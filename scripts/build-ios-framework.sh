@@ -54,6 +54,28 @@ TARGETS=(
   x86_64-apple-darwin        # host tests, Intel
 )
 
+# The SDK each target links against, named rather than inherited.
+#
+# Rust asks `xcrun` for an SDK only when SDKROOT is unset, and a machine that
+# exports it — the usual reason is a Homebrew or Command Line Tools setup note —
+# hands every target the macOS SDK instead. The failure is a linker error deep in
+# Security.framework that says nothing about SDKROOT, so pin it here per target
+# rather than trust the environment.
+#
+# The deployment targets are the same ones Pikos declares (project.yml's iOS 17,
+# PikosCore/Package.swift's macOS 14). Rust otherwise defaults to iOS 10, which
+# no current SDK supports and which buries the build in version warnings.
+sdk_for() {
+  case "$1" in
+    aarch64-apple-ios) echo iphoneos ;;
+    aarch64-apple-ios-sim | x86_64-apple-ios) echo iphonesimulator ;;
+    *-apple-darwin) echo macosx ;;
+  esac
+}
+
+export IPHONEOS_DEPLOYMENT_TARGET=17.0
+export MACOSX_DEPLOYMENT_TARGET=14.0
+
 echo "▶ ensuring Rust targets are installed"
 for t in "${TARGETS[@]}"; do
   rustup target add "$t" >/dev/null
@@ -65,7 +87,8 @@ for t in "${TARGETS[@]}"; do
   # along with it. That binary runs on the host to generate Swift and is never
   # linked into the app; building it for a phone is wasted time at best, and a
   # link failure in something irrelevant at worst.
-  (cd "$ROOT" && cargo build -p pikos-ffi --release --target "$t" --lib)
+  (cd "$ROOT" && SDKROOT="$(xcrun --sdk "$(sdk_for "$t")" --show-sdk-path)" \
+    cargo build -p pikos-ffi --release --target "$t" --lib)
 done
 
 echo "▶ regenerating Swift bindings so they match this build"

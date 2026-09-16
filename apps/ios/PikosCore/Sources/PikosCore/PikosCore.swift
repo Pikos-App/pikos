@@ -481,6 +481,22 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
+    typealias FfiType = Int32
+    typealias SwiftType = Int32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int32, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -888,6 +904,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func calendarRange(start: String, end: String) async throws  -> [CalendarEntry]
     
     /**
+     * Remove every reminder row from a page, returning it to the default.
+     */
+    func clearPageReminders(pageId: String) async throws 
+    
+    /**
      * Take a page's date away, leaving any recurrence it has intact.
      *
      * A page can carry several schedule rows and they are not all the same
@@ -1029,6 +1050,8 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func deleteAllData() async throws 
     
+    func deletePageReminder(id: String) async throws 
+    
     /**
      * Disconnect an account: release its credential and stop syncing it.
      *
@@ -1106,6 +1129,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     func listFolders() async throws  -> [Folder]
     
+    /**
+     * A page's own reminder rows, smallest lead first. Empty means the page
+     * takes the default; a single `-1` row means it reminds never.
+     */
+    func listPageReminders(pageId: String) async throws  -> [PageReminder]
+    
     func listPages(query: PageQuery) async throws  -> [PageSummary]
     
     /**
@@ -1144,6 +1173,14 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * says nothing the next populated one does not.
      */
     func listUpcoming() async throws  -> [UpcomingDay]
+    
+    /**
+     * Note that a page was opened, which is what orders [`Workspace::recent_pages`].
+     *
+     * Reading is not authoring, so this does not claim a synced page the way
+     * an edit does.
+     */
+    func markPageOpened(id: String) async throws 
     
     /**
      * Move one occurrence of a series to a new time, leaving the rest alone.
@@ -1251,6 +1288,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func readOnly()  -> ReadOnlyWorkspace
     
     /**
+     * The pages opened most recently, newest first, for search to suggest
+     * before anything is typed.
+     */
+    func recentPages(limit: UInt32) async throws  -> [PageSummary]
+    
+    /**
      * Swap the password on a CalDAV account whose credential stopped working.
      *
      * Takes the password alone: the base URL and username are already in the
@@ -1296,6 +1339,14 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func renameFolder(id: String, name: String) async throws  -> Folder
     
     /**
+     * Hand-arrange a folder, or the Inbox when `folder_id` is `None`, in the order given.
+     *
+     * An id from anywhere else is passed over rather than moved in. Arranging never claims a
+     * synced page, as the desktop's reorder does not.
+     */
+    func reorderPages(folderId: String?, orderedIds: [String]) async throws 
+    
+    /**
      * Bring a trashed folder and its pages back.
      */
     func restoreFolder(id: String) async throws 
@@ -1323,8 +1374,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     /**
      * Full-text search across titles and page bodies.
+     *
+     * Completed pages are left out unless `include_completed` is set or the
+     * query says `is:done`, and are counted either way.
      */
-    func search(query: String, limit: UInt32) async throws  -> [SearchHit]
+    func search(query: String, includeCompleted: Bool, limit: UInt32) async throws  -> SearchResults
     
     /**
      * Turn one calendar's mirroring on or off.
@@ -1398,12 +1452,10 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * ends up with a time on one end only, and the storage format has no way
      * to represent that.
      *
-     * **Refused on a repeating page.** A recurring head's date belongs to its
-     * rule: moving it has to realign the rule's anchor and snap the drop onto
-     * a day the rule can yield, or the next recompute silently reverts it.
-     * That logic is `resolveAnchorMove` in `@pikos/core` and is not ported
-     * yet, so this refuses rather than corrupting a series — the same line the
-     * CLI draws (`update --due`, matrix §5).
+     * **A repeating page moves its series.** Its date belongs to its rule, so the
+     * rule's anchor moves with it, realigned and snapped as the desktop does
+     * ([`pikos_recurrence::resolve_anchor_move`]); a date the rule cannot yield
+     * lands on the nearest one it can.
      *
      * Refused on a page a calendar owns, by the data layer: its schedule is
      * upstream's.
@@ -1754,6 +1806,25 @@ open func calendarRange(start: String, end: String)async throws  -> [CalendarEnt
 }
     
     /**
+     * Remove every reminder row from a page, returning it to the default.
+     */
+open func clearPageReminders(pageId: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_clear_page_reminders(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Take a page's date away, leaving any recurrence it has intact.
      *
      * A page can carry several schedule rows and they are not all the same
@@ -2014,6 +2085,22 @@ open func deleteAllData()async throws   {
         )
 }
     
+open func deletePageReminder(id: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_delete_page_reminder(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
     /**
      * Disconnect an account: release its credential and stop syncing it.
      *
@@ -2197,6 +2284,26 @@ open func listFolders()async throws  -> [Folder]  {
         )
 }
     
+    /**
+     * A page's own reminder rows, smallest lead first. Empty means the page
+     * takes the default; a single `-1` row means it reminds never.
+     */
+open func listPageReminders(pageId: String)async throws  -> [PageReminder]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_page_reminders(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePageReminder.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
 open func listPages(query: PageQuery)async throws  -> [PageSummary]  {
     return
         try  await uniffiRustCallAsync(
@@ -2302,6 +2409,28 @@ open func listUpcoming()async throws  -> [UpcomingDay]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeUpcomingDay.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Note that a page was opened, which is what orders [`Workspace::recent_pages`].
+     *
+     * Reading is not authoring, so this does not claim a synced page the way
+     * an edit does.
+     */
+open func markPageOpened(id: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_mark_page_opened(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2482,6 +2611,26 @@ open func readOnly() -> ReadOnlyWorkspace  {
 }
     
     /**
+     * The pages opened most recently, newest first, for search to suggest
+     * before anything is typed.
+     */
+open func recentPages(limit: UInt32)async throws  -> [PageSummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_recent_pages(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePageSummary.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Swap the password on a CalDAV account whose credential stopped working.
      *
      * Takes the password alone: the base URL and username are already in the
@@ -2583,6 +2732,28 @@ open func renameFolder(id: String, name: String)async throws  -> Folder  {
 }
     
     /**
+     * Hand-arrange a folder, or the Inbox when `folder_id` is `None`, in the order given.
+     *
+     * An id from anywhere else is passed over rather than moved in. Arranging never claims a
+     * synced page, as the desktop's reorder does not.
+     */
+open func reorderPages(folderId: String?, orderedIds: [String])async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_reorder_pages(
+                        self.uniffiCloneHandle(),FfiConverterOptionString.lower(folderId),FfiConverterSequenceString.lower(orderedIds)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Bring a trashed folder and its pages back.
      */
 open func restoreFolder(id: String)async throws   {
@@ -2666,19 +2837,22 @@ open func schedulePage(pageId: String, scheduledStart: String, scheduledEnd: Str
     
     /**
      * Full-text search across titles and page bodies.
+     *
+     * Completed pages are left out unless `include_completed` is set or the
+     * query says `is:done`, and are counted either way.
      */
-open func search(query: String, limit: UInt32)async throws  -> [SearchHit]  {
+open func search(query: String, includeCompleted: Bool, limit: UInt32)async throws  -> SearchResults  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_search(
-                        self.uniffiCloneHandle(),FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
+                        self.uniffiCloneHandle(),FfiConverterString.lower(query),FfiConverterBool.lower(includeCompleted),FfiConverterUInt32.lower(limit)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeSearchHit.lift,
+            liftFunc: FfiConverterTypeSearchResults_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2811,12 +2985,10 @@ open func setPageRepeat(pageId: String, pattern: Repeat)async throws   {
      * ends up with a time on one end only, and the storage format has no way
      * to represent that.
      *
-     * **Refused on a repeating page.** A recurring head's date belongs to its
-     * rule: moving it has to realign the rule's anchor and snap the drop onto
-     * a day the rule can yield, or the next recompute silently reverts it.
-     * That logic is `resolveAnchorMove` in `@pikos/core` and is not ported
-     * yet, so this refuses rather than corrupting a series — the same line the
-     * CLI draws (`update --due`, matrix §5).
+     * **A repeating page moves its series.** Its date belongs to its rule, so the
+     * rule's anchor moves with it, realigned and snapped as the desktop does
+     * ([`pikos_recurrence::resolve_anchor_move`]); a date the rule cannot yield
+     * lands on the nearest one it can.
      *
      * Refused on a page a calendar owns, by the data layer: its schedule is
      * upstream's.
@@ -4043,6 +4215,7 @@ public func FfiConverterTypeMovedPage_lower(_ value: MovedPage) -> RustBuffer {
  */
 public struct NewPage: Equatable, Hashable {
     public var title: String
+    public var subtitle: String?
     public var folderId: String?
     /**
      * Tiptap JSON. Defaults to an empty document.
@@ -4054,11 +4227,12 @@ public struct NewPage: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(title: String, folderId: String? = nil, 
+    public init(title: String, subtitle: String? = nil, folderId: String? = nil, 
         /**
          * Tiptap JSON. Defaults to an empty document.
          */content: String? = nil, tags: [String]? = nil, scheduledStart: String? = nil, scheduledEnd: String? = nil) {
         self.title = title
+        self.subtitle = subtitle
         self.folderId = folderId
         self.content = content
         self.tags = tags
@@ -4083,6 +4257,7 @@ public struct FfiConverterTypeNewPage: FfiConverterRustBuffer {
         return
             try NewPage(
                 title: FfiConverterString.read(from: &buf), 
+                subtitle: FfiConverterOptionString.read(from: &buf), 
                 folderId: FfiConverterOptionString.read(from: &buf), 
                 content: FfiConverterOptionString.read(from: &buf), 
                 tags: FfiConverterOptionSequenceString.read(from: &buf), 
@@ -4093,6 +4268,7 @@ public struct FfiConverterTypeNewPage: FfiConverterRustBuffer {
 
     public static func write(_ value: NewPage, into buf: inout [UInt8]) {
         FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.subtitle, into: &buf)
         FfiConverterOptionString.write(value.folderId, into: &buf)
         FfiConverterOptionString.write(value.content, into: &buf)
         FfiConverterOptionSequenceString.write(value.tags, into: &buf)
@@ -4435,6 +4611,10 @@ public func FfiConverterTypePage_lower(_ value: Page) -> RustBuffer {
 public struct PageEdit: Equatable, Hashable {
     public var title: String?
     /**
+     * An empty string clears it; the column has no other way to say "none".
+     */
+    public var subtitle: String?
+    /**
      * Tiptap JSON. Setting this re-stamps `content_schema_version`.
      */
     public var content: String?
@@ -4456,6 +4636,9 @@ public struct PageEdit: Equatable, Hashable {
     // declare one manually.
     public init(title: String? = nil, 
         /**
+         * An empty string clears it; the column has no other way to say "none".
+         */subtitle: String? = nil, 
+        /**
          * Tiptap JSON. Setting this re-stamps `content_schema_version`.
          */content: String? = nil, 
         /**
@@ -4467,6 +4650,7 @@ public struct PageEdit: Equatable, Hashable {
          * Absent leaves the page where it is; see [`FolderAssignment`].
          */folder: FolderAssignment? = nil) {
         self.title = title
+        self.subtitle = subtitle
         self.content = content
         self.contentText = contentText
         self.status = status
@@ -4492,6 +4676,7 @@ public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
         return
             try PageEdit(
                 title: FfiConverterOptionString.read(from: &buf), 
+                subtitle: FfiConverterOptionString.read(from: &buf), 
                 content: FfiConverterOptionString.read(from: &buf), 
                 contentText: FfiConverterOptionString.read(from: &buf), 
                 status: FfiConverterOptionString.read(from: &buf), 
@@ -4503,6 +4688,7 @@ public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
 
     public static func write(_ value: PageEdit, into buf: inout [UInt8]) {
         FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.subtitle, into: &buf)
         FfiConverterOptionString.write(value.content, into: &buf)
         FfiConverterOptionString.write(value.contentText, into: &buf)
         FfiConverterOptionString.write(value.status, into: &buf)
@@ -4655,6 +4841,66 @@ public func FfiConverterTypePageQuery_lift(_ buf: RustBuffer) throws -> PageQuer
 #endif
 public func FfiConverterTypePageQuery_lower(_ value: PageQuery) -> RustBuffer {
     return FfiConverterTypePageQuery.lower(value)
+}
+
+
+public struct PageReminder: Equatable, Hashable {
+    public var id: String
+    /**
+     * Minutes before the start, or a sentinel: `-1` never, `-2` the day before at 09:00.
+     */
+    public var minutesBefore: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, 
+        /**
+         * Minutes before the start, or a sentinel: `-1` never, `-2` the day before at 09:00.
+         */minutesBefore: Int64) {
+        self.id = id
+        self.minutesBefore = minutesBefore
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PageReminder: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePageReminder: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PageReminder {
+        return
+            try PageReminder(
+                id: FfiConverterString.read(from: &buf), 
+                minutesBefore: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PageReminder, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterInt64.write(value.minutesBefore, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageReminder_lift(_ buf: RustBuffer) throws -> PageReminder {
+    return try FfiConverterTypePageReminder.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageReminder_lower(_ value: PageReminder) -> RustBuffer {
+    return FfiConverterTypePageReminder.lower(value)
 }
 
 
@@ -5093,12 +5339,13 @@ public func FfiConverterTypeRecurringCompletion_lower(_ value: RecurringCompleti
 
 /**
  * A repeat in the shape an editor can offer: a frequency, how many of them
- * between runs, and — for a weekly repeat — which days.
+ * between runs, which days, and when it stops.
  *
- * Deliberately narrower than an RRULE. This is the set of rules a picker can
- * round-trip without losing anything; a rule carrying `BYSETPOS`, `BYWEEKNO`
- * or an ordinal weekday cannot be described here, and [`PageRepeat::Fixed`] is
- * what says so instead of quietly flattening it.
+ * Deliberately narrower than an RRULE, and as wide as the desktop's presets:
+ * this is the set of rules a picker can round-trip without losing anything. A
+ * rule carrying `BYSETPOS`, `BYMONTHDAY`, `BYWEEKNO` or a fifth weekday cannot
+ * be described here, and [`PageRepeat::Fixed`] is what says so instead of
+ * quietly flattening it.
  */
 public struct Repeat: Equatable, Hashable {
     public var freq: RepeatFreq
@@ -5108,14 +5355,22 @@ public struct Repeat: Equatable, Hashable {
     public var interval: UInt32
     /**
      * Weekdays for a weekly repeat: 0 is Monday through 6 is Sunday, matching
-     * what the rule layer stores. Empty for every other frequency, and for a
-     * weekly repeat that names no day — which means "the day it started on".
+     * what the rule layer stores. Empty for daily and yearly, and for a weekly
+     * repeat that names no day, which means "the day it started on". A monthly
+     * repeat names exactly one here when it has a `month_week`, and none otherwise.
      *
      * `u32` rather than the `u8` the rule layer uses, because UniFFI maps a
      * `Vec<u8>` to Swift's `Data`. These are weekday numbers, not bytes, and a
      * caller should not have to build a byte buffer to say "Tuesday".
      */
     public var weekdays: [UInt32]
+    /**
+     * Which of the month's weekdays a monthly repeat falls on: 1 to 4 for the
+     * first through fourth, -1 for the last. `None` for a monthly repeat on the
+     * start's date, and for every other frequency.
+     */
+    public var monthWeek: Int32?
+    public var ends: RepeatEnds
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5125,16 +5380,24 @@ public struct Repeat: Equatable, Hashable {
          */interval: UInt32, 
         /**
          * Weekdays for a weekly repeat: 0 is Monday through 6 is Sunday, matching
-         * what the rule layer stores. Empty for every other frequency, and for a
-         * weekly repeat that names no day — which means "the day it started on".
+         * what the rule layer stores. Empty for daily and yearly, and for a weekly
+         * repeat that names no day, which means "the day it started on". A monthly
+         * repeat names exactly one here when it has a `month_week`, and none otherwise.
          *
          * `u32` rather than the `u8` the rule layer uses, because UniFFI maps a
          * `Vec<u8>` to Swift's `Data`. These are weekday numbers, not bytes, and a
          * caller should not have to build a byte buffer to say "Tuesday".
-         */weekdays: [UInt32]) {
+         */weekdays: [UInt32], 
+        /**
+         * Which of the month's weekdays a monthly repeat falls on: 1 to 4 for the
+         * first through fourth, -1 for the last. `None` for a monthly repeat on the
+         * start's date, and for every other frequency.
+         */monthWeek: Int32?, ends: RepeatEnds) {
         self.freq = freq
         self.interval = interval
         self.weekdays = weekdays
+        self.monthWeek = monthWeek
+        self.ends = ends
     }
 
     
@@ -5155,7 +5418,9 @@ public struct FfiConverterTypeRepeat: FfiConverterRustBuffer {
             try Repeat(
                 freq: FfiConverterTypeRepeatFreq.read(from: &buf), 
                 interval: FfiConverterUInt32.read(from: &buf), 
-                weekdays: FfiConverterSequenceUInt32.read(from: &buf)
+                weekdays: FfiConverterSequenceUInt32.read(from: &buf), 
+                monthWeek: FfiConverterOptionInt32.read(from: &buf), 
+                ends: FfiConverterTypeRepeatEnds.read(from: &buf)
         )
     }
 
@@ -5163,6 +5428,8 @@ public struct FfiConverterTypeRepeat: FfiConverterRustBuffer {
         FfiConverterTypeRepeatFreq.write(value.freq, into: &buf)
         FfiConverterUInt32.write(value.interval, into: &buf)
         FfiConverterSequenceUInt32.write(value.weekdays, into: &buf)
+        FfiConverterOptionInt32.write(value.monthWeek, into: &buf)
+        FfiConverterTypeRepeatEnds.write(value.ends, into: &buf)
     }
 }
 
@@ -5247,10 +5514,20 @@ public struct SearchHit: Equatable, Hashable {
      */
     public var excerpt: String
     /**
-     * Which column matched — `"title"`, `"body"`, and so on. Lets the UI say
-     * why a result is a result.
+     * Which column matched: `"title"`, `"subtitle"`, `"content"` or `"both"`.
+     * Decides the second line, as on the desktop: the subtitle for a subtitle
+     * match, the excerpt for a body match, the page's facts otherwise.
      */
     public var matchSource: String
+    public var status: String
+    public var subtitle: String?
+    public var scheduledStart: String?
+    public var priority: Int64
+    public var tags: [String]
+    /**
+     * The start of the body, for a title match with nothing else to show.
+     */
+    public var contentPreview: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5259,13 +5536,23 @@ public struct SearchHit: Equatable, Hashable {
          * The matching text with surrounding context.
          */excerpt: String, 
         /**
-         * Which column matched — `"title"`, `"body"`, and so on. Lets the UI say
-         * why a result is a result.
-         */matchSource: String) {
+         * Which column matched: `"title"`, `"subtitle"`, `"content"` or `"both"`.
+         * Decides the second line, as on the desktop: the subtitle for a subtitle
+         * match, the excerpt for a body match, the page's facts otherwise.
+         */matchSource: String, status: String, subtitle: String?, scheduledStart: String?, priority: Int64, tags: [String], 
+        /**
+         * The start of the body, for a title match with nothing else to show.
+         */contentPreview: String) {
         self.pageId = pageId
         self.title = title
         self.excerpt = excerpt
         self.matchSource = matchSource
+        self.status = status
+        self.subtitle = subtitle
+        self.scheduledStart = scheduledStart
+        self.priority = priority
+        self.tags = tags
+        self.contentPreview = contentPreview
     }
 
     
@@ -5287,7 +5574,13 @@ public struct FfiConverterTypeSearchHit: FfiConverterRustBuffer {
                 pageId: FfiConverterString.read(from: &buf), 
                 title: FfiConverterString.read(from: &buf), 
                 excerpt: FfiConverterString.read(from: &buf), 
-                matchSource: FfiConverterString.read(from: &buf)
+                matchSource: FfiConverterString.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                subtitle: FfiConverterOptionString.read(from: &buf), 
+                scheduledStart: FfiConverterOptionString.read(from: &buf), 
+                priority: FfiConverterInt64.read(from: &buf), 
+                tags: FfiConverterSequenceString.read(from: &buf), 
+                contentPreview: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -5296,6 +5589,12 @@ public struct FfiConverterTypeSearchHit: FfiConverterRustBuffer {
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.excerpt, into: &buf)
         FfiConverterString.write(value.matchSource, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterOptionString.write(value.subtitle, into: &buf)
+        FfiConverterOptionString.write(value.scheduledStart, into: &buf)
+        FfiConverterInt64.write(value.priority, into: &buf)
+        FfiConverterSequenceString.write(value.tags, into: &buf)
+        FfiConverterString.write(value.contentPreview, into: &buf)
     }
 }
 
@@ -5312,6 +5611,95 @@ public func FfiConverterTypeSearchHit_lift(_ buf: RustBuffer) throws -> SearchHi
 #endif
 public func FfiConverterTypeSearchHit_lower(_ value: SearchHit) -> RustBuffer {
     return FfiConverterTypeSearchHit.lower(value)
+}
+
+
+/**
+ * One search, with what it left out.
+ */
+public struct SearchResults: Equatable, Hashable {
+    public var hits: [SearchHit]
+    /**
+     * Completed pages that matched, counted whether or not `hits` carries them,
+     * so the UI can offer to show them.
+     */
+    public var completedCount: UInt32
+    /**
+     * True when the query itself says `is:done`, so completed pages are in
+     * `hits` whatever `include_completed` was.
+     */
+    public var askedForCompleted: Bool
+    /**
+     * The words the index matched on, split as FTS5 splits them, for
+     * highlighting. Operators are not among them.
+     */
+    public var terms: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(hits: [SearchHit], 
+        /**
+         * Completed pages that matched, counted whether or not `hits` carries them,
+         * so the UI can offer to show them.
+         */completedCount: UInt32, 
+        /**
+         * True when the query itself says `is:done`, so completed pages are in
+         * `hits` whatever `include_completed` was.
+         */askedForCompleted: Bool, 
+        /**
+         * The words the index matched on, split as FTS5 splits them, for
+         * highlighting. Operators are not among them.
+         */terms: [String]) {
+        self.hits = hits
+        self.completedCount = completedCount
+        self.askedForCompleted = askedForCompleted
+        self.terms = terms
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SearchResults: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchResults: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResults {
+        return
+            try SearchResults(
+                hits: FfiConverterSequenceTypeSearchHit.read(from: &buf), 
+                completedCount: FfiConverterUInt32.read(from: &buf), 
+                askedForCompleted: FfiConverterBool.read(from: &buf), 
+                terms: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchResults, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeSearchHit.write(value.hits, into: &buf)
+        FfiConverterUInt32.write(value.completedCount, into: &buf)
+        FfiConverterBool.write(value.askedForCompleted, into: &buf)
+        FfiConverterSequenceString.write(value.terms, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResults_lift(_ buf: RustBuffer) throws -> SearchResults {
+    return try FfiConverterTypeSearchResults.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResults_lower(_ value: SearchResults) -> RustBuffer {
+    return FfiConverterTypeSearchResults.lower(value)
 }
 
 
@@ -6808,6 +7196,94 @@ public func FfiConverterTypeQuickAddResult_lower(_ value: QuickAddResult) -> Rus
 
 
 /**
+ * When a repeat stops.
+ */
+
+public enum RepeatEnds: Equatable, Hashable {
+    
+    case never
+    /**
+     * The last day an occurrence can fall on, as `YYYY-MM-DD`.
+     */
+    case onDay(day: String
+    )
+    /**
+     * After this many occurrences, the first included.
+     */
+    case afterCount(count: UInt32
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension RepeatEnds: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRepeatEnds: FfiConverterRustBuffer {
+    typealias SwiftType = RepeatEnds
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RepeatEnds {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .never
+        
+        case 2: return .onDay(day: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .afterCount(count: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RepeatEnds, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .never:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .onDay(day):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(day, into: &buf)
+            
+        
+        case let .afterCount(count):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt32.write(count, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRepeatEnds_lift(_ buf: RustBuffer) throws -> RepeatEnds {
+    return try FfiConverterTypeRepeatEnds.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRepeatEnds_lower(_ value: RepeatEnds) -> RustBuffer {
+    return FfiConverterTypeRepeatEnds.lower(value)
+}
+
+
+
+/**
  * How often a page repeats.
  */
 
@@ -7140,6 +7616,30 @@ public func FfiConverterTypeWorkspaceError_lift(_ buf: RustBuffer) throws -> Wor
 #endif
 public func FfiConverterTypeWorkspaceError_lower(_ value: WorkspaceError) -> RustBuffer {
     return FfiConverterTypeWorkspaceError.lower(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
+    typealias SwiftType = Int32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
 }
 
 #if swift(>=5.8)
@@ -7653,6 +8153,31 @@ fileprivate struct FfiConverterSequenceTypePage: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypePage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePageReminder: FfiConverterRustBuffer {
+    typealias SwiftType = [PageReminder]
+
+    public static func write(_ value: [PageReminder], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePageReminder.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PageReminder] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PageReminder]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePageReminder.read(from: &buf))
         }
         return seq
     }
@@ -8223,6 +8748,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_calendar_range() != 23142) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_clear_page_reminders() != 9077) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_clear_page_schedule() != 51741) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8250,6 +8778,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_delete_all_data() != 15051) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_delete_page_reminder() != 46272) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_disconnect_sync_account() != 11852) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8274,6 +8805,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_list_folders() != 57405) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_page_reminders() != 8473) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_pages() != 58039) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8287,6 +8821,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_upcoming() != 48506) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_mark_page_opened() != 62372) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_move_occurrence() != 25049) {
@@ -8307,6 +8844,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_recent_pages() != 49240) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8317,6 +8857,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_rename_folder() != 17853) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_reorder_pages() != 54361) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_restore_folder() != 50398) {
@@ -8331,7 +8874,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_schedule_page() != 2015) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_search() != 52923) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_search() != 23454) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled() != 65191) {
@@ -8346,7 +8889,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_repeat() != 26372) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_set_page_schedule() != 23911) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_page_schedule() != 57788) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_status() != 12587) {

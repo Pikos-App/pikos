@@ -743,3 +743,27 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     let first_next = NaiveDate::from_ymd_opt(ny, nm, 1).unwrap();
     first_next.pred_opt().unwrap().day()
 }
+
+/// Where a moved anchor lands, and the rule that follows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnchorMove {
+    /// The rule realigned to the new weekday, or `None` when the rule is one the editor is
+    /// locked out of. Equal to the input when the realign had nothing to change.
+    pub rrule: Option<String>,
+    pub start: String,
+    pub end: Option<String>,
+}
+
+/// Mirrors `resolveAnchorMove`, whose doc says why each of its two corrections is needed:
+/// realign a single-weekday weekly rule to the moved day, then snap an off-pattern drop onto a
+/// day the rule yields, carrying the end across.
+pub fn resolve_anchor_move(rrule: &str, start: &str, end: Option<&str>) -> AnchorMove {
+    let aligned = (!crate::rule::rrule_edit_would_degrade(rrule))
+        .then(|| align_weekly_rule_to_anchor(rrule, start));
+    let (start, end) = snap_schedule_to_rule(aligned.as_deref().unwrap_or(rrule), start, end);
+    AnchorMove {
+        rrule: aligned,
+        start,
+        end,
+    }
+}

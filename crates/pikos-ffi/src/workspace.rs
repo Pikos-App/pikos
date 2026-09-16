@@ -469,25 +469,46 @@ pub enum RepeatFreq {
 }
 
 /// A repeat in the shape an editor can offer: a frequency, how many of them
-/// between runs, and — for a weekly repeat — which days.
+/// between runs, which days, and when it stops.
 ///
-/// Deliberately narrower than an RRULE. This is the set of rules a picker can
-/// round-trip without losing anything; a rule carrying `BYSETPOS`, `BYWEEKNO`
-/// or an ordinal weekday cannot be described here, and [`PageRepeat::Fixed`] is
-/// what says so instead of quietly flattening it.
-#[derive(Debug, Clone, uniffi::Record)]
+/// Deliberately narrower than an RRULE, and as wide as the desktop's presets:
+/// this is the set of rules a picker can round-trip without losing anything. A
+/// rule carrying `BYSETPOS`, `BYMONTHDAY`, `BYWEEKNO` or a fifth weekday cannot
+/// be described here, and [`PageRepeat::Fixed`] is what says so instead of
+/// quietly flattening it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Repeat {
     pub freq: RepeatFreq,
     /// 1 is every day/week/month/year, 2 is every other, and so on.
     pub interval: u32,
     /// Weekdays for a weekly repeat: 0 is Monday through 6 is Sunday, matching
-    /// what the rule layer stores. Empty for every other frequency, and for a
-    /// weekly repeat that names no day — which means "the day it started on".
+    /// what the rule layer stores. Empty for daily and yearly, and for a weekly
+    /// repeat that names no day, which means "the day it started on". A monthly
+    /// repeat names exactly one here when it has a `month_week`, and none otherwise.
     ///
     /// `u32` rather than the `u8` the rule layer uses, because UniFFI maps a
     /// `Vec<u8>` to Swift's `Data`. These are weekday numbers, not bytes, and a
     /// caller should not have to build a byte buffer to say "Tuesday".
     pub weekdays: Vec<u32>,
+    /// Which of the month's weekdays a monthly repeat falls on: 1 to 4 for the
+    /// first through fourth, -1 for the last. `None` for a monthly repeat on the
+    /// start's date, and for every other frequency.
+    pub month_week: Option<i32>,
+    pub ends: RepeatEnds,
+}
+
+/// When a repeat stops.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum RepeatEnds {
+    Never,
+    /// The last day an occurrence can fall on, as `YYYY-MM-DD`.
+    OnDay {
+        day: String,
+    },
+    /// After this many occurrences, the first included.
+    AfterCount {
+        count: u32,
+    },
 }
 
 /// What a page's repeat is, and whether this editor may change it.
@@ -662,6 +683,8 @@ impl From<PageQuery> for DbPageFilter {
 pub struct NewPage {
     pub title: String,
     #[uniffi(default = None)]
+    pub subtitle: Option<String>,
+    #[uniffi(default = None)]
     pub folder_id: Option<String>,
     /// Tiptap JSON. Defaults to an empty document.
     #[uniffi(default = None)]
@@ -691,6 +714,9 @@ pub enum FolderAssignment {
 pub struct PageEdit {
     #[uniffi(default = None)]
     pub title: Option<String>,
+    /// An empty string clears it; the column has no other way to say "none".
+    #[uniffi(default = None)]
+    pub subtitle: Option<String>,
     /// Tiptap JSON. Setting this re-stamps `content_schema_version`.
     #[uniffi(default = None)]
     pub content: Option<String>,
@@ -716,9 +742,56 @@ pub struct SearchHit {
     pub title: String,
     /// The matching text with surrounding context.
     pub excerpt: String,
-    /// Which column matched — `"title"`, `"body"`, and so on. Lets the UI say
-    /// why a result is a result.
+    /// Which column matched: `"title"`, `"subtitle"`, `"content"` or `"both"`.
+    /// Decides the second line, as on the desktop: the subtitle for a subtitle
+    /// match, the excerpt for a body match, the page's facts otherwise.
     pub match_source: String,
+    pub status: String,
+    pub subtitle: Option<String>,
+    pub scheduled_start: Option<String>,
+    pub priority: i64,
+    pub tags: Vec<String>,
+    /// The start of the body, for a title match with nothing else to show.
+    pub content_preview: String,
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct PageReminder {
+    pub id: String,
+    /// Minutes before the start, or a sentinel: `-1` never, `-2` the day before at 09:00.
+    pub minutes_before: i64,
+}
+
+/// One search, with what it left out.
+#[derive(Debug, uniffi::Record)]
+pub struct SearchResults {
+    pub hits: Vec<SearchHit>,
+    /// Completed pages that matched, counted whether or not `hits` carries them,
+    /// so the UI can offer to show them.
+    pub completed_count: u32,
+    /// True when the query itself says `is:done`, so completed pages are in
+    /// `hits` whatever `include_completed` was.
+    pub asked_for_completed: bool,
+    /// The words the index matched on, split as FTS5 splits them, for
+    /// highlighting. Operators are not among them.
+    pub terms: Vec<String>,
+}
+
+impl From<pikos_db::SearchResult> for SearchHit {
+    fn from(r: pikos_db::SearchResult) -> Self {
+        SearchHit {
+            page_id: r.id,
+            title: r.title,
+            excerpt: r.excerpt,
+            match_source: r.match_source,
+            status: r.status,
+            subtitle: r.subtitle,
+            scheduled_start: r.scheduled_date,
+            priority: i64::from(r.priority),
+            tags: r.tags,
+            content_preview: r.content_preview,
+        }
+    }
 }
 
 /// One page from one parsed line. `schedule` is false for the head of a
@@ -737,6 +810,7 @@ async fn create_quick_add_page(
     let page = workspace
         .create_page(NewPage {
             title: input.title,
+            subtitle: None,
             folder_id,
             content,
             tags: Some(input.tags),
@@ -833,6 +907,19 @@ impl Workspace {
     pub async fn list_pages(&self, query: PageQuery) -> Result<Vec<PageSummary>, WorkspaceError> {
         let pages = pikos_db::list_pages_impl(&self.pool, Some(query.into())).await?;
         Ok(pages.into_iter().map(Into::into).collect())
+    }
+
+    /// Hand-arrange a folder, or the Inbox when `folder_id` is `None`, in the order given.
+    ///
+    /// An id from anywhere else is passed over rather than moved in. Arranging never claims a
+    /// synced page, as the desktop's reorder does not.
+    pub async fn reorder_pages(
+        &self,
+        folder_id: Option<String>,
+        ordered_ids: Vec<String>,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::reorder_pages_impl(&self.pool, folder_id.as_deref(), &ordered_ids).await?;
+        Ok(())
     }
 
     /// Pages scheduled for today, plus anything overdue.
@@ -995,7 +1082,7 @@ impl Workspace {
             DbNewPage {
                 folder_id: page.folder_id,
                 title: page.title,
-                subtitle: None,
+                subtitle: page.subtitle.filter(|s| !s.trim().is_empty()),
                 content: page.content.unwrap_or_else(|| EMPTY_DOCUMENT.to_string()),
                 content_text,
                 status: "not_started".to_string(),
@@ -1564,6 +1651,14 @@ impl Workspace {
             id,
             DbPageUpdate {
                 title: edit.title,
+                subtitle: edit.subtitle.map(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(trimmed.to_string())
+                    }
+                }),
                 content: edit.content,
                 content_text: edit.content_text,
                 status: edit.status,
@@ -1728,6 +1823,34 @@ impl Workspace {
                 message: "weekdays are 0 (Monday) through 6 (Sunday)".to_string(),
             });
         }
+        if let Some(week) = pattern.month_week {
+            if pattern.freq != RepeatFreq::Monthly
+                || pattern.weekdays.len() != 1
+                || !MONTH_WEEKS.contains(&week)
+            {
+                return Err(WorkspaceError::InvalidInput {
+                    message: "a week of the month is 1 to 4 or -1, on a monthly repeat naming one weekday"
+                        .to_string(),
+                });
+            }
+        }
+        let (count, until) = match &pattern.ends {
+            RepeatEnds::Never => (None, None),
+            RepeatEnds::AfterCount { count: 0 } => {
+                return Err(WorkspaceError::InvalidInput {
+                    message: "a repeat that ends has to happen at least once".to_string(),
+                });
+            }
+            RepeatEnds::AfterCount { count } => (Some(*count), None),
+            RepeatEnds::OnDay { day } => {
+                if chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").is_err() {
+                    return Err(WorkspaceError::InvalidInput {
+                        message: format!("an end day is YYYY-MM-DD, not {day:?}"),
+                    });
+                }
+                (None, Some(day.clone()))
+            }
+        };
 
         let rrule = pikos_recurrence::build_rrule(&pikos_recurrence::RecurrenceOptions {
             freq: Some(match pattern.freq {
@@ -1737,16 +1860,25 @@ impl Workspace {
                 RepeatFreq::Yearly => pikos_recurrence::Freq::Yearly,
             }),
             interval: pattern.interval,
-            byweekday: match pattern.freq {
-                // Weekdays mean nothing on a monthly or yearly repeat, and the
-                // engine rejects a rule that carries them there. Dropped rather
-                // than passed through, so switching a weekly repeat to monthly
-                // does not produce a rule that fails to enumerate.
-                RepeatFreq::Weekly if !pattern.weekdays.is_empty() => {
+            byweekday: match (pattern.freq, pattern.month_week) {
+                // Bare weekdays mean nothing on a monthly or yearly repeat, and
+                // the engine rejects a rule that carries them there. Dropped
+                // rather than passed through, so switching a weekly repeat to
+                // monthly does not produce a rule that fails to enumerate.
+                (RepeatFreq::Weekly, _) if !pattern.weekdays.is_empty() => {
+                    Some(pattern.weekdays.iter().map(|d| *d as u8).collect())
+                }
+                (RepeatFreq::Monthly, Some(_)) => {
                     Some(pattern.weekdays.iter().map(|d| *d as u8).collect())
                 }
                 _ => None,
             },
+            byweekday_ordinals: match (pattern.freq, pattern.month_week) {
+                (RepeatFreq::Monthly, Some(week)) => Some(vec![Some(week)]),
+                _ => None,
+            },
+            count,
+            until,
             ..Default::default()
         });
 
@@ -1832,12 +1964,10 @@ impl Workspace {
     /// ends up with a time on one end only, and the storage format has no way
     /// to represent that.
     ///
-    /// **Refused on a repeating page.** A recurring head's date belongs to its
-    /// rule: moving it has to realign the rule's anchor and snap the drop onto
-    /// a day the rule can yield, or the next recompute silently reverts it.
-    /// That logic is `resolveAnchorMove` in `@pikos/core` and is not ported
-    /// yet, so this refuses rather than corrupting a series — the same line the
-    /// CLI draws (`update --due`, matrix §5).
+    /// **A repeating page moves its series.** Its date belongs to its rule, so the
+    /// rule's anchor moves with it, realigned and snapped as the desktop does
+    /// ([`pikos_recurrence::resolve_anchor_move`]); a date the rule cannot yield
+    /// lands on the nearest one it can.
     ///
     /// Refused on a page a calendar owns, by the data layer: its schedule is
     /// upstream's.
@@ -1853,13 +1983,6 @@ impl Workspace {
                 entity: "page".into(),
                 id: page_id.clone(),
             })?;
-        if page.is_recurring {
-            return Err(WorkspaceError::Refused {
-                message: "A repeating page's date comes from its rule. Change the repeat instead."
-                    .to_string(),
-            });
-        }
-
         let start = pikos_core::dates::parse_local_iso(&scheduled_start).ok_or_else(|| {
             WorkspaceError::InvalidInput {
                 message: format!("not a wall-clock date or datetime: {scheduled_start}"),
@@ -1886,13 +2009,56 @@ impl Workspace {
             }
         }
 
+        let rule = if page.is_recurring {
+            if page.schedule_locked {
+                return Err(WorkspaceError::Refused {
+                    message: "This series belongs to a calendar. Move it there.".to_string(),
+                });
+            }
+            pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await?
+        } else {
+            None
+        };
+        let (scheduled_start, scheduled_end, moved_rrule) = match &rule {
+            Some(rule) => {
+                let moved = pikos_recurrence::resolve_anchor_move(
+                    &rule.rrule,
+                    &scheduled_start,
+                    scheduled_end.as_deref(),
+                );
+                (moved.start, moved.end, moved.rrule)
+            }
+            None => (scheduled_start, scheduled_end, None),
+        };
+
         // Clear first, then write. Not one transaction — each of these is its
         // own, as they are on the desktop — but the order is the safe one: a
         // failure between them leaves the page with no date, which the user can
         // see and redo, rather than with two.
         self.clear_page_schedule(page_id.clone()).await?;
-        self.schedule_page(page_id.clone(), scheduled_start, scheduled_end)
+        self.schedule_page(
+            page_id.clone(),
+            scheduled_start.clone(),
+            scheduled_end.clone(),
+        )
+        .await?;
+        // The rule update recomputes the head, which is what settles a date the snap
+        // could not see was skipped or completed.
+        if let Some(rule) = rule {
+            pikos_db::update_recurrence_rule_impl(
+                &self.pool,
+                rule.id,
+                pikos_db::RecurrenceRuleUpdate {
+                    rrule: moved_rrule.filter(|moved| *moved != rule.rrule),
+                    scheduled_start: Some(scheduled_start),
+                    scheduled_end: Some(
+                        scheduled_end.map_or(serde_json::Value::Null, serde_json::Value::String),
+                    ),
+                    ..Default::default()
+                },
+            )
             .await?;
+        }
         self.get_page(page_id).await
     }
 
@@ -2085,6 +2251,33 @@ impl Workspace {
         Ok(())
     }
 
+    /// A page's own reminder rows, smallest lead first. Empty means the page
+    /// takes the default; a single `-1` row means it reminds never.
+    pub async fn list_page_reminders(
+        &self,
+        page_id: String,
+    ) -> Result<Vec<PageReminder>, WorkspaceError> {
+        let rows = pikos_db::list_page_reminders(&self.pool, &page_id).await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| PageReminder {
+                id: r.id,
+                minutes_before: r.minutes_before,
+            })
+            .collect())
+    }
+
+    pub async fn delete_page_reminder(&self, id: String) -> Result<(), WorkspaceError> {
+        pikos_db::delete_page_reminder(&self.pool, &id).await?;
+        Ok(())
+    }
+
+    /// Remove every reminder row from a page, returning it to the default.
+    pub async fn clear_page_reminders(&self, page_id: String) -> Result<(), WorkspaceError> {
+        pikos_db::delete_page_reminders(&self.pool, &page_id).await?;
+        Ok(())
+    }
+
     pub async fn trash_page(&self, id: String) -> Result<(), WorkspaceError> {
         pikos_db::soft_delete_page_impl(&self.pool, &id).await?;
         Ok(())
@@ -2261,11 +2454,15 @@ impl Workspace {
     }
 
     /// Full-text search across titles and page bodies.
+    ///
+    /// Completed pages are left out unless `include_completed` is set or the
+    /// query says `is:done`, and are counted either way.
     pub async fn search(
         &self,
         query: String,
+        include_completed: bool,
         limit: u32,
-    ) -> Result<Vec<SearchHit>, WorkspaceError> {
+    ) -> Result<SearchResults, WorkspaceError> {
         // Two ways in, decided by the query itself. A plain one is full-text
         // search. One carrying an operator — `tag:`, `folder:`, `is:`,
         // `priority:`, `due:` — becomes a structured query with full-text
@@ -2275,26 +2472,76 @@ impl Workspace {
         // happens to also have.
         let (_, now) = pikos_db::now_local_parts();
         let parsed = pikos_core::parse_search_query(&query, now);
-        let results = if parsed.has_operators {
-            filtered_search(&self.pool, &parsed).await?
+        let asked_for_completed = parsed.status == Some(pikos_core::SearchStatus::Done);
+        let indexed_text = if parsed.has_operators {
+            parsed.text.as_str()
         } else {
-            pikos_db::search_pages_impl(&self.pool, query, Some(false))
-                .await?
-                .results
+            query.as_str()
+        };
+        let terms = pikos_db::fts_tokens(indexed_text);
+        let (results, completed_count) = if parsed.has_operators {
+            let rows = filtered_search(&self.pool, &parsed).await?;
+            let completed = rows.iter().filter(|r| r.status == "done").count();
+            let shows_done = include_completed || asked_for_completed;
+            let rows = rows
+                .into_iter()
+                .filter(|r| shows_done || r.status != "done")
+                .collect();
+            (rows, completed)
+        } else if query.trim().chars().count() < MIN_FTS_QUERY_CHARS {
+            (Vec::new(), 0)
+        } else {
+            let response =
+                pikos_db::search_pages_impl(&self.pool, query, Some(include_completed)).await?;
+            let completed = usize::try_from(response.completed_count).unwrap_or(0);
+            (response.results, completed)
         };
         // The data layer has no limit parameter — it returns its own capped set
         // — so the cap is applied here rather than pushed down. Worth knowing if
         // a caller passes a large limit expecting more results: it will not get
         // them, and the fix belongs in search_pages_impl.
-        Ok(results
+        Ok(SearchResults {
+            hits: results
+                .into_iter()
+                .take(limit as usize)
+                .map(Into::into)
+                .collect(),
+            completed_count: u32::try_from(completed_count).unwrap_or(u32::MAX),
+            asked_for_completed,
+            terms,
+        })
+    }
+
+    /// Note that a page was opened, which is what orders [`Workspace::recent_pages`].
+    ///
+    /// Reading is not authoring, so this does not claim a synced page the way
+    /// an edit does.
+    pub async fn mark_page_opened(&self, id: String) -> Result<(), WorkspaceError> {
+        pikos_db::update_page_impl(
+            &self.pool,
+            id,
+            pikos_db::PageUpdate {
+                last_opened_at: Some(serde_json::Value::String(pikos_db::now_iso())),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// The pages opened most recently, newest first, for search to suggest
+    /// before anything is typed.
+    pub async fn recent_pages(&self, limit: u32) -> Result<Vec<PageSummary>, WorkspaceError> {
+        let mut pages: Vec<pikos_db::PageSummary> = pikos_db::list_pages_impl(&self.pool, None)
+            .await?
+            .into_iter()
+            .filter(|p| p.last_opened_at.is_some())
+            .collect();
+        pages.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+        Ok(pages
             .into_iter()
             .take(limit as usize)
-            .map(|r| SearchHit {
-                page_id: r.id,
-                title: r.title,
-                excerpt: r.excerpt,
-                match_source: r.match_source,
-            })
+            .map(Into::into)
             .collect())
     }
 
@@ -2685,6 +2932,10 @@ impl Workspace {
 }
 
 /// The empty Tiptap document, matching what the editor produces for a new page.
+/// FTS5 needs something to prefix-match on; below this a plain query is too
+/// broad to run. The desktop palette holds the same floor.
+const MIN_FTS_QUERY_CHARS: usize = 2;
+
 const EMPTY_DOCUMENT: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
 
 /// A read-only handle, for widget and intent extensions.
@@ -2843,11 +3094,11 @@ async fn calendar_range_impl(
         .collect();
 
     let override_rows: Vec<OverrideRow> = overrides
-        .into_iter()
+        .iter()
         .filter_map(|row| {
             Some(OverrideRow {
-                rule_id: row.rule_id?,
-                original_date: row.original_date?,
+                rule_id: row.rule_id.clone()?,
+                original_date: row.original_date.clone()?,
             })
         })
         .collect();
@@ -2900,7 +3151,64 @@ async fn calendar_range_impl(
         ));
     }
 
+    entries.extend(moved_occurrences(
+        &overrides,
+        &series_rules,
+        drawn.iter().chain(heads.iter()),
+        start,
+        &to,
+    ));
+
     Ok(entries)
+}
+
+/// A calendar series' occurrences that were moved off their rule, drawn where they went.
+///
+/// As the desktop's expansion draws them: only on a series with a sync origin, since a native
+/// move clones rather than writing an override row, and not once the original occurrence is
+/// completed or skipped, when its done page or nothing stands there instead. The expansion
+/// already keeps them off their original slot. Keyed and dated by the original occurrence, which
+/// is what completing or skipping one records.
+fn moved_occurrences<'a>(
+    overrides: &[pikos_db::PageSchedule],
+    rules: &[SeriesRule],
+    pages: impl Iterator<Item = &'a pikos_db::PageSummary> + Clone,
+    from: &str,
+    to_exclusive: &str,
+) -> Vec<CalendarEntry> {
+    let day = |iso: &str| iso.get(..10).unwrap_or(iso).to_string();
+    overrides
+        .iter()
+        .filter_map(|row| {
+            let rule_id = row.rule_id.as_ref()?;
+            let original = day(row.original_date.as_deref()?);
+            let rule = rules.iter().find(|r| &r.id == rule_id)?;
+            let page = pages
+                .clone()
+                .find(|p| p.id == rule.page_id && p.sync_state.is_some())?;
+            let completed = page
+                .completed_occurrences
+                .as_ref()
+                .is_some_and(|done| done.keys().any(|k| day(k) == original));
+            let skipped = page
+                .skipped_occurrences
+                .as_ref()
+                .is_some_and(|skips| skips.iter().any(|k| day(k) == original));
+            let last_day = day(row.scheduled_end.as_deref().unwrap_or(&row.scheduled_start));
+            let visible =
+                day(&row.scheduled_start).as_str() < to_exclusive && last_day.as_str() >= from;
+            (!completed && !skipped && visible).then(|| {
+                entry_of(
+                    page,
+                    format!("{}@{}", page.id, original),
+                    row.scheduled_start.clone(),
+                    row.scheduled_end.clone(),
+                    Some(original),
+                    Some(rule_id.clone()),
+                )
+            })
+        })
+        .collect()
 }
 
 /// One entry, from a page plus whichever schedule this occurrence has.
@@ -2916,8 +3224,7 @@ async fn calendar_range_impl(
 /// field is an unindexed `LIKE` over title and body which `list_pages_impl`
 /// documents as test-only.
 ///
-/// Finished work is left out unless the query asked for it, which is what the
-/// plain path does too. `is:done` asks for it; nothing else does.
+/// Completed pages are returned; [`Workspace::search`] counts and hides them.
 async fn filtered_search(
     pool: &sqlx::SqlitePool,
     parsed: &pikos_core::ParsedSearchQuery,
@@ -2939,7 +3246,6 @@ async fn filtered_search(
         }
     }
 
-    let wants_done = parsed.status == Some(pikos_core::SearchStatus::Done);
     if let Some(status) = parsed.status {
         filter.status = Some(status.as_str().to_string());
     }
@@ -2958,10 +3264,8 @@ async fn filtered_search(
 
     let summaries = pikos_db::list_pages_impl(pool, Some(filter)).await?;
 
-    // FTS5 needs something to prefix-match on; below two characters the query is
-    // too broad to run, so a single leftover character is matched on the title
-    // rather than thrown away.
-    let rows: Vec<pikos_db::SearchResult> = if parsed.text.chars().count() >= 2 {
+    // A single leftover character is matched on the title rather than thrown away.
+    let rows: Vec<pikos_db::SearchResult> = if parsed.text.chars().count() >= MIN_FTS_QUERY_CHARS {
         let allowed: std::collections::HashSet<String> =
             summaries.iter().map(|p| p.id.clone()).collect();
         pikos_db::search_pages_impl(pool, parsed.text.clone(), Some(true))
@@ -2979,10 +3283,7 @@ async fn filtered_search(
             .collect()
     };
 
-    Ok(rows
-        .into_iter()
-        .filter(|r| wants_done || r.status != "done")
-        .collect())
+    Ok(rows)
 }
 
 /// Every folder beneath `id`, at any depth.
@@ -3053,8 +3354,8 @@ fn summary_as_hit(page: pikos_db::PageSummary) -> pikos_db::SearchResult {
 ///
 /// A second, narrower envelope than `rrule_edit_would_degrade`, and the two
 /// answer different questions. That guard asks whether a *full* editor could
-/// round-trip the rule; this asks whether *this* picker can — frequency,
-/// interval, and weekdays for a weekly repeat, and nothing else.
+/// round-trip the rule; this asks whether *this* picker can: frequency,
+/// interval, weekdays, one week of the month, and an end, and nothing else.
 ///
 /// The distinction is not academic, and a test caught it being missed.
 /// `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` — "the last Friday of the month" —
@@ -3069,35 +3370,51 @@ fn repeat_from(options: pikos_recurrence::RecurrenceOptions) -> Option<Repeat> {
         pikos_recurrence::Freq::Yearly => RepeatFreq::Yearly,
     };
 
-    // "The first Monday", "the last Friday", "the 15th", "every March", a
-    // non-default week start, and the two ways a rule can stop. A picker with
-    // no control for any of them must not claim to be editing the rule.
+    // "The last Friday" spelled with BYSETPOS, "the 15th", "every March", and a
+    // non-default week start. A picker with no control for any of them must not
+    // claim to be editing the rule.
     let unrepresentable = options.bysetpos.is_some_and(|v| !v.is_empty())
         || options.bymonthday.is_some_and(|v| !v.is_empty())
         || options.bymonth.is_some_and(|v| !v.is_empty())
-        || options
-            .byweekday_ordinals
-            .is_some_and(|v| v.iter().any(Option::is_some))
         || options.wkst.is_some()
-        || options.count.is_some()
-        || options.until.is_some();
+        || options.count == Some(0);
     if unrepresentable {
         return None;
     }
 
     let weekdays = options.byweekday.unwrap_or_default();
-    // Weekdays on anything but a weekly rule say something this shape cannot,
-    // and would be dropped on the way back out.
-    if !weekdays.is_empty() && freq != RepeatFreq::Weekly {
+    let ordinals = options.byweekday_ordinals.unwrap_or_default();
+    let month_week = match (freq, weekdays.as_slice(), ordinals.as_slice()) {
+        (_, _, []) => None,
+        (RepeatFreq::Monthly, [_], [Some(week)]) if MONTH_WEEKS.contains(week) => Some(*week),
+        // A fifth weekday, several, or an ordinal on a weekly or yearly rule.
+        _ => return None,
+    };
+    // Bare weekdays on anything but a weekly rule say something this shape
+    // cannot, and would be dropped on the way back out.
+    if !weekdays.is_empty() && freq != RepeatFreq::Weekly && month_week.is_none() {
         return None;
     }
+
+    let ends = match (options.count, options.until) {
+        (Some(count), _) => RepeatEnds::AfterCount { count },
+        (None, Some(day)) => RepeatEnds::OnDay { day },
+        (None, None) => RepeatEnds::Never,
+    };
 
     Some(Repeat {
         freq,
         interval: options.interval.max(1),
         weekdays: weekdays.into_iter().map(u32::from).collect(),
+        month_week,
+        ends,
     })
 }
+
+/// The weeks of the month a monthly repeat can name: the desktop's presets
+/// offer the first four and the last. A fifth is left to the rule layer, since
+/// most months do not have one and a picker offering it would promise a gap.
+const MONTH_WEEKS: [i32; 5] = [1, 2, 3, 4, -1];
 
 fn entry_of(
     page: &pikos_db::PageSummary,

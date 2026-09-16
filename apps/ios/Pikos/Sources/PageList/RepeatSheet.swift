@@ -1,17 +1,14 @@
 import PikosCore
+import PikosSupport
 import SwiftUI
 
-/// How often a page repeats.
+/// How often a page repeats: the desktop's presets by name, one tap each, Custom for the rest,
+/// and when it stops.
 ///
-/// Quick add could make a page repeat and nothing could change it afterwards —
-/// so "every Monday" typed once was every Monday forever, and the only way out
-/// was to delete the page.
-///
-/// Narrow on purpose. Frequency, how many of them between runs, and which
-/// weekdays: the repeats people actually type. Anything richer — "the last
-/// Friday of the month", "every 15 March", one that stops after ten — is shown
-/// and left alone, because a picker with nowhere to put those terms would save
-/// the rule back without them. The workspace decides which is which and says so
+/// As wide as the desktop's presets and no wider. Frequency, how many of them between runs,
+/// which weekdays, a week of the month, and an end: anything richer, such as "every 15 March"
+/// or the fifth Friday, is shown and left alone, because a picker with nowhere to put those terms
+/// would save the rule back without them. The workspace decides which is which and says so
 /// through `PageRepeat`; this screen only draws the answer.
 struct RepeatSheet: View {
     let page: PageFacts
@@ -23,69 +20,105 @@ struct RepeatSheet: View {
     @State private var freq: RepeatFreq = .weekly
     @State private var interval = 1
     @State private var weekdays: Set<UInt32> = []
+    @State private var monthlyByWeekday = false
+    @State private var ends: RepeatEnds = .never
     @State private var repeats = false
+    @State private var isCustom = false
     @State private var isSaving = false
+    /// An end being nudged, saved once the stepper or picker has been still for a moment.
+    @State private var pendingEndsSave: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             Form {
-                switch current {
-                case .none:
-                    // Still reading. A form drawn from defaults and then
-                    // rearranged a beat later reads as the app changing its
-                    // mind about the page.
-                    ProgressView().frame(maxWidth: .infinity)
+                Group {
+                    switch current {
+                    case .none:
+                        // Still reading. A form drawn from defaults and then
+                        // rearranged a beat later reads as the app changing its
+                        // mind about the page.
+                        ProgressView().frame(maxWidth: .infinity)
 
-                case .fixed(let label):
-                    Section {
-                        Text(label)
-                    } header: {
-                        Text("Repeats")
-                    } footer: {
-                        Text(
-                            "This repeat is more detailed than Pikos can edit on iPhone. It still works — change it on the desktop."
-                        )
+                    case .fixed(let label):
+                        Section {
+                            Text(label)
+                        } header: {
+                            Text("Repeats")
+                        } footer: {
+                            Text(
+                                "This repeat is more detailed than Pikos can edit on iPhone. It still works, and you can change it on the desktop."
+                            )
+                        }
+
+                    case .never, .editable:
+                        editor
                     }
-
-                case .never, .editable:
-                    editor
                 }
+                .pikosFormRows()
             }
             .navigationTitle("Repeat")
+            .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)
             .disabled(isSaving)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(isEditable ? "Cancel" : "Done") { dismiss() }
-                }
-                if isEditable {
-                    ToolbarItem(placement: .confirmationAction) {
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Button("Save") { Task { await save() } }
-                        }
-                    }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
                 }
             }
             .task { await load() }
         }
+        .onDisappear {
+            guard isEditable, repeats, page.scheduledStart != nil else { return }
+            if isCustom {
+                saveCustom()
+            } else if let pending = pendingEndsSave {
+                pending.cancel()
+                saveEnds()
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     @ViewBuilder
     private var editor: some View {
         Section {
-            Toggle("Repeats", isOn: $repeats)
+            ForEach(presets, id: \.title) { preset in
+                Button {
+                    Task { await choose(preset) }
+                } label: {
+                    HStack {
+                        Text(preset.title).foregroundStyle(.textPrimary)
+                        Spacer()
+                        if !isCustom && current.map(preset.matches) == true {
+                            Image(systemName: "checkmark").foregroundStyle(.textAction)
+                        }
+                    }
+                }
+                .disabled(preset.rule != nil && page.scheduledStart == nil)
+            }
+            Button {
+                isCustom = true
+                repeats = true
+            } label: {
+                HStack {
+                    Text("Custom…").foregroundStyle(.textPrimary)
+                    Spacer()
+                    if isCustom {
+                        Image(systemName: "checkmark").foregroundStyle(.textAction)
+                    }
+                }
+            }
+            .disabled(page.scheduledStart == nil)
         } footer: {
             if page.scheduledStart == nil {
-                // Said before the attempt, not after it. Every occurrence is
-                // derived from the page's date, so there is nothing to repeat
+                // Every occurrence is derived from the page's date, so there is nothing to repeat
                 // from until it has one.
-                Text("Give the page a date first — a repeat needs somewhere to start.")
+                Text("Give the page a date first. A repeat needs somewhere to start.")
             }
         }
 
-        if repeats {
+        if isCustom && repeats {
             Section {
                 Picker("Every", selection: $freq) {
                     ForEach(Self.frequencies, id: \.value) { option in
@@ -94,6 +127,12 @@ struct RepeatSheet: View {
                 }
                 Stepper(
                     intervalLabel, value: $interval, in: 1...99)
+                if freq == .monthly {
+                    Picker("On", selection: $monthlyByWeekday) {
+                        Text(anchor.dayOfMonthLabel).tag(false)
+                        Text(anchor.weekOfMonthLabel).tag(true)
+                    }
+                }
             }
 
             if freq == .weekly {
@@ -103,15 +142,14 @@ struct RepeatSheet: View {
                             toggle(day.number)
                         } label: {
                             HStack {
-                                Text(day.name)
+                                Text(day.name).foregroundStyle(.textPrimary)
                                 Spacer()
                                 if weekdays.contains(day.number) {
                                     Image(systemName: "checkmark")
-                                        .foregroundStyle(Color.accentColor)
+                                        .foregroundStyle(Color.textAction)
                                 }
                             }
                         }
-                        .tint(.primary)
                     }
                 } header: {
                     Text("On these days")
@@ -121,11 +159,104 @@ struct RepeatSheet: View {
                     // who never opens this section gets.
                     Text(
                         weekdays.isEmpty
-                            ? "None chosen — it repeats on whichever day the page is on."
+                            ? "None chosen, so it repeats on whichever day the page is on."
                             : "")
                 }
             }
         }
+
+        if repeats {
+            endsSection
+        }
+    }
+
+    /// Kept across preset taps, as the desktop keeps it: changing how often something repeats is
+    /// not a decision about when it stops.
+    private var endsSection: some View {
+        Section {
+            Picker("Ends", selection: endKind) {
+                Text("Never").tag(EndKind.never)
+                Text("On a Day").tag(EndKind.onDay)
+                Text("After").tag(EndKind.afterCount)
+            }
+            switch ends {
+            case .never:
+                EmptyView()
+            case .onDay:
+                DatePicker("Last day", selection: endDay, in: anchor.date..., displayedComponents: .date)
+            case .afterCount(let count):
+                Stepper(
+                    count == 1 ? String(localized: "Once") : String(localized: "\(count) times"),
+                    value: endCount, in: 1...999)
+            }
+        } header: {
+            Text("Ends")
+        }
+    }
+
+    private enum EndKind: Hashable { case never, onDay, afterCount }
+
+    private var endKind: Binding<EndKind> {
+        Binding(
+            get: {
+                switch ends {
+                case .never: return .never
+                case .onDay: return .onDay
+                case .afterCount: return .afterCount
+                }
+            },
+            set: { kind in
+                switch kind {
+                case .never: setEnds(.never)
+                case .onDay:
+                    let monthOut = Calendar.current.date(byAdding: .month, value: 1, to: anchor.date) ?? anchor.date
+                    setEnds(.onDay(day: DayLabel.today(now: monthOut)))
+                case .afterCount: setEnds(.afterCount(count: 10))
+                }
+            })
+    }
+
+    private var endDay: Binding<Date> {
+        Binding(
+            get: {
+                if case .onDay(let day) = ends, let date = DayLabel.date(from: day) { return date }
+                return anchor.date
+            },
+            set: { setEnds(.onDay(day: DayLabel.today(now: $0))) })
+    }
+
+    private var endCount: Binding<Int> {
+        Binding(
+            get: {
+                if case .afterCount(let count) = ends { return Int(count) }
+                return 1
+            },
+            set: { setEnds(.afterCount(count: UInt32($0))) })
+    }
+
+    /// Applied as chosen. A custom rule carries it when the sheet closes; a preset's is saved here.
+    private func setEnds(_ value: RepeatEnds) {
+        guard value != ends else { return }
+        ends = value
+        guard !isCustom else { return }
+        pendingEndsSave?.cancel()
+        pendingEndsSave = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            pendingEndsSave = nil
+            saveEnds()
+        }
+    }
+
+    private func saveEnds() {
+        guard case .editable(let value, let label) = current else { return }
+        let rule = Repeat(
+            freq: value.freq, interval: value.interval, weekdays: value.weekdays, monthWeek: value.monthWeek,
+            ends: ends)
+        guard rule != value else { return }
+        current = .editable(repeat: rule, label: label)
+        let pageId = page.id
+        Task { await store.setRepeat(pageId: pageId, to: rule) }
     }
 
     private var isEditable: Bool {
@@ -174,29 +305,143 @@ struct RepeatSheet: View {
             repeats = true
             freq = value.freq
             interval = Int(value.interval)
-            weekdays = Set(value.weekdays)
+            weekdays = value.monthWeek == nil ? Set(value.weekdays) : []
+            monthlyByWeekday = value.monthWeek != nil
+            ends = value.ends
+            isCustom = !presets.contains { $0.matches(answer) }
         }
     }
 
-    private func save() async {
+    // MARK: - Presets
+
+    /// A repeat people pick by name, saved the moment it is tapped.
+    private struct Preset {
+        let title: String
+        /// Nil for "Doesn't repeat".
+        let rule: Repeat?
+
+        /// The shape alone, as the desktop compares: an end is kept across presets, not part of one.
+        func matches(_ answer: PageRepeat) -> Bool {
+            switch answer {
+            case .never: return rule == nil
+            case .fixed: return false
+            case .editable(let value, _):
+                guard let rule else { return false }
+                return value.freq == rule.freq && value.interval == rule.interval
+                    && Set(value.weekdays) == Set(rule.weekdays) && value.monthWeek == rule.monthWeek
+            }
+        }
+    }
+
+    private var anchor: RepeatAnchor {
+        RepeatAnchor(page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) } ?? Date())
+    }
+
+    /// The desktop's presets, each named from the page's own day so "every week" says which day.
+    private var presets: [Preset] {
+        let anchor = anchor
+        func rule(_ freq: RepeatFreq, interval: UInt32 = 1, weekdays: [UInt32] = [], monthWeek: Int32? = nil)
+            -> Repeat
+        {
+            Repeat(freq: freq, interval: interval, weekdays: weekdays, monthWeek: monthWeek, ends: .never)
+        }
+        return [
+            Preset(title: String(localized: "Doesn't repeat"), rule: nil),
+            Preset(title: String(localized: "Every day"), rule: rule(.daily)),
+            Preset(title: String(localized: "Every weekday"), rule: rule(.weekly, weekdays: [0, 1, 2, 3, 4])),
+            Preset(
+                title: String(localized: "Every week on \(anchor.weekdayName)"),
+                rule: rule(.weekly, weekdays: [anchor.weekday])),
+            Preset(
+                title: String(localized: "Every 2 weeks on \(anchor.weekdayName)"),
+                rule: rule(.weekly, interval: 2, weekdays: [anchor.weekday])),
+            Preset(
+                title: String(localized: "Every month \(anchor.dayOfMonthLabel)"),
+                rule: rule(.monthly)),
+            Preset(
+                title: String(localized: "Every month \(anchor.weekOfMonthLabel)"),
+                rule: rule(.monthly, weekdays: [anchor.weekday], monthWeek: anchor.weekOfMonth)),
+            Preset(
+                title: String(localized: "Every year on \(anchor.date.formatted(.dateTime.month(.abbreviated).day()))"),
+                rule: rule(.yearly)),
+        ]
+    }
+
+    private func choose(_ preset: Preset) async {
+        isCustom = false
+        if let current, preset.matches(current) {
+            dismiss()
+            return
+        }
         isSaving = true
         defer { isSaving = false }
-
         let ok: Bool
-        if repeats {
-            ok = await store.setRepeat(
-                pageId: page.id,
-                to: Repeat(
-                    freq: freq,
-                    interval: UInt32(interval),
-                    // Sorted, so the same choice always produces the same rule
-                    // string. A set has no order, and an unordered rule would
-                    // make every save look like a change to anything diffing
-                    // the rrule.
-                    weekdays: freq == .weekly ? weekdays.sorted() : []))
+        if var rule = preset.rule {
+            rule.ends = ends
+            ok = await store.setRepeat(pageId: page.id, to: rule)
         } else {
             ok = await store.removeRepeat(pageId: page.id)
         }
         if ok { dismiss() }
+    }
+
+    /// A custom rule is kept when the sheet closes, however it closes.
+    private func saveCustom() {
+        let anchor = anchor
+        let onWeekday = freq == .monthly && monthlyByWeekday
+        let rule = Repeat(
+            freq: freq,
+            interval: UInt32(interval),
+            // Sorted, so the same choice always produces the same rule
+            // string. A set has no order, and an unordered rule would
+            // make every save look like a change to anything diffing
+            // the rrule.
+            weekdays: freq == .weekly ? weekdays.sorted() : (onWeekday ? [anchor.weekday] : []),
+            monthWeek: onWeekday ? anchor.weekOfMonth : nil,
+            ends: ends)
+        if case .editable(let value, _) = current, value == rule { return }
+        let pageId = page.id
+        Task { await store.setRepeat(pageId: pageId, to: rule) }
+    }
+}
+
+/// What the presets are named from: the day a page's repeat starts on.
+private struct RepeatAnchor {
+    let date: Date
+
+    init(_ date: Date) { self.date = date }
+
+    /// Monday-first, as the rule layer numbers weekdays.
+    var weekday: UInt32 {
+        UInt32((Calendar.current.component(.weekday, from: date) + 5) % 7)
+    }
+
+    var weekdayName: String { date.formatted(.dateTime.weekday(.wide)) }
+
+    /// "on the 17th".
+    var dayOfMonthLabel: String {
+        String(localized: "on the \(Self.ordinal(Calendar.current.component(.day, from: date)))")
+    }
+
+    /// The desktop's reading of the start's week: a day in its month's last seven is "the last",
+    /// since that late it almost always means month end, and a fifth week would skip most months.
+    var weekOfMonth: Int32 {
+        let calendar = Calendar.current
+        let day = calendar.component(.day, from: date)
+        let length = calendar.range(of: .day, in: .month, for: date)?.count ?? 31
+        return day + 7 > length ? -1 : Int32((day + 6) / 7)
+    }
+
+    /// "on the 3rd Tuesday", "on the last Friday".
+    var weekOfMonthLabel: String {
+        let week = weekOfMonth
+        let position = week == -1 ? String(localized: "last") : Self.ordinal(Int(week))
+        return String(localized: "on the \(position) \(weekdayName)")
+    }
+
+    private static func ordinal(_ number: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .ordinal
+        return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
     }
 }

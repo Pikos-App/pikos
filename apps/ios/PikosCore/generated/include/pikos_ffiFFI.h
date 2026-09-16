@@ -313,6 +313,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_backup_database(uint64_t ptr, Rust
 uint64_t uniffi_pikos_ffi_fn_method_workspace_calendar_range(uint64_t ptr, RustBuffer start, RustBuffer end
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CLEAR_PAGE_REMINDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CLEAR_PAGE_REMINDERS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_clear_page_reminders(uint64_t ptr, RustBuffer page_id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CLEAR_PAGE_SCHEDULE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CLEAR_PAGE_SCHEDULE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_clear_page_schedule(uint64_t ptr, RustBuffer page_id
@@ -358,6 +363,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_create_page(uint64_t ptr, RustBuff
 uint64_t uniffi_pikos_ffi_fn_method_workspace_delete_all_data(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DELETE_PAGE_REMINDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DELETE_PAGE_REMINDER
+uint64_t uniffi_pikos_ffi_fn_method_workspace_delete_page_reminder(uint64_t ptr, RustBuffer id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 uint64_t uniffi_pikos_ffi_fn_method_workspace_disconnect_sync_account(uint64_t ptr, RustBuffer account_id
@@ -398,6 +408,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_completed(uint64_t ptr, RustB
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_folders(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_PAGE_REMINDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_PAGE_REMINDERS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_page_reminders(uint64_t ptr, RustBuffer page_id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_PAGES
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_pages(uint64_t ptr, RustBuffer query
@@ -421,6 +436,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_UPCOMING
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_UPCOMING
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_upcoming(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MARK_PAGE_OPENED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MARK_PAGE_OPENED
+uint64_t uniffi_pikos_ffi_fn_method_workspace_mark_page_opened(uint64_t ptr, RustBuffer id
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_OCCURRENCE
@@ -453,6 +473,11 @@ RustBuffer uniffi_pikos_ffi_fn_method_workspace_palette_colors(uint64_t ptr, Rus
 uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECENT_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECENT_PAGES
+uint64_t uniffi_pikos_ffi_fn_method_workspace_recent_pages(uint64_t ptr, uint32_t limit
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint64_t uniffi_pikos_ffi_fn_method_workspace_reconnect_caldav(uint64_t ptr, RustBuffer account_id, RustBuffer password
@@ -471,6 +496,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_remove_page_repeat(uint64_t ptr, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RENAME_FOLDER
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RENAME_FOLDER
 uint64_t uniffi_pikos_ffi_fn_method_workspace_rename_folder(uint64_t ptr, RustBuffer id, RustBuffer name
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REORDER_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REORDER_PAGES
+uint64_t uniffi_pikos_ffi_fn_method_workspace_reorder_pages(uint64_t ptr, RustBuffer folder_id, RustBuffer ordered_ids
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RESTORE_FOLDER
@@ -495,7 +525,7 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_schedule_page(uint64_t ptr, RustBu
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SEARCH
-uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer query, uint32_t limit
+uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer query, int8_t include_completed, uint32_t limit
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
@@ -1055,6 +1085,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_calendar_range(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CLEAR_PAGE_REMINDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CLEAR_PAGE_REMINDERS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_clear_page_reminders(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CLEAR_PAGE_SCHEDULE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CLEAR_PAGE_SCHEDULE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_clear_page_schedule(void
@@ -1109,6 +1145,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_delete_all_data(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DELETE_PAGE_REMINDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DELETE_PAGE_REMINDER
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_delete_page_reminder(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_disconnect_sync_account(void
@@ -1157,6 +1199,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_folders(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_PAGE_REMINDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_PAGE_REMINDERS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_page_reminders(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_PAGES
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_pages(void
@@ -1184,6 +1232,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_upcoming(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MARK_PAGE_OPENED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MARK_PAGE_OPENED
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_mark_page_opened(void
     
 );
 #endif
@@ -1223,6 +1277,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECENT_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECENT_PAGES
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_recent_pages(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav(void
@@ -1244,6 +1304,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RENAME_FOLDER
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RENAME_FOLDER
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_rename_folder(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_REORDER_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_REORDER_PAGES
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_reorder_pages(void
     
 );
 #endif

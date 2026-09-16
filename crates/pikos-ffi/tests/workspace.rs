@@ -8,9 +8,9 @@
 use pikos_ffi::workspace::FocusOutcome;
 use pikos_ffi::workspace::{
     CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, PageRepeat,
-    ReadOnlyWorkspace, Repeat, RepeatFreq, Workspace, WorkspaceError,
+    ReadOnlyWorkspace, Repeat, RepeatEnds, RepeatFreq, Workspace, WorkspaceError,
 };
-use pikos_ffi::Occurrence;
+use pikos_ffi::{CalendarEntry, Occurrence};
 
 /// A workspace in a fresh temporary file.
 ///
@@ -52,6 +52,7 @@ fn unique_suffix() -> String {
 fn new_page(title: &str) -> NewPage {
     NewPage {
         title: title.to_string(),
+        subtitle: None,
         folder_id: None,
         content: None,
         tags: None,
@@ -247,6 +248,60 @@ async fn assigning_a_folder_round_trips_and_clears() {
 }
 
 #[tokio::test]
+async fn a_subtitle_is_set_on_create_left_alone_by_other_edits_and_cleared_by_an_empty_string() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let page = ws
+        .create_page(NewPage {
+            subtitle: Some("Price is $379".to_string()),
+            ..new_page("Order the frame")
+        })
+        .await
+        .unwrap();
+    assert_eq!(page.subtitle.as_deref(), Some("Price is $379"));
+
+    let renamed = ws
+        .update_page(
+            page.id.clone(),
+            PageEdit {
+                title: Some("Order the desk frame".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(renamed.subtitle.as_deref(), Some("Price is $379"));
+
+    let edited = ws
+        .update_page(
+            page.id.clone(),
+            PageEdit {
+                subtitle: Some("  Free shipping  ".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(edited.subtitle.as_deref(), Some("Free shipping"));
+
+    let cleared = ws
+        .update_page(
+            page.id.clone(),
+            PageEdit {
+                subtitle: Some(" ".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(cleared.subtitle, None);
+
+    let listed = ws.list_pages(PageQuery::default()).await.unwrap();
+    assert_eq!(listed[0].subtitle, None);
+}
+
+#[tokio::test]
 async fn trashed_pages_leave_the_listing_and_come_back() {
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
@@ -275,7 +330,11 @@ async fn search_finds_a_page_by_its_body() {
     .await
     .unwrap();
 
-    let hits = ws.search("brown".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("brown".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].page_id, page.id);
 }
@@ -300,7 +359,14 @@ async fn search_respects_its_limit() {
         .await
         .unwrap();
     }
-    assert_eq!(ws.search("keyword".to_string(), 2).await.unwrap().len(), 2);
+    assert_eq!(
+        ws.search("keyword".to_string(), false, 2)
+            .await
+            .unwrap()
+            .hits
+            .len(),
+        2
+    );
 }
 
 #[tokio::test]
@@ -769,12 +835,9 @@ async fn the_read_only_handle_serves_the_calendar() {
 /// Written through `pikos-db` rather than the FFI because the FFI has no writer
 /// for it. That is the point — this stands in for the desktop.
 ///
-/// Note what is deliberately not asserted: that the override row is *drawn*.
-/// It is not, and the desktop does not draw it either. Both read one block per
-/// page from `pages.scheduled_start`, and for an rrule-backed page that column
-/// is owned by the recurring logic — `refresh_schedule_denorm` returns early
-/// rather than letting a new schedule row move the head. Drawing overrides
-/// would be a change to both apps, not to this one.
+/// Not asserted: that the row is drawn. On this native series it is not, as on the
+/// desktop; a calendar series' moved occurrences are, which
+/// `a_calendar_series_occurrence_that_was_moved_is_drawn_where_it_went` covers.
 #[tokio::test]
 async fn an_overridden_occurrence_is_not_also_projected() {
     let tmp = TempWorkspace::new();
@@ -2433,16 +2496,7 @@ async fn an_end_before_the_start_is_refused() {
     }
 }
 
-/// A repeating page is refused, and the refusal arrives as a refusal.
-///
-/// Its date belongs to the rule: moving it has to realign the anchor and snap
-/// onto a day the rule yields, and without that the next recompute reverts the
-/// edit. Refusing is the honest version of not having ported that yet — the
-/// same line `pikos update --due` draws.
-#[tokio::test]
-async fn a_repeating_page_refuses_a_plain_date_change() {
-    let tmp = TempWorkspace::new();
-    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+async fn weekly_standup(ws: &Workspace, rrule: &str) -> String {
     let page = ws
         .create_page(NewPage {
             scheduled_start: Some("2099-03-16T09:00:00".to_string()),
@@ -2450,31 +2504,61 @@ async fn a_repeating_page_refuses_a_plain_date_change() {
         })
         .await
         .unwrap();
+    // 2099-03-16 is a Monday.
     ws.set_recurrence(
         page.id.clone(),
-        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        rrule.to_string(),
         "2099-03-16T09:00:00".to_string(),
         None,
         "UTC".to_string(),
     )
     .await
     .unwrap();
+    page.id
+}
 
-    let before = ws.get_page(page.id.clone()).await.unwrap().scheduled_start;
-    match ws
-        .set_page_schedule(page.id.clone(), "2099-03-18T09:00:00".to_string(), None)
+#[tokio::test]
+async fn moving_a_weekly_series_to_another_weekday_moves_the_rule_with_it() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = weekly_standup(&ws, "FREQ=WEEKLY;BYDAY=MO").await;
+
+    ws.set_page_schedule(id.clone(), "2099-03-18T09:00:00".to_string(), None)
         .await
-    {
-        Err(WorkspaceError::Refused { message }) => {
-            assert!(message.contains("repeat"), "explains itself: {message}")
-        }
-        other => panic!("expected Refused, got {other:?}"),
-    }
+        .unwrap();
+    drop(ws);
+
+    let reopened = Workspace::open(tmp.path.clone()).await.unwrap();
     assert_eq!(
-        ws.get_page(page.id.clone()).await.unwrap().scheduled_start,
-        before,
-        "and the series is untouched"
+        reopened
+            .get_page(id.clone())
+            .await
+            .unwrap()
+            .scheduled_start
+            .as_deref(),
+        Some("2099-03-18T09:00:00"),
+        "the head stays on the Wednesday after a relaunch"
     );
+    match reopened.page_repeat(id).await.unwrap() {
+        PageRepeat::Editable { repeat, .. } => {
+            assert_eq!(repeat.weekdays, [2], "every Wednesday now")
+        }
+        other => panic!("expected an editable weekly repeat, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_series_moved_to_a_day_its_rule_skips_lands_on_one_it_yields() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = weekly_standup(&ws, "FREQ=WEEKLY;BYDAY=MO,WE,FR").await;
+
+    // 2099-03-24 is a Tuesday, a week out, so the snap has to pick the Wednesday after it.
+    let page = ws
+        .set_page_schedule(id, "2099-03-24T09:00:00".to_string(), None)
+        .await
+        .unwrap();
+    assert_eq!(page.scheduled_start.as_deref(), Some("2099-03-25T09:00:00"));
 }
 
 /// A calendar's page is refused by the data layer's own guard, reached through
@@ -2564,6 +2648,8 @@ async fn a_repeat_survives_being_read_back_and_changed() {
             freq: RepeatFreq::Weekly,
             interval: 2,
             weekdays: vec![0, 2],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -2587,6 +2673,8 @@ async fn a_repeat_survives_being_read_back_and_changed() {
             freq: RepeatFreq::Daily,
             interval: 1,
             weekdays: vec![],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -2622,6 +2710,8 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
             freq: RepeatFreq::Weekly,
             interval: 1,
             weekdays: vec![0],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -2643,6 +2733,8 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
             freq: RepeatFreq::Weekly,
             interval: 1,
             weekdays: vec![2],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -2697,6 +2789,8 @@ async fn switching_away_from_weekly_drops_the_weekdays() {
             freq: RepeatFreq::Monthly,
             interval: 1,
             weekdays: vec![0, 2, 4],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -2732,6 +2826,8 @@ async fn removing_a_repeat_keeps_the_page_and_its_date() {
             freq: RepeatFreq::Weekly,
             interval: 1,
             weekdays: vec![0],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -2782,6 +2878,8 @@ async fn a_page_with_no_date_cannot_be_made_to_repeat() {
                 freq: RepeatFreq::Daily,
                 interval: 1,
                 weekdays: vec![],
+                month_week: None,
+                ends: RepeatEnds::Never,
             },
         )
         .await
@@ -2836,6 +2934,8 @@ async fn a_rule_beyond_the_picker_is_shown_but_locked() {
                 freq: RepeatFreq::Weekly,
                 interval: 1,
                 weekdays: vec![4],
+                month_week: None,
+                ends: RepeatEnds::Never,
             },
         )
         .await
@@ -2860,8 +2960,9 @@ async fn a_rule_with_terms_the_picker_lacks_controls_for_is_locked() {
     for (rrule, what) in [
         ("FREQ=MONTHLY;BYMONTHDAY=15", "on the 15th"),
         ("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15", "every 15 March"),
-        ("FREQ=DAILY;COUNT=10", "ten times and stop"),
-        ("FREQ=DAILY;UNTIL=20990401T235959", "until April"),
+        ("FREQ=MONTHLY;BYDAY=5FR", "the fifth Friday"),
+        ("FREQ=MONTHLY;BYDAY=1MO,3MO", "the first and third Monday"),
+        ("FREQ=WEEKLY;BYDAY=2TU", "an ordinal on a weekly rule"),
         ("FREQ=WEEKLY;BYDAY=MO;WKST=SU", "a different week start"),
     ] {
         let page = ws
@@ -2892,12 +2993,160 @@ async fn a_rule_with_terms_the_picker_lacks_controls_for_is_locked() {
                     freq: RepeatFreq::Daily,
                     interval: 1,
                     weekdays: vec![],
+                    month_week: None,
+                    ends: RepeatEnds::Never,
                 },
             )
             .await
         {
             Err(WorkspaceError::Refused { .. }) => {}
             other => panic!("{rrule} ({what}) should refuse the write, got {other:?}"),
+        }
+    }
+}
+
+/// The desktop's richer presets survive the round-trip: a week of the month,
+/// and both ways a repeat can stop.
+///
+/// Each was locked before the picker had a control for it, so the regression
+/// this catches is a phone that shows "Every month on the third Tuesday" and
+/// then saves it back as every month on the 17th.
+#[tokio::test]
+async fn a_week_of_the_month_and_an_end_survive_being_read_back() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    // 2099-03-17 is the third Tuesday of its month.
+    for (pattern, rrule_has) in [
+        (
+            Repeat {
+                freq: RepeatFreq::Monthly,
+                interval: 1,
+                weekdays: vec![1],
+                month_week: Some(3),
+                ends: RepeatEnds::Never,
+            },
+            "BYDAY=3TU",
+        ),
+        (
+            Repeat {
+                freq: RepeatFreq::Monthly,
+                interval: 1,
+                weekdays: vec![1],
+                month_week: Some(-1),
+                ends: RepeatEnds::AfterCount { count: 6 },
+            },
+            "COUNT=6",
+        ),
+        (
+            Repeat {
+                freq: RepeatFreq::Weekly,
+                interval: 2,
+                weekdays: vec![1],
+                month_week: None,
+                ends: RepeatEnds::OnDay {
+                    day: "2099-06-30".to_string(),
+                },
+            },
+            "UNTIL=20990630",
+        ),
+    ] {
+        let page = ws
+            .create_page(NewPage {
+                scheduled_start: Some("2099-03-17T09:00:00".to_string()),
+                ..new_page(rrule_has)
+            })
+            .await
+            .unwrap();
+        ws.set_page_repeat(page.id.clone(), pattern.clone())
+            .await
+            .unwrap();
+
+        let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+        let rule = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
+            .await
+            .unwrap()
+            .expect("a rule was written");
+        assert!(rule.rrule.contains(rrule_has), "{}", rule.rrule);
+
+        match ws.page_repeat(page.id.clone()).await.unwrap() {
+            PageRepeat::Editable { repeat, .. } => assert_eq!(repeat, pattern),
+            other => panic!("{rrule_has} should stay editable, got {other:?}"),
+        }
+    }
+}
+
+/// A week of the month needs a monthly repeat naming one weekday, and an end
+/// has to leave at least one occurrence.
+#[tokio::test]
+async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-17T09:00:00".to_string()),
+            ..new_page("Report")
+        })
+        .await
+        .unwrap();
+
+    for (pattern, what) in [
+        (
+            Repeat {
+                freq: RepeatFreq::Weekly,
+                interval: 1,
+                weekdays: vec![1],
+                month_week: Some(3),
+                ends: RepeatEnds::Never,
+            },
+            "a week of the month on a weekly repeat",
+        ),
+        (
+            Repeat {
+                freq: RepeatFreq::Monthly,
+                interval: 1,
+                weekdays: vec![1, 3],
+                month_week: Some(3),
+                ends: RepeatEnds::Never,
+            },
+            "two weekdays for one week of the month",
+        ),
+        (
+            Repeat {
+                freq: RepeatFreq::Monthly,
+                interval: 1,
+                weekdays: vec![1],
+                month_week: Some(5),
+                ends: RepeatEnds::Never,
+            },
+            "a fifth week",
+        ),
+        (
+            Repeat {
+                freq: RepeatFreq::Daily,
+                interval: 1,
+                weekdays: vec![],
+                month_week: None,
+                ends: RepeatEnds::AfterCount { count: 0 },
+            },
+            "no occurrences at all",
+        ),
+        (
+            Repeat {
+                freq: RepeatFreq::Daily,
+                interval: 1,
+                weekdays: vec![],
+                month_week: None,
+                ends: RepeatEnds::OnDay {
+                    day: "June 30".to_string(),
+                },
+            },
+            "an end day that is not a date",
+        ),
+    ] {
+        match ws.set_page_repeat(page.id.clone(), pattern).await {
+            Err(WorkspaceError::InvalidInput { .. }) => {}
+            other => panic!("{what} should be refused, got {other:?}"),
         }
     }
 }
@@ -2953,11 +3202,15 @@ async fn an_interval_of_zero_is_refused() {
             freq: RepeatFreq::Daily,
             interval: 0,
             weekdays: vec![],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
         Repeat {
             freq: RepeatFreq::Weekly,
             interval: 1,
             weekdays: vec![9],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     ] {
         match ws.set_page_repeat(page.id.clone(), bad).await {
@@ -3130,6 +3383,8 @@ async fn skipping_a_date_outside_the_series_changes_nothing() {
             freq: RepeatFreq::Weekly,
             interval: 1,
             weekdays: vec![0],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -3560,6 +3815,7 @@ async fn tagged_page(
     let page = ws
         .create_page(NewPage {
             title: title.to_string(),
+            subtitle: None,
             folder_id: folder_id.clone(),
             content: None,
             tags: Some(tags.iter().map(|t| t.to_string()).collect()),
@@ -3590,9 +3846,10 @@ async fn a_tag_operator_narrows_to_that_tag() {
     tagged_page(&ws, "Quarterly recipe", None, &["home"], 0, None).await;
 
     let hits = ws
-        .search("tag:work quarterly".to_string(), 10)
+        .search("tag:work quarterly".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(
         ids,
@@ -3610,9 +3867,10 @@ async fn tags_are_matched_conjunctively() {
     tagged_page(&ws, "Release notes", None, &["work"], 0, None).await;
 
     let hits = ws
-        .search("tag:work tag:urgent release".to_string(), 10)
+        .search("tag:work tag:urgent release".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [both.as_str()]);
 }
@@ -3627,9 +3885,10 @@ async fn a_folder_operator_matches_a_folder_by_a_prefix_of_its_name() {
     tagged_page(&ws, "Standup shoes", None, &[], 0, None).await;
 
     let hits = ws
-        .search("folder:wor standup".to_string(), 10)
+        .search("folder:wor standup".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [inside.as_str()]);
 }
@@ -3644,9 +3903,10 @@ async fn the_inbox_is_the_pages_with_no_folder_at_all() {
     tagged_page(&ws, "Standup agenda", Some(folder.id), &[], 0, None).await;
 
     let hits = ws
-        .search("folder:inbox standup".to_string(), 10)
+        .search("folder:inbox standup".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [loose.as_str()]);
 }
@@ -3663,9 +3923,10 @@ async fn a_folder_that_does_not_exist_matches_nothing_rather_than_everything() {
     tagged_page(&ws, "Standup notes", None, &[], 0, None).await;
 
     let hits = ws
-        .search("folder:nowhere standup".to_string(), 10)
+        .search("folder:nowhere standup".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     assert!(hits.is_empty(), "got {} hits", hits.len());
 }
 
@@ -3678,22 +3939,156 @@ async fn done_pages_are_withheld_until_the_query_asks_for_them() {
     let open = tagged_page(&ws, "Plan the release", None, &["work"], 0, None).await;
     ws.set_page_status(finished.clone(), true).await.unwrap();
 
-    let default = ws.search("tag:work release".to_string(), 10).await.unwrap();
-    assert_eq!(
-        default.iter().map(|h| &h.page_id).collect::<Vec<_>>(),
-        vec![&open],
-        "a tag search is about outstanding work"
-    );
-
-    let asked = ws
-        .search("tag:work is:done release".to_string(), 10)
+    let default = ws
+        .search("tag:work release".to_string(), false, 10)
         .await
         .unwrap();
     assert_eq!(
-        asked.iter().map(|h| &h.page_id).collect::<Vec<_>>(),
+        default.hits.iter().map(|h| &h.page_id).collect::<Vec<_>>(),
+        vec![&open],
+        "a tag search is about outstanding work"
+    );
+    assert_eq!(default.completed_count, 1, "but says what it held back");
+
+    assert!(!default.asked_for_completed);
+
+    let asked = ws
+        .search("tag:work is:done release".to_string(), false, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        asked.hits.iter().map(|h| &h.page_id).collect::<Vec<_>>(),
         vec![&finished],
         "and `is:done` is how you ask for the rest"
     );
+    assert!(asked.asked_for_completed);
+
+    let everything = ws
+        .search("tag:work release".to_string(), true, 10)
+        .await
+        .unwrap()
+        .hits;
+    assert_eq!(
+        everything.len(),
+        2,
+        "or asking for completed pages outright"
+    );
+}
+
+#[tokio::test]
+async fn a_plain_search_counts_the_completed_pages_it_leaves_out() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let finished = tagged_page(&ws, "Invoice March", None, &[], 0, None).await;
+    tagged_page(&ws, "Invoice April", None, &[], 0, None).await;
+    ws.set_page_status(finished.clone(), true).await.unwrap();
+
+    let open_only = ws.search("invoice".to_string(), false, 10).await.unwrap();
+    assert_eq!(open_only.hits.len(), 1);
+    assert_eq!(open_only.completed_count, 1);
+
+    let with_done = ws.search("invoice".to_string(), true, 10).await.unwrap();
+    assert_eq!(with_done.hits.len(), 2);
+    assert!(with_done
+        .hits
+        .iter()
+        .any(|h| h.page_id == finished && h.status == "done"));
+}
+
+#[tokio::test]
+async fn a_plain_query_of_one_character_waits_for_another() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Invoice March", None, &[], 0, None).await;
+
+    let results = ws.search("i".to_string(), false, 10).await.unwrap();
+    assert!(results.hits.is_empty());
+    assert_eq!(results.completed_count, 0);
+}
+
+#[tokio::test]
+async fn a_search_hit_carries_what_a_result_row_shows() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = tagged_page(
+        &ws,
+        "Dentist",
+        None,
+        &["health"],
+        2,
+        Some("2099-03-04T15:00:00"),
+    )
+    .await;
+    ws.update_page(
+        id.clone(),
+        PageEdit {
+            subtitle: Some("Cleaning and x-rays".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let hit = ws
+        .search("dentist".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits
+        .remove(0);
+    assert_eq!(hit.page_id, id);
+    assert_eq!(hit.match_source, "title");
+    assert_eq!(hit.subtitle.as_deref(), Some("Cleaning and x-rays"));
+    assert_eq!(hit.scheduled_start.as_deref(), Some("2099-03-04T15:00:00"));
+    assert_eq!(hit.priority, 2);
+    assert_eq!(hit.tags, ["health"]);
+    assert_eq!(hit.status, "not_started");
+}
+
+#[tokio::test]
+async fn the_highlight_terms_are_the_words_the_index_saw() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Multi color plan", None, &["work"], 0, None).await;
+
+    let plain = ws
+        .search("multi-color".to_string(), false, 10)
+        .await
+        .unwrap();
+    assert_eq!(plain.terms, ["multi", "color"]);
+    assert_eq!(plain.hits.len(), 1);
+
+    let filtered = ws
+        .search("tag:work plan".to_string(), false, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        filtered.terms,
+        ["plan"],
+        "an operator is not a word to mark"
+    );
+}
+
+#[tokio::test]
+async fn recent_pages_are_the_opened_ones_newest_first() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let first = ws.create_page(new_page("First")).await.unwrap();
+    let second = ws.create_page(new_page("Second")).await.unwrap();
+    let trashed = ws.create_page(new_page("Trashed")).await.unwrap();
+    ws.create_page(new_page("Never opened")).await.unwrap();
+
+    ws.mark_page_opened(first.id.clone()).await.unwrap();
+    ws.mark_page_opened(trashed.id.clone()).await.unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    ws.mark_page_opened(second.id.clone()).await.unwrap();
+    ws.trash_page(trashed.id.clone()).await.unwrap();
+
+    let recent = ws.recent_pages(10).await.unwrap();
+    assert_eq!(
+        recent.iter().map(|p| p.title.as_str()).collect::<Vec<_>>(),
+        ["Second", "First"]
+    );
+    assert_eq!(ws.recent_pages(1).await.unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -3704,9 +4099,10 @@ async fn a_priority_operator_narrows_to_that_priority() {
     tagged_page(&ws, "Fix the typo", None, &[], 4, None).await;
 
     let hits = ws
-        .search("priority:urgent fix".to_string(), 10)
+        .search("priority:urgent fix".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [urgent.as_str()]);
 }
@@ -3722,7 +4118,11 @@ async fn a_due_window_excludes_both_the_far_future_and_the_undated() {
     tagged_page(&ws, "Report final", None, &[], 0, Some("2099-01-01")).await;
     tagged_page(&ws, "Report someday", None, &[], 0, None).await;
 
-    let hits = ws.search("due:today report".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("due:today report".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [inside.as_str()]);
 }
@@ -3741,9 +4141,10 @@ async fn is_scheduled_keeps_only_the_pages_that_have_a_date() {
     tagged_page(&ws, "Report someday", None, &[], 0, None).await;
 
     let hits = ws
-        .search("is:scheduled report".to_string(), 10)
+        .search("is:scheduled report".to_string(), false, 10)
         .await
-        .unwrap();
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [dated.as_str()]);
 }
@@ -3760,7 +4161,11 @@ async fn a_query_of_nothing_but_operators_still_answers() {
     let wanted = tagged_page(&ws, "Anything at all", None, &["work"], 0, None).await;
     tagged_page(&ws, "Something else", None, &["home"], 0, None).await;
 
-    let hits = ws.search("tag:work".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("tag:work".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [wanted.as_str()]);
 }
@@ -3778,7 +4183,11 @@ async fn a_single_leftover_character_still_narrows() {
     let matching = tagged_page(&ws, "Zebra", None, &["work"], 0, None).await;
     tagged_page(&ws, "Quilt", None, &["work"], 0, None).await;
 
-    let hits = ws.search("tag:work z".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("tag:work z".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
     assert_eq!(ids, [matching.as_str()]);
 }
@@ -3798,7 +4207,11 @@ async fn a_rejected_operator_value_leaves_the_token_as_text() {
     tagged_page(&ws, "Fix the outage", None, &[], 1, None).await;
     tagged_page(&ws, "Write the notes", None, &[], 0, None).await;
 
-    let hits = ws.search("priority:9".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("priority:9".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     assert!(
         hits.is_empty(),
         "9 is not a priority, so this is a search for two words that appear nowhere: got {:?}",
@@ -3808,7 +4221,11 @@ async fn a_rejected_operator_value_leaves_the_token_as_text() {
     // The same shape with a value the grammar *does* know narrows instead of
     // matching nothing — which is what makes the assertion above about the
     // value, and not about the path being broken.
-    let hits = ws.search("priority:urgent".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("priority:urgent".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     assert_eq!(
         hits.iter().map(|h| h.title.as_str()).collect::<Vec<_>>(),
         ["Fix the outage"]
@@ -3840,7 +4257,11 @@ async fn an_unknown_operator_is_searched_for_rather_than_obeyed() {
     // "5" — all of which that page has, and the other page has none of. A port
     // that swallowed `ratio:` as an operator would take the structured path
     // with an empty filter and hand back both.
-    let hits = ws.search("ratio:1.5".to_string(), 10).await.unwrap();
+    let hits = ws
+        .search("ratio:1.5".to_string(), false, 10)
+        .await
+        .unwrap()
+        .hits;
     assert_eq!(
         hits.iter().map(|h| h.page_id.as_str()).collect::<Vec<_>>(),
         [page.id.as_str()],
@@ -4359,6 +4780,8 @@ async fn deleting_all_data_leaves_nothing_behind_and_the_workspace_usable() {
             freq: RepeatFreq::Daily,
             interval: 1,
             weekdays: vec![],
+            month_week: None,
+            ends: RepeatEnds::Never,
         },
     )
     .await
@@ -4896,5 +5319,268 @@ async fn completing_a_backlog_stops_at_the_number_it_was_given() {
         ws.get_page(id).await.unwrap().scheduled_start.as_deref(),
         Some(format!("{}T09:00:00", days_ago(3)).as_str()),
         "three days still owed"
+    );
+}
+
+#[tokio::test]
+async fn a_pages_reminders_are_listed_smallest_lead_first_and_removed_one_or_all() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Dentist")).await.unwrap();
+    assert!(ws
+        .list_page_reminders(page.id.clone())
+        .await
+        .unwrap()
+        .is_empty());
+
+    ws.add_page_reminder(page.id.clone(), 30).await.unwrap();
+    ws.add_page_reminder(page.id.clone(), 10).await.unwrap();
+    let listed = ws.list_page_reminders(page.id.clone()).await.unwrap();
+    assert_eq!(
+        listed.iter().map(|r| r.minutes_before).collect::<Vec<_>>(),
+        [10, 30]
+    );
+
+    ws.delete_page_reminder(listed[0].id.clone()).await.unwrap();
+    let left = ws.list_page_reminders(page.id.clone()).await.unwrap();
+    assert_eq!(
+        left.iter().map(|r| r.minutes_before).collect::<Vec<_>>(),
+        [30]
+    );
+
+    ws.add_page_reminder(page.id.clone(), 0).await.unwrap();
+    ws.clear_page_reminders(page.id.clone()).await.unwrap();
+    assert!(ws
+        .list_page_reminders(page.id.clone())
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+/// A detached calendar series with its occurrence two days ago moved to 14:00.
+async fn series_with_a_moved_occurrence(tmp: &TempWorkspace, ws: &Workspace) -> String {
+    let id = overdue_series(ws, "Book club", 4).await;
+    link_to_a_calendar(&tmp.path, &id).await;
+    detach_from_its_calendar(&tmp.path, &id).await;
+    let rule_id = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap()
+        .iter()
+        .find_map(|e| e.rule_id.clone())
+        .expect("the series projects onto the days behind today");
+    ws.move_occurrence(
+        rule_id,
+        days_ago(2),
+        format!("{}T14:00:00", days_ago(2)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    id
+}
+
+fn on_day<'a>(entries: &'a [CalendarEntry], day: &str) -> Vec<&'a CalendarEntry> {
+    entries
+        .iter()
+        .filter(|e| e.original_date.as_deref() == Some(day))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_calendar_series_occurrence_that_was_moved_is_drawn_where_it_went() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    series_with_a_moved_occurrence(&tmp, &ws).await;
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    let moved = on_day(&entries, &days_ago(2));
+    assert_eq!(moved.len(), 1, "once, not also at its old slot: {moved:#?}");
+    assert_eq!(
+        moved[0].scheduled_start,
+        format!("{}T14:00:00", days_ago(2))
+    );
+    assert!(moved[0].rule_id.is_some() && !moved[0].schedule_locked);
+}
+
+#[tokio::test]
+async fn skipping_a_moved_occurrence_takes_it_off_the_calendar() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = series_with_a_moved_occurrence(&tmp, &ws).await;
+
+    ws.skip_occurrence(id, days_ago(2)).await.unwrap();
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    assert!(on_day(&entries, &days_ago(2)).is_empty());
+}
+
+#[tokio::test]
+async fn completing_a_moved_occurrence_records_its_original_day() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = series_with_a_moved_occurrence(&tmp, &ws).await;
+
+    ws.complete_recurring_occurrence(
+        id.clone(),
+        Some(Occurrence {
+            original_date: days_ago(2),
+            scheduled_start: format!("{}T14:00:00", days_ago(2)),
+            scheduled_end: None,
+        }),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    assert!(
+        on_day(&entries, &days_ago(2)).is_empty(),
+        "the done page stands there instead"
+    );
+    let backlog = ws.occurrence_backlog(id, days_ago(4)).await.unwrap();
+    assert!(!backlog.contains(&days_ago(2)), "{backlog:?}");
+}
+
+#[tokio::test]
+async fn a_moved_occurrence_of_a_native_series_is_not_drawn_twice() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 4).await;
+    let rule_id = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap()
+        .iter()
+        .find_map(|e| e.rule_id.clone())
+        .unwrap();
+    ws.move_occurrence(
+        rule_id,
+        days_ago(2),
+        format!("{}T14:00:00", days_ago(2)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    let on_the_day: Vec<_> = entries
+        .iter()
+        .filter(|e| e.scheduled_start.starts_with(&days_ago(2)))
+        .collect();
+    assert_eq!(
+        on_the_day.len(),
+        1,
+        "the clone, and nothing from the rule: {on_the_day:#?}"
+    );
+    assert!(
+        on_the_day[0].rule_id.is_none(),
+        "a native move leaves an ordinary page"
+    );
+    let _ = id;
+}
+
+#[tokio::test]
+async fn moving_a_moved_occurrence_again_moves_the_same_one() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    series_with_a_moved_occurrence(&tmp, &ws).await;
+    let rule_id = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap()
+        .iter()
+        .find_map(|e| e.rule_id.clone())
+        .unwrap();
+
+    ws.move_occurrence(
+        rule_id,
+        days_ago(2),
+        format!("{}T16:30:00", days_ago(2)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    let moved = on_day(&entries, &days_ago(2));
+    assert_eq!(moved.len(), 1, "{moved:#?}");
+    assert_eq!(
+        moved[0].scheduled_start,
+        format!("{}T16:30:00", days_ago(2))
+    );
+}
+
+#[tokio::test]
+async fn a_hand_arranged_inbox_keeps_its_order_and_ignores_pages_from_elsewhere() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let a = ws.create_page(new_page("A")).await.unwrap();
+    let b = ws.create_page(new_page("B")).await.unwrap();
+    let c = ws.create_page(new_page("C")).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let elsewhere = ws
+        .create_page(NewPage {
+            folder_id: Some(folder.id.clone()),
+            ..new_page("Elsewhere")
+        })
+        .await
+        .unwrap();
+    let sort_order_of = |pages: &[pikos_ffi::workspace::PageSummary], id: &str| {
+        pages.iter().find(|p| p.id == id).map(|p| p.sort_order)
+    };
+    let before = sort_order_of(
+        &ws.list_pages(PageQuery::default()).await.unwrap(),
+        &elsewhere.id,
+    );
+
+    ws.reorder_pages(
+        None,
+        vec![
+            c.id.clone(),
+            elsewhere.id.clone(),
+            a.id.clone(),
+            b.id.clone(),
+        ],
+    )
+    .await
+    .unwrap();
+
+    let mut inbox: Vec<_> = ws
+        .list_pages(PageQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|p| p.folder_id.is_none())
+        .collect();
+    inbox.sort_by_key(|p| p.sort_order);
+    assert_eq!(
+        inbox.iter().map(|p| p.title.as_str()).collect::<Vec<_>>(),
+        ["C", "A", "B"]
+    );
+    assert_eq!(
+        sort_order_of(
+            &ws.list_pages(PageQuery::default()).await.unwrap(),
+            &elsewhere.id
+        ),
+        before,
+        "a page in another folder is not renumbered"
     );
 }
