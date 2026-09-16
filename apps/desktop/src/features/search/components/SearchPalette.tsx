@@ -100,10 +100,9 @@ function buildMetadataSummary(item: SearchResult): string {
   if (item.scheduledDate) {
     parts.push(formatShortDate(item.scheduledDate));
   }
-  // Only show priority if non-default (0 = none)
-  const label = PRIORITY_LABELS[item.priority];
-  if (label) {
-    parts.push(label);
+  // Tested against the value, not its label: PRIORITY_LABELS[0] is "None", which is truthy.
+  if (item.priority !== 0) {
+    parts.push(PRIORITY_LABELS[item.priority]);
   }
   if (item.tags.length > 0) {
     parts.push(item.tags.map((t) => `#${t}`).join(" "));

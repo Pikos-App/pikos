@@ -206,6 +206,18 @@ describe("SearchPalette — operators", () => {
     expect(queryRow("beta someday")).toBeNull();
   });
 
+  it("leaves priority off the second line when a page has none", async () => {
+    await setup([
+      { priority: 0, scheduledStart: "2026-09-12", title: "alpha report" },
+      { priority: 1, scheduledStart: "2026-09-12", title: "beta report" },
+    ]);
+
+    type("report");
+
+    expect(await findRow("alpha report")).toHaveAccessibleName(expect.not.stringContaining("None"));
+    expect(await findRow("beta report")).toHaveAccessibleName(expect.stringContaining("Urgent"));
+  });
+
   it("filters by folder name, fuzzily", async () => {
     await setup([{ folderId: "Work", title: "alpha report" }, { title: "beta notes" }], ["Work"]);
 
