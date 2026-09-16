@@ -188,6 +188,33 @@ public enum CalendarGeometry {
         return String(format: "%@T%02d:%02d:00", day, clamped / 60, clamped % 60)
     }
 
+    // MARK: - Dropping a page on a day
+
+    /// The schedule a page dropped at `minute` of `day` takes.
+    ///
+    /// A timed page keeps its length, the way the desktop's drag does; anything else lands as a
+    /// start with no end, which the grid draws at its minimum height. Ends are clamped to the
+    /// day rather than rolled into tomorrow, because a drop is aimed at the day on screen.
+    public static func dropSchedule(
+        day: String, minute: Int, previousStart: String?, previousEnd: String?
+    ) -> (start: String, end: String?) {
+        let startMinute = min(max(0, minute), 24 * 60 - 1)
+        let start = wallClock(day: day, minute: startMinute)
+        guard let previousStart, let previousEnd,
+            self.day(of: previousStart) == self.day(of: previousEnd),
+            let from = minutesIntoDay(previousStart), let to = minutesIntoDay(previousEnd),
+            to > from
+        else { return (start, nil) }
+        return (start, wallClock(day: day, minute: min(startMinute + (to - from), 24 * 60 - 1)))
+    }
+
+    /// A position over a day into a minute, snapped down to the quarter hour the desktop snaps to.
+    public static func dropMinute(atY y: CGFloat, firstHour: Int, hourHeight: CGFloat) -> Int {
+        guard hourHeight > 0 else { return firstHour * 60 }
+        let minute = firstHour * 60 + Int((y / hourHeight * 60).rounded(.down))
+        return min(max(0, (minute / 15) * 15), 24 * 60 - 15)
+    }
+
     // MARK: - The now indicator
 
     /// Where "now" sits in a day column, or nil if that day is not today.

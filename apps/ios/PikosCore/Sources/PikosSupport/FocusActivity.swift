@@ -1,4 +1,4 @@
-#if canImport(ActivityKit)
+#if os(iOS)
     import ActivityKit
     import Foundation
 
@@ -7,9 +7,10 @@
     /// Declared here, in the package both processes link, because a Live
     /// Activity is drawn by the widget extension from a value the app
     /// requested — and two declarations of the same attributes in two targets
-    /// are two types the system cannot match. Behind `canImport` because the
-    /// package also builds for the Mac that runs its tests, and ActivityKit
-    /// does not exist there.
+    /// are two types the system cannot match. Behind `os(iOS)` because the
+    /// package also builds for the Mac that runs its tests: ActivityKit
+    /// *imports* on macOS — `canImport` is true there — and every type in it
+    /// is then marked unavailable, so only the platform test excludes this.
     ///
     /// The state is only the start instant. The island's own timer text counts
     /// up from it, kept current by the system, so the app never has to push an

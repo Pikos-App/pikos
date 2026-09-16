@@ -182,4 +182,38 @@ final class CalendarGeometryTests: XCTestCase {
         XCTAssertEqual(CalendarGeometry.day(of: clock), "2026-09-14")
         XCTAssertEqual(CalendarGeometry.wallClock(day: "2026-09-14", minute: 0), "2026-09-14T00:00:00")
     }
+
+    func testADroppedTimedPageKeepsItsLength() {
+        let dropped = CalendarGeometry.dropSchedule(
+            day: "2026-09-14", minute: 16 * 60,
+            previousStart: "2026-09-10T10:00:00", previousEnd: "2026-09-10T11:45:00")
+        XCTAssertEqual(dropped.start, "2026-09-14T16:00:00")
+        XCTAssertEqual(dropped.end, "2026-09-14T17:45:00")
+    }
+
+    func testADroppedUndatedOrAllDayPageGetsAStartAndNoEnd() {
+        let undated = CalendarGeometry.dropSchedule(
+            day: "2026-09-14", minute: 9 * 60 + 15, previousStart: nil, previousEnd: nil)
+        XCTAssertEqual(undated.start, "2026-09-14T09:15:00")
+        XCTAssertNil(undated.end)
+
+        let allDay = CalendarGeometry.dropSchedule(
+            day: "2026-09-14", minute: 9 * 60, previousStart: "2026-09-10", previousEnd: "2026-09-12")
+        XCTAssertNil(allDay.end)
+    }
+
+    func testALateDropEndsAtMidnightRatherThanTomorrow() {
+        let dropped = CalendarGeometry.dropSchedule(
+            day: "2026-09-14", minute: 23 * 60 + 30,
+            previousStart: "2026-09-10T10:00:00", previousEnd: "2026-09-10T12:00:00")
+        XCTAssertEqual(dropped.end, "2026-09-14T23:59:00")
+    }
+
+    func testADropSnapsDownToTheQuarterHourUnderTheFinger() {
+        XCTAssertEqual(CalendarGeometry.dropMinute(atY: 0, firstHour: 15, hourHeight: 40), 15 * 60)
+        XCTAssertEqual(CalendarGeometry.dropMinute(atY: 39, firstHour: 15, hourHeight: 40), 15 * 60 + 45)
+        XCTAssertEqual(CalendarGeometry.dropMinute(atY: 50, firstHour: 15, hourHeight: 40), 16 * 60 + 15)
+        XCTAssertEqual(CalendarGeometry.dropMinute(atY: -30, firstHour: 0, hourHeight: 40), 0)
+        XCTAssertEqual(CalendarGeometry.dropMinute(atY: 400, firstHour: 22, hourHeight: 40), 23 * 60 + 45)
+    }
 }

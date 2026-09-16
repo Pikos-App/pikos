@@ -5,8 +5,8 @@ import XCTest
 final class ReminderNotificationTests: XCTestCase {
     private let london = TimeZone(identifier: "Europe/London")!
 
-    private func calendar(_ identifier: Calendar.Identifier = .gregorian) -> Calendar {
-        var calendar = Calendar(identifier: identifier)
+    private func calendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = london
         calendar.locale = Locale(identifier: "en_GB")
         return calendar
@@ -26,15 +26,18 @@ final class ReminderNotificationTests: XCTestCase {
     }
 
     /// The trap the components exist to avoid: a device on the Buddhist
-    /// calendar would resolve "2026" as a year 543 years away. With the
-    /// calendar pinned inside the components, the same digits name the same
-    /// instant whatever the device is set to.
-    func testComponentsResolveToTheSameInstantOnAnyDeviceCalendar() throws {
+    /// calendar would resolve "2026" as a year 543 years away. Because the
+    /// components carry their own calendar and zone, the digits name one
+    /// instant with no device setting taking part.
+    ///
+    /// Read through `DateComponents.date`, which resolves against the calendar
+    /// inside the components — the same one `UNCalendarNotificationTrigger`
+    /// matches on. `Calendar.date(from:)` is not the same question: it answers
+    /// with the calendar it is called on and ignores the one it is handed.
+    func testComponentsNameOneInstantWithNoDeviceCalendarInvolved() throws {
         let components = try XCTUnwrap(
             ReminderNotification.fireComponents("2026-05-27T13:30:00", timeZone: london))
-        let fromGregorian = try XCTUnwrap(calendar().date(from: components))
-        let fromBuddhist = try XCTUnwrap(calendar(.buddhist).date(from: components))
-        XCTAssertEqual(fromGregorian, fromBuddhist)
+        XCTAssertEqual(components.date, Date(timeIntervalSince1970: 1_779_885_000))
     }
 
     func testMalformedWallClocksAreRefused() {

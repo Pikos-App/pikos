@@ -106,7 +106,7 @@ final class WorkspaceTests: XCTestCase {
             edit: PageEdit(
                 content: #"{"type":"doc"}"#, contentText: "the quick brown fox"))
 
-        let hits = try await workspace.search(query: "brown", limit: 10)
+        let hits = try await workspace.search(query: "brown", includeCompleted: false, limit: 10).hits
         XCTAssertEqual(hits.map(\.pageId), [page.id])
     }
 

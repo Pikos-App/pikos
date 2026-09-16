@@ -12,17 +12,17 @@ import XCTest
 /// say "Deleted 3 days ago".
 final class StorageTimestampTests: XCTestCase {
     /// The exact shape Rust's `now_iso()` writes: `%Y-%m-%dT%H:%M:%S%.3fZ`.
-    func testReadsTheFormatTheDataLayerWrites() {
-        let parsed = StorageTimestamp.utc("2026-09-13T14:30:00.123Z")
-        XCTAssertEqual(parsed?.timeIntervalSince1970, 1_789_309_800.123, accuracy: 0.0005)
+    func testReadsTheFormatTheDataLayerWrites() throws {
+        let parsed = try XCTUnwrap(StorageTimestamp.utc("2026-09-13T14:30:00.123Z"))
+        XCTAssertEqual(parsed.timeIntervalSince1970, 1_789_309_800.123, accuracy: 0.0005)
     }
 
     /// Milliseconds are not optional inside one `ISO8601FormatStyle`, so both
     /// shapes are tried. A stamp from an import or an older writer should still
     /// read as a date.
-    func testReadsAStampWithoutMilliseconds() {
-        let parsed = StorageTimestamp.utc("2026-09-13T14:30:00Z")
-        XCTAssertEqual(parsed?.timeIntervalSince1970, 1_789_309_800, accuracy: 0.0005)
+    func testReadsAStampWithoutMilliseconds() throws {
+        let parsed = try XCTUnwrap(StorageTimestamp.utc("2026-09-13T14:30:00Z"))
+        XCTAssertEqual(parsed.timeIntervalSince1970, 1_789_309_800, accuracy: 0.0005)
     }
 
     /// The whole point of the type. A value read as UTC must land on the same

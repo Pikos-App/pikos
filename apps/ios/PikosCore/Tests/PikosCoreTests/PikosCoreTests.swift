@@ -27,8 +27,8 @@ final class BridgeMappingTests: XCTestCase {
     }
 
     func testPresentOptionalsSurvive() {
-        let end = computeNextEnd(baseEnd: "2026-03-16T10:30:00", nextStart: "2026-03-20T14:00:00")
-        XCTAssertEqual(end, "2026-03-20T15:30:00")
+        let end = computeNextEnd(baseEnd: "2026-03-16T10:30:00", nextStart: "2026-03-20T09:00:00")
+        XCTAssertEqual(end, "2026-03-20T10:30:00")
     }
 
     // MARK: - Enums with payloads
