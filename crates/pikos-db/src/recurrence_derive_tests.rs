@@ -186,7 +186,10 @@ async fn an_exhausted_active_mirror_stays_open_at_its_last_occurrence() {
     recompute(&pool, "head").await;
 
     let (cached, status) = head(&pool, "head").await;
-    assert_eq!(status, "not_started", "a live mirror must not complete itself");
+    assert_eq!(
+        status, "not_started",
+        "a live mirror must not complete itself"
+    );
     assert_eq!(
         cached.as_deref(),
         Some(day_at(-9, "09:00:00").as_str()),
