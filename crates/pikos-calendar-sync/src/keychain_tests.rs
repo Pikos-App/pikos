@@ -1,6 +1,24 @@
 use super::*;
 use crate::test_support::memory_keychain as keychain;
 
+/// The real OS store, not the in-memory stand-in.
+///
+/// Ignored by default: it writes to the machine's own keychain, which on macOS means a prompt and
+/// on a headless Linux session means nothing is listening. `scripts/linux-keyring-check.sh` runs it
+/// where a Secret Service exists, which is the only place the Linux backend is exercised at all —
+/// every other test here injects a map, and a missing backend still passes all of them.
+#[test]
+#[ignore = "writes to the machine's keychain; see scripts/linux-keyring-check.sh"]
+fn the_system_keychain_round_trips() {
+    let account = format!("pikos-test-{}", std::process::id());
+    let kc = Keychain::system();
+
+    kc.store(&account, "app-password").expect("store");
+    assert_eq!(kc.load(&account).expect("load"), "app-password");
+    kc.delete(&account).expect("delete");
+    assert!(matches!(kc.load(&account), Err(KeychainError::NotFound)));
+}
+
 #[test]
 fn store_then_load_round_trips() {
     let kc = keychain();

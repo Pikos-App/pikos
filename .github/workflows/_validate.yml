@@ -237,6 +237,15 @@ jobs:
         working-directory: .
         run: cargo test --workspace --quiet
 
+      # The one test that asks the OS for its keychain. Every other keychain test injects a map,
+      # so a build naming no backend for this platform passes all of them and then forgets every
+      # password at runtime, which is what 0.4.0-beta.3 did.
+      - name: Linux keyring round-trip
+        working-directory: .
+        run: |
+          sudo apt-get install -y gnome-keyring dbus-x11
+          bash scripts/linux-keyring-check.sh
+
       - name: Cargo fmt --check (desktop crate)
         run: cargo fmt --check
 

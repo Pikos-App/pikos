@@ -127,6 +127,15 @@ jobs:
           PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
           PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
 
+      # The keychain is a runtime link, so a missing dependency here is a package that installs
+      # and then cannot store a password.
+      - name: The .deb depends on libdbus
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          deb=$(find apps/desktop/src-tauri/target -name "*.deb" | head -1)
+          dpkg -I "$deb" | grep -q "libdbus-1-3" || {
+            echo "::error::the .deb does not depend on libdbus-1-3"; exit 1; }
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
