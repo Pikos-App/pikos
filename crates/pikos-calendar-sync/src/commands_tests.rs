@@ -148,29 +148,51 @@ async fn a_caldav_password_never_lands_in_the_database_file() {
     .to_blob()
     .unwrap();
     keychain.store(&account.id, &blob).unwrap();
-    pool.close().await;
 
     assert!(
         backing.get(&account.id).unwrap().contains(PASSWORD),
         "precondition: the keychain is where it went"
     );
+
+    // Swept with the pool still open. Closing it checkpoints the WAL and unlinks both sidecars,
+    // so a sweep that ran only after the close read the main file and called that the whole proof.
+    let wal = dir.join("pikos.sqlite-wal");
+    assert!(
+        std::fs::metadata(&wal)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false),
+        "no write-ahead log to sweep, so the pages the main file has not been given yet were \
+         never looked at"
+    );
+    sweep_for(&dir, PASSWORD, &["", "-wal", "-shm"]);
+
+    pool.close().await;
+    sweep_for(&dir, PASSWORD, &[""]);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Panics if `needle` appears in any of the named files, or if none of them could be read.
+fn sweep_for(dir: &std::path::Path, needle: &str, suffixes: &[&str]) {
     let mut swept = 0;
-    for suffix in ["", "-wal", "-shm"] {
+    for suffix in suffixes {
         let file = dir.join(format!("pikos.sqlite{suffix}"));
         let Ok(bytes) = std::fs::read(&file) else {
             continue;
         };
         swept += 1;
         assert!(
-            !bytes
-                .windows(PASSWORD.len())
-                .any(|w| w == PASSWORD.as_bytes()),
+            !bytes.windows(needle.len()).any(|w| w == needle.as_bytes()),
             "the password is in {}",
             file.display()
         );
     }
-    assert!(swept > 0, "nothing was swept, so nothing was proven");
-    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(
+        swept,
+        suffixes.len(),
+        "only {swept} of {} files were readable, so the sweep proved less than it claims",
+        suffixes.len()
+    );
 }
 
 #[tokio::test]
