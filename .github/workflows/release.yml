@@ -143,6 +143,21 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: bash scripts/linux-package-check.sh apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle
 
+      # Start it on a virtual display and count the colours in a screenshot. A blank window has
+      # one; the real UI has thousands. This is the check that a build log cannot be: the package
+      # can install perfectly and still open on nothing.
+      - name: The app launches and paints
+        if: matrix.platform == 'ubuntu-22.04'
+        run: bash scripts/linux-launch-check.sh apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle "$RUNNER_TEMP/linux-shots"
+
+      - name: Keep what the launch check saw
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-launch-screenshot
+          path: ${{ runner.temp }}/linux-shots/*.png
+          if-no-files-found: warn
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
