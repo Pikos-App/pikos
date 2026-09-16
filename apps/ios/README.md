@@ -121,12 +121,21 @@ boot.
 
 ## Status
 
-**None of this Swift has been compiled yet.** It was written where no Swift
-toolchain was available — and until `_ios.yml` landed, nothing anywhere built
-it, so the first green run is likely to surface work. Most likely
-strict-concurrency annotations on `EditorWebView.Coordinator`, which conforms
-to two WebKit delegate protocols. `docs/ios/03-m0-spike.md` says what to expect
-and why annotations were not added speculatively.
+Compiled, and the three suites run green: the packages on the host, the app for
+device and simulator, the tier-1 flows in a simulator. Xcode 26.6, Swift 6.3.
+
+The first compile cost less than the plan feared. `EditorWebView.Coordinator`
+needed nothing; the concurrency work was elsewhere — a Live Activity held as an
+object across an actor hop, notification identifiers inheriting a class's
+main-actor isolation, and `ActivityKit` importing on macOS while every type in
+it is unavailable there, so `canImport` was the wrong test.
+
+Two things were broken in ways only a running app shows. The rows in the page
+list carried a selection binding at all times, so tapping a page selected it
+instead of opening it. And the launch screen and orientations were written as
+`INFOPLIST_KEY_…` build settings against a target that supplies its own
+Info.plist, where Xcode ignores them — the app ran letterboxed on every modern
+iPhone. `docs/ios/07-device-checklist.md` is what to do with the phone next.
 
 Everything beneath the Swift _is_ tested: the Rust is graded against a corpus
 generated from the TypeScript it replaces, and the editor against a browser
@@ -141,34 +150,22 @@ suite.
   screen icon wants a full-bleed composition, not a rounded tile inside the
   system's rounding. Replace the PNG when there is one; the slot needs
   nothing else.
-- **Dragging in the calendar.** The grid draws; moving and resizing a block by
-  dragging is not wired. On a phone both compete with scrolling and want a
-  design decision rather than a port of the desktop's gestures. Paging between
-  days is a swipe; moving a one-off block is the long-press menu's "Change
-  Date…", and moving one occurrence of a series is "Move this one…".
-- **The scope question behind a backlog.** When a series has open occurrences
-  before today, the desktop asks whether a skip means _just this one_ or
-  _this and everything before today_. iOS always means the first.
-- **The iPad UI.** Ships in the same universal binary, styled after the desktop
-  app rather than the phone. Not started; `docs/ios/00-status.md` records the
-  three things being kept true so that it stays a change of shell.
-- **Filtering the Completed section.** The filter field narrows the open list
-  only. The finished pages come from their own paginated query and a filter
-  over the rows that happen to be loaded would search a fifth of the folder
-  while looking like it searched all of it.
-- **Repeats richer than a picker can hold.** "Every other Tuesday" is
-  editable; "the last Friday of the month", "every 15 March", and one that
-  stops after ten runs are shown and left alone. The workspace decides which is
-  which — `repeat_from` is a narrower envelope than
+- **Resizing blocks on the calendar.** A page is scheduled by holding its row
+  and dropping it on an hour of the day under the list, and a one-off block
+  already on the grid is held and moved to another hour the same way. Dragging
+  a block's edge to change its length is not wired: on a phone it competes with
+  scrolling the grid. A length is set in the When sheet, and one occurrence of
+  a series moves through "Move this one…".
+- **The iPad UI.** Ships in the same universal binary and today runs the phone
+  shell at a larger size. The intended layout is a split view of the same
+  surfaces, closer to the desktop's three panels; not started.
+- **Repeats richer than a picker can hold.** Everything the desktop's presets
+  make is editable: every other Tuesday, the last Friday of the month, and one
+  that stops after ten runs or on a day. "Every 15 March", the fifth Friday and
+  a rule spelled with `BYSETPOS` are shown and left alone. The workspace decides
+  which is which: `repeat_from` is a narrower envelope than
   `rrule_edit_would_degrade`, and the difference is exactly the rule that
-  round-trips fine but has nowhere to go in a frequency-and-weekdays form.
-- **Moving a repeating page's date.** Every other page can be scheduled,
-  moved, given an end or converted between timed and all-day from the context
-  menu. A recurring head cannot: its date belongs to its rule, so moving it has
-  to realign the anchor and snap onto a day the rule yields, and without that
-  the next recompute silently reverts the edit. `resolveAnchorMove` in
-  `@pikos/core` is the logic; it is not ported, so the workspace refuses rather
-  than corrupting a series — the same line `pikos update --due` draws.
+  round-trips fine but has nowhere to go in the form.
 - **Google calendars.** CalDAV accounts can be added, repaired, toggled and
   synced from the phone. Google cannot: its grant waits on a loopback TCP
   listener inside the app process, and leaving for the browser is what starts
@@ -186,13 +183,13 @@ suite.
   a settings row that does nothing is indistinguishable from one that is
   broken. Notifications and import are still missing entirely, not omitted by
   design; export is in Settings, through the share sheet.
-- **Clearing a repeating page's date.** The context menu's "Clear Date" is
+- **Clearing a repeating page's date.** The hold menu's When › No Date is
   left out on a repeating page, where it would remove the one-off schedule rows
   and change nothing the user can see — a page with a rule owns its
   `scheduled_start` directly. Ending the series is what is meant there, and
   that is "Stop Repeating" on the same menu, with an undo in the notice where
   the rule can be rebuilt.
-- **Emptying the trash by hand.** "Recently Deleted" restores; it does not
+- **Emptying the trash by hand.** "Trash" restores; it does not
   offer a permanent delete. The retention window already clears the trash, and
   a destructive control sitting next to a restore button on a phone is the same
   mis-tap the screen exists to undo. Worth revisiting only alongside a
@@ -225,23 +222,19 @@ suite.
   one way of opening the workspace (`WidgetSupport.swift`), so a change to how
   a page is drawn is one change.
 - **Onboarding.** Deliberately. Nothing to sign up for means nothing to ask. A
-  brand-new workspace starts with one page in the Inbox, "Welcome to Pikos",
-  that says where the data lives and what to type; each empty view offers a
+  brand-new workspace starts with the desktop's Start here folder, three
+  undated pages that say where the data lives and what to type; each empty view offers a
   sentence the parser understands and opens quick add with it filled in. The
-  two gestures with no affordance — the swipes and the title menu — get one
-  TipKit card each at the top of the list, a day apart, until dismissed.
-- **Dragging the create button.** Things' Magic Plus can be dragged into a
-  list position or onto a day. The floating button here is a tap. It is the
-  right place for the button (see `docs/ios/08-design-review.md`); the drag is
-  a delighter that needs drop targets the list does not model.
+  gestures with no affordance get one tip each, a day apart, until dismissed:
+  a card at the top of the list for swiping and dragging a row, and a popover
+  on the title for switching views.
 - **Reordering rows by drag.** `sort_order` is on the summary and nothing
   crosses the FFI to change it. A folder can be _sorted_ — manual, date, title,
-  priority, from the corner menu, remembered per view like the desktop — and
+  priority, from the header's sort menu, remembered per view like the desktop — and
   select mode covers moving several pages at once; a hand-arranged order waits
   on a reorder call.
-- **Liquid Glass everywhere.** The floating button, the notice bar, the tab
-  bar's minimize and the bottom search are glass on iOS 26 and system
-  materials before it. Nothing in the content layer is glass, on purpose,
+- **Liquid Glass everywhere.** The bottom bar, the select-mode verbs and the
+  notice bar are glass on iOS 26 and system materials before it. Nothing in the content layer is glass, on purpose,
   and every iOS 26 symbol sits behind `#if compiler(>=6.2)` so the tree still
   builds with Xcode 16.
 - **A way to see the file.** Settings › Your data says how big the workspace

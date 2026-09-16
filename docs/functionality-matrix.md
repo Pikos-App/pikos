@@ -7,8 +7,8 @@ performed from.
 
 Scope: **0.4.0**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
 every Synced/Detached cell is unreachable there. The iOS column describes `apps/ios` — a
-native SwiftUI app over the same Rust, not a second implementation — and **none of it has
-been compiled yet**, so read every ✅ there as "written and tested beneath the Swift".
+native SwiftUI app over the same Rust, not a second implementation. It compiles and its tier-1
+flows run in a simulator; nothing on it has been measured on a phone yet.
 
 Use it for: checking a new feature covers every origin, and settling "what should this
 do?" for a case the app itself doesn't make obvious.
@@ -57,9 +57,10 @@ the surface exists, and five facts explain nearly every `○`:
   local notification, re-planned on every write, on the way to the background, and by a
   background refresh. The rows that stay `○` are the ones that need the polling model — the
   daily summary, the fired log — and quiet hours are `—`, since a Focus mode is the same
-  control system-wide. A reminder is set from quick add's line; nothing edits one afterwards.
-- **No dragging.** The calendar draws; moving and resizing a block compete with scrolling on
-  a touch screen and want a design decision rather than a port of the desktop's gestures.
+  control system-wide. A reminder is set from quick add's line or changed in the page header.
+- **One drag.** A page held in the list drops onto an hour of today, drawn under the list, which
+  is the desktop's drag from list to calendar. Moving and resizing a block on the grid compete
+  with scrolling on a touch screen and want a design decision rather than a port.
 - **One occurrence at a time, from the calendar.** Long-pressing a block completes or skips
   _that_ occurrence, which is what a series with a backlog needs — the head sits on last
   Monday while the block on screen is this Thursday — and asks the desktop's scope question
@@ -94,8 +95,9 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | --------------------------------- | --------------- | ----------------------- | ------------------------- | ------------------------------------------------ | ----------------------- |
 | Create page                       | ✅              | 🚫 ¹                    | 🚫 ¹                      | ✅ `add` ²                                       | ✅ quick add / new page |
 | Open in editor                    | ✅              | ✅ read-only mirror ³   | ✅                        | ✅ `read`                                        | ✅ same webview         |
-| Adjust page title                 | ✅              | 🚫 locked ⁴             | ✅                        | ⚠️ `update --title`, refused on synced ⁴         | ✅ long press → Rename  |
+| Adjust page title                 | ✅              | 🚫 locked ⁴             | ✅                        | ⚠️ `update --title`, refused on synced ⁴         | ✅ header or long press |
 | Edit body / content               | ✅              | ✅ marks owned ⁵        | ✅                        | ⚠️ `update --content`, plain text, replaces body | ✅                      |
+| Adjust page subtitle              | ✅              | ✅ marks owned ⁵        | ✅                        | —                                                | ✅ editor header        |
 | Adjust priority                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --priority`                           | ✅ long press           |
 | Add / remove tags                 | ✅              | ✅ marks owned ⁵        | ✅                        | ⚠️ `add` only, no tag flag on `update`           | ✅ long press           |
 | Toggle status (non-recurring)     | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `done` / `status`                             | ✅                      |
@@ -153,14 +155,14 @@ un-tombstones what that delete set. So detached survives the trash round-trip.
 
 | Functionality                                   | Native                | Synced                               | Detached                          | CLI                       | iOS                          |
 | ----------------------------------------------- | --------------------- | ------------------------------------ | --------------------------------- | ------------------------- | ---------------------------- |
-| Adjust page date                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `update --due` ¹⁰      | ✅ long press → Change Date  |
+| Adjust page date                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `update --due` ¹⁰      | ✅ hold → When               |
 | Adjust page time                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `--due` with a time ¹⁰ | ✅ same sheet                |
 | Adjust duration (end)                           | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `--end` ¹⁰             | ✅ same sheet                |
-| Clear the schedule                              | ✅                    | 🚫 locked ⁴                          | ✅                                | 🚫 ¹⁰                     | ✅ long press → Clear Date   |
+| Clear the schedule                              | ✅                    | 🚫 locked ⁴                          | ✅                                | 🚫 ¹⁰                     | ✅ hold → When › No Date     |
 | Drag block on calendar                          | ✅                    | 🚫 locked ¹¹                         | ✅                                | —                         | ○                            |
 | Resize block on calendar                        | ✅                    | 🚫 locked ¹¹                         | ✅                                | —                         | ○                            |
-| Drag page from list onto calendar               | ✅                    | 🚫 locked ¹²                         | ✅                                | —                         | ○                            |
-| Set / change per-page reminder                  | ✅ timed only ¹³      | ✅ same ¹³                           | ✅ same ¹³                        | ⚠️ `reminders add` ¹³     | ⚠️ quick add's line only     |
+| Drag page from list onto calendar               | ✅                    | 🚫 locked ¹²                         | ✅                                | —                         | ⚠️ onto today's hours only   |
+| Set / change per-page reminder                  | ✅ timed only ¹³      | ✅ same ¹³                           | ✅ same ¹³                        | ⚠️ `reminders add` ¹³     | ✅ page header, same options |
 | Reminder fires with no explicit lead set        | ✅ global default ¹³  | ✅ same ¹³                           | ✅ same ¹³                        | —                         | ✅ per-device default        |
 | Several leads on one page                       | ✅ each fires once ¹³ | ✅ same ¹³                           | ✅ same ¹³                        | —                         | ✅ one notification each     |
 | Re-timing re-arms a reminder that already fired | ✅ ¹³                 | 🚫 locked; upstream move re-arms ¹³  | ✅ page and override ¹³           | ✅ `update --due` ¹³      | ✅ re-planned on every write |
@@ -224,20 +226,20 @@ discriminator everywhere. `isAllDayIso` (`packages/core/src/utils/dates.ts`); th
 flag column. Ends are stored **inclusive**: the last day the event covers. All-day is
 orthogonal to origin _and_ to recurrence, so every row here stacks on top of §1–§2.
 
-| Functionality                  | Native                               | Synced                                                  | Detached                    | CLI                                    | iOS                      |
-| ------------------------------ | ------------------------------------ | ------------------------------------------------------- | --------------------------- | -------------------------------------- | ------------------------ |
-| Create as all-day              | ✅ click / drag the all-day strip ¹⁶ | 🚫 ¹                                                    | 🚫 ¹                        | ✅ date-only NL date ¹⁷                | ✅ quick add             |
-| Convert timed ↔ all-day        | ✅ date picker ¹⁸                    | 🚫 locked ⁴                                             | ✅                          | ✅ `--all-day` / a timed `--due` ¹⁰ ¹⁷ | ✅ same sheet            |
-| Multi-day span                 | ✅                                   | ✅                                                      | ✅                          | ✅ `add`, or `update --end` ¹⁷         | ✅                       |
-| Drag across days               | ✅                                   | 🚫 locked ¹⁹                                            | ✅                          | —                                      | ○                        |
-| Edge-resize the span           | ⚠️ not while recurring ²⁰            | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                        |
-| Extend past the week edge      | ⚠️ popover only ²⁰                   | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                        |
-| Stored end convention          | inclusive                            | inclusive; provider's exclusive end decremented once ²¹ | inclusive, frozen at detach | inclusive                              | inclusive                |
-| Timezone semantics             | floats                               | floats ¹⁴ ²²                                            | floats                      | floats ²²                              | same store, same rules   |
-| Set / change per-page reminder | ✅ day-before lead only ²³           | ✅ same                                                 | ✅ same                     | ⚠️ `add` only ²³                       | ⚠️ quick add's line only |
-| Counted in the daily summary   | ✅ ²⁴                                | ✅ ²⁴                                                   | ✅ ²⁴                       | —                                      | ○ no summary             |
-| Overdue / Today classification | ✅ date compare ²⁵                   | ✅ same                                                 | ✅ same                     | ✅ same                                | ✅ same predicate        |
-| Recurring all-day series       | ✅ one bar per day ²⁶                | ✅ same                                                 | ✅ same                     | —                                      | ✅ renders               |
+| Functionality                  | Native                               | Synced                                                  | Detached                    | CLI                                    | iOS                    |
+| ------------------------------ | ------------------------------------ | ------------------------------------------------------- | --------------------------- | -------------------------------------- | ---------------------- |
+| Create as all-day              | ✅ click / drag the all-day strip ¹⁶ | 🚫 ¹                                                    | 🚫 ¹                        | ✅ date-only NL date ¹⁷                | ✅ quick add           |
+| Convert timed ↔ all-day        | ✅ date picker ¹⁸                    | 🚫 locked ⁴                                             | ✅                          | ✅ `--all-day` / a timed `--due` ¹⁰ ¹⁷ | ✅ same sheet          |
+| Multi-day span                 | ✅                                   | ✅                                                      | ✅                          | ✅ `add`, or `update --end` ¹⁷         | ✅                     |
+| Drag across days               | ✅                                   | 🚫 locked ¹⁹                                            | ✅                          | —                                      | ○                      |
+| Edge-resize the span           | ⚠️ not while recurring ²⁰            | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                      |
+| Extend past the week edge      | ⚠️ popover only ²⁰                   | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                      |
+| Stored end convention          | inclusive                            | inclusive; provider's exclusive end decremented once ²¹ | inclusive, frozen at detach | inclusive                              | inclusive              |
+| Timezone semantics             | floats                               | floats ¹⁴ ²²                                            | floats                      | floats ²²                              | same store, same rules |
+| Set / change per-page reminder | ✅ day-before lead only ²³           | ✅ same                                                 | ✅ same                     | ⚠️ `add` only ²³                       | ✅ page header         |
+| Counted in the daily summary   | ✅ ²⁴                                | ✅ ²⁴                                                   | ✅ ²⁴                       | —                                      | ○ no summary           |
+| Overdue / Today classification | ✅ date compare ²⁵                   | ✅ same                                                 | ✅ same                     | ✅ same                                | ✅ same predicate      |
+| Recurring all-day series       | ✅ one bar per day ²⁶                | ✅ same                                                 | ✅ same                     | —                                      | ✅ renders             |
 
 ¹⁶ A click in the all-day strip creates a single-day page; a drag across columns creates a span
 (`useAllDayCreate`). Quick Add with a date-only date does the same.
@@ -330,7 +332,7 @@ the raw base. The completed/skip sets survive a wholesale rule rewrite and push 
 
 | Functionality                              | Native                                   | Synced                                                | Detached               | CLI                             | iOS                                   |
 | ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------- | ---------------------- | ------------------------------- | ------------------------------------- |
-| Move the head (drag / date edit)           | ⚠️ snaps to rule ³¹                      | 🚫 locked ⁴ ¹¹                                        | ⚠️ ³¹                  | 🚫 refused ¹⁰ ³¹                | 🚫 refused, anchor move unported      |
+| Move the head (drag / date edit)           | ⚠️ snaps to rule ³¹                      | 🚫 locked ⁴ ¹¹                                        | ⚠️ ³¹                  | 🚫 refused ¹⁰ ³¹                | ⚠️ snaps to rule, from the menu       |
 | Complete head, on time or future           | ✅ fast path ³²                          | ✅ same command ³²                                    | ✅                     | ✅ `done`                       | ✅ checkbox                           |
 | Complete head, overdue                     | ✅ scope dialog ³³                       | ✅ same dialog ³⁴                                     | ✅ same dialog         | ⚠️ one occurrence, no prompt ³⁵ | ⚠️ list: no dialog; calendar: asks ³³ |
 | … scope _Just this one_                    | ✅ head's own day; the rest stay open ³³ | ✅ same                                               | ✅                     | ✅ the only CLI behavior ³⁵     | ✅ the list's only behaviour          |
@@ -387,25 +389,25 @@ survive soft-delete). Skipped for an active-synced head, whose cache is reconcil
 
 ## 6. A single occurrence
 
-| Functionality                                                   | Native                                          | Synced                                 | Detached                     | CLI                            | iOS                           |
-| --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------- | ---------------------------- | ------------------------------ | ----------------------------- |
-| Render a virtual occurrence                                     | ✅ repeat glyph, no checkbox                    | ✅ checkbox                            | ✅ checkbox                  | — no expansion; real rows only | ✅ calendar only              |
-| Open a virtual occurrence                                       | ✅ opens the head                               | ✅                                     | ✅                           | —                              | ✅ opens the head             |
-| Delete a single virtual                                         | ✅ skip-set + undo toast ³⁹                     | ✅ skip-set survives sync ³⁹           | ✅                           | —                              | ✅ long press → Skip ³⁹       |
-| Delete an occurrence with a backlog behind it                   | ✅ scope dialog ³⁹                              | ✅ same, copy reads local-only ³⁹      | ✅ plain delete copy ³⁹      | —                              | ✅ action sheet ³⁹            |
-| … scope _Just this one_                                         | ✅ that date to the skip-set                    | ✅ same                                | ✅                           | —                              | ✅ the only iOS behaviour     |
-| … scope _This and everything before today_                      | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴       | —                              | ✅ bounded the same ³⁹        |
-| Move a single virtual                                           | ✅ detached clone ⁴⁰                            | 🚫 locked ⁴¹                           | ✅ mints an override ⁴²      | —                              | ✅ long press → Move ⁴⁰       |
-| Complete a single virtual                                       | 🚫 head-only ⁴³                                 | ✅ that occurrence ⁴³                  | ✅ ⁴³                        | —                              | ✅ long press ⁴³              |
-| Tick an occurrence with a backlog behind it                     | — head-only ⁴³                                  | ✅ the same scope dialog ³³ ⁴³         | ✅ ⁴³                        | —                              | ✅ the same question ³³ ⁴³    |
-| Render a materialized override                                  | — synced series only ⁴⁴                         | ✅ locked block at the moved slot ⁴²   | ✅ same block, unlocked ⁴²   | —                              | ✅ drawn, not distinguished   |
-| Move a materialized override                                    | — synced series only ⁴⁴                         | 🚫 provider-owned                      | ✅ moves the row in place ⁴² | —                              | ○                             |
-| Delete a materialized override                                  | — synced series only ⁴⁴                         | ✅ skip-set, series intact ³⁹          | ✅ same ³⁹                   | —                              | ○                             |
-| Complete a materialized override                                | — synced series only ⁴⁴                         | ✅ keyed on `original_date` ⁴²         | ✅ same key ⁴²               | —                              | ○                             |
-| Re-link after moving a detached override                        | —                                               | —                                      | ⚠️ provider's time wins ⁴²   | —                              | —                             |
-| Move / complete / delete a done clone                           | ✅ independent                                  | ✅ independent (native page)           | ✅                           | ✅ ⁹                           | ✅ an ordinary page           |
-| Per-occurrence reminder fires (lead, multi-lead, re-arm: §2 ¹³) | ✅ device-local wall-clock                      | ✅ source-zone → absolute              | ⚠️ device-local ¹⁵           | —                              | ✅ same horizon, phone's zone |
-| Per-occurrence body / notes                                     | 🚫 body is series-wide ⁴⁵                       | 🚫 same                                | 🚫 same                      | —                              | —                             |
+| Functionality                                                   | Native                                          | Synced                                 | Detached                     | CLI                            | iOS                             |
+| --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------- | ---------------------------- | ------------------------------ | ------------------------------- |
+| Render a virtual occurrence                                     | ✅ repeat glyph, no checkbox                    | ✅ checkbox                            | ✅ checkbox                  | — no expansion; real rows only | ✅ calendar only                |
+| Open a virtual occurrence                                       | ✅ opens the head                               | ✅                                     | ✅                           | —                              | ✅ opens the head               |
+| Delete a single virtual                                         | ✅ skip-set + undo toast ³⁹                     | ✅ skip-set survives sync ³⁹           | ✅                           | —                              | ✅ long press → Skip ³⁹         |
+| Delete an occurrence with a backlog behind it                   | ✅ scope dialog ³⁹                              | ✅ same, copy reads local-only ³⁹      | ✅ plain delete copy ³⁹      | —                              | ✅ action sheet ³⁹              |
+| … scope _Just this one_                                         | ✅ that date to the skip-set                    | ✅ same                                | ✅                           | —                              | ✅ the only iOS behaviour       |
+| … scope _This and everything before today_                      | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴       | —                              | ✅ bounded the same ³⁹          |
+| Move a single virtual                                           | ✅ detached clone ⁴⁰                            | 🚫 locked ⁴¹                           | ✅ mints an override ⁴²      | —                              | ✅ long press → Move ⁴⁰         |
+| Complete a single virtual                                       | 🚫 head-only ⁴³                                 | ✅ that occurrence ⁴³                  | ✅ ⁴³                        | —                              | ✅ long press ⁴³                |
+| Tick an occurrence with a backlog behind it                     | — head-only ⁴³                                  | ✅ the same scope dialog ³³ ⁴³         | ✅ ⁴³                        | —                              | ✅ the same question ³³ ⁴³      |
+| Render a materialized override                                  | — synced series only ⁴⁴                         | ✅ locked block at the moved slot ⁴²   | ✅ same block, unlocked ⁴²   | —                              | ✅ drawn at the moved slot      |
+| Move a materialized override                                    | — synced series only ⁴⁴                         | 🚫 provider-owned                      | ✅ moves the row in place ⁴² | —                              | ✅ Move this one, detached only |
+| Delete a materialized override                                  | — synced series only ⁴⁴                         | ✅ skip-set, series intact ³⁹          | ✅ same ³⁹                   | —                              | ✅ Skip this one                |
+| Complete a materialized override                                | — synced series only ⁴⁴                         | ✅ keyed on `original_date` ⁴²         | ✅ same key ⁴²               | —                              | ✅ Complete this one            |
+| Re-link after moving a detached override                        | —                                               | —                                      | ⚠️ provider's time wins ⁴²   | —                              | —                               |
+| Move / complete / delete a done clone                           | ✅ independent                                  | ✅ independent (native page)           | ✅                           | ✅ ⁹                           | ✅ an ordinary page             |
+| Per-occurrence reminder fires (lead, multi-lead, re-arm: §2 ¹³) | ✅ device-local wall-clock                      | ✅ source-zone → absolute              | ⚠️ device-local ¹⁵           | —                              | ✅ same horizon, phone's zone   |
+| Per-occurrence body / notes                                     | 🚫 body is series-wide ⁴⁵                       | 🚫 same                                | 🚫 same                      | —                              | —                               |
 
 ³⁹ Dismissals go to `skip_set`, **not** rule EXDATEs. That's what makes a synced dismissal
 survive a wholesale provider rule rewrite: the reconciler never writes the skip-set
@@ -535,7 +537,8 @@ whose whole job is to show what exists.
 
 | Functionality                                                | Native                      | Synced                       | Detached               | CLI                        | iOS                               |
 | ------------------------------------------------------------ | --------------------------- | ---------------------------- | ---------------------- | -------------------------- | --------------------------------- |
-| Full-text search                                             | ✅                          | ✅ ⁵²                        | ✅                     | ✅ `search`                | ✅ Search tab                     |
+| Full-text search                                             | ✅                          | ✅ ⁵²                        | ✅                     | ✅ `search`                | ✅ same ranking and rows          |
+| Recently opened pages, before a query is typed               | ✅                          | ✅                           | ✅                     | —                          | ✅                                |
 | Today / Inbox views                                          | ✅                          | ✅ ⁵³                        | ✅                     | ✅ `today` / `list` ⁵⁴     | ✅ both, plus Upcoming            |
 | Page linking (`[[`) + backlinks                              | ○ ⁵⁵                        | ○ ⁵⁵                         | ○ ⁵⁵                   | —                          | ○                                 |
 | Markdown / CSV / SQLite export                               | ✅ ⁵⁶                       | ✅ ⁵⁶                        | ✅ ⁵⁶                  | —                          | ✅ share sheet ⁵⁶                 |
@@ -551,7 +554,7 @@ whose whole job is to show what exists.
 | Move overdue → today (bulk)                                  | ✅                          | 🚫 locked ⁶²                 | ✅                     | —                          | ✅ Overdue header ⁶²              |
 | Select several: complete / schedule / move / delete          | ✅ multi-select ¹²          | ⚠️ locked members skipped ¹² | ✅                     | —                          | ✅ select mode, same skips ⁶²     |
 | System search finds a page (Spotlight)                       | —                           | —                            | —                      | —                          | ✅ open pages, on-device          |
-| Month view                                                   | ✅                          | ✅                           | ✅                     | —                          | ○                                 |
+| Month view                                                   | ✅                          | ✅                           | ✅                     | —                          | ✅ bars per day, tap for the day  |
 | `.ics` calendar export                                       | ✅ ⁶³                       | ✅ ⁶³                        | ✅ ⁶³                  | —                          | ✅ same builder ⁶³                |
 | Notification history panel                                   | ✅ ⁶⁴                       | ✅ ⁶⁴                        | ✅ ⁶⁴                  | —                          | ○ the plan is rebuilt, not logged |
 | Notification click opens its page                            | ✅ ⁶⁵                       | ✅ ⁶⁵                        | ✅ ⁶⁵                  | —                          | ✅ and "Complete" from the banner |
@@ -666,8 +669,8 @@ palette-input affordance, and `list` had typed flags before they existed. iOS ru
 itself rather than a second one: `parseSearchQuery` is ported to `pikos-core::search` and graded
 against the TypeScript over every query the TS suite exercises, at seven reference times because
 `due:` reads a clock. `Workspace::search` then takes the same two paths the palette does — the
-filter first, full-text search over the leftover words second, the two intersected — and hides
-finished pages unless `is:done` asks for them.
+filter first, full-text search over the leftover words second, the two intersected — and holds
+finished pages behind the same "Show completed" count unless `is:done` asks for them.
 ⁶¹ A leading `>` switches the palette from searching pages to running commands; the command
 list is derived from the keyboard registry, so a shortcut and its palette entry cannot drift.
 Commands act on the app, not on a page, so the origin columns don't apply.

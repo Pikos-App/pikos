@@ -5,6 +5,11 @@ reminder work. Two halves: what a productivity app on an iPhone is expected
 to feel like in 2026, and how the phone app measured against it. The pass
 that followed is recorded at the end, with what it left alone and why.
 
+The shell this review placed, with tabs, a floating `+` and a filter field under
+the title, was replaced the same day by the desktop's own two controls and one
+bottom bar. `00-status.md` has that pass. The research and the row, capture,
+selection and system-reach findings below still stand.
+
 The research underneath this — Apple's WWDC25/26 sessions on the new design
 system, the App Store accessibility criteria, and the help pages of Things,
 Todoist, Reminders, Notes, Fantastical and Structured — is summarised here

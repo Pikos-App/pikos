@@ -440,7 +440,7 @@ folder it was created in.
 no way back: the delete had been soft all along, but nothing on iOS listed or
 restored a trashed page, so as far as the user could tell it was gone. The
 workspace now exposes `list_trashed_pages()` and `trash_retention_days()`, and
-"Recently Deleted" sits behind the view switcher with a restore on each row.
+"Trash" sits behind the view switcher with a restore on each row.
 Two things it is deliberately careful about — it does not offer a permanent
 delete (a destructive control next to a restore button on a small screen is the
 same mis-tap the screen exists to undo), and it marks the rows that mirror a
@@ -784,6 +784,200 @@ drag reordering (needs a reorder call across the FFI), an evening bucket, a
 deadline distinct from the date, Spotlight _actions_, Focus filters, the
 share extension.
 
+## The shell and the palette (2026-09-14)
+
+The design pass above placed things well and still left the phone looking like
+a different product from the Mac: a light, airy single column with a large
+title, a filter field, a floating `+`, a detached search button, a gear, an
+ellipsis and a two-tab pill, where the desktop is a dense warm-neutral
+workspace in teal with a page list beside its week. This pass makes them one
+app.
+
+**Navigation is the desktop's own two controls.** When the Mac's sidebar is
+hidden, its list title becomes a switcher of every view and folder, and its
+right-hand panel swaps between the document and the calendar. The phone uses
+exactly those: the title opens the switcher (views, folders with colours and
+counts, calendars, Trash and Settings), and one bottom bar holds the
+List/Calendar toggle, search and capture (`Shell/`), so search is in reach of a
+thumb from either pane. The sort-and-select menu is the header's one tool. The tab bar, the floating button, the filter field
+and both corner buttons are gone. The whole app is one stack on `Route`.
+
+**Today's hours sit under the list** (`Calendar/DayPeek.swift`): the next three
+hours, drawn as the calendar draws them, in a tray labelled "Up next" rather
+than with a second date, shrinking to one line naming what is next when today
+is clear. **Holding a row and dropping it on an hour schedules
+the page**, keeping a timed page's length, with Undo in the notice. The system
+drag gives no callback when a drop lands nowhere, and the item provider
+outlives the drag, so the session ends when drop updates stop arriving
+(`Support/PageDrag.swift`). Two UI tests cover a drop on the day and a drag let
+go over the list; the second caught the day staying open before that was fixed.
+
+**The palette is generated, not copied.** `scripts/gen-ui-tokens.mjs` now also
+writes `PikosSupport/DesignTokens.swift`, the asset catalog's `AccentColor`
+and `LaunchBackground`, and the colour block of the phone editor's stylesheet,
+all from `packages/ui/src/tokens.ts`, and `--check` covers every one. The phone
+had been tinting controls `#d1603d`, which is not a token; interactive colour is
+now the desktop's teal and terracotta is the icon only. Type is each desktop
+step at 1.15×, snapped to a Dynamic Type style (`Support/Theme.swift`).
+
+**Every surface follows the desktop's.** Rows: the square checkbox stroked red
+or amber by priority, a medium-weight title with its date at the trailing edge
+(red once late, amber within three days), the one-line subtitle. The calendar
+opens on one day under the week strip, with three days and a week a menu away,
+the desktop's uppercase day headers, blocks blended
+from their folder colour with a leading stripe, and a teal now line. The editor
+gains the desktop's page header: the title and subtitle edited in place and the
+byline of status, folder, date, priority and tags, each changing itself. The
+editor's own stylesheet mirrors the desktop editor at phone scale. Quick add is
+a sheet of its own rather than a form.
+
+**Search is the desktop palette.** With nothing typed it offers the ten pages
+opened most recently, and opening a page on the phone now records it in the same
+column the desktop writes. A result row is the palette's: matched words in teal,
+and a second line that is the matched subtitle, the matched passage, or the
+page's date, priority and tags. Completed pages wait behind "Show completed (n)",
+and plain words wait for two characters, as on the desktop. Across the FFI,
+`Workspace::search` takes `include_completed` and returns `SearchResults` with
+that count, the words the index matched and whether the query said `is:done`;
+`mark_page_opened` and `recent_pages` are new. The remembered searches are gone,
+because their suggestion list covered the recent pages. A `pikos://search` link's
+text now fills the field, which it silently did not before.
+
+**Reminders are edited in the page header.** A scheduled page's byline carries
+the desktop's reminder menu: None, the desktop's leads on a timed page or the
+day-before anchor on an all-day one, and Reset to Default. Tapping a lead the page
+has takes it off, and the device's default shows as on until the page has leads of
+its own, the same reading as `usePageReminders` (`PikosSupport.PageReminders`).
+The workspace gained `list_page_reminders`, `delete_page_reminder` and
+`clear_page_reminders`. A reminder write bumps the data version, which is what
+re-plans the notifications.
+
+**A repeating page's date can be changed.** The refusal described earlier is gone:
+`set_page_schedule` moves a series through `pikos_recurrence::resolve_anchor_move`,
+which composes the engine's own realign and snap exactly as `resolveAnchorMove`
+does, then writes the rule so the head is recomputed. Change Date is on a repeating
+page's menu, the sheet leaves out "No date" there, and a date the rule cannot yield
+lands on the nearest one it can with a notice saying where.
+
+**A calendar's moved occurrence is drawn where it went.** When a provider or the
+reader moves one occurrence of a synced series, the data layer keeps it as an
+override row. `calendar_range` suppressed its original slot and drew nothing in its
+place, so the event vanished from the phone. It now draws it at the moved time, as
+the desktop's expansion does: only for a series with a sync origin, not once the
+original day is completed or skipped, keyed on the original day. The long-press
+menu's Complete this one, Skip this one and, on a detached series, Move this one
+already act on that key.
+
+**A month view.** Month is the fourth span under the calendar's title. The month
+is padded to whole weeks from the reader's week start, each day shows what touches
+it as up to three bars in folder colours and a count past that, and tapping a day
+opens it in the day view. The grid and the per-day placement are
+`PikosSupport.MonthLayout`, tested on the host, including a span counting on every
+day it covers.
+
+**Calendar blocks are placed, not offset.** Blocks in the day under the list and in
+the grid moved with `.offset`, which moves what is drawn and what a finger hits but
+not the accessibility frame, so VoiceOver and UI tests found each block where it
+would sit unmoved: in the tray, one hour above. They are positioned now.
+
+**The subtitle crosses the FFI.** `NewPage` and `PageEdit` carry `subtitle`, so
+the phone can write the line the desktop shows under every title. An empty
+string clears it.
+
+**For design review.** Debug builds launched with `PIKOS_DEMO=1` seed a lived-in
+workspace instead of the welcome page, and further `PIKOS_DEMO_*` variables open
+any screen, including a drag frozen over the day (`Support/DemoWorkspace.swift`).
+
+## The two-touch pass (2026-09-15)
+
+A review of every screen against one question: how many taps does a small change cost? The answer
+was often three or four, through a sheet with Save and Cancel for a choice that was easy to take
+back. This pass makes the likeliest change a hold and one tap, and lets choices apply as they are
+made.
+
+**One menu, likeliest first.** Holding a row, a calendar block or the editor's ellipsis opens the
+same menu: Complete, Today and Tomorrow across the top, then Priority (each flag in its colour),
+When, Move to Folder (each folder in its colour), Tags, Repeat, Rename and Delete. The editor
+leaves out Rename, since its title is edited in place. Priority stayed a submenu: a row of flags
+in the menu stopped a held row lifting to be dragged onto the day, which the drag test caught. The
+editor's priority chip, which nothing drags, is that row of flags.
+
+**One set of days.** `PikosSupport.WhenChoice` names Today, Tomorrow, This Weekend and Next Week,
+and every date control offers them in those words. Sending a page to one keeps its time and length
+(`ScheduleShift`), with Undo in the notice. Select mode's When, quick add's chip, the hold menu and
+the When sheet all use it.
+
+**Swipes send a page to a day.** Right completes. Left offers the likeliest days, and When for
+any other. Delete left the swipe for the hold menu.
+
+**No Save buttons.** Tapping a day in the When sheet saves it and closes. Tags save as they are
+added or removed. Repeat offers presets by name, saved on tap, with Custom for the rest. A time, an
+end or a custom rule is kept when its sheet closes, however it closes. Select mode's Delete has
+Undo and no confirmation. A quick-add line swiped away comes back as a draft.
+
+**Capture knows where it was opened.** From Today a new page is dated today, from a folder it is
+filed there, from the calendar it lands on the day shown. The words the parser read are coloured
+where they were typed (`PikosSupport.QuickAddHighlight`, a word-level diff against the parsed
+title), which replaced the separate line repeating the title.
+
+**The calendar.** Phone width offers Day, 3 Days and Month; seven columns drew titles a letter to
+a line. The title opens the span choice and a month in place of the old menu and Go to Date sheet.
+The week strip draws folder-coloured bars instead of dots. A one-off block can be held and moved
+to another hour. The hour label no longer hides under the all-day band. A repeating block shows
+Complete disabled, with the reason, when an earlier day is still open.
+
+**Lists.** Overdue holds only earlier days; a page from this morning stays in Today with its time
+in red. Over Today the tray under the list rests as one line naming what is next. A new folder is
+named in the switcher's own row, a folder is renamed in its row, and its colour is a palette of real
+swatches.
+
+**Search.** Chips for states, due dates, priority, folders and tags put a system search token in
+the field, and the query sent is each token's operator followed by the typed words. On iOS 26 the
+field is at the bottom. A result is the list's row, checkbox and date included. A passage that spans
+two blocks of a page joins them with a middle dot.
+
+**The editor.** WebKit's previous, next and done bar no longer sits under the formatting row. The
+checkbox sits beside the title, and the byline wraps, so priority and tags are no longer cut off.
+
+**Colour and copy.** Teal read as text uses a new token, `text-action`, at 5.3:1 on white where
+the old teal was 2.8:1; the accent colour and the editor's accent follow it. Swipe colours mean one
+thing each. Settings has one backup, no document-format row, and Send feedback, Report a bug and
+Privacy under About. In-app sentences no longer use a dash as punctuation.
+
+## The consistency pass (2026-09-15)
+
+Both themes and the desktop were toured side by side (`scripts/desktop-screen-tour.sh` builds the
+desktop's review on a seed that copies the phone's demo). The phone moved wherever the two
+disagreed, or wherever a screen fell short of a standard.
+
+**Contrast.** Swipe actions carried a white label on a teal or grey that turns light in dark mode,
+at about 1.9:1. Two fill tokens, `interactive-fill` and `interactive-fill-neutral`, hold 5:1 or
+better behind white in both themes. The capture button and today's circle in Month use
+`text-action` under the inverse text, as the day pills do. `text-tertiary` is a step darker in
+light, 4.7:1 on the grey grounds where it was 4.3, a change the desktop shares. Counts and hints
+moved off `text-disabled`, which stays for placeholders and controls that are off.
+
+**Dark mode.** Form rows in Settings, Folders, Calendars, CalDAV, Repeat and Trash sit on the raised
+surface instead of iOS's cool grey. Search's completions are pills above the results rather than the
+system's suggestion list on black. Captions inside buttons no longer take the teal, and the CalDAV
+URL prompt is no longer drawn as a blue link.
+
+**Priority.** Menus, the editor chip and quick add show the desktop's marks, `!!`, `!`, `··` and
+`·`, beside the colour, because High and Medium are one colour to the eye in dark.
+
+**Standards.** The byline chips, Move to today and the switcher's Edit take a 44pt touch without
+growing on screen. Quick add's Cancel and Add sit in the toolbar's standard places, where every other
+sheet has Done.
+
+**Parity with the desktop.** Recently Deleted is called Trash, as it is on the desktop. Repeat offers the desktop's presets,
+every 2 weeks and a week of the month among them, and an Ends control; the rule layer's editable
+envelope grew to carry both. The undo notice lasts the desktop's eight seconds. A new workspace
+starts with the desktop's Start here folder and its three pages, left undated so Today's empty state
+still teaches capture.
+
+**The tour.** `PIKOS_TOUR_TEXT_SIZE` and `PIKOS_TOUR_CONTRAST` run it at a large text size or with
+Increase Contrast. Reduce Transparency has no simulator switch.
+
 ## Needs a Mac
 
 Nothing here is blocked on design — only on hardware.
@@ -795,8 +989,8 @@ Nothing here is blocked on design — only on hardware.
 3. `swift test --package-path apps/ios/PikosCore` and the same for
    `PikosEditorBridge` — the boundary tests, unrun.
 4. **Run M0 on a physical device** and record the numbers. `03-m0-spike.md` has
-   the method for each item on the pass bar, and `EditorScreen` shows the
-   cold-load time in the navigation bar on debug builds so one of them needs no
+   the method for each item on the pass bar, and the page menu shows the
+   editor's cold-load time on debug builds so one of them needs no
    instrumentation at all.
 
 ## What to expect on the first build
@@ -896,8 +1090,9 @@ Three things follow, and they are the whole of it:
 1. **The shell owns navigation; screens are content.** `PageListScreen` and
    `SearchScreen` hold no `NavigationStack` and declare no
    `navigationDestination` — `RootView` does, and the paths live on `Route`.
-   The iPad build replaces `RootView` with a `NavigationSplitView` reading
-   `pagesPath.last` as its detail selection, and both screens are untouched.
+   The iPad build replaces `WorkspaceScreen` with a `NavigationSplitView`
+   reading `Route.openPageId` as its detail selection, and the screens are
+   untouched.
    This was not free-standing tidiness: a screen owning its own stack is also
    why `pikos://page/<id>` did nothing, since a deep link had no path to push
    onto. Fixing one fixed the other.
