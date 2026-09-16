@@ -44,9 +44,13 @@ public final class ReminderScheduler {
     /// The task identifier the OS wakes the app under. Declared once here and
     /// once in `project.yml`; a mismatch means the registration throws and no
     /// refresh ever lands.
-    public static let refreshTaskIdentifier = "app.pikos.reminders.refresh"
-    static let categoryIdentifier = "app.pikos.reminder"
-    static let completeActionIdentifier = "app.pikos.reminder.complete"
+    public nonisolated static let refreshTaskIdentifier = "app.pikos.reminders.refresh"
+    nonisolated static let categoryIdentifier = "app.pikos.reminder"
+    /// `nonisolated`, all three: these are names on the wire, not state. The
+    /// notification delegate reads them on whatever queue the system calls it
+    /// on, and inheriting the class's main-actor isolation would make a
+    /// constant string something to await.
+    nonisolated static let completeActionIdentifier = "app.pikos.reminder.complete"
 
     private let workspace: @MainActor () -> Workspace?
     private let preferences: () -> Preferences
@@ -111,6 +115,10 @@ public final class ReminderScheduler {
     /// interleave removals with additions; `syncing` folds a call that arrives
     /// mid-sync into one more pass afterwards.
     public func sync() async {
+        #if DEBUG
+            // A permission prompt over a design screenshot is noise, not a test of reminders.
+            if DemoWorkspace.isRequested { return }
+        #endif
         if syncing {
             syncAgain = true
             return

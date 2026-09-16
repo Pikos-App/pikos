@@ -1,5 +1,6 @@
 import Observation
 import PikosCore
+import PikosSupport
 import SwiftUI
 
 /// Where the app is, and what an incoming link asks it to do.
@@ -17,39 +18,33 @@ final class Route {
     /// reading a `@State` wrapper outside a view body to register it would be
     /// undefined.
     ///
-    /// `nonisolated(unsafe)` because the dependency manager's factory closure
-    /// is `@Sendable` and not on any actor, and under strict concurrency a
+    /// `nonisolated` because the dependency manager's factory closure is
+    /// `@Sendable` and not on any actor, and under strict concurrency a
     /// main-actor static cannot be read from there. The reference itself is
     /// safe to hand out from anywhere — it is immutable, and every member on
     /// it is still main-actor isolated, so a caller off the main actor can hold
     /// the router but not move it. The initialiser is `nonisolated` for the
     /// same reason: it touches nothing but stored-property defaults.
-    nonisolated(unsafe) static let shared = Route()
+    nonisolated static let shared = Route()
 
     nonisolated init() {}
 
-    enum Tab: Hashable {
-        case pages
-        case calendar
+    /// Which half of the desktop's right-hand panel fills the phone: the pages, or the calendar.
+    enum Pane: String, Hashable {
+        case list
+        case week
+    }
+
+    enum Destination: Hashable {
+        case page(String)
         case search
     }
 
-    var tab: Tab = .pages
+    var pane: Pane = .list
 
-    /// What each tab's navigation stack has pushed, as page ids.
-    ///
-    /// Held here rather than by the screens, so that something outside a screen
-    /// — a deep link, a widget tap, an App Intent — can push. The screens are
-    /// content; the container owns navigation.
-    ///
-    /// One per tab, because the tabs are independent on a phone. An iPad split
-    /// view has a single detail column instead and would read the active tab's
-    /// `.last` as its selection; keeping the paths here rather than inside the
-    /// screens is what makes that a change of shell rather than a rewrite of
-    /// every screen.
-    var pagesPath: [String] = []
-    var calendarPath: [String] = []
-    var searchPath: [String] = []
+    /// One stack for the whole app. Held here rather than by a screen so a deep
+    /// link, a widget tap or an App Intent can push from outside it.
+    var path: [Destination] = []
 
     var isQuickAddPresented = false
     /// Text to open quick add with, from a `pikos://quick-add?text=…` link.
@@ -59,12 +54,54 @@ final class Route {
     /// an empty calendar slot. Cleared with the text, for the same reason.
     var quickAddPrefillDate: Date?
 
-    /// Open quick add with the schedule already set.
-    ///
-    /// The calendar's way of saying "a page here": the sheet opens with the
-    /// slot's day and time in its picker, and the sentence typed into it
-    /// names the page rather than the time. Presents rather than navigates,
-    /// so the calendar stays where it was when the sheet closes.
+    /// The view quick add was opened from, which a line that says nothing else lands in.
+    struct QuickAddContext {
+        var day: String?
+        var folderId: String?
+    }
+
+    var quickAddContext = QuickAddContext()
+
+    /// A line swiped away before it was added, offered again when quick add next opens empty.
+    var quickAddDraft = ""
+
+    /// Quick add from the bar, landing where the reader is looking.
+    func presentQuickAdd(from store: WorkspaceStore) {
+        quickAddPrefill = ""
+        quickAddPrefillDate = nil
+        switch (pane, store.scope) {
+        case (.week, _): quickAddContext = QuickAddContext(day: calendarDay)
+        case (.list, .today): quickAddContext = QuickAddContext(day: DayLabel.today())
+        case (.list, .folder(let id, _)): quickAddContext = QuickAddContext(folderId: id)
+        case (.list, _): quickAddContext = QuickAddContext()
+        }
+        isQuickAddPresented = true
+    }
+
+    /// Text to open search with, from a `pikos://search` link. The search screen takes it when it appears.
+    var searchPrefill = ""
+
+    /// Select mode hands the bottom of the screen to the list's verbs, so the shell's bar steps aside.
+    var isSelectingPages = false
+
+    var isSwitcherPresented = false
+    var isSettingsPresented = false
+    var isTrashPresented = false
+    var isFolderManagerPresented = false
+
+    /// The day the week pane should show next time it appears, when something outside it asked.
+    var weekFocus: Date?
+
+    /// The `YYYY-MM-DD` the calendar pane is on, so a page added from there lands on that day.
+    var calendarDay: String?
+
+    /// The page open on top of the workspace, if any.
+    var openPageId: String? {
+        guard case .page(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// Quick add with the slot's time already chosen, so the sentence typed names the page, not the time.
     func presentQuickAdd(at date: Date) {
         quickAddPrefill = ""
         quickAddPrefillDate = date
@@ -75,13 +112,24 @@ final class Route {
     func clearQuickAddPrefill() {
         quickAddPrefill = ""
         quickAddPrefillDate = nil
+        quickAddContext = QuickAddContext()
+    }
+
+    func open(page id: String) {
+        path.append(.page(id))
+    }
+
+    func showWeek(on day: Date) {
+        weekFocus = day
+        isSwitcherPresented = false
+        pane = .week
     }
 
     /// Show today's pages. Also the landing point for the "Open today" intent,
     /// which has no view to route through and moves this state directly.
     func showToday(store: WorkspaceStore? = nil) {
-        tab = .pages
-        pagesPath = []
+        pane = .list
+        path = []
         store?.scope = .today
         pendingScope = .today
     }
@@ -108,21 +156,14 @@ final class Route {
     /// is nothing useful to tell the user about one.
     func handle(_ url: URL, store: WorkspaceStore) {
         guard let link = parseDeepLink(url: url.absoluteString) else { return }
+        isSwitcherPresented = false
 
-        // A link that *navigates* returns its tab to the root first; a link
-        // that merely *presents* does not. Without that, "show me today" from a
-        // widget would select the Pages tab and leave whatever editor was open
-        // sitting on top of the list it was asked to show — the stack survives
-        // now that the shell owns it, which it did not when each screen kept
-        // its own.
+        // A link that navigates empties the stack; one that presents leaves the open page alone.
         switch link {
         case .view(let viewId):
-            tab = .pages
-            pagesPath = []
-            // Exhaustive rather than a ternary. The Rust side had exactly this
-            // as an if/else over two views, which is how `pikos://upcoming`
-            // came to be a link that silently did nothing when the desktop
-            // grew a third.
+            pane = .list
+            path = []
+            // Exhaustive: an if/else here is how `pikos://upcoming` once silently did nothing.
             let scope: WorkspaceStore.Scope =
                 switch viewId {
                 case .today: .today
@@ -133,31 +174,21 @@ final class Route {
             pendingScope = scope
 
         case .page(let pageId):
-            // Replaces the stack rather than appending to it. A link is a jump,
-            // not a step: appending would build a back stack of pages the user
-            // never navigated through, and tapping back would walk them.
-            tab = .pages
-            pagesPath = [pageId]
+            // A jump, not a step: appending would build a back stack nobody walked.
+            path = [.page(pageId)]
 
         case .calendar:
-            tab = .calendar
-            calendarPath = []
+            path = []
+            showWeek(on: Date())
 
         case .quickAdd(let prefill):
-            // The prefill is parsed like anything typed by hand, so a link
-            // carrying "tomorrow at 3pm" schedules rather than naming a page
-            // that. Presents rather than navigates, so the stack is left
-            // alone: a quick-add link arriving while a page is open should
-            // give the user the sheet and their page back, not lose their
-            // place.
             quickAddPrefill = prefill
             quickAddPrefillDate = nil
-            tab = .pages
             isQuickAddPresented = true
 
-        case .search:
-            tab = .search
-            searchPath = []
+        case .search(let prefill):
+            searchPrefill = prefill
+            path = [.search]
         }
     }
 }

@@ -14,6 +14,10 @@ import XCTest
 /// the app would open the App Group container, and whether a simulator honours
 /// that entitlement on an unsigned build is a question about certificates
 /// rather than about the app.
+/// `@MainActor` because every `XCUIApplication` member is: the whole class,
+/// so a subclass's tests inherit it and neither this file nor theirs has to
+/// annotate a query at a time.
+@MainActor
 class PikosUITestCase: XCTestCase {
     private(set) var app: XCUIApplication!
     private var workspace: URL!
@@ -22,8 +26,14 @@ class PikosUITestCase: XCTestCase {
     /// short enough that a hang fails the job rather than occupying it.
     static let timeout: TimeInterval = 30
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    /// Added to every launch, before the workspace is first opened.
+    class var launchEnvironment: [String: String] { [:] }
+
+    // The async pair rather than `setUpWithError`/`tearDownWithError`: an
+    // override may add main-actor isolation only to an `async` method, and
+    // everything below — the app handle included — is main-actor bound.
+    override func setUp() async throws {
+        try await super.setUp()
         // A failed assertion should stop the test at the point it failed. A UI
         // test that carries on after the screen is not what it expected reports
         // the fifth symptom of the first problem.
@@ -37,10 +47,11 @@ class PikosUITestCase: XCTestCase {
 
         app = XCUIApplication()
         app.launchEnvironment["PIKOS_WORKSPACE_DIRECTORY"] = workspace.path
+        for (key, value) in Self.launchEnvironment { app.launchEnvironment[key] = value }
         app.launch()
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         app = nil
         if let workspace {
             // Best-effort: a simulator that will not give the directory up must
@@ -48,7 +59,7 @@ class PikosUITestCase: XCTestCase {
             try? FileManager.default.removeItem(at: workspace)
         }
         workspace = nil
-        try super.tearDownWithError()
+        try await super.tearDown()
     }
 
     // MARK: - Shared steps
@@ -91,12 +102,25 @@ class PikosUITestCase: XCTestCase {
             file: file, line: line)
     }
 
-    /// Switch the page list to one of its views.
-    ///
-    /// The switcher is the title: tapping the navigation bar's title drops the
-    /// menu of views, so the caller says which title is currently showing.
-    func showView(_ name: String, from current: String = "Today") {
-        app.navigationBars[current].buttons[current].firstMatch.tap()
-        app.buttons[name].firstMatch.tap()
+    /// Accept the system's notification prompt if it is up. It appears the first time a page has
+    /// a time to remind at, and covers the screen until answered.
+    func allowNotificationsIfAsked() {
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+    }
+
+    /// Switch the page list to one of its views, through the title's switcher.
+    func showView(_ name: String) {
+        app.buttons["Switch view"].firstMatch.tap()
+        // A row's label carries its count after the name: "Inbox, 2".
+        let row = app.buttons.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, "\(name), ")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout), "the switcher lists \(name)")
+        row.tap()
+    }
+
+    /// The field or text view a vertical-axis `TextField` became, by its label.
+    func textInput(_ label: String) -> XCUIElement {
+        let view = app.textViews[label].firstMatch
+        return view.waitForExistence(timeout: 2) ? view : app.textFields[label].firstMatch
     }
 }

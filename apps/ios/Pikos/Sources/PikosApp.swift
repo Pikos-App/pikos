@@ -114,6 +114,9 @@ struct PikosApp: App {
                     // An intent or deep link may have arrived while the
                     // workspace was still opening.
                     route.applyPending(to: store)
+                    #if DEBUG
+                        await DemoWorkspace.applyScreen(route: route, store: store)
+                    #endif
                     await reminders.sync()
                 }
                 .onOpenURL { url in route.handle(url, store: store) }
@@ -151,53 +154,17 @@ struct RootView: View {
     var body: some View {
         @Bindable var route = route
 
-        // The shell owns navigation; the screens are content.
-        //
-        // That split is the one thing worth preserving deliberately, because it
-        // is expensive to retrofit and free to keep. A `pikos://page/<id>` link
-        // can push only because the path lives out here, and the iPad build —
-        // a `NavigationSplitView` with a folder sidebar, the list as content
-        // and the editor as detail, closer to the desktop app than to this —
-        // replaces this view and nothing else. `PageListScreen` and
-        // `SearchScreen` do not know which shell they are in.
-        // Both applied at the root rather than per screen. `preferredColorScheme`
-        // has to sit above the sheets or a presented sheet keeps the system
-        // appearance while the app behind it does not, and the calendar is read
-        // by every `DatePicker` below here — including the ones inside sheets,
-        // which is exactly what a per-screen modifier would miss.
-        Group {
-            if #available(iOS 18.0, *) {
-                // The `Tab` form. On iOS 26 the search tab's role is what puts
-                // the search field where the tab bar was, and the minimize
-                // behaviour is what lets the bar shrink out of the way as a
-                // list scrolls; both are no-ops on iOS 18, which draws the
-                // same three tabs it always did.
-                TabView(selection: $route.tab) {
-                    Tab("Pages", systemImage: "doc.text", value: Route.Tab.pages) {
-                        pagesTab
-                    }
-                    Tab("Calendar", systemImage: "calendar", value: Route.Tab.calendar) {
-                        calendarTab
-                    }
-                    Tab(value: Route.Tab.search, role: .search) {
-                        searchTab
+        // The path lives on the router so a `pikos://page/<id>` link can push from outside.
+        NavigationStack(path: $route.path) {
+            WorkspaceScreen()
+                .navigationDestination(for: Route.Destination.self) { destination in
+                    switch destination {
+                    case .page(let id): EditorScreen(pageId: id)
+                    case .search: SearchScreen()
                     }
                 }
-                .minimizingTabBar()
-            } else {
-                TabView(selection: $route.tab) {
-                    pagesTab
-                        .tabItem { Label("Pages", systemImage: "doc.text") }
-                        .tag(Route.Tab.pages)
-                    calendarTab
-                        .tabItem { Label("Calendar", systemImage: "calendar") }
-                        .tag(Route.Tab.calendar)
-                    searchTab
-                        .tabItem { Label("Search", systemImage: "magnifyingglass") }
-                        .tag(Route.Tab.search)
-                }
-            }
         }
+        .tint(.textAction)
         // One sheet for quick add, wherever it was asked for. The toolbar
         // button, the empty state and a `pikos://quick-add` link all set the
         // same flag, so there is one place the prefill is read and one place
@@ -210,7 +177,10 @@ struct RootView: View {
             // closure.
             onDismiss: { route.clearQuickAddPrefill() }
         ) {
-            QuickAddSheet(prefill: route.quickAddPrefill, prefillDate: route.quickAddPrefillDate)
+            QuickAddSheet(
+                prefill: route.quickAddPrefill.isEmpty ? route.quickAddDraft : route.quickAddPrefill,
+                prefillDate: route.quickAddPrefillDate,
+                context: route.quickAddContext)
         }
         // Errors surface here, above every tab and sheet, so a write that
         // fails on the calendar is not an alert waiting on the page list.
@@ -294,8 +264,8 @@ struct RootView: View {
             guard pending != nil else { return }
             route.applyPending(to: store)
         }
-        .onChange(of: route.pagesPath) { _, path in
-            openPage = path.last ?? ""
+        .onChange(of: route.path) { _, _ in
+            openPage = route.openPageId ?? ""
             openPageAt = Date().timeIntervalSince1970
         }
         .onChange(of: store.isLoading) { _, loading in
@@ -304,38 +274,6 @@ struct RootView: View {
         }
         .preferredColorScheme(settings.colorScheme)
         .environment(\.calendar, settings.calendar)
-    }
-
-    // The shell owns navigation; the screens are content. Each tab is one
-    // stack whose path lives on the router, which is what lets a deep link
-    // push from outside and what makes the iPad shell a change of container
-    // rather than of screens.
-
-    @ViewBuilder
-    private var pagesTab: some View {
-        @Bindable var route = route
-        NavigationStack(path: $route.pagesPath) {
-            PageListScreen()
-                .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
-        }
-    }
-
-    @ViewBuilder
-    private var calendarTab: some View {
-        @Bindable var route = route
-        NavigationStack(path: $route.calendarPath) {
-            CalendarScreen()
-                .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
-        }
-    }
-
-    @ViewBuilder
-    private var searchTab: some View {
-        @Bindable var route = route
-        NavigationStack(path: $route.searchPath) {
-            SearchScreen()
-                .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
-        }
     }
 
     /// Land back on the page that was open, if the app was only just put away.
@@ -353,7 +291,7 @@ struct RootView: View {
     /// has since been trashed — here with the editor closed, or on another
     /// device — is not brought back.
     private func restoreOpenPage() async {
-        guard route.pagesPath.isEmpty, !openPage.isEmpty, let workspace = store.handle else { return }
+        guard route.path.isEmpty, !openPage.isEmpty, let workspace = store.handle else { return }
         let saved = Date(timeIntervalSince1970: openPageAt)
         guard Date().timeIntervalSince(saved) < Self.restoreWindow else {
             openPage = ""
@@ -366,8 +304,7 @@ struct RootView: View {
             openPage = ""
             return
         }
-        route.tab = .pages
-        route.pagesPath = [openPage]
+        route.path = [.page(openPage)]
     }
 
     private static let restoreWindow: TimeInterval = 4 * 60 * 60

@@ -116,7 +116,7 @@ public final class WorkspaceStore {
     /// One mechanism for every "done — undo?" moment in the app: a backlog
     /// moved to today, an occurrence skipped, a page added somewhere the user
     /// is not looking. Each used to draw its own bar, and two copies of a
-    /// six-second countdown is two places for the timing to drift. The shell
+    /// countdown is two places for the timing to drift. The shell
     /// draws whatever is here and clears it; the store only says what
     /// happened.
     public struct Notice: Identifiable, Equatable {
@@ -225,7 +225,15 @@ public final class WorkspaceStore {
             // be applied without racing anyone.
             try? WorkspaceLocation.applyProtectionClass()
             if isNewWorkspace {
-                await seedWelcomePage()
+                #if DEBUG
+                    if DemoWorkspace.isRequested {
+                        await DemoWorkspace.seed(self)
+                    } else {
+                        await seedStartHere()
+                    }
+                #else
+                    await seedStartHere()
+                #endif
             }
             await refresh()
         } catch {
@@ -234,48 +242,105 @@ public final class WorkspaceStore {
         }
     }
 
-    /// The one page a brand-new workspace starts with.
+    /// What a brand-new workspace starts with: the desktop's "Start here" folder and its three
+    /// pages, in the phone's own words.
     ///
     /// There is no onboarding. Nothing to sign up for means nothing to ask,
     /// and a carousel of screens between a person and their first note is a
     /// cost the app's whole pitch is about not having. What a first launch
-    /// does get is one page in the Inbox, written in the product's own voice:
-    /// where the data lives, how capture works, and what to swipe. It is a
-    /// page like any other — deletable, editable, and gone from Today's empty
-    /// state, which stays empty so the "Try …" example there still lands.
+    /// does get is a folder of ordinary pages, written in the product's own
+    /// voice: where the data lives, how capture works, and what to swipe. A
+    /// folder rather than one page in the Inbox, as the desktop has it, so the
+    /// whole lesson goes in one delete.
+    ///
+    /// Undated, unlike the desktop's welcome page, which sits on today's
+    /// calendar. On a phone Today's empty state is where capture is taught, and
+    /// it stays empty so its "Try …" example still lands.
     ///
     /// Seeded only when the database did not exist before this open, so a
-    /// workspace that arrives by restore or sync is never given a page its
+    /// workspace that arrives by restore or sync is never given pages its
     /// owner did not write.
-    private func seedWelcomePage() async {
-        guard let workspace else { return }
-        let page = NewPage(
-            title: String(localized: "Welcome to Pikos"),
-            content: plainTextToDocument(text: Self.welcomeText))
-        _ = try? await workspace.createPage(page: page)
+    private func seedStartHere() async {
+        guard let workspace,
+            let folder = try? await workspace.createFolder(
+                name: String(localized: "Start here"), color: Self.startHereColor)
+        else { return }
+        for page in Self.startHerePages {
+            let new = NewPage(
+                title: page.title, subtitle: page.subtitle, folderId: folder.id,
+                content: plainTextToDocument(text: page.text), tags: ["tutorial"])
+            _ = try? await workspace.createPage(page: new)
+        }
     }
 
-    /// Plain paragraphs, turned into a document by the shared Rust so the
-    /// page is written in the same schema as everything else.
-    private static var welcomeText: String {
-        String(
-            localized: """
-                Pikos is notes, tasks and a calendar in one place. Everything you write is stored in a database on this device. There is no account, and nothing is sent anywhere.
+    /// The desktop tutorial's folder colour, so the folder looks the same on both.
+    private static let startHereColor = "#6366f1"
 
-                A page is a note until you give it a date. Then it is on your calendar too. Tick the ring beside a page to finish it.
+    /// Plain paragraphs, turned into documents by the shared Rust so the
+    /// pages are written in the same schema as everything else.
+    private static var startHerePages: [(title: String, subtitle: String, text: String)] {
+        [
+            (
+                String(localized: "Welcome to Pikos"),
+                String(localized: "Notes, tasks and a calendar in one app, stored on your device."),
+                String(
+                    localized: """
+                        Every page is something you can write in, schedule, and tick off when it's done. Everything stays on this device. There is no account, and nothing is sent anywhere.
 
-                The fastest way in is the + button. Type a sentence and Pikos reads the details out of it:
+                        A few things to try:
 
-                Call the dentist tomorrow at 3pm !high #health
-                Standup every weekday at 9:30 !r10
-                Pay rent every month on the 1st
+                        Tap + at the bottom and type a sentence, such as "call the dentist tomorrow at 3pm".
 
-                Swipe a row to complete or delete it. Tap the title at the top of the list to switch between Today, Upcoming, your Inbox and your folders.
+                        Tap the calendar button at the bottom to see your day, and back to return to the list.
 
-                Settings › Your data shows how big your workspace is and puts a copy of it in the Files app whenever you like.
+                        Tap the search button to find any page by what is in it, not just its title.
 
-                Delete this page whenever you like.
-                """)
+                        Tick the box beside a page to mark it done.
+
+                        When you're done, tap the title at the top of the list, tap Edit beside Folders, and delete Start here. These pages go with it, and wait in the Trash in case you want one back.
+                        """)
+            ),
+            (
+                String(localized: "How it works"),
+                String(localized: "Type what you want, put it on a day, tick it off."),
+                String(
+                    localized: """
+                        Most of Pikos is three steps: add, schedule, complete.
+
+                        Add. Tap + and type what you want to do. Pikos reads the date, time, priority and tags out of the sentence:
+
+                        go for a run tomorrow 7am for 30m
+                        call the dentist monday 9am !high
+                        book club thursday 7pm #friends
+
+                        Schedule. Swipe a page left to send it to Today or Tomorrow, or hold it and choose When for any other day. On the calendar, hold an empty slot to add a page at that time.
+
+                        Complete. Swipe a page right, or tick its box in the list, on the page, or on the calendar.
+
+                        Repeats. Type something like "team meeting every monday at 9am", or hold a page and choose Repeat. To skip one, hold it on the calendar and choose Skip this one.
+
+                        Reminders. Pikos reminds you 10 minutes before a scheduled page starts. Change it for one page from the bell at the top of the page, or for every page in Settings › Reminders.
+                        """)
+            ),
+            (
+                String(localized: "Gestures & tips"),
+                String(localized: "A reference for when you want one. You don't need these to use the app."),
+                String(
+                    localized: """
+                        Everything here is also in a menu, so none of it has to be learned. These are the ones worth knowing.
+
+                        In a list. Swipe right to complete. Swipe left to send to another day. Hold a page for everything else. Tap the title at the top to switch between Today, Upcoming, your Inbox and your folders.
+
+                        Several at once. Tap the sort button, choose Select Pages, and act on everything you tick.
+
+                        On the calendar. Tap the title to jump to another date or show more days. Hold a block to move it, complete it or skip it.
+
+                        Search. Tap a chip under Narrow to, or type a folder or tag name, to search inside it.
+
+                        Settings › Your data shows how big your workspace is and puts a copy of it in the Files app whenever you like.
+                        """)
+            ),
+        ]
     }
 
     /// Open the workspace if nothing has yet.
@@ -337,16 +402,18 @@ public final class WorkspaceStore {
         switch scope {
         case .today:
             let split = try await workspace.listTodaySections()
+            let today = DayLabel.today()
+            let earlierDays = split.overdue.filter { TodayGrouping.isFromAnEarlierDay($0.scheduledStart, today: today) }
+            let laterToday = split.overdue.filter { !TodayGrouping.isFromAnEarlierDay($0.scheduledStart, today: today) }
+            let todayPages = laterToday + split.today
             // A heading only when there is something under it, and none at all
-            // when nothing has slipped — an empty "Overdue" is a small daily
-            // accusation, and a lone "Today" over the only list on screen is a
-            // label for something that needs none.
-            guard !split.overdue.isEmpty else {
-                return [Section(id: "today", title: nil, pages: split.today)]
+            // when nothing has slipped: a lone "Today" over the only list on screen labels nothing.
+            guard !earlierDays.isEmpty else {
+                return [Section(id: "today", title: nil, pages: todayPages)]
             }
             return [
-                Section(id: "overdue", title: String(localized: "Overdue"), pages: split.overdue),
-                Section(id: "today", title: String(localized: "Today"), pages: split.today),
+                Section(id: "overdue", title: String(localized: "Overdue"), pages: earlierDays),
+                Section(id: "today", title: String(localized: "Today"), pages: todayPages),
             ].filter { !$0.pages.isEmpty }
 
         case .upcoming:
@@ -492,14 +559,30 @@ public final class WorkspaceStore {
         }.map(\.key)
     }
 
-    public func search(_ query: String, limit: UInt32 = 50) async -> [SearchHit] {
-        guard let workspace, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+    public func search(_ query: String, includeCompleted: Bool, limit: UInt32 = 50) async
+        -> SearchResults?
+    {
+        guard let workspace, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         do {
-            return try await workspace.search(query: query, limit: limit)
+            return try await workspace.search(
+                query: query, includeCompleted: includeCompleted, limit: limit)
         } catch {
             errorMessage = error.localizedDescription
-            return []
+            return nil
         }
+    }
+
+    /// The pages opened most recently, for search to offer before anything is typed.
+    /// An empty list on failure: search without suggestions still works.
+    public func recentPages(limit: UInt32 = 10) async -> [PageSummary] {
+        guard let workspace else { return [] }
+        return (try? await workspace.recentPages(limit: limit)) ?? []
+    }
+
+    /// Recency is a convenience, so a failed write is not worth interrupting the reader for.
+    public func markOpened(pageId: String) async {
+        guard let workspace else { return }
+        try? await workspace.markPageOpened(id: pageId)
     }
 
     // MARK: - Writes
@@ -547,6 +630,82 @@ public final class WorkspaceStore {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Hand-arrange the Inbox or a folder into `orderedIds`.
+    ///
+    /// Applied to the list before the write, so a dragged row stays where it was dropped rather
+    /// than snapping back until the write returns.
+    public func reorderPages(inFolder folderId: String?, orderedIds: [String]) async {
+        let position = Dictionary(
+            orderedIds.enumerated().map { ($1, Int64($0)) }, uniquingKeysWith: { first, _ in first })
+        sections = sections.map { section in
+            Section(
+                id: section.id, title: section.title,
+                pages: section.pages.map { page in
+                    var arranged = page
+                    if let index = position[page.id] { arranged.sortOrder = index }
+                    return arranged
+                })
+        }
+        guard let workspace else { return }
+        do {
+            try await workspace.reorderPages(folderId: folderId, orderedIds: orderedIds)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await refresh()
+    }
+
+    public func reminders(pageId: String) async -> PageReminders {
+        guard let workspace,
+            let rows = try? await workspace.listPageReminders(pageId: pageId)
+        else { return PageReminders([]) }
+        return PageReminders(rows.map(\.minutesBefore))
+    }
+
+    /// Put a lead on a page or take it off, as the desktop's reminder menu does.
+    public func toggleReminder(pageId: String, minutes: Int64) async -> PageReminders {
+        await writeReminders(pageId: pageId) { workspace, rows in
+            switch PageReminders(rows.map(\.minutesBefore)).toggling(minutes) {
+            case .remove(let lead):
+                for row in rows where row.minutesBefore == lead {
+                    try await workspace.deletePageReminder(id: row.id)
+                }
+            case .add(let lead, let clearingNever):
+                if clearingNever { try await workspace.clearPageReminders(pageId: pageId) }
+                try await workspace.addPageReminder(pageId: pageId, minutesBefore: lead)
+            }
+        }
+    }
+
+    public func setNeverRemind(pageId: String) async -> PageReminders {
+        await writeReminders(pageId: pageId) { workspace, _ in
+            try await workspace.clearPageReminders(pageId: pageId)
+            try await workspace.addPageReminder(pageId: pageId, minutesBefore: PageReminders.never)
+        }
+    }
+
+    /// Back to the default lead, or to no reminder on an all-day page.
+    public func clearReminders(pageId: String) async -> PageReminders {
+        await writeReminders(pageId: pageId) { workspace, _ in
+            try await workspace.clearPageReminders(pageId: pageId)
+        }
+    }
+
+    /// Bumps the data version rather than refreshing: no list shows a reminder, but the
+    /// notification plan follows the version.
+    private func writeReminders(
+        pageId: String, _ write: (Workspace, [PageReminder]) async throws -> Void
+    ) async -> PageReminders {
+        guard let workspace else { return PageReminders([]) }
+        do {
+            try await write(workspace, try await workspace.listPageReminders(pageId: pageId))
+            dataVersion += 1
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        return await reminders(pageId: pageId)
     }
 
     /// Folders the user can file into.
@@ -745,12 +904,98 @@ public final class WorkspaceStore {
     public func setSchedule(pageId: String, start: String, end: String?) async {
         guard let workspace else { return }
         do {
+            let page = try await workspace.setPageSchedule(
+                pageId: pageId, scheduledStart: start, scheduledEnd: end)
+            await refresh()
+            // A repeating page lands on the nearest day its rule yields, which may not be the day picked.
+            if page.isRecurring, let landed = page.scheduledStart, landed.prefix(10) != start.prefix(10),
+                let day = StorageTimestamp.wallClock(landed)
+            {
+                notice = Notice(
+                    String(localized: "Moved to \(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())), the nearest day it repeats on"))
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Send a page to one of the When days, keeping its time and length, with the old date offered back.
+    func send(_ page: PageFacts, to choice: WhenChoice) async {
+        let moved = ScheduleShift.move(
+            start: page.scheduledStart, end: page.scheduledEnd, toDay: choice.day())
+        await schedule(
+            pageId: page.id, title: page.title, start: moved.start, end: moved.end,
+            previousStart: page.scheduledStart, previousEnd: page.scheduledEnd, saying: choice.label)
+    }
+
+    /// A page dropped on an hour: the schedule moves, and the notice offers the old one back.
+    public func schedule(
+        pageId: String, title: String, start: String, end: String?,
+        previousStart: String?, previousEnd: String?, saying day: String? = nil
+    ) async {
+        guard let workspace else { return }
+        do {
             _ = try await workspace.setPageSchedule(
                 pageId: pageId, scheduledStart: start, scheduledEnd: end)
+            await refresh()
+            let name = title.isEmpty ? String(localized: "Untitled") : title
+            let when = StorageTimestamp.wallClock(start).map {
+                $0.formatted(date: .omitted, time: .shortened)
+            } ?? start
+            notice = Notice(
+                day.map { String(localized: "“\(name)” moved to \($0)") }
+                    ?? String(localized: "“\(name)” at \(when)"),
+                action: Notice.Action(title: String(localized: "Undo")) { [weak self] in
+                    guard let self else { return }
+                    if let previousStart {
+                        await self.setSchedule(pageId: pageId, start: previousStart, end: previousEnd)
+                    } else {
+                        await self.clearDate(pageId: pageId)
+                    }
+                })
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// The one-sentence line under a title. An empty string takes it away.
+    public func setSubtitle(pageId: String, to subtitle: String) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.updatePage(id: pageId, edit: PageEdit(subtitle: subtitle))
             await refresh()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    public struct ViewCounts: Equatable {
+        public var today = 0
+        public var upcoming = 0
+        public var inbox = 0
+        public var folders: [String: Int] = [:]
+    }
+
+    /// Open pages per view, for the switcher. Read when it opens rather than on every refresh.
+    public func viewCounts() async -> ViewCounts {
+        guard let workspace else { return ViewCounts() }
+        var counts = ViewCounts()
+        if let today = try? await workspace.listTodaySections() {
+            counts.today = today.overdue.count + today.today.count
+        }
+        if let upcoming = try? await workspace.listUpcoming() {
+            counts.upcoming = upcoming.reduce(0) { $0 + $1.pages.count }
+        }
+        if let inbox = try? await workspace.listPages(query: PageQuery(folder: .inbox, openOnly: true)) {
+            counts.inbox = inbox.count
+        }
+        if let open = try? await workspace.listPages(query: PageQuery(openOnly: true)) {
+            for page in open {
+                guard let folder = page.folderId else { continue }
+                counts.folders[folder, default: 0] += 1
+            }
+        }
+        return counts
     }
 
     /// Replace a page's tags.
@@ -1055,8 +1300,9 @@ public final class WorkspaceStore {
             }
             do {
                 if let day {
+                    let moved = ScheduleShift.move(start: page.scheduledStart, end: page.scheduledEnd, toDay: day)
                     _ = try await workspace.setPageSchedule(
-                        pageId: page.id, scheduledStart: day, scheduledEnd: nil)
+                        pageId: page.id, scheduledStart: moved.start, scheduledEnd: moved.end)
                 } else {
                     _ = try await workspace.clearPageSchedule(pageId: page.id)
                 }
@@ -1325,7 +1571,7 @@ public final class WorkspaceStore {
     /// Move a page to the trash, and offer the way back for a few seconds.
     ///
     /// The delete was always soft, but until the notice existed the only way
-    /// back was the Recently Deleted screen, two menus away — and a mis-swipe
+    /// back was the Trash screen, two menus away — and a mis-swipe
     /// on a phone is the commonest accidental delete there is. `title` is what
     /// the notice names; the caller has it and a lookup here would miss a page
     /// that is not in the current list.

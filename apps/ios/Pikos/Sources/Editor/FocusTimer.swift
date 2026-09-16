@@ -37,19 +37,27 @@ struct FocusTimer: View {
     @State private var startedAt: Date?
     @State private var elapsed = 0
     @State private var notice: String?
-    @State private var activity: Activity<FocusActivityAttributes>?
+    /// The running session's Live Activity, held by id rather than by the
+    /// object. `Activity` is not `Sendable` and ending one is an async call
+    /// that leaves the main actor, so keeping the object here would mean
+    /// handing a main-actor value to another isolation domain every time a
+    /// session stops. A string crosses cleanly; the object is found again on
+    /// the side that ends it.
+    @State private var activityID: String?
 
     var body: some View {
         Group {
             if let startedAt {
                 HStack(spacing: 6) {
                     Text(store.focusElapsedLabel(seconds: elapsed))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.pkUISm)
+                        .monospacedDigit()
+                        .foregroundStyle(.textAction)
                     Button {
                         Task { await stop(began: startedAt) }
                     } label: {
                         Image(systemName: "stop.circle.fill")
+                            .foregroundStyle(.textAction)
                     }
                     .accessibilityLabel("Stop timing")
                 }
@@ -58,6 +66,7 @@ struct FocusTimer: View {
                     start()
                 } label: {
                     Image(systemName: "timer")
+                        .foregroundStyle(.textSecondary)
                 }
                 .accessibilityLabel("Start timing this page")
             }
@@ -133,15 +142,26 @@ struct FocusTimer: View {
             pageId: pageId, title: title.isEmpty ? String(localized: "Untitled") : title)
         let content = ActivityContent(
             state: FocusActivityAttributes.ContentState(startedAt: began), staleDate: nil)
-        activity = try? Activity.request(attributes: attributes, content: content, pushType: nil)
+        activityID = (try? Activity.request(attributes: attributes, content: content, pushType: nil))?
+            .id
     }
 
     /// Take it down. Immediately rather than on the system's schedule: a
     /// session that has ended is not something to keep showing for the
     /// minutes the default dismissal would allow.
     private func endActivity() {
-        guard let running = activity else { return }
-        activity = nil
-        Task { await running.end(nil, dismissalPolicy: .immediate) }
+        guard let id = activityID else { return }
+        activityID = nil
+        Task { await Self.endActivity(id: id) }
+    }
+
+    /// Off the main actor deliberately, so the activity is looked up and ended
+    /// in one isolation domain and never crosses one.
+    private nonisolated static func endActivity(id: String) async {
+        guard
+            let running = Activity<FocusActivityAttributes>.activities
+                .first(where: { $0.id == id })
+        else { return }
+        await running.end(nil, dismissalPolicy: .immediate)
     }
 }

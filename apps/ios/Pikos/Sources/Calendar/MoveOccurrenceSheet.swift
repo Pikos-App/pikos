@@ -24,7 +24,8 @@ struct MoveOccurrenceSheet: View {
     @State private var start: Date
     @State private var hasEnd: Bool
     @State private var end: Date
-    @State private var isSaving = false
+    /// Set once the move has been written, so closing does not write it again.
+    @State private var isMoved = false
 
     private let isAllDay: Bool
 
@@ -42,46 +43,77 @@ struct MoveOccurrenceSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    DatePicker(
-                        "Starts", selection: $start,
-                        displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]
-                    )
-                    .onChange(of: start) { old, new in
-                        // Keep the length the user already has. Moving a
-                        // one-hour meeting to Thursday should leave it an hour.
-                        guard hasEnd else { return }
-                        end = end.addingTimeInterval(new.timeIntervalSince(old))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    FlowLayout {
+                        ForEach(WhenChoice.allCases) { choice in
+                            Button {
+                                moveDay(to: choice)
+                            } label: {
+                                Pill(
+                                    title: choice.label, systemImage: choice.systemImage,
+                                    isOn: WallClockDay.string(from: start) == choice.day())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-
+                    DatePicker(
+                        "Day",
+                        selection: Binding(get: { start }, set: { setDay($0) }),
+                        displayedComponents: .date
+                    )
+                        .datePickerStyle(.graphical)
+                    if !isAllDay {
+                        DatePicker("Starts at", selection: Binding(get: { start }, set: { moveStart(to: $0) }), displayedComponents: .hourAndMinute)
+                    }
                     if hasEnd {
                         DatePicker(
                             "Ends", selection: $end, in: start...,
                             displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
                     }
-                } header: {
-                    Text("This occurrence")
-                } footer: {
                     Text(footnote)
+                        .font(.pkUISm)
+                        .foregroundStyle(.textTertiary)
                 }
+                .font(.pkBody)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
-            .navigationTitle("Move")
+            .background(.surfaceElevated)
+            .navigationTitle("Move This One")
             .navigationBarTitleDisplayMode(.inline)
-            .disabled(isSaving)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button("Move") { Task { await save() } }
-                    }
+                    Button("Done") { dismiss() }
                 }
             }
         }
+        // A new time is kept however the sheet closes; a day tapped has already moved it.
+        .onDisappear {
+            guard !isMoved, moveTarget.start != entry.scheduledStart else { return }
+            isMoved = true
+            let target = moveTarget
+            Task { _ = await store.moveOccurrence(entry, to: target.start, end: target.end) }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.surfaceElevated)
+    }
+
+    private func moveDay(to choice: WhenChoice) {
+        guard let day = DayLabel.date(from: choice.day()) else { return }
+        setDay(day)
+    }
+
+    /// Move to a day, keeping the time already chosen, and close: the day was the choice.
+    private func setDay(_ day: Date) {
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute], from: start)
+        moveStart(to: calendar.date(bySettingHour: time.hour ?? 9, minute: time.minute ?? 0, second: 0, of: day) ?? day)
+        isMoved = true
+        let target = moveTarget
+        dismiss()
+        Task { _ = await store.moveOccurrence(entry, to: target.start, end: target.end) }
     }
 
     /// Said before the move, not discovered after it.
@@ -97,17 +129,17 @@ struct MoveOccurrenceSheet: View {
             : "This one leaves the repeat and becomes a page of its own. The rest of the series stays where it is."
     }
 
-    private func save() async {
-        isSaving = true
-        defer { isSaving = false }
+    /// The end follows the start by the gap already chosen, so a one-hour meeting moved to Thursday
+    /// stays one hour long.
+    private func moveStart(to new: Date) {
+        if hasEnd { end = end.addingTimeInterval(new.timeIntervalSince(start)) }
+        start = new
+    }
 
-        let moved = await store.moveOccurrence(
-            entry,
-            to: isAllDay
-                ? WallClockDay.string(from: start) : WallClockDay.instant(from: start),
-            end: hasEnd
-                ? (isAllDay ? WallClockDay.string(from: end) : WallClockDay.instant(from: end))
-                : nil)
-        if moved { dismiss() }
+    private var moveTarget: (start: String, end: String?) {
+        (
+            isAllDay ? WallClockDay.string(from: start) : WallClockDay.instant(from: start),
+            hasEnd ? (isAllDay ? WallClockDay.string(from: end) : WallClockDay.instant(from: end)) : nil
+        )
     }
 }

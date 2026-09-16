@@ -34,46 +34,50 @@ struct CalendarSyncScreen: View {
         @Bindable var sync = sync
 
         List {
-            if sync.isLoading && sync.accounts.isEmpty {
-                ProgressView().frame(maxWidth: .infinity)
-            } else if sync.accounts.isEmpty {
+            Group {
+                if sync.isLoading && sync.accounts.isEmpty {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else if sync.accounts.isEmpty {
+                    Section {
+                        Text("No calendars connected.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } footer: {
+                        Text(
+                            "Connect a CalDAV server, such as Fastmail, iCloud or Nextcloud, and its events appear in Pikos as pages you can see but not edit."
+                        )
+                    }
+                }
+
+                ForEach(sync.accounts, id: \.account.id) { entry in
+                    accountSection(entry)
+                }
+
                 Section {
-                    Text("No calendars connected.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        isAddPresented = true
+                    } label: {
+                        Label("Add CalDAV account", systemImage: "plus")
+                    }
+                    .disabled(sync.isBusy)
                 } footer: {
-                    Text(
-                        "Connect a CalDAV server — Fastmail, iCloud, Nextcloud — and its events appear in Pikos as pages you can see but not edit."
-                    )
+                    // Both limits said here rather than discovered. The first is a
+                    // missing feature; the second is what iOS allows, and a user
+                    // who does not know it will read a day-stale calendar as a bug.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(
+                            "Google accounts are added on the desktop, because signing in to Google needs a browser that can hand back to Pikos."
+                        )
+                        Text(
+                            "Calendars sync when you open Pikos, when you ask, and in the background when iPhone allows it, which is on its own schedule rather than every few minutes."
+                        )
+                    }
                 }
             }
-
-            ForEach(sync.accounts, id: \.account.id) { entry in
-                accountSection(entry)
-            }
-
-            Section {
-                Button {
-                    isAddPresented = true
-                } label: {
-                    Label("Add CalDAV account", systemImage: "plus")
-                }
-                .disabled(sync.isBusy)
-            } footer: {
-                // Both limits said here rather than discovered. The first is a
-                // missing feature; the second is what iOS allows, and a user
-                // who does not know it will read a day-stale calendar as a bug.
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(
-                        "Google accounts can only be added on the desktop for now — the sign-in needs a browser the phone cannot hand back to."
-                    )
-                    Text(
-                        "Calendars sync when you open Pikos, when you ask, and in the background when iPhone allows it — which is on its schedule, not every few minutes."
-                    )
-                }
-            }
+            .pikosFormRows()
         }
         .navigationTitle("Calendars")
+        .pikosFormStyle()
         .navigationBarTitleDisplayMode(.inline)
         .task { await sync.load() }
         .refreshable { await sync.load() }
@@ -106,7 +110,7 @@ struct CalendarSyncScreen: View {
                 Button {
                     reconnecting = Reconnecting(account: entry.account)
                 } label: {
-                    Label("Password rejected — reconnect", systemImage: "exclamationmark.triangle")
+                    Label("Password rejected. Reconnect", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
             }

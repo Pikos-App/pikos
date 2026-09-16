@@ -43,7 +43,7 @@ struct FormattingToolbar: View {
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(Color.textSecondary)
             .accessibilityLabel("Insert photo")
 
             moreMenu
@@ -58,7 +58,7 @@ struct FormattingToolbar: View {
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(Color.textSecondary)
             .accessibilityLabel("Hide keyboard")
         }
         .padding(.horizontal, 4)
@@ -89,10 +89,10 @@ struct FormattingToolbar: View {
             Image(systemName: "textformat")
                 .frame(minWidth: 44, minHeight: 44)
                 .background(
-                    hasActiveExtra ? Color.accentColor.opacity(0.15) : Color.clear,
+                    hasActiveExtra ? Color.surfaceSelected : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8))
         }
-        .foregroundStyle(hasActiveExtra ? Color.accentColor : Color.primary)
+        .foregroundStyle(hasActiveExtra ? Color.textAction : Color.textSecondary)
         .accessibilityLabel("More formatting")
     }
 
@@ -118,11 +118,11 @@ struct FormattingToolbar: View {
             Image(systemName: systemImage)
                 .frame(minWidth: 44, minHeight: 44)
                 .background(
-                    active ? Color.accentColor.opacity(0.15) : Color.clear,
+                    active ? Color.surfaceSelected : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(active ? Color.accentColor : Color.primary)
+        .foregroundStyle(active ? Color.textAction : Color.textSecondary)
         .accessibilityLabel(label(for: mark))
         .accessibilityAddTraits(active ? .isSelected : [])
     }
@@ -137,11 +137,11 @@ struct FormattingToolbar: View {
             Image(systemName: systemImage)
                 .frame(minWidth: 44, minHeight: 44)
                 .background(
-                    active ? Color.accentColor.opacity(0.15) : Color.clear,
+                    active ? Color.surfaceSelected : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(active ? Color.accentColor : Color.primary)
+        .foregroundStyle(active ? Color.textAction : Color.textSecondary)
         .accessibilityLabel(label)
         .accessibilityAddTraits(active ? .isSelected : [])
     }

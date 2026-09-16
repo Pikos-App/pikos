@@ -1,20 +1,14 @@
 import PikosCore
 import SwiftUI
 
-/// A page's tags.
+/// A page's tags, as chips: the ones it has, and the ones used elsewhere a tap away.
 ///
-/// Quick add's line sets them once with `#work`, and until now nothing changed
-/// them afterwards — so a page tagged wrongly, or not at all, stayed that way.
+/// Each add and remove is saved as it happens, and a tag still being typed is kept when the sheet
+/// closes, so there is no Save to miss.
 ///
-/// A list and one field rather than a comma-separated text box. The stored
-/// value is a list, and a text box makes the reader do the splitting in their
-/// head: whether a trailing comma means an empty tag, whether a space starts a
-/// new one. Showing what is there as rows answers both by construction.
-///
-/// Offered on a calendar's page too. Tags are user-layer — the lock covers the
-/// title and the schedule, not what somebody files a meeting under — and
-/// tagging a mirror marks it owned, which is the data layer's business rather
-/// than this sheet's.
+/// Offered on a calendar's page too. Tags are user-layer, the lock covers the title and the
+/// schedule and not what somebody files a meeting under, and tagging a mirror marks it owned,
+/// which is the data layer's business rather than this sheet's.
 struct TagsSheet: View {
     let page: PageFacts
 
@@ -22,8 +16,8 @@ struct TagsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var tags: [String]
+    @State private var known: [String] = []
     @State private var entry = ""
-    @State private var isSaving = false
     @FocusState private var entryFocused: Bool
 
     init(page: PageFacts) {
@@ -33,73 +27,98 @@ struct TagsSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack {
-                        TextField("Add a tag", text: $entry)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($entryFocused)
-                            // The keyboard's return key adds and stays, rather
-                            // than dismissing: adding three tags is the normal
-                            // case, and `.done` would close the keyboard after
-                            // the first.
-                            .submitLabel(.next)
-                            .onSubmit(add)
-                        Button("Add", action: add)
-                            .disabled(cleaned(entry) == nil)
-                    }
-                } footer: {
-                    Text("A leading # is optional — Pikos stores the word either way.")
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    TextField("Add a tag", text: $entry)
+                        .font(.pkBody)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($entryFocused)
+                        // Return adds and stays: adding three tags is the normal case.
+                        .submitLabel(.next)
+                        .onSubmit(add)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 44)
+                        .background(.surfaceHover, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                if tags.isEmpty {
-                    Section {
-                        Text("No tags.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Section("Tags") {
-                        // A list rather than a wrapping chip row. Swipe-to-delete
-                        // is the gesture people already know for "remove this
-                        // one", and it needs no hit target of its own next to
-                        // text that may be long.
-                        ForEach(tags, id: \.self) { tag in
-                            Text(tag)
+                    if tags.isEmpty {
+                        Text("No tags yet.")
+                            .font(.pkBodySm)
+                            .foregroundStyle(.textTertiary)
+                    } else {
+                        FlowLayout {
+                            ForEach(tags, id: \.self) { tag in
+                                Button {
+                                    tags.removeAll { $0 == tag }
+                                    saveTags()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text("#\(tag)")
+                                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                                    }
+                                    .font(.pkUI)
+                                    .foregroundStyle(.textInverse)
+                                    .padding(.horizontal, 12)
+                                    .frame(minHeight: 34)
+                                    .background(Capsule().fill(.textAction))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove \(tag)")
+                            }
                         }
-                        .onDelete { offsets in tags.remove(atOffsets: offsets) }
+                    }
+
+                    if !suggestions.isEmpty {
+                        Text(entry.isEmpty ? "Your tags" : "Matching tags")
+                            .sectionLabelStyle()
+                        FlowLayout {
+                            ForEach(suggestions, id: \.self) { tag in
+                                Button {
+                                    tags.append(tag)
+                                    entry = ""
+                                    saveTags()
+                                } label: {
+                                    Pill(title: "#\(tag)")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Add \(tag)")
+                            }
+                        }
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
+            .background(.surfaceElevated)
             .navigationTitle("Tags")
             .navigationBarTitleDisplayMode(.inline)
-            .disabled(isSaving)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        // The pending entry counts as a change, or Save would
-                        // be disabled in exactly the case `save()` exists to
-                        // handle: a tag typed but never committed.
-                        Button("Save") { Task { await save() } }
-                            .disabled(tags == page.tags && cleaned(entry) == nil)
-                    }
+                    Button("Done") { dismiss() }
                 }
             }
+            .task { known = await store.allTags() }
             .onAppear { entryFocused = tags.isEmpty }
+        }
+        .onDisappear {
+            guard cleaned(entry) != nil else { return }
+            add()
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.surfaceElevated)
+    }
+
+    /// Tags used on other pages and not on this one, narrowed by what is typed.
+    private var suggestions: [String] {
+        let typed = entry.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        return known.filter { tag in
+            !tags.contains(tag)
+                && (typed.isEmpty || tag.range(of: typed, options: [.caseInsensitive, .diacriticInsensitive]) != nil)
         }
     }
 
-    /// The typed word, or nil when there is nothing worth adding.
-    ///
-    /// Duplicates are refused silently rather than flagged: adding a tag a page
-    /// already carries is a no-op the user meant, not a mistake worth a
-    /// sentence.
+    /// The typed word, or nil when there is nothing worth adding; a duplicate is a no-op the user meant.
     private func cleaned(_ raw: String) -> String? {
         var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("#") { value.removeFirst() }
@@ -113,19 +132,13 @@ struct TagsSheet: View {
         tags.append(value)
         entry = ""
         entryFocused = true
+        saveTags()
     }
 
-    /// Saves what is typed as well as what is committed.
-    ///
-    /// Tapping Save with a half-typed tag in the field should not throw it
-    /// away: the user's intent is visible on screen, and losing it to a missed
-    /// return key is the kind of small betrayal that stops people trusting a
-    /// form.
-    private func save() async {
-        isSaving = true
-        defer { isSaving = false }
-        add()
-        await store.setTags(pageId: page.id, to: tags)
-        dismiss()
+    /// The whole list each time, which is what the workspace stores.
+    private func saveTags() {
+        let snapshot = tags
+        let pageId = page.id
+        Task { await store.setTags(pageId: pageId, to: snapshot) }
     }
 }

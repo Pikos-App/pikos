@@ -109,7 +109,7 @@ public final class ExportStore {
     /// the point: it is the copy a person can see, and the answer to "where
     /// is my data" that a phone otherwise cannot give.
     public func backUpToFiles() async {
-        guard let workspace, !isBackingUp else { return }
+        guard let workspace = workspace(), !isBackingUp else { return }
         isBackingUp = true
         defer { isBackingUp = false }
 
@@ -142,7 +142,7 @@ public final class ExportStore {
     }
 
     public func export(_ format: Format, includeSynced: Bool) async {
-        guard let workspace, isExporting == nil else { return }
+        guard let workspace = workspace(), isExporting == nil else { return }
         isExporting = format
         defer { isExporting = nil }
 

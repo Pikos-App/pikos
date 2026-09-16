@@ -23,61 +23,58 @@ struct FolderManagerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var newName = ""
-    @State private var renaming: Folder?
-    @State private var renameText = ""
+    /// Names being typed, by folder id, until the field lets go.
+    @State private var names: [String: String] = [:]
+    @FocusState private var focusedFolder: String?
     @FocusState private var newFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack {
-                        TextField("New folder", text: $newName)
-                            .focused($newFieldFocused)
-                            .submitLabel(.done)
-                            .onSubmit { Task { await create() } }
-                        Button("Add") { Task { await create() } }
-                            .disabled(trimmedNewName.isEmpty)
-                    }
-                }
-
-                if store.folders.isEmpty {
+                Group {
                     Section {
-                        Text("No folders yet. Pages without one live in the Inbox.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    if !ownFolders.isEmpty {
-                        Section("Folders") {
-                            ForEach(ownFolders, id: \.id) { folder in
-                                row(folder)
-                            }
+                        HStack {
+                            TextField("New folder", text: $newName)
+                                .focused($newFieldFocused)
+                                .submitLabel(.done)
+                                .onSubmit { Task { await create() } }
+                            Button("Add") { Task { await create() } }
+                                .disabled(trimmedNewName.isEmpty)
                         }
                     }
-                    ForEach(calendarGroups) { group in
-                        Section(group.title) {
-                            ForEach(group.folders, id: \.id) { folder in
-                                row(folder)
+
+                    if store.folders.isEmpty {
+                        Section {
+                            Text("No folders yet. Pages without one live in the Inbox.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        if !ownFolders.isEmpty {
+                            Section("Folders") {
+                                ForEach(ownFolders, id: \.id) { folder in
+                                    row(folder)
+                                }
+                            }
+                        }
+                        ForEach(calendarGroups) { group in
+                            Section(group.title) {
+                                ForEach(group.folders, id: \.id) { folder in
+                                    row(folder)
+                                }
                             }
                         }
                     }
                 }
+                .pikosFormRows()
             }
             .navigationTitle("Folders")
+            .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
-            }
-            // The rename field is an alert rather than an inline edit: a list
-            // row that becomes editable on tap competes with the tap that
-            // selects it, and on a phone there is no hover to disambiguate.
-            .alert("Rename folder", isPresented: isRenaming) {
-                TextField("Name", text: $renameText)
-                Button("Cancel", role: .cancel) { renaming = nil }
-                Button("Rename") { Task { await commitRename() } }
             }
         }
         .task { await sync.load() }
@@ -88,21 +85,38 @@ struct FolderManagerSheet: View {
     private func row(_ folder: Folder) -> some View {
         HStack(spacing: 10) {
             swatch(folder)
-            Text(folder.name)
-                .padding(.leading, indent(of: folder))
             if folder.isExternalCalendar {
+                Text(folder.name)
                 Spacer()
                 Image(systemName: "calendar")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Managed by a calendar")
+            } else {
+                // The name is its own field, as Reminders edits a list's name: renaming is typing
+                // where the name already is, with no alert in between.
+                TextField(
+                    "Name",
+                    text: Binding(
+                        get: { names[folder.id] ?? folder.name },
+                        set: { names[folder.id] = $0 })
+                )
+                .focused($focusedFolder, equals: folder.id)
+                .submitLabel(.done)
+                .onSubmit { Task { await commitRename(folder) } }
+                .padding(.leading, indent(of: folder))
+                .accessibilityLabel(accessibleLabel(folder))
+                // A hold on the name selects its text, so the folder's menu also has a button.
+                Menu {
+                    menu(for: folder)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.textTertiary)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("More for \(folder.name)")
             }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard !folder.isExternalCalendar else { return }
-            renameText = folder.name
-            renaming = folder
         }
         .contextMenu { menu(for: folder) }
         .swipeActions(edge: .trailing) {
@@ -115,11 +129,13 @@ struct FolderManagerSheet: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .tint(.statusOverdue)
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibleLabel(folder))
-        .accessibilityHint(folder.isExternalCalendar ? "" : "Double tap to rename")
+        .onChange(of: focusedFolder) { old, _ in
+            guard old == folder.id else { return }
+            Task { await commitRename(folder) }
+        }
     }
 
     /// The colour dot, which is also the colour control.
@@ -129,16 +145,21 @@ struct FolderManagerSheet: View {
     /// person does to a folder list the slowest thing in it.
     private func swatch(_ folder: Folder) -> some View {
         Menu {
-            ForEach(store.paletteColors, id: \.value) { option in
-                Button {
-                    Task { await store.setFolderColor(id: folder.id, to: option.value) }
-                } label: {
-                    // The name, not just the swatch. A picker that is only
-                    // colour is a picker nobody using VoiceOver can operate,
-                    // and one nobody colour-blind can operate confidently.
-                    Label(option.label, systemImage: folder.color == option.value ? "checkmark" : "circle.fill")
+            // A palette of real swatches, each still named for VoiceOver and for anyone who
+            // cannot tell two of them apart.
+            Picker(
+                "Colour",
+                selection: Binding(
+                    get: { folder.color ?? "" },
+                    set: { value in Task { await store.setFolderColor(id: folder.id, to: value) } })
+            ) {
+                ForEach(store.paletteColors, id: \.value) { option in
+                    Label(option.label, systemImage: "circle.fill")
+                        .tint(Color(hex: option.value) ?? .textDisabled)
+                        .tag(option.value)
                 }
             }
+            .pickerStyle(.palette)
             if folder.color != nil {
                 Divider()
                 Button("No colour") {
@@ -160,8 +181,7 @@ struct FolderManagerSheet: View {
     private func menu(for folder: Folder) -> some View {
         if !folder.isExternalCalendar {
             Button {
-                renameText = folder.name
-                renaming = folder
+                focusedFolder = folder.id
             } label: {
                 Label("Rename", systemImage: "pencil")
             }
@@ -179,6 +199,14 @@ struct FolderManagerSheet: View {
                 }
             } label: {
                 Label("Move into…", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                Task { await store.trashFolder(id: folder.id) }
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
     }
@@ -290,12 +318,6 @@ struct FolderManagerSheet: View {
         newName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Bound to the presence of a folder rather than a separate flag, so the two
-    /// cannot disagree about whether the alert is up.
-    private var isRenaming: Binding<Bool> {
-        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
-    }
-
     private func create() async {
         guard !trimmedNewName.isEmpty else { return }
         await store.createFolder(named: trimmedNewName)
@@ -303,9 +325,12 @@ struct FolderManagerSheet: View {
         newFieldFocused = true
     }
 
-    private func commitRename() async {
-        guard let folder = renaming else { return }
-        renaming = nil
-        await store.renameFolder(id: folder.id, to: renameText)
+    /// An emptied name goes back to what it was rather than saving a folder called nothing.
+    private func commitRename(_ folder: Folder) async {
+        guard let typed = names[folder.id] else { return }
+        names[folder.id] = nil
+        let trimmed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != folder.name else { return }
+        await store.renameFolder(id: folder.id, to: trimmed)
     }
 }

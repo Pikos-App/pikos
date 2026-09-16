@@ -2,231 +2,431 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// Search over titles, page bodies, and the things a page *is*.
+/// Search over titles, page bodies, and the things a page *is*, shaped like the
+/// desktop's palette.
 ///
 /// Two kinds of query, and the workspace decides which this is. Plain words go
-/// to SQLite's FTS5, maintained by the same data layer the desktop app uses —
-/// including for pages typed on this phone, because the editor sends its
-/// extracted plain text alongside every save. A query carrying an operator
+/// to SQLite's FTS5, maintained by the same data layer the desktop app uses,
+/// including for pages typed on this phone. A query carrying an operator
 /// (`tag:`, `folder:`, `is:`, `priority:`, `due:`) becomes a structured query
-/// instead, with any remaining words still going to the index.
+/// instead, with any remaining words still going to the index. Nothing here
+/// parses any of that: the grammar is one function in Rust, shared with the
+/// desktop, so that "is:open" cannot come to mean two things.
 ///
-/// Nothing here parses any of that. The grammar is one function in Rust, shared
-/// with the desktop and graded against it, precisely so that "is:open" cannot
-/// come to mean two things.
-///
-/// What the screen adds is memory and completion. The field offers the last
-/// few searches back, because on a phone retyping is the expensive part; and
-/// as an operator is typed it completes from what exists — the folders the
-/// reader has, the tags on their pages — rather than from a legend they have
-/// to have read. The legend stays on the empty state for the first visit.
+/// On a phone the operators are chips rather than syntax. Tapping a folder, a tag
+/// or "Due this week" puts a token in the field that stands for the operator, and
+/// the query sent is the tokens' operators followed by the typed words. Someone who
+/// types `tag:home` still gets it read; nobody has to learn that they can.
 struct SearchScreen: View {
     @Environment(WorkspaceStore.self) private var store
+    @Environment(Route.self) private var route
 
     @State private var query = ""
-    @State private var hits: [SearchHit] = []
-    @State private var isSearching = false
-    /// Incremented on each keystroke so a slow query for an old term cannot
-    /// overwrite the results of a newer one.
-    @State private var generation = 0
-    @State private var recents: [String] = Preferences.shared.recentSearches
+    @State private var tokens: [SearchToken] = []
+    @State private var results: SearchResults?
+    @State private var showCompleted = false
+    @State private var recents: [PageSummary] = []
+    @State private var hasLoadedRecents = false
     @State private var knownTags: [String] = []
+
+    private var fullQuery: String {
+        (tokens.map(\.query) + [query.trimmingCharacters(in: .whitespaces)])
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
 
     /// No `NavigationStack` of its own — see the note on `PageListScreen`.
     var body: some View {
-        Group {
-            if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                ContentUnavailableView {
-                    Label("Search", systemImage: "magnifyingglass")
-                } description: {
-                    Text("Find a page by its title or anything written in it.")
-                } actions: {
-                    operatorLegend
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if fullQuery.isEmpty {
+                    suggestedPages
+                } else {
+                    matches
                 }
-            } else if hits.isEmpty && !isSearching {
-                ContentUnavailableView.search(text: query)
-            } else {
-                List(hits, id: \.pageId) { hit in
-                    NavigationLink(value: hit.pageId) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(hit.title.isEmpty ? "Untitled" : hit.title)
-                                .font(.body)
-                            // A hit found by its tags or its date has no
-                            // passage to quote, and an empty line under the
-                            // title reads as a page with a blank body.
-                            if !hit.excerpt.isEmpty {
-                                Text(hit.excerpt)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                        }
-                    }
-                }
-                .listStyle(.plain)
             }
+            .padding(.bottom, 24)
         }
+        .scrollDismissesKeyboard(.immediately)
+        .background(.surfacePrimary)
         .navigationTitle("Search")
-        .searchField(text: $query, prompt: "Titles, text, tag:, folder:, due:")
-        .searchSuggestions { suggestions }
-        // A search is remembered when it is *run* — the return key, or a
-        // suggestion tapped — never per keystroke, or the recents would fill
-        // with the first three letters of everything.
-        .onSubmit(of: .search) { remember(query) }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.surfacePrimary, for: .navigationBar)
+        .searchable(text: $query, tokens: $tokens, placement: Self.fieldPlacement, prompt: "Search pages") { token in
+            Label(token.label, systemImage: token.systemImage)
+        }
+        .focusSearchOnFirstAppear()
         .noticeOverlay()
-        .task { knownTags = await store.allTags() }
-        .task(id: query) {
-            // Debounced by cancellation: `task(id:)` cancels the previous run on
-            // each keystroke, so a sleep that is not interrupted means typing
-            // has stopped.
-            generation += 1
-            let mine = generation
-            try? await Task.sleep(for: .milliseconds(200))
-            guard !Task.isCancelled else { return }
-
-            isSearching = true
-            let results = await store.search(query)
-            guard mine == generation else { return }
-            hits = results
-            isSearching = false
+        .onAppear {
+            guard !route.searchPrefill.isEmpty else { return }
+            query = route.searchPrefill
+            route.searchPrefill = ""
         }
-    }
-
-    // MARK: - Suggestions
-
-    /// What the field offers under itself.
-    ///
-    /// Empty field: the recent searches, then the operators as a reminder.
-    /// A field with something in it: completions for its last word, drawn
-    /// from the reader's own folders and tags. Tapping any of them runs the
-    /// completed query, which is what `searchCompletion` does.
-    @ViewBuilder
-    private var suggestions: some View {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
-            if !recents.isEmpty {
-                Section {
-                    ForEach(recents, id: \.self) { recent in
-                        Label(recent, systemImage: "clock.arrow.circlepath")
-                            .searchCompletion(recent)
-                    }
-                    Button("Clear recent searches", role: .destructive) {
-                        var preferences = Preferences.shared
-                        preferences.clearRecentSearches()
-                        recents = []
-                    }
-                    .font(.footnote)
-                } header: {
-                    Text("Recent")
-                }
-            }
-        } else {
-            let completions = completions(for: trimmed)
-            if !completions.isEmpty {
-                Section {
-                    ForEach(completions, id: \.query) { completion in
-                        Label(completion.label, systemImage: completion.systemImage)
-                            .searchCompletion(completion.query)
-                    }
-                }
-            }
+        .task {
+            recents = await store.recentPages()
+            hasLoadedRecents = true
+            knownTags = await store.allTags()
         }
-    }
-
-    private struct Completion {
-        let label: String
-        let systemImage: String
-        /// The whole query with the last word completed.
-        let query: String
-    }
-
-    /// Completions for the word being typed.
-    ///
-    /// Only the last word is completed; everything before it is kept, so
-    /// "budget fol" becomes "budget folder:Admin" rather than losing the
-    /// word. An operator prefix — "tag:", "folder:", "is:" — matches by the
-    /// operator, and a value already started narrows the list. A bare word
-    /// that is the start of an operator's name ("fol") offers that operator's
-    /// values too, which is how somebody who has forgotten the syntax gets
-    /// it back without the legend.
-    private func completions(for text: String) -> [Completion] {
-        let words = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
-        guard let last = words.last, !last.isEmpty else { return [] }
-        let head = words.dropLast().joined(separator: " ")
-        func full(_ token: String) -> String { head.isEmpty ? token : "\(head) \(token)" }
-
-        let lower = last.lowercased()
-        var out: [Completion] = []
-
-        func offer(_ operatorName: String, values: [String], systemImage: String) {
-            let prefix = operatorName + ":"
-            let typedValue: String?
-            if lower.hasPrefix(prefix) {
-                typedValue = String(last.dropFirst(prefix.count))
-            } else if prefix.hasPrefix(lower) {
-                typedValue = ""
-            } else {
+        .task(id: SearchRequest(query: fullQuery, includeCompleted: showCompleted, version: store.dataVersion)) {
+            guard !fullQuery.isEmpty else {
+                results = nil
                 return
             }
-            guard let typedValue else { return }
-            for value in values
-            where typedValue.isEmpty
-                || value.range(of: typedValue, options: [.caseInsensitive, .diacriticInsensitive])
-                    != nil
-            {
-                // A value with a space needs quoting the grammar does not
-                // have; the desktop offers the same folders unquoted and the
-                // parser reads up to the next space, so a multi-word folder
-                // is offered by its first word, which is what the parser
-                // will match on.
-                let firstWord = value.split(separator: " ").first.map(String.init) ?? value
-                let token = prefix + firstWord
-                out.append(Completion(label: prefix + value, systemImage: systemImage, query: full(token)))
+            // Debounced by cancellation: each keystroke cancels the previous run.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let found = await store.search(fullQuery, includeCompleted: showCompleted)
+            guard !Task.isCancelled else { return }
+            results = found
+        }
+    }
+
+    /// At the bottom on iOS 26, in thumb reach, where Mail and Notes put it; in the navigation bar before.
+    private static var fieldPlacement: SearchFieldPlacement {
+        if #available(iOS 26.0, *) { return .toolbar }
+        return .navigationBarDrawer(displayMode: .always)
+    }
+
+    /// Keyed on the data version too, so ticking a result re-reads the list it is in.
+    private struct SearchRequest: Equatable {
+        let query: String
+        let includeCompleted: Bool
+        let version: Int
+    }
+
+    // MARK: - Before typing
+
+    @ViewBuilder
+    private var suggestedPages: some View {
+        if !recents.isEmpty {
+            sectionLabel("Recent")
+            ForEach(recents, id: \.id) { page in
+                ResultRow(
+                    pageId: page.id, title: page.title, status: page.status, priority: page.priority,
+                    scheduledStart: page.scheduledStart, scheduledEnd: page.scheduledEnd,
+                    titleTerms: [], detail: nil)
             }
+        } else if hasLoadedRecents {
+            sectionLabel("Recent")
+            Text("No recent pages")
+                .font(.pkBodySm)
+                .foregroundStyle(.textTertiary)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
         }
 
-        offer("tag", values: knownTags, systemImage: "number")
-        offer(
-            "folder", values: store.fileableFolders.map(\.name), systemImage: "folder")
-        offer("is", values: ["open", "done", "scheduled"], systemImage: "checkmark.circle")
-        offer("priority", values: ["urgent", "high", "medium", "low"], systemImage: "flag")
-        offer("due", values: ["today", "tomorrow", "week", "month"], systemImage: "calendar")
-        return Array(out.prefix(12))
-    }
-
-    private func remember(_ text: String) {
-        var preferences = Preferences.shared
-        preferences.remember(search: text)
-        recents = preferences.recentSearches
-    }
-
-    /// What can be typed here beyond words.
-    ///
-    /// Shown on the empty state rather than in a help screen, because an
-    /// operator nobody knows about is an operator nobody uses — and the moment
-    /// somebody is looking at an empty search field is the only moment they are
-    /// asking what to type.
-    private var operatorLegend: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Self.operators, id: \.syntax) { entry in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(entry.syntax)
-                        .font(.footnote.monospaced())
-                        .foregroundStyle(Color.accentColor)
-                    Text(entry.meaning)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        sectionLabel("Narrow to")
+        FlowLayout {
+            ForEach(narrowingTokens) { token in
+                Button {
+                    tokens.append(token)
+                } label: {
+                    Pill(title: token.label, systemImage: token.dot == nil ? token.systemImage : nil, dot: token.dot)
                 }
+                .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, 20)
         .padding(.top, 4)
     }
 
-    private static let operators: [(syntax: String, meaning: String)] = [
-        ("tag:work", "tagged work"),
-        ("folder:admin", "in that folder"),
-        ("is:open", "still open — also is:done, is:scheduled"),
-        ("priority:urgent", "at that priority"),
-        ("due:week", "due in the next seven days"),
+    /// Every token worth a tap: the states, the reader's folders in their colours, and their tags.
+    private var narrowingTokens: [SearchToken] {
+        SearchToken.fixed
+            + store.fileableFolders.map { SearchToken.folder($0) }
+            + knownTags.prefix(12).map { SearchToken.tag($0) }
+    }
+
+    private func sectionLabel(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .sectionLabelStyle()
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 6)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    // MARK: - Results
+
+    @ViewBuilder
+    private var matches: some View {
+        suggestions
+
+        if let results {
+            ForEach(results.hits, id: \.pageId) { hit in
+                ResultRow(
+                    pageId: hit.pageId, title: hit.title, status: hit.status, priority: hit.priority,
+                    scheduledStart: hit.scheduledStart, scheduledEnd: nil,
+                    titleTerms: hit.highlightsTitle ? results.terms : [],
+                    detail: hit.detail(terms: results.terms))
+            }
+
+            if results.hits.isEmpty && results.completedCount == 0 && fullQuery.count >= 2 {
+                Text("No pages found")
+                    .font(.pkBodySm)
+                    .foregroundStyle(.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 48)
+            }
+
+            completedToggle(results)
+        }
+    }
+
+    /// The desktop's quiet line under the results. A search that asked for finished pages already
+    /// has them, so it says so instead of offering to hide them.
+    @ViewBuilder
+    private func completedToggle(_ results: SearchResults) -> some View {
+        if results.askedForCompleted {
+            Text("Showing completed pages")
+                .font(.pkBodySm)
+                .foregroundStyle(.textTertiary)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+        } else if showCompleted || results.completedCount > 0 {
+            Button {
+                showCompleted.toggle()
+            } label: {
+                Label(
+                    showCompleted ? "Hide completed" : "Show completed (\(results.completedCount))",
+                    systemImage: showCompleted ? "chevron.up" : "chevron.down")
+                    .font(.pkUI)
+                    .foregroundStyle(.textAction)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableRowStyle())
+        }
+    }
+
+    // MARK: - Completions
+
+    /// Tokens for the word being typed, from the reader's own folders and tags and the fixed states.
+    ///
+    /// A word that starts an operator's name ("fol") or its value ("hom") offers the matching
+    /// tokens, so somebody who never learns the syntax still narrows by typing a name.
+    ///
+    /// Drawn as the same pills as "Narrow to" above the results, not through `searchSuggestions`:
+    /// the system's suggestion list covers the results on a black ground the theme cannot reach.
+    @ViewBuilder
+    private var suggestions: some View {
+        let words = query.split(separator: " ").map(String.init)
+        if let last = words.last, !last.isEmpty {
+            let matching = completions(for: last)
+            if !matching.isEmpty {
+                sectionLabel("Narrow to")
+                FlowLayout {
+                    ForEach(matching) { token in
+                        Button {
+                            tokens.append(token)
+                            query = words.dropLast().joined(separator: " ")
+                        } label: {
+                            Pill(
+                                title: token.label, systemImage: token.dot == nil ? token.systemImage : nil,
+                                dot: token.dot)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private func completions(for word: String) -> [SearchToken] {
+        let lower = word.lowercased()
+        let value = lower.split(separator: ":", maxSplits: 1).last.map(String.init) ?? lower
+        let operatorName = lower.contains(":") ? String(lower.split(separator: ":").first ?? "") : nil
+        return narrowingTokens.filter { token in
+            guard !tokens.contains(token) else { return false }
+            if let operatorName {
+                return token.operatorName == operatorName
+                    && (value.isEmpty || token.label.lowercased().contains(value))
+            }
+            return token.label.lowercased().contains(lower) || token.operatorName.hasPrefix(lower)
+        }
+        .prefix(12)
+        .map { $0 }
+    }
+}
+
+// MARK: - Tokens
+
+/// One operator as a chip: what the field shows, and what the workspace is sent.
+struct SearchToken: Identifiable, Hashable {
+    let operatorName: String
+    let value: String
+    let label: String
+    let systemImage: String
+    var dot: Color?
+
+    var id: String { query }
+
+    /// A value with a space is sent by its first word, which is what the grammar reads up to.
+    var query: String {
+        "\(operatorName):\(value.split(separator: " ").first.map(String.init) ?? value)"
+    }
+
+    static let fixed: [SearchToken] = [
+        SearchToken(operatorName: "is", value: "open", label: String(localized: "Open"), systemImage: "circle"),
+        SearchToken(operatorName: "is", value: "done", label: String(localized: "Done"), systemImage: "checkmark.circle"),
+        SearchToken(operatorName: "is", value: "scheduled", label: String(localized: "Scheduled"), systemImage: "calendar"),
+        SearchToken(operatorName: "due", value: "today", label: String(localized: "Due today"), systemImage: "sun.max"),
+        SearchToken(operatorName: "due", value: "week", label: String(localized: "Due this week"), systemImage: "calendar.badge.clock"),
+        SearchToken(operatorName: "priority", value: "urgent", label: String(localized: "Urgent"), systemImage: "flag"),
+        SearchToken(operatorName: "priority", value: "high", label: String(localized: "High priority"), systemImage: "flag"),
     ]
+
+    static func folder(_ folder: Folder) -> SearchToken {
+        SearchToken(
+            operatorName: "folder", value: folder.name, label: folder.name, systemImage: "folder",
+            dot: Color(hex: folder.color) ?? .textDisabled)
+    }
+
+    static func tag(_ tag: String) -> SearchToken {
+        SearchToken(operatorName: "tag", value: tag, label: "#\(tag)", systemImage: "number")
+    }
+}
+
+// MARK: - Row
+
+/// One page in the results or the recents: the list's row, with its checkbox and date, at search's
+/// size, so a page found can be ticked where it was found.
+private struct ResultRow: View {
+    @Environment(Route.self) private var route
+    @Environment(WorkspaceStore.self) private var store
+
+    let pageId: String
+    let title: String
+    let status: String
+    let priority: Int64
+    let scheduledStart: String?
+    let scheduledEnd: String?
+    let titleTerms: [String]
+    let detail: SearchHit.Detail?
+
+    private var isDone: Bool { status == "done" }
+    private var displayTitle: String { title.isEmpty ? String(localized: "Untitled") : title }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            CompletionToggle(isDone: isDone, priority: PagePriority(stored: priority)) { done in
+                Task { await store.setStatus(pageId: pageId, done: done) }
+            }
+            Button {
+                route.open(page: pageId)
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(highlighted(displayTitle, terms: titleTerms, font: .pkBodyMedium))
+                            .font(.pkBody)
+                            .foregroundStyle(isDone ? Color.textTertiary : Color.textPrimary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let scheduledStart {
+                            ScheduleLabel(iso: scheduledStart, end: scheduledEnd, isDone: isDone)
+                        }
+                    }
+                    if let detail {
+                        Text(highlighted(detail.text, terms: detail.terms, font: .system(.subheadline, weight: .medium)))
+                            .font(.pkBodySm)
+                            .foregroundStyle(.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.trailing, 20)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableRowStyle())
+            .accessibilityLabel(displayTitle)
+            .accessibilityValue(
+                [detail?.text, isDone ? String(localized: "Completed") : nil]
+                    .compactMap { $0 }
+                    .joined(separator: ", "))
+        }
+        .padding(.leading, 8)
+    }
+
+    private func highlighted(_ text: String, terms: [String], font: Font) -> AttributedString {
+        SearchHighlight.attributed(text, terms: terms) {
+            $0.foregroundColor = .textAction
+            $0.font = font
+        }
+    }
+}
+
+// MARK: - What a hit shows
+
+extension SearchHit {
+    struct Detail {
+        let text: String
+        /// Empty when the line is the page's facts rather than matched text.
+        let terms: [String]
+    }
+
+    var highlightsTitle: Bool { matchSource == "title" || matchSource == "both" }
+
+    /// The second line, chosen as the desktop chooses it: the subtitle when that
+    /// is what matched, the passage when the body did, and otherwise the page's
+    /// own facts so a title match still says which page it is.
+    func detail(terms: [String]) -> Detail? {
+        if matchSource == "subtitle", let subtitle, !subtitle.isEmpty {
+            return Detail(text: SearchHighlight.leadIn(subtitle, terms: terms), terms: terms)
+        }
+        if matchSource == "content" || matchSource == "both", !excerpt.isEmpty {
+            return Detail(text: SearchHighlight.leadIn(excerpt, terms: terms), terms: terms)
+        }
+        let summary = facts
+        return summary.isEmpty ? nil : Detail(text: summary, terms: [])
+    }
+
+    private var facts: String {
+        // No date: the row already prints it at the trailing edge.
+        var parts: [String] = []
+        if let priority = PagePriority(rawValue: priority) {
+            parts.append(priority.name)
+        }
+        if !tags.isEmpty {
+            parts.append(tags.map { "#\($0)" }.joined(separator: " "))
+        }
+        if !parts.isEmpty { return parts.joined(separator: " · ") }
+        if let subtitle, !subtitle.isEmpty { return subtitle }
+        return contentPreview
+    }
+}
+
+// MARK: - Focus
+
+private extension View {
+    /// Puts the keyboard up the first time search opens, as the desktop palette
+    /// takes focus. Only on iOS 18, where a search field's focus can be set.
+    @ViewBuilder
+    func focusSearchOnFirstAppear() -> some View {
+        if #available(iOS 18.0, *) {
+            modifier(FocusSearchOnFirstAppear())
+        } else {
+            self
+        }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct FocusSearchOnFirstAppear: ViewModifier {
+    @FocusState private var isFocused: Bool
+    @State private var hasFocused = false
+
+    func body(content: Content) -> some View {
+        content
+            .searchFocused($isFocused)
+            .task {
+                guard !hasFocused else { return }
+                hasFocused = true
+                isFocused = true
+            }
+    }
 }

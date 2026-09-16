@@ -5,8 +5,9 @@ import SwiftUI
 /// Drawn over the bottom of whichever screen is up, from `WorkspaceStore.notice`.
 /// It is one view because it is one behaviour: a sentence, an optional action,
 /// and a countdown. Two screens each drawing their own copy is how the undo
-/// window comes to be six seconds on one and eight on the other, and a reader
-/// who has learned one is wrong-footed by the other.
+/// window comes to differ between them, and a reader who has learned one is
+/// wrong-footed by the other. The window is the desktop's eight seconds, for
+/// the same reason across the two apps.
 ///
 /// It clears itself rather than waiting to be dismissed. A bar sitting over the
 /// bottom of a list until somebody notices it is worse than a missed undo —
@@ -19,7 +20,8 @@ struct NoticeBar: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(notice.message)
-                .font(.subheadline)
+                .font(.pkBodySm)
+                .foregroundStyle(.textPrimary)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let action = notice.action {
@@ -29,12 +31,13 @@ struct NoticeBar: View {
                         onDismiss()
                     }
                 }
-                .font(.subheadline.weight(.semibold))
+                .font(.system(.subheadline, weight: .semibold))
+                .foregroundStyle(.textAction)
                 .buttonStyle(.borderless)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 13)
         // Glass on iOS 26, a material elsewhere: the bar floats in the
         // navigation layer over content, which is the one place the new
         // design language puts glass.
@@ -44,7 +47,7 @@ struct NoticeBar: View {
         // Keyed on the notice, so a second one restarts the countdown instead
         // of inheriting the first one's remaining time.
         .task(id: notice) {
-            try? await Task.sleep(for: .seconds(6))
+            try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled else { return }
             onDismiss()
         }
@@ -62,13 +65,8 @@ extension View {
         bottomChrome { EmptyView() }
     }
 
-    /// The screen's floating controls and its notice, stacked at the bottom.
-    ///
-    /// One overlay rather than two, so the notice and the create button are
-    /// laid out together: the notice slides in *under* the button and pushes
-    /// it up, rather than appearing on top of it and hiding the one control
-    /// the screen floats on purpose. The button is trailing, where a right
-    /// thumb rests; the notice is full width, since it carries a sentence.
+    /// The screen's floating bar and its notice, laid out together so the notice sits above the bar
+    /// instead of covering it.
     func bottomChrome<Floating: View>(@ViewBuilder floating: @escaping () -> Floating) -> some View {
         modifier(BottomChrome(floating: floating))
     }
@@ -81,8 +79,7 @@ private struct BottomChrome<Floating: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
-            VStack(alignment: .trailing, spacing: 12) {
-                floating()
+            VStack(spacing: 10) {
                 if let notice = store.notice {
                     NoticeBar(notice: notice) {
                         // Only clear the notice this bar was drawn for. By the
@@ -94,9 +91,10 @@ private struct BottomChrome<Floating: View>: ViewModifier {
                         }
                     }
                 }
+                floating()
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.bottom, 4)
         }
         // A dissolve under Reduce Motion: the slide is decoration, the
         // sentence is the content.

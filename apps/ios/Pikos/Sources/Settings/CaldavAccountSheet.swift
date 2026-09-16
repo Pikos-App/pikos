@@ -39,70 +39,77 @@ struct CaldavAccountSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if case .reconnect(let account) = mode {
-                    Section {
-                        LabeledContent("Account", value: account.displayName)
-                    } footer: {
-                        Text("The server and username are already saved. Only the password changes.")
-                    }
-                } else {
-                    Section {
-                        // No autocapitalisation and no autocorrect on any of
-                        // these: a server URL and a username are not prose, and
-                        // iOS helpfully capitalising the first letter of a
-                        // username is a failed login nobody can see the cause of.
-                        TextField("https://caldav.example.com", text: $baseURL)
-                            .keyboardType(.URL)
-                            .textContentType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focus, equals: .url)
-                            .submitLabel(.next)
-                            .onSubmit { focus = .username }
-
-                        TextField("Username", text: $username)
-                            .textContentType(.username)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focus, equals: .username)
-                            .submitLabel(.next)
-                            .onSubmit { focus = .password }
-                    } header: {
-                        Text("Server")
-                    } footer: {
-                        Text("Fastmail, iCloud, Nextcloud and most self-hosted calendars speak CalDAV. Some require an app-specific password rather than your usual one.")
-                    }
-                }
-
-                Section {
-                    SecureField("Password", text: $password)
-                        .textContentType(.password)
-                        .focused($focus, equals: .password)
-                        .submitLabel(mode.isReconnect ? .done : .next)
-                        .onSubmit {
-                            if mode.isReconnect {
-                                Task { await submit() }
-                            } else {
-                                focus = .name
-                            }
+                Group {
+                    if case .reconnect(let account) = mode {
+                        Section {
+                            LabeledContent("Account", value: account.displayName)
+                        } footer: {
+                            Text("The server and username are already saved. Only the password changes.")
                         }
-                }
+                    } else {
+                        Section {
+                            // No autocapitalisation and no autocorrect on any of
+                            // these: a server URL and a username are not prose, and
+                            // iOS helpfully capitalising the first letter of a
+                            // username is a failed login nobody can see the cause of.
+                            // Verbatim: a localized prompt is Markdown, which turns a URL into a system-blue link.
+                            TextField(text: $baseURL, prompt: Text(verbatim: "https://caldav.example.com")) {
+                                Text("Server URL")
+                            }
+                                .keyboardType(.URL)
+                                .textContentType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($focus, equals: .url)
+                                .submitLabel(.next)
+                                .onSubmit { focus = .username }
 
-                if !mode.isReconnect {
+                            TextField("Username", text: $username)
+                                .textContentType(.username)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($focus, equals: .username)
+                                .submitLabel(.next)
+                                .onSubmit { focus = .password }
+                        } header: {
+                            Text("Server")
+                        } footer: {
+                            Text("Fastmail, iCloud, Nextcloud and most self-hosted calendars speak CalDAV. Some require an app-specific password rather than your usual one.")
+                        }
+                    }
+
                     Section {
-                        TextField("Name this account", text: $displayName)
-                            .focused($focus, equals: .name)
-                            .submitLabel(.done)
-                            .onSubmit { Task { await submit() } }
-                    } footer: {
-                        // Not cosmetic: identity is provider plus this name, so
-                        // it decides whether a later connection repairs this
-                        // account or creates a second one beside it.
-                        Text("How it appears in Pikos. Reconnecting later matches on this name, so pick something you will use again.")
+                        SecureField("Password", text: $password)
+                            .textContentType(.password)
+                            .focused($focus, equals: .password)
+                            .submitLabel(mode.isReconnect ? .done : .next)
+                            .onSubmit {
+                                if mode.isReconnect {
+                                    Task { await submit() }
+                                } else {
+                                    focus = .name
+                                }
+                            }
+                    }
+
+                    if !mode.isReconnect {
+                        Section {
+                            TextField("Name this account", text: $displayName)
+                                .focused($focus, equals: .name)
+                                .submitLabel(.done)
+                                .onSubmit { Task { await submit() } }
+                        } footer: {
+                            // Not cosmetic: identity is provider plus this name, so
+                            // it decides whether a later connection repairs this
+                            // account or creates a second one beside it.
+                            Text("How it appears in Pikos. Reconnecting later matches on this name, so pick something you will use again.")
+                        }
                     }
                 }
+                .pikosFormRows()
             }
             .navigationTitle(mode.isReconnect ? "Reconnect" : "Add account")
+            .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)
             .disabled(isWorking)
             .toolbar {

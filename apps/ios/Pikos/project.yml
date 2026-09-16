@@ -58,7 +58,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         # Sources/Assets.xcassets. The accent is the brand's terracotta, the
         # same value PikosSupport's `Brand.accentHex` hands to the editor and
         # the widget — every native control tints from here, so the app and
@@ -82,23 +81,33 @@ targets:
         # closer to the desktop app, and narrowing this would make that a new
         # SKU rather than an update.
         TARGETED_DEVICE_FAMILY: "1,2"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: >-
-          UIInterfaceOrientationPortrait
-          UIInterfaceOrientationLandscapeLeft
-          UIInterfaceOrientationLandscapeRight
-        # iPad is expected to rotate freely, upside down included — it has no
-        # single "up", and an iPad app that refuses an orientation reads as
-        # broken rather than opinionated.
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: >-
-          UIInterfaceOrientationPortrait
-          UIInterfaceOrientationPortraitUpsideDown
-          UIInterfaceOrientationLandscapeLeft
-          UIInterfaceOrientationLandscapeRight
         CODE_SIGN_ENTITLEMENTS: Pikos.entitlements
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: Pikos
+        # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
+        # settings: those are synthesised only when Xcode generates the
+        # Info.plist, and this target supplies one. As settings they were
+        # silently dropped, and an app with no launch screen is given a
+        # letterboxed window on every modern iPhone.
+        #
+        # The modern launch screen: the desktop's ground colour, generated from
+        # its tokens, and no storyboard to keep in step with the UI.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # iPad is expected to rotate freely, upside down included — it has no
+        # single "up", and an iPad app that refuses an orientation reads as
+        # broken rather than opinionated.
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         # The scheme the desktop app already uses, so one link grammar serves
         # both. Parsed by shared Rust — see Support/Route.swift.
         CFBundleURLTypes:
@@ -161,6 +170,27 @@ targets:
       path: ../PikosWidgets/Info.plist
       properties:
         CFBundleDisplayName: Pikos
+        # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
+        # settings: those are synthesised only when Xcode generates the
+        # Info.plist, and this target supplies one. As settings they were
+        # silently dropped, and an app with no launch screen is given a
+        # letterboxed window on every modern iPhone.
+        #
+        # An empty dictionary is the modern launch screen: a plain background
+        # in the app's own colours, no storyboard to keep in step with the UI.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # iPad is expected to rotate freely, upside down included — it has no
+        # single "up", and an iPad app that refuses an orientation reads as
+        # broken rather than opinionated.
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 

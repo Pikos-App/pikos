@@ -1,7 +1,914 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
 
+    },
+    "—" : {
+
+    },
+    "(%lld from a calendar, left alone)" : {
+
+    },
+    "(%lld repeating or from a calendar, left alone)" : {
+
+    },
+    "%@" : {
+
+    },
+    "%@ no longer repeats" : {
+
+    },
+    "%@ priority" : {
+
+    },
+    "%lld hours before" : {
+
+    },
+    "%lld minutes before" : {
+
+    },
+    "%lld more" : {
+
+    },
+    "%lld pages" : {
+
+    },
+    "%lld pages you edited were kept when this was switched off. Switching it back on will let the calendar's versions win." : {
+
+    },
+    "%lld syncing" : {
+
+    },
+    "+%lld" : {
+
+    },
+    "1 day before" : {
+
+    },
+    "1 hour before" : {
+
+    },
+    "1 page" : {
+
+    },
+    "1 page you edited was kept when this was switched off. Switching it back on will let the calendar's version win." : {
+
+    },
+    "3 Days" : {
+
+    },
+    "A leading # is optional — Pikos stores the word either way." : {
+
+    },
+    "A spreadsheet of every page. Imports back into Pikos." : {
+
+    },
+    "About" : {
+
+    },
+    "Account" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add a tag" : {
+
+    },
+    "Add account" : {
+
+    },
+    "Add CalDAV account" : {
+
+    },
+    "Added %@." : {
+
+    },
+    "Added %lld pages to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Added %1$lld pages to %2$@"
+          }
+        }
+      }
+    },
+    "Added to %@" : {
+
+    },
+    "all-day" : {
+
+    },
+    "Allow notifications" : {
+
+    },
+    "Allow notifications for Pikos" : {
+
+    },
+    "Appearance" : {
+
+    },
+    "At the time" : {
+
+    },
+    "Back up to Files" : {
+
+    },
+    "Block" : {
+
+    },
+    "Calendar" : {
+
+    },
+    "Calendar (.ics)" : {
+
+    },
+    "Calendar density" : {
+
+    },
+    "Calendar density sets how tall an hour is — how much of the day fits on screen at once." : {
+
+    },
+    "Calendars" : {
+
+    },
+    "Calendars sync when you open Pikos, when you ask, and in the background when iPhone allows it — which is on its schedule, not every few minutes." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Change Date…" : {
+
+    },
+    "Change password" : {
+
+    },
+    "Clear Date" : {
+
+    },
+    "Clear recent searches" : {
+
+    },
+    "Cleared the date on %lld" : {
+
+    },
+    "Colour of %@" : {
+
+    },
+    "Complete" : {
+
+    },
+    "Complete this one" : {
+
+    },
+    "Completed" : {
+
+    },
+    "Completed (%u)" : {
+
+    },
+    "Completed %lld pages" : {
+
+    },
+    "Completed 1 page" : {
+
+    },
+    "Connect" : {
+
+    },
+    "Connect a CalDAV server — Fastmail, iCloud, Nextcloud — and its events appear in Pikos as pages you can see but not edit." : {
+
+    },
+    "Could not reach the server" : {
+
+    },
+    "Could not reach the server. Check the address and your connection." : {
+
+    },
+    "Could not reach the server. Nothing was changed." : {
+
+    },
+    "Create a page in Pikos." : {
+
+    },
+    "CSV" : {
+
+    },
+    "Database backup" : {
+
+    },
+    "Date" : {
+
+    },
+    "Dates" : {
+
+    },
+    "Day" : {
+
+    },
+    "Default folder" : {
+
+    },
+    "Default reminder" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete %lld pages?" : {
+
+    },
+    "Delete all data" : {
+
+    },
+    "Delete everything on this device?" : {
+
+    },
+    "Deleted %@" : {
+
+    },
+    "Deleted %lld pages" : {
+
+    },
+    "Deleted 1 page" : {
+
+    },
+    "Deleted pages appear here for %lld days." : {
+
+    },
+    "Deleting…" : {
+
+    },
+    "Deselect All" : {
+
+    },
+    "Disconnect" : {
+
+    },
+    "Document format" : {
+
+    },
+    "Done" : {
+
+    },
+    "Double tap to rename" : {
+
+    },
+    "Ends" : {
+
+    },
+    "Ends on a later day" : {
+
+    },
+    "Every" : {
+
+    },
+    "Every page, folder and calendar connection. This cannot be undone." : {
+
+    },
+    "Everything Pikos knows is one database on this device, with your images beside it. A backup is a copy of both, in Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it." : {
+
+    },
+    "Export" : {
+
+    },
+    "Export failed" : {
+
+    },
+    "External calendars" : {
+
+    },
+    "Fastmail, iCloud, Nextcloud and most self-hosted calendars speak CalDAV. Some require an app-specific password rather than your usual one." : {
+
+    },
+    "Filter %@" : {
+
+    },
+    "Find a page by its title or anything written in it." : {
+
+    },
+    "Find pages in Pikos by title or content." : {
+
+    },
+    "Focus" : {
+
+    },
+    "Folder" : {
+
+    },
+    "Folder: %@" : {
+
+    },
+    "Folders" : {
+
+    },
+    "Found %lld %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Found %1$lld %2$@."
+          }
+        }
+      }
+    },
+    "Give the page a date first — a repeat needs somewhere to start." : {
+
+    },
+    "Go to" : {
+
+    },
+    "Go to Date" : {
+
+    },
+    "Go to Date…" : {
+
+    },
+    "Go to Today" : {
+
+    },
+    "Google accounts can only be added on the desktop for now — the sign-in needs a browser the phone cannot hand back to." : {
+
+    },
+    "Hide keyboard" : {
+
+    },
+    "High" : {
+
+    },
+    "How it appears in Pikos. Reconnecting later matches on this name, so pick something you will use again." : {
+
+    },
+    "https://caldav.example.com" : {
+
+    },
+    "In %@" : {
+
+    },
+    "Inbox" : {
+
+    },
+    "Include calendar events" : {
+
+    },
+    "Insert photo" : {
+
+    },
+    "Last backup %@ at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Last backup %1$@ at %2$@"
+          }
+        }
+      }
+    },
+    "Last synced %@." : {
+
+    },
+    "List density" : {
+
+    },
+    "Loading…" : {
+
+    },
+    "Low" : {
+
+    },
+    "Manage Folders…" : {
+
+    },
+    "Managed by a calendar" : {
+
+    },
+    "Mark as done" : {
+
+    },
+    "Mark as not done" : {
+
+    },
+    "Markdown" : {
+
+    },
+    "Medium" : {
+
+    },
+    "More" : {
+
+    },
+    "More formatting" : {
+
+    },
+    "More…" : {
+
+    },
+    "Move" : {
+
+    },
+    "Move into…" : {
+
+    },
+    "Move this one" : {
+
+    },
+    "Move this one…" : {
+
+    },
+    "Move to Folder" : {
+
+    },
+    "Move to today" : {
+
+    },
+    "Moved %lld to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Moved %1$lld to %2$@"
+          }
+        }
+      }
+    },
+    "Name" : {
+
+    },
+    "Name this account" : {
+
+    },
+    "Name this page" : {
+
+    },
+    "Navigation" : {
+
+    },
+    "Never backed up" : {
+
+    },
+    "New folder" : {
+
+    },
+    "New page" : {
+
+    },
+    "New pages" : {
+
+    },
+    "Next" : {
+
+    },
+    "Next %@" : {
+
+    },
+    "No calendars connected." : {
+
+    },
+    "No colour" : {
+
+    },
+    "No date" : {
+
+    },
+    "No folders yet. Pages without one live in the Inbox." : {
+
+    },
+    "No pages matched %@." : {
+
+    },
+    "No tags." : {
+
+    },
+    "None" : {
+
+    },
+    "None chosen — it repeats on whichever day the page is on." : {
+
+    },
+    "Not synced yet." : {
+
+    },
+    "Nothing deleted" : {
+
+    },
+    "Nothing finished here yet." : {
+
+    },
+    "Nothing here yet" : {
+
+    },
+    "Nothing in %@ yet." : {
+
+    },
+    "Nothing in the next two weeks" : {
+
+    },
+    "Nothing open here." : {
+
+    },
+    "Nothing rings on this phone. Reminders still fire on the desktop." : {
+
+    },
+    "nothing scheduled" : {
+
+    },
+    "Notifications" : {
+
+    },
+    "Off by default: events mirrored from a calendar are that calendar's copy, and your calendar app already has them." : {
+
+    },
+    "Off in Settings" : {
+
+    },
+    "OK" : {
+
+    },
+    "On these days" : {
+
+    },
+    "On this device" : {
+
+    },
+    "One file per page, in folders. Readable anywhere." : {
+
+    },
+    "Open" : {
+
+    },
+    "Open Pikos showing today's pages." : {
+
+    },
+    "Open today" : {
+
+    },
+    "Overdue" : {
+
+    },
+    "Overdue, %@" : {
+
+    },
+    "page" : {
+
+    },
+    "Page" : {
+
+    },
+    "Page options" : {
+
+    },
+    "Page unavailable" : {
+
+    },
+    "Pages" : {
+
+    },
+    "Pages are removed permanently after %lld days." : {
+
+    },
+    "Pages from a calendar stay here until they're deleted in the calendar." : {
+
+    },
+    "Pages scheduled for today appear here. Type a sentence and Pikos reads the date, time, priority and tags out of it." : {
+
+    },
+    "Pages scheduled in the next week will appear here." : {
+
+    },
+    "Pages without a reminder of their own use the default. Use a Focus to silence them at night." : {
+
+    },
+    "Pages you haven't filed or dated wait here. Swipe one to send it to today or tomorrow." : {
+
+    },
+    "Password" : {
+
+    },
+    "Password rejected — reconnect" : {
+
+    },
+    "Pick a date…" : {
+
+    },
+    "Pikos couldn't open your notes." : {
+
+    },
+    "Pikos is notes, tasks and a calendar in one place. Everything you write is stored in a database on this device. There is no account, and nothing is sent anywhere.\n\nA page is a note until you give it a date. Then it is on your calendar too. Tick the ring beside a page to finish it.\n\nThe fastest way in is the + button. Type a sentence and Pikos reads the details out of it:\n\nCall the dentist tomorrow at 3pm !high #health\nStandup every weekday at 9:30 !r10\nPay rent every month on the 1st\n\nSwipe a row to complete or delete it. Tap the title at the top of the list to switch between Today, Upcoming, your Inbox and your folders.\n\nSettings › Your data shows how big your workspace is and puts a copy of it in the Files app whenever you like.\n\nDelete this page whenever you like." : {
+
+    },
+    "Previous %@" : {
+
+    },
+    "Priority" : {
+
+    },
+    "Priority: %@" : {
+
+    },
+    "Re-read everything" : {
+
+    },
+    "Recent" : {
+
+    },
+    "Recently Deleted" : {
+
+    },
+    "Recently Deleted…" : {
+
+    },
+    "Reconnect" : {
+
+    },
+    "Remind me" : {
+
+    },
+    "Reminders" : {
+
+    },
+    "Removes every page, folder and calendar connection from this device. There is no trash to recover from — export first if you want a copy." : {
+
+    },
+    "Rename" : {
+
+    },
+    "Rename folder" : {
+
+    },
+    "Rename page" : {
+
+    },
+    "Reopen" : {
+
+    },
+    "Repeat" : {
+
+    },
+    "Repeat…" : {
+
+    },
+    "Repeats" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset preferences" : {
+
+    },
+    "Reset preferences?" : {
+
+    },
+    "Restore" : {
+
+    },
+    "Returns the settings above to their defaults. Your pages are not touched." : {
+
+    },
+    "Save" : {
+
+    },
+    "Schedule" : {
+
+    },
+    "Schedule…" : {
+
+    },
+    "Scheduled %lld" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search for" : {
+
+    },
+    "Search pages" : {
+
+    },
+    "Select All" : {
+
+    },
+    "Select Pages" : {
+
+    },
+    "Server" : {
+
+    },
+    "Set an end time" : {
+
+    },
+    "Settings" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show less" : {
+
+    },
+    "Show more" : {
+
+    },
+    "Skip this one" : {
+
+    },
+    "Skipped %@" : {
+
+    },
+    "Skipped %lld days of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Skipped %1$lld days of %2$@"
+          }
+        }
+      }
+    },
+    "Something went wrong" : {
+
+    },
+    "Sort by" : {
+
+    },
+    "Start timing this page" : {
+
+    },
+    "Starts" : {
+
+    },
+    "Stop Repeating" : {
+
+    },
+    "Stop timing" : {
+
+    },
+    "Swipe a row" : {
+
+    },
+    "Swipe right to complete a page, left to schedule or delete it. Hold a row for everything else." : {
+
+    },
+    "Sync now" : {
+
+    },
+    "Sync problem" : {
+
+    },
+    "Tagged %@" : {
+
+    },
+    "Tags" : {
+
+    },
+    "Tags…" : {
+
+    },
+    "Tap “Today” at the top to switch to Upcoming, the Inbox or any folder." : {
+
+    },
+    "Text" : {
+
+    },
+    "That image could not be read." : {
+
+    },
+    "The end day is included — 1 to 8 July is eight days." : {
+
+    },
+    "The folder this was set to no longer exists, so new pages go to the Inbox." : {
+
+    },
+    "The photo could not be added: %@" : {
+
+    },
+    "The server and username are already saved. Only the password changes." : {
+
+    },
+    "The server rejected the saved password. Reconnect the account to fix it." : {
+
+    },
+    "The title is a menu" : {
+
+    },
+    "The whole workspace as one file, trash included." : {
+
+    },
+    "Theme" : {
+
+    },
+    "Theme, density, week start, default folder and reminders go back to their defaults." : {
+
+    },
+    "They go to Recently Deleted, where they can be put back." : {
+
+    },
+    "This occurrence" : {
+
+    },
+    "This page may have been deleted." : {
+
+    },
+    "This page was edited in a newer version of Pikos. Update to edit it." : {
+
+    },
+    "This repeat is more detailed than Pikos can edit on iPhone. It still works — change it on the desktop." : {
+
+    },
+    "Title" : {
+
+    },
+    "Titles, text, tag:, folder:, due:" : {
+
+    },
+    "today" : {
+
+    },
+    "Today" : {
+
+    },
+    "Tomorrow" : {
+
+    },
+    "Tomorrow %@" : {
+
+    },
+    "Top level" : {
+
+    },
+    "Try “%@”" : {
+
+    },
+    "Type a sentence and Pikos reads the date, priority and tags out of it" : {
+
+    },
+    "Undo" : {
+
+    },
+    "Untitled" : {
+
+    },
+    "Upcoming" : {
+
+    },
+    "Urgent" : {
+
+    },
+    "Used by every date picker. Defaults to your region." : {
+
+    },
+    "Username" : {
+
+    },
+    "Version" : {
+
+    },
+    "View" : {
+
+    },
+    "Week" : {
+
+    },
+    "Week starts on" : {
+
+    },
+    "Welcome to Pikos" : {
+
+    },
+    "What are you looking for?" : {
+
+    },
+    "What needs doing?" : {
+
+    },
+    "What should the page say?" : {
+
+    },
+    "When" : {
+
+    },
+    "When: %@" : {
+
+    },
+    "Where a new page lands when you create one from a widget or a link." : {
+
+    },
+    "Yesterday" : {
+
+    },
+    "Yesterday %@" : {
+
+    },
+    "Your data" : {
+
+    },
+    "Your scheduled pages as calendar events." : {
+
+    }
   },
   "version" : "1.0"
 }

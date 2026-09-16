@@ -15,7 +15,7 @@ import SwiftUI
 extension View {
     /// Liquid Glass on a floating control, a material capsule elsewhere.
     ///
-    /// For the app's own floating elements — the create button, the notice
+    /// For the app's own floating elements — the bottom bar, the notice
     /// bar — which sit in the navigation layer over content and are exactly
     /// what the new design language reserves glass for. Never applied to
     /// content: a list row or a calendar block on glass is the one thing the
@@ -38,65 +38,5 @@ extension View {
             .background(.regularMaterial, in: shape)
             .overlay(shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
-    }
-
-    /// The prominent, tinted button style of the running OS.
-    ///
-    /// `.glassProminent` on iOS 26, `.borderedProminent` before it — the same
-    /// role in both, which is the point: the primary action reads as the
-    /// primary action on every version.
-    @ViewBuilder
-    func prominentButtonStyle() -> some View {
-        #if compiler(>=6.2)
-            if #available(iOS 26.0, *) {
-                self.buttonStyle(.glassProminent)
-            } else {
-                self.buttonStyle(.borderedProminent)
-            }
-        #else
-            self.buttonStyle(.borderedProminent)
-        #endif
-    }
-
-    /// Let the tab bar shrink out of the way as the user scrolls down.
-    ///
-    /// iOS 26's "content remains the star" behaviour. A no-op on earlier
-    /// systems, where the tab bar has no minimized form to take.
-    @ViewBuilder
-    func minimizingTabBar() -> some View {
-        #if compiler(>=6.2)
-            if #available(iOS 26.0, *) {
-                self.tabBarMinimizeBehavior(.onScrollDown)
-            } else {
-                self
-            }
-        #else
-            self
-        #endif
-    }
-
-    /// Search that lives where the running OS puts it.
-    ///
-    /// On iOS 26 the search tab's field takes the tab bar's place at the
-    /// bottom of the screen, which is where Apple moved search in Mail, Notes
-    /// and Messages for thumb reach; the placement has to be left automatic
-    /// for that to happen. Earlier systems keep the field pinned under the
-    /// title, always visible, because a search screen whose field has to be
-    /// pulled down into view is a search screen with a hidden step.
-    @ViewBuilder
-    func searchField(text: Binding<String>, prompt: LocalizedStringKey) -> some View {
-        #if compiler(>=6.2)
-            if #available(iOS 26.0, *) {
-                self.searchable(text: text, placement: .automatic, prompt: prompt)
-                    .searchToolbarBehavior(.minimize)
-            } else {
-                self.searchable(
-                    text: text, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: prompt)
-            }
-        #else
-            self.searchable(
-                text: text, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
-        #endif
     }
 }

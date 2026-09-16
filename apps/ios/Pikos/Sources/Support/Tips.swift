@@ -17,12 +17,12 @@ import TipKit
 /// sees it.
 struct SwipeRowTip: Tip {
     var title: Text {
-        Text("Swipe a row")
+        Text("Swipe, or hold and drag")
     }
 
     var message: Text? {
         Text(
-            "Swipe right to complete a page, left to schedule or delete it. Hold a row for everything else."
+            "Swipe right to complete a page and left to send it to another day. Hold a page for everything else, or drag it onto the day below to give it a time."
         )
     }
 
@@ -31,13 +31,21 @@ struct SwipeRowTip: Tip {
     }
 }
 
+/// Waits for the swipe tip to be dismissed: both sit at the top of the list, and shown together the
+/// popover covered the card.
 struct SwitchViewTip: Tip {
+    @Parameter static var isSwipeTipDone: Bool = false
+
+    var rules: [Rule] {
+        #Rule(Self.$isSwipeTipDone) { $0 == true }
+    }
+
     var title: Text {
         Text("The title is a menu")
     }
 
     var message: Text? {
-        Text("Tap “Today” at the top to switch to Upcoming, the Inbox or any folder.")
+        Text("Tap “Today” to switch to Upcoming, the Inbox, a folder, or Settings.")
     }
 
     var image: Image? {
@@ -53,9 +61,20 @@ enum PikosTips {
     /// tests, which read the screen by label and must not find a tip card
     /// sitting where a row was expected.
     static func configure() {
-        if ProcessInfo.processInfo.environment["PIKOS_WORKSPACE_DIRECTORY"] != nil {
-            Tips.hideAllTipsForTesting()
-        }
+        let environment = ProcessInfo.processInfo.environment
+        #if DEBUG
+            if environment["PIKOS_DEMO_TIPS"] != nil {
+                // Rules are ignored under testing, so one tip at a time is asked for by name.
+                Tips.showTipsForTesting([SwipeRowTip.self])
+                try? Tips.resetDatastore()
+            } else if environment["PIKOS_WORKSPACE_DIRECTORY"] != nil || environment["PIKOS_DEMO"] != nil {
+                Tips.hideAllTipsForTesting()
+            }
+        #else
+            if environment["PIKOS_WORKSPACE_DIRECTORY"] != nil || environment["PIKOS_DEMO"] != nil {
+                Tips.hideAllTipsForTesting()
+            }
+        #endif
         try? Tips.configure([
             .displayFrequency(.daily),
             .datastoreLocation(.applicationDefault),

@@ -32,127 +32,147 @@ struct SettingsScreen: View {
 
         NavigationStack {
             Form {
-                Section("Appearance") {
-                    Picker("Theme", selection: $settings.theme) {
-                        ForEach(Preferences.Theme.allCases, id: \.self) { theme in
-                            Text(theme.label).tag(theme)
-                        }
-                    }
-                    Picker("List density", selection: $settings.listDensity) {
-                        ForEach(Preferences.ListDensity.allCases, id: \.self) { density in
-                            Text(density.label).tag(density)
-                        }
-                    }
-                    Picker("Calendar density", selection: $settings.calendarDensity) {
-                        ForEach(Preferences.CalendarDensity.allCases, id: \.self) { density in
-                            Text(density.label).tag(density)
-                        }
-                    }
-                } footer: {
-                    Text("Calendar density sets how tall an hour is — how much of the day fits on screen at once.")
-                }
-
-                Section("Dates") {
-                    Picker("Week starts on", selection: $settings.weekStart) {
-                        ForEach(Preferences.WeekStart.allCases, id: \.self) { start in
-                            Text(start.label).tag(start)
-                        }
-                    }
-                } footer: {
-                    Text("Used by every date picker. Defaults to your region.")
-                }
-
-                Section {
-                    Picker("Default folder", selection: $settings.defaultFolderID) {
-                        Text("Inbox").tag(String?.none)
-                        ForEach(store.fileableFolders, id: \.id) { folder in
-                            Text(folder.name).tag(String?.some(folder.id))
-                        }
-                    }
-                } header: {
-                    Text("New pages")
-                } footer: {
-                    Text(defaultFolderFooter)
-                }
-
-                remindersSection
-
-                Section {
-                    NavigationLink {
-                        CalendarSyncScreen()
-                    } label: {
-                        LabeledContent("Calendars", value: calendarSummary)
-                    }
-                } header: {
-                    Text("External calendars")
-                }
-
-                yourDataSection
-
-                exportSection
-
-                Section("About") {
-                    LabeledContent("Version", value: Self.version)
-                    // Not decoration: a page written by a newer build cannot be
-                    // saved over by this one, and when somebody hits that the
-                    // first useful question is which version each device is on.
-                    LabeledContent("Document format", value: "v\(store.contentSchemaVersion)")
-                }
-
-                #if DEBUG
-                    // The first device run's checklist, answered on screen —
-                    // see docs/ios/07-device-checklist.md. Not in a release
-                    // build: a container path is nobody's business but the
-                    // developer's, and the attribute read behind it would
-                    // need a privacy declaration the shipped binary should
-                    // not have to make.
+                Group {
                     Section {
-                        ForEach(Diagnostics.report()) { row in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.label).font(.caption).foregroundStyle(.secondary)
-                                Text(row.value).font(.caption.monospaced()).textSelection(.enabled)
+                        Picker("Theme", selection: $settings.theme) {
+                            ForEach(Preferences.Theme.allCases, id: \.self) { theme in
+                                Text(theme.label).tag(theme)
+                            }
+                        }
+                        Picker("List density", selection: $settings.listDensity) {
+                            ForEach(Preferences.ListDensity.allCases, id: \.self) { density in
+                                Text(density.label).tag(density)
+                            }
+                        }
+                        Picker("Calendar density", selection: $settings.calendarDensity) {
+                            ForEach(Preferences.CalendarDensity.allCases, id: \.self) { density in
+                                Text(density.label).tag(density)
                             }
                         }
                     } header: {
-                        Text("Diagnostics (debug build)")
+                        Text("Appearance")
                     } footer: {
+                        Text("Calendar density sets how tall an hour is, so how much of the day fits on screen at once.")
+                    }
+
+                    Section {
+                        Picker("Week starts on", selection: $settings.weekStart) {
+                            ForEach(Preferences.WeekStart.allCases, id: \.self) { start in
+                                Text(start.label).tag(start)
+                            }
+                        }
+                    } header: {
+                        Text("Dates")
+                    } footer: {
+                        Text("Used by every date picker. Defaults to your region.")
+                    }
+
+                    Section {
+                        Picker("Default folder", selection: $settings.defaultFolderID) {
+                            Text("Inbox").tag(String?.none)
+                            ForEach(store.fileableFolders, id: \.id) { folder in
+                                Text(folder.name).tag(String?.some(folder.id))
+                            }
+                        }
+                    } header: {
+                        Text("New pages")
+                    } footer: {
+                        Text(defaultFolderFooter)
+                    }
+
+                    remindersSection
+
+                    Section {
+                        NavigationLink {
+                            CalendarSyncScreen()
+                        } label: {
+                            LabeledContent("Calendars", value: calendarSummary)
+                        }
+                    } header: {
+                        Text("External calendars")
+                    }
+
+                    yourDataSection
+
+                    exportSection
+
+                    Section("About") {
+                        // Not decoration: a page written by a newer build cannot be
+                        // saved over by this one, and when somebody hits that the
+                        // first useful question is which version each device is on.
+                        LabeledContent("Version", value: Self.version)
+                        Link(destination: URL(string: "mailto:hello@pikos.app")!) {
+                            LabeledContent {
+                                Text(verbatim: "hello@pikos.app").foregroundStyle(.textSecondary)
+                            } label: {
+                                Label("Send feedback", systemImage: "envelope")
+                            }
+                        }
+                        Link(destination: Self.bugReportURL) {
+                            Label("Report a bug", systemImage: "ladybug")
+                        }
+                        Link(destination: URL(string: "https://pikos.app/privacy")!) {
+                            Label("Privacy", systemImage: "hand.raised")
+                        }
+                    }
+
+                    #if DEBUG
+                        // The first device run's checklist, answered on screen —
+                        // see docs/ios/07-device-checklist.md. Not in a release
+                        // build: a container path is nobody's business but the
+                        // developer's, and the attribute read behind it would
+                        // need a privacy declaration the shipped binary should
+                        // not have to make.
+                        Section {
+                            ForEach(Diagnostics.report()) { row in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(row.label).font(.caption).foregroundStyle(.textSecondary)
+                                    Text(row.value).font(.caption.monospaced()).textSelection(.enabled)
+                                }
+                            }
+                        } header: {
+                            Text("Diagnostics (debug build)")
+                        } footer: {
+                            Text(
+                                "Lock the phone, wait for the Today widget to refresh, then come back: every file above should still read “until first unlock”."
+                            )
+                        }
+                    #endif
+
+                    Section {
+                        Button("Reset preferences", role: .destructive) {
+                            isResetConfirmed = true
+                        }
+                    } footer: {
+                        Text("Returns the settings above to their defaults. Your pages are not touched.")
+                    }
+
+                    Section {
+                        if isDeleting {
+                            HStack {
+                                ProgressView()
+                                Text("Deleting…").foregroundStyle(.textSecondary)
+                            }
+                        } else {
+                            Button("Delete all data", role: .destructive) {
+                                isDeleteConfirmed = true
+                            }
+                        }
+                    } footer: {
+                        // Said before the tap. The trash makes an ordinary delete
+                        // recoverable, and somebody who has learned that will
+                        // reasonably expect the same here.
                         Text(
-                            "Lock the phone, wait for the Today widget to refresh, then come back: every file above should still read “until first unlock”."
+                            "Removes every page, folder and calendar connection from this device. There is no trash to recover from, so back up first if you want a copy."
                         )
                     }
-                #endif
-
-                Section {
-                    Button("Reset preferences", role: .destructive) {
-                        isResetConfirmed = true
-                    }
-                } footer: {
-                    Text("Returns the settings above to their defaults. Your pages are not touched.")
                 }
-
-                Section {
-                    if isDeleting {
-                        HStack {
-                            ProgressView()
-                            Text("Deleting…").foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Button("Delete all data", role: .destructive) {
-                            isDeleteConfirmed = true
-                        }
-                    }
-                } footer: {
-                    // Said before the tap. The trash makes an ordinary delete
-                    // recoverable, and somebody who has learned that will
-                    // reasonably expect the same here.
-                    Text(
-                        "Removes every page, folder and calendar connection from this device. There is no trash to recover from — export first if you want a copy."
-                    )
-                }
+                .pikosFormRows()
             }
             .task { await sync.load() }
             .task { exports.refreshDataFacts() }
             .navigationTitle("Settings")
+            .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -214,7 +234,7 @@ struct SettingsScreen: View {
                 switch reminders.authorization {
                 case .denied:
                     LabeledContent("Notifications") {
-                        Text("Off in Settings").foregroundStyle(.red)
+                        Text("Off in Settings").foregroundStyle(.statusOverdue)
                     }
                     if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
                         Link("Allow notifications for Pikos", destination: url)
@@ -238,7 +258,7 @@ struct SettingsScreen: View {
                                         fireAt: WallClockDay.instant(from: Date()))
                                 )
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.textSecondary)
                             }
                         }
                     } else {
@@ -265,11 +285,6 @@ struct SettingsScreen: View {
 
     // MARK: - Export
 
-    /// Four formats, each saying what it is for before it is tapped.
-    ///
-    /// They are not interchangeable, and the difference only becomes visible
-    /// once the file is somewhere else — a CSV that imports back, a Markdown
-    /// tree that opens anywhere, a calendar file, and a backup that is the whole
     /// The promise, made checkable.
     ///
     /// The marketing site says the data is a file on your device. On a
@@ -295,10 +310,10 @@ struct SettingsScreen: View {
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Back up to Files").foregroundStyle(Color.primary)
+                        Text("Back up to Files").foregroundStyle(.textPrimary)
                         Text(lastBackupLabel)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.textSecondary)
                     }
                     Spacer()
                     if exports.isBackingUp {
@@ -311,7 +326,7 @@ struct SettingsScreen: View {
             Text("Your data")
         } footer: {
             Text(
-                "Everything Pikos knows is one database on this device, with your images beside it. A backup is a copy of both, in Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it."
+                "Your pages, folders and images are stored on this device. A backup copies all of them into Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it."
             )
         }
     }
@@ -328,20 +343,25 @@ struct SettingsScreen: View {
         return String(localized: "Last backup \(day) at \(time)")
     }
 
-    /// workspace including the trash.
+    /// Three formats, each saying what it is for before it is tapped.
+    ///
+    /// They are not interchangeable, and the difference only becomes visible
+    /// once the file is somewhere else: a CSV that imports back, a Markdown
+    /// tree that opens anywhere, and a calendar file.
     @ViewBuilder
     private var exportSection: some View {
         Section {
-            ForEach(ExportStore.Format.allCases) { format in
+            // The whole-workspace file is Back up to Files, above: one backup, in one place.
+            ForEach(ExportStore.Format.allCases.filter { $0 != .backup }) { format in
                 Button {
                     Task { await exports.export(format, includeSynced: includeSyncedInExport) }
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(format.title).foregroundStyle(Color.primary)
+                            Text(format.title).foregroundStyle(.textPrimary)
                             Text(format.detail)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.textSecondary)
                         }
                         Spacer()
                         if exports.isExporting == format {
@@ -415,6 +435,13 @@ struct SettingsScreen: View {
             !store.fileableFolders.contains(where: { $0.id == id })
         else { return base }
         return base + " " + String(localized: "The folder this was set to no longer exists, so new pages go to the Inbox.")
+    }
+
+    /// The site's bug form, with the platform and version filled in as the desktop's link does.
+    private static var bugReportURL: URL {
+        var components = URLComponents(string: "https://pikos.app/bugs")!
+        components.queryItems = [URLQueryItem(name: "os", value: "iOS"), URLQueryItem(name: "version", value: version)]
+        return components.url!
     }
 
     /// The marketing version and build, as Xcode stamped them.

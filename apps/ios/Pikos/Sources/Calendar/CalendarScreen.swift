@@ -2,22 +2,12 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// The calendar.
+/// The week pane.
 ///
-/// Owns one question — which days are on screen — and asks the workspace for
-/// everything to draw on them. It holds no `NavigationStack` of its own, like
-/// the other screens: the shell owns navigation, so this can sit in a tab's
-/// stack on a phone and in a split view's detail column on iPad without
-/// changing.
-///
-/// The span defaults by width class and is then the user's to change. A week on
-/// a phone is cramped but perfectly usable when someone deliberately asks for
-/// it, and an iPad in a narrow split view is a phone-shaped screen on a large
-/// device — so the width class picks the *default*, never the options.
-///
-/// Moving through time is a swipe, which is what a thumb tries first on any
-/// calendar; the chevrons stay for the people who cannot swipe and the ones
-/// who would rather not. The title is a menu: today, any date, and the span.
+/// Owns one question — which days are on screen — and asks the workspace for everything to draw
+/// on them. Three days by default on a phone, the count the desktop draws at its narrowest; the
+/// title's menu offers one day or seven. A swipe pages, and the header keeps the desktop's
+/// chevrons and Today for anyone who would rather tap.
 struct CalendarScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -35,7 +25,8 @@ struct CalendarScreen: View {
     @State private var moving: Moving?
     @State private var scopeQuestion: ScopeQuestion?
     @State private var actions = PageActionState()
-    @State private var isDatePickerPresented = false
+    /// The month and the span choice, opened in place under the title.
+    @State private var isJumping = false
     /// Which way the last step went, so the grid slides in from that side.
     @State private var steppedForward = true
     /// What the week strip's dots are drawn from: the whole week around the
@@ -53,9 +44,12 @@ struct CalendarScreen: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private var effectiveSpan: CalendarSpan {
-        span ?? .default(isCompactWidth: widthClass == .compact)
+        let compact = widthClass == .compact
+        guard let span, CalendarSpan.offered(isCompactWidth: compact).contains(span) else {
+            return .default(isCompactWidth: compact)
+        }
+        return span
     }
-
     /// The reader's calendar with their week-start preference applied. Every
     /// piece of date arithmetic here goes through it — a week that started on
     /// Sunday in the grid while the setting said Monday was exactly the bug
@@ -80,12 +74,16 @@ struct CalendarScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if effectiveSpan == .day, !stripDayStrings.isEmpty {
+            header
+            if isJumping {
+                jumpPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            } else if effectiveSpan == .day, !stripDayStrings.isEmpty {
                 WeekStrip(
                     days: stripDayStrings,
                     selected: dayStrings.first ?? "",
                     today: WallClockDay.string(from: Date()),
-                    counts: weekCounts
+                    bars: weekBars
                 ) { day in
                     guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
                     steppedForward = chosen > anchor
@@ -94,6 +92,23 @@ struct CalendarScreen: View {
             }
             if !hasLoaded {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if effectiveSpan == .month {
+                MonthGrid(
+                    days: dayStrings,
+                    month: String(WallClockDay.string(from: anchor).prefix(7)),
+                    today: WallClockDay.string(from: Date()),
+                    entries: entries,
+                    folderColors: folderColors,
+                    calendar: calendar
+                ) { day in
+                    guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
+                    steppedForward = chosen > anchor
+                    anchor = chosen
+                    span = .day
+                }
+                .id(dayStrings.first ?? "")
+                .transition(
+                    reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
             } else {
                 CalendarGrid(
                     days: dayStrings,
@@ -109,10 +124,10 @@ struct CalendarScreen: View {
                     onComplete: { entry in Task { await act(.complete, on: entry) } },
                     onSkip: { entry in Task { await act(.skip, on: entry) } },
                     onMove: { entry in moving = Moving(entry: entry) },
-                    onCreate: { day, minute in create(on: day, at: minute) }
+                    onCreate: { day, minute in create(on: day, at: minute) },
+                    onDrop: { page, day, minute in drop(page, on: day, at: minute) }
                 )
-                // The last hour scrolls above the floating button, not under it.
-                .contentMargins(.bottom, NewPageButton.clearance, for: .scrollContent)
+                .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
                 // A new identity per range is what lets the grid slide rather
                 // than redraw in place when the user pages. A dissolve under
                 // Reduce Motion: the direction is a nicety, the new day is
@@ -140,10 +155,7 @@ struct CalendarScreen: View {
                     step(by: dx < 0 ? 1 : -1)
                 }
         )
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationTitle(title)
-        .toolbarTitleMenu { titleMenu }
-        .toolbar { toolbar }
+        .background(.surfacePrimary)
         .sheet(item: $moving) { MoveOccurrenceSheet(entry: $0.entry) }
         .confirmationDialog(
             scopeQuestion?.title ?? "", isPresented: hasScopeQuestion,
@@ -155,13 +167,16 @@ struct CalendarScreen: View {
         } message: { question in
             Text(question.message)
         }
-        .sheet(isPresented: $isDatePickerPresented) { datePickerSheet }
         .pageActionSheets($actions)
-        // The same floating button the list has. A page made from here is
-        // quick add's business; the slot press below is the way to make one
-        // *at* a time.
-        .bottomChrome {
-            NewPageButton { route.isQuickAddPresented = true }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: isJumping)
+        .onChange(of: WallClockDay.string(from: anchor), initial: true) { _, day in
+            route.calendarDay = day
+        }
+        .onChange(of: route.weekFocus) { _, focus in
+            guard let focus else { return }
+            steppedForward = focus > anchor
+            anchor = focus
+            route.weekFocus = nil
         }
         // Keyed on the range *and* on the workspace's version. The range half
         // means swiping to another week cancels the query for the one being
@@ -185,6 +200,13 @@ struct CalendarScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { now = WallClockDay.instant(from: Date()) }
         }
+        #if DEBUG
+            .onAppear {
+                if let requested = ProcessInfo.processInfo.environment["PIKOS_DEMO_SPAN"] {
+                    span = CalendarSpan(rawValue: requested)
+                }
+            }
+        #endif
     }
 
     // MARK: - Navigation between ranges
@@ -199,18 +221,23 @@ struct CalendarScreen: View {
         anchor = Date()
     }
 
-    /// How many entries each day of the strip's week holds.
-    ///
-    /// By the day an entry starts on. A multi-day span counts once, on its
-    /// first day — a dot is "something here", not a bar chart.
-    private var weekCounts: [String: Int] {
-        var counts: [String: Int] = [:]
-        for entry in weekEntries {
-            if let day = CalendarGeometry.day(of: entry.scheduledStart) {
-                counts[day, default: 0] += 1
+    /// The folder colours on each day of the strip's week, counted the way the month counts them.
+    private var weekBars: [String: [Color]] {
+        MonthLayout.byDay(weekEntries, days: stripDayStrings, start: \.scheduledStart, end: \.scheduledEnd)
+            .mapValues { entries in
+                entries.map { CalendarPalette.tint(folderId: $0.folderId, colors: folderColors) }
             }
+    }
+
+    /// A page carried onto an hour of the grid keeps its length, as a drop on the day under the list does.
+    private func drop(_ page: PageFacts, on day: String, at minute: Int) {
+        let dropped = CalendarGeometry.dropSchedule(
+            day: day, minute: minute, previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
+        Task {
+            await store.schedule(
+                pageId: page.id, title: page.title, start: dropped.start, end: dropped.end,
+                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
         }
-        return counts
     }
 
     /// A long press on empty grid: quick add, already set to that slot.
@@ -229,20 +256,12 @@ struct CalendarScreen: View {
     /// on its own would have to materialise a row first, which is a feature and
     /// not a side effect of tapping.
     private func openPage(_ pageId: String) {
-        route.calendarPath = [pageId]
+        route.open(page: pageId)
     }
 
-    /// The folder colours, keyed by folder id, for the grid to tint blocks by.
-    ///
-    /// Computed here from the store's folders rather than looked up per block
-    /// in the grid, which draws a hundred blocks a week and should not search a
-    /// list for each.
+    /// Keyed once here: the grid draws a hundred blocks a week and should not search a list for each.
     private var folderColors: [String: Color] {
-        var colors: [String: Color] = [:]
-        for folder in store.folders {
-            if let color = Color(hex: folder.color) { colors[folder.id] = color }
-        }
-        return colors
+        CalendarPalette.folderColors(store.folders)
     }
 
     // MARK: - Acting on one occurrence
@@ -291,7 +310,7 @@ struct CalendarScreen: View {
         /// The earlier days, named. Three at most: a list of eleven dates in a
         /// sheet's message is not something anybody reads.
         var message: String {
-            let shown = backlog.prefix(3).map(DayLabel.short(_:)).joined(separator: ", ")
+            let shown = backlog.prefix(3).map { DayLabel.short($0) }.joined(separator: ", ")
             let rest = backlog.count - min(backlog.count, 3)
             let days = backlog.count == 1 ? "day is" : "days are"
             let list = rest > 0 ? "\(shown), and \(rest) more" : shown
@@ -344,12 +363,53 @@ struct CalendarScreen: View {
         }
     }
 
-    // MARK: - Title and toolbar
+    // MARK: - Header
+
+    private var header: some View {
+        PaneHeader {
+            Button {
+                isJumping.toggle()
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.pkScreenTitle)
+                            .foregroundStyle(.textPrimary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.textTertiary)
+                            .rotationEffect(.degrees(isJumping ? 180 : 0))
+                    }
+                    Text(subline)
+                        .font(.pkUISm)
+                        .foregroundStyle(.textTertiary)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Visible days, \(title)")
+            .accessibilityValue(isJumping ? "Expanded" : "Collapsed")
+        } trailing: {
+            HeaderIconButton(systemImage: "chevron.left", label: "Previous") { step(by: -1) }
+            HeaderIconButton(systemImage: "chevron.right", label: "Next") { step(by: 1) }
+            Button("Today") { goToToday() }
+                .font(.pkUI)
+                .foregroundStyle(showsToday ? Color.textDisabled : Color.textAction)
+                .disabled(showsToday)
+                .frame(minWidth: 52, minHeight: 44)
+                .padding(.trailing, 4)
+        }
+    }
 
     private var title: String {
         guard let first = days.first, let last = days.last else { return String(localized: "Calendar") }
         if effectiveSpan == .day {
             return first.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        }
+        if effectiveSpan == .month {
+            return anchor.formatted(.dateTime.month(.wide))
         }
         let sameMonth = calendar.isDate(first, equalTo: last, toGranularity: .month)
         let start = first.formatted(.dateTime.month(.abbreviated).day())
@@ -360,44 +420,21 @@ struct CalendarScreen: View {
         return "\(start) – \(end)"
     }
 
-    /// Under the title: where to go, and how much to show.
-    @ViewBuilder
-    private var titleMenu: some View {
-        Button {
-            goToToday()
-        } label: {
-            Label("Go to Today", systemImage: "sun.max")
-        }
-        .disabled(showsToday)
-        Button {
-            isDatePickerPresented = true
-        } label: {
-            Label("Go to Date…", systemImage: "calendar")
-        }
-        Divider()
-        Picker("Show", selection: spanBinding) {
-            ForEach(CalendarSpan.allCases) { option in
-                Text(option.label).tag(option)
+    private var subline: String {
+        let year = (days.first ?? anchor).formatted(.dateTime.year())
+        return "\(year) · \(effectiveSpan.label)"
+    }
+
+    /// Under the title, in place of the week strip: how much to show, and a month to jump to any day
+    /// in one tap.
+    private var jumpPanel: some View {
+        VStack(spacing: 8) {
+            Picker("Show", selection: spanBinding) {
+                ForEach(CalendarSpan.offered(isCompactWidth: widthClass == .compact)) { option in
+                    Text(option.label).tag(option)
+                }
             }
-        }
-        .pickerStyle(.inline)
-    }
-
-    /// One button. Paging is the swipe, or the rotor for anyone who cannot
-    /// swipe; the chevrons that used to flank the title left "Sep 14 – 20"
-    /// truncating on an inline bar, and the one thing worth a tap of its own
-    /// is the way back to today.
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("Today") { goToToday() }
-                .disabled(showsToday)
-        }
-    }
-
-    /// A month at a time, for jumping further than a swipe wants to.
-    private var datePickerSheet: some View {
-        NavigationStack {
+            .pickerStyle(.segmented)
             DatePicker(
                 "Go to",
                 selection: Binding(
@@ -405,21 +442,18 @@ struct CalendarScreen: View {
                     set: { chosen in
                         steppedForward = chosen > anchor
                         anchor = chosen
+                        isJumping = false
                     }),
                 displayedComponents: .date
             )
             .datePickerStyle(.graphical)
-            .padding(.horizontal)
-            .navigationTitle("Go to Date")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { isDatePickerPresented = false }
-                }
-            }
         }
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .background(.surfacePrimary)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(.borderSecondary).frame(height: 1)
+        }
     }
 
     /// True when today is already on screen, which is when "Today" would do
@@ -429,7 +463,13 @@ struct CalendarScreen: View {
         dayStrings.contains(WallClockDay.string(from: Date()))
     }
 
+    /// Choosing how much to show is the choice, so the panel closes on it.
     private var spanBinding: Binding<CalendarSpan> {
-        Binding(get: { effectiveSpan }, set: { span = $0 })
+        Binding(
+            get: { effectiveSpan },
+            set: {
+                span = $0
+                isJumping = false
+            })
     }
 }

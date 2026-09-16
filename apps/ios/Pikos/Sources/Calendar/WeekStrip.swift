@@ -2,32 +2,26 @@ import SwiftUI
 
 /// Seven days across the top of the day view, one tap each.
 ///
-/// The day view's answer to "what about Thursday": a swipe reaches the next
-/// day, but a tap on a strip reaches any day of the week without paging
-/// through the ones between, and shows at a glance which days hold anything.
-/// Apple's Calendar draws exactly this above its day column; Fantastical's
-/// DayTicker and Todoist's Upcoming are the same idea.
+/// The day view's answer to "what about Thursday": a swipe reaches the next day, but a tap on the
+/// strip reaches any day of the week without paging through the ones between. Under each day sit
+/// the month view's bars in folder colours, so the strip is a one-row month that says what kind of
+/// day Thursday is and not only that something is on it.
 ///
-/// The strip follows the reader's week — Sunday-first or Monday-first from
-/// the same setting the grid uses — and re-anchors to whichever week the
-/// selected day is in, so paging off the end of one week lands on the start
-/// of the next with the strip already showing it.
-///
-/// A dot under a day says something is scheduled on it; the count is in the
-/// accessibility label, since a dot cannot carry one. The selected day is a
-/// filled circle, today is the accent colour, and the two combine — today
-/// selected is a filled accent circle — so neither has to be found by
-/// hunting.
+/// The strip follows the reader's week, Sunday-first or Monday-first from the setting the grid
+/// uses, and re-anchors to whichever week the selected day is in. The selected day is a filled
+/// circle and today is the accent colour; today selected is a filled accent circle.
 struct WeekStrip: View {
     /// The week, as `YYYY-MM-DD` keys in display order.
     let days: [String]
     let selected: String
     let today: String
-    /// How many entries each day holds. Absent means none.
-    let counts: [String: Int]
+    /// The folder colour of each thing on a day. Absent means none.
+    let bars: [String: [Color]]
     let onSelect: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let barLimit = 3
 
     var body: some View {
         HStack(spacing: 0) {
@@ -36,11 +30,12 @@ struct WeekStrip: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
-        // A light tick as the selection moves, the same the system's own
-        // segmented controls give.
+        .padding(.top, 2)
+        .padding(.bottom, 6)
+        .background(.surfacePrimary)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(.borderSecondary).frame(height: 1)
+        }
         .sensoryFeedback(.selection, trigger: selected)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Week")
@@ -49,29 +44,31 @@ struct WeekStrip: View {
     private func cell(_ day: String) -> some View {
         let isSelected = day == selected
         let isToday = day == today
-        let count = counts[day] ?? 0
+        let colors = bars[day] ?? []
         return Button {
             onSelect(day)
         } label: {
             VStack(spacing: 3) {
                 Text(Self.weekdayLetter(day))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .sectionLabelStyle(isToday ? .textAction : .textTertiary)
                 Text(Self.dayNumber(day))
-                    .font(.subheadline.weight(isSelected || isToday ? .semibold : .regular))
+                    .font(.system(.subheadline, weight: isSelected || isToday ? .semibold : .regular))
                     .monospacedDigit()
                     .foregroundStyle(
-                        isSelected ? Color.white : (isToday ? Color.accentColor : Color.primary)
+                        isSelected ? Color.textInverse : (isToday ? Color.textAction : Color.textPrimary)
                     )
                     .frame(width: 32, height: 32)
                     .background {
                         if isSelected {
-                            Circle().fill(Color.accentColor)
+                            Circle().fill(isToday ? Color.textAction : Color.textPrimary)
                         }
                     }
-                Circle()
-                    .fill(count > 0 ? (isToday ? Color.accentColor : Color.secondary) : Color.clear)
-                    .frame(width: 4, height: 4)
+                HStack(spacing: 2) {
+                    ForEach(Array(colors.prefix(Self.barLimit).enumerated()), id: \.offset) { _, color in
+                        Capsule().fill(color).frame(width: 7, height: 3)
+                    }
+                }
+                .frame(height: 3)
             }
             .frame(maxWidth: .infinity)
             .frame(minHeight: 44)
@@ -79,7 +76,7 @@ struct WeekStrip: View {
         }
         .buttonStyle(.plain)
         .animation(reduceMotion ? nil : .snappy, value: selected)
-        .accessibilityLabel(Self.accessibleLabel(day, count: count, isToday: isToday))
+        .accessibilityLabel(Self.accessibleLabel(day, count: colors.count, isToday: isToday))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -90,9 +87,8 @@ struct WeekStrip: View {
         return number.first == "0" ? String(number.dropFirst()) : String(number)
     }
 
-    /// "M", "T", "W" — one letter, because seven abbreviations do not fit
-    /// beside each other at the larger text sizes and the full name is in
-    /// the accessibility label anyway.
+    /// One letter, because seven abbreviations do not fit side by side at the larger text sizes and
+    /// the full name is in the accessibility label anyway.
     private static func weekdayLetter(_ day: String) -> String {
         guard let date = date(from: day) else { return "" }
         return date.formatted(.dateTime.weekday(.narrow))

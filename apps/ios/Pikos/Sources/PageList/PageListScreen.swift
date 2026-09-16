@@ -3,255 +3,294 @@ import PikosSupport
 import SwiftUI
 import TipKit
 
-/// The page list — the app's home screen.
+/// The list pane: the view being shown, the rest of today under it, and every verb a row has.
 ///
-/// Native by construction, which is the whole point of the architecture: the
-/// scrolling, swipe actions, selection and search field here are UIKit's, not a
-/// webview's approximation of them.
-///
-/// The view being shown is the title, and the title is the switcher: tapping
-/// "Today" drops a menu of every view and folder. That is the platform's own
-/// idiom for "this screen can be one of several things" (Files, Mail, Notes),
-/// and it replaces a filter-shaped icon in the corner that named nothing and
-/// hid Settings behind it. What the screen *does* — select several rows,
-/// manage folders, open the trash — sits under the ellipsis in the corner,
-/// the way Reminders and Notes arrange theirs, so the title menu answers one
-/// question and the corner menu the other.
-///
-/// Creating a page is the floating button at the bottom, in reach of the
-/// thumb; the corner used to hold it, which is the one place a thumb cannot
-/// reach without shifting grip.
+/// The title is the switcher, as it is on the desktop when the sidebar is hidden; the sort/select
+/// menu is the header's one tool. Search lives in the bottom bar, in reach from either pane.
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
     @Environment(SettingsStore.self) private var settings
+    @Environment(PageDragSession.self) private var drag
 
-    @State private var isFolderManagerPresented = false
-    @State private var isTrashPresented = false
-    @State private var isSettingsPresented = false
-    @State private var searchText = ""
     @State private var actions = PageActionState()
     @State private var isCompletedExpanded = false
     @State private var isMovingOverdue = false
-    /// Select mode: several rows, one verb. Entered from the corner menu and
-    /// left with Done; the tab bar and the floating button give way to a
-    /// bottom bar of verbs while it is on, the way Mail does it.
     @State private var isSelecting = false
     @State private var selection: Set<String> = []
-    @State private var isBatchDeleteConfirmed = false
+    @State private var datingSelection: SelectedPages?
+    @State private var isSwipeTipAvailable = false
+
+    private let swipeTip = SwipeRowTip()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
-    /// The list only — no `NavigationStack` of its own.
-    ///
-    /// The container owns navigation, which is what lets the same screen sit in
-    /// a tab's stack on a phone and in a split view's content column on iPad
-    /// without being rewritten. It is also what makes a `pikos://page/<id>`
-    /// link work at all: a screen that declares its own stack gives nothing
-    /// outside it a way to push.
     var body: some View {
-        Group {
-            if store.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if store.pages.isEmpty && store.completedTotal == 0 {
-                // Genuinely nothing — not merely nothing *open*. A view whose
-                // pages have all been finished still has a Completed section to
-                // reach, and replacing the whole list with "nothing here yet"
-                // would put that work out of reach of the screen it belongs to.
-                // The count comes back with every refresh for exactly this.
-                emptyState
-            } else if visibleSections.isEmpty && !searchText.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            } else {
-                list
-            }
-        }
-        .navigationTitle(store.scope.title)
-        .toolbarTitleMenu { viewMenu }
-        .toolbar { toolbar }
-        .toolbar { selectionBar }
-        // The tab bar steps aside while rows are being selected: the bottom
-        // of the screen is the verbs' now, and two bars stacked there is one
-        // too many to aim at.
-        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
-        .environment(\.editMode, .constant(isSelecting ? .active : .inactive))
-        // Filters the current view by title. Deliberately narrower than
-        // the Search tab, which is full-text across every page — this is
-        // "find it in what I'm looking at", which is a different question
-        // and the one a list wants answered.
-        .searchable(text: $searchText, prompt: "Filter \(store.scope.title)")
-        .sheet(isPresented: $isFolderManagerPresented) {
-            FolderManagerSheet()
-        }
-        .sheet(isPresented: $isTrashPresented) {
-            TrashSheet()
-        }
-        .sheet(isPresented: $isSettingsPresented) {
-            SettingsScreen()
-        }
-        .pageActionSheets($actions)
-        .confirmationDialog(
-            "Delete \(selection.count) pages?", isPresented: $isBatchDeleteConfirmed,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                let ids = orderedSelection.map(\.id)
-                Task {
-                    await store.trashPages(ids: ids)
-                    leaveSelection()
+        VStack(spacing: 0) {
+            header
+            VStack(spacing: 0) {
+                content
+                    .frame(maxHeight: .infinity)
+                if isSelecting {
+                    Color.clear.frame(height: ShellBar.clearance)
+                } else {
+                    DayPeek()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("They go to Recently Deleted, where they can be put back.")
-        }
-        // The floating create button and the notice bar, stacked at the
-        // bottom. Hidden while selecting, when the bottom of the screen
-        // belongs to the verbs.
-        .bottomChrome {
-            if !isSelecting {
-                NewPageButton { route.isQuickAddPresented = true }
-                    .transition(.scale.combined(with: .opacity))
+            // An overlay, so the switcher's height never sets the pane's: as a stacked sibling, a
+            // keyboard raised to name a folder made the pane overflow and push the header under the clock.
+            .overlay(alignment: .top) {
+                if route.isSwitcherPresented {
+                    switcherLayer
+                }
             }
         }
-        .animation(reduceMotion ? nil : .snappy, value: isSelecting)
-        // A view change ends the selection: the rows it named are gone.
+        .background(.surfacePrimary)
+        .overlay(alignment: .bottom) {
+            if isSelecting {
+                selectionBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .environment(\.editMode, .constant(isSelecting ? .active : .inactive))
+        .pageActionSheets($actions)
+        .sheet(item: $datingSelection) { batch in
+            SchedulePageSheet(pages: batch.pages) { leaveSelection() }
+        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.3), value: isSelecting)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: route.isSwitcherPresented)
         .onChange(of: store.scope) { _, _ in leaveSelection() }
+        .onChange(of: isSelecting) { _, selecting in route.isSelectingPages = selecting }
+        .task {
+            for await status in swipeTip.statusUpdates {
+                isSwipeTipAvailable = status == .available
+                if case .invalidated = status { SwitchViewTip.isSwipeTipDone = true }
+            }
+        }
     }
 
-    // MARK: - Pieces
+    // MARK: - Header
 
-    private var list: some View {
-        List(selection: $selection) {
-            // The in-place hints, one at a time and only until dismissed.
-            // At the top of the list because that is where the eye lands,
-            // and inline rather than a popover because a card that scrolls
-            // with the rows is one the reader can ignore without a tap.
-            if !isSelecting && searchText.isEmpty {
-                TipView(SwipeRowTip())
-                    .listRowSeparator(.hidden)
-                TipView(SwitchViewTip())
-                    .listRowSeparator(.hidden)
+    @ViewBuilder
+    private var header: some View {
+        if isSelecting {
+            PaneHeader {
+                Button(selection.count == selectable.count ? "Deselect All" : "Select All") {
+                    selection = selection.count == selectable.count ? [] : Set(selectable.map(\.id))
+                }
+                .font(.pkUI)
+                .foregroundStyle(.textAction)
+                .frame(minHeight: 44)
+            } trailing: {
+                Text(selection.isEmpty ? String(localized: "Select pages") : String(localized: "\(selection.count) selected"))
+                    .font(.pkUI)
+                    .foregroundStyle(.textSecondary)
+                    .padding(.trailing, 12)
+                Button("Done") { leaveSelection() }
+                    .font(.system(.subheadline, weight: .semibold))
+                    .foregroundStyle(.textAction)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .padding(.trailing, 8)
             }
-
-            // Reached when everything in the view has been finished. Said
-            // plainly rather than left as a bare gap above the Completed
-            // section, which reads as a loading failure.
-            if visibleSections.isEmpty {
-                Text("Nothing open here.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        } else {
+            PaneHeader {
+                switcherButton
+            } trailing: {
+                orderMenu
             }
+        }
+    }
 
-            ForEach(visibleSections) { section in
-                // One shape for every view. A folder is a single untitled
-                // section; Today is up to two; Upcoming is one per day that
-                // holds something. `Section` with a nil header draws no
-                // header, so the untitled case costs nothing.
-                Section {
-                    ForEach(section.pages, id: \.id) { page in
-                        row(page)
-                    }
-                } header: {
-                    if let title = section.title {
-                        if section.id == "overdue" {
-                            overdueHeader(title)
-                        } else {
-                            Text(title)
-                        }
+    private var switcherButton: some View {
+        Button {
+            route.isSwitcherPresented.toggle()
+        } label: {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(store.scope.title)
+                        .font(.pkScreenTitle)
+                        .foregroundStyle(.textPrimary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.textTertiary)
+                        .rotationEffect(.degrees(route.isSwitcherPresented ? 180 : 0))
+                }
+                Text(subline)
+                    .font(.pkUISm)
+                    .foregroundStyle(.textTertiary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Switch view")
+        .accessibilityValue(store.scope.title)
+        .popoverTip(SwitchViewTip(), arrowEdge: .top)
+    }
+
+    private var subline: String {
+        let open = store.pages.count
+        let count = open == 0 ? String(localized: "Nothing open") : String(localized: "\(open) open")
+        switch store.scope {
+        case .today:
+            return Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) + " · " + count
+        case .upcoming:
+            return String(localized: "Next seven days") + " · " + count
+        case .inbox, .folder:
+            return count
+        }
+    }
+
+    private var orderMenu: some View {
+        Menu {
+            if store.scope.isDateGrouped {
+                Text("Sorted by time")
+            } else {
+                Picker("Sort by", selection: sortBinding) {
+                    ForEach(PageSort.Mode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
                     }
                 }
+            }
+            Divider()
+            Button {
+                enterSelection()
+            } label: {
+                Label("Select Pages", systemImage: "checkmark.circle")
+            }
+            .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(.textSecondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Sort and select")
+    }
+
+    private var switcherLayer: some View {
+        ZStack(alignment: .top) {
+            Color.black.opacity(colorScheme == .dark ? 0.5 : 0.16)
+                .ignoresSafeArea(edges: .bottom)
+                .onTapGesture { route.isSwitcherPresented = false }
+                .accessibilityHidden(true)
+                .transition(.opacity)
+            ScopeSwitcher()
+                .frame(maxHeight: 560)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .transition(
+                    .scale(scale: 0.96, anchor: .topLeading)
+                        .combined(with: .opacity)
+                        .combined(with: .offset(y: -6)))
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        if store.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if store.pages.isEmpty && store.completedTotal == 0 {
+            // Nothing open *and* nothing finished; a view of finished work still has a section to reach.
+            emptyState
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
+        // Nil unless selecting: a row in a List carrying any selection binding selects instead of opening.
+        List(selection: isSelecting ? $selection : nil) {
+            // Only while the tip is live: an invalidated TipView still leaves an empty row behind.
+            if !isSelecting && isSwipeTipAvailable {
+                TipView(swipeTip)
+                    .tipBackground(.surfaceSecondary)
+                    .listRowBackground(Color.surfacePrimary)
+                    .listRowSeparator(.hidden)
+            }
+
+            if visibleSections.isEmpty {
+                Text("Nothing open here.")
+                    .font(.pkBodySm)
+                    .foregroundStyle(.textTertiary)
+                    .listRowBackground(Color.surfacePrimary)
+                    .listRowSeparator(.hidden)
+            }
+
+            // Headings are rows, not sticky `Section` headers: the desktop's don't stick, and a plain
+            // List's header carries top padding nothing can remove.
+            ForEach(visibleSections) { section in
+                if let title = section.title {
+                    sectionHeader(title, section: section)
+                }
+                ForEach(section.pages, id: \.id) { page in
+                    row(page)
+                }
+                .onMove(perform: canReorder ? { from, to in move(in: section, from: from, to: to) } : nil)
             }
 
             completedSection
         }
         .listStyle(.plain)
-        // The last row scrolls above the floating button, not under it.
-        .contentMargins(.bottom, isSelecting ? 0 : NewPageButton.clearance, for: .scrollContent)
-        // Rows slide rather than jump when a tick moves one to Completed or a
-        // refresh reorders a day. Keyed on the sections so a filter keystroke
-        // — which changes only what is *visible* — does not animate too. Under
-        // Reduce Motion the rows simply change: the slide is decoration.
+        .scrollContentBackground(.hidden)
+        .background(.surfacePrimary)
+        .environment(\.defaultMinListRowHeight, 44)
+        .environment(\.defaultMinListHeaderHeight, 0)
         .animation(reduceMotion ? nil : .default, value: store.sections)
         .refreshable { await store.refresh() }
     }
 
-    /// One open page: the checkbox, the link, and everything reachable from a
-    /// swipe or a long press.
-    ///
-    /// Extracted when the list became sectioned. Two call sites — the open
-    /// sections here and the Completed section below — and a second copy of
-    /// wiring this particular is a second place to quietly lose a swipe
-    /// action. A finished page gets the same row: its checkbox reads ticked
-    /// from its own status, and its leading swipe says "Reopen" for the same
-    /// reason.
     private func row(_ page: PageSummary) -> some View {
         let done = page.status == "done"
-        // The checkbox sits beside the row rather than inside a link's label:
-        // a Button inside a NavigationLink's label does not reliably get the
-        // tap, because the link swallows it, and the symptom is a checkbox
-        // that navigates instead of completing.
-        //
-        // The link itself is behind the row, invisible. That is what removes
-        // the disclosure chevron: a row with a checkbox already says it is a
-        // task, and the chevron was a third control flanking a title that
-        // needs the width. Reminders and Things draw their rows the same way.
-        return HStack(spacing: 0) {
-            // The list's own selection circle takes the ring's place while
-            // selecting; two circles on one row would be two things to aim at.
+        let facts = PageFacts(page)
+        // The checkbox sits beside the link, not inside it: a Button in a link's label loses its tap.
+        return HStack(alignment: .top, spacing: 0) {
             if !isSelecting {
                 CompletionToggle(isDone: done, priority: PagePriority(stored: page.priority)) { done in
                     Task { await store.setStatus(pageId: page.id, done: done) }
                 }
             }
             PageRow(page: page, showsFolder: store.scope.isDateGrouped)
-                .padding(.leading, isSelecting ? 8 : 0)
+                .padding(.leading, isSelecting ? 4 : 0)
         }
         .contentShape(Rectangle())
         .background {
             if !isSelecting {
-                NavigationLink(value: page.id) { EmptyView() }.opacity(0)
+                NavigationLink(value: Route.Destination.page(page.id)) { EmptyView() }.opacity(0)
             }
         }
-        // What `List(selection:)` collects when the row is tapped in select
-        // mode. The `ForEach` id would serve, but saying it here keeps the
-        // Completed section's rows — a second `ForEach` — selectable too.
         .tag(page.id)
-        // The ring's 44pt hit area already indents the title; the list's own
-        // inset on top of it put the title 64pt from the edge, where the
-        // platform's lists put it at about 52.
-        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 16))
+        .listRowBackground(
+            drag.page?.id == page.id ? Color.surfaceSelected : Color.surfacePrimary)
+        .listRowSeparatorTint(.borderSecondary)
+        .alignmentGuide(.listRowSeparatorLeading) { _ in isSelecting ? 0 : 44 }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                Task { await store.trash(pageId: page.id, title: page.title) }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            if isInbox && page.scheduledStart == nil && !page.scheduleLocked && !page.isRecurring {
-                // Filing is the Inbox's whole job, and "today or tomorrow" is
-                // most of it. Two one-tap answers here, rather than the sheet
-                // every other view offers: a person clearing an inbox of
-                // twenty captures should not open twenty date pickers.
-                Button {
-                    Task { await store.setSchedule(pageId: page.id, start: DayLabel.today(), end: nil) }
-                } label: {
-                    Label("Today", systemImage: "sun.max")
+            if !done && !page.scheduleLocked && !page.isRecurring {
+                ForEach(Self.swipeDays(for: page.scheduledStart)) { choice in
+                    Button {
+                        Task { await store.send(facts, to: choice) }
+                    } label: {
+                        Label(choice.label, systemImage: choice.systemImage)
+                    }
+                    .tint(.interactiveFillNeutral)
                 }
-                .tint(.indigo)
-                Button {
-                    Task { await store.setSchedule(pageId: page.id, start: Self.tomorrow(), end: nil) }
-                } label: {
-                    Label("Tomorrow", systemImage: "sunrise")
+                if page.scheduledStart != nil {
+                    Button {
+                        actions.sheet = .schedule(facts)
+                    } label: {
+                        Label("When", systemImage: "calendar")
+                    }
+                    .tint(.interactiveFill)
                 }
-                .tint(.teal)
-            } else if !page.scheduleLocked && !page.isRecurring {
-                Button {
-                    actions.sheet = .schedule(PageFacts(page))
-                } label: {
-                    Label(page.scheduledStart == nil ? "Schedule" : "Move", systemImage: "calendar")
-                }
-                .tint(.indigo)
             }
         }
         .swipeActions(edge: .leading) {
@@ -262,151 +301,140 @@ struct PageListScreen: View {
                     done ? "Reopen" : "Complete",
                     systemImage: done ? "arrow.uturn.backward" : "checkmark")
             }
-            .tint(done ? .orange : .green)
+            .tint(done ? .interactiveFillNeutral : .interactiveFill)
         }
-        .contextMenu { PageActionsMenu(page: PageFacts(page), state: $actions) }
+        .contextMenu { PageActionsMenu(page: facts, state: $actions) }
+        .modifier(SchedulableRow(page: facts, isEnabled: !isSelecting && canDragToSchedule(page)))
     }
 
-    private var isInbox: Bool {
-        if case .inbox = store.scope { return true }
-        return false
+    /// A repeating page's date belongs to its rule and a calendar's page to the calendar.
+    private func canDragToSchedule(_ page: PageSummary) -> Bool {
+        page.status != "done" && !page.isRecurring && !page.scheduleLocked
     }
 
-    /// Tomorrow as the `YYYY-MM-DD` key, through calendar arithmetic rather
-    /// than 86,400 seconds: a day around a clock change is not that long.
-    private static func tomorrow() -> String {
-        let next = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-        return DayLabel.today(now: next)
-    }
-
-    // MARK: - Clearing the backlog
-
-    /// The Overdue heading, with the one thing worth doing to the whole section.
-    ///
-    /// On the heading rather than in the toolbar because it acts on *this*
-    /// section and nothing else, and a toolbar button would be as available in
-    /// Upcoming, where it means nothing.
-    ///
-    /// No confirmation. The move is reversible, cheap and visible, and the
-    /// three of those together are what a confirmation exists to compensate
-    /// for — so the way back is offered afterwards instead, in the notice the
-    /// store posts, where it costs nothing when it is not wanted.
-    private func overdueHeader(_ title: String) -> some View {
-        HStack {
+    private func sectionHeader(_ title: String, section: WorkspaceStore.Section) -> some View {
+        let isOverdue = section.id == "overdue"
+        return HStack(spacing: 6) {
             Text(title)
+                .sectionLabelStyle(isOverdue ? .statusOverdue : .textTertiary)
+            Text("\(section.pages.count)")
+                .font(.pkUISm)
+                .monospacedDigit()
+                .foregroundStyle(.textTertiary)
             Spacer()
-            if isMovingOverdue {
-                ProgressView()
-            } else {
-                Button("Move to today") {
-                    Task {
-                        isMovingOverdue = true
-                        defer { isMovingOverdue = false }
-                        await store.moveOverdueToToday()
+            if isOverdue && !isSelecting {
+                if isMovingOverdue {
+                    ProgressView().controlSize(.small)
+                } else {
+                    // No confirmation: the move is cheap, visible, and the notice carries the undo.
+                    Button {
+                        Task {
+                            isMovingOverdue = true
+                            defer { isMovingOverdue = false }
+                            await store.moveOverdueToToday()
+                        }
+                    } label: {
+                        Text("Move to today").touchTarget()
                     }
+                    .font(.pkUISm)
+                    .foregroundStyle(.textAction)
                 }
-                .font(.caption.weight(.semibold))
-                .textCase(nil)
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.top, section.id == visibleSections.first?.id ? 10 : 22)
+        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.surfacePrimary)
+        .listRowSeparator(.hidden)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The days a trailing swipe offers: the two a page is likeliest to go to next.
+    ///
+    /// Today and tomorrow for anything not already due by today; tomorrow alone for what is, beside
+    /// When for any other day. Delete is in the hold menu instead, out of reach of a stray swipe.
+    private static func swipeDays(for scheduledStart: String?) -> [WhenChoice] {
+        guard let scheduledStart else { return [.today, .tomorrow] }
+        return String(scheduledStart.prefix(10)) <= DayLabel.today() ? [.tomorrow] : [.today]
     }
 
     // MARK: - Finished work
 
-    /// Finished work, below the open list and folded away.
-    ///
-    /// Collapsed by default and loaded only when opened: a folder accumulates
-    /// completed pages without limit, and a section that fetches them on every
-    /// appearance would make the screen slower every week for rows nobody asked
-    /// to see. It stays in the same `List` rather than becoming its own screen
-    /// so that unticking something puts it straight back where it came from,
-    /// visibly.
+    /// Collapsed and loaded only when opened: a folder's finished pages grow without limit.
+    @ViewBuilder
     private var completedSection: some View {
-        Section {
-            DisclosureGroup(isExpanded: $isCompletedExpanded) {
-                if store.completedPages.isEmpty {
-                    Text(
-                        store.hasLoadedCompleted
-                            ? "Nothing finished here yet." : "Loading…"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                } else {
-                    ForEach(store.completedPages, id: \.id) { page in
-                        row(page)
-                    }
-                    if store.hasMoreCompleted {
-                        Button("Show more") {
-                            Task { await store.loadMoreCompleted() }
-                        }
-                        .font(.callout)
-                    }
+        Button {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { isCompletedExpanded.toggle() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .rotationEffect(.degrees(isCompletedExpanded ? 90 : 0))
+                Text("Completed")
+                    .font(.pkUI)
+                if store.completedTotal > 0 {
+                    Text("\(store.completedTotal)")
+                        .font(.pkUISm)
+                        .monospacedDigit()
+                        .foregroundStyle(.textTertiary)
                 }
-            } label: {
-                Text(completedTitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Spacer()
             }
-            // The load is driven by the expansion rather than by the tap, so it
-            // also runs when something else expands the section.
-            .onChange(of: isCompletedExpanded) { _, expanded in
-                guard expanded else { return }
-                Task { await store.expandCompleted() }
+            .foregroundStyle(.textTertiary)
+            .padding(.leading, 10)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.surfacePrimary)
+        .listRowSeparator(.hidden)
+        .accessibilityLabel(completedTitle)
+        .accessibilityValue(isCompletedExpanded ? "Expanded" : "Collapsed")
+        .onChange(of: isCompletedExpanded) { _, expanded in
+            guard expanded else { return }
+            Task { await store.expandCompleted() }
+        }
+
+        if isCompletedExpanded {
+            if store.completedPages.isEmpty {
+                Text(store.hasLoadedCompleted ? "Nothing finished here yet." : "Loading…")
+                    .font(.pkBodySm)
+                    .foregroundStyle(.textTertiary)
+                    .padding(.leading, 38)
+                    .listRowBackground(Color.surfacePrimary)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(store.completedPages, id: \.id) { page in
+                    row(page)
+                }
+                if store.hasMoreCompleted {
+                    Button("Show more") {
+                        Task { await store.loadMoreCompleted() }
+                    }
+                    .font(.pkUI)
+                    .foregroundStyle(.textAction)
+                    .padding(.leading, 38)
+                    .listRowBackground(Color.surfacePrimary)
+                    .listRowSeparator(.hidden)
+                }
             }
         }
     }
 
-    /// "Completed" until the count is known, then "Completed (12)".
-    ///
-    /// The number comes from the query's total rather than from the rows
-    /// loaded, so it does not read as 20 for a folder holding hundreds — and it
-    /// is shown whether or not the section has been opened, because `refresh()`
-    /// fetches the count either way. Gating it on having expanded the section
-    /// hid a number the app already had, which made a closed section look empty
-    /// when it was not.
     private var completedTitle: String {
         store.completedTotal > 0
             ? String(localized: "Completed (\(store.completedTotal))") : String(localized: "Completed")
     }
 
-    // MARK: - Filtering
-
-    /// The current view's sections, narrowed by the filter field.
-    ///
-    /// Filtering inside each section rather than flattening first: a filter is
-    /// a narrower view of the same list, not a different list, and collapsing
-    /// Upcoming's days into one run the moment somebody types would lose the
-    /// only structure it has.
-    ///
-    /// Case- and diacritic-insensitive so "cafe" finds "Café" —
-    /// `localizedStandardContains` is the same comparison Finder and Mail use,
-    /// which is what someone typing into a filter field expects.
-    private var visibleSections: [WorkspaceStore.Section] {
-        let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else {
-            return orderedSections.filter { !$0.pages.isEmpty }
-        }
-        return orderedSections.compactMap { section in
-            let matches = section.pages.filter { page in
-                page.title.localizedStandardContains(needle)
-                    || (page.subtitle?.localizedStandardContains(needle) ?? false)
-                    || page.tags.contains { $0.localizedStandardContains(needle) }
-            }
-            // A day with nothing left in it becomes a header over a gap.
-            return matches.isEmpty
-                ? nil
-                : WorkspaceStore.Section(id: section.id, title: section.title, pages: matches)
-        }
-    }
-
     // MARK: - Ordering
 
-    /// The store's sections in the reader's chosen order.
-    ///
-    /// The date views arrive already ordered by the schedule and are left
-    /// alone; a folder or the Inbox is ordered here, by the mode kept for
-    /// that view — manual by default, chronology for a calendar's folder,
-    /// the same defaults the desktop's `useActiveSortMode` picks.
+    private var visibleSections: [WorkspaceStore.Section] {
+        orderedSections.filter { !$0.pages.isEmpty }
+    }
+
+    /// Date views arrive in schedule order; a folder or the Inbox takes the reader's chosen order.
     private var orderedSections: [WorkspaceStore.Section] {
         guard !store.scope.isDateGrouped else { return store.sections }
         let mode = sortMode
@@ -422,7 +450,25 @@ struct PageListScreen: View {
         }
     }
 
-    /// The key this view's order is kept under, and the order it starts in.
+    /// Only a manual order can be arranged by hand, as on the desktop, and a date view is always in
+    /// schedule order.
+    private var canReorder: Bool {
+        guard sortMode == .manual else { return false }
+        switch store.scope {
+        case .inbox, .folder: return true
+        case .today, .upcoming: return false
+        }
+    }
+
+    private func move(in section: WorkspaceStore.Section, from source: IndexSet, to destination: Int) {
+        var arranged = section.pages
+        arranged.move(fromOffsets: source, toOffset: destination)
+        let others = visibleSections.filter { $0.id != section.id }.flatMap(\.pages)
+        let ids = arranged.map(\.id) + others.map(\.id)
+        let folderId: String? = if case .folder(let id, _) = store.scope { id } else { nil }
+        Task { await store.reorderPages(inFolder: folderId, orderedIds: ids) }
+    }
+
     private var sortViewId: String {
         switch store.scope {
         case .today: return "today"
@@ -432,6 +478,7 @@ struct PageListScreen: View {
         }
     }
 
+    /// Manual by default and chronological for a calendar's folder, as the desktop picks.
     private var sortMode: PageSort.Mode {
         let fallback: PageSort.Mode
         if case .folder(let id, _) = store.scope,
@@ -450,42 +497,40 @@ struct PageListScreen: View {
 
     // MARK: - Empty state
 
-    /// An empty view, and the one place the app teaches how to fill it.
-    ///
-    /// Quick capture is the headline feature, and an empty list is the moment
-    /// somebody is about to type their first line. So the empty state shows a
-    /// sentence the parser understands and opens quick add with it filled
-    /// in: the chips the sheet draws under it are the lesson, and Add is the
-    /// exam. A sentence rather than a grammar table, because nobody reads a
-    /// grammar table on a phone.
+    /// The one place the app teaches capture: a sentence the parser reads, opening quick add with it.
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("Nothing here yet", systemImage: emptyIcon)
-        } description: {
+        VStack(spacing: 12) {
+            Spacer(minLength: 0)
+            Image(systemName: emptyIcon)
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.textDisabled)
+                .padding(.bottom, 4)
+            Text("Nothing here yet")
+                .font(.pkHeadingSm)
+                .foregroundStyle(.textPrimary)
             Text(emptyDescription)
-        } actions: {
-            VStack(spacing: 12) {
-                Button("New page") { route.isQuickAddPresented = true }
-                    .buttonStyle(.borderedProminent)
-                if let example = emptyExample {
-                    Button {
-                        route.quickAddPrefill = example
-                        route.isQuickAddPresented = true
-                    } label: {
-                        Text("Try “\(example)”")
-                            .font(.footnote)
-                            .multilineTextAlignment(.center)
-                    }
-                    .buttonStyle(.borderless)
+                .font(.pkBodySm)
+                .foregroundStyle(.textTertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+            if let example = emptyExample {
+                Button {
+                    route.quickAddPrefill = example
+                    route.isQuickAddPresented = true
+                } label: {
+                    ExampleSentence(text: example)
                 }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+                .accessibilityLabel("Try “\(example)”")
             }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity)
     }
 
-    /// A line the parser reads a date, time, priority or tag out of, chosen
-    /// so that adding it lands in the view the reader is looking at. Nothing
-    /// for a folder: a page typed there goes to that folder regardless, and
-    /// the lesson has been taught by the time somebody has made one.
+    /// Chosen so that adding it lands in the view the reader is looking at.
     private var emptyExample: String? {
         switch store.scope {
         case .today: return "Call the dentist today at 3pm !high #health"
@@ -517,199 +562,88 @@ struct PageListScreen: View {
         }
     }
 
-    // MARK: - Switching views
-
-    /// Every view the list can be, under the title.
-    ///
-    /// The three smart views first, then the user's folders in tree order — a
-    /// parent followed by its children — then the calendars, which are folders
-    /// too but not ones the user made. Nothing else: the things that change
-    /// what exists rather than what is shown live in the corner menu, so a
-    /// destructive action never sits one row under a navigational one.
-    @ViewBuilder
-    private var viewMenu: some View {
-        Picker("View", selection: scopeBinding) {
-            Label("Today", systemImage: "sun.max").tag(WorkspaceStore.Scope.today)
-            Label("Upcoming", systemImage: "calendar").tag(WorkspaceStore.Scope.upcoming)
-            Label("Inbox", systemImage: "tray").tag(WorkspaceStore.Scope.inbox)
-        }
-        .pickerStyle(.inline)
-
-        if !ownFolders.isEmpty {
-            Picker("Folders", selection: scopeBinding) {
-                ForEach(ownFolders, id: \.id) { folder in
-                    Label(folder.name, systemImage: folder.parentId == nil ? "folder" : "arrow.turn.down.right")
-                        .tag(WorkspaceStore.Scope.folder(id: folder.id, name: folder.name))
-                }
-            }
-            .pickerStyle(.inline)
-        }
-
-        if !calendarFolders.isEmpty {
-            Picker("Calendars", selection: scopeBinding) {
-                ForEach(calendarFolders, id: \.id) { folder in
-                    Label(folder.name, systemImage: "calendar")
-                        .tag(WorkspaceStore.Scope.folder(id: folder.id, name: folder.name))
-                }
-            }
-            .pickerStyle(.inline)
-        }
-
-    }
-
-    /// The user's folders, a parent immediately followed by its children.
-    ///
-    /// Anything whose parent is missing or unreachable still has to appear, or
-    /// a folder becomes invisible without being deleted.
-    private var ownFolders: [Folder] {
-        let own = store.folders.filter { !$0.isExternalCalendar }
-        var ordered: [Folder] = []
-        func append(childrenOf parent: String?) {
-            for folder in own where folder.parentId == parent {
-                ordered.append(folder)
-                append(childrenOf: folder.id)
-            }
-        }
-        append(childrenOf: nil)
-        for folder in own where !ordered.contains(where: { $0.id == folder.id }) {
-            ordered.append(folder)
-        }
-        return ordered
-    }
-
-    private var calendarFolders: [Folder] {
-        store.folders.filter(\.isExternalCalendar)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if isSelecting {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(selection.count == selectable.count ? "Deselect All" : "Select All") {
-                    if selection.count == selectable.count {
-                        selection = []
-                    } else {
-                        selection = Set(selectable.map(\.id))
-                    }
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Done") { leaveSelection() }
-                    .fontWeight(.semibold)
-            }
-        } else {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    isSettingsPresented = true
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        enterSelection()
-                    } label: {
-                        Label("Select Pages", systemImage: "checkmark.circle")
-                    }
-                    .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
-
-                    // Only where there is an order to choose. Today and
-                    // Upcoming are the schedule's order by definition, and a
-                    // control that changed nothing there would read as broken.
-                    if !store.scope.isDateGrouped {
-                        Picker("Sort by", selection: sortBinding) {
-                            ForEach(PageSort.Mode.allCases, id: \.self) { mode in
-                                Text(mode.label).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-
-                    Divider()
-
-                    Button {
-                        isFolderManagerPresented = true
-                    } label: {
-                        Label("Manage Folders…", systemImage: "folder.badge.gearshape")
-                    }
-                    // The way back from the swipe action on a row. Here rather
-                    // than as a scope in the title menu because the trash is
-                    // not a view of the workspace — nothing in it can be
-                    // opened, filed or completed, only restored.
-                    Button {
-                        isTrashPresented = true
-                    } label: {
-                        Label("Recently Deleted…", systemImage: "trash")
-                    }
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
-                }
-            }
-        }
-    }
-
     // MARK: - Selecting several
 
-    /// The verbs, along the bottom while selecting.
-    ///
-    /// Four, and the same four Things and Mail put there: finish, date, file,
-    /// delete. Each acts on every selected row through one store call that
-    /// refreshes once and says what it did in the notice. Delete asks first
-    /// — the only one that does — because a mis-tap here is several pages,
-    /// not one, though the trash still has them.
-    @ToolbarContentBuilder
-    private var selectionBar: some ToolbarContent {
-        if isSelecting {
-            ToolbarItemGroup(placement: .bottomBar) {
-                Button {
-                    let ids = orderedSelection.map(\.id)
-                    Task {
-                        await store.completePages(ids: ids)
-                        leaveSelection()
-                    }
-                } label: {
-                    Label("Complete", systemImage: "checkmark.circle")
+    /// Finish, date, file, delete: one store call each and one notice, whose Undo covers a delete.
+    private var selectionBar: some View {
+        HStack(spacing: 0) {
+            verb("Complete", systemImage: "checkmark.circle") {
+                let ids = orderedSelection.map(\.id)
+                Task {
+                    await store.completePages(ids: ids)
+                    leaveSelection()
                 }
-                .disabled(selection.isEmpty)
-                Spacer()
+            }
+            // A disabled Menu keeps drawing its label as enabled, so an empty selection gets a plain
+            // disabled verb in its place.
+            if selection.isEmpty {
+                verb("When", systemImage: "calendar") {}
+                verb("Move", systemImage: "folder") {}
+            } else {
                 Menu {
-                    Button("Today") { schedule(to: DayLabel.today()) }
-                    Button("Tomorrow") { schedule(to: Self.tomorrow()) }
-                    Divider()
-                    Button("Clear Date", role: .destructive) { schedule(to: nil) }
+                    WhenMenuItems(
+                        onChoose: { schedule(to: $0.day()) },
+                        onPickDate: { datingSelection = SelectedPages(pages: orderedSelection) },
+                        onClear: { schedule(to: nil) })
                 } label: {
-                    Label("Schedule", systemImage: "calendar")
+                    verbLabel("When", systemImage: "calendar")
                 }
-                .disabled(selection.isEmpty)
-                Spacer()
                 Menu {
-                    Button("Inbox") { move(to: nil) }
-                    ForEach(store.fileableFolders, id: \.id) { folder in
-                        Button(folder.name) { move(to: folder.id) }
+                    Picker("Move to Folder", selection: Binding(get: { String?.some("") }, set: { move(to: $0) })) {
+                        FolderChoices(folders: store.fileableFolders)
                     }
+                    .pickerStyle(.inline)
                 } label: {
-                    Label("Move", systemImage: "folder")
+                    verbLabel("Move", systemImage: "folder")
                 }
-                .disabled(selection.isEmpty)
-                Spacer()
-                Button(role: .destructive) {
-                    isBatchDeleteConfirmed = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
+            }
+            verb("Delete", systemImage: "trash", role: .destructive) {
+                let ids = orderedSelection.map(\.id)
+                Task {
+                    await store.trashPages(ids: ids)
+                    leaveSelection()
                 }
-                .disabled(selection.isEmpty)
             }
         }
+        .padding(.horizontal, 8)
+        .frame(height: ShellBar.height)
+        .floatingSurface(in: Capsule())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
     }
 
-    /// Every row on screen, open and finished alike, in list order.
+    private func verb(
+        _ title: LocalizedStringKey, systemImage: String, role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            verbLabel(title, systemImage: systemImage, isDestructive: role == .destructive)
+        }
+        .buttonStyle(.plain)
+        .disabled(selection.isEmpty)
+    }
+
+    private func verbLabel(_ title: LocalizedStringKey, systemImage: String, isDestructive: Bool = false)
+        -> some View
+    {
+        VStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .regular))
+            Text(title)
+                .font(.system(.caption2, weight: .medium))
+        }
+        .foregroundStyle(
+            selection.isEmpty
+                ? Color.textDisabled : (isDestructive ? Color.statusOverdue : Color.textSecondary)
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+
     private var selectable: [PageSummary] {
         visibleSections.flatMap(\.pages) + (isCompletedExpanded ? store.completedPages : [])
     }
 
-    /// The selected rows in the order the list shows them, so a notice that
-    /// counts them counts what the reader ticked.
     private var orderedSelection: [PageSummary] {
         selectable.filter { selection.contains($0.id) }
     }
@@ -739,8 +673,71 @@ struct PageListScreen: View {
             leaveSelection()
         }
     }
+}
 
-    private var scopeBinding: Binding<WorkspaceStore.Scope> {
-        Binding(get: { store.scope }, set: { store.scope = $0 })
+/// The pages select mode is dating through the When sheet.
+private struct SelectedPages: Identifiable {
+    let id = UUID()
+    let pages: [PageSummary]
+}
+
+/// Lifting a row carries the page to the day under the list.
+private struct SchedulableRow: ViewModifier {
+    let page: PageFacts
+    let isEnabled: Bool
+
+    @Environment(PageDragSession.self) private var drag
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.onDrag {
+                drag.itemProvider(for: page)
+            } preview: {
+                PageDragPreview(title: page.title)
+            }
+        } else {
+            content
+        }
     }
+}
+
+/// A quick-add line with the parts the parser reads out of it picked out, the way the chips will be.
+struct ExampleSentence: View {
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text("Try")
+                .sectionLabelStyle()
+            styled
+                .font(.pkBodySm)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.borderSecondary, lineWidth: 1))
+    }
+
+    private var styled: Text {
+        text.split(separator: " ", omittingEmptySubsequences: false).enumerated().reduce(Text("")) {
+            partial, item in
+            let word = String(item.element)
+            let piece = Text(item.offset == 0 ? word : " " + word)
+            if word.hasPrefix("!") { return partial + piece.foregroundColor(.statusDueSoon) }
+            if word.hasPrefix("#") || word.hasPrefix("~") { return partial + piece.foregroundColor(.textTertiary) }
+            if Self.dateWords.contains(word.lowercased()) || word.lowercased().hasSuffix("pm")
+                || word.lowercased().hasSuffix("am") || word == "at"
+            {
+                return partial + piece.foregroundColor(.textAction)
+            }
+            return partial + piece.foregroundColor(.textPrimary)
+        }
+    }
+
+    private static let dateWords: Set<String> = [
+        "today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    ]
 }

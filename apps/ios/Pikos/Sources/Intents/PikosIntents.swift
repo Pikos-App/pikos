@@ -137,7 +137,7 @@ struct SearchPagesIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[PageEntity]> & ProvidesDialog {
         let workspace = try await openWorkspace()
-        let hits = try await workspace.search(query: query, limit: 20)
+        let hits = try await workspace.search(query: query, includeCompleted: false, limit: 20).hits
         let entities = hits.map { PageEntity(id: $0.pageId, title: $0.title) }
 
         let dialog: IntentDialog =

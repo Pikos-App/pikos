@@ -1,4 +1,5 @@
 import PikosCore
+import PikosSupport
 import SwiftUI
 import UIKit
 
@@ -17,16 +18,28 @@ import UIKit
 /// touching a control wins: once you have picked a date by hand, a later
 /// keystroke will not move it out from under you.
 ///
-/// ## Why the understood-as summary is not decoration
+/// ## Why the line is coloured
 ///
 /// A parser that quietly takes half a sentence for a date is worse than one
 /// that misses it, because the title loses words with no sign that anything
-/// happened. The summary row is how the boundary stays visible: it shows the
-/// title that will be saved, which is the thing most likely to be wrong.
+/// happened. The words it read are coloured where they were typed, so whatever
+/// is left in the ordinary colour is the title that will be saved. A separate
+/// summary of the title did the same job one line further from the eye.
+///
+/// ## Where it opens
+///
+/// On the view it was opened from: Today opens on today, a folder on that
+/// folder, the calendar on the day it shows. A page typed into a view should
+/// land in it, and anything typed in the line still overrules the view.
 struct QuickAddSheet: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(SettingsStore.self) private var settings
     @Environment(\.dismiss) private var dismiss
+    @Environment(Route.self) private var route
+
+    /// Added or cancelled. A sheet swiped away without either keeps its line as a draft for the next
+    /// open, so a sentence is never lost to a stray swipe.
+    @State private var isFinished = false
 
     @State private var line: String
     @State private var folderId: String?
@@ -54,20 +67,32 @@ struct QuickAddSheet: View {
     /// has been used, like the schedule and the folder.
     @State private var priority: Priority?
     @State private var priorityIsManual = false
-    @FocusState private var lineFocused: Bool
 
     /// `prefill` arrives from a `pikos://quick-add` link and is parsed on
     /// appearance, exactly as if it had been typed. `prefillDate` arrives
     /// from a long press on a calendar slot and counts as a choice already
     /// made: the picker opens on it, and a date the line happens to mention
     /// does not move it — the reader pressed *there*.
-    init(prefill: String = "", prefillDate: Date? = nil) {
+    init(prefill: String = "", prefillDate: Date? = nil, context: Route.QuickAddContext = .init()) {
         _line = State(initialValue: prefill)
+        self.context = context
         if let prefillDate {
             _date = State(initialValue: prefillDate)
             _schedule = State(initialValue: .timed)
             _scheduleIsManual = State(initialValue: true)
+        } else if let day = context.day.flatMap({ DayLabel.date(from: $0) }) {
+            _date = State(initialValue: day)
+            _schedule = State(initialValue: .allDay)
+            _appliedSchedule = State(initialValue: .allDay)
+            _appliedDate = State(initialValue: day)
         }
+    }
+
+    private let context: Route.QuickAddContext
+
+    /// The view's own day, which a line with no date of its own keeps.
+    private var contextDay: Date? {
+        context.day.flatMap { DayLabel.date(from: $0) }
     }
 
     private enum Schedule: String, CaseIterable, Identifiable {
@@ -80,94 +105,121 @@ struct QuickAddSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("What needs doing?", text: $line, axis: .vertical)
-                        .lineLimit(1...4)
-                        .focused($lineFocused)
-                        .submitLabel(.done)
-                        .onSubmit { Task { await save() } }
-                        .onChange(of: line) { _, _ in reparse() }
-
-                    if let parsed, parsed.hasAnything {
-                        UnderstoodRow(parsed: parsed)
-                    }
-                }
-
-                // One row for the two things the line may not have said,
-                // rather than two sections of pickers. At the medium detent
-                // with the keyboard up, the field and its chips are all that
-                // fits; the pickers were below the fold on every open. The
-                // chips already show what was understood — these are for
-                // overriding it, and they open only when asked.
-                Section {
-                    // Three chips, scrolling sideways when the text size
-                    // means they no longer fit side by side.
-                    ViewThatFits(in: .horizontal) {
-                        chipRow
-                        ScrollView(.horizontal, showsIndicators: false) { chipRow }
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-
-                    if isPickingDate && schedule != .none {
-                        Picker("Schedule", selection: $schedule) {
-                            ForEach(Schedule.allCases) { option in
-                                Text(option.rawValue).tag(option)
-                            }
+            content
+                .navigationTitle("New page")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            isFinished = true
+                            dismiss()
                         }
-                        .pickerStyle(.segmented)
-                        DatePicker(
-                            "Date",
-                            selection: $date,
-                            displayedComponents: schedule == .timed
-                                ? [.date, .hourAndMinute] : [.date]
-                        )
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Add") { Task { await save() } }
+                            .disabled(!canSave)
                     }
                 }
-                .onChange(of: schedule) { _, new in
-                    if new != appliedSchedule { scheduleIsManual = true }
-                }
-                .onChange(of: date) { _, new in
-                    if new != appliedDate { scheduleIsManual = true }
-                }
-                .onChange(of: folderId) { _, new in
-                    if new != appliedFolderId { folderIsManual = true }
-                }
-            }
-            .navigationTitle("New page")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { Task { await save() } }
-                        .disabled(savedTitle.isEmpty || isSaving)
-                }
-            }
-            // Straight into the field: the whole point of quick add is that it
-            // costs one tap and a sentence.
-            .onAppear {
-                lineFocused = true
-                // The preferred folder, unless the line names one. Applied here
-                // rather than in `init` because the store is not reachable from
-                // an initialiser, and set through `appliedFolderId` as well so
-                // the parse can still override it — a default is where a page
-                // goes when nothing says otherwise, and "~work" in the line
-                // says otherwise.
-                if !folderIsManual, let preferred = settings.defaultFolderID,
-                    store.fileableFolders.contains(where: { $0.id == preferred })
-                {
-                    folderId = preferred
-                    appliedFolderId = preferred
-                }
-                // A prefill never fired `onChange`, so it has not been read yet.
-                if !line.isEmpty { reparse() }
-            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(.surfaceElevated)
+        .presentationCornerRadius(20)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            QuickAddField(
+                text: $line,
+                parsedTitle: parsed?.hasAnything == true ? parsed?.title : nil,
+                priority: parsed?.priority,
+                focusOnAppear: true,
+                onSubmit: { Task { await save() } }
+            )
+            .onChange(of: line) { _, _ in reparse() }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 12)
+
+            if let parsed, parsed.hasAnything {
+                ExtrasRow(parsed: parsed, unmatchedFolder: unmatchedFolder)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, parsed.hasExtras || unmatchedFolder != nil ? 12 : 0)
+                    .transition(.opacity)
+            }
+
+            Rectangle().fill(.borderSecondary).frame(height: 1)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                chipRow
+                    .padding(.horizontal, 20)
+            }
+            .padding(.vertical, 12)
+
+            if isPickingDate && schedule != .none {
+                VStack(spacing: 10) {
+                    Picker("Schedule", selection: $schedule) {
+                        ForEach(Schedule.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    DatePicker(
+                        "Date",
+                        selection: $date,
+                        displayedComponents: schedule == .timed ? [.date, .hourAndMinute] : [.date]
+                    )
+                    .font(.pkBodySm)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            }
+
+            Spacer(minLength: 0)
+
+            Text("Type a date, !priority, #tag or ~folder, or set them with the buttons above.")
+                .font(.pkUISm)
+                .foregroundStyle(.textTertiary)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+        }
+        .background(.surfaceElevated)
+        .animation(.snappy(duration: 0.22), value: parsed?.hasAnything)
+        .animation(.snappy(duration: 0.22), value: isPickingDate)
+        .onChange(of: schedule) { _, new in
+            if new != appliedSchedule { scheduleIsManual = true }
+        }
+        .onChange(of: date) { _, new in
+            if new != appliedDate { scheduleIsManual = true }
+        }
+        .onChange(of: folderId) { _, new in
+            if new != appliedFolderId { folderIsManual = true }
+        }
+        .onAppear {
+            // Applied through `appliedFolderId` so "~work" in the line still wins over the view's folder.
+            if !folderIsManual, let preferred = context.folderId ?? settings.defaultFolderID,
+                store.fileableFolders.contains(where: { $0.id == preferred })
+            {
+                folderId = preferred
+                appliedFolderId = preferred
+            }
+            // A prefill never fired `onChange`, so it has not been read yet.
+            if !line.isEmpty { reparse() }
+        }
+        .onDisappear {
+            route.quickAddDraft = isFinished ? "" : line
+        }
+    }
+
+    private var canSave: Bool { !savedTitle.isEmpty && !isSaving }
+
+    /// A "~folder" the line named that matches none of the reader's, so it is not silently lost.
+    private var unmatchedFolder: String? {
+        guard let query = parsed?.folderQuery else { return nil }
+        let matched = store.fileableFolders.contains {
+            $0.name.compare(query, options: .caseInsensitive) == .orderedSame
+        }
+        return matched ? nil : query
     }
 
     /// Whether the date pickers are unfolded under the row.
@@ -181,75 +233,60 @@ struct QuickAddSheet: View {
                 folderMenu
             }
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
     }
 
-    /// How urgent, as a menu: the four levels and "None".
-    ///
-    /// The line can say `!high`; the chip is for the person who did not
-    /// know that, or changed their mind. Todoist puts the same chip under
-    /// its field, and for the same reason — priority is the one thing about
-    /// a task that is decided *after* the words are typed.
+    /// Priority is the one thing about a task usually decided after the words are typed.
     private var priorityMenu: some View {
         Menu {
-            Button {
-                priority = nil
-                priorityIsManual = true
-            } label: {
-                Label("None", systemImage: priority == nil ? "checkmark" : "circle")
+            Picker(
+                "Priority",
+                selection: Binding(
+                    get: { priority.flatMap { value in PagePriority.allCases.first { $0.value == value }?.stored } ?? 0 },
+                    set: { stored in
+                        priority = PagePriority(stored: stored)?.value
+                        priorityIsManual = true
+                    })
+            ) {
+                PriorityChoices()
             }
-            ForEach(PagePriority.allCases) { option in
-                Button {
-                    priority = option.value
-                    priorityIsManual = true
-                } label: {
-                    Label(option.name, systemImage: priority == option.value ? "checkmark" : "flag")
-                }
-            }
+            .pickerStyle(.inline)
         } label: {
-            Label(priorityLabel, systemImage: priority == nil ? "flag" : "flag.fill")
-                .foregroundStyle(priorityColor)
+            ControlChip(
+                title: priorityLabel, mark: priorityLevel?.mark ?? "—",
+                tint: priority == nil ? nil : priorityLevel?.color)
         }
         .accessibilityLabel("Priority: \(priorityLabel)")
     }
 
+    private var priorityLevel: PagePriority? {
+        priority.flatMap { value in PagePriority.allCases.first { $0.value == value } }
+    }
+
     private var priorityLabel: String {
-        guard let priority, let level = PagePriority.allCases.first(where: { $0.value == priority })
-        else { return String(localized: "Priority") }
-        return level.name
+        priorityLevel?.name ?? String(localized: "Priority")
     }
 
-    private var priorityColor: Color {
-        guard let priority, let level = PagePriority.allCases.first(where: { $0.value == priority })
-        else { return .accentColor }
-        return level.color
-    }
-
-    /// When the page will be, as a menu: the three answers people give
-    /// without a picker, and the picker for the rest.
-    ///
-    /// The label is the current answer, so the row reads as a summary when
-    /// closed — "Tomorrow 3:00 PM" — and the parse's answer is what it shows
-    /// until the user changes it.
+    /// The label is the current answer, so the closed row reads as a summary.
     private var whenMenu: some View {
         Menu {
-            Button("Today") { choose(day: Date()) }
-            Button("Tomorrow") { choose(day: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) }
-            Button("Pick a date…") {
-                if schedule == .none { schedule = .allDay }
-                isPickingDate = true
-            }
-            if schedule != .none {
-                Divider()
-                Button("No date", role: .destructive) {
-                    schedule = .none
-                    isPickingDate = false
-                }
-            }
+            WhenMenuItems(
+                onChoose: { choice in
+                    if let day = DayLabel.date(from: choice.day()) { choose(day: day) }
+                },
+                onPickDate: {
+                    if schedule == .none { schedule = .allDay }
+                    isPickingDate = true
+                },
+                onClear: schedule == .none
+                    ? nil
+                    : {
+                        schedule = .none
+                        isPickingDate = false
+                    })
         } label: {
-            Label(whenLabel, systemImage: "calendar")
+            ControlChip(
+                title: whenLabel, systemImage: "calendar",
+                tint: schedule == .none ? nil : .textAction)
         }
         .accessibilityLabel("When: \(whenLabel)")
     }
@@ -266,23 +303,30 @@ struct QuickAddSheet: View {
     }
 
     private var whenLabel: String {
-        switch schedule {
-        case .none: return String(localized: "No date")
-        case .allDay: return date.formatted(date: .abbreviated, time: .omitted)
-        case .timed: return date.formatted(date: .abbreviated, time: .shortened)
+        guard schedule != .none else { return String(localized: "No date") }
+        let calendar = Calendar.current
+        let day: String
+        if calendar.isDateInToday(date) {
+            day = String(localized: "Today")
+        } else if calendar.isDateInTomorrow(date) {
+            day = String(localized: "Tomorrow")
+        } else {
+            day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         }
+        guard schedule == .timed else { return day }
+        return "\(day), \(date.formatted(date: .omitted, time: .shortened))"
     }
 
     private var folderMenu: some View {
         Menu {
             Picker("Folder", selection: $folderId) {
-                Label("Inbox", systemImage: "tray").tag(String?.none)
-                ForEach(store.fileableFolders, id: \.id) { folder in
-                    Label(folder.name, systemImage: "folder").tag(String?.some(folder.id))
-                }
+                FolderChoices(folders: store.fileableFolders)
             }
         } label: {
-            Label(folderLabel, systemImage: "folder")
+            ControlChip(
+                title: folderLabel,
+                systemImage: folderId == nil ? "tray" : "folder",
+                dot: store.fileableFolders.first { $0.id == folderId }.flatMap { Color(hex: $0.color) })
         }
         .accessibilityLabel("Folder: \(folderLabel)")
     }
@@ -339,6 +383,10 @@ struct QuickAddSheet: View {
                 date = at
                 appliedDate = at
                 schedule = start.contains("T") ? .timed : .allDay
+            } else if let contextDay {
+                date = contextDay
+                appliedDate = contextDay
+                schedule = .allDay
             } else {
                 schedule = .none
             }
@@ -362,6 +410,7 @@ struct QuickAddSheet: View {
     private func save() async {
         guard !savedTitle.isEmpty, !isSaving else { return }
         isSaving = true
+        isFinished = true
         defer { isSaving = false }
         // Felt before the sheet goes: the page lands in a list the user may
         // not be looking at (the notice says where), and a tap that is felt
@@ -523,6 +572,11 @@ struct ParsedLine {
             || repeats != nil || !reminders.isEmpty || content != nil
     }
 
+    /// What the line said that neither the colouring nor a chip below shows.
+    var hasExtras: Bool {
+        repeats != nil || !reminders.isEmpty || content != nil
+    }
+
     /// The reminders in words: "30 min before", "the day before".
     var reminderLabel: String? {
         guard !reminders.isEmpty else { return nil }
@@ -571,55 +625,31 @@ struct ParsedLine {
     }
 }
 
-/// What the line was understood to mean, shown under the field.
-private struct UnderstoodRow: View {
+/// What the line said that has no control and no colour of its own: a repeat, a reminder, a note, a
+/// folder name that matches none. Also where VoiceOver hears the whole reading, since colour is
+/// not read aloud.
+private struct ExtrasRow: View {
     let parsed: ParsedLine
+    let unmatchedFolder: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // The title first and on its own line: it is what the parse most
-            // plausibly got wrong, and the only part the user cannot see by
-            // looking at the controls.
-            Text(parsed.title.isEmpty ? "No title left" : parsed.title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(parsed.title.isEmpty ? .secondary : .primary)
-
-            ViewThatFits(in: .horizontal) {
-                chips
-                ScrollView(.horizontal, showsIndicators: false) { chips }
-            }
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-    }
-
-    private var chips: some View {
-        HStack(spacing: 6) {
+        FlowLayout(spacing: 6, lineSpacing: 6) {
             if let repeats = parsed.repeats {
-                Chip(text: repeats, icon: "repeat")
+                Chip(text: repeats, icon: "repeat", tint: .textAction)
             }
-            if let start = parsed.scheduledStart {
-                Chip(text: friendly(start), icon: "calendar")
-            }
-            if let priority = parsed.priority {
-                Chip(text: name(priority), icon: "exclamationmark")
-            }
-            // Offsets rather than the tag itself: "#work #work" is a
-            // perfectly typeable line, and duplicate ids confuse SwiftUI.
-            ForEach(Array(parsed.tags.enumerated()), id: \.offset) { _, tag in
-                Chip(text: tag, icon: "number")
-            }
-            if let folder = parsed.folderQuery {
-                Chip(text: folder, icon: "folder")
+            if let unmatchedFolder {
+                Chip(text: String(localized: "No folder called \(unmatchedFolder)"), icon: "folder", tint: .textSecondary)
             }
             if let reminder = parsed.reminderLabel {
-                Chip(text: reminder, icon: "bell")
+                Chip(text: reminder, icon: "bell", tint: .textSecondary)
             }
             if parsed.content != nil {
-                Chip(text: "Note", icon: "text.alignleft")
+                Chip(text: String(localized: "Note"), icon: "text.alignleft", tint: .textSecondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
     }
 
     private var accessibilityDescription: String {
@@ -634,12 +664,17 @@ private struct UnderstoodRow: View {
         return parts.joined(separator: ", ")
     }
 
-    /// A stored wall-clock string in the reader's own formatting.
     private func friendly(_ iso: String) -> String {
         guard let date = QuickAddSheet.wallClock(iso) else { return iso }
-        return date.formatted(
-            date: .abbreviated,
-            time: iso.contains("T") ? .shortened : .omitted)
+        let calendar = Calendar.current
+        let day =
+            calendar.isDateInToday(date)
+            ? String(localized: "Today")
+            : calendar.isDateInTomorrow(date)
+                ? String(localized: "Tomorrow")
+                : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        guard iso.contains("T") else { return day }
+        return "\(day), \(date.formatted(date: .omitted, time: .shortened))"
     }
 
     private func name(_ priority: Priority) -> String {
@@ -652,18 +687,52 @@ private struct UnderstoodRow: View {
     }
 }
 
+/// A parsed fact, in the desktop's chip: a small rounded tag on the inset surface.
 private struct Chip: View {
     let text: String
-    let icon: String
+    let icon: String?
+    let tint: Color
 
     var body: some View {
-        Label(text, systemImage: icon)
-            .font(.caption)
-            .labelStyle(.titleAndIcon)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.quaternary, in: Capsule())
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+            }
+            Text(text).lineLimit(1)
+        }
+        .font(.pkUISm)
+        .foregroundStyle(tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.surfaceInset, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+/// An override control under the divider: outlined until it holds an answer.
+private struct ControlChip: View {
+    let title: String
+    var systemImage: String? = nil
+    var mark: String? = nil
+    var tint: Color? = nil
+    var dot: Color? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let dot {
+                Circle().fill(dot).frame(width: 7, height: 7)
+            } else if let mark {
+                Text(mark).fontWeight(.heavy)
+            } else if let systemImage {
+                Image(systemName: systemImage).font(.system(size: 13, weight: .medium))
+            }
+            Text(title).lineLimit(1)
+        }
+        .font(.pkUI)
+        .foregroundStyle(tint ?? .textSecondary)
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(Capsule().fill(tint == nil && dot == nil ? Color.clear : Color.surfaceHover))
+        .overlay(Capsule().strokeBorder(.borderSecondary, lineWidth: 1))
+        .fixedSize()
     }
 }

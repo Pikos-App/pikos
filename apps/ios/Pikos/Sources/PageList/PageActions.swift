@@ -1,4 +1,5 @@
 import PikosCore
+import PikosSupport
 import SwiftUI
 
 /// What a page action needs to know, whichever record the page arrived as.
@@ -102,19 +103,22 @@ struct PageActionState {
     }
 }
 
-/// The long press menu — desktop's right-click menu, minus what a phone cannot
-/// do. Also the editor's page menu, which is the same list of verbs reached
-/// from the other direction.
+/// The long press menu: the desktop's right-click menu, with the likeliest changes first.
 ///
-/// Everything above Delete is withheld from a page a calendar owns. The title,
-/// dates and placement of a mirror belong upstream and the workspace refuses
-/// all three, so an entry here would only ever produce an error alert. Tags
-/// and priority stay: they are user-layer, and the lock covers what a meeting
-/// is, not what somebody files it under. Delete stays too: a mirror can be
-/// removed locally, and that path already knows to keep the tombstone.
+/// Also the editor's page menu and a calendar block's, so a page offers the same verbs in the same
+/// places wherever it is held. The top row finishes the page or sends it to today or tomorrow, so
+/// the commonest edits are a hold and one tap; everything needing a choice from a list sits below.
+///
+/// What a calendar owns is withheld from its pages. The title, dates and placement of a mirror
+/// belong upstream and the workspace refuses all three, so an entry here would only ever produce
+/// an error alert. Tags and priority stay: they are user-layer, and the lock covers what a meeting
+/// is, not what somebody files it under. Delete stays too: a mirror can be removed locally, and
+/// that path already knows to keep the tombstone.
 struct PageActionsMenu: View {
     let page: PageFacts
     @Binding var state: PageActionState
+    /// Off in the editor, where the title is edited in place.
+    var showsRename = true
     /// Runs after the page has been moved to the trash. The list needs nothing
     /// here — its refresh removes the row — but an editor showing the page
     /// has to leave.
@@ -122,31 +126,67 @@ struct PageActionsMenu: View {
 
     @Environment(WorkspaceStore.self) private var store
 
+    /// A repeating page's date belongs to its rule, so it is sent to a day only through the sheet.
+    private var canSendToDay: Bool { !page.scheduleLocked && !page.isRecurring }
+
     var body: some View {
-        if !page.scheduleLocked {
+        ControlGroup {
             Button {
-                state.renameText = page.title
-                state.renaming = page
+                Task { await store.setStatus(pageId: page.id, done: !page.isDone) }
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label(page.isDone ? "Reopen" : "Complete", systemImage: page.isDone ? "arrow.uturn.backward" : "checkmark.circle")
+            }
+            if canSendToDay {
+                ForEach([WhenChoice.today, .tomorrow]) { choice in
+                    Button {
+                        Task { await store.send(page, to: choice) }
+                    } label: {
+                        Label(choice.label, systemImage: choice.systemImage)
+                    }
+                }
             }
         }
 
-        // Same shape as Move to Folder, and for the same reason: one decision
-        // from a short fixed list. "None" is a real choice here rather than the
-        // absence of one — a page with a priority needs a way back to having
-        // none.
-        Menu {
-            Button { setPriority(nil) } label: {
-                checkedLabel("None", systemImage: "circle", current: page.priority == 0)
-            }
-            ForEach(PagePriority.allCases) { option in
-                Button { setPriority(option.value) } label: {
-                    checkedLabel(option.name, systemImage: "flag", current: page.priority == option.stored)
-                }
-            }
+        // A submenu rather than `PriorityPalette`; see why on its declaration.
+        Picker(
+            selection: Binding(
+                get: { PagePriority(stored: page.priority)?.stored ?? 0 },
+                set: { stored in
+                    Task { await store.setPriority(pageId: page.id, priority: PagePriority(stored: stored)?.value) }
+                })
+        ) {
+            PriorityChoices()
         } label: {
             Label("Priority", systemImage: "flag")
+        }
+        .pickerStyle(.menu)
+
+        if !page.scheduleLocked {
+            Menu {
+                if canSendToDay {
+                    WhenMenuItems(
+                        choices: [.thisWeekend, .nextWeek],
+                        onChoose: { choice in Task { await store.send(page, to: choice) } },
+                        onPickDate: { state.sheet = .schedule(page) },
+                        onClear: page.scheduledStart == nil
+                            ? nil : { Task { await store.clearDate(pageId: page.id) } })
+                } else {
+                    // Clearing a repeating page's date does nothing visible: the head owns its
+                    // `scheduled_start`, pinned by `clearing_a_repeating_page_s_date_leaves_the_head_where_it_is`.
+                    WhenMenuItems(choices: [], onChoose: { _ in }, onPickDate: { state.sheet = .schedule(page) })
+                }
+            } label: {
+                Label("When", systemImage: "calendar")
+            }
+
+            Picker(
+                selection: Binding(get: { page.folderId }, set: { move(to: $0) })
+            ) {
+                FolderChoices(folders: store.fileableFolders)
+            } label: {
+                Label("Move to Folder", systemImage: "folder")
+            }
+            .pickerStyle(.menu)
         }
 
         Button {
@@ -156,19 +196,15 @@ struct PageActionsMenu: View {
         }
 
         if !page.scheduleLocked {
-            // Offered on a repeating page too — it is the way to change one.
-            // What the user may change is the workspace's answer, not this
-            // menu's guess; the sheet shows a rule it cannot edit read-only.
+            // Offered on a repeating page too: it is the way to change one. What the user may
+            // change is the workspace's answer, and the sheet shows a rule it cannot edit read-only.
             Button {
                 state.sheet = .repeatRule(page)
             } label: {
                 Label("Repeat…", systemImage: "repeat")
             }
 
-            // Ending a series is one tap rather than a sheet, a toggle and a
-            // save: it is the thing most often wanted from a repeat that has
-            // outlived its usefulness, and the notice afterwards carries the
-            // way back where the rule can be rebuilt.
+            // Ending a series is one tap: the notice afterwards carries the way back.
             if page.isRecurring {
                 Button {
                     Task { await store.stopRepeating(pageId: page.id, title: page.title) }
@@ -176,56 +212,18 @@ struct PageActionsMenu: View {
                     Label("Stop Repeating", systemImage: "repeat.circle")
                 }
             }
-
-            // Nested rather than a sheet: a move is one decision from a short
-            // list, and a sheet for it would be two taps and a dismissal for
-            // something the menu is already showing.
-            Menu {
-                Button { move(to: nil) } label: {
-                    checkedLabel("Inbox", systemImage: "tray", current: page.folderId == nil)
-                }
-                ForEach(store.fileableFolders, id: \.id) { folder in
-                    Button { move(to: folder.id) } label: {
-                        checkedLabel(
-                            folder.name, systemImage: "folder", current: page.folderId == folder.id)
-                    }
-                }
-            } label: {
-                Label("Move to Folder", systemImage: "folder")
-            }
-
-            // Not offered on a repeating page. Its date belongs to its rule:
-            // moving it has to realign the anchor and snap onto a day the rule
-            // yields, or the next recompute reverts the edit, and clearing it
-            // does nothing visible at all because the head owns its own
-            // `scheduled_start`. The workspace refuses both — `pikos-ffi`'s
-            // `a_repeating_page_refuses_a_plain_date_change` and
-            // `clearing_a_repeating_page_s_date_leaves_the_head_where_it_is`
-            // pin them — so the menu declines to offer what would fail.
-            if !page.isRecurring {
-                Button {
-                    state.sheet = .schedule(page)
-                } label: {
-                    Label(
-                        page.scheduledStart == nil ? "Schedule…" : "Change Date…",
-                        systemImage: "calendar")
-                }
-
-                // Kept beside the sheet rather than folded into it. Taking a
-                // date off is the one schedule change that is a single tap,
-                // and making it three would be a worse trade than the extra
-                // row.
-                if page.scheduledStart != nil {
-                    Button {
-                        Task { await store.clearDate(pageId: page.id) }
-                    } label: {
-                        Label("Clear Date", systemImage: "calendar.badge.minus")
-                    }
-                }
-            }
         }
 
         Divider()
+
+        if showsRename && !page.scheduleLocked {
+            Button {
+                state.renameText = page.title
+                state.renaming = page
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+        }
 
         Button(role: .destructive) {
             Task {
@@ -235,18 +233,6 @@ struct PageActionsMenu: View {
         } label: {
             Label("Delete", systemImage: "trash")
         }
-    }
-
-    /// A tick beside the current choice.
-    ///
-    /// Desktop bolds that row; a menu on iOS shows state with a checkmark, and
-    /// `Label` is what puts one in the leading position the system uses.
-    private func checkedLabel(_ name: String, systemImage: String, current: Bool) -> some View {
-        Label(name, systemImage: current ? "checkmark" : systemImage)
-    }
-
-    private func setPriority(_ priority: Priority?) {
-        Task { await store.setPriority(pageId: page.id, priority: priority) }
     }
 
     private func move(to folderId: String?) {
@@ -261,8 +247,7 @@ struct PageActionsMenu: View {
 /// Low number first — 1 urgent through 4 low — which runs the opposite way to
 /// the names. The pairing is written out here rather than derived so the
 /// menu's order, the column's meaning and the row's colour cannot drift apart.
-/// The colours are the desktop's (`PRIORITY_COLORS` in `@pikos/core`): red,
-/// orange, yellow, blue.
+/// The colours follow the desktop's `PRIORITY_COLORS`, through its tokens.
 enum PagePriority: Int64, CaseIterable, Identifiable {
     case urgent = 1
     case high = 2
@@ -290,12 +275,23 @@ enum PagePriority: Int64, CaseIterable, Identifiable {
         }
     }
 
+    /// The desktop's marks. Shape tells the levels apart where colour alone does not: on the dark
+    /// theme High's amber and Medium's yellow read as one.
+    var mark: String {
+        switch self {
+        case .urgent: return "!!"
+        case .high: return "!"
+        case .medium: return "··"
+        case .low: return "·"
+        }
+    }
+
     var color: Color {
         switch self {
-        case .urgent: return .red
-        case .high: return .orange
-        case .medium: return .yellow
-        case .low: return .blue
+        case .urgent: return .statusOverdue
+        case .high: return .statusDueSoon
+        case .medium: return Color(PikosToken.yellow500)
+        case .low: return .statusOpen
         }
     }
 

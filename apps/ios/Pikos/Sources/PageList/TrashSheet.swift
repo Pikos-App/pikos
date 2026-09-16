@@ -33,17 +33,21 @@ struct TrashSheet: View {
                             "Deleted pages appear here for \(store.trashRetentionDays) days."))
                 } else {
                     List {
-                        Section {
-                            ForEach(pages, id: \.id) { page in
-                                row(page)
+                        Group {
+                            Section {
+                                ForEach(pages, id: \.id) { page in
+                                    row(page)
+                                }
+                            } footer: {
+                                Text(retentionFooter)
                             }
-                        } footer: {
-                            Text(retentionFooter)
                         }
+                        .pikosFormRows()
                     }
                 }
             }
-            .navigationTitle("Recently Deleted")
+            .navigationTitle("Trash")
+            .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -100,7 +104,7 @@ struct TrashSheet: View {
             } label: {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
-            .tint(.green)
+            .tint(.interactiveFill)
         }
     }
 
