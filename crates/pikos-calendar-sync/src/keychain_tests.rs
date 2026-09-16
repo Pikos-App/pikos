@@ -19,6 +19,48 @@ fn the_system_keychain_round_trips() {
     assert!(matches!(kc.load(&account), Err(KeychainError::NotFound)));
 }
 
+/// Every platform Pikos builds for names a keyring backend.
+///
+/// With no feature named, keyring compiles in an in-memory mock that accepts every write and
+/// shares nothing between `Entry` instances, so Connect appears to work and every later launch
+/// reads `NotFound`. That is what shipped, and it passed every other test in this file.
+///
+/// A manifest check rather than a round trip because the round trip needs a Secret Service to talk
+/// to, which the suite that would catch the omission has not got. The round trip lives in
+/// `scripts/linux-keyring-check.sh`; this is the half that runs on the commit that drops the line.
+#[test]
+fn every_platform_names_a_keyring_backend() {
+    let manifest = include_str!("../Cargo.toml");
+    let mut checked = 0;
+
+    for (platform, section) in [
+        (
+            "macos",
+            "[target.'cfg(target_os = \"macos\")'.dependencies]",
+        ),
+        (
+            "linux",
+            "[target.'cfg(target_os = \"linux\")'.dependencies]",
+        ),
+    ] {
+        let body = manifest
+            .split(section)
+            .nth(1)
+            .unwrap_or_else(|| panic!("{section} is gone from Cargo.toml"));
+        let line = body
+            .lines()
+            .find(|l| l.trim_start().starts_with("keyring"))
+            .unwrap_or_else(|| panic!("{platform} names no keyring dependency"));
+        assert!(
+            line.contains("features"),
+            "{platform} names keyring with no backend feature, so it gets the in-memory mock: {line}"
+        );
+        checked += 1;
+    }
+
+    assert_eq!(checked, 2, "a target block stopped being checked");
+}
+
 #[test]
 fn store_then_load_round_trips() {
     let kc = keychain();
