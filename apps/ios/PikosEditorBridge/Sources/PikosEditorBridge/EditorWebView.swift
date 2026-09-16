@@ -123,6 +123,8 @@ public struct EditorWebView: UIViewRepresentable {
         webView.isInspectable = true
         #endif
 
+        webView.hidesFormAccessory()
+
         context.coordinator.webView = webView
         controller?.attach(context.coordinator)
 
@@ -334,6 +336,42 @@ public struct EditorWebView: UIViewRepresentable {
             }
             decisionHandler(.cancel)
         }
+    }
+}
+
+extension WKWebView {
+    /// Replace WebKit's form bar, the previous, next and done row it puts over the keyboard, with an
+    /// empty one.
+    ///
+    /// It is for stepping between the fields of a web form, and a document has none, so above the
+    /// editor it was a second bar under the host's own formatting row. WebKit offers no switch for
+    /// it: the view that owns the keyboard is a private content view, so this gives that one
+    /// instance a subclass whose `inputAccessoryView` is an empty view. Empty rather than nil: with
+    /// a hardware keyboard the accessory is the only thing iOS shows, and with none the keyboard
+    /// notifications the host's formatting row waits for never arrive. If a future WebKit renames
+    /// the view, nothing matches and the bar simply comes back.
+    func hidesFormAccessory() {
+        guard
+            let content = scrollView.subviews.first(where: {
+                String(describing: type(of: $0)).hasPrefix("WKContent")
+            }),
+            let base = object_getClass(content)
+        else { return }
+        let name = "\(NSStringFromClass(base))_PikosNoFormAccessory"
+        if let existing = NSClassFromString(name) {
+            object_setClass(content, existing)
+            return
+        }
+        guard let subclass = objc_allocateClassPair(base, name, 0) else { return }
+        let getter = #selector(getter: UIResponder.inputAccessoryView)
+        let empty = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 1))
+        empty.backgroundColor = .clear
+        let noAccessory: @convention(block) (AnyObject) -> UIView? = { _ in empty }
+        guard let method = class_getInstanceMethod(UIResponder.self, getter) else { return }
+        class_addMethod(
+            subclass, getter, imp_implementationWithBlock(noAccessory), method_getTypeEncoding(method))
+        objc_registerClassPair(subclass)
+        object_setClass(content, subclass)
     }
 }
 

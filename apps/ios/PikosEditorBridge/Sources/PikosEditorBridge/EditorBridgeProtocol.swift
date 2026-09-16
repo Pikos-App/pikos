@@ -249,17 +249,17 @@ public enum EditorBridge {
             let type = try container.decode(String.self, forKey: .type)
             switch type {
             case "docChanged":
-                return .docChanged(try container.decode(IncomingDocChangedPayload.self, forKey: .payload))
+                self = .docChanged(try container.decode(IncomingDocChangedPayload.self, forKey: .payload))
             case "heightChanged":
-                return .heightChanged(try container.decode(IncomingHeightChangedPayload.self, forKey: .payload))
+                self = .heightChanged(try container.decode(IncomingHeightChangedPayload.self, forKey: .payload))
             case "linkTapped":
-                return .linkTapped(try container.decode(IncomingLinkTappedPayload.self, forKey: .payload))
+                self = .linkTapped(try container.decode(IncomingLinkTappedPayload.self, forKey: .payload))
             case "ready":
-                return .ready(try container.decode(IncomingReadyPayload.self, forKey: .payload))
+                self = .ready(try container.decode(IncomingReadyPayload.self, forKey: .payload))
             case "requestImagePicker":
-                return .requestImagePicker(try container.decode(IncomingRequestImagePickerPayload.self, forKey: .payload))
+                self = .requestImagePicker(try container.decode(IncomingRequestImagePickerPayload.self, forKey: .payload))
             case "selectionChanged":
-                return .selectionChanged(try container.decode(IncomingSelectionChangedPayload.self, forKey: .payload))
+                self = .selectionChanged(try container.decode(IncomingSelectionChangedPayload.self, forKey: .payload))
             default:
                 throw DecodingFailure.unknownType(type)
             }

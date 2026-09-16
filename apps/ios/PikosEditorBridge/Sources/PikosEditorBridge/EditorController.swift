@@ -114,7 +114,10 @@ public final class EditorController {
         case blockquote
         case codeBlock
 
-        var nodeType: String {
+        /// The name this block goes by on the wire. Public because the host's
+        /// toolbar compares it against the node the editor reports under the
+        /// caret to decide which button looks active.
+        public var nodeType: String {
             switch self {
             case .paragraph: return "paragraph"
             case .heading: return "heading"

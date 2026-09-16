@@ -124,7 +124,7 @@ function main(): void {
   const decodeCases = Object.entries(WEBVIEW_TO_HOST)
     .map(
       ([type]) => `            case "${type}":
-                return .${type}(try container.decode(${structName("Incoming", type)}.self, forKey: .payload))`
+                self = .${type}(try container.decode(${structName("Incoming", type)}.self, forKey: .payload))`
     )
     .join("\n");
 
