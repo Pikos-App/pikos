@@ -15,6 +15,23 @@ mod window_state;
 use db::DbState;
 use notifications::scheduler::{NotificationSettingsState, SchedulerRuntimeState};
 
+/// What the window is being painted with, in the log, for a blank-window report.
+///
+/// A blank window says nothing about which render path produced it, and the answer decides the
+/// next step: the DMABUF override below, compositing, or the session being Wayland. Reading it
+/// out of a user's log beats asking them to reproduce it with three environment variables.
+#[cfg(target_os = "linux")]
+fn log_render_environment() {
+    let read = |name: &str| std::env::var(name).unwrap_or_else(|_| "unset".to_string());
+    log::info!(
+        "linux render environment: session={} gdk_backend={} dmabuf_disabled={} compositing_disabled={}",
+        read("XDG_SESSION_TYPE"),
+        read("GDK_BACKEND"),
+        read("WEBKIT_DISABLE_DMABUF_RENDERER"),
+        read("WEBKIT_DISABLE_COMPOSITING_MODE"),
+    );
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
@@ -67,6 +84,8 @@ pub fn run() {
                 env!("CARGO_PKG_VERSION"),
                 std::env::consts::OS
             );
+            #[cfg(target_os = "linux")]
+            log_render_environment();
 
             // macOS: install the foreground-presentation delegate and request
             // notification authorization via the modern UserNotifications
