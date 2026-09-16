@@ -25,6 +25,11 @@ deb=$(find "$ART" -name "*.deb" | head -1)
 appimage=$(find "$ART" -name "*.AppImage" | head -1)
 cli=$(find "$ART" -name "pikos-cli-*linux*.tar.gz" | head -1)
 
+# A `find` that matches nothing used to skip its whole block and still exit 0, so a renamed or
+# missing artifact read as a pass. The two the desktop build always produces are required.
+[ -n "$deb" ] || { echo "no .deb in $ART"; exit 1; }
+[ -n "$appimage" ] || { echo "no AppImage in $ART"; exit 1; }
+
 fail=0
 run() { docker run --rm --platform linux/amd64 -v "$ART":/artifacts:ro "$1" bash -c "$2"; }
 
@@ -37,9 +42,14 @@ if [ -n "$deb" ]; then
       apt-get update -qq
       # `apt-get install ./x.deb` resolves the package own Depends; `dpkg -i` would not.
       apt-get install -y -qq /artifacts/'"$(basename "$deb")"' >/dev/null
-      missing=$(ldd /usr/bin/pikos | grep "not found" || true)
+      # Asked of dpkg rather than assumed to be /usr/bin/pikos: Tauri names the binary, and an
+      # `ldd` on a path that does not exist fails in a way `grep "not found" || true` swallows.
+      package=$(dpkg-deb -f /artifacts/'"$(basename "$deb")"' Package)
+      bin=$(dpkg -L "$package" | grep -E "^/usr/bin/" | head -1)
+      [ -n "$bin" ] && [ -x "$bin" ] || { echo "   the .deb installed no executable in /usr/bin"; exit 1; }
+      missing=$(ldd "$bin" | grep "not found" || true)
       [ -z "$missing" ] || { echo "$missing"; exit 1; }
-      echo "   installs, and every library resolves"
+      echo "   installs $bin, and every library resolves"
     ' || fail=1
   done
 fi
@@ -67,7 +77,12 @@ if [ -n "$appimage" ]; then
   done
 fi
 
-if [ -n "$cli" ]; then
+# Optional, and said out loud when it is absent: the CLI is built by a different job, so pointing
+# this script at the desktop bundle directory finds no tarball and that is not a failure. A silent
+# skip is, because it reads exactly like a pass.
+if [ -z "$cli" ]; then
+  echo "── CLI tarball: none in $ART, skipped"
+else
   echo "── CLI tarball on debian:12"
   run debian:12 '
     set -eu
