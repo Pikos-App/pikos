@@ -44,9 +44,13 @@ cask_version_of() {
   brew info --cask --json=v2 "$1" 2>/dev/null \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["casks"][0]["version"])' 2>/dev/null
 }
+# Every input below is read through `2>/dev/null`, so an unauthenticated or rate-limited `gh`
+# yields empty strings on both sides and an equality test that passes having compared nothing.
+# Unreadable is a failure here, not a skip.
 compare() { # name, tap version, published version
-  if [ -z "$3" ]; then
-    echo "   $1: could not read the published version, skipped"
+  if [ -z "$2" ] || [ -z "$3" ]; then
+    echo "   $1: could not read a version to compare (tap '$2', published '$3')"
+    fail=1
   elif [ "$2" != "$3" ]; then
     echo "   $1: the tap says $2 and $3 is published"
     fail=1
@@ -62,7 +66,10 @@ formula_version=$(brew info --json=v2 "$FORMULA" 2>/dev/null \
 compare "the cask" "$(cask_version_of "$CASK")" "$stable"
 compare "the beta cask" "$(cask_version_of "$BETA")" "$prerelease"
 # The CLI ships with the betas too, so it tracks whichever of the two is newer.
-if [ "$formula_version" = "$stable" ] || [ "$formula_version" = "$prerelease" ]; then
+if [ -z "$formula_version" ] || { [ -z "$stable" ] && [ -z "$prerelease" ]; }; then
+  echo "   the cli formula: could not read a version to compare"
+  fail=1
+elif [ "$formula_version" = "$stable" ] || [ "$formula_version" = "$prerelease" ]; then
   echo "   the cli formula matches at $formula_version"
 else
   echo "   the cli formula: the tap says $formula_version, and $stable / $prerelease are published"
