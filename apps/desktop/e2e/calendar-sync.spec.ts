@@ -5,9 +5,9 @@
 // The synced-block tests need the "synced" dev seed (Settings → Developer),
 // available because the e2e webServer runs the Vite dev server.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { expect, mod, quickAdd, test as appTest } from "./fixtures";
 
 // Synced events render in the viewer's zone, so pin one and the seed's block
 // positions are the same everywhere.
@@ -858,6 +858,37 @@ appTest(
   }
 );
 
+async function dragRowToPoint(app: Page, row: Locator, x: number, y: number): Promise<boolean> {
+  const rowBox = await row.boundingBox();
+  if (!rowBox) throw new Error("page row missing a bounding box");
+  const startX = rowBox.x + rowBox.width / 2;
+  const startY = rowBox.y + rowBox.height / 2;
+
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  // Past dnd-kit's 8px activation threshold, then onto the target.
+  await app.mouse.move(startX + 16, startY, { steps: 4 });
+  await app.mouse.move(x, y, { steps: 10 });
+  const ghosted = (await app.locator("[data-drag-ghost]").count()) > 0;
+  await app.mouse.up();
+  return ghosted;
+}
+
+/** A timed slot inside the visible week, clear of the grid's edges. */
+async function weekGridDropPoint(app: Page): Promise<{ x: number; y: number }> {
+  const grid = await app.getByRole("region", { name: "Week calendar" }).boundingBox();
+  if (!grid) throw new Error("week grid missing a bounding box");
+  return { x: grid.x + grid.width * 0.6, y: grid.y + grid.height * 0.4 };
+}
+
+/** Drop a page-list row on the sidebar's Today row, which replaces the dropped
+ *  page's schedule with an all-day occurrence today. */
+async function dragRowOntoTodayRow(app: Page, row: Locator): Promise<void> {
+  const target = await app.getByRole("button", { name: /^Today/ }).boundingBox();
+  if (!target) throw new Error("Today nav row missing a bounding box");
+  await dragRowToPoint(app, row, target.x + target.width / 2, target.y + target.height / 2);
+}
+
 /**
  * Drag a page-list row into the week grid, reporting the drop ghost's visibility while
  * the cursor is still over the grid. Ghost presence is the only honest signal here: the
@@ -870,19 +901,8 @@ async function dragRowOntoCalendar(app: Page, rowText: string) {
   const dateButton = row.getByRole("button", { name: /^Toggle date format:/ });
   const before = await dateButton.getAttribute("aria-label");
 
-  const rowBox = await row.boundingBox();
-  const grid = await app.getByRole("region", { name: "Week calendar" }).boundingBox();
-  if (!rowBox || !grid) throw new Error("page row or week grid missing a bounding box");
-
-  await app.mouse.move(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2);
-  await app.mouse.down();
-  // Past dnd-kit's 8px activation threshold, then into the grid.
-  await app.mouse.move(rowBox.x + rowBox.width / 2 + 16, rowBox.y + rowBox.height / 2, {
-    steps: 4,
-  });
-  await app.mouse.move(grid.x + grid.width * 0.6, grid.y + grid.height * 0.4, { steps: 10 });
-  const ghosted = (await app.locator("[data-drag-ghost]").count()) > 0;
-  await app.mouse.up();
+  const { x, y } = await weekGridDropPoint(app);
+  const ghosted = await dragRowToPoint(app, row, x, y);
 
   return { after: await dateButton.getAttribute("aria-label"), before, ghosted };
 }
@@ -945,3 +965,78 @@ appTest("a page can't be dropped onto a calendar folder @tier2", async ({ app })
     app.locator("[data-page-list-item]").filter({ hasText: "Old planning" })
   ).toHaveCount(0);
 });
+
+// ─── tier2: the Today nav row and a mixed selection honour the lock ───────────
+//
+// The last two page-list surfaces that can reschedule. Neither raises a ghost
+// that says anything about the mirror, so both are measured by the byline's
+// save-failure chip: the one trace a refused write leaves once it has rolled
+// back (dragRowOntoCalendar above), and it needs the page open to show.
+
+appTest("a synced page can't be dropped onto the Today nav row @tier2", async ({ app }) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+
+  const locked = app.locator("[data-page-list-item]").filter({ hasText: "Team standup" });
+  await locked.click();
+  const lockedDate = locked.getByRole("button", { name: /^Toggle date format:/ });
+  const lockedBefore = await lockedDate.getAttribute("aria-label");
+
+  await dragRowOntoTodayRow(app, locked);
+
+  await expect(app.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
+  expect(await lockedDate.getAttribute("aria-label")).toBe(lockedBefore);
+
+  // The detached page is the control: the same drop lands, and today's timed
+  // label ("5 PM") becomes the all-day one (a date).
+  await openCalendarFolder(app, "Work");
+  const detached = app.locator("[data-page-list-item]").filter({ hasText: "Old planning" });
+  const detachedDate = detached.getByRole("button", { name: /^Toggle date format:/ });
+  const detachedBefore = await detachedDate.getAttribute("aria-label");
+
+  await dragRowOntoTodayRow(app, detached);
+
+  await expect(detachedDate).not.toHaveAttribute("aria-label", detachedBefore!);
+});
+
+appTest(
+  "a mixed selection schedules the ordinary page and leaves the mirror @tier2",
+  async ({ app }) => {
+    await seedSynced(app);
+    // All-day today, like the mirror it is paired with, so both sit in Today's
+    // own group rather than the collapsed Overdue one.
+    await quickAdd(app, "desk tidy @today");
+    await app.getByRole("button", { name: /^Today/ }).click();
+
+    const list = app.locator("[data-page-list-item]");
+    const mirror = list.filter({ hasText: "Company offsite" });
+    const ordinary = list.filter({ hasText: "desk tidy" });
+    const mirrorDate = mirror.getByRole("button", { name: /^Toggle date format:/ });
+    const mirrorBefore = await mirrorDate.getAttribute("aria-label");
+
+    // Cmd+click seeds the selection with whatever is open, so opening the mirror
+    // both puts it in the selection and mounts the byline read below.
+    await mirror.click();
+    await ordinary.click({ modifiers: ["ControlOrMeta"] });
+    await expect(mirror).toHaveAttribute("data-selected", "true");
+    await expect(ordinary).toHaveAttribute("data-selected", "true");
+
+    // Keyboard, not the toolbar button: a mousedown anywhere outside a page row
+    // is the workspace's own dismiss for a multi-selection.
+    await app.keyboard.press(mod("Mod+Shift+c"));
+    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+
+    // The trailing time is what a timed grid block has; an all-day one and the
+    // page-list row don't.
+    await expect(app.getByRole("button", { name: /^desk tidy, / })).toHaveCount(0);
+    const { x, y } = await weekGridDropPoint(app);
+    expect(await dragRowToPoint(app, ordinary, x, y)).toBe(true);
+
+    await expect(app.getByRole("button", { name: /^desk tidy, / }).first()).toBeVisible();
+    expect(await mirrorDate.getAttribute("aria-label")).toBe(mirrorBefore);
+
+    await app.keyboard.press(mod("Mod+Shift+c"));
+    await expect(app.getByRole("textbox", { name: "Page content" })).toBeVisible();
+    await expect(app.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
+  }
+);
