@@ -61,7 +61,24 @@ fn build_excerpt(
     subtitle: Option<&str>,
     tokens: &[String],
 ) -> String {
-    excerpt_around(strip_title_subtitle(content_text, title, subtitle), tokens)
+    excerpt_around(
+        &join_blocks(strip_title_subtitle(content_text, title, subtitle)),
+        tokens,
+    )
+}
+
+/// One block per line, rejoined so two of them do not read as one sentence.
+///
+/// `content_text` keeps the document's line breaks, and every reader renders the excerpt as HTML,
+/// where a newline folds into a space: a hit at the end of "Measure the alcove" came out as
+/// "the alcove Order the desktop top". Blank lines are dropped, or an empty paragraph leaves a
+/// separator with nothing on either side of it.
+fn join_blocks(body: &str) -> String {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" \u{00B7} ")
 }
 
 /// A mirror's calendar-owned metadata as the excerpt, for a hit that lands only
@@ -76,7 +93,7 @@ fn build_mirror_excerpt(mirror_search_text: Option<&str>, tokens: &[String]) -> 
     let Some(text) = mirror_search_text else {
         return String::new();
     };
-    excerpt_around(&text.replace('\n', " \u{00B7} "), tokens)
+    excerpt_around(&join_blocks(text), tokens)
 }
 
 /// Window `body` around the first occurrence of any token, snapped to word

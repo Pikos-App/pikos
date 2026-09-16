@@ -277,6 +277,15 @@ fn build_excerpt_strips_title_and_subtitle() {
     assert!(out.contains("morning"), "{out:?}");
 }
 
+/// Two blocks of a page are two sentences, and HTML would fold the newline between them into a
+/// space: "the alcove Order the desktop top" reads as one phrase nobody wrote.
+#[test]
+fn build_excerpt_joins_blocks_rather_than_running_them_together() {
+    let body = "My Page\nMeasure the alcove\n\nOrder the desktop top";
+    let out = build_excerpt(Some(body), "My Page", None, &["alcove".into()]);
+    assert_eq!(out, "Measure the alcove \u{00B7} Order the desktop top");
+}
+
 #[test]
 fn strip_prefix_ci_handles_multibyte() {
     // Regression check: char-based prefix strip must not panic on UTF-8.
