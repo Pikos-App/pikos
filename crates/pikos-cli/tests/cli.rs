@@ -1058,6 +1058,112 @@ async fn list_rejects_a_priority_outside_the_scale_exit_2() {
     assert_eq!(code(&cli(dbs, &["list", "--priority", "9", "--json"])), 2);
 }
 
+// ─── today ───────────────────────────────────────────────────────────────────
+
+/// A local calendar day `offset` days from now. `today` reads the machine clock,
+/// so a fixture for it cannot be a fixed date the way the rest of this file's are.
+fn local_day(offset: i64) -> String {
+    (chrono::Local::now().date_naive() + chrono::Duration::days(offset))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
+/// Schedule through the flag a user would type: seeding `NewPage.scheduled_start`
+/// writes only the denorm, and the count cross-checked below reads `page_schedules`.
+fn schedule(db: &str, id: &str, flag: &str, when: &str) {
+    let out = cli(db, &["update", id, flag, when, "--json"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn titles(out: &Output) -> Vec<String> {
+    json(out)
+        .as_array()
+        .expect("today prints an array")
+        .iter()
+        .map(|p| p["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// What the app's daily summary would say the same day holds.
+async fn today_count(db: &str, day: &str) -> i64 {
+    let pool = open_pool(db).await.unwrap();
+    pikos_db::today_scheduled_count(&pool, day).await.unwrap()
+}
+
+#[tokio::test]
+async fn today_lists_timed_all_day_and_synced_pages_scheduled_today() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let today = local_day(0);
+    let ids = seed(
+        dbs,
+        vec![
+            base_page("Timed today"),
+            base_page("All day today"),
+            base_page("Finished today"),
+            base_page("Tomorrow"),
+            base_page("Synced meeting"),
+        ],
+    )
+    .await;
+    schedule(dbs, &ids[0], "--due", &format!("{today}T09:00:00"));
+    schedule(dbs, &ids[1], "--all-day", &today);
+    schedule(dbs, &ids[2], "--due", &format!("{today}T10:00:00"));
+    assert!(cli(dbs, &["done", &ids[2], "--json"]).status.success());
+    schedule(dbs, &ids[3], "--due", &format!("{}T09:00:00", local_day(1)));
+    // Scheduled before the mirror locks it — origin doesn't enter into what's due.
+    schedule(dbs, &ids[4], "--due", &format!("{today}T11:00:00"));
+    mark_synced(dbs, &ids[4], "active").await;
+
+    assert_eq!(
+        titles(&cli(dbs, &["today", "--json"])),
+        ["Timed today", "All day today", "Synced meeting"]
+    );
+    assert_eq!(
+        today_count(dbs, &today).await,
+        3,
+        "the app counts the same 3"
+    );
+}
+
+/// A series reaches `today` through its derived head — the CLI expands nothing.
+#[tokio::test]
+async fn today_lists_a_recurring_series_whose_occurrence_falls_today() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let today = local_day(0);
+    let ids = seed(
+        dbs,
+        vec![base_page("Weekly standup"), base_page("Weekly retro")],
+    )
+    .await;
+    mark_recurring(dbs, &ids[0], &format!("{today}T09:00:00")).await;
+    mark_recurring(dbs, &ids[1], &format!("{}T09:00:00", local_day(7))).await;
+
+    assert_eq!(titles(&cli(dbs, &["today", "--json"])), ["Weekly standup"]);
+    assert_eq!(today_count(dbs, &today).await, 1);
+}
+
+#[tokio::test]
+async fn today_says_so_when_nothing_is_due() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Tomorrow")]).await;
+    schedule(dbs, &ids[0], "--due", &format!("{}T09:00:00", local_day(1)));
+
+    assert!(titles(&cli(dbs, &["today", "--json"])).is_empty());
+    let human = cli(dbs, &["today"]);
+    assert!(
+        String::from_utf8_lossy(&human.stdout).contains("Nothing scheduled for today."),
+        "stdout: {}",
+        String::from_utf8_lossy(&human.stdout)
+    );
+}
+
 // ─── folders ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]
