@@ -113,14 +113,14 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     const activePage = activePageId ? pages.find((p) => p.id === activePageId) : null;
     if (activePage && activePage.folderId === folder.id) setActivePage(null);
     setHiddenFolderIds((prev) => new Set([...prev, folder.id]));
-    const suffix = pageCount > 0 ? ` (${pageCount} ${pageCount === 1 ? "page" : "pages"})` : "";
+    const suffix = pageCount > 0 ? ` and ${pageCount} ${pageCount === 1 ? "page" : "pages"}` : "";
     setToastItems((prev) => [
       ...prev,
       {
         action: { label: "Undo", onClick: () => undoFolder(undoId) },
         duration: 16000,
         id: undoId,
-        label: `Deleted “${folder.name}${suffix}”`,
+        label: `Deleted “${folder.name}”${suffix}`,
       },
     ]);
     void softDeleteFolder(folder.id);
