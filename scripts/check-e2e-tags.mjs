@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Fail when an e2e spec declares a test that no Playwright project would pick up.
 //
-// Every project across playwright.config.ts and the prod-build configs
-// (playwright.perf.config.ts, playwright.csp.config.ts) is grep-scoped by tag —
-// tier1/tier2/perf/recording/perf-prod/csp-prod. A test whose title
+// Every project across playwright.config.ts, the prod-build configs
+// (playwright.perf.config.ts, playwright.csp.config.ts) and the screen tour's
+// (playwright.tour.config.ts) is grep-scoped by tag —
+// tier1/tier2/perf/recording/perf-prod/csp-prod/tour. A test whose title
 // carries none of those tags therefore runs in *no* project: it is not skipped,
 // not reported, not failed. It simply never executes, and nothing in the suite
 // says so. This guard is the thing that says so.
@@ -20,8 +21,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const E2E_DIR = join(ROOT, "apps/desktop/e2e");
 
-// Keep in sync with the `grep` of every project across all three Playwright configs.
-const KNOWN_TAGS = ["@tier1", "@tier2", "@perf-prod", "@perf", "@recording", "@csp-prod"];
+// Keep in sync with the `grep` of every project across all four Playwright configs.
+const KNOWN_TAGS = ["@tier1", "@tier2", "@perf-prod", "@perf", "@recording", "@csp-prod", "@tour"];
 
 // `test(`, `appTest(`, and their modifier chains (.only/.skip/.fixme/...).
 // `.describe(`/`.use(`/`.beforeEach(` are handled separately below.
