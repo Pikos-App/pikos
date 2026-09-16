@@ -335,6 +335,53 @@ async fn a_redirect_to_a_partition_of_the_same_domain_is_followed() {
     assert_eq!(followed.final_url.host_str(), Some("p42-caldav.icloud.com"));
 }
 
+/// Every hop is checked, not just the first.
+///
+/// One legitimate same-domain hop followed by one that leaves: a loop that vetted only the first
+/// `Location` would hand the account's Basic auth to the second.
+#[tokio::test]
+async fn a_redirect_that_leaves_the_domain_on_a_later_hop_is_refused() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    let t = TwoHops {
+        first: "https://p42-caldav.example.com/principal/".into(),
+        second: "https://harvester.example.net/caldav/".into(),
+        hits: std::sync::Mutex::new(0),
+    };
+
+    match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
+        Err(CaldavError::Protocol(m)) => {
+            assert!(m.contains("harvester.example.net"), "got: {m}");
+        }
+        _ => panic!("expected the second hop to be refused"),
+    }
+    assert_eq!(*t.hits.lock().unwrap(), 2, "the first hop must be followed");
+}
+
+/// 301 to `first`, then 301 to `second`.
+struct TwoHops {
+    first: String,
+    second: String,
+    hits: std::sync::Mutex<u32>,
+}
+impl DavTransport for TwoHops {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        let mut n = self.hits.lock().unwrap();
+        *n += 1;
+        Ok(DavResponse {
+            status: 301,
+            location: Some(if *n == 1 {
+                self.first.clone()
+            } else {
+                self.second.clone()
+            }),
+            body: String::new(),
+        })
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("discovery never issues a REPORT");
+    }
+}
+
 /// 301 to `location` on the first hit, 207 thereafter.
 struct RedirectThen207 {
     location: String,
