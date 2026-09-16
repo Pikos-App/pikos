@@ -6,7 +6,12 @@
 # resolve.
 name: Homebrew tap
 
+# Also on publish, which is the moment the tap goes stale: it turns "found a week later by the
+# Monday run" into "found now", and it stays red until the tap names the release that just shipped.
+# That red is the reminder, and bumping the tap is the last step of shipping rather than a chore.
 on:
+  release:
+    types: [published]
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:
