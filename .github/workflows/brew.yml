@@ -1,0 +1,23 @@
+# The Homebrew tap is a second repository with no CI of its own, and it breaks in ways nobody
+# sees: a release ships and the cask keeps naming the version before it, or Homebrew deprecates a
+# stanza the tap still uses. Both surface as a failed `brew install` for somebody else.
+#
+# Weekly, and on demand. Installs nothing: it audits, and fetches to prove the URLs and checksums
+# resolve.
+name: Homebrew tap
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  tap:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tap
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/brew-check.sh
