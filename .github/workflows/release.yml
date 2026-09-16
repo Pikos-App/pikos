@@ -136,6 +136,13 @@ jobs:
           dpkg -I "$deb" | grep -q "libdbus-1-3" || {
             echo "::error::the .deb does not depend on libdbus-1-3"; exit 1; }
 
+      # The packages, installed on distributions that are not the one that built them. A build log
+      # cannot see the failure this catches: the package installs, and then cannot find a library
+      # at launch, which reaches the user as an app that does nothing.
+      - name: Packages install on other distributions
+        if: matrix.platform == 'ubuntu-22.04'
+        run: bash scripts/linux-package-check.sh apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
