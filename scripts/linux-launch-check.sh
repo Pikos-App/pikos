@@ -40,7 +40,10 @@ xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- bash -c '
   import -window root /tmp/shot.png
   colours=$(convert /tmp/shot.png -format %k info:)
   echo "   distinct colours: $colours"
-  grep -h "linux render environment" /tmp/app.log || true
+  # The only assertion the startup log line has. Without it the line can stop being written and
+  # nothing anywhere notices, which matters because it is what a blank-window report is read from.
+  grep -h "linux render environment" /tmp/app.log \
+    || { echo "   the app did not log its render environment"; exit 1; }
   errors=$(grep -c "\[ERROR\]" /tmp/app.log || true)
   [ "$errors" = "0" ] || { echo "   $errors error line(s) in the log:"; grep "\[ERROR\]" /tmp/app.log | head -5; exit 1; }
   # One colour is a blank window. A painted UI runs to four figures; 50 is far below anything real
@@ -51,9 +54,13 @@ xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- bash -c '
 '
 INNER
 
-mkdir -p "${SHOTS:-$(mktemp -d)}"
+# Resolved once: two `$(mktemp -d)` expansions make two directories, and the screenshot then lands
+# in the one that was not mounted.
+SHOTS="${SHOTS:-$(mktemp -d)}"
+mkdir -p "$SHOTS"
 docker run --rm --platform linux/amd64 \
   -v "$ART":/artifacts:ro \
   -v "$probe":/probe.sh:ro \
-  -v "${SHOTS:-$(mktemp -d)}":/shots \
+  -v "$SHOTS":/shots \
   ubuntu:24.04 bash /probe.sh
+echo "   screenshot: $SHOTS/linux-launch.png"
