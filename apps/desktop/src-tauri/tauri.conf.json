@@ -55,6 +55,11 @@
     "macOS": {
       "minimumSystemVersion": "12.0"
     },
+    "linux": {
+      "deb": {
+        "depends": ["libdbus-1-3"]
+      }
+    },
     "category": "Productivity",
     "shortDescription": "Notes, tasks, and calendar — local-first",
     "longDescription": "Pikos combines notes, tasks, and a calendar into one local-first app. Your data stays on your device — no account required, no cloud sync by default."

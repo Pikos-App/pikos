@@ -81,7 +81,8 @@ jobs:
             librsvg2-dev \
             patchelf \
             libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev
+            libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev
 
       - run: pnpm install --frozen-lockfile
 

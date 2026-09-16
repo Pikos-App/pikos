@@ -197,7 +197,9 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+          # libdbus-1-dev backs the Linux keychain (keyring's sync-secret-service); without it
+          # pikos-calendar-sync fails at link time.
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
 
       # Two Cargo trees, both gated. The root workspace is `crates/*` and it
       # *excludes* apps/desktop/src-tauri, so `--all` inside src-tauri resolves to

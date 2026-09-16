@@ -35,12 +35,23 @@ chrono-tz = "0.10"
 oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 tokio = { version = "1", features = ["net", "io-util", "time"] }
 
-# OS-specific backend: apple-native on macOS, none elsewhere so a Linux `cargo
-# check` stays system-lib-free (no libdbus/secret-service).
+# OS-specific backend, and every platform needs one named: with no feature
+# keyring falls back to a mock store that keeps secrets in memory and does not
+# share them between `Entry` instances, so Connect appears to work and the next
+# launch reads NotFound for ever.
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6.3", features = ["apple-native"] }
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+# Secret Service over D-Bus: GNOME Keyring, KWallet 5.97+, KeePassXC. `sync-` because
+# `CredentialStore` is a sync trait, and keyring's async backend still blocks, which
+# deadlocks under a tokio runtime. `crypto-rust` encrypts the D-Bus session without
+# pulling OpenSSL. Building this needs `libdbus-1-dev`, which both workflows install.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+
+# Windows has no backend yet, and no build either; named here so adding one is a
+# one-line change rather than a discovery.
+[target.'cfg(not(any(target_os = "macos", target_os = "linux")))'.dependencies]
 keyring = "3.6.3"
 
 [dev-dependencies]

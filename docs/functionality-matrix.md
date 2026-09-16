@@ -97,7 +97,7 @@ editor renders the folder as a read-only label while locked; the page list drops
 Folder" menu item and skips locked pages in the sidebar-folder drop (`useThreePanelDnD`'s
 `unlockedIds`), so the reject is unreachable from the UI. The
 *inbound* half is unreachable too, but by a different mechanism worth knowing before
-anyone unifies the two sidebar components: `folderMoveTargets` hides calendar folders from
+anyone unifies the two sidebar components: `writableFolders` hides calendar folders from
 the menu, and a calendar folder renders as `ExternalCalendarItem`, which registers no dnd
 droppable at all. Only `FolderItem` (user folders) does. So no page of any origin can be
 dropped onto a calendar folder, and the guard is never reached from the UI.
@@ -530,7 +530,9 @@ predicate teardown uses (`sync::PAGE_OWNED_SQL`); an off-by-default "include syn
 events" toggle, shown only once a calendar folder exists, brings them back. Owned and detached
 pages export either way, with no origin marker; a recurring series is one row, so it exports as
 its head. The SQLite backup is `VACUUM INTO`: a full file copy including trash and the sync
-bookkeeping tables (`page_sync`, cursors; credentials stay in the OS keychain, never in the
+bookkeeping tables (`page_sync`, cursors; credentials stay in the OS keychain — on Linux the
+desktop's Secret Service, which a session without GNOME Keyring, KWallet or KeePassXC does not
+have, and connecting says so rather than failing silently — never in the
 DB).
 ⁵⁷ Import matches folders **by name** but skips external-calendar folders when reusing
 (`ImportProvider`): a vault folder named like a synced calendar gets a sibling *regular* folder

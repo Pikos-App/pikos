@@ -56,6 +56,63 @@ impl CalendarProvider for OneShot {
 
 // ─── tests ──────────────────────────────────────────────────────────────────────
 
+/// A credential that cannot be stored leaves no account behind.
+///
+/// The row has to be written before the credential, because the keychain key is the account id.
+/// An account left active with an empty keychain polls for ever and says "reconnect needed" on
+/// every pass, which is what a Linux session with no Secret Service daemon produced.
+#[tokio::test]
+async fn a_failed_credential_store_takes_its_new_account_back_out() {
+    let pool = test_pool().await;
+    let refused: AppResult<()> = Err(AppError::Internal("no keyring".into()));
+
+    let claimed = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    assert!(claimed.created, "precondition: this connect made the row");
+    let id = claimed.account.id.clone();
+
+    let outcome = keep_or_release(&pool, claimed, refused).await;
+
+    assert!(outcome.is_err());
+    assert!(
+        is_dormant(&pool, &id).await,
+        "an account with nothing in the keychain is dormant, not active"
+    );
+}
+
+/// An account that already existed keeps its own working credential.
+#[tokio::test]
+async fn a_failed_credential_store_leaves_an_existing_account_alone() {
+    let pool = test_pool().await;
+    let refused: AppResult<()> = Err(AppError::Internal("no keyring".into()));
+
+    let first = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    let id = first.account.id.clone();
+    let again = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    assert!(!again.created, "precondition: the second connect reuses it");
+
+    let _ = keep_or_release(&pool, again, refused).await;
+
+    assert!(
+        !is_dormant(&pool, &id).await,
+        "the working account stayed connected"
+    );
+}
+
+async fn is_dormant(pool: &sqlx::SqlitePool, id: &str) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT disconnected FROM sync_account WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        == 1
+}
+
 /// A password never reaches the database file.
 ///
 /// The claim the privacy page makes, and what a `strings` sweep over a real workspace is looking
@@ -81,7 +138,8 @@ async fn a_caldav_password_never_lands_in_the_database_file() {
     let keychain = Keychain::with_store(Box::new(backing.clone()));
     let account = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
         .await
-        .unwrap();
+        .unwrap()
+        .account;
     let blob = CaldavCredentials {
         base_url: "https://caldav.fastmail.com".into(),
         username: "person@example.com".into(),
@@ -487,7 +545,8 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     // folder), one sync so a mirror page exists.
     let acc = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
-        .unwrap();
+        .unwrap()
+        .account;
     let cal = upsert_sync_calendar_impl(&pool, &acc.id, "cal-a", "Work", None)
         .await
         .unwrap();
@@ -499,7 +558,8 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
 
     let acc2 = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
-        .unwrap();
+        .unwrap()
+        .account;
     assert_eq!(
         acc2.id, acc.id,
         "reconnect reuses the active row, no new account"

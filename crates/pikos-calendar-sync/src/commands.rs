@@ -81,10 +81,11 @@ pub async fn connect_caldav(
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let account = claim_account(pool, PROVIDER_CALDAV, &display_name, "basic").await?;
-    keychain
-        .store(&account.id, &blob)
-        .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
+    let claimed = claim_account(pool, PROVIDER_CALDAV, &display_name, "basic").await?;
+    let stored = keychain
+        .store(&claimed.account.id, &blob)
+        .map_err(|e| AppError::Internal(e.user_message()));
+    let account = keep_or_release(pool, claimed, stored).await?;
 
     let calendars = upsert_calendars(pool, &account.id, &remote).await?;
     Ok(AccountWithCalendars { account, calendars })
@@ -122,7 +123,7 @@ pub async fn reconnect_caldav(
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
     keychain
         .store(account_id, &blob)
-        .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
+        .map_err(|e| AppError::Internal(e.user_message()))?;
     reactivate_account_impl(pool, account_id).await?;
 
     let calendars = upsert_calendars(pool, account_id, &remote).await?;
@@ -154,11 +155,20 @@ where
     // the same validate-first order connect_caldav uses.
     let (remote, display_name) = crate::google::GoogleProvider::list_with(&credentials).await?;
 
-    let account = claim_account(pool, PROVIDER_GOOGLE, &display_name, "oauth").await?;
-    crate::google::store(&keychain, &account.id, &credentials)?;
+    let claimed = claim_account(pool, PROVIDER_GOOGLE, &display_name, "oauth").await?;
+    let stored = crate::google::store(&keychain, &claimed.account.id, &credentials);
+    let account = keep_or_release(pool, claimed, stored.map_err(AppError::from)).await?;
 
     let calendars = upsert_calendars(pool, &account.id, &remote).await?;
     Ok(AccountWithCalendars { account, calendars })
+}
+
+/// An account row a connect has taken, and whether this connect is what created it.
+struct Claimed {
+    account: pikos_db::sync_commands::SyncAccount,
+    /// Only a row this connect created may be taken back out when the credential cannot be
+    /// stored. An account that already existed still has its own working credential.
+    created: bool,
 }
 
 /// Reuse an existing account row on (re)connect, else create one. Shared by both
@@ -170,13 +180,41 @@ async fn claim_account(
     provider: &str,
     display_name: &str,
     auth_kind: &str,
-) -> AppResult<pikos_db::sync_commands::SyncAccount> {
+) -> AppResult<Claimed> {
     match find_account_by_identity_impl(pool, provider, display_name).await? {
         Some(existing) => {
             reactivate_account_impl(pool, &existing.id).await?;
-            Ok(existing)
+            Ok(Claimed {
+                account: existing,
+                created: false,
+            })
         }
-        None => insert_sync_account_impl(pool, provider, display_name, auth_kind).await,
+        None => Ok(Claimed {
+            account: insert_sync_account_impl(pool, provider, display_name, auth_kind).await?,
+            created: true,
+        }),
+    }
+}
+
+/// Keep the claimed row when the credential landed, and put it back when it did not.
+///
+/// The row is written before the credential because the keychain key *is* the account id. An
+/// account left active with nothing in the keychain polls for ever and reports "reconnect needed"
+/// on every pass, with no way back except deleting it, so a store that fails takes its own row
+/// dormant again.
+async fn keep_or_release(
+    pool: &SqlitePool,
+    claimed: Claimed,
+    stored: AppResult<()>,
+) -> AppResult<pikos_db::sync_commands::SyncAccount> {
+    match stored {
+        Ok(()) => Ok(claimed.account),
+        Err(e) => {
+            if claimed.created {
+                mark_account_disconnected_impl(pool, &claimed.account.id).await?;
+            }
+            Err(e)
+        }
     }
 }
 
