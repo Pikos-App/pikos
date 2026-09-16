@@ -6,6 +6,7 @@
 //! temp workspace through them.
 
 use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -347,6 +348,71 @@ async fn a_workspace_needing_migration_fails_the_tool_not_the_handshake() {
         .as_str()
         .unwrap()
         .contains("--migrate"));
+
+    server.shutdown();
+}
+
+/// Listening TCP sockets held by one pid, lsof's own tabular output. `None` when
+/// lsof isn't installed; lsof exits 1 on no match, so the status is not an error.
+///
+/// `-a` is load-bearing: lsof ORs its selection flags by default, so without it
+/// the answer is every file the process has open and nothing is ever empty.
+fn listening_tcp(pid: u32) -> Option<String> {
+    let out = match Command::new("lsof")
+        .args([
+            "-a",
+            "-p",
+            &pid.to_string(),
+            "-iTCP",
+            "-sTCP:LISTEN",
+            "-n",
+            "-P",
+        ])
+        .output()
+    {
+        Ok(out) => out,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => panic!("lsof is installed but would not run: {e}"),
+    };
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Pikos reaches the network only for a calendar the user connected; `mcp` is a
+/// stdio server and must hold no socket at all, which is otherwise a manual QA row.
+#[tokio::test]
+async fn the_server_opens_no_listening_socket() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Alive")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    server.call(2, "list_pages", json!({})); // past the lazy workspace open
+
+    // A listener of this process's own, so an lsof that is broken or blind to the
+    // pid fails here rather than clearing the child on silence.
+    let canary = TcpListener::bind("127.0.0.1:0").unwrap();
+    match listening_tcp(std::process::id()) {
+        Some(own) => {
+            assert!(
+                own.contains("LISTEN"),
+                "lsof found no listener on this test process, which is holding one: {own:?}"
+            );
+            let child = listening_tcp(server.child.id()).expect("lsof ran a moment ago");
+            assert!(
+                child.trim().is_empty(),
+                "pikos mcp is listening on a socket:\n{child}"
+            );
+        }
+        // Not eprintln!: the harness captures the print macros, so a skip written
+        // that way is invisible on a green run — which is how a check goes vacuous.
+        None => {
+            let _ = std::io::stderr().write_all(
+                b"WARNING: pikos mcp listening-socket check SKIPPED, lsof not on PATH\n",
+            );
+        }
+    }
+    drop(canary);
 
     server.shutdown();
 }
