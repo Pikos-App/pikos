@@ -231,11 +231,13 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
     tokens: [
       { dark: hex("#f0efed"), name: "text-primary", value: hex("#161613") },
       { dark: hex("#b0afaa"), name: "text-secondary", value: hex("#5a5955") },
-      { dark: hex("#999893"), name: "text-tertiary", value: hex("#767571") },
+      { dark: hex("#999893"), name: "text-tertiary", value: hex("#6f6e6a") },
       { dark: hex("#8e8d88"), name: "text-disabled", value: hex("#8e8d88") },
       { dark: hex("#161613"), name: "text-inverse", value: hex("#ffffff") },
       { dark: hex("#2dd4a8"), name: "text-brand", value: hex("#14896c") },
       { dark: hex("#2dd4a8"), name: "text-link", value: hex("#1aae8a") },
+      // text-link's light value is 2.8:1 on white; teal a reader has to read as text needs 4.5:1.
+      { dark: hex("#2dd4a8"), name: "text-action", value: hex("#117a60") },
     ],
   },
   {
@@ -252,6 +254,9 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
     tokens: [
       { dark: hex("#2dd4a8"), name: "interactive-primary", value: hex("#1aae8a") },
       { dark: hex("#4ddcb2"), name: "interactive-primary-hover", value: hex("#14896c") },
+      // Solid fills behind a white label, 4.5:1 in both themes; interactive-primary is 2.8:1 in light and 1.9:1 in dark.
+      { dark: hex("#117a60"), name: "interactive-fill", value: hex("#117a60") },
+      { dark: hex("#6b6a66"), name: "interactive-fill-neutral", value: hex("#5a5955") },
       { dark: hex("#272724"), name: "interactive-secondary", value: hex("#f0efed") },
       { dark: hex("#3a3a37"), name: "interactive-secondary-hover", value: hex("#e6e5e2") },
     ],

@@ -199,11 +199,12 @@ button,
   /* ─── Text ─── */
   --text-primary: #161613;
   --text-secondary: #5a5955;
-  --text-tertiary: #767571;
+  --text-tertiary: #6f6e6a;
   --text-disabled: #8e8d88;
   --text-inverse: #ffffff;
   --text-brand: #14896c;
   --text-link: #1aae8a;
+  --text-action: #117a60;
 
   /* ─── Borders ─── */
   --border-primary: #d5d4d0;
@@ -214,6 +215,8 @@ button,
   /* ─── Interactive ─── */
   --interactive-primary: #1aae8a;
   --interactive-primary-hover: #14896c;
+  --interactive-fill: #117a60;
+  --interactive-fill-neutral: #5a5955;
   --interactive-secondary: #f0efed;
   --interactive-secondary-hover: #e6e5e2;
 
@@ -312,6 +315,7 @@ button,
   --text-inverse: #161613;
   --text-brand: #2dd4a8;
   --text-link: #2dd4a8;
+  --text-action: #2dd4a8;
 
   /* ─── Borders ─── */
   --border-primary: #3a3a37;
@@ -322,6 +326,8 @@ button,
   /* ─── Interactive ─── */
   --interactive-primary: #2dd4a8;
   --interactive-primary-hover: #4ddcb2;
+  --interactive-fill: #117a60;
+  --interactive-fill-neutral: #6b6a66;
   --interactive-secondary: #272724;
   --interactive-secondary-hover: #3a3a37;
 
