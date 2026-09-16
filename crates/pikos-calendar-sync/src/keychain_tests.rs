@@ -19,6 +19,73 @@ fn the_system_keychain_round_trips() {
     assert!(matches!(kc.load(&account), Err(KeychainError::NotFound)));
 }
 
+/// Disconnect really removes the item, as seen by something other than us.
+///
+/// Our own `load` returning `NotFound` would also be the answer if `delete` merely forgot a
+/// handle, so the reader here is `secret-tool`, which asks the Secret Service directly. Ignored
+/// and run by the same script as the round trip.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "needs a real Secret Service; see scripts/linux-keyring-check.sh"]
+fn a_deleted_credential_is_gone_from_the_session_keyring() {
+    let account = format!("pikos-test-delete-{}", std::process::id());
+    let kc = Keychain::system();
+
+    kc.store(&account, "app-password").expect("store");
+    // Without this the assertion below would pass against a keyring that never held the secret,
+    // a search that matches nothing, or a missing tool.
+    assert!(
+        secret_tool_output().contains(&account),
+        "secret-tool cannot see a credential that was just stored, so the check below proves \
+         nothing. Its output was:\n{}",
+        secret_tool_output()
+    );
+
+    kc.delete(&account).expect("delete");
+
+    assert!(
+        !secret_tool_output().contains(&account),
+        "the credential survived delete:\n{}",
+        secret_tool_output()
+    );
+}
+
+/// What a session with no Secret Service does, which is the whole reason the Linux backend exists.
+///
+/// Run outside `dbus-run-session`, so there is nothing to talk to. The assertion is about what
+/// somebody is told: a D-Bus error on its own reads as a crash and names nothing to fix.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "needs a session with no Secret Service; see scripts/linux-keyring-check.sh"]
+fn a_session_with_no_keyring_says_which_one_to_start() {
+    let kc = Keychain::system();
+    let err = kc
+        .store("pikos-test-no-daemon", "app-password")
+        .expect_err("storing a password with no Secret Service running must fail");
+
+    // A missing daemon is a machine that needs fixing, not a revoked credential; treating it as
+    // the latter would disconnect the account instead of asking the user to start a keyring.
+    assert!(!err.is_reconnect_needed(), "{err}");
+
+    let message = err.user_message();
+    for name in ["GNOME Keyring", "KWallet", "KeePassXC"] {
+        assert!(message.contains(name), "{message:?} does not name {name}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn secret_tool_output() -> String {
+    let out = std::process::Command::new("secret-tool")
+        .args(["search", "--all", "service", SERVICE])
+        .output()
+        .expect("secret-tool: scripts/linux-keyring-check.sh installs libsecret-tools");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
+
 /// Every platform Pikos builds for names a keyring backend.
 ///
 /// With no feature named, keyring compiles in an in-memory mock that accepts every write and
