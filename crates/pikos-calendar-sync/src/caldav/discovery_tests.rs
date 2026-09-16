@@ -301,6 +301,67 @@ async fn a_redirect_loop_stops_after_the_cap() {
     }
 }
 
+/// The credential leak: every PROPFIND carries the account's Basic auth, so a server that answers
+/// discovery with a redirect elsewhere is handed the username and password for wherever it points.
+#[tokio::test]
+async fn a_redirect_off_the_account_s_domain_is_refused() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    let t = FixedResponse {
+        status: 302,
+        location: Some("https://harvester.example.net/caldav/".into()),
+    };
+    match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
+        Err(CaldavError::Protocol(m)) => {
+            assert!(m.contains("harvester.example.net"), "got: {m}");
+        }
+        _ => panic!("expected the redirect to be refused"),
+    }
+}
+
+/// And the case that has to keep working: iCloud answers with its own partition host.
+#[tokio::test]
+async fn a_redirect_to_a_partition_of_the_same_domain_is_followed() {
+    let base = Url::parse("https://caldav.icloud.com/").unwrap();
+    let t = RedirectThen207 {
+        location: "https://p42-caldav.icloud.com/123/principal/".into(),
+        hits: std::sync::Mutex::new(0),
+    };
+
+    let followed = propfind_follow(&t, &base, base.clone(), "0", "<b/>")
+        .await
+        .unwrap()
+        .expect("a 207 after the hop");
+
+    assert_eq!(followed.final_url.host_str(), Some("p42-caldav.icloud.com"));
+}
+
+/// 301 to `location` on the first hit, 207 thereafter.
+struct RedirectThen207 {
+    location: String,
+    hits: std::sync::Mutex<u32>,
+}
+impl DavTransport for RedirectThen207 {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        let mut n = self.hits.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            return Ok(DavResponse {
+                status: 301,
+                location: Some(self.location.clone()),
+                body: String::new(),
+            });
+        }
+        Ok(DavResponse {
+            status: 207,
+            location: None,
+            body: "<multistatus xmlns=\"DAV:\"/>".into(),
+        })
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("discovery never issues a REPORT");
+    }
+}
+
 /// 301 → an http:// target on the first hit, 207 thereafter.
 struct DowngradeThenOk {
     hits: std::sync::Mutex<u32>,

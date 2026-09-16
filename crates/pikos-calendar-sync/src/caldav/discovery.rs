@@ -131,10 +131,41 @@ async fn principal_at<T: DavTransport>(
     Ok(xml::parse_principal_href(&resp.body)?.map(|href| (resp.final_url, href)))
 }
 
+/// Whether a URL discovery reached may be given the account's credentials.
+///
+/// The transport attaches Basic auth to every request, so a server that answers discovery with a
+/// redirect elsewhere is handed the username and password for wherever it points. Same registrable
+/// domain rather than same host, because the legitimate case is real: iCloud answers
+/// `caldav.icloud.com` with its partition host, `p42-caldav.icloud.com`. A host with no registrable
+/// domain — an IP address, an unknown suffix — has to match exactly.
+fn same_site(base: &Url, next: &Url) -> bool {
+    let (Some(from), Some(to)) = (base.host_str(), next.host_str()) else {
+        return false;
+    };
+    if from.eq_ignore_ascii_case(to) {
+        return true;
+    }
+    match (psl::domain_str(from), psl::domain_str(to)) {
+        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+        _ => false,
+    }
+}
+
+fn refuse_offsite(base: &Url, next: &Url) -> Result<(), CaldavError> {
+    if same_site(base, next) {
+        return Ok(());
+    }
+    Err(CaldavError::Protocol(format!(
+        "discovery was sent to {}, which is not part of {}",
+        next.host_str().unwrap_or("nowhere"),
+        base.host_str().unwrap_or("the account's server")
+    )))
+}
+
 /// PROPFIND `start`, following `Location` redirects by hand — reqwest turns a
 /// 301/302 on a PROPFIND into a bodyless GET. Re-applies https if a redirect
-/// downgrades to http (the classic CalDAV footgun). `None` on a 404/405; the
-/// caller decides fallback vs. fatal.
+/// downgrades to http (the classic CalDAV footgun), and refuses one that leaves
+/// the account's domain. `None` on a 404/405; the caller decides fallback vs. fatal.
 async fn propfind_follow<T: DavTransport>(
     transport: &T,
     base: &Url,
@@ -163,6 +194,7 @@ async fn propfind_follow<T: DavTransport>(
                 if base.scheme() == "https" && next.scheme() == "http" {
                     let _ = next.set_scheme("https");
                 }
+                refuse_offsite(base, &next)?;
                 current = next;
             }
             401 | 403 => return Err(CaldavError::Unauthorized),
@@ -183,6 +215,9 @@ fn resolve(base: &Url, from: &Url, href: &str) -> Result<Url, CaldavError> {
     if base.scheme() == "https" && url.scheme() == "http" {
         let _ = url.set_scheme("https");
     }
+    // Deliberately not `refuse_offsite`: a calendar-home-set on another host is legitimate and
+    // tested (iCloud's partitions, a self-hosted server whose storage lives elsewhere). It is the
+    // authenticated server's own answer, where a redirect is anyone who can answer first.
     Ok(url)
 }
 

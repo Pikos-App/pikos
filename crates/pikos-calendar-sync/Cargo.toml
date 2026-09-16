@@ -34,6 +34,11 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 chrono-tz = "0.10"
 oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 tokio = { version = "1", features = ["net", "io-util", "time"] }
+# The registrable domain of a host, from a compiled-in public suffix list. Discovery needs it to
+# tell `p42-caldav.icloud.com` (iCloud's own partition, and legitimate) from a redirect that leaves
+# the account's domain carrying its password — which counting labels cannot do, since `co.uk` and
+# `icloud.com` are both two.
+psl = "2.1.232"
 
 # OS-specific backend, and every platform needs one named: with no feature
 # keyring falls back to a mock store that keeps secrets in memory and does not
