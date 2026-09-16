@@ -148,4 +148,21 @@ describe("useCalendarPageCreate", () => {
     expect(created).toEqual([]);
     expect(hook.result.current.undo.toastItems).toHaveLength(1);
   });
+
+  // A page with no title and no date, in a folder the user never chose, is the wreckage of a
+  // gesture that already reported itself as failed.
+  it("leaves no page behind when the schedule fails", async () => {
+    const { hook } = setup();
+    await init(hook);
+    const before = hook.result.current.pages.pages.length;
+    vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule").mockRejectedValue(
+      new Error("disk is full")
+    );
+
+    await act(async () => {
+      await hook.result.current.create.createTimedPage(START);
+    });
+
+    await waitFor(() => expect(hook.result.current.pages.pages).toHaveLength(before));
+  });
 });
