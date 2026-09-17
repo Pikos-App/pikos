@@ -246,7 +246,7 @@ jobs:
       - name: Linux keyring round-trip
         working-directory: .
         run: |
-          sudo apt-get install -y gnome-keyring dbus-x11
+          sudo apt-get install -y gnome-keyring dbus-x11 libsecret-tools
           bash scripts/linux-keyring-check.sh
 
       # The connect itself, against a CalDAV server that answers and a Secret Service
