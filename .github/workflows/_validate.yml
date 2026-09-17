@@ -43,7 +43,10 @@ jobs:
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 
-      # Dep vulnerability gate — non-blocking for one cycle, then promote.
+      # Reports only. Most of what it finds is the Astro build toolchain and the
+      # test runner, neither of which reaches a user, so promoting this as-is
+      # would just pin the build red. Making it block needs a reviewed list of
+      # accepted advisory ids to fail against.
       - name: pnpm audit (high)
         continue-on-error: true
         run: pnpm audit --audit-level=high
@@ -246,6 +249,16 @@ jobs:
           sudo apt-get install -y gnome-keyring dbus-x11
           bash scripts/linux-keyring-check.sh
 
+      # The connect itself, against a CalDAV server that answers and a Secret Service
+      # that persists — the two things every other test of this path fakes. It is not
+      # the manual Linux matrix, which needs a desktop session, but it is the row
+      # underneath it: connecting works and the password is still there afterwards.
+      - name: Linux CalDAV connect round-trip
+        working-directory: .
+        run: |
+          sudo apt-get install -y gnome-keyring dbus-x11 libsecret-tools radicale
+          bash scripts/linux-sync-check.sh
+
       - name: Cargo fmt --check (desktop crate)
         run: cargo fmt --check
 
@@ -260,7 +273,6 @@ jobs:
       - name: Cargo test (desktop crate)
         run: cargo test --all --quiet
 
-      # cargo-audit gate — non-blocking for one cycle, then promote to blocking.
       # Cached binary so we don't reinstall every run.
       - name: Cache cargo-audit
         id: cache-cargo-audit
@@ -273,7 +285,19 @@ jobs:
         if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
         run: cargo install cargo-audit --locked
 
+      # Blocking. This tree is Pikos's own crates and the dependencies they chose,
+      # so an advisory here is a decision someone made. What it may stay quiet
+      # about, and why, is `.cargo/audit.toml`.
       - name: Cargo audit
+        working-directory: .
+        run: cargo audit
+
+      # Reports only. The desktop crate is outside the workspace and keeps its own
+      # lock, which is the one the shipped binary is built from, so it has to be
+      # audited separately — but its tree is mostly Tauri's and the advisories that
+      # land in it are rarely Pikos's to fix. Promoting it means deciding what to
+      # accept from a dependency nobody here controls.
+      - name: Cargo audit (desktop)
         continue-on-error: true
         run: cargo audit
 

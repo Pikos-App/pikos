@@ -6,8 +6,9 @@ set -euo pipefail
 # doesn't have to re-run validation in CI. Also exposed as `pnpm preflight`.
 #
 # Ordered cheapest-/most-likely-to-fail first so it fails fast.
-# Skips the two warn-only CI gates (`pnpm audit`, `cargo audit`) — they are
-# continue-on-error in CI and never block a release.
+# Skips `pnpm audit`, which is still warn-only in CI. `cargo audit` on the
+# workspace blocks in CI now, so it runs here too; the desktop lock's audit stays
+# CI-side and warn-only.
 #
 # Escape hatch: SKIP_VALIDATE=1 (honored by release.sh) bypasses this entirely.
 
@@ -78,6 +79,16 @@ step "cargo clippy (desktop)" "zero warnings"
 
 step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)
+
+# Needs cargo-audit installed; CI caches it. Skipped rather than failed when it is
+# absent, because a missing tool is not a finding and this script is also the
+# pre-release gate on a machine that may never have installed it.
+if command -v cargo-audit &>/dev/null; then
+  step "cargo audit (workspace)" "accepted advisories in .cargo/audit.toml"
+  (cd "$ROOT" && cargo audit)
+else
+  step "cargo audit (workspace)" "skipped — cargo-audit not installed"
+fi
 
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────
 step "e2e" "Playwright tier1 + tier2"
