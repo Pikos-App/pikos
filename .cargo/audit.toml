@@ -1,0 +1,27 @@
+# What `cargo audit` is allowed to stay quiet about, and why.
+#
+# An entry here is a claim that the advisory cannot reach a user, and it needs a
+# reason and a date so the next person can re-check it rather than inherit it.
+# The test is not "is it in Cargo.lock" — cargo audit reads the lockfile and the
+# lockfile keeps entries no target compiles. It is:
+#
+#   cargo tree -i <crate> -e normal,build,dev --target all
+#
+# "nothing to print" means nothing in the workspace reaches it. Anything the sync
+# path calls is reachable by definition and does not belong here; fix it instead.
+#
+# Re-check this list when a release cuts. An advisory whose crate has since become
+# reachable is the failure this file could cause, and the tree command is cheap.
+
+[advisories]
+ignore = [
+    # quinn-proto: QUIC reassembly memory exhaustion. reqwest carries the HTTP/3
+    # feature in the lockfile without it being activated, so no target compiles
+    # quinn. Verified unreachable 2026-09-16.
+    "RUSTSEC-2026-0185",
+
+    # rsa: Marvin timing sidechannel, and upstream has no fix. Reaches the lockfile
+    # through a sqlx backend Pikos does not use; SQLite is the only one built.
+    # Verified unreachable 2026-09-16.
+    "RUSTSEC-2023-0071",
+]
