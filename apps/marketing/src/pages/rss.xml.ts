@@ -8,7 +8,7 @@ const posts = [
     title: "Your Calendar, Inside Pikos",
     description:
       "Pikos 0.4.0 syncs your calendar in: iCloud, Google, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
-    date: "2026-07-05",
+    date: "2026-09-20",
   },
   {
     slug: "the-code-is-public",
