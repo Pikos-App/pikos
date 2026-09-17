@@ -5,34 +5,22 @@ import Footer from "../components/Footer.astro";
 const title = "FAQ - Pikos";
 const description = "Common questions about Pikos, the free app that combines notes, tasks, and calendar, on your device, not in the cloud.";
 
-// Problem-first before product-first, deliberately. Someone who has never heard
-// of Pikos asks an assistant "is there one app for notes and tasks", never "is
-// Pikos free", so a page of questions containing the product name is a page no
-// stranger's question can match. The ones naming Pikos still matter and follow.
+// The first few name no product, because someone who has not heard of Pikos
+// cannot ask a question containing the word. They are only worth having while
+// they stay questions a person would actually type: written to set up the
+// answer, they read as an advert and earn the distrust that comes with one.
 const faqs = [
   {
-    q: "Is there one app for notes, tasks, and a calendar?",
-    a: "Pikos is one. Every page in it is a note, a task, and a calendar event at the same time, so writing something down, ticking it off, and putting it on a day are the same object rather than three you keep in step by hand. It runs on macOS and Linux, and it's a free download.",
-  },
-  {
-    q: "Can I use a notes app without making an account?",
-    a: "Pikos never asks for one. There's no sign-up, no email, no login screen. You download it and start writing, and your notes sit in a file on your own computer rather than on somebody's server.",
-  },
-  {
     q: "Which note-taking apps keep your data on your own computer?",
-    a: "Obsidian, Logseq, Things and Pikos all store your work locally. Of those, Pikos is the one that also does tasks and a calendar in the same app, without plugins. Notion, Todoist and TickTick keep your data on their servers instead.",
+    a: "Obsidian, Logseq and Things all do, and so does Pikos. Notion, Todoist and TickTick keep it on their servers. If local storage is what you're after, the question that usually narrows it is whether you need tasks and a calendar too, because that's where the local options thin out.",
   },
   {
-    q: "Is there a notes app that works offline?",
-    a: "Pikos works with no connection at all, because it isn't talking to a server in the first place. Writing, searching, scheduling and completing all work on a plane. It checks for updates at launch, which you can turn off, and syncs a calendar only if you connect one.",
-  },
-  {
-    q: "How do I stop my notes, tasks, and calendar being in three different apps?",
-    a: "The usual fix is to pick tools that integrate, which means copying things between them forever. The other fix is one app where they're the same thing. In Pikos a meeting on your calendar is a page you write notes on, and a note you need to act on is a task you can drop on a day.",
+    q: "Is there a notes app that works without an account?",
+    a: "Several. Obsidian and Logseq don't need one, and neither does Pikos: no sign-up, no email, no login screen. Your notes are a file on your drive. Most of the cloud-based ones need an account before you can type a word.",
   },
   {
     q: "Can I take notes on my calendar events?",
-    a: "Yes. Connect iCloud, Google Calendar or any CalDAV server and your events arrive in Pikos as pages you can write on, tag and search. The notes are yours and stay on your device. Pikos only reads the calendar, so nothing you write is ever sent back to it.",
+    a: "In Pikos, yes. Connect iCloud, Google Calendar or any CalDAV server and your events turn up as pages you can write on, tag and search. It only reads the calendar, so nothing you write goes back to it.",
     href: "/calendar-sync",
     linkLabel: "How to connect a calendar",
   },
