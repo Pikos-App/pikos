@@ -30,10 +30,14 @@ pnpm --filter @pikos/bridge build
 # the CLI binary
 cargo build -p pikos-cli --release   # target/release/pikos
 
-# point the CLI at the bridge (until packaging bundles it next to the binary)
+# point the CLI at the bridge, which a build from source cannot find on its own
+# unless it is run from the repo root
 export PIKOS_BRIDGE_JS="$PWD/packages/pikos-bridge/dist/bridge.mjs"
 pikos add "Email Sam tomorrow 2pm #work !high"
 ```
+
+A released build needs none of that: the tarball puts the bundle where the binary
+already looks, and the Homebrew formula pins the variable anyway.
 
 Requires Node on PATH for `add` (including `--dry-run`) and recurring `done`
 only.
@@ -123,9 +127,11 @@ nothing in the server reaches `pikos-db` directly.
 ```
 
 Add `"--db", "/path/to/workspace.sqlite"` to the args to target a workspace other
-than the default one, and `"env": { "PIKOS_BRIDGE_JS": "…/bridge.mjs" }` until
-packaging puts the bridge next to the binary (`create_page` needs it; every other
-tool is DB-only).
+than the default one.
+
+`create_page` is the one tool that needs Node on PATH and the parser bridge, both
+covered under **Build & run** — an installed build resolves the bridge itself, so
+there is nothing to set. Every other tool is DB-only.
 
 Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 `create_page` (natural language, plus `dryRun` to preview the parse),
