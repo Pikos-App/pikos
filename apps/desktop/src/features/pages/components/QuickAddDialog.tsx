@@ -27,6 +27,7 @@ import type React from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
+import { MOD_KEY_SPOKEN } from "@/shared/constants/platform";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -97,8 +98,8 @@ export function QuickAddDialog() {
         <DialogTitle className="sr-only">Quick add</DialogTitle>
         <DialogDescription className="sr-only">
           Type a title with optional date, time, tags, folder, and recurrence shortcuts. Enter
-          commits, Cmd+Enter commits and stays open for the next page, Shift+Enter commits and opens
-          the new page.
+          commits, {MOD_KEY_SPOKEN}+Enter commits and stays open for the next page, Shift+Enter
+          commits and opens the new page.
         </DialogDescription>
         {isOpen && <QuickAddDialogBody onClose={() => setOpenDialog(null)} />}
       </DialogContent>
