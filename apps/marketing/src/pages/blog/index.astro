@@ -42,7 +42,13 @@ const posts: { slug: string; title: string; description: string; date: string; t
   },
 ];
 
-const tags = [...new Set(posts.map((p) => p.tag))];
+// A date ahead of the build is a scheduled post, not a published one. This is a
+// static site, so a post goes live on a build that runs on or after its date, not
+// at the moment the clock rolls over. Same rule in rss.xml.ts.
+const today = new Date().toISOString().slice(0, 10);
+const published = posts.filter((p) => p.date <= today);
+
+const tags = [...new Set(published.map((p) => p.tag))];
 ---
 
 <Base title="Blog - Pikos" description="Articles about Pikos: the app, the architecture, the philosophy.">
@@ -77,7 +83,7 @@ const tags = [...new Set(posts.map((p) => p.tag))];
     </div>
 
     <div class="mt-10 space-y-6" id="posts">
-      {posts.map((post) => (
+      {published.map((post) => (
         <article class="group" data-post-tag={post.tag}>
           <a href={`/blog/${post.slug}`} class="block rounded-lg border border-neutral-100 bg-white px-6 py-5 transition-colors hover:border-primary-400/30 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40">
             <div class="flex items-center gap-2">
