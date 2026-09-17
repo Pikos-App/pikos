@@ -29,7 +29,7 @@ export function CalendarSyncSettings() {
   const [addOpen, setAddOpen] = useState(false);
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <SettingsSection
         description="See your real calendar inside Pikos. Pikos only reads your events in. Your notes and pages never leave your device."
         title="Calendar Sync"

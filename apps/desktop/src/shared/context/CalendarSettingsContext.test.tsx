@@ -157,9 +157,9 @@ describe("text size", () => {
     act(() => result.current.setTextSize(28));
     act(() => result.current.stepTextSize(1));
     expect(result.current.textSize).toBe(28);
-    act(() => result.current.setTextSize(12));
+    act(() => result.current.setTextSize(10));
     act(() => result.current.stepTextSize(-1));
-    expect(result.current.textSize).toBe(12);
+    expect(result.current.textSize).toBe(10);
   });
 
   it("raises the hour height only once text outgrows the block", () => {

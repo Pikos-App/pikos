@@ -2,8 +2,10 @@
  *  rows render the same options, and one place to change if the ladder ever
  *  moves — a size missing here is reachable by neither Settings nor ⌘+/⌘−.
  *  The top is 2× the editor default because that is the size the accessibility
- *  guidance asks text to reach, not because 28 renders particularly well. */
-export const TEXT_SIZES = [12, 14, 16, 18, 20, 22, 24, 28] as const;
+ *  guidance asks text to reach, not because 28 renders particularly well. The
+ *  bottom is there for the calendar, where a day column is narrow enough that
+ *  fitting another event title beats reading comfort. */
+export const TEXT_SIZES = [10, 12, 14, 16, 18, 20, 22, 24, 28] as const;
 
 export type TextSize = (typeof TEXT_SIZES)[number];
 

@@ -145,7 +145,7 @@ export function NotificationSettings() {
   const disabled = !notificationsEnabled;
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <section className="mb-8">
         <h2 className="mb-1 text-base font-semibold">Notifications</h2>
         <p className="mb-4 text-sm text-muted-foreground">

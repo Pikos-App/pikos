@@ -181,7 +181,7 @@ export function DataSettings({
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       {/* ── Usage stats ────────────────────────────────────────────────── */}
       <SettingsSection
         description="Your data is stored locally and never leaves your device."

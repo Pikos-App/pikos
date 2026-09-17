@@ -13,6 +13,7 @@ import {
 import { EDITOR_FONT_SIZES, useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import type { EditorFontSize, LineWidth } from "@/shared/context/EditorSettingsContext";
 import {
+  INTERFACE_TEXT_SCALES,
   type InterfaceTextScale,
   useInterfaceSettings,
 } from "@/shared/context/InterfaceSettingsContext";
@@ -64,18 +65,8 @@ const LIST_DENSITY_OPTIONS: readonly { id: ListDensity; label: string }[] = [
   { id: "spacious", label: "Spacious" },
 ];
 
-/** The interface has no single body size for a px to refer to, so it names
- *  its steps. The editor and calendar each do have one and name the px
- *  (PKOS-0067: shared control shape, per-area vocabulary). */
-const TEXT_SCALE_OPTIONS: readonly { id: InterfaceTextScale; label: string }[] = [
-  { id: 0.85, label: "Smaller" },
-  { id: 1, label: "Default" },
-  { id: 1.15, label: "Large" },
-  { id: 1.3, label: "Larger" },
-  { id: 1.5, label: "Huge" },
-  { id: 1.75, label: "Huger" },
-  { id: 2, label: "Largest" },
-];
+const TEXT_SCALE_OPTIONS: readonly { id: InterfaceTextScale; label: string }[] =
+  INTERFACE_TEXT_SCALES.map((scale) => ({ id: scale, label: `${Math.round(scale * 100)}%` }));
 
 const CALENDAR_TEXT_SIZE_OPTIONS: readonly { id: CalendarTextSize; label: string }[] =
   CALENDAR_TEXT_SIZES.map((size) => ({ id: size, label: String(size) }));
@@ -110,7 +101,7 @@ export function GeneralSettingsPreferences() {
 
   return (
     <SettingsSection title="Preferences">
-      <div className="mb-3 rounded-lg border border-border bg-card px-4">
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
         <SettingChoice
           description="Choose how Pikos looks."
           label="Theme"
@@ -119,9 +110,9 @@ export function GeneralSettingsPreferences() {
           value={mode}
         />
       </div>
-      <div className="mb-3 rounded-lg border border-border bg-card px-4">
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
         <SettingSelect
-          description="Text size in the sidebar, lists, dialogs and menus. ⌘+ and ⌘− change this while Settings is open."
+          description="Text size in the sidebar, lists, dialogs and menus."
           label="Interface text size"
           onChange={setInterfaceTextScale}
           options={TEXT_SCALE_OPTIONS}
@@ -135,7 +126,7 @@ export function GeneralSettingsPreferences() {
           value={listDensity}
         />
       </div>
-      <div className="mb-3 rounded-lg border border-border bg-card px-4">
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
         <SettingSelect
           description="Body text size in the editor."
           label="Editor text size"
@@ -151,7 +142,7 @@ export function GeneralSettingsPreferences() {
           value={lineWidth}
         />
       </div>
-      <div className="mb-3 rounded-lg border border-border bg-card px-4">
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
         <SettingSelect
           description="Text size for event titles and time labels."
           label="Calendar text size"
@@ -181,7 +172,7 @@ export function GeneralSettingsPreferences() {
           value={weekStart}
         />
       </div>
-      <div className="rounded-lg border border-border bg-card px-4">
+      <div className="rounded-lg border border-border bg-card px-ui-xl">
         {/* Default folder uses a searchable popover, not a button group. */}
         <div className="flex items-center justify-between py-3">
           <div>

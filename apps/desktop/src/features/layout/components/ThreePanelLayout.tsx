@@ -59,12 +59,14 @@ export function ThreePanelLayout() {
   const left = usePanelResize({
     defaultWidth: 180,
     max: 320,
+    maxWindowShare: 0.2,
     min: 180,
     storageKey: STORAGE_KEYS.leftPanelWidth,
   });
   const mid = usePanelResize({
     defaultWidth: 280,
     max: 480,
+    maxWindowShare: 0.3,
     min: 240,
     storageKey: STORAGE_KEYS.midPanelWidth,
   });
@@ -183,7 +185,7 @@ export function ThreePanelLayout() {
         ) : activeFolderData ? (
           <div className="flex cursor-grabbing items-center gap-2 rounded bg-accent px-2 py-1.5 text-sm text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
             <span
-              className="h-2 w-2 shrink-0 rounded-full"
+              className="color-dot h-2 w-2 shrink-0 rounded-full"
               style={{
                 backgroundColor: activeFolderData.color ?? "hsl(var(--muted-foreground) / 0.4)",
               }}

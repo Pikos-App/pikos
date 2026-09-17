@@ -82,7 +82,7 @@ export function ShortcutsSettings() {
   ]);
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <h2 className="mb-1 text-base font-semibold">Keyboard Shortcuts</h2>
       <p className="mb-6 text-sm text-muted-foreground">
         {IS_MACOS ? "⌘ is Cmd, ⇧ is Shift, ⌥ is Option." : "Ctrl replaces Cmd on this platform."}

@@ -470,6 +470,24 @@ button,
   --text-xl--line-height: calc(1.75rem * var(--ui-text-scale, 1));
   --text-2xl: calc(1.5rem * var(--ui-text-scale, 1));
   --text-2xl--line-height: calc(2rem * var(--ui-text-scale, 1));
+
+  /* Settings is a reading column beside a nav, and both are measured in text.
+     Fixed rem widths here are what make a doubled label wrap every row into a
+     ragged two-line stack, so both widths ride the scale like the type does. */
+  --container-settings: calc(32rem * var(--ui-text-scale, 1));
+  --container-settings-nav: calc(14rem * var(--ui-text-scale, 1));
+
+  /* Padding and gaps *inside* a text row — the inset around a label, the space
+     between an icon and the word next to it. These belong to the type, so they
+     ride the scale: left fixed, a doubled label sits in the same tight box it
+     had at 13px. Structural spacing (panel gutters, grid gaps) stays on the
+     plain `--spacing` ladder, because moving that is the app-wide zoom
+     PKOS-0067 rejected. */
+  --spacing-ui-xs: calc(0.25rem * var(--ui-text-scale, 1));
+  --spacing-ui-sm: calc(0.375rem * var(--ui-text-scale, 1));
+  --spacing-ui-md: calc(0.625rem * var(--ui-text-scale, 1));
+  --spacing-ui-lg: calc(0.75rem * var(--ui-text-scale, 1));
+  --spacing-ui-xl: calc(1rem * var(--ui-text-scale, 1));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -496,6 +514,16 @@ button,
     font-feature-settings:
       "kern" 1,
       "liga" 1;
+  }
+
+  /* Icons and colour dots carry their size as an SVG width/height attribute or
+     a rem utility, and the `--text-*` scale reaches neither. `zoom` multiplies
+     both the drawn mark and the box it reserves, so one rule scales all of them
+     and each keeps its size relative to the others. Scaling `--spacing` instead
+     would move the whole layout, which is the app-wide zoom PKOS-0067 rejected. */
+  .lucide,
+  .color-dot {
+    zoom: var(--ui-text-scale, 1);
   }
 
   /* Prevent text selection on UI chrome (not editor content) */

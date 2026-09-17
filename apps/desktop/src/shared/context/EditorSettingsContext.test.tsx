@@ -53,7 +53,7 @@ describe("stepEditorFontSize", () => {
 
   it("stops at the ends instead of wrapping", () => {
     expect(stepEditorFontSize(28, 1)).toBe(28);
-    expect(stepEditorFontSize(12, -1)).toBe(12);
+    expect(stepEditorFontSize(10, -1)).toBe(10);
   });
 
   it("steps a size that is not on the ladder to the rung either side of it", () => {

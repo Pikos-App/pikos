@@ -43,9 +43,9 @@ export function SmartViewEntry({
       tabIndex={-1}
     >
       <span className="shrink-0">{icon}</span>
-      <span className="flex-1 text-left">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="type-ui-sm ml-auto text-subtle tabular-nums">
+        <span className="type-ui-sm shrink-0 text-subtle tabular-nums">
           {badge > 99 ? "99+" : badge}
         </span>
       )}

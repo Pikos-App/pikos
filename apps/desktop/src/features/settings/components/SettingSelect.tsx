@@ -20,7 +20,7 @@ export function SettingSelect<T extends string | number>({
   value,
 }: SettingSelectProps<T>) {
   return (
-    <div className="flex items-center justify-between border-b border-border py-3 last:border-b-0">
+    <div className="flex items-center justify-between border-b border-border py-ui-lg last:border-b-0">
       <div>
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{description}</p>

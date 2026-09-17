@@ -16,7 +16,7 @@ export function SettingChoice<T extends string | number>({
   value,
 }: SettingChoiceProps<T>) {
   return (
-    <div className="flex items-center justify-between border-b border-border py-3 last:border-b-0">
+    <div className="flex items-center justify-between border-b border-border py-ui-lg last:border-b-0">
       <div>
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
@@ -25,7 +25,7 @@ export function SettingChoice<T extends string | number>({
         {options.map((opt) => (
           <button
             className={cn(
-              "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-sm px-ui-md py-ui-xs text-xs font-medium transition-colors",
               value === opt.id
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:text-foreground"

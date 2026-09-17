@@ -98,7 +98,7 @@ export function DeveloperSettings() {
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <h2 className="mb-1 text-base font-semibold">Developer Tools</h2>
       <p className="mb-6 text-sm text-muted-foreground">
         Seed scripts for development. For destructive actions affecting all data, see Data → Danger

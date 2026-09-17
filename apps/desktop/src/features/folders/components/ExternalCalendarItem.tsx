@@ -76,7 +76,7 @@ export function ExternalCalendarItem({
             {PALETTE_COLORS.map(({ label, value }) => (
               <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
                 <span
-                  className="mr-2 h-3 w-3 shrink-0 rounded-full"
+                  className="color-dot mr-2 h-3 w-3 shrink-0 rounded-full"
                   style={{ backgroundColor: value }}
                 />
                 {label}

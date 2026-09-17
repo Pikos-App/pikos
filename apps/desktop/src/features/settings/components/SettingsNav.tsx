@@ -22,9 +22,9 @@ interface SettingsNavProps {
 
 export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
   return (
-    <div className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-background">
+    <div className="flex h-full w-settings-nav shrink-0 flex-col border-r border-border bg-background">
       {/* Header */}
-      <div className="flex h-11 items-center justify-between border-b border-border px-3">
+      <div className="flex min-h-11 items-center justify-between border-b border-border px-ui-lg">
         <span className="type-ui-sm tracking-wide text-subtle uppercase">Settings</span>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -49,7 +49,7 @@ export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
         {NAV_ITEMS.map(({ icon: Icon, id, label }) => (
           <button
             className={cn(
-              "type-ui flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-colors",
+              "type-ui flex w-full items-center gap-ui-md rounded-md px-ui-md py-ui-sm transition-colors",
               active === id
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -58,7 +58,7 @@ export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
             onClick={() => onNavigate(id)}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" />
-            {label}
+            <span className="truncate">{label}</span>
           </button>
         ))}
       </nav>

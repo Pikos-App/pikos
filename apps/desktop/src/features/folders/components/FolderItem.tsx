@@ -87,7 +87,7 @@ export function FolderItem({
           onSelect={onSelect}
           prefix={
             <span
-              className="mt-0.75 h-2 w-2 shrink-0 rounded-sm"
+              className="color-dot mt-0.75 h-2 w-2 shrink-0 rounded-sm"
               style={{ backgroundColor: folder.color ?? "var(--text-tertiary)" }}
             />
           }
@@ -112,7 +112,7 @@ export function FolderItem({
             {PALETTE_COLORS.map(({ label, value }) => (
               <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
                 <span
-                  className="mr-2 h-3 w-3 shrink-0 rounded-full"
+                  className="color-dot mr-2 h-3 w-3 shrink-0 rounded-full"
                   style={{ backgroundColor: value }}
                 />
                 {label}

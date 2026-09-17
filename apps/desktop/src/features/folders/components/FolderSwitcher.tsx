@@ -163,7 +163,7 @@ function Row({ badge, dot, icon, isActive, label, onSelect }: RowProps) {
       {icon && <span className="shrink-0">{icon}</span>}
       {dot !== undefined && (
         <span
-          className="h-2 w-2 shrink-0 rounded-full"
+          className="color-dot h-2 w-2 shrink-0 rounded-full"
           style={{ backgroundColor: dot || "hsl(var(--muted-foreground) / 0.4)" }}
         />
       )}

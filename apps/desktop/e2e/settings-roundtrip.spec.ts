@@ -56,12 +56,12 @@ appTest(
   }
 );
 
-// ─── Editor font size: shortcut → live type → reload survives → reset ──────
+// ─── Editor text size: shortcut → live type → reload survives → reset ──────
 //
 // The two paths (⌘+/⌘− and the Settings row) write the same preference, so the
 // round-trip is only proved by driving one and reading the other back.
 
-appTest("editor font size steps from the keyboard and survives reload @tier2", async ({ app }) => {
+appTest("editor text size steps from the keyboard and survives reload @tier2", async ({ app }) => {
   await quickAdd(app, "font size test");
   await app.locator("[data-page-list-item]").getByText("font size test").click();
   const editor = app.getByRole("textbox", { name: "Page content" });
@@ -89,7 +89,7 @@ appTest("editor font size steps from the keyboard and survives reload @tier2", a
   // what the shortcut wrote, not its own stale copy.
   await app.getByRole("button", { name: "Open settings" }).click();
   const settings = app.getByRole("region", { name: "Settings" });
-  await settings.getByRole("button", { name: /^Editor font size:/ }).click();
+  await settings.getByRole("button", { name: /^Editor text size:/ }).click();
   // Radix portals the popover outside the settings region.
   await app.getByRole("button", { name: "20", exact: true }).click();
   await app.keyboard.press("Escape");
