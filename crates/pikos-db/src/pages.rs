@@ -491,6 +491,7 @@ async fn upsert_page_tags_tx(
 }
 
 async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
     ))
@@ -1071,17 +1072,93 @@ pub async fn list_pages_today_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Pag
 /// Inner form taking an explicit local day (`YYYY-MM-DD`), so the boundary is
 /// deterministically testable without depending on the machine clock or timezone.
 async fn list_pages_today_at(pool: &sqlx::SqlitePool, today: &str) -> AppResult<Vec<PageSummary>> {
+    // The stored date is the source zone's for a synced row, and reading it in the
+    // viewer's zone can move it either side of midnight. SQL cannot do that
+    // conversion, so the window reaches a day past today and `viewer_day_of`
+    // decides; no real zone offset moves a date by more than one day.
+    let window_end = chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.checked_add_days(chrono::Days::new(1)))
+        .map_or_else(|| today.to_string(), |d| d.format("%Y-%m-%d").to_string());
+
+    // A moved occurrence is a rule-backed `page_schedules` row, and moving it puts
+    // its original date in the exclusion set, so the head derives *past* today and
+    // a head-only read misses the one day the series is due. `today_scheduled_count`
+    // reads these rows too, which is why the daily summary counted a page this list
+    // then left out.
+    let moved = moved_occurrences_through(pool, &window_end).await?;
+
+    // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
     let rows = sqlx::query_as::<_, PageSummaryRow>(&format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages
          WHERE deleted_at IS NULL
-           AND substr(scheduled_start, 1, 10) <= ?
            AND status != 'done'
+           AND (substr(scheduled_start, 1, 10) <= ?1
+                OR EXISTS (SELECT 1 FROM page_schedules ps
+                             WHERE ps.page_id = pages.id
+                               AND ps.rule_id IS NOT NULL
+                               AND ps.status != 'done'
+                               AND substr(ps.scheduled_start, 1, 10) <= ?1))
          ORDER BY sort_order ASC"
     ))
-    .bind(today)
+    .bind(&window_end)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(PageSummary::from).collect())
+
+    Ok(rows
+        .into_iter()
+        .map(PageSummary::from)
+        .map(|mut p| {
+            // Only when the head is on a later day. A head already at or before
+            // today is the row to show, moved instance or not.
+            let head_ahead = p.scheduled_start.as_deref().is_none_or(|start| {
+                crate::sync::viewer_day_of(start, p.timezone.as_deref()).as_str() > today
+            });
+            if head_ahead {
+                if let Some((start, end)) = moved.get(&p.id) {
+                    p.scheduled_start = Some(start.clone());
+                    p.scheduled_end = end.clone();
+                }
+            }
+            p
+        })
+        .filter(|p| {
+            p.scheduled_start.as_deref().is_some_and(|start| {
+                crate::sync::viewer_day_of(start, p.timezone.as_deref()).as_str() <= today
+            })
+        })
+        .collect())
+}
+
+/// The earliest open moved occurrence per page, at or before `through`.
+///
+/// Earliest because the head it stands in for is the oldest open occurrence, so a
+/// series with two moved instances behind it reads the same way a series with two
+/// un-moved ones does.
+async fn moved_occurrences_through(
+    pool: &sqlx::SqlitePool,
+    through: &str,
+) -> AppResult<std::collections::HashMap<String, (String, Option<String>)>> {
+    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ps.page_id, ps.scheduled_start, ps.scheduled_end
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE ps.rule_id IS NOT NULL
+           AND ps.status != 'done'
+           AND p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND substr(ps.scheduled_start, 1, 10) <= ?
+         ORDER BY ps.scheduled_start ASC",
+    )
+    .bind(through)
+    .fetch_all(pool)
+    .await?;
+
+    let mut earliest = std::collections::HashMap::new();
+    for (page_id, start, end) in rows {
+        earliest.entry(page_id).or_insert((start, end));
+    }
+    Ok(earliest)
 }
 
 pub async fn reorder_pages_impl(
@@ -1421,6 +1498,7 @@ async fn complete_recurring_page_once(
     // Fetch the head inside the tx, rejecting soft-deleted pages — completing a
     // trashed series must not resurrect it as a visible "done" clone. The
     // sort_order read also lives in the tx so concurrent completions can't collide.
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
     ))
@@ -1915,6 +1993,7 @@ async fn reschedule_virtual_occurrence_once(
 
     // Reject soft-deleted heads: rescheduling an occurrence of a trashed series
     // must not resurrect its content as a visible page.
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
     ))
@@ -2043,6 +2122,7 @@ async fn reschedule_virtual_occurrence_once(
 
 /// Fetch a single page by id (mirrors the app's get_page — no deleted_at filter).
 pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Page>> {
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let row = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
     ))

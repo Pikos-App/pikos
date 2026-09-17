@@ -47,8 +47,13 @@ export function usePageList() {
     recurrenceRules: isTodayView ? recurrenceRules : NO_RULES,
   });
 
-  const filtered = getVisiblePages(pages, activeViewId).filter((p) => !hiddenIds.has(p.id));
-  const withOccurrences = isTodayView ? withTodayOccurrences(filtered, expanded) : filtered;
+  // Swap occurrences in before the view filter runs: the filter judges a page by
+  // its head, and a series with an occurrence today is exactly the case where the
+  // head is on some other day.
+  const candidates = isTodayView ? withTodayOccurrences(pages, expanded) : pages;
+  const withOccurrences = getVisiblePages(candidates, activeViewId).filter(
+    (p) => !hiddenIds.has(p.id)
+  );
   // Today and Upcoming are ordered by their sections (overdue/today, then day
   // groups), so running sortPages here would only churn an order the section
   // builders are about to replace.

@@ -260,7 +260,8 @@ export { anchorMoveUpdate, applyAnchorMove, resolveAnchorMove } from "./utils/sc
 export type { AnchorMove } from "./utils/scheduleAnchor";
 export { ftsTokens } from "./utils/search";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
-export { cloneWallClock, resolveSyncedInstant } from "./utils/syncedTime";
+export type { ViewerScheduled } from "./utils/syncedTime";
+export { resolveSyncedInstant, viewerEnd, viewerStart, viewerWallClock } from "./utils/syncedTime";
 export {
   expandRecurrenceInZone,
   normalizeUntilToZone,

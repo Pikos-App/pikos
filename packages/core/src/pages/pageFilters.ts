@@ -4,6 +4,7 @@ import type { PageSummary } from "../types";
 import { formatDateOnly, isAllDayIso, localToday, parseLocalISO } from "../utils/dates";
 import { isDone, isOpen } from "../utils/page";
 import { emojiAwareCompare } from "../utils/sort";
+import { viewerStart } from "../utils/syncedTime";
 
 export type SortMode = "manual" | "date" | "title" | "priority";
 
@@ -60,12 +61,14 @@ export function upcomingWindowEnd(todayStr: string): string {
  */
 export function belongsToView(page: PageSummary, viewId: string, todayStr: string): boolean {
   if (viewId === "today") {
-    if (page.scheduledStart == null) return false;
-    return page.scheduledStart.slice(0, 10) <= todayStr;
+    const start = viewerStart(page);
+    if (start == null) return false;
+    return start.slice(0, 10) <= todayStr;
   }
   if (viewId === "upcoming") {
-    if (page.scheduledStart == null) return false;
-    const day = page.scheduledStart.slice(0, 10);
+    const start = viewerStart(page);
+    if (start == null) return false;
+    const day = start.slice(0, 10);
     return day >= todayStr && day <= upcomingWindowEnd(todayStr);
   }
   if (viewId === "inbox") return page.folderId === null;
@@ -82,7 +85,8 @@ export function belongsToView(page: PageSummary, viewId: string, todayStr: strin
  * All-day strings for other days sort at midnight (start of day).
  * Timed strings are parsed as Date so JS DST normalization applies.
  */
-function toSortMs(iso: string): number {
+function toSortMs(page: PageSummary): number {
+  const iso = viewerStart(page) ?? "";
   if (isAllDayIso(iso)) {
     if (iso === localToday()) return Date.now();
     return parseLocalISO(iso).getTime();
@@ -95,7 +99,7 @@ function toSortMs(iso: string): number {
  * so a day group in Upcoming reads exactly like the Today view's sections do.
  */
 export function compareByScheduledStart(a: PageSummary, b: PageSummary): number {
-  return toSortMs(a.scheduledStart ?? "") - toSortMs(b.scheduledStart ?? "");
+  return toSortMs(a) - toSortMs(b);
 }
 
 /** Returns a new array. */
@@ -107,7 +111,7 @@ export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
       // Unscheduled items sink to the bottom
       if (aHas !== bHas) return aHas ? -1 : 1;
       if (!aHas) return 0;
-      return toSortMs(a.scheduledStart!) - toSortMs(b.scheduledStart!);
+      return toSortMs(a) - toSortMs(b);
     });
   }
   if (mode === "title") {
@@ -125,7 +129,7 @@ export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
       const bHas = b.scheduledStart != null;
       if (aHas !== bHas) return aHas ? -1 : 1;
       if (!aHas) return 0;
-      return toSortMs(a.scheduledStart!) - toSortMs(b.scheduledStart!);
+      return toSortMs(a) - toSortMs(b);
     });
   }
   // manual — sort by sortOrder ascending
@@ -173,10 +177,11 @@ export function groupTodayPages(pages: PageSummary[]): {
   const now = new Date();
 
   function isOverdue(p: PageSummary): boolean {
-    if (!p.scheduledStart) return false;
-    if (isAllDayIso(p.scheduledStart)) return p.scheduledStart < todayStr;
+    const start = viewerStart(p);
+    if (!start) return false;
+    if (isAllDayIso(start)) return start < todayStr;
     // Timed: treat as past once the scheduled moment has passed
-    return parseLocalISO(p.scheduledStart) < now;
+    return parseLocalISO(start) < now;
   }
 
   return {

@@ -18,6 +18,7 @@ import { addDays, isSameDay, startOfDay, startOfWeek } from "date-fns";
 
 import type { PageSummary } from "../types";
 import { dateKey, formatDateOnly, isAllDayIso, parseLocalISO } from "../utils/dates";
+import { viewerEnd, viewerStart } from "../utils/syncedTime";
 
 /**
  * Which shape the calendar panel renders. Persisted separately from
@@ -172,17 +173,22 @@ export function placeMonthCellEvents(
   const events: MonthCellEvent[] = [];
 
   for (const page of pages) {
-    const scheduledStart = page.scheduledStart;
+    // Which cell a synced event belongs in is the viewer's question: its stored
+    // wall-clock is the source calendar's, and a Tokyo morning falls on the day
+    // before for a viewer in California. The week grid resolves the same way in
+    // `calendarLayout`.
+    const scheduledStart = viewerStart(page);
     if (scheduledStart == null) continue;
-    const range = eventDayRange(scheduledStart, page.scheduledEnd);
+    const range = eventDayRange(scheduledStart, viewerEnd(page));
     if (dayStr < range.start || dayStr > range.end) continue;
     events.push({
       continuesAfter: dayStr < range.end,
       continuesBefore: dayStr > range.start,
       isAllDay: isAllDayIso(scheduledStart),
       // Recurring virtual occurrences and moved synced overrides share the head
-      // page's id, so the start stamp is what makes the key unique in a cell.
-      key: `${page.id}:${scheduledStart}:${dayStr}`,
+      // page's id, so the start stamp is what makes the key unique in a cell. It
+      // stays the stored one: the key is an identity, not a position.
+      key: `${page.id}:${page.scheduledStart}:${dayStr}`,
       page,
       spanDays: inclusiveDaySpan(range.start, range.end),
       startDate: parseLocalISO(scheduledStart),

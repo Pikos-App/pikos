@@ -1,5 +1,5 @@
 import type { MonthCellEvent, VirtualOccurrence } from "@pikos/core";
-import { formatTime12h, isDone } from "@pikos/core";
+import { DEFAULT_EVENT_COLOR, formatTime12h, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -76,6 +76,7 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
           {showsCheckbox ? (
             <TaskCheckbox
               as="span"
+              borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
               checked={done}
               className="h-3 w-3 shrink-0 cursor-pointer!"
               onChange={handleCheckboxClick}

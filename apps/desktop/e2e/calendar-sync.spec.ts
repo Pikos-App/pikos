@@ -874,6 +874,29 @@ async function dragRowToPoint(app: Page, row: Locator, x: number, y: number): Pr
   return ghosted;
 }
 
+/** A timed slot in **today's** column.
+ *
+ * Not [`weekGridDropPoint`], which aims across the week: a page dropped on another
+ * day leaves Today, and its row label then reads a bare date whether it is timed or
+ * not, so there is nothing left to assert scheduling against. Reading the grid
+ * block instead is what this used to do, and a block collapses into a "+N more"
+ * pill when the day is busy — layout, not scheduling, and it varies with the
+ * viewer's zone because the seed's events land on different days. */
+async function todayColumnDropPoint(app: Page): Promise<{ x: number; y: number }> {
+  const heading = await app.evaluate(() =>
+    new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", weekday: "long" })
+  );
+  const column = await app.getByLabel(heading).first().boundingBox();
+  if (!column) throw new Error(`no day column headed "${heading}"`);
+  const timed = await app
+    .getByRole("region", { name: "Week calendar" })
+    .getByLabel("Time grid")
+    .first()
+    .boundingBox();
+  if (!timed) throw new Error("time grid missing a bounding box");
+  return { x: column.x + column.width / 2, y: timed.y + timed.height * 0.4 };
+}
+
 /** A timed slot inside the visible week, clear of the grid's edges. */
 async function weekGridDropPoint(app: Page): Promise<{ x: number; y: number }> {
   const grid = await app.getByRole("region", { name: "Week calendar" }).boundingBox();
@@ -999,16 +1022,28 @@ appTest("a synced page can't be dropped onto the Today nav row @tier2", async ({
   await expect(detachedDate).not.toHaveAttribute("aria-label", detachedBefore!);
 });
 
+// `todayColumnDropPoint` aims at a fixed fraction down the time grid, so it names a
+// fixed clock time, near half past nine. Against a wall clock later than that the
+// drop schedules the page into the past, which moves it to the collapsed Overdue
+// group and out of the list every assertion below reads. The test passed in the
+// morning and failed in the afternoon. Pin the hour rather than aiming relative to
+// now, which only narrows the window. Raw `page` fixture because clock.install has
+// to run before the first app script reads Date.
 appTest(
   "a mixed selection schedules the ordinary page and leaves the mirror @tier2",
-  async ({ app }) => {
-    await seedSynced(app);
+  async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-06-08T06:00:00") });
+    await page.clock.resume();
+    await page.goto("/");
+    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+    await seedSynced(page);
     // All-day today, like the mirror it is paired with, so both sit in Today's
     // own group rather than the collapsed Overdue one.
-    await quickAdd(app, "desk tidy @today");
-    await app.getByRole("button", { name: /^Today/ }).click();
+    await quickAdd(page, "desk tidy @today");
+    await page.getByRole("button", { name: /^Today/ }).click();
 
-    const list = app.locator("[data-page-list-item]");
+    const list = page.locator("[data-page-list-item]");
     const mirror = list.filter({ hasText: "Company offsite" });
     const ordinary = list.filter({ hasText: "desk tidy" });
     const mirrorDate = mirror.getByRole("button", { name: /^Toggle date format:/ });
@@ -1023,20 +1058,22 @@ appTest(
 
     // Keyboard, not the toolbar button: a mousedown anywhere outside a page row
     // is the workspace's own dismiss for a multi-selection.
-    await app.keyboard.press(mod("Mod+Shift+c"));
-    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+    await page.keyboard.press(mod("Mod+Shift+c"));
+    await expect(page.getByRole("region", { name: "Week calendar" })).toBeVisible();
 
-    // The trailing time is what a timed grid block has; an all-day one and the
-    // page-list row don't.
-    await expect(app.getByRole("button", { name: /^desk tidy, / })).toHaveCount(0);
-    const { x, y } = await weekGridDropPoint(app);
-    expect(await dragRowToPoint(app, ordinary, x, y)).toBe(true);
+    // All-day, so the row names a date and no clock time.
+    const ordinaryDate = ordinary.getByRole("button", { name: /^Toggle date format:/ });
+    await expect(ordinaryDate).not.toHaveAttribute("aria-label", /\d{1,2}:\d{2}[ap]/);
 
-    await expect(app.getByRole("button", { name: /^desk tidy, / }).first()).toBeVisible();
+    const { x, y } = await todayColumnDropPoint(page);
+    expect(await dragRowToPoint(page, ordinary, x, y)).toBe(true);
+
+    // Timed now, and read off the row rather than the grid: see todayColumnDropPoint.
+    await expect(ordinaryDate).toHaveAttribute("aria-label", /\d{1,2}:\d{2}[ap]/);
     expect(await mirrorDate.getAttribute("aria-label")).toBe(mirrorBefore);
 
-    await app.keyboard.press(mod("Mod+Shift+c"));
-    await expect(app.getByRole("textbox", { name: "Page content" })).toBeVisible();
-    await expect(app.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
+    await page.keyboard.press(mod("Mod+Shift+c"));
+    await expect(page.getByRole("textbox", { name: "Page content" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
   }
 );

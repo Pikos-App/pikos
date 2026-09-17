@@ -48,12 +48,12 @@ function makeBar(page: PageSummary): AllDayBarData {
   };
 }
 
-function renderBar(page: PageSummary, onDragStart = vi.fn()) {
+function renderBar(page: PageSummary, onDragStart = vi.fn(), folderColor?: string) {
   renderWithProviders(
     <AllDayBar
       bar={makeBar(page)}
       draggingPageId={null}
-      folderColor={undefined}
+      folderColor={folderColor}
       onDoubleClick={vi.fn()}
       onDragStart={onDragStart}
       position={{}}
@@ -110,5 +110,24 @@ describe("AllDayBar — occurrence identity on drag", () => {
     dragPast(screen.getByRole("button", { name: "Conference" }));
 
     expect(onDragStart).toHaveBeenCalledWith({ folderColor: undefined, pageId: "p1" });
+  });
+});
+
+// The chip paints itself in the folder's color, so a checkbox left on the default
+// neutral stroke sinks into its own fill. Timed blocks have always passed the color
+// through; the all-day chip did not, which showed up worst on the dark theme.
+describe("AllDayBar — the checkbox stays visible on a colored chip", () => {
+  it("strokes the checkbox in the folder color", () => {
+    renderBar(makePage({ status: "not_started", syncState: null }), vi.fn(), "rgb(255, 0, 0)");
+
+    const box = document.querySelector(".task-checkbox");
+    expect(box).toHaveStyle({ borderColor: "rgb(255, 0, 0)" });
+  });
+
+  it("falls back to the event color when the page has no folder", () => {
+    renderBar(makePage({ status: "not_started", syncState: null }), vi.fn(), undefined);
+
+    const box = document.querySelector(".task-checkbox");
+    expect(box).toHaveAttribute("style", expect.stringContaining("border-color"));
   });
 });

@@ -1,5 +1,5 @@
 import type { AllDayBar as AllDayBarData, VirtualOccurrence } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import { DEFAULT_EVENT_COLOR, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 import type { CSSProperties } from "react";
 
@@ -160,6 +160,7 @@ export function AllDayBar({
           {showsCheckbox ? (
             <TaskCheckbox
               as="span"
+              borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
               checked={done}
               className="h-3.5 w-3.5 cursor-pointer!"
               onChange={handleCheckboxClick}

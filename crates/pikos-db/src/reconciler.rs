@@ -995,7 +995,7 @@ async fn float_wall_clock(
 /// floats already) or anything unparseable, and for a wall-clock that doesn't
 /// exist in the source zone (spring-forward gap) — the caller keeps the original
 /// rather than inventing a time.
-fn to_device_wall_clock(wall_clock: &str, source: Tz, device: Tz) -> Option<String> {
+pub(crate) fn to_device_wall_clock(wall_clock: &str, source: Tz, device: Tz) -> Option<String> {
     let wall = WallClock::parse(wall_clock).filter(|w| !w.is_all_day())?;
     Some(WallClock::timed(convert_instant(wall.as_datetime(), source, device)?).format())
 }

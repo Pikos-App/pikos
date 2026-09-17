@@ -132,3 +132,51 @@ describe("PageListItem mirror-lock gating", () => {
     expect(screen.getByText("Move to Folder")).toBeInTheDocument();
   });
 });
+
+// The row and the calendar block draw the same event, so they have to agree.
+// Reading the stored wall-clock made a London 5pm meeting read as still to come
+// long after it ran at 9am here, and put a Tokyo morning on the wrong day.
+// Vitest pins TZ=UTC, so these offsets are relative to UTC.
+describe("PageListItem — a synced event shows the viewer's time", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  function syncedPage(start: string, timezone: string): PageSummary {
+    return makePage({
+      scheduledStart: start,
+      scheduleLocked: true,
+      syncState: "active",
+      timezone,
+    });
+  }
+
+  function dateLabel(): string {
+    return screen.getByRole("button", { name: /Toggle date format/ }).textContent ?? "";
+  }
+
+  it("files a Tokyo morning under the day it happens here", () => {
+    // 06:00 on the 8th in Tokyo (UTC+9) is 21:00 on the 7th in UTC.
+    renderItem(syncedPage("2026-08-08T06:00:00", "Asia/Tokyo"), vi.fn());
+
+    expect(dateLabel()).toContain("Aug 7");
+  });
+
+  it("shows a New York standup at the hour it runs here", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-07T09:00:00Z"));
+    // 11:00 in New York (UTC-4 in August) is 15:00 UTC.
+    renderItem(syncedPage("2026-08-07T11:00:00", "America/New_York"), vi.fn());
+
+    expect(dateLabel()).toContain("3:00p");
+  });
+
+  it("leaves a page with no zone on its stored time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-07T09:00:00Z"));
+    renderItem(makePage({ scheduledStart: "2026-08-07T11:00:00" }), vi.fn());
+
+    expect(dateLabel()).toContain("11:00a");
+  });
+});

@@ -12,6 +12,7 @@ import { addDays } from "date-fns";
 
 import type { PageSummary } from "../types";
 import { dateKey, formatDateOnly, localToday, parseLocalISO } from "../utils/dates";
+import { viewerStart } from "../utils/syncedTime";
 import { compareByScheduledStart } from "./pageFilters";
 
 export interface UpcomingDaySection {
@@ -46,8 +47,9 @@ export function groupUpcomingPages(
 ): UpcomingDaySection[] {
   const byDay = new Map<string, PageSummary[]>();
   for (const page of pages) {
-    if (!page.scheduledStart) continue;
-    const day = dateKey(page.scheduledStart);
+    const start = viewerStart(page);
+    if (!start) continue;
+    const day = dateKey(start);
     const bucket = byDay.get(day);
     if (bucket) bucket.push(page);
     else byDay.set(day, [page]);

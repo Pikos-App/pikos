@@ -172,6 +172,11 @@ can't be moved from Pikos at all (⁴), so its only re-arm path is upstream.
 ¹⁴ Only a *timed* synced event is absolute. An all-day one carries `timezone: None` from both
 providers (`caldav/ics.rs`, `google/events.rs`), since a date has no meaningful zone, so it
 floats exactly like a native all-day page and every viewer sees the same date. §3.
+Absolute binds every surface, not only the calendar: the time on a list row, the day a page is
+filed under, the order within that day, and the cell a month view draws it in all resolve the
+stored wall-clock against its source zone first. Reading the stored string directly is the
+failure this note exists to prevent — it shows the source calendar's clock as if it were the
+viewer's, which is wrong by hours and, either side of midnight, by a day.
 ¹⁵ Detaching spends the source-zone stamp rather than dropping it: `detach_sync` rewrites every
 stored wall-clock (base, override rows, the denorm) into the device zone and clears the stamp,
 so the page keeps the instant it was rendered at and floats natively from there. Display and

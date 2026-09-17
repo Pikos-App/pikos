@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cloneWallClock, resolveSyncedInstant } from "./syncedTime";
+import { resolveSyncedInstant, viewerWallClock } from "./syncedTime";
 
 // Vitest pins TZ=UTC, so a Date's UTC fields ARE the viewer-zone wall clock the
 // calendar reads — exactly the production "device zone = viewer zone" case.
@@ -27,19 +27,19 @@ describe("resolveSyncedInstant", () => {
   });
 });
 
-describe("cloneWallClock", () => {
+describe("viewerWallClock", () => {
   it("re-expresses a timed zoned occurrence in the viewer's zone (UTC runner)", () => {
-    expect(cloneWallClock("2026-06-15T15:00:00", "America/Los_Angeles")).toBe(
+    expect(viewerWallClock("2026-06-15T15:00:00", "America/Los_Angeles")).toBe(
       "2026-06-15T22:00:00"
     );
   });
 
   it("keeps an all-day occurrence's date untouched", () => {
-    expect(cloneWallClock("2026-06-15", "America/Los_Angeles")).toBe("2026-06-15");
+    expect(viewerWallClock("2026-06-15", "America/Los_Angeles")).toBe("2026-06-15");
   });
 
   it("keeps a floating (no-zone) occurrence's wall-clock untouched", () => {
-    expect(cloneWallClock("2026-06-15T15:00:00", null)).toBe("2026-06-15T15:00:00");
-    expect(cloneWallClock("2026-06-15T15:00:00", undefined)).toBe("2026-06-15T15:00:00");
+    expect(viewerWallClock("2026-06-15T15:00:00", null)).toBe("2026-06-15T15:00:00");
+    expect(viewerWallClock("2026-06-15T15:00:00", undefined)).toBe("2026-06-15T15:00:00");
   });
 });

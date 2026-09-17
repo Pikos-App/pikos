@@ -11,6 +11,8 @@ import {
   isDueSoon,
   isOpen,
   parseLocalISO,
+  viewerEnd,
+  viewerStart,
   writableFolders,
 } from "@pikos/core";
 import type React from "react";
@@ -216,29 +218,32 @@ export function PageListItem({
                 {page.scheduledStart &&
                   (() => {
                     const isCompleted = isDone(page);
+                    // A synced event's stored time is its source calendar's, so the
+                    // row reads the viewer's — otherwise a London 5pm meeting reads
+                    // as still to come at 5pm long after it happened at 9am here.
+                    const start = viewerStart(page)!;
+                    const end = viewerEnd(page);
                     // Multi-day all-day span: show the explicit range ("May 2 – 10").
                     // Falls back to single-date formatting for timed events or
                     // when end is missing/equal to start.
                     const isAllDaySpan =
-                      isAllDayIso(page.scheduledStart) &&
-                      typeof page.scheduledEnd === "string" &&
-                      isAllDayIso(page.scheduledEnd) &&
-                      page.scheduledEnd > page.scheduledStart;
+                      isAllDayIso(start) &&
+                      typeof end === "string" &&
+                      isAllDayIso(end) &&
+                      end > start;
                     const { isPast, label, tooltip } = isAllDaySpan
                       ? (() => {
-                          const d = formatPageDate(page.scheduledStart);
+                          const d = formatPageDate(start);
                           return {
                             isPast: d.isPast,
-                            label: formatDateRange(page.scheduledStart, page.scheduledEnd),
-                            tooltip: `${d.tooltip} – ${formatLongDate(
-                              parseLocalISO(page.scheduledEnd!)
-                            )}`,
+                            label: formatDateRange(start, end),
+                            tooltip: `${d.tooltip} – ${formatLongDate(parseLocalISO(end))}`,
                           };
                         })()
                       : !isCompleted && showRelative
-                        ? formatPageRelativeTime(page.scheduledStart)
-                        : formatPageDate(page.scheduledStart);
-                    const dueSoon = !isCompleted && !isPast && isDueSoon(page.scheduledStart);
+                        ? formatPageRelativeTime(start)
+                        : formatPageDate(start);
+                    const dueSoon = !isCompleted && !isPast && isDueSoon(start);
                     return (
                       <button
                         aria-label={`Toggle date format: ${label}`}
@@ -294,7 +299,7 @@ export function PageListItem({
                   onSelect={() => onMoveToFolder(folder.id)}
                 >
                   <span
-                    className="mr-2 h-2 w-2 shrink-0 rounded-full"
+                    className="color-dot mr-2 h-2 w-2 shrink-0 rounded-full"
                     style={{
                       backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
                     }}

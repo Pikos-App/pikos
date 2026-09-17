@@ -18,6 +18,7 @@ import {
   isDone,
   parseSearchQuery,
   PRIORITY_LABELS,
+  viewerStart,
 } from "@pikos/core";
 import { Command, FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -127,7 +128,7 @@ function summaryToResult(page: PageSummary): SearchResult {
     id: page.id,
     matchSource: "title" as const,
     priority: page.priority,
-    scheduledDate: page.scheduledStart ?? null,
+    scheduledDate: viewerStart(page),
     status: page.status,
     subtitle: page.subtitle ?? null,
     tags: page.tags,

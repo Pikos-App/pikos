@@ -370,3 +370,85 @@ describe("belongsToView — past synced events", () => {
     expect(belongsToView(page, "f1", TODAY)).toBe(true);
   });
 });
+
+// ─── synced events are read in the viewer's zone ──────────────────────────────
+
+// A synced event happens at one instant; which day and time that is depends on
+// who is looking. The stored wall-clock is the source calendar's, so reading it
+// directly files a Tokyo morning under tomorrow and leaves a London afternoon
+// looking like it has not happened yet. Vitest pins TZ=UTC, so these offsets are
+// relative to UTC rather than to whatever machine runs them.
+describe("viewer-zone bucketing", () => {
+  // 06:00 in Tokyo (UTC+9) is 21:00 the previous day in UTC.
+  const tokyoMorning = makePage({
+    id: "tokyo",
+    scheduledStart: "2026-08-08T06:00:00",
+    scheduleLocked: true,
+    syncState: "active",
+    timezone: "Asia/Tokyo",
+  });
+
+  // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC.
+  const laEvening = makePage({
+    id: "la",
+    scheduledStart: "2026-08-07T20:00:00",
+    scheduleLocked: true,
+    syncState: "active",
+    timezone: "America/Los_Angeles",
+  });
+
+  const floating = makePage({ id: "native", scheduledStart: "2026-08-07T09:00:00" });
+
+  it("puts a page in Today by the day the viewer sees, not the source calendar's", () => {
+    expect(belongsToView(tokyoMorning, "today", "2026-08-07")).toBe(true);
+    expect(belongsToView(laEvening, "today", "2026-08-07")).toBe(false);
+    expect(belongsToView(floating, "today", "2026-08-07")).toBe(true);
+  });
+
+  it("puts a page in Upcoming by the same day", () => {
+    expect(belongsToView(laEvening, "upcoming", "2026-08-07")).toBe(true);
+    expect(belongsToView(tokyoMorning, "upcoming", "2026-08-08")).toBe(false);
+  });
+
+  it("leaves an all-day synced page on its own date whatever the account's zone", () => {
+    const allDay = makePage({
+      id: "all-day",
+      scheduledStart: "2026-08-07",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "Asia/Tokyo",
+    });
+    expect(belongsToView(allDay, "today", "2026-08-07")).toBe(true);
+    expect(belongsToView(allDay, "today", "2026-08-06")).toBe(false);
+  });
+
+  it("calls a synced event overdue by when it passed for the viewer", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-07T12:00:00Z"));
+
+    // Both of these read the opposite way if the stored wall-clock is taken as
+    // local. 08:00 in Los Angeles (UTC-7) is 15:00 UTC, still ahead of noon, but
+    // the bare "08:00" looks past. 14:00 in Tokyo (UTC+9) is 05:00 UTC and gone,
+    // but the bare "14:00" looks upcoming.
+    const laMorning = makePage({
+      id: "la-morning",
+      scheduledStart: "2026-08-07T08:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "America/Los_Angeles",
+    });
+    const tokyoAfternoon = makePage({
+      id: "tokyo-afternoon",
+      scheduledStart: "2026-08-07T14:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "Asia/Tokyo",
+    });
+
+    const { overdue, today } = groupTodayPages([laMorning, tokyoAfternoon]);
+    expect(overdue.map((p) => p.id)).toEqual(["tokyo-afternoon"]);
+    expect(today.map((p) => p.id)).toEqual(["la-morning"]);
+
+    vi.useRealTimers();
+  });
+});

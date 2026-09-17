@@ -22,18 +22,44 @@ export function resolveSyncedInstant(wallClock: string, sourceZone: string): Dat
 }
 
 /**
- * The wall-clock a done clone of a synced occurrence should carry. The clone is
- * a NATIVE (floating) page, so a timed zoned occurrence stores its start as the
- * viewer-local wall-clock — the clone then floats at the same slot the absolute
- * occurrence rendered (a 3pm PT event shown at 6pm ET keeps a 6pm clone).
- * All-day / floating (no zone) occurrences keep the raw wall-clock.
+ * The wall-clock a stored value occupies **for the viewer**, which is what every
+ * surface that shows a time, files a page under a day, or sorts by one must read.
+ * A timed value with a source zone converts; everything else is returned as it
+ * came, and that is the model rather than a fallback. All-day values have no
+ * meaningful zone, and native and detached pages carry none (detaching rewrites
+ * the stored wall-clock into the device zone and clears the stamp).
  *
- * The completion map's KEY stays the source-zone date — that is what expansion
- * suppresses by — so only the clone's own timestamps come through here.
+ * Reading the stored string directly is the bug this exists to prevent: a Tokyo
+ * morning then reads as tomorrow to a viewer in California, showing the wrong
+ * time in every list and dropping out of Today while its calendar block sits on
+ * today's grid.
+ *
+ * Two things deliberately do **not** come through here. A completion map's KEY
+ * stays the source-zone date, because that is what expansion suppresses by. An
+ * editable date picker on a native page is already floating and has nothing to
+ * convert.
  */
-export function cloneWallClock(wallClock: string, timezone: string | null | undefined): string {
+export function viewerWallClock(wallClock: string, timezone: string | null | undefined): string {
   if (timezone && isTimedIso(wallClock)) {
     return formatLocalISO(resolveSyncedInstant(wallClock, timezone));
   }
   return wallClock;
+}
+
+/** What a page carries for [`viewerStart`] to read. Structural so `Page`,
+ *  `PageSummary` and an expanded occurrence all satisfy it. */
+export interface ViewerScheduled {
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+  timezone?: string | null;
+}
+
+/** A page's start in the viewer's zone, or null when it has no schedule. */
+export function viewerStart(page: ViewerScheduled): string | null {
+  return page.scheduledStart ? viewerWallClock(page.scheduledStart, page.timezone) : null;
+}
+
+/** A page's end in the viewer's zone, or null when it has none. */
+export function viewerEnd(page: ViewerScheduled): string | null {
+  return page.scheduledEnd ? viewerWallClock(page.scheduledEnd, page.timezone) : null;
 }

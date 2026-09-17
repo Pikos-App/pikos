@@ -9,6 +9,7 @@ import {
   snapAnchorToRule,
   storageErrorUserMessage,
   toStorageError,
+  viewerStart,
 } from "@pikos/core";
 import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -88,7 +89,9 @@ export function MetadataHeader({
   }
 
   function handleOpenInCalendar() {
-    const start = page.scheduledStart!;
+    // The grid draws a synced event in the viewer's zone, so the day to jump to
+    // and the hour to scroll are read the same way or the jump misses the block.
+    const start = viewerStart(page)!;
     setReferenceDate(parseLocalISO(start));
     // Date-only (all-day) strings have no time component — the chip sits in the
     // always-visible all-day strip, so no timed-grid scroll needed.

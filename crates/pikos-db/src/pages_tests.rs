@@ -1065,6 +1065,25 @@ async fn insert_schedule(pool: &sqlx::SqlitePool, page_id: &str, scheduled_start
     .unwrap();
 }
 
+async fn insert_schedule_in_zone(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+    scheduled_start: &str,
+    timezone: &str,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, timezone, status, created_at)
+         VALUES (?, ?, ?, ?, 'not_started', datetime('now'))",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn insert_scheduled_page(pool: &sqlx::SqlitePool, id: &str, scheduled_start: &str) {
     insert_test_page(
         pool,
@@ -1091,6 +1110,138 @@ async fn list_pages_today_boundary_is_the_local_day() {
     let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
     let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, vec!["overdue", "today"]);
+}
+
+/// A synced event happens at one instant. Which day that instant falls on is the
+/// viewer's question, not the source calendar's, and the two disagree for most of
+/// every day once the zones differ. Reading the stored date put a Tokyo morning
+/// under tomorrow while its block sat on today's grid.
+///
+/// `device_zone()` is UTC under `cfg(test)`, so both offsets here are relative to
+/// UTC rather than to whatever machine is running this.
+#[tokio::test]
+async fn list_pages_today_reads_a_synced_day_in_the_viewer_zone() {
+    let pool = test_pool().await;
+
+    // 06:00 in Tokyo (UTC+9) is 21:00 the day before in UTC — today for the viewer,
+    // tomorrow by the stored date.
+    insert_scheduled_page(&pool, "tokyo-morning", "2026-08-08T06:00:00").await;
+    insert_schedule_in_zone(&pool, "tokyo-morning", "2026-08-08T06:00:00", "Asia/Tokyo").await;
+
+    // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC — tomorrow for the
+    // viewer, today by the stored date.
+    insert_scheduled_page(&pool, "la-evening", "2026-08-07T20:00:00").await;
+    insert_schedule_in_zone(
+        &pool,
+        "la-evening",
+        "2026-08-07T20:00:00",
+        "America/Los_Angeles",
+    )
+    .await;
+
+    // No zone: floats, and keeps its own date whatever the viewer's zone is.
+    insert_scheduled_page(&pool, "native", "2026-08-07T09:00:00").await;
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
+
+    assert!(ids.contains(&"tokyo-morning"), "got {ids:?}");
+    assert!(!ids.contains(&"la-evening"), "got {ids:?}");
+    assert!(ids.contains(&"native"), "got {ids:?}");
+}
+
+/// An all-day synced event has no zone to convert from and floats like a native
+/// one, so it must not be dragged across midnight by the account's zone.
+#[tokio::test]
+async fn list_pages_today_leaves_an_all_day_synced_page_on_its_own_date() {
+    let pool = test_pool().await;
+
+    insert_scheduled_page(&pool, "all-day", "2026-08-07").await;
+    insert_schedule_in_zone(&pool, "all-day", "2026-08-07", "Asia/Tokyo").await;
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(ids, vec!["all-day"]);
+}
+
+/// C111: moving an occurrence onto today puts its original date in the exclusion
+/// set, so the head derives *past* today and a head-only read lists nothing — while
+/// `today_scheduled_count`, which reads the override row, counts it. A reminder
+/// pointing at an empty list is the shape of a page having been lost.
+#[tokio::test]
+async fn list_pages_today_shows_an_occurrence_moved_onto_today() {
+    let pool = test_pool().await;
+
+    // Head two weeks out; the series is daily from there.
+    insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
+    add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
+
+    let rule_id: String =
+        sqlx::query_scalar("SELECT id FROM page_recurrence_rules WHERE page_id = 'series'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    // One occurrence moved back onto today.
+    sqlx::query(
+        "INSERT INTO page_schedules
+           (id, page_id, scheduled_start, scheduled_end, rule_id, original_date, status, created_at)
+         VALUES (?, 'series', '2026-08-07T15:00:00', NULL, ?, '2026-08-22', 'not_started',
+                 datetime('now'))",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&rule_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    let listed = pages
+        .iter()
+        .find(|p| p.id == "series")
+        .expect("series is listed");
+
+    // And at the moved time, not the head's — the row has to name the day it is
+    // being listed for.
+    assert_eq!(
+        listed.scheduled_start.as_deref(),
+        Some("2026-08-07T15:00:00")
+    );
+}
+
+/// The same row must not drag a series into Today when it was moved to some other
+/// future day.
+#[tokio::test]
+async fn list_pages_today_ignores_an_occurrence_moved_to_a_later_day() {
+    let pool = test_pool().await;
+
+    insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
+    add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
+
+    let rule_id: String =
+        sqlx::query_scalar("SELECT id FROM page_recurrence_rules WHERE page_id = 'series'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    sqlx::query(
+        "INSERT INTO page_schedules
+           (id, page_id, scheduled_start, scheduled_end, rule_id, original_date, status, created_at)
+         VALUES (?, 'series', '2026-08-19T15:00:00', NULL, ?, '2026-08-22', 'not_started',
+                 datetime('now'))",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&rule_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    assert!(
+        pages.iter().all(|p| p.id != "series"),
+        "got {:?}",
+        pages.iter().map(|p| &p.id).collect::<Vec<_>>()
+    );
 }
 
 #[tokio::test]

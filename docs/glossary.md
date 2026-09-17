@@ -54,6 +54,12 @@ tag. Without it a projection change invalidates the whole synced corpus at once.
 Behavior per origin and surface: [`functionality-matrix.md`](./functionality-matrix.md)
 §5–§6.
 
+**Finite recurrence** — a quick-add phrase bounded by a count or an end date
+("m/w/f for 2 weeks"). Creates N independent pages, one per matched day, each scheduled
+on its own and carrying no rule. It never becomes a Series, so the "never one row per
+occurrence" rule below does not apply to it. `ParseResult` type `finite`, expanded in
+`QuickAddDialog.tsx`.
+
 **Series** — one recurring page. Always a single `pages` row plus one
 `page_recurrence_rules` row; never one row per occurrence.
 
@@ -224,3 +230,8 @@ These live in code. Listed here so nobody records them as decisions.
 | Package manager: pnpm (Rust workspace for `crates/`) | `package.json`, `Cargo.toml` |
 | Index list | `crates/pikos-db/migrations/` |
 | Dev DB `app.pikos.desktop.dev` vs prod `app.pikos.desktop` | Tauri `app_data_dir()` |
+| Manual order is `sort_order INTEGER` on `pages` and `folders`, `max+1` on create | `crates/pikos-db/migrations/001_initial.sql` |
+| `subtitle TEXT` on `pages`, searchable through `pages_fts` | `crates/pikos-db/migrations/001_initial.sql` |
+| `last_opened_at` on `pages` is what Recent reads | `crates/pikos-db/migrations/001_initial.sql` |
+| Autosave debounce 800ms, flushed early on blur and on close | `apps/desktop/src/features/editor/hooks/useAutosave.ts` |
+| A focus session shorter than 30s is never written | `MIN_SESSION_S`, `apps/desktop/src/features/editor/hooks/useFocusTimer.ts` |

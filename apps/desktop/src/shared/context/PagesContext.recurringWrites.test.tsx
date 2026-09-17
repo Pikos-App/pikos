@@ -408,7 +408,7 @@ describe("skipOccurrences", () => {
   });
 });
 
-// ─── completeSyncedOccurrence + cloneWallClock ────────────────────────────────
+// ─── completeSyncedOccurrence + viewerWallClock ────────────────────────────────
 // Completing a rendered occurrence of a synced series writes against that
 // occurrence's own date (never the head's) and stores the done clone at the
 // viewer-local wall clock for a zoned timed event. Which gesture reaches this
@@ -565,7 +565,7 @@ describe("maybeUncompleteRecurringClone", () => {
   });
 });
 
-describe("cloneWallClock", () => {
+describe("viewerWallClock", () => {
   it("converts a timed zoned occurrence's clone start to the viewer-local instant", async () => {
     const { hook, pageId } = await setupSyncedRecurring(
       "2099-01-05T15:00:00",

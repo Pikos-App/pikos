@@ -317,3 +317,35 @@ describe("placeMonthCellEvents — overflow capping", () => {
     expect(placeMonthCellEvents(many, day, -2).visible).toEqual([]);
   });
 });
+
+// The week grid resolves a synced event's zone in `calendarLayout`; the month
+// grid is its parallel and did not, so a cross-zone event landed in the source
+// calendar's cell instead of the viewer's. Vitest pins TZ=UTC.
+describe("placeMonthCellEvents — a synced event lands in the viewer's cell", () => {
+  function synced(id: string, start: string, timezone: string): PageSummary {
+    return page({ id, scheduledStart: start, scheduleLocked: true, syncState: "active", timezone });
+  }
+
+  it("pulls a Tokyo morning back onto the previous day", () => {
+    // 06:00 on the 11th in Tokyo (UTC+9) is 21:00 on the 10th in UTC.
+    const tokyo = synced("tokyo", "2026-03-11T06:00:00", "Asia/Tokyo");
+
+    expect(placeMonthCellEvents([tokyo], new Date(2026, 2, 10)).visible).toHaveLength(1);
+    expect(placeMonthCellEvents([tokyo], new Date(2026, 2, 11)).visible).toHaveLength(0);
+  });
+
+  it("pushes a Los Angeles evening onto the next day", () => {
+    // 20:00 on the 10th in Los Angeles (UTC-8 in March) is 04:00 on the 11th UTC.
+    const la = synced("la", "2026-03-10T20:00:00", "America/Los_Angeles");
+
+    expect(placeMonthCellEvents([la], new Date(2026, 2, 11)).visible).toHaveLength(1);
+    expect(placeMonthCellEvents([la], new Date(2026, 2, 10)).visible).toHaveLength(0);
+  });
+
+  it("leaves an all-day synced event on its own day", () => {
+    const allDay = synced("all-day", "2026-03-10", "Asia/Tokyo");
+
+    expect(placeMonthCellEvents([allDay], new Date(2026, 2, 10)).visible).toHaveLength(1);
+    expect(placeMonthCellEvents([allDay], new Date(2026, 2, 9)).visible).toHaveLength(0);
+  });
+});

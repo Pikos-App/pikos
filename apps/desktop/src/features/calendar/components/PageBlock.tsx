@@ -246,9 +246,6 @@ export function PageBlock({
     !isMicro && isRenderingCompact && "mt-px",
     !isMicro && !isRenderingCompact && "mt-[3px]"
   );
-  // Checkbox stroke tracks the event's accent (the left-border stripe), not
-  // the fill — so it stays legible on muted fills and against any folder
-  // color. Same fallback the chip background uses when no folder colour is set.
   const checkbox = showsCheckbox ? (
     <TaskCheckbox
       as="span"

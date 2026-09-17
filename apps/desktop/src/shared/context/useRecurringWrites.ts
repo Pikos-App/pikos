@@ -22,12 +22,12 @@ import type {
   StorageAdapter,
 } from "@pikos/core";
 import {
-  cloneWallClock,
   dateKey,
   findRecurringOccurrenceClone,
   formatDateOnly,
   getLocalTimezone,
   toStorageError,
+  viewerWallClock,
 } from "@pikos/core";
 import { type Dispatch, type RefObject, type SetStateAction, useRef, useState } from "react";
 
@@ -291,9 +291,9 @@ export function useRecurringWrites({
       head?.scheduleLocked && head.scheduledStart
         ? {
             occurrenceDate: head.scheduledStart.slice(0, 10),
-            scheduledStart: cloneWallClock(head.scheduledStart, head.timezone),
+            scheduledStart: viewerWallClock(head.scheduledStart, head.timezone),
             ...(head.scheduledEnd
-              ? { scheduledEnd: cloneWallClock(head.scheduledEnd, head.timezone) }
+              ? { scheduledEnd: viewerWallClock(head.scheduledEnd, head.timezone) }
               : {}),
           }
         : {};
@@ -402,9 +402,9 @@ export function useRecurringWrites({
     try {
       result = await adapter.completeRecurringPage({
         ...input,
-        scheduledStart: cloneWallClock(input.scheduledStart, timezone),
+        scheduledStart: viewerWallClock(input.scheduledStart, timezone),
         ...(input.scheduledEnd
-          ? { scheduledEnd: cloneWallClock(input.scheduledEnd, timezone) }
+          ? { scheduledEnd: viewerWallClock(input.scheduledEnd, timezone) }
           : {}),
       });
     } finally {
