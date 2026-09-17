@@ -2743,6 +2743,7 @@ async fn teardown_re_drains_a_link_inserted_below_the_cursor() {
     )
     .await
     .unwrap();
+    // sql-ok: ACCOUNT is a test-local constant
     sqlx::query(&format!(
         "CREATE TRIGGER late_link AFTER UPDATE OF sync_state ON page_sync
          WHEN NOT EXISTS (SELECT 1 FROM page_sync WHERE id = 'aaa-late')

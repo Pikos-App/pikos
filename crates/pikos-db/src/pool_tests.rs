@@ -291,6 +291,7 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
         ("page_reminders", "rem1"),
     ] {
         let found: i64 =
+            // sql-ok: table and id come from this test's own literal list
             sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE id = '{id}'"))
                 .fetch_one(&pool)
                 .await
