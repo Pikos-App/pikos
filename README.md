@@ -40,7 +40,7 @@ machine. Point a client at it:
 { "mcpServers": { "pikos": { "command": "pikos", "args": ["mcp"] } } }
 ```
 
-Thirteen tools, each a thin wrapper over the same code the subcommands use. Deleting only
+Every tool is a thin wrapper over the same code the subcommands use. Deleting only
 moves a page to the trash and restoring undoes it, so nothing an agent does is one-way, and
 the server refuses to migrate your workspace behind your back. Full reference:
 [`crates/pikos-cli/README.md`](crates/pikos-cli/README.md) and
