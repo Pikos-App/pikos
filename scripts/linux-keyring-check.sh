@@ -48,10 +48,20 @@ export CRATE PREFIX
 export -f run_tests
 dbus-run-session -- bash -c '
   set -euo pipefail
+  # --replace because a daemon someone else started answers the control socket and
+  # leaves this invocation printing nothing at all. Installing gnome-keyring pulls
+  # in libpam-gnome-keyring, whose systemd user units start one, so on a machine
+  # running systemd this is the normal case rather than the odd one.
+  #
   # Not `eval "$(…)"` on its own line: a command substitution consumed as an argument hides its
   # own failure from set -e, so a daemon that never started would read as an empty address.
-  address=$(printf "\n" | gnome-keyring-daemon --unlock --components=secrets)
-  [ -n "$address" ] || { echo "gnome-keyring-daemon printed no control address"; exit 1; }
+  err=$(mktemp)
+  address=$(printf "\n" | gnome-keyring-daemon --replace --unlock --components=secrets 2>"$err")
+  [ -n "$address" ] || {
+    echo "gnome-keyring-daemon printed no control address. It said:"
+    cat "$err"
+    exit 1
+  }
   eval "$address"
   export GNOME_KEYRING_CONTROL
   run_tests 2 "$PREFIX::the_system_keychain_round_trips" \

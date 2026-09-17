@@ -84,8 +84,15 @@ step "connecting, then polling from a fresh keychain handle"
 export CRATE PREFIX
 dbus-run-session -- bash -c '
   set -euo pipefail
-  address=$(printf "\n" | gnome-keyring-daemon --unlock --components=secrets)
-  [ -n "$address" ] || { echo "gnome-keyring-daemon printed no control address"; exit 1; }
+  # --replace for the reason linux-keyring-check.sh gives: a daemon already on the
+  # control socket leaves this printing nothing.
+  err=$(mktemp)
+  address=$(printf "\n" | gnome-keyring-daemon --replace --unlock --components=secrets 2>"$err")
+  [ -n "$address" ] || {
+    echo "gnome-keyring-daemon printed no control address. It said:"
+    cat "$err"
+    exit 1
+  }
   eval "$address"
   export SSH_AUTH_SOCK GNOME_KEYRING_CONTROL
 
