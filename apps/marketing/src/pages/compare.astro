@@ -2,17 +2,18 @@
 import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 
-const title = "Pikos vs Obsidian, NotePlan, TickTick, and Others";
-const description = "How Pikos compares to Obsidian, NotePlan, TickTick, Things, Todoist, and Linear. Honest feature comparison.";
+const title = "Pikos vs Notion, Obsidian, NotePlan, and Others";
+const description = "How Pikos compares to Notion, Obsidian, Logseq, NotePlan, TickTick, Things, Todoist, and the Apple apps. Honest feature comparison.";
 
 const apps = [
   { name: "Pikos",    notes: true,  tasks: true,  calendar: true,  localFirst: true,  noAccount: true,  free: true  },
   { name: "NotePlan", notes: true,  tasks: true,  calendar: true,  localFirst: true,  noAccount: false, free: false },
+  { name: "Notion",   notes: true,  tasks: true,  calendar: true,  localFirst: false, noAccount: false, free: true  },
   { name: "Obsidian", notes: true,  tasks: false, calendar: false, localFirst: true,  noAccount: true,  free: true  },
+  { name: "Logseq",   notes: true,  tasks: true,  calendar: false, localFirst: true,  noAccount: true,  free: true  },
   { name: "TickTick", notes: false, tasks: true,  calendar: true,  localFirst: false, noAccount: false, free: false },
   { name: "Things",   notes: false, tasks: true,  calendar: false, localFirst: true,  noAccount: true,  free: false },
   { name: "Todoist",  notes: false, tasks: true,  calendar: false, localFirst: false, noAccount: false, free: false },
-  { name: "Linear",   notes: false, tasks: true,  calendar: false, localFirst: false, noAccount: false, free: false },
 ];
 
 const columns = [
@@ -80,13 +81,31 @@ const columns = [
       </table>
     </div>
 
+    <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">
+      Checked September 2026. These apps all move, so if something here has gone out of date, <a href="/feedback" class="hover:text-primary-500 hover:underline dark:hover:text-primary-400">tell me</a> and I'll correct it.
+    </p>
+
     <!-- Prose comparison sections -->
     <div class="mt-16 space-y-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+      <section>
+        <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Pikos vs Notes, Reminders and Calendar</h2>
+        <p class="mt-3">
+          You already have all three, they cost nothing, and they sync across your devices without you setting anything up. That's a real advantage and Pikos doesn't match it yet. What you don't get is any connection between them. The note about a meeting sits in one app, the task it produced in another, the meeting itself in a third, and nothing ties them together. In Pikos a page is all three at once, so the note, the task and the time are one thing rather than three you keep in step by hand.
+        </p>
+      </section>
 
       <section>
         <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Pikos vs Obsidian</h2>
         <p class="mt-3">
           Obsidian is great for linking notes and building a personal knowledge base. It doesn't have tasks or a calendar. You need plugins for both, and they don't talk to each other well. If your workflow is mostly writing and linking, Obsidian is the right tool. If you also need to track and schedule things without switching apps, Pikos does that natively.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Pikos vs Notion</h2>
+        <p class="mt-3">
+          Notion covers all three too, and with far more power than Pikos: databases, views, templates, and a whole layer for working with other people. The difference is where the work lives. Notion wants an account from the first minute and keeps your pages on its servers, and its offline mode is a cache of what you had open rather than the real thing. Pikos keeps everything in a file on your disk and behaves the same with the network off. If you're building something with a team, Notion is the stronger tool. If you want your own notes to stay yours, that's the entire point of Pikos.
         </p>
       </section>
 
