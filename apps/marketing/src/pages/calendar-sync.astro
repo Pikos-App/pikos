@@ -26,7 +26,7 @@ const description = "Pull your calendar into Pikos. Works with iCloud, Google Ca
         </p>
 
         <p>
-          It's read-only and opt-in. Nothing you write in Pikos goes back out to your provider, and only the calendars you turn on ever sync. Your notes and pages stay on your device. The only thing that moves over the network is your calendar coming in.
+          It's read-only and opt-in. Nothing you write in Pikos goes back out to your provider, and only the calendars you turn on ever sync. Your notes and pages stay on your device. Your calendar coming in is the only thing sync moves over the network, and the app's one other request is the update check it makes at launch, which you can turn off.
         </p>
 
         <h2>What you need</h2>
@@ -67,23 +67,31 @@ const description = "Pull your calendar into Pikos. Works with iCloud, Google Ca
         </p>
 
         <p>
-          Pikos connects and lists every calendar on the account. Flip on the ones you want. Each enabled calendar gets its own folder and a color you can change. Turn a calendar off and its folder disappears. Your password goes straight into the system keychain, never the app's own files. On Linux that means GNOME Keyring or KWallet, which has to be running.
+          Pikos connects and lists the calendars on the account that hold events. Flip on the ones you want. Each enabled calendar gets its own folder and a color you can change. Your password goes straight into the system keychain, never the app's own files. On Linux that means GNOME Keyring, KWallet or KeePassXC, one of which has to be running.
+        </p>
+
+        <p>
+          Pikos brings in the past week and everything ahead of it. Older events stay in your calendar and don't come across, so a freshly connected account looks thinner than the one you're used to.
         </p>
 
         <h2>How synced events behave</h2>
 
         <ul>
           <li><strong>The schedule is locked.</strong> Title, time, and recurrence come from your calendar and can't be edited or dragged in Pikos. That's on purpose. It's how an event always matches the source.</li>
-          <li><strong>The notes are yours.</strong> The body, tags, reminders, and links belong to you. Write whatever you want. Sync never touches them.</li>
+          <li><strong>The notes are yours.</strong> Tags, reminders and completions are yours outright: sync never writes them. The body starts as the event's description, and while you haven't touched it an update from your calendar refreshes it. The moment you write in it, it's yours. A later change upstream waits in a notice for you to accept or dismiss.</li>
           <li><strong>Recurring events just work.</strong> Repeats, exceptions, and cancelled occurrences come across and project onto the calendar.</li>
-          <li><strong>It works offline.</strong> Synced events are stored locally, so the calendar still renders with no connection. Pikos refreshes when you're back online and when the window regains focus.</li>
-          <li><strong>Removing a calendar is clean.</strong> Disable it and the mirror events go with it. Anything you took notes on or marked done is kept, so you never lose your own work.</li>
+          <li><strong>It works offline.</strong> Synced events are stored locally, so the calendar still renders with no connection. Pikos re-checks every few minutes and when the window regains focus, so after a spell offline the next pass picks things up.</li>
+          <li><strong>Removing a calendar keeps your work.</strong> Disable it and the mirror events go. Anything you took notes on or marked done is kept, and its folder is kept with it, as an ordinary folder holding your own pages.</li>
         </ul>
 
         <h2>Connecting Google Calendar</h2>
 
         <p>
-          Google skips all of the above. There's no server URL or app password; you sign in with Google instead. Click <strong>Add account</strong>, choose <strong>Google</strong>, and approve read-only access in your browser. Pikos asks for read-only access to your calendars, and disconnecting revokes it.
+          Google skips all of the above. There's no server URL or app password; you sign in with Google instead. Click <strong>Add account</strong>, choose <strong>Google Calendar</strong>, and approve read-only access in your browser. Pikos only ever asks to read your calendar list and your events.
+        </p>
+
+        <p>
+          Disconnecting deletes the token and asks Google to revoke it. If you're offline at the time the local half still happens, so Pikos loses its access either way, but the grant can linger in your Google account. You can always clear it yourself from Google's permissions page.
         </p>
 
         <p>

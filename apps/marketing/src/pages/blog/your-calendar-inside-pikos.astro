@@ -37,23 +37,24 @@ import BlogPost from "../../layouts/BlogPost.astro";
   </p>
 
   <p>
-    Either way, your credentials go straight into the system keychain, never the Pikos database. Disconnecting deletes them, and for Google it also revokes Pikos's access.
+    Either way, your credentials go straight into the system keychain, never the Pikos database. Disconnecting deletes them, and for Google it also asks Google to revoke the grant. If that call can't go through, Pikos has still lost its own copy, and you can clear the grant from Google's permissions page.
   </p>
 
   <h2>The details</h2>
 
   <ul>
     <li>Recurring events come across properly: repeats, exceptions, moved and cancelled occurrences.</li>
-    <li>Reminders fire at the right moment, even for events in another time zone.</li>
-    <li>Everything works offline. Events are stored locally and refresh when you're back online.</li>
+    <li>Reminders you set in Pikos fire at the right moment, even for an event in another time zone. Your provider's own alerts don't come across, because a read-only mirror would leave you with a reminder you couldn't edit.</li>
+    <li>Everything works offline. Events are stored locally, and Pikos re-checks every few minutes and whenever you focus the window.</li>
+    <li>The past week comes in, along with everything ahead of it. Older events stay where they are.</li>
     <li>Each calendar gets its own folder and color, and you choose exactly which calendars sync.</li>
-    <li>Turning a calendar off removes its events but keeps every page you wrote notes on.</li>
+    <li>Turning a calendar off removes its events but keeps every page you wrote notes on. The folder stays too, as an ordinary one, if any of your pages are still in it.</li>
   </ul>
 
   <h2>What this means for privacy</h2>
 
   <p>
-    The only network traffic is your device talking to your calendar provider. There's no Pikos server in the middle; there's no Pikos server at all. Sync is off by default and nothing connects until you set it up. The <a href="/privacy">privacy policy</a> has the full picture.
+    Sync talks to your calendar provider and to nothing else. There's no Pikos server in the middle; there's no Pikos server at all. The app's one other request is the update check it makes at launch, which you can turn off in Settings. Sync itself is off by default and nothing connects until you set it up. The <a href="/privacy">privacy policy</a> has the full picture.
   </p>
 
   <p>
