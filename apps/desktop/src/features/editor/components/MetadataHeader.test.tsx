@@ -305,3 +305,41 @@ describe("MetadataHeader — why a locked field can't be edited", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+// The caret is placed once, when the field swaps from its div to its textarea.
+// Re-placing it on every value change is what made typing into the middle of a
+// title impossible: each keystroke threw the caret back to the end.
+describe("MetadataHeader — the caret stays where you put it", () => {
+  async function focusField(name: string) {
+    await renderHeader(makePage({ scheduleLocked: false, subtitle: "Weekly", syncState: null }));
+    fireEvent.click(screen.getByRole("button", { name }));
+    const field = screen.getByRole<HTMLTextAreaElement>("textbox", { name });
+    const setSelectionRange = vi.spyOn(field, "setSelectionRange");
+    return { field, setSelectionRange };
+  }
+
+  it("does not move the caret while you type in the title", async () => {
+    const { field, setSelectionRange } = await focusField("Page title");
+
+    fireEvent.change(field, { target: { value: "Team Xsync" } });
+
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
+  it("does not move the caret while you type in the description", async () => {
+    const { field, setSelectionRange } = await focusField("Page description");
+
+    fireEvent.change(field, { target: { value: "WeXekly" } });
+
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
+  it("puts the caret at the end when the title opens for editing", async () => {
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null, title: "Team sync" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Page title" }));
+
+    const field = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Page title" });
+    expect(field.selectionStart).toBe("Team sync".length);
+  });
+});

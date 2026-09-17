@@ -22,6 +22,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
+import { useCaretAtEndOnFocus } from "../hooks/useCaretAtEndOnFocus";
 import { Byline } from "./Byline";
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
 import { FocusTimer } from "./FocusTimer";
@@ -177,11 +178,9 @@ export function MetadataHeader({
     el.style.height = titleHeightRef.current !== undefined ? `${titleHeightRef.current}px` : "0";
     titleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
-    if (titleFocused) {
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
   }, [titleValue, titleFocused]);
+
+  useCaretAtEndOnFocus(titleRef, titleFocused);
 
   function handleTitleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const next = e.target.value;
@@ -215,11 +214,9 @@ export function MetadataHeader({
       subtitleHeightRef.current !== undefined ? `${subtitleHeightRef.current}px` : "0";
     subtitleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
-    if (subtitleFocused) {
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
   }, [subtitleValue, subtitleFocused]);
+
+  useCaretAtEndOnFocus(subtitleRef, subtitleFocused);
 
   function handleSubtitleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const next = e.target.value;

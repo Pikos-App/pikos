@@ -49,6 +49,35 @@ appTest("open page and edit content @tier1", async ({ app }) => {
   await expect(editor).toContainText("Hello world");
 });
 
+// ─── Typing into the middle of a title ─────────────────────────────────────
+
+// Two characters, not one: the old bug re-placed the caret after the state
+// round-trip, so the first character landed correctly and every one after it
+// went to the end. "abcXdefY" instead of "abcXYdef".
+appTest("typing into the middle of a title or description stays there @tier1", async ({ app }) => {
+  await quickAdd(app, "abcdef");
+
+  await app.locator("[data-page-list-item]").getByText("abcdef").click();
+
+  await app.getByLabel("Page title").click();
+  const titleInput = app.getByRole("textbox", { name: "Page title" });
+  await expect(titleInput).toBeFocused();
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.type("XY");
+  await expect(titleInput).toHaveValue("abcXYdef");
+
+  await app.getByLabel("Page description").click();
+  const descInput = app.getByRole("textbox", { name: "Page description" });
+  await app.keyboard.type("abcdef");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.type("XY");
+  await expect(descInput).toHaveValue("abcXYdef");
+});
+
 // ─── Complete a page (toggle status) ───────────────────────────────────────
 
 appTest("complete a page via status toggle @tier1", async ({ app }) => {
