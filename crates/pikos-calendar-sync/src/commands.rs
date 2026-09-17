@@ -405,3 +405,7 @@ pub async fn refresh_account<P: CalendarProvider>(
 #[cfg(test)]
 #[path = "commands_tests.rs"]
 mod commands_tests;
+
+#[cfg(test)]
+#[path = "live_caldav_tests.rs"]
+mod live_caldav_tests;
