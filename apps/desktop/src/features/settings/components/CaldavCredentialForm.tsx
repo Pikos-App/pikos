@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 
 import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
 
+const SERVER_HINT_ID = "caldav-server-url-hint";
+
 interface CaldavCredentialFormProps {
   password: string;
   onPasswordChange: (value: string) => void;
@@ -28,6 +30,12 @@ interface CaldavCredentialFormProps {
   onSecondary: () => void;
 }
 
+/** "a, b and c" — the reading order, not a bulleted list of one or two things. */
+function listWords(words: string[]): string {
+  if (words.length <= 1) return words[0] ?? "";
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
 export function CaldavCredentialForm({
   busy,
   busyLabel,
@@ -40,9 +48,17 @@ export function CaldavCredentialForm({
   server,
   submitLabel,
 }: CaldavCredentialFormProps) {
-  const canSubmit = server
-    ? !!(server.url.trim() && server.username.trim() && password) && !busy
-    : !!password && !busy;
+  const missing = [
+    server && !server.url.trim() && "a server URL",
+    server && !server.username.trim() && "a username",
+    !password && "an app password",
+  ].filter((m): m is string => typeof m === "string");
+  const canSubmit = missing.length === 0 && !busy;
+
+  // Only once something has been typed. On an untouched form the list is every
+  // field and says nothing the empty inputs don't; the case worth naming is the
+  // half-filled one, where Connect is grey and the reason isn't on screen.
+  const started = !!(password || server?.url.trim() || server?.username.trim());
 
   return (
     <div className="flex flex-col gap-3">
@@ -51,13 +67,21 @@ export function CaldavCredentialForm({
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Server URL</span>
             <input
+              aria-describedby={SERVER_HINT_ID}
               autoFocus
               className={FORM_INPUT}
               onChange={(e) => server.onUrlChange(e.target.value)}
-              placeholder="https://caldav.icloud.com"
+              placeholder="https://caldav.example.com"
               value={server.url}
             />
           </label>
+          {/* Outside the label, because a description is not part of the field's
+              name. The placeholder used to be a real iCloud URL, which read as a
+              value already filled in while Connect stayed grey saying nothing; this
+              carries what it was there to carry. */}
+          <span className="-mt-2 text-xs text-subtle" id={SERVER_HINT_ID}>
+            iCloud is https://caldav.icloud.com, Fastmail https://caldav.fastmail.com
+          </span>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Username</span>
             <input
@@ -90,6 +114,9 @@ export function CaldavCredentialForm({
       </a>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {!error && !busy && started && missing.length > 0 && (
+        <p className="text-xs text-subtle">Needs {listWords(missing)}.</p>
+      )}
 
       <div className="mt-1 flex justify-end gap-2">
         <Button disabled={busy} onClick={onSecondary} size="sm" variant="ghost">

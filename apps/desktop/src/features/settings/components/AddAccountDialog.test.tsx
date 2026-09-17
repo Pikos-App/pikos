@@ -92,6 +92,45 @@ describe("AddAccountDialog", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
+  // C113: the Server URL placeholder was a real, working iCloud URL, sitting above
+  // two placeholders that obviously are examples. An iCloud user read the field as
+  // answered, filled in the other two, and met a Connect button that stayed grey
+  // and said nothing.
+  it("offers a server URL you cannot mistake for a value", () => {
+    render();
+    fireEvent.click(screen.getByText("CalDAV"));
+
+    const url = screen.getByLabelText("Server URL");
+    expect(url).toHaveValue("");
+    expect(url.getAttribute("placeholder")).toContain("example.com");
+    expect(url.getAttribute("placeholder")).not.toContain("icloud.com");
+  });
+
+  it("still says what an iCloud server URL is, beside the field", () => {
+    render();
+    fireEvent.click(screen.getByText("CalDAV"));
+
+    expect(screen.getByLabelText("Server URL")).toHaveAccessibleDescription(/caldav\.icloud\.com/);
+  });
+
+  it("names the field a disabled Connect is waiting on", () => {
+    render();
+    fireEvent.click(screen.getByText("CalDAV"));
+
+    // Nothing typed: the empty inputs already say it, so no line.
+    expect(screen.queryByText(/^Needs /)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Server URL"), {
+      target: { value: "https://caldav.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "me@example.com" },
+    });
+
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByText("Needs an app password.")).toBeInTheDocument();
+  });
+
   it("submits trimmed credentials", async () => {
     const onConnect = vi.fn().mockResolvedValue(undefined);
     render({ onConnect });
