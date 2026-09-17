@@ -97,34 +97,18 @@ run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
 # reasoning as e2e-tags.
 run_check "ui-tokens"         bash scripts/check-ui-tokens.sh &
 
-# Only the specs the working-tree diff can reach. Safe because the workspace
-# resolves `@pikos/core` to its *source* (`exports: "./src/index.ts"`), so
-# vitest's module graph crosses the package boundary — a core edit still selects
-# every desktop spec importing it, rather than silently testing nothing. Specs
-# reached only at runtime (dynamic import, fixture read off disk) are the blind
-# spot, and why the full suite still gates pre-push and CI.
-affected_tests() {
-  pnpm --filter @pikos/desktop exec vitest run --changed --passWithNoTests &&
-    pnpm --filter @pikos/core exec vitest run --changed --passWithNoTests &&
-    pnpm --filter @pikos/ui exec vitest run --changed --passWithNoTests
-}
-
 # SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
 # runs the same desktop+core suite, with thresholds) is the single test pass.
 #
-# Locally the default is affected-only: the full suite is ~37s and dominates this
-# script's wall clock on every commit, where a typical edit reaches 4 of 91 specs.
-# VERIFY_ALL=1 forces the full run — validate.sh sets it, a release gate being the
-# one place scoping to a diff is wrong.
-tests_mode=""
+# Always the full suite, never `vitest --changed`. Scoping to the diff measured
+# slower and burned six times the CPU: vitest rebuilds the module graph on every
+# invocation and carries nothing between runs, so a branch with a broad working
+# diff selects most of the suite and pays for the selection on top. Turbo hashes
+# content, so an untouched re-run is free and an edit re-runs only the packages
+# that can reach it. Running everything is also what lets one command be the
+# whole gate: a spec reached only at runtime was invisible to `--changed`.
 if [ -z "$SKIP_UNIT_TESTS" ]; then
-  if [ -n "$VERIFY_ALL" ]; then
-    tests_mode="(full)"
-    run_check "tests"         pnpm exec turbo test &
-  else
-    tests_mode="(affected — VERIFY_ALL=1 for the full suite)"
-    run_check "tests"         affected_tests &
-  fi
+  run_check "tests"           pnpm exec turbo test &
 fi
 
 if [ ${#changed[@]} -gt 0 ]; then
@@ -138,7 +122,7 @@ for name in typecheck-desktop typecheck-core typecheck-ui lint prettier depcruis
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
-    if [ "$name" = "tests" ]; then pass "$name" "$tests_mode"; else pass "$name"; fi
+    pass "$name"
   else
     fail "$name"
     if [ "$name" = "tests" ]; then

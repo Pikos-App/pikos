@@ -64,6 +64,18 @@ export default defineConfig({
       VITE_TEST_MODE: "true",
     },
     environment: "jsdom",
+    // The conformance tables are read off disk with `node:fs`, so they are not in
+    // vitest's module graph and `--changed` selects nothing when one is edited. The
+    // Rust runners catch a break because `cargo test` runs everything; this side
+    // would stay quiet until CI, which is the half of a two-sided table that matters.
+    // Vitest replaces the default list rather than extending it, so the defaults are
+    // repeated here.
+    forceRerunTriggers: [
+      "**/package.json/**",
+      "**/{vitest,vite}.config.*/**",
+      "**/crates/pikos-db/tests/fixtures/**",
+      "**/crates/pikos-recurrence/tests/fixtures/**",
+    ],
     // seeds/ carries two suites of its own — the tutorial seed's unit test and
     // the synced-calendar conformance runner — so it has to be swept too.
     include: ["src/**/*.test.{ts,tsx}", "seeds/**/*.test.{ts,tsx}"],

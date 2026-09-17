@@ -21,10 +21,8 @@ RESET='\033[0m'
 step() { printf "\n${BOLD}▶ %s${RESET}${DIM} %s${RESET}\n" "$1" "$2"; }
 
 # ── verify job ────────────────────────────────────────────────────────────────
-# VERIFY_ALL forces the full unit suite: verify's default is affected-only, which
-# is right for a pre-commit gate and wrong for a release gate.
 step "verify" "typecheck + lint + prettier + depcruise + unit tests"
-VERIFY_ALL=1 pnpm verify
+pnpm verify
 
 step "coverage" "desktop + core, per-directory thresholds"
 pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
