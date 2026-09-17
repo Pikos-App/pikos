@@ -320,10 +320,12 @@ appTest("a focus session's hidden panels leave the Tab order @tier2", async ({ a
     'nav[aria-label="Workspace navigation"], [aria-label="Page actions"], [role="group"][aria-label="Inbox"]'
   );
 
-  await app.keyboard.press("Tab");
-  await expect(app.getByRole("textbox", { name: "Page content" })).toBeFocused();
-
-  for (let i = 0; i < 5; i++) {
+  // Naming the element the first Tab lands on would pin this to one platform.
+  // macOS keeps buttons out of the Tab order, so there the first Tab reaches the
+  // editor; everywhere else it stops at the first of the eleven buttons the
+  // editor pane puts above it, the focus timer's among them. What has to hold on
+  // both is that no step of the walk lands in a panel that is not on screen.
+  for (let i = 0; i < 6; i++) {
     await app.keyboard.press("Tab");
     await expect(hiddenPanels.locator(":focus")).toHaveCount(0);
   }
