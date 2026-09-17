@@ -233,14 +233,41 @@ describe("groupTodayPages", () => {
     vi.useRealTimers();
   });
 
-  it("timed item 2 hours ago — in 'overdue' group", () => {
+  it("timed item 2 hours ago — still in 'today' group", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
 
     const pages = [makePage({ scheduledStart: "2026-03-27T12:00:00", title: "Past timed" })];
     const { overdue, today } = groupTodayPages(pages);
-    expect(overdue.map((p) => p.title)).toEqual(["Past timed"]);
+    expect(today.map((p) => p.title)).toEqual(["Past timed"]);
+    expect(overdue).toHaveLength(0);
+
+    vi.useRealTimers();
+  });
+
+  it("timed item yesterday evening — in 'overdue' group", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
+
+    const pages = [makePage({ scheduledStart: "2026-03-26T22:00:00", title: "Last night" })];
+    const { overdue, today } = groupTodayPages(pages);
+    expect(overdue.map((p) => p.title)).toEqual(["Last night"]);
     expect(today).toHaveLength(0);
+
+    vi.useRealTimers();
+  });
+
+  it("a timed page and an all-day page on the same date group together", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
+
+    const pages = [
+      makePage({ scheduledStart: "2026-03-27T09:00:00", title: "Timed" }),
+      makePage({ scheduledStart: "2026-03-27", title: "All-day" }),
+    ];
+    const { overdue, today } = groupTodayPages(pages);
+    expect(today.map((p) => p.title).sort()).toEqual(["All-day", "Timed"]);
+    expect(overdue).toHaveLength(0);
 
     vi.useRealTimers();
   });
@@ -422,32 +449,33 @@ describe("viewer-zone bucketing", () => {
     expect(belongsToView(allDay, "today", "2026-08-06")).toBe(false);
   });
 
-  it("calls a synced event overdue by when it passed for the viewer", () => {
+  it("calls a synced event overdue by the day it falls on for the viewer", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-07T12:00:00Z"));
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"));
 
-    // Both of these read the opposite way if the stored wall-clock is taken as
-    // local. 08:00 in Los Angeles (UTC-7) is 15:00 UTC, still ahead of noon, but
-    // the bare "08:00" looks past. 14:00 in Tokyo (UTC+9) is 05:00 UTC and gone,
-    // but the bare "14:00" looks upcoming.
-    const laMorning = makePage({
-      id: "la-morning",
-      scheduledStart: "2026-08-07T08:00:00",
-      scheduleLocked: true,
-      syncState: "active",
-      timezone: "America/Los_Angeles",
-    });
-    const tokyoAfternoon = makePage({
-      id: "tokyo-afternoon",
-      scheduledStart: "2026-08-07T14:00:00",
+    // Both of these land on the opposite day if the stored wall-clock is taken as
+    // local. 08:00 on the 8th in Tokyo (UTC+9) is 23:00 UTC on the 7th, so it is
+    // yesterday for the viewer while the bare date reads as today. 18:00 on the
+    // 7th in Los Angeles (UTC-7) is 01:00 UTC on the 8th, so it is today while
+    // the bare date reads as yesterday.
+    const tokyoEarly = makePage({
+      id: "tokyo-early",
+      scheduledStart: "2026-08-08T08:00:00",
       scheduleLocked: true,
       syncState: "active",
       timezone: "Asia/Tokyo",
     });
+    const laEvening = makePage({
+      id: "la-evening",
+      scheduledStart: "2026-08-07T18:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "America/Los_Angeles",
+    });
 
-    const { overdue, today } = groupTodayPages([laMorning, tokyoAfternoon]);
-    expect(overdue.map((p) => p.id)).toEqual(["tokyo-afternoon"]);
-    expect(today.map((p) => p.id)).toEqual(["la-morning"]);
+    const { overdue, today } = groupTodayPages([tokyoEarly, laEvening]);
+    expect(overdue.map((p) => p.id)).toEqual(["tokyo-early"]);
+    expect(today.map((p) => p.id)).toEqual(["la-evening"]);
 
     vi.useRealTimers();
   });

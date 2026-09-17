@@ -163,25 +163,25 @@ export function getCompletedViewPages(pages: PageSummary[], activeViewId: string
   );
 }
 
-/** Splits today-view pages into overdue (before now) and today (today, not yet past).
+/** Splits today-view pages into overdue (scheduled on an earlier day) and today.
  *
- * All-day items ('YYYY-MM-DD') use date-only comparison so they stay in "today" all day.
- * Timed items ('YYYY-MM-DDTHH:MM:SS') use a full datetime comparison so past-today
- * times (e.g. 1:45 AM when it is now 10 AM) correctly appear in "overdue".
+ * Overdue compares days, never the passing moment, so a page set for 9am today is still
+ * under Today at 2pm and reads as late only through its own red time. Grouping on the
+ * moment instead moved a page to Overdue the minute its time passed, which by the
+ * afternoon filled the section with the day's own plan and left it saying nothing about
+ * what needs rescheduling. It also split a timed page from an all-day one on the same
+ * date, which no one chose.
  */
 export function groupTodayPages(pages: PageSummary[]): {
   overdue: PageSummary[];
   today: PageSummary[];
 } {
   const todayStr = localToday();
-  const now = new Date();
 
   function isOverdue(p: PageSummary): boolean {
     const start = viewerStart(p);
     if (!start) return false;
-    if (isAllDayIso(start)) return start < todayStr;
-    // Timed: treat as past once the scheduled moment has passed
-    return parseLocalISO(start) < now;
+    return start.slice(0, 10) < todayStr;
   }
 
   return {

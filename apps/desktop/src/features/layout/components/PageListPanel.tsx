@@ -129,7 +129,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   const isTodayView = activeViewId === "today";
   const isUpcomingView = activeViewId === "upcoming";
-  // Re-renders once per minute so overdue/today grouping stays current as time passes.
+  // Re-renders once per minute so the overdue/today split follows the date over midnight.
   useMinuteTick();
   const { overdue, today } = isTodayView
     ? groupTodayPages(visiblePages)
