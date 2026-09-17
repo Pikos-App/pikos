@@ -425,8 +425,18 @@ async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Parent", "{}", "one two", 0, "[]").await;
 
-    assert!(!get_usage_stats_impl(&pool, MONDAY).await.unwrap().has_reminders);
-    assert!(!get_usage_stats_impl(&pool, MONDAY).await.unwrap().has_calendar_sync);
+    assert!(
+        !get_usage_stats_impl(&pool, MONDAY)
+            .await
+            .unwrap()
+            .has_reminders
+    );
+    assert!(
+        !get_usage_stats_impl(&pool, MONDAY)
+            .await
+            .unwrap()
+            .has_calendar_sync
+    );
 
     pikos_db::create_page_reminder(&pool, "p1", 30)
         .await
