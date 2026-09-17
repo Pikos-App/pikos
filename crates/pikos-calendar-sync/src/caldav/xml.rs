@@ -13,6 +13,35 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::NsReader;
 
+/// Decodes a text event's bytes, and does nothing else.
+///
+/// Not `xml_content`, which looks like the replacement for the old `unescape`
+/// and is the wrong one: it normalizes end-of-line sequences, and a
+/// `calendar-data` body is an ICS whose CRLF endings RFC 5545 line unfolding
+/// depends on. Entities are not this function's job either — see
+/// [`resolve_entity`].
+pub(super) fn decode_text(t: &quick_xml::events::BytesText<'_>) -> Result<String, CaldavError> {
+    Ok(t.decode()
+        .map_err(|e| CaldavError::Protocol(e.to_string()))?
+        .into_owned())
+}
+
+/// Resolves one `&name;` or `&#nn;` reference to the character it stands for.
+///
+/// quick-xml 0.41 reports a reference as its own event instead of folding it
+/// into the surrounding text, so a parser that matches only on text events drops
+/// every `&amp;` on the floor without erroring. Both readers here re-fold it,
+/// because their accumulators trim each call and would otherwise eat the spaces
+/// on either side of the entity too: `Work &amp; Life` became `WorkLife`.
+pub(super) fn resolve_entity(r: &quick_xml::events::BytesRef<'_>) -> Result<String, CaldavError> {
+    let name = r
+        .decode()
+        .map_err(|e| CaldavError::Protocol(e.to_string()))?;
+    Ok(quick_xml::escape::unescape(&format!("&{name};"))
+        .map_err(|e| CaldavError::Protocol(e.to_string()))?
+        .into_owned())
+}
+
 const NS_DAV: &[u8] = b"DAV:";
 const NS_CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
 const NS_APPLE: &[u8] = b"http://apple.com/ns/ical/";
@@ -250,6 +279,7 @@ impl Parse {
 
 fn parse_multistatus(xml: &str) -> Result<Vec<RawResponse>, CaldavError> {
     let mut reader = NsReader::from_str(xml);
+    let mut chars = String::new();
     let mut p = Parse::new();
 
     loop {
@@ -261,33 +291,37 @@ fn parse_multistatus(xml: &str) -> Result<Vec<RawResponse>, CaldavError> {
             _ => Vec::new(),
         };
         match ev {
-            Event::Start(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.open(&ns, &local, &e, true);
+            // Character data arrives in as many pieces as the document splits it
+            // into, so it is gathered here and handed over whole at the next
+            // structural event. CDATA joins it unescaped: its content is literal
+            // by definition. Dropping CDATA made an element wrapping its value in
+            // one look byte-identical to an empty element, which is a silent wrong
+            // answer rather than a parse failure.
+            Event::Text(t) => chars.push_str(&decode_text(&t)?),
+            Event::GeneralRef(r) => chars.push_str(&resolve_entity(&r)?),
+            Event::CData(t) => chars.push_str(&String::from_utf8_lossy(t.as_ref())),
+            structural => {
+                if !chars.is_empty() {
+                    p.text(&chars);
+                    chars.clear();
+                }
+                match structural {
+                    Event::Start(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.open(&ns, &local, &e, true);
+                    }
+                    Event::Empty(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.open(&ns, &local, &e, false);
+                    }
+                    Event::End(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.close(&ns, &local);
+                    }
+                    Event::Eof => break,
+                    _ => {}
+                }
             }
-            Event::Empty(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.open(&ns, &local, &e, false);
-            }
-            Event::Text(t) => {
-                let text = t
-                    .unescape()
-                    .map_err(|e| CaldavError::Protocol(e.to_string()))?;
-                p.text(&text);
-            }
-            // CDATA is character data like any other here. Dropping it made an
-            // element wrapping its value in CDATA look byte-identical to an empty
-            // one, which is a silent wrong answer rather than a parse failure.
-            // Its content is literal by definition, so it is not unescaped.
-            Event::CData(t) => {
-                p.text(&String::from_utf8_lossy(t.as_ref()));
-            }
-            Event::End(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.close(&ns, &local);
-            }
-            Event::Eof => break,
-            _ => {}
         }
     }
 
