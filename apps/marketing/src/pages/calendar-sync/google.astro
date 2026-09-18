@@ -1,0 +1,78 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
+
+const title = "Connect Google Calendar to Pikos";
+const description = "Sign in with Google and your events arrive in Pikos as pages you can take notes on. Read-only access, no app password, and nothing you write goes back to Google.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/calendar-sync" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Calendar sync
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Connect Google Calendar</h1>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">No server URL, no app password. You sign in with Google instead.</p>
+
+      <Prose class="mt-10">
+
+        <p>
+          Sync is read-only and opt-in. Your events come into Pikos as pages you can write on, and nothing you do in Pikos is ever sent back to Google. Connecting it cannot change your calendar.
+        </p>
+
+        <h2>Connect</h2>
+
+        <p>
+          Open Settings with <code>Cmd+,</code>, go to the <strong>Calendar Sync</strong> tab, click <strong>Add account</strong> and choose <strong>Google Calendar</strong>. Your browser opens, you approve, and you're back.
+        </p>
+
+        <p>
+          Pikos asks for read-only access to your calendar list and your events, and nothing else. It cannot create, edit or delete anything in Google Calendar, because it never asks for permission to.
+        </p>
+
+        <h2>Pick the calendars you want</h2>
+
+        <p>
+          Pikos lists the calendars on the account that hold events. Turn on the ones you want. Each gets its own folder and a colour you can change. The token goes into the system keychain, not a file Pikos owns.
+        </p>
+
+        <h2>What to expect afterwards</h2>
+
+        <p>
+          Pikos brings in the past week and everything ahead of it. Older events stay in Google and don't come across, so a freshly connected account looks thinner than the calendar you're used to.
+        </p>
+
+        <p>
+          The title, time and recurrence of a synced event are locked, so it always matches the source. The notes you add are yours and sync never overwrites them. Recurring events, their exceptions and cancelled occurrences all come across.
+        </p>
+
+        <h2>Disconnecting</h2>
+
+        <p>
+          Disconnecting deletes the token and asks Google to revoke it. If you happen to be offline at the time, the local half still happens, so Pikos loses access either way. The grant can linger in your Google account until it next reaches them, and you can always clear it yourself from Google's permissions page.
+        </p>
+
+        <p>
+          Turning off a calendar removes the mirrored events and keeps anything you wrote on them, in the folder it was already in.
+        </p>
+
+      </Prose>
+
+      <div class="mt-16 rounded-lg border border-neutral-200 bg-neutral-50 px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
+        <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          How synced events behave in full, plus iCloud and other providers, is on the <a href="/calendar-sync" class="font-medium text-primary-500 hover:underline dark:text-primary-400">calendar sync page</a>. Don't have Pikos yet? It's a <a href="/download" class="font-medium text-primary-500 hover:underline dark:text-primary-400">free download</a>.
+        </p>
+      </div>
+
+    </article>
+
+  </main>
+
+  <Footer />
+</Base>
