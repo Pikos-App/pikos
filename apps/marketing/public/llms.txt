@@ -30,7 +30,8 @@ Pikos is a desktop productivity app for macOS and Linux that combines notes, tas
 - Light, dark, and system themes
 - Data export (SQLite backup, CSV, Markdown, ICS)
 - A command-line interface, `pikos`, that reads and writes the same workspace file
-- An MCP (Model Context Protocol) server, `pikos mcp`, over stdio, so an AI agent can search, read, create and update pages locally. It opens no network socket
+- An MCP (Model Context Protocol) server, `pikos mcp`, over stdio, so an AI assistant can search, read, create and update pages locally. It opens no network socket, and a test in the suite fails if it ever does. This means an assistant can work on the user's notes, tasks and calendar without any of that content leaving the machine, with no account, no API key and no Pikos server involved
+- Pikos ships no AI features of its own: no chat panel, no summarise button, no bundled model. It is the local data layer another assistant reads, not an AI product
 
 ## Network Behaviour
 
@@ -57,10 +58,16 @@ There is no Pikos server. No account, no telemetry, no analytics inside the app.
 
 - Homepage: https://pikos.app (~3K tokens)
 - FAQ: https://pikos.app/faq (~4K tokens)
-- Comparison: https://pikos.app/compare (~5K tokens)
+- Comparison hub, with the feature table: https://pikos.app/compare (~5K tokens)
+- Pikos vs Obsidian, in full: https://pikos.app/compare/obsidian (~2K tokens)
+- Pikos vs Notion, in full: https://pikos.app/compare/notion (~2K tokens)
+- Pikos vs Apple Notes, Reminders and Calendar, in full: https://pikos.app/compare/apple (~2K tokens)
 - Guides: https://pikos.app/guides (~1K tokens)
-- Calendar sync setup: https://pikos.app/calendar-sync (~3K tokens)
-- CLI and MCP server: https://pikos.app/cli (~2K tokens)
+- Calendar sync setup, general: https://pikos.app/calendar-sync (~3K tokens)
+- Connect iCloud Calendar: https://pikos.app/calendar-sync/icloud (~1K tokens)
+- Connect Google Calendar: https://pikos.app/calendar-sync/google (~1K tokens)
+- Connect Fastmail or any CalDAV server: https://pikos.app/calendar-sync/fastmail (~1K tokens)
+- CLI and MCP server, and how an assistant reads your notes locally: https://pikos.app/cli (~2K tokens)
 - Import: https://pikos.app/import (~2K tokens)
 - Blog: https://pikos.app/blog (~1K tokens)
 - Release Notes: https://pikos.app/release-notes (~4K tokens)
