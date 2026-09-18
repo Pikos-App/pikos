@@ -11,6 +11,8 @@ Notes, tasks, and calendar. One app, on your device.
 
 Pikos is a local-first desktop app that combines a rich text editor, task management, and a calendar into a single tool. No accounts, no cloud, no subscriptions. Your data is a SQLite file on your machine.
 
+An MCP server ships with it, so your own assistant can search, read and write those notes without any of it leaving the machine. Pikos has no AI features of its own: it's the local data layer, not the model.
+
 **[Website](https://pikos.app)** &middot; **[Download](https://pikos.app/download)** &middot; **[Blog](https://pikos.app/blog)**
 
 ## Features

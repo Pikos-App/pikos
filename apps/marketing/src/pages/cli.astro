@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 
 const title = "Pikos CLI and MCP server";
-const description = "Drive your Pikos workspace from the terminal, or let an agent drive it over MCP. Runs on your machine against your own file. No account, no server.";
+const description = "Let an assistant read and write your notes, tasks and calendar over MCP, without any of it leaving your machine. Plus a command line for the same workspace. No account, no server, no port.";
 
 const mcpConfig = `{
   "mcpServers": {
@@ -21,9 +21,12 @@ const mcpConfig = `{
       Home
     </a>
 
-    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Command line and MCP</h1>
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">An agent on your own notes</h1>
     <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-      Pikos keeps your workspace in one SQLite file on your machine. The <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos</code> command reads and writes that file, and <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos mcp</code> hands the same operations to an agent. There's no account to connect and no server in the middle.
+      Your assistant can search, read and write everything in Pikos, and none of it leaves your machine. There's no account to connect, no API key to paste, and no Pikos server in the middle. <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos mcp</code> talks to whatever started it over stdin and stdout, and that's the whole network story.
+    </p>
+    <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+      The same <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos</code> command works from a terminal, against the same SQLite file the app uses.
     </p>
 
     <!-- Install -->
@@ -35,6 +38,21 @@ const mcpConfig = `{
       </p>
       <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
         Open the desktop app once before you start. It creates the workspace file, and the CLI opens that same file rather than making its own.
+      </p>
+    </section>
+
+    <!-- MCP -->
+    <section class="mt-10">
+      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Give an agent access</h2>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">pikos mcp</code> speaks the <a href="https://modelcontextprotocol.io" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Model Context Protocol</a> over stdio. Point any MCP client at it:
+      </p>
+      <pre class="mt-3 overflow-x-auto rounded-lg bg-neutral-100 p-4 text-sm leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{mcpConfig}</pre>
+      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        That block works in Claude Desktop, Claude Code, and anything else that reads an MCP server config. The agent can search and read pages, list them with the full filter set, create and update them, change status, complete, delete and restore, and work with folders and reminders. Each tool runs the same code the matching subcommand does, so the two can't drift apart.
+      </p>
+      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        <strong class="font-medium text-neutral-900 dark:text-neutral-50">It never opens a port.</strong> The server talks over stdin and stdout to the process that started it, and there's a test in the suite that fails if it ever opens a listening socket. Your notes are readable by the agent on your machine and by nothing else.
       </p>
     </section>
 
@@ -53,18 +71,6 @@ pikos search "quarterly review"</pre>
       </p>
     </section>
 
-    <!-- MCP -->
-    <section class="mt-10">
-      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Give an agent access</h2>
-      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">pikos mcp</code> speaks the <a href="https://modelcontextprotocol.io" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Model Context Protocol</a> over stdio. Point any MCP client at it:
-      </p>
-      <pre class="mt-3 overflow-x-auto rounded-lg bg-neutral-100 p-4 text-sm leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{mcpConfig}</pre>
-      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        The agent can search and read pages, list them with the full filter set, create and update them, change status, complete, delete and restore, and work with folders and reminders. Each tool runs the same code the matching subcommand does, so the two can't drift apart.
-      </p>
-    </section>
-
     <!-- Limits -->
     <section class="mt-10">
       <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">What it won't do</h2>
@@ -75,7 +81,7 @@ pikos search "quarterly review"</pre>
         <strong class="font-medium text-neutral-900 dark:text-neutral-50">Upgrade your workspace behind your back.</strong> A schema upgrade is one-way and would lock your installed app out until you update it too, so the server refuses and tells you to run it yourself.
       </p>
       <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <strong class="font-medium text-neutral-900 dark:text-neutral-50">Open a port.</strong> It talks over stdin and stdout to the process that started it. There's a test in the suite that fails if it ever opens a listening socket.
+        <strong class="font-medium text-neutral-900 dark:text-neutral-50">Send anything anywhere.</strong> There's no telemetry in the CLI or the server, and no model runs inside Pikos. The app you point at it does the thinking; Pikos just holds the notes.
       </p>
     </section>
 
