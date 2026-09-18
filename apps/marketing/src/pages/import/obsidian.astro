@@ -1,6 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
 
 const title = "Import from Obsidian to Pikos";
 const description = "Move an Obsidian vault into Pikos. Frontmatter, wikilinks, callouts, and image attachments all come across.";
@@ -19,7 +20,7 @@ const description = "Move an Obsidian vault into Pikos. Frontmatter, wikilinks, 
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from Obsidian</h1>
       <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">A 3-step migration for Obsidian vaults.</p>
 
-      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+      <Prose class="mt-10">
 
         <p>
           Pikos reads an Obsidian vault directly from disk. There's no export step to run on the Obsidian side. Point Pikos at the vault folder and it does the rest. The same path works for any directory of plain <code>.md</code> files.
@@ -94,7 +95,7 @@ const description = "Move an Obsidian vault into Pikos. Frontmatter, wikilinks, 
           Ready to try? <a href="/download">Download Pikos</a>. The import flow is in the Data tab the first time you open Settings.
         </p>
 
-      </div>
+      </Prose>
     </article>
 
   </main>
@@ -102,55 +103,3 @@ const description = "Move an Obsidian vault into Pikos. Frontmatter, wikilinks, 
   <Footer />
 </Base>
 
-<style>
-
-  .prose :global(h2) {
-    padding-top: 1rem;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--color-neutral-900);
-  }
-  :global(html.dark) .prose :global(h2) {
-    color: var(--color-neutral-100);
-  }
-
-  .prose :global(p) {
-    margin-top: 1.5rem;
-  }
-
-  .prose :global(ul) {
-    margin-top: 1rem;
-    padding-left: 1.25rem;
-    list-style-type: disc;
-  }
-
-  .prose :global(ul ul) {
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
-    list-style-type: circle;
-  }
-
-  .prose :global(li) {
-    margin-top: 0.375rem;
-  }
-
-  .prose :global(a) {
-    color: var(--color-primary-500);
-  }
-  :global(html.dark) .prose :global(a) {
-    color: var(--color-primary-400);
-  }
-  .prose :global(a:hover) {
-    text-decoration: underline;
-  }
-
-  .prose :global(code) {
-    border-radius: 0.25rem;
-    background-color: var(--color-neutral-150);
-    padding: 0.125rem 0.375rem;
-    font-size: 0.875rem;
-  }
-  :global(html.dark) .prose :global(code) {
-    background-color: var(--color-neutral-800);
-  }
-</style>

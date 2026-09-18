@@ -1,6 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
 
 const title = "Import from TickTick to Pikos";
 const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses, priorities, dates, reminders, sub-tasks, and recurring rules all come across via the CSV backup.";
@@ -19,7 +20,7 @@ const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from TickTick</h1>
       <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">One CSV backup, one click in Pikos.</p>
 
-      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+      <Prose class="mt-10">
 
         <p>
           TickTick has a single Backup feature that exports every list as one CSV file. Pikos auto-detects the format, including the metadata preamble TickTick adds at the top, and maps everything in place.
@@ -92,7 +93,7 @@ const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses
           Ready to try? <a href="/download">Download Pikos</a>. The CSV importer is in the Data tab the first time you open Settings.
         </p>
 
-      </div>
+      </Prose>
     </article>
 
   </main>
@@ -100,49 +101,3 @@ const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses
   <Footer />
 </Base>
 
-<style>
-
-  .prose :global(h2) {
-    padding-top: 1rem;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--color-neutral-900);
-  }
-  :global(html.dark) .prose :global(h2) {
-    color: var(--color-neutral-100);
-  }
-
-  .prose :global(p) {
-    margin-top: 1.5rem;
-  }
-
-  .prose :global(ul) {
-    margin-top: 1rem;
-    padding-left: 1.25rem;
-    list-style-type: disc;
-  }
-
-  .prose :global(li) {
-    margin-top: 0.375rem;
-  }
-
-  .prose :global(a) {
-    color: var(--color-primary-500);
-  }
-  :global(html.dark) .prose :global(a) {
-    color: var(--color-primary-400);
-  }
-  .prose :global(a:hover) {
-    text-decoration: underline;
-  }
-
-  .prose :global(code) {
-    border-radius: 0.25rem;
-    background-color: var(--color-neutral-150);
-    padding: 0.125rem 0.375rem;
-    font-size: 0.875rem;
-  }
-  :global(html.dark) .prose :global(code) {
-    background-color: var(--color-neutral-800);
-  }
-</style>

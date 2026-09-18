@@ -1,6 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
 
 const title = "Import from Todoist to Pikos";
 const description = "Move your Todoist projects into Pikos. Tasks, due dates, priorities, durations, and labels come across via CSV.";
@@ -19,7 +20,7 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from Todoist</h1>
       <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Export each project as CSV, then drop the file into Pikos.</p>
 
-      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+      <Prose class="mt-10">
 
         <p>
           Todoist exports per-project CSV files from its web app. Pikos auto-detects the format from the headers and brings across tasks, descriptions, fixed dates, priorities, and labels.
@@ -86,7 +87,7 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
           Ready to try? <a href="/download">Download Pikos</a>. The CSV importer is in the Data tab.
         </p>
 
-      </div>
+      </Prose>
     </article>
 
   </main>
@@ -94,49 +95,3 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
   <Footer />
 </Base>
 
-<style>
-
-  .prose :global(h2) {
-    padding-top: 1rem;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--color-neutral-900);
-  }
-  :global(html.dark) .prose :global(h2) {
-    color: var(--color-neutral-100);
-  }
-
-  .prose :global(p) {
-    margin-top: 1.5rem;
-  }
-
-  .prose :global(ul) {
-    margin-top: 1rem;
-    padding-left: 1.25rem;
-    list-style-type: disc;
-  }
-
-  .prose :global(li) {
-    margin-top: 0.375rem;
-  }
-
-  .prose :global(a) {
-    color: var(--color-primary-500);
-  }
-  :global(html.dark) .prose :global(a) {
-    color: var(--color-primary-400);
-  }
-  .prose :global(a:hover) {
-    text-decoration: underline;
-  }
-
-  .prose :global(code) {
-    border-radius: 0.25rem;
-    background-color: var(--color-neutral-150);
-    padding: 0.125rem 0.375rem;
-    font-size: 0.875rem;
-  }
-  :global(html.dark) .prose :global(code) {
-    background-color: var(--color-neutral-800);
-  }
-</style>
