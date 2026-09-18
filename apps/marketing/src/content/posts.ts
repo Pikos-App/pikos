@@ -20,6 +20,14 @@ export interface Post {
 
 export const posts: Post[] = [
   {
+    slug: "read-only-on-purpose",
+    title: "Read Only, On Purpose",
+    description:
+      "Pikos syncs your calendar in and never writes back. Two-way sync is the feature everyone advertises and the one that eats calendars, so Pikos cut it rather than deferring it.",
+    date: "2026-09-20",
+    tag: "Design",
+  },
+  {
     slug: "your-calendar-inside-pikos",
     title: "Your Calendar, Inside Pikos",
     description:

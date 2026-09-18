@@ -1,0 +1,77 @@
+---
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost slug="read-only-on-purpose">
+
+  <p>
+    Pikos 0.4.0 connects to your calendar. It reads iCloud, Google, or any CalDAV server, and your events show up as pages you can write on. What it will never do is write anything back.
+  </p>
+
+  <p>
+    That's not a gap I'm planning to close. It's the design.
+  </p>
+
+  <h2>Two-way sync is the hard part</h2>
+
+  <p>
+    It's the feature everyone advertises, and it's also one of the hardest things in this corner of software to get right. The moment an app can write to your calendar, it can write the wrong thing. A timezone read one way on your laptop and another on the server. A recurring event whose exception gets flattened. A sync that runs twice and leaves you with two of everything. A tidy-up that removes an event you needed.
+  </p>
+
+  <p>
+    Plenty of teams do this carefully and still hit those bugs, because the surface is genuinely hard. And they're expensive in a way ordinary bugs aren't, since the thing being damaged is the one your week runs on. You tend to find out when you don't show up.
+  </p>
+
+  <p>
+    A read-only integration can't cause any of it, because the code that would do the writing was never written. I'd rather give you that than a careful implementation and my reassurance.
+  </p>
+
+  <h2>What you actually lose</h2>
+
+  <p>
+    Being honest about the cost: you can't create a calendar event from inside Pikos and have it appear in iCloud. You can't drag a synced meeting to a new time and have it move for everyone else. Title, time and recurrence on a synced event are locked, and you edit those where they came from.
+  </p>
+
+  <p>
+    If that's the thing you wanted, Pikos isn't it yet, and I'd rather say so here than have you find out after connecting an account.
+  </p>
+
+  <h2>What you get instead</h2>
+
+  <p>
+    The notes are yours. A synced event arrives as a real page, and everything you add to it belongs to you outright: the body you write, tags, reminders, whether it's done. Sync never touches those. The body starts as the event description, and while you haven't written in it, an update upstream refreshes it. The moment you type, it's yours, and a later change waits in a notice for you to accept or ignore.
+  </p>
+
+  <p>
+    So the meeting and the notes from the meeting are the same thing, which is the whole point. Not a note that mentions a meeting. The meeting.
+  </p>
+
+  <p>
+    And turning a calendar off doesn't take your work with it. The mirrored events go, and anything you wrote on stays, in the folder it was already in, as ordinary pages.
+  </p>
+
+  <h2>You can check this yourself</h2>
+
+  <p>
+    You don't have to take my word for any of it. The code is public, so go and look. The whole CalDAV client can issue exactly two requests: <code>PROPFIND</code> and <code>REPORT</code>. Both are read operations. There is no <code>PUT</code>, no <code>POST</code> and no <code>DELETE</code> anywhere in the sync engine, because a request that could change your calendar was never written.
+  </p>
+
+  <p>
+    It's the same idea as the <a href="/cli">MCP server</a> having a test that fails if it ever opens a listening socket. A promise about what an app won't do is easier to trust when the thing simply isn't built, and that's a nicer position for both of us than asking you to believe me.
+  </p>
+
+  <h2>A decision, not a to-do</h2>
+
+  <p>
+    I want to be clear that this isn't "two-way sync is coming later". Writing back was considered and dropped, and I've written it down as a decision so the reasoning is still there in a year, for me as much as for you.
+  </p>
+
+  <p>
+    If you need to edit events from inside the app you take notes in, I'd genuinely rather you used something that does that well. It's a fair thing to want and Pikos won't be it.
+  </p>
+
+  <p>
+    If you want to try it, calendar sync is opt-in and off until you connect something. <a href="/calendar-sync">Setting it up</a> takes about two minutes, and there's a guide for <a href="/calendar-sync/icloud">iCloud</a>, <a href="/calendar-sync/google">Google</a> and <a href="/calendar-sync/fastmail">Fastmail</a>. Your calendar can't be harmed by trying, which is sort of the point.
+  </p>
+
+</BlogPost>
