@@ -224,6 +224,15 @@ export function MetadataHeader({
     updatePage(page.id, { subtitle: next });
   }
 
+  /** Leaving a metadata field writes it out now rather than on the debounce.
+   *  The window listener below is a different event: it fires when the whole app
+   *  loses focus, never when focus moves between elements inside it. Without
+   *  this, clicking from the title into the body left the edit unwritten for
+   *  800ms, and a quit inside that window dropped it. */
+  function commitField() {
+    void flushPage(page.id);
+  }
+
   useEffect(() => {
     function handleBlur() {
       void flushPage(page.id);
@@ -269,12 +278,16 @@ export function MetadataHeader({
               autoComplete="off"
               autoCorrect="off"
               className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
-              onBlur={() => setTitleFocused(false)}
+              onBlur={() => {
+                setTitleFocused(false);
+                commitField();
+              }}
               onChange={handleTitleChange}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   setTitleFocused(false);
+                  commitField();
                   handleSubtitleFocus();
                 }
                 if (e.key === "Escape") {
@@ -326,7 +339,10 @@ export function MetadataHeader({
             autoComplete="off"
             autoCorrect="off"
             className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[23px] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[23px] text-muted-foreground outline-none [border:none] placeholder:text-faint"
-            onBlur={() => setSubtitleFocused(false)}
+            onBlur={() => {
+              setSubtitleFocused(false);
+              commitField();
+            }}
             onChange={handleSubtitleChange}
             onKeyDown={(e) => {
               if (e.key === "Enter") {

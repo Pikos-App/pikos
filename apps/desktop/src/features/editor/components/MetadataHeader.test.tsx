@@ -3,6 +3,7 @@
 // notice; the reminder bell shows on a locked page whether or not it recurs.
 
 import type { Page } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -341,5 +342,73 @@ describe("MetadataHeader — the caret stays where you put it", () => {
 
     const field = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Page title" });
     expect(field.selectionStart).toBe("Team sync".length);
+  });
+});
+
+// PKOS-0039 says the 800ms auto-save debounce is "flushed on blur". It was not:
+// the only flush listened on `window`'s blur, which fires when the whole app
+// loses focus and never when focus moves between elements inside it. So moving
+// from the title into the body left the rename unwritten, and anything reading
+// storage in that window — search, the CLI, a quit — saw the old title.
+describe("MetadataHeader — leaving a field commits it", () => {
+  async function editField(label: string, value: string) {
+    // The harness renders a page object without seeding it into the adapter, so
+    // the real updatePage would reject on a missing row. Resolving here keeps the
+    // assertion on "was it called, and when" rather than on the mock's bookkeeping.
+    const updatePage = vi
+      .spyOn(MockStorageAdapter.prototype, "updatePage")
+      .mockImplementation((id, patch) => Promise.resolve(makePage({ id, ...patch })));
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null, title: "Team sync" }));
+
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    const field = screen.getByRole("textbox", { name: label });
+    fireEvent.change(field, { target: { value } });
+    updatePage.mockClear();
+
+    return { field, updatePage };
+  }
+
+  it("writes the title on blur instead of waiting out the debounce", async () => {
+    const { field, updatePage } = await editField("Page title", "zenith proposal");
+
+    expect(updatePage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.blur(field);
+      await Promise.resolve();
+    });
+
+    expect(updatePage).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ title: "zenith proposal" })
+    );
+  });
+
+  it("writes the description on blur", async () => {
+    const { field, updatePage } = await editField("Page description", "the quarterly one");
+
+    await act(async () => {
+      fireEvent.blur(field);
+      await Promise.resolve();
+    });
+
+    expect(updatePage).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ subtitle: "the quarterly one" })
+    );
+  });
+
+  it("writes the title when Enter moves focus to the description", async () => {
+    const { field, updatePage } = await editField("Page title", "zenith proposal");
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+      await Promise.resolve();
+    });
+
+    expect(updatePage).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ title: "zenith proposal" })
+    );
   });
 });
