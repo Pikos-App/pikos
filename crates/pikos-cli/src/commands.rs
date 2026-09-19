@@ -28,9 +28,11 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
     // through open_workspace, which resolves to the real one when --db is absent.
     if let CliCommand::Stress { action } = &cli.command {
         return match action {
-            StressCommand::Seed { pages, large_pages, large_words } => {
-                crate::stress::seed(&cli.db, *pages, *large_pages, *large_words, json).await
-            }
+            StressCommand::Seed {
+                pages,
+                large_pages,
+                large_words,
+            } => crate::stress::seed(&cli.db, *pages, *large_pages, *large_words, json).await,
             StressCommand::Bench => crate::stress::bench(&cli.db, json).await,
         };
     }

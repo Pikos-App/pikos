@@ -25,10 +25,36 @@ use crate::write::base_page;
 /// FTS5 tokenises real words the way it will in use, and a corpus of one repeated token would
 /// make search look faster than it is.
 const WORDS: &[&str] = &[
-    "meeting", "notes", "review", "draft", "follow", "up", "budget", "roadmap", "hiring",
-    "release", "customer", "feedback", "design", "kitchen", "holiday", "invoice", "renewal",
-    "quarterly", "standup", "retro", "migration", "rollout", "deadline", "proposal", "contract",
-    "onboarding", "handover", "estimate", "sprint", "incident",
+    "meeting",
+    "notes",
+    "review",
+    "draft",
+    "follow",
+    "up",
+    "budget",
+    "roadmap",
+    "hiring",
+    "release",
+    "customer",
+    "feedback",
+    "design",
+    "kitchen",
+    "holiday",
+    "invoice",
+    "renewal",
+    "quarterly",
+    "standup",
+    "retro",
+    "migration",
+    "rollout",
+    "deadline",
+    "proposal",
+    "contract",
+    "onboarding",
+    "handover",
+    "estimate",
+    "sprint",
+    "incident",
 ];
 
 /// Body sizes the bench reads and writes against, in words. Roughly: a note, a long document, and
@@ -112,7 +138,10 @@ pub async fn seed(
         // Seeding a quarter of a million pages is minutes of work, and a silent process that
         // long reads as a hang.
         if !json && i > 0 && i % 5_000 == 0 {
-            eprintln!("  {i} / {pages} pages, {:.0}s elapsed", started.elapsed().as_secs_f64());
+            eprintln!(
+                "  {i} / {pages} pages, {:.0}s elapsed",
+                started.elapsed().as_secs_f64()
+            );
         }
     }
 
@@ -169,7 +198,10 @@ where
     let _ = f().await?;
     let start = Instant::now();
     f().await?;
-    Ok(Timing { name, millis: start.elapsed().as_secs_f64() * 1000.0 })
+    Ok(Timing {
+        name,
+        millis: start.elapsed().as_secs_f64() * 1000.0,
+    })
 }
 
 pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
@@ -191,7 +223,10 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
         .await
         .map_err(|e| classify(e.into()))?;
 
-    let mut timings = vec![Timing { name: "open workspace", millis: open_ms }];
+    let mut timings = vec![Timing {
+        name: "open workspace",
+        millis: open_ms,
+    }];
 
     timings.push(
         time_it("create page", || async {
@@ -212,7 +247,10 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
             update_page_impl(
                 &pool,
                 sample_id.clone(),
-                PageUpdate { title: Some("renamed".to_string()), ..Default::default() },
+                PageUpdate {
+                    title: Some("renamed".to_string()),
+                    ..Default::default()
+                },
             )
             .await
             .map_err(classify)
@@ -235,7 +273,10 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
             _ => "read huge page",
         };
         timings.push(
-            time_it(name, || async { get_page(&pool, &id).await.map_err(classify) }).await?,
+            time_it(name, || async {
+                get_page(&pool, &id).await.map_err(classify)
+            })
+            .await?,
         );
 
         let name: &'static str = match *label {
@@ -248,7 +289,10 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
                 update_page_impl(
                     &pool,
                     id.clone(),
-                    PageUpdate { content: Some(sentence(&mut Rng(7), 80)), ..Default::default() },
+                    PageUpdate {
+                        content: Some(sentence(&mut Rng(7), 80)),
+                        ..Default::default()
+                    },
                 )
                 .await
                 .map_err(classify)
@@ -259,7 +303,14 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
 
     timings.push(
         time_it("list 50 pages", || async {
-            list_pages(&pool, ListQuery { limit: Some(50), ..Default::default() }).await
+            list_pages(
+                &pool,
+                ListQuery {
+                    limit: Some(50),
+                    ..Default::default()
+                },
+            )
+            .await
         })
         .await?,
     );
