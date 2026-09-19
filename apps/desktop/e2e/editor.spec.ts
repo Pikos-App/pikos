@@ -4,7 +4,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 async function openEditorForPage(app: Page, title: string) {
   await app.locator("[data-page-list-item]").getByText(title).click();
@@ -251,7 +251,7 @@ appTest("formatted content persists across page switches @tier1", async ({ app }
 
 appTest("table toolbar appears when cursor is in table @tier2", async ({ app }) => {
   await quickAdd(app, "table toolbar test");
-  const editor = await openEditorForPage(app, "table toolbar test");
+  await openEditorForPage(app, "table toolbar test");
 
   await app.keyboard.type("/");
   await expect(app.locator(".slash-menu")).toBeVisible();

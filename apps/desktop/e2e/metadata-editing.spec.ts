@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 /** Open a page in the editor and return when the byline is mounted. The
  *  byline carries every editable metadata chip we assert against. */
@@ -105,7 +105,7 @@ appTest(
     // smart-view button (same accessible name, different element).
     const picker = app.getByRole("dialog", { name: "Schedule picker" });
     await expect(picker).toBeVisible();
-    await picker.getByRole("button", { name: "Today", exact: true }).click();
+    await picker.getByRole("button", { exact: true, name: "Today" }).click();
 
     // Byline chip flipped to a "Scheduled:" state — proves the schedule
     // committed even with the popover still open.
@@ -142,7 +142,7 @@ appTest(
 
     await app.getByRole("button", { name: /^Scheduled:/ }).click();
     const picker = app.getByRole("dialog", { name: "Schedule picker" });
-    await picker.getByRole("button", { name: "Clear", exact: true }).click();
+    await picker.getByRole("button", { exact: true, name: "Clear" }).click();
 
     await app.keyboard.press(mod("Mod+w")); // close active page so list refreshes
     await expect(app.getByRole("button", { name: "Set schedule" })).not.toBeVisible();

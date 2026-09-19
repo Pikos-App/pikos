@@ -7,7 +7,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 // ─── Full golden path: create → search → edit → revisit ─────────────────────
 //
@@ -162,7 +162,7 @@ appTest("Mod+1 switches active view to the first folder @tier2", async ({ app })
   );
 
   await app.keyboard.press(mod("Mod+1"));
-  const folderBtn = app.getByRole("button", { name: "Active", exact: true });
+  const folderBtn = app.getByRole("button", { exact: true, name: "Active" });
   await expect(folderBtn).toHaveAttribute("aria-current", "true");
 });
 

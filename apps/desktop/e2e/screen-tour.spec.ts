@@ -9,9 +9,10 @@
  * cost the other hundred shots.
  */
 
-import type { Locator, Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+import type { Locator, Page } from "@playwright/test";
 
 import { expect, mod, test } from "./fixtures";
 
@@ -21,7 +22,7 @@ const NOW = new Date("2026-09-15T11:20:00");
 const VIEW = "pikos:lastActiveViewId";
 const PANEL = "pikos:rightPanel";
 const TODAY = { "pikos:overdueCollapsed": false, [VIEW]: "today" };
-const CALENDAR = { ...TODAY, "pikos:calendarScrollHour": 7, [PANEL]: "calendar" };
+const CALENDAR = { ...TODAY, [PANEL]: "calendar", "pikos:calendarScrollHour": 7 };
 const MODIFIER = mod("Mod") as "Control" | "Meta";
 
 const WINDOW = { height: 900, width: 1440 };

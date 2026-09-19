@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, mod, quickAdd } from "./fixtures";
 
 async function createPages(app: Page, titles: string[]) {
   for (const title of titles) {
@@ -128,7 +128,7 @@ appTest("Cmd+A then Space marks all selected pages as completed @tier2", async (
   // the core "complete ALL" guarantee: the bug dropped some completions to a
   // write-write race so they silently stayed open (QA §4). The bulk write does
   // every flip in one transaction, so none are left behind.
-  await app.getByRole("button", { name: "Completed", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "Completed" }).click();
   for (const title of titles) {
     const item = list.filter({ hasText: title });
     await expect(item).toBeVisible();
@@ -158,7 +158,7 @@ appTest("Cmd+A then Space completes all with the folder row focused @tier2", asy
   // condition that used to eat Space.
   await app
     .getByRole("group", { name: "Views and folders" })
-    .getByRole("button", { name: "Bulk QA", exact: true })
+    .getByRole("button", { exact: true, name: "Bulk QA" })
     .click();
 
   await app.keyboard.press(mod("Mod+a"));

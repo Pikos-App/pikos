@@ -8,7 +8,7 @@
 
 import { expect } from "@playwright/test";
 
-import { quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, quickAdd } from "./fixtures";
 
 /** Delete through the row's context menu, then let the undo toast expire the
  *  way it does for a user who walks away — which is the state the trash exists

@@ -4,7 +4,7 @@
 // the user-visible empty-state copy and the cross-feature consequences of
 // deleting a scheduled page.
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 // ─── Today empty state ──────────────────────────────────────────────────────
 //

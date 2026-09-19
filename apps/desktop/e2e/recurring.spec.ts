@@ -8,7 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
   // Click the right-panel header's "Calendar view" button rather than firing
@@ -235,7 +235,7 @@ appTest("page-list checkbox completes a recurring page into Completed @tier1", a
 
   // The head advanced to tomorrow → it leaves the Today main list. The only
   // remaining standup is the done clone, reachable once Completed is expanded.
-  await app.getByRole("button", { name: "Completed", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "Completed" }).click();
   // Regression guard for the head-revert race: quick-add writes the recurring
   // head's denorm scheduledStart through the 800ms debounce, and completing
   // before it flushes let the stale write land *after* the advance and snap the
@@ -275,7 +275,7 @@ appTest("unchecking a done recurring clone restores the occurrence onto the head
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
   // The head advanced out of Today; the done clone is in Completed.
-  await app.getByRole("button", { name: "Completed", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "Completed" }).click();
   // Past the quick-add denorm debounce, so a re-introduced head-revert race would
   // surface here rather than passing by luck (see the completion test above).
   await app.waitForTimeout(1000);
@@ -528,7 +528,7 @@ appTest(
     // the materialised page from the drag).
     const allStandups = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
     // Expand the Completed accordion so its members count toward the locator.
-    await app.getByRole("button", { name: "Completed", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
     await expect(allStandups).toHaveCount(3);
   }
 );
@@ -577,7 +577,7 @@ appTest("overdue tick → just this one keeps the gap and drops one clone @tier2
   await page.getByRole("button", { name: /Just this one/ }).click();
   await expect(page.getByText(/2 earlier days are still open/)).not.toBeVisible();
 
-  await page.getByRole("button", { name: "Completed", exact: true }).click();
+  await page.getByRole("button", { exact: true, name: "Completed" }).click();
   await expect(
     items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
   ).toHaveCount(1);
@@ -592,7 +592,7 @@ appTest("overdue tick → everything before today clones one done page per day @
   await expect(page.getByText(/2 earlier days are still open/)).not.toBeVisible();
 
   // Mon, Tue and Wed each land as their own done page; the head moves to today.
-  await page.getByRole("button", { name: "Completed", exact: true }).click();
+  await page.getByRole("button", { exact: true, name: "Completed" }).click();
   await expect(
     items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
   ).toHaveCount(3);
@@ -635,7 +635,7 @@ async function expectNothingCompleted(
   page: import("@playwright/test").Page,
   items: ReturnType<import("@playwright/test").Page["locator"]>
 ) {
-  await page.getByRole("button", { name: "Completed", exact: true }).click();
+  await page.getByRole("button", { exact: true, name: "Completed" }).click();
   await expect(items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })).toHaveCount(0);
 }
 

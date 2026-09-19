@@ -9,7 +9,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod } from "./fixtures";
 
 /** Boots the app with the clock pinned to Monday 2026-06-15, 09:00. */
 async function bootAt(page: Page, iso: string) {

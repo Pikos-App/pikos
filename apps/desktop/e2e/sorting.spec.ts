@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, quickAdd } from "./fixtures";
 
 async function setSort(app: Page, mode: "Date" | "Title" | "Priority" | "Manual") {
   await app.getByRole("button", { name: /^Sort:/ }).click();

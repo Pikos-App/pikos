@@ -5,7 +5,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, quickAdd } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
   // Click the header button rather than the shortcut — a keypress can be

@@ -10,7 +10,7 @@
 // import.spec.ts already covers the markdown-vault import path, so this
 // spec focuses on the preferences round-trip.
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 // ─── Calendar day count: setting → live UI → reload survives ───────────────
 //
@@ -36,7 +36,7 @@ appTest(
 
     // "Calendar days shown" row has buttons "1", "3", "5", "M–F", "7".
     // The "3" label is unique to this row inside the settings region.
-    await settings.getByRole("button", { name: "3", exact: true }).click();
+    await settings.getByRole("button", { exact: true, name: "3" }).click();
 
     // Close settings and verify the calendar live-updated to 3 columns.
     await app.keyboard.press("Escape");
@@ -91,7 +91,7 @@ appTest("editor text size steps from the keyboard and survives reload @tier2", a
   const settings = app.getByRole("region", { name: "Settings" });
   await settings.getByRole("button", { name: /^Editor text size:/ }).click();
   // Radix portals the popover outside the settings region.
-  await app.getByRole("button", { name: "20", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "20" }).click();
   await app.keyboard.press("Escape");
   await expect.poll(fontSize).toBe("20px");
 

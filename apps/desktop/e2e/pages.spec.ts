@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, mod, quickAdd } from "./fixtures";
 
 // ─── Open page and edit content ────────────────────────────────────────────
 

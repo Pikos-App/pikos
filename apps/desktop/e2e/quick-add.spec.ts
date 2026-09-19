@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { mod, test as appTest } from "./fixtures";
+import { test as appTest, mod } from "./fixtures";
 
 // ─── Basic Quick Add: chip defaults + NLP tokens ───────────────────────────
 
@@ -154,7 +154,7 @@ appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) =
   await expect(dialog).not.toBeVisible();
 
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  const folderBtn = sidebar.getByRole("button", { name: "Fresh Folder", exact: true });
+  const folderBtn = sidebar.getByRole("button", { exact: true, name: "Fresh Folder" });
   await expect(folderBtn).toBeVisible();
   await folderBtn.click();
   await expect(

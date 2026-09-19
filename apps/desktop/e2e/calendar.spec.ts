@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, quickAdd } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
   // Click the right-panel header's "Calendar view" button rather than firing

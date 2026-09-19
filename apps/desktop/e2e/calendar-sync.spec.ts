@@ -7,7 +7,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 // Synced events render in the viewer's zone, so pin one and the seed's block
 // positions are the same everywhere.
@@ -337,7 +337,7 @@ appTest(
     }
     // All-day events sit in their own bar, with no time.
     for (const name of ["Company offsite", "Product summit", "On-call rotation"]) {
-      await expect(app.getByRole("button", { name, exact: true }).first()).toBeVisible();
+      await expect(app.getByRole("button", { exact: true, name }).first()).toBeVisible();
     }
   }
 );
@@ -435,7 +435,7 @@ appTest(
 
     // Exactly one durable done clone lands in Completed — a duplicate-append
     // regression on the completion path would show two.
-    await app.getByRole("button", { name: "Completed", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
     const doneClone = seriesRows(app).filter({
       has: app.getByRole("checkbox", { name: /Mark not done/i }),
     });
@@ -458,7 +458,7 @@ appTest(
       .getByRole("checkbox", { name: /Mark done/i })
       .click();
 
-    await app.getByRole("button", { name: "Completed", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
     const doneClone = seriesRows(app).filter({
       has: app.getByRole("checkbox", { name: /Mark not done/i }),
     });
@@ -729,7 +729,7 @@ appTest(
     // Exact "View" avoids the byline's "View in calendar" button.
     await expect(app.getByText(/calendar description changed/i)).toBeVisible();
     await expect(app.getByText(/demo the new sync panel/i)).toHaveCount(0);
-    await app.getByRole("button", { name: "View", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "View" }).click();
     await expect(app.getByText(/demo the new sync panel/i)).toBeVisible();
   }
 );
