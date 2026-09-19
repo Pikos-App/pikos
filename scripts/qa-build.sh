@@ -53,6 +53,14 @@ find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
 APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop tauri build
 
 APP="$ROOT/apps/desktop/src-tauri/target/release/bundle/macos/Pikos.app"
+
+# The identity is resolved above and handed to tauri, and tauri falls back to an
+# ad-hoc signature rather than failing when it cannot use it. That build looks
+# finished and delivers no notifications, which is the trap this whole script
+# exists to avoid — so confirm the signature rather than assume it.
+bash "$ROOT/scripts/macos-signing-check.sh" \
+  "$ROOT/apps/desktop/src-tauri/target/release/bundle" --signature-only
+
 echo
 log "built: $APP"
 log "launch it directly (NOT via Spotlight — that may open an older copy):"

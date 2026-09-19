@@ -108,6 +108,34 @@ jobs:
             exit 1
           fi
 
+      # Same failure shape as the Google guard above, with a worse ending. Tauri
+      # signs when it finds an identity and notarizes when it finds an API key;
+      # with neither it builds happily and produces a DMG that Gatekeeper refuses
+      # to open on every machine that downloads it. Nothing in the build log says
+      # so, and with no telemetry the first report is an email from a stranger.
+      #
+      # TAURI_SIGNING_PRIVATE_KEY needs no guard here: createUpdaterArtifacts is
+      # on, so the build fails outright without it.
+      - name: Require Apple signing and notarization credentials
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          missing=""
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          [ -s "$RUNNER_TEMP/apple-api-key.p8" ] || missing="$missing APPLE_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo secret(s):$missing — this build would ship unsigned or un-notarized, and Gatekeeper would block it for every downloader. Set them with 'gh secret set <NAME>'."
+            exit 1
+          fi
+
       - name: Build Tauri app
         run: pnpm tauri build --target ${{ matrix.target }}
         working-directory: apps/desktop
@@ -126,6 +154,20 @@ jobs:
           # inputs, not runtime config. Guarded non-empty above.
           PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
           PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
+
+      # The guard above proves the secrets were present; this proves they worked.
+      # Signing and notarization can both fail into a build that still succeeds —
+      # an expired certificate, a revoked key, a notarization ticket that never
+      # got stapled — and every one of those reaches the user as "Pikos is
+      # damaged and can't be opened", with no way back except a new release.
+      #
+      # `spctl --assess` is the one that answers the question a user actually
+      # asks, because it is the same check Gatekeeper runs on first launch.
+      - name: The macOS build is signed, notarized and stapled
+        if: matrix.platform == 'macos-latest'
+        run: |
+          bash scripts/macos-signing-check.sh \
+            "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
 
       # The keychain is a runtime link, so a missing dependency here is a package that installs
       # and then cannot store a password.
