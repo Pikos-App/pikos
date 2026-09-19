@@ -79,7 +79,7 @@ pub fn device_zone() -> chrono_tz::Tz {
 
 /// Highest migration version this binary carries (down-migrations ignored;
 /// there are none today, but filter defensively).
-fn embedded_migration_max() -> i64 {
+pub(crate) fn embedded_migration_max() -> i64 {
     MIGRATOR
         .iter()
         .filter(|m| !m.migration_type.is_down_migration())
@@ -131,6 +131,58 @@ pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.
 pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
+    match open_pool_inner(path).await {
+        Ok(pool) => Ok(pool),
+        Err(err) => Err(match integrity_failure(path).await {
+            Some(detail) => AppError::Corrupt(detail),
+            None => err,
+        }),
+    }
+}
+
+/// `PRAGMA quick_check` on the file, if it can be read at all. `Some` means the
+/// workspace is damaged and names how; `None` means the file is structurally
+/// fine and whatever went wrong upstream is the real error.
+///
+/// Every way `open_pool` can fail arrives as a sqlx error whose `Display` is a
+/// SQL fragment, and the two causes underneath want opposite answers: a damaged
+/// file is recoverable from the backups directory and never by retrying, while
+/// anything else is a bug to report. Only the file can tell them apart, which is
+/// why this runs on the failure path rather than the open path.
+///
+/// Deliberately `quick_check` and not `integrity_check`: the full check walks
+/// every index on what may be a large workspace, and this runs at a moment when
+/// the user is already staring at a window that will not open.
+async fn integrity_failure(path: &str) -> Option<String> {
+    if !std::path::Path::new(path).exists() {
+        return None;
+    }
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(false)
+                .read_only(true),
+        )
+        .await
+        .ok()?;
+
+    let result = sqlx::query_scalar::<_, String>("PRAGMA quick_check")
+        .fetch_one(&pool)
+        .await;
+    pool.close().await;
+
+    match result {
+        Ok(row) if row == "ok" => None,
+        Ok(row) => Some(row),
+        // The check itself could not run, which on a readable file means the
+        // header or the page structure is unreadable.
+        Err(e) => Some(e.to_string()),
+    }
+}
+
+async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
     }
