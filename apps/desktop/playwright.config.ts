@@ -20,7 +20,7 @@ export default defineConfig({
       use: { ...devices["Desktop Safari"] },
     },
     {
-      grep: /@perf(?!-prod)/,
+      grep: /@perf(?!-prod|-scale)/,
       name: "perf",
       use: { ...devices["Desktop Safari"] },
     },

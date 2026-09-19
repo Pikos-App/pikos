@@ -22,7 +22,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const E2E_DIR = join(ROOT, "apps/desktop/e2e");
 
 // Keep in sync with the `grep` of every project across all four Playwright configs.
-const KNOWN_TAGS = ["@tier1", "@tier2", "@perf-prod", "@perf", "@recording", "@csp-prod", "@tour"];
+const KNOWN_TAGS = ["@tier1", "@tier2", "@perf-prod", "@perf-scale", "@perf", "@recording", "@csp-prod", "@tour"];
 
 // `test(`, `appTest(`, and their modifier chains (.only/.skip/.fixme/...).
 // `.describe(`/`.use(`/`.beforeEach(` are handled separately below.
