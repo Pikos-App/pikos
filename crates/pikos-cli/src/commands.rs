@@ -4,7 +4,7 @@
 use pikos_db::{hard_delete_page_impl, hard_delete_would_resurrect, list_pages_today_impl};
 use serde_json::json;
 
-use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand};
+use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand, StressCommand};
 use crate::error::{classify, CliError};
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
@@ -23,6 +23,16 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
     // in a frame it can read that the workspace is missing or behind.
     if matches!(cli.command, CliCommand::Mcp) {
         return crate::mcp::serve(cli.db, cli.migrate).await;
+    }
+    // Owns its own workspace lifecycle too: it opens a scratch file by path and must never go
+    // through open_workspace, which resolves to the real one when --db is absent.
+    if let CliCommand::Stress { action } = &cli.command {
+        return match action {
+            StressCommand::Seed { pages, large_pages, large_words } => {
+                crate::stress::seed(&cli.db, *pages, *large_pages, *large_words, json).await
+            }
+            StressCommand::Bench => crate::stress::bench(&cli.db, json).await,
+        };
     }
     let pool = open_workspace(&cli.db, cli.migrate).await?;
 
@@ -257,7 +267,9 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 }
             }
         },
-        CliCommand::Mcp => unreachable!("served above, before the workspace was opened"),
+        CliCommand::Mcp | CliCommand::Stress { .. } => {
+            unreachable!("handled above, before the workspace was opened")
+        }
     }
     Ok(())
 }

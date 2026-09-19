@@ -16,6 +16,7 @@ mod mcp;
 mod ops;
 mod render;
 mod schedule;
+mod stress;
 mod workspace;
 mod write;
 

@@ -127,6 +127,11 @@ pub enum CliCommand {
     },
     /// Speak the Model Context Protocol on stdio, for an agent to drive
     Mcp,
+    /// Seed a throwaway workspace and time it. Never touches your real one.
+    Stress {
+        #[command(subcommand)]
+        action: StressCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -152,4 +157,19 @@ pub enum ReminderCommand {
     },
     /// Remove a reminder by its own id
     Rm { reminder_id: String },
+}
+
+#[derive(Subcommand)]
+pub enum StressCommand {
+    /// Fill a scratch workspace with generated pages
+    Seed {
+        #[arg(long, default_value_t = 100_000, help = "Ordinary pages to create")]
+        pages: usize,
+        #[arg(long, default_value_t = 20, help = "Very large pages to create")]
+        large_pages: usize,
+        #[arg(long, default_value_t = 50_000, help = "Words in each large page")]
+        large_words: usize,
+    },
+    /// Time the operations that decide whether Pikos feels instant
+    Bench,
 }
