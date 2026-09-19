@@ -10,7 +10,7 @@
 // subtly wrong in three of them at once.
 
 import type { PageSummary, PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
-import { toPageSummary, toStorageError } from "@pikos/core";
+import { storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
 import {
   type Dispatch,
   type RefObject,
@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 
+import { postNotice } from "@/shared/events/noticeBus";
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
 import { onDrainPending } from "@/shared/pendingWrites";
@@ -40,6 +41,19 @@ export interface OptimisticWrite<T> {
   errorIds?: string[];
   /** Short, app-controlled prefix for the rollback log line. */
   label: string;
+  /** What the user was doing, in their words, for the toast a failure raises —
+   *  "reordering pages", "moving a page to a folder". Reads as "Storage error
+   *  while <notice>." A generic save message stands in when it is omitted.
+   *
+   *  Who reports a failure follows `rethrow`, and only that: a write that
+   *  rethrows is being awaited by a caller that branches on it, and that caller
+   *  owns the message — raising one here too would toast the same failure twice.
+   *  Everything else is fire-and-forget and is reported from here. Before that,
+   *  the only surface was `pageErrors`, which the editor reads for the one page
+   *  it has open, so a status ticked from a list, the calendar or a search result
+   *  rolled back in silence. With no telemetry, a failure nobody is shown is a
+   *  failure nobody can report. */
+  notice?: string;
   /** Serialise the write on this page's queue. Omit for writes that aren't
    *  scoped to one page (bulk status, folder reorder). */
   queueOn?: string;
@@ -114,6 +128,7 @@ export function usePageWriteQueue({
     apply,
     errorIds,
     label,
+    notice,
     queueOn,
     rethrow,
     rollback,
@@ -126,8 +141,10 @@ export function usePageWriteQueue({
       } catch (err: unknown) {
         log.error(`${label} failed; rolling back`, err);
         rollback();
-        if (errorIds && errorIds.length > 0) recordPageErrors(errorIds, toStorageError(err));
+        const storageError = toStorageError(err);
+        if (errorIds && errorIds.length > 0) recordPageErrors(errorIds, storageError);
         if (rethrow) throw err;
+        postNotice(storageErrorUserMessage(storageError, notice ?? "saving your changes"));
         return undefined;
       }
     }
@@ -194,7 +211,13 @@ export function usePageWriteQueue({
     // low-frequency, so the immediate write has no perceptible cost. flushPage
     // records any DB error in pageErrors, so the rethrow is safe to swallow.
     if ("status" in patch) {
-      void flushPage(id).catch(() => {});
+      // flushPage rethrows, so nothing downstream of it reports. This is the one
+      // place that awaits it and has no caller to hand the failure to: the tick
+      // came from a list row, a calendar block or a search result, none of which
+      // show the editor's inline indicator.
+      void flushPage(id).catch((err: unknown) => {
+        postNotice(storageErrorUserMessage(toStorageError(err), "updating status"));
+      });
       return;
     }
 

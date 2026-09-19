@@ -76,6 +76,7 @@ export function useScheduleWrites({
       },
       errorIds: [pageId],
       label: `scheduleOnce(${pageId})`,
+      notice: "scheduling this page",
       queueOn: pageId,
       rethrow: true,
       rollback: () => {
@@ -127,6 +128,7 @@ export function useScheduleWrites({
         ),
       errorIds: [pageId],
       label: `clearSchedule(${pageId})`,
+      notice: "clearing this page's date",
       queueOn: pageId,
       rethrow: true,
       rollback: () => {

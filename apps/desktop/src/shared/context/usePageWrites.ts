@@ -78,6 +78,7 @@ export function usePageWrites({
         setPages((prev) => prev.filter((p) => p.id !== id));
       },
       label: `softDeletePage(${id})`,
+      notice: "deleting this page",
       rollback: () => {
         if (snapshot) {
           setPages((prev) => (prev.some((p) => p.id === id) ? prev : [...prev, snapshot]));
@@ -114,6 +115,7 @@ export function usePageWrites({
         );
       },
       label: "reorderPages",
+      notice: "reordering pages",
       rollback: () => setPages(snapshot),
       write: () => adapter.reorderPages(folderId, orderedIds),
     });
@@ -133,6 +135,7 @@ export function usePageWrites({
         setPages((prev) => prev.map((p) => (idSet.has(p.id) ? { ...p, completedAt, status } : p))),
       errorIds: ids,
       label: `setPagesStatus for ${ids.length} pages`,
+      notice: "updating status",
       rollback: () => {
         const byId = new Map(snapshot.map((p) => [p.id, p]));
         setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));

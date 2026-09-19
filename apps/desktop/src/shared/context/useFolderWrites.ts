@@ -91,6 +91,7 @@ export function useFolderWrites({
         );
       },
       label: "reorderFolders",
+      notice: "reordering folders",
       rollback: () => setFolders(snapshot),
       write: () => adapter.reorderFolders(orderedIds),
     });
