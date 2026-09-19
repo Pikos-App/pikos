@@ -119,6 +119,11 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
     ("resync_sync_account", "polls the provider"),
     ("disconnect_sync_account", "opens the login keychain"),
     ("save_asset", "copies a file into the app data dir"),
+    (
+        "restore_backup",
+        "replaces the workspace file and re-execs the process — driving it would \
+         end the test run, and pikos_db::backups covers the swap directly",
+    ),
 ];
 
 /// Bodies for the read commands `wire_cases` does not already carry. Split that
@@ -170,6 +175,11 @@ const NOT_PROBED: &[(&str, &str)] = &[
         "backup_db",
         "copies the workspace file into the app data dir — it reads no rows, but \
          driving it writes to the machine running the test",
+    ),
+    (
+        "list_backups",
+        "reads the backups directory rather than any table, so the row probe has \
+         nothing to measure — pikos_db::backups covers what it returns",
     ),
     ("backup_db_before_import", "same copy, on the import path"),
     (

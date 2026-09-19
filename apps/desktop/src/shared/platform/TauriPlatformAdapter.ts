@@ -19,7 +19,7 @@ import type {
   PlatformWindowAction,
 } from "@pikos/core";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { appLogDir, join } from "@tauri-apps/api/path";
+import { appDataDir, appLogDir, join } from "@tauri-apps/api/path";
 
 export class TauriPlatformAdapter implements PlatformAdapter {
   async openExternal(url: string): Promise<void> {
@@ -39,6 +39,10 @@ export class TauriPlatformAdapter implements PlatformAdapter {
 
   async openLogFile(): Promise<void> {
     await this.openPath(await join(await appLogDir(), "pikos.log"));
+  }
+
+  async openBackupsDir(): Promise<void> {
+    await this.revealInDir(await join(await appDataDir(), "backups"));
   }
 
   async relaunch(): Promise<void> {

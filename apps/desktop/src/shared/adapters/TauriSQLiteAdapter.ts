@@ -1,5 +1,6 @@
 import type {
   AccountWithCalendars,
+  BackupEntry,
   CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
@@ -98,6 +99,10 @@ function watchdog(command: string): void {
 // and seeding commands go straight to `@tauri-apps/api/core` and are not listed —
 // a reload after wiping the workspace is the right outcome anyway.
 export const WRITE_COMMANDS = new Set([
+  // Replaces the workspace file outright, then restarts the app. The watcher
+  // never sees the echo because the process is gone, but it belongs here rather
+  // than among the reads: nothing in this app rewrites more.
+  "restore_backup",
   "create_page",
   "update_page",
   "clear_pending_description",
@@ -178,6 +183,7 @@ export const READ_COMMANDS = new Set([
   "export_ics",
   "export_markdown",
   "get_usage_stats",
+  "list_backups",
 ]);
 
 // Rust commands serialize errors as { kind, message } (see
@@ -493,6 +499,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   async backupBeforeImport(): Promise<void> {
     await invoke<void>("backup_db_before_import");
+  }
+
+  listBackups(): Promise<BackupEntry[]> {
+    return invoke<BackupEntry[]>("list_backups");
+  }
+
+  async restoreBackup(fileName: string): Promise<void> {
+    await invoke<void>("restore_backup", { fileName });
   }
 
   /** Each command spelled at its own call rather than dispatched through a

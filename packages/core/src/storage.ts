@@ -1,5 +1,6 @@
 import type {
   AccountWithCalendars,
+  BackupEntry,
   CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
@@ -351,6 +352,14 @@ export interface StorageAdapter {
   // where a backup landed is the platform's job; producing it is this one's.
   /** Write a full database backup; resolves to where it landed. */
   backupDatabase(): Promise<string>;
+  /** Snapshots sitting beside the workspace, newest first. Written by the
+   *  migrator and by imports; this is the only way to read them back. */
+  listBackups(): Promise<BackupEntry[]>;
+  /** Replace the workspace with a snapshot and restart into it. Never resolves
+   *  on success — the process re-execs — so callers must not sequence work
+   *  after it. Rejects, with the app still running, when the snapshot is
+   *  damaged or was written by a newer build. */
+  restoreBackup(fileName: string): Promise<void>;
   /** Snapshot taken before an import so the user can roll back. Best-effort at
    *  the call site — an import must not fail because the backup did. */
   backupBeforeImport(): Promise<void>;

@@ -215,3 +215,54 @@ pub(crate) async fn backdate_page_impl(
     builder.build().execute(pool).await?;
     Ok(())
 }
+
+// ── Backups ──────────────────────────────────────────────────────────────────
+
+/// Every snapshot sitting beside the workspace, newest first.
+#[tauri::command]
+pub async fn list_backups(
+    state: tauri::State<'_, DbState>,
+) -> AppResult<Vec<pikos_db::BackupEntry>> {
+    let path = state
+        .current_path()
+        .await
+        .ok_or_else(|| AppError::Internal("No database connected.".into()))?;
+    pikos_db::list_backups(&path.to_string_lossy())
+}
+
+/// Put a snapshot back and restart into it.
+///
+/// The restart is the whole design. Swapping the file under a live pool means
+/// reasoning about every open connection, the WAL, and a React tree holding rows
+/// that no longer exist; restarting means none of that is true, and the app comes
+/// up through the same path a normal launch takes. So the pool is dropped first,
+/// the file is replaced, and the process re-execs — there is no window in which
+/// the app is running against a workspace it did not open.
+///
+/// Only reached on success: a refused or damaged backup returns its error with
+/// the pool still open and nothing on disk touched.
+#[tauri::command]
+pub async fn restore_backup(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DbState>,
+    file_name: String,
+) -> AppResult<()> {
+    let path = state
+        .current_path()
+        .await
+        .ok_or_else(|| AppError::Internal("No database connected.".into()))?;
+    let path = path.to_string_lossy().to_string();
+
+    // Validate before taking the pool: a rejected restore has to leave a working
+    // app behind, and every command fails once the pool is gone.
+    pikos_db::backups::verify_restorable(&path, &file_name).await?;
+
+    if let Some(pool) = state.take_pool().await {
+        pool.close().await;
+    }
+
+    let displaced = pikos_db::restore_backup(&path, &file_name).await?;
+    log::info!("restored {file_name}; previous workspace kept at {displaced}");
+
+    app.restart();
+}

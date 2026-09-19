@@ -1,4 +1,4 @@
-import { isSmartViewId } from "@pikos/core";
+import { isSmartViewId, toStorageError } from "@pikos/core";
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -43,6 +43,7 @@ import { useExternalChangeReload } from "@/shared/hooks/useExternalChangeReload"
 import { useSyncAppliedReload } from "@/shared/hooks/useSyncAppliedReload";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { getPlatform } from "@/shared/platform";
 
 function useTrackPageOpened() {
   const { activePageId } = useUI();
@@ -319,17 +320,40 @@ function AppShell() {
 }
 
 function WorkspaceLoadError({ error }: { error: unknown }) {
-  const detail = error instanceof Error ? error.message : String(error);
+  const storageError = toStorageError(error);
+  // A damaged file and a failed open read the same from here, and the answers
+  // are opposite: relaunching fixes a locked or missing path and does nothing at
+  // all for corruption, which needs a backup put back. The backend tells them
+  // apart by running an integrity check on the failure path.
+  const damaged = storageError.kind === "Corrupt";
+
   return (
     <div className="flex h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="w-full max-w-md">
-        <p className="text-lg font-medium">Couldn't open your workspace</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Quit and relaunch the app. If this keeps happening, file a bug — connect_db failures are
-          usually a path or permission problem on disk.
+        <p className="text-lg font-medium">
+          {damaged ? "Your workspace file is damaged" : "Couldn't open your workspace"}
         </p>
+        {damaged ? (
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pikos keeps a snapshot before anything that rewrites your workspace. Putting one back
+              is the way out of this, and it takes a moment.
+            </p>
+            <button
+              className="mt-4 inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              onClick={() => void getPlatform().openBackupsDir()}
+            >
+              Show me the backups
+            </button>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Quit and relaunch the app. If this keeps happening, file a bug — it is usually a path or
+            permission problem on disk.
+          </p>
+        )}
         <pre className="mt-4 max-h-48 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-          {detail}
+          {storageError.message}
         </pre>
       </div>
     </div>

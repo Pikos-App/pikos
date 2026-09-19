@@ -60,6 +60,11 @@ export interface PlatformAdapter {
   /** Open the app's own rotating log file. The host owns the path — callers
    *  never learn where logs live, which is the whole point of the method. */
   openLogFile(): Promise<void>;
+  /** Reveal the directory holding the workspace snapshots. Host-owned for the
+   *  same reason as the log file, and for one more: the only caller is the
+   *  screen shown when the workspace will not open, where a path typed into the
+   *  UI would be a macOS path shown to a Linux user. */
+  openBackupsDir(): Promise<void>;
   /** Restart the app process. No-op where the host has no such notion. */
   relaunch(): Promise<void>;
 

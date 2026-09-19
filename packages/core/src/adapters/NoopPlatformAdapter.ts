@@ -39,6 +39,11 @@ export class NoopPlatformAdapter implements PlatformAdapter {
     return Promise.resolve();
   }
 
+  openBackupsDir(): Promise<void> {
+    this.record("openBackupsDir");
+    return Promise.resolve();
+  }
+
   openLogFile(): Promise<void> {
     this.record("openLogFile");
     return Promise.resolve();

@@ -9,6 +9,7 @@
 // borrow before pushing additional clauses — clippy flags this but it's required.
 #![allow(clippy::drop_non_drop)]
 
+pub mod backups;
 pub mod error;
 pub mod focus;
 pub mod folders;
@@ -26,6 +27,7 @@ pub mod sync_delta;
 pub mod tags;
 pub mod tx;
 
+pub use backups::{list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind};
 pub use error::{AppError, AppResult};
 pub use focus::*;
 pub use folders::*;

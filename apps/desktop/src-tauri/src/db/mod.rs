@@ -61,6 +61,13 @@ impl DbState {
             .cloned()
     }
 
+    /// The workspace file this state is connected to. `None` matches an empty
+    /// pool. Read by maintenance commands that act on the file rather than on
+    /// the data inside it.
+    pub(crate) async fn current_path(&self) -> Option<PathBuf> {
+        self.inner.lock().await.path.clone()
+    }
+
     /// Take ownership of the current pool, clearing state. Used by
     /// `wipe_app_data` so SQLite file handles release before the on-disk
     /// file is removed.

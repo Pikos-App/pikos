@@ -21,6 +21,8 @@ export interface Workspace {
 // Wire types are generated from the Rust structs that produce them — see
 // scripts/gen-ts-bindings.sh. Re-exported here so consumers keep one import path
 // and the shapes cannot drift from the backend.
+export type { BackupEntry } from "./generated/BackupEntry";
+export type { BackupKind } from "./generated/BackupKind";
 export type { FocusSession } from "./generated/FocusSession";
 export type { Folder } from "./generated/Folder";
 export type { NotificationHistoryEntry } from "./generated/NotificationHistoryEntry";

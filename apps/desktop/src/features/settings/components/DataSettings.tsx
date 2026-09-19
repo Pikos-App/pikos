@@ -16,6 +16,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 
+import { RestoreSection } from "./RestoreSection";
 import { UsageStats } from "./UsageStats";
 import type { UsageStatsData } from "./UsageStats";
 
@@ -228,6 +229,14 @@ export function DataSettings({
           reset={resetImport}
           state={importState}
         />
+      </SettingsSection>
+
+      {/* ── Restore ────────────────────────────────────────────────────── */}
+      <SettingsSection
+        description="Pikos snapshots your workspace before anything that rewrites it. Put one back if something has gone wrong."
+        title="Restore"
+      >
+        <RestoreSection />
       </SettingsSection>
 
       {/* ── Export ─────────────────────────────────────────────────────── */}

@@ -143,6 +143,8 @@ db_commands! {
         crate::db::dev::backdate_page,
         crate::db::dev::backup_db,
         crate::db::dev::backup_db_before_import,
+        crate::db::dev::list_backups,
+        crate::db::dev::restore_backup,
         crate::db::dev::export_csv,
         crate::db::dev::export_ics,
         crate::db::dev::export_markdown,
