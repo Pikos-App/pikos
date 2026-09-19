@@ -20,6 +20,7 @@ import type {
 } from "../storage";
 import type {
   AccountWithCalendars,
+  BackupEntry,
   CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
@@ -267,6 +268,48 @@ export class MockStorageAdapter implements StorageAdapter {
    */
   seedMirrorPage(data: NewPage): Promise<Page> {
     return Promise.resolve(this.insertPage(data));
+  }
+
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): fill the adapter with generated pages so a render
+   * can be timed against a realistic row count.
+   *
+   * Does not go through `insertPage`, deliberately. That calls `nextSortOrder` over every existing
+   * page, which is O(n) per insert and O(n^2) for a seed — seeding 50,000 pages through it takes
+   * minutes and measures the seeder rather than the app. Sort order here is just the index, which
+   * is what `nextSortOrder` would have produced anyway for an empty start.
+   *
+   * Bodies are short and varied rather than identical: a list of one repeated string lets the
+   * renderer and the browser's text shaping cache in ways a real workspace never would.
+   */
+  seedPages(count: number, opts: { completedEvery?: number; bodyWords?: number } = {}): void {
+    const completedEvery = opts.completedEvery ?? 0;
+    const stamp = now();
+    for (let i = 0; i < count; i += 1) {
+      const done = completedEvery > 0 && i % completedEvery === 0;
+      const body = opts.bodyWords
+        ? `${"seeded body text ".repeat(Math.ceil(opts.bodyWords / 3))}${i}`
+        : `Seeded body ${i} with a little text so the row has something to measure.`;
+      const page: Page = {
+        completedAt: done ? stamp : null,
+        content: body,
+        contentText: body,
+        createdAt: stamp,
+        folderId: null,
+        id: `seed-${i}`,
+        isRecurring: false,
+        links: [],
+        priority: (i % 5) as Page["priority"],
+        scheduleLocked: false,
+        sortOrder: i,
+        status: done ? "done" : "not_started",
+        subtitle: null,
+        tags: [],
+        title: `Seeded page ${i}`,
+        updatedAt: stamp,
+      };
+      this.pages.set(page.id, page);
+    }
   }
 
   private insertPage(data: NewPage): Page {
@@ -1518,6 +1561,29 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   backupBeforeImport(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Two entries so a test can tell "newest first" from "in directory order",
+   *  and one of each kind the settings panel labels differently. */
+  listBackups(): Promise<BackupEntry[]> {
+    return Promise.resolve([
+      {
+        bytes: 204_800,
+        createdAt: "2026-07-02T09:00:00.000Z",
+        fileName: "pre-import-2026-07-02T09-00-00.sqlite",
+        kind: "preImport",
+      },
+      {
+        bytes: 196_608,
+        createdAt: "2026-07-01T09:00:00.000Z",
+        fileName: "pre-migration-20260701T090000000Z-v9-to-v12.sqlite",
+        kind: "preMigration",
+      },
+    ]);
+  }
+
+  restoreBackup(): Promise<void> {
     return Promise.resolve();
   }
 
