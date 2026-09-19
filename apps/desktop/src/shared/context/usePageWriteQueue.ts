@@ -22,6 +22,7 @@ import {
 
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
+import { onDrainPending } from "@/shared/pendingWrites";
 
 const log = createLogger("PageWriteQueue");
 
@@ -220,6 +221,30 @@ export function usePageWriteQueue({
     return commitPatch(id, accumulated, true);
   }
 
+  /** Write out every pending patch and wait for all in-flight mutations.
+   *  Best-effort by design: the callers are on their way out of the process, so a
+   *  write that fails has nowhere to report to and must not stop the others. */
+  async function drainAll(): Promise<void> {
+    for (const id of Array.from(pendingPatches.current.keys())) {
+      const timer = debounceTimers.current.get(id);
+      if (timer !== undefined) clearTimeout(timer);
+      debounceTimers.current.delete(id);
+      const accumulated = pendingPatches.current.get(id);
+      if (!accumulated) continue;
+      pendingPatches.current.delete(id);
+      const prev = mutationQueues.current.get(id) ?? Promise.resolve();
+      const next = prev
+        .then(() => adapter.updatePage(id, accumulated))
+        .then(
+          () => undefined,
+          () => undefined
+        );
+      mutationQueues.current.set(id, next);
+    }
+
+    await Promise.allSettled(Array.from(mutationQueues.current.values()));
+  }
+
   // ─── Flush on window close ────────────────────────────────────────────────
   // Tauri's Rust side calls prevent_close() so we get a chance here to flush
   // any debounced writes, wait for all in-flight mutations, then destroy.
@@ -234,26 +259,7 @@ export function usePageWriteQueue({
       const win = getCurrentWindow();
       unlisten = await win.onCloseRequested(async (event) => {
         event.preventDefault();
-
-        for (const id of Array.from(pendingPatches.current.keys())) {
-          const timer = debounceTimers.current.get(id);
-          if (timer !== undefined) clearTimeout(timer);
-          debounceTimers.current.delete(id);
-          const accumulated = pendingPatches.current.get(id);
-          if (!accumulated) continue;
-          pendingPatches.current.delete(id);
-          // Inline enqueue: best-effort write, swallow errors since we're closing
-          const prev = mutationQueues.current.get(id) ?? Promise.resolve();
-          const next = prev
-            .then(() => adapter.updatePage(id, accumulated))
-            .then(
-              () => undefined,
-              () => undefined
-            );
-          mutationQueues.current.set(id, next);
-        }
-
-        await Promise.allSettled(Array.from(mutationQueues.current.values()));
+        await drainAll();
         await win.destroy();
       });
     }
@@ -263,6 +269,11 @@ export function usePageWriteQueue({
       unlisten?.();
     };
   }, [adapter]);
+
+  // An update relaunch restarts the process without closing the window, so the
+  // handler above never sees it. Registering here means the updater does not
+  // have to know what a write queue is.
+  useEffect(() => onDrainPending(drainAll), [adapter]);
 
   return {
     cancelPendingWrite,

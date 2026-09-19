@@ -21,6 +21,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { onFlushPending } from "@/shared/pendingWrites";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 import { PikosImage } from "../extensions/PikosImage";
@@ -218,6 +219,10 @@ export function EditorPane() {
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [flush]);
+
+  // Body text sits behind two debounces: this one, then the write queue's. Both
+  // have to run, in that order, before anything ends the process.
+  useEffect(() => onFlushPending(flush), [flush]);
 
   const [isAddingLink, setIsAddingLink] = useState(false);
 
