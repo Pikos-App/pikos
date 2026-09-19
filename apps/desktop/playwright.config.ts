@@ -38,10 +38,14 @@ export default defineConfig({
     : [["list"], ["html", { open: "never" }]],
   retries: process.env["CI"] ? 2 : 0,
   testDir: "./e2e",
+  // Per-test budget. `timeout` is not a `use` option — it sat there for a long
+  // time, silently ignored, so the suite has always run on the 30s default.
+  // Stated here at the value it has actually been passing under; tighten it
+  // deliberately, with a run to back it, rather than as a typo fix.
+  timeout: 30_000,
   use: {
     baseURL: `http://localhost:${E2E_PORT}`,
     screenshot: "only-on-failure",
-    timeout: 15_000,
     trace: "on-first-retry",
   },
   webServer: {
@@ -50,5 +54,8 @@ export default defineConfig({
     timeout: 30_000,
     url: `http://localhost:${E2E_PORT}`,
   },
-  workers: process.env["CI"] ? 1 : undefined,
+  // Spread rather than `: undefined`, which exactOptionalPropertyTypes rejects.
+  // Absent means Playwright's own default (half the cores); CI pins one worker
+  // because the suite is already sharded across runners.
+  ...(process.env["CI"] ? { workers: 1 } : {}),
 });
