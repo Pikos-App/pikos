@@ -92,9 +92,10 @@ or the calendar.
 ## Exit codes
 
 `0` ok · `2` usage · `3` not found · `4` conflict · `5` workspace not found ·
-`6` schema too new (DB newer than this CLI — upgrade) · `8` migration required
-(DB older; re-run with `--migrate`) · `1` other. Foreign (SQLite) error text is
-never surfaced; failures carry a stable `kind`.
+`6` schema too new (DB newer than this CLI — upgrade) · `7` node missing ·
+`8` migration required (DB older; re-run with `--migrate`) · `9` database file
+damaged (restore a backup from the app) · `1` other. Foreign (SQLite) error text
+is never surfaced; failures carry a stable `kind`.
 
 ## Schema skew
 
