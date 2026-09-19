@@ -747,3 +747,405 @@ fn prune_keeps_newest_n_and_ignores_other_files() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ─── Shipped-workspace upgrades ──────────────────────────────────────────────
+//
+// Everything above builds its schema from empty, in this process. That misses
+// the only migration run that can lose a user's data: the one where a database
+// written by a *released* build meets a newer migrator. `tests/fixtures/
+// workspaces/` holds one real file per shipped version, and the test below walks
+// all of them, so covering a new release is adding a file rather than editing a
+// test.
+
+fn workspace_fixture_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("workspaces")
+}
+
+fn shipped_workspace_fixtures() -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = std::fs::read_dir(workspace_fixture_dir())
+        .expect("workspace fixture directory")
+        .map(|e| e.expect("dir entry").path())
+        .filter(|p| p.extension().is_some_and(|e| e == "sqlite"))
+        .collect();
+    found.sort();
+    found
+}
+
+/// The fixtures exist to be migrated, so an empty directory has to fail rather
+/// than pass vacuously — the loop below would otherwise report success having
+/// checked nothing at all.
+#[test]
+fn every_shipped_version_has_a_workspace_fixture() {
+    let found = shipped_workspace_fixtures();
+    assert!(
+        !found.is_empty(),
+        "no .sqlite fixtures in {} — regenerate with `cargo test -p pikos-db \
+         regenerate_shipped_workspace_fixture -- --ignored`",
+        workspace_fixture_dir().display()
+    );
+}
+
+#[tokio::test]
+async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
+    for fixture in shipped_workspace_fixtures() {
+        let name = fixture.file_name().unwrap().to_string_lossy().to_string();
+        let dir = std::env::temp_dir().join(format!("pkos_upgrade_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("workspace.sqlite");
+        std::fs::copy(&fixture, &path).expect("copy fixture");
+
+        // The real entry point the app and the CLI both use: it migrates on connect.
+        let pool = open_pool(path.to_str().unwrap())
+            .await
+            .unwrap_or_else(|e| panic!("{name} failed to open and migrate: {e:?}"));
+
+        let count = |table: &'static str| {
+            let pool = pool.clone();
+            async move {
+                // sql-ok: table name is a test-local literal, never user input.
+                sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {table}"))
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+            }
+        };
+
+        // What the fixture was seeded with. A migration that rebuilds a table by
+        // recreating it is the shape that drops rows, and 011 recreates the FTS
+        // index outright.
+        assert_eq!(count("folders").await, 2, "{name}: folders lost");
+        assert_eq!(count("pages").await, 5, "{name}: pages lost");
+        assert_eq!(count("page_schedules").await, 3, "{name}: schedules lost");
+        assert_eq!(
+            count("page_recurrence_rules").await,
+            1,
+            "{name}: recurrence rules lost"
+        );
+        assert_eq!(count("tags").await, 2, "{name}: tags lost");
+        assert_eq!(count("page_tags").await, 2, "{name}: page_tags lost");
+        assert_eq!(count("page_reminders").await, 1, "{name}: reminders lost");
+        assert_eq!(
+            count("focus_sessions").await,
+            1,
+            "{name}: focus sessions lost"
+        );
+        assert_eq!(
+            count("notification_log").await,
+            1,
+            "{name}: notification log lost"
+        );
+
+        // Field-level survival on a page that carries every column a migration
+        // touches, including the soft-delete flag 004 added.
+        let (title, status, completed, deleted): (String, String, Option<String>, Option<String>) =
+            sqlx::query_as("SELECT title, status, completed_at, deleted_at FROM pages WHERE id = ?")
+                .bind("page-done")
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("{name}: the completed page is gone: {e:?}"));
+        assert_eq!(title, "Ship the release");
+        assert_eq!(status, "done");
+        assert!(completed.is_some(), "{name}: completed_at cleared");
+        assert!(deleted.is_none(), "{name}: a live page was soft-deleted");
+
+        // The soft-deleted page must still be in the trash, not swept.
+        let trashed: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NOT NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(trashed, 1, "{name}: the trashed page did not survive");
+
+        // 010-012 are what this upgrade is for.
+        let tables = table_names(&pool).await;
+        for expected in [
+            "sync_account",
+            "sync_calendar",
+            "page_sync",
+            "completed_set",
+            "skip_set",
+        ] {
+            assert!(
+                tables.iter().any(|t| t == expected),
+                "{name}: {expected} missing after upgrade; have {tables:?}"
+            );
+        }
+
+        // 011 rebuilds the search index. A backfill that skips existing rows
+        // leaves every page written before the upgrade unfindable, with every
+        // other check here still green.
+        sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('integrity-check')")
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("{name}: pages_fts failed integrity-check: {e:?}"));
+        let hits: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH 'tarragon'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            hits, 1,
+            "{name}: a page written before the upgrade is not in the search index"
+        );
+
+        pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// Writes `tests/fixtures/workspaces/0.3.1.sqlite` by running the migrations that
+/// version actually shipped, then seeding it. Ignored because it writes into the
+/// source tree; run it once per release, with the new version's list:
+///
+///   cargo test -p pikos-db regenerate_shipped_workspace_fixture -- --ignored
+///
+/// It goes through sqlx rather than raw SQL so `_sqlx_migrations` carries the
+/// same bookkeeping and checksums a real install has. A hand-built table there
+/// makes the next migrator refuse the file, which is the failure this whole
+/// fixture exists to catch, arriving in the fixture instead of in the product.
+#[tokio::test]
+#[ignore]
+async fn regenerate_shipped_workspace_fixture() {
+    const SHIPPED_IN_0_3_1: &[&str] = &[
+        "001_initial.sql",
+        "002_drop_duration_mins.sql",
+        "003_tags_normalize.sql",
+        "004_soft_delete.sql",
+        "005_folder_soft_delete.sql",
+        "006_notifications.sql",
+        "007_reminder_none_sentinel.sql",
+        "008_tags_nocase.sql",
+        "009_tags_lowercase.sql",
+    ];
+
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let staged = std::env::temp_dir().join(format!("pkos_mig_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&staged).unwrap();
+    for name in SHIPPED_IN_0_3_1 {
+        std::fs::copy(source.join(name), staged.join(name))
+            .unwrap_or_else(|e| panic!("{name} is not in {}: {e}", source.display()));
+    }
+
+    let work = std::env::temp_dir().join(format!("pkos_fix_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&work).unwrap();
+    let path = work.join("0.3.1.sqlite");
+
+    let opts = SqliteConnectOptions::new()
+        .filename(&path)
+        .create_if_missing(true)
+        .foreign_keys(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(opts)
+        .await
+        .unwrap();
+
+    Migrator::new(staged.as_path())
+        .await
+        .expect("read the staged migrations")
+        .run(&pool)
+        .await
+        .expect("apply the 0.3.1 migrations");
+
+    seed_shipped_workspace(&pool).await;
+    // Committed file, so it is worth the pages SQLite would otherwise leave
+    // allocated: ~205KB of mostly-empty pages down to a few tens of KB.
+    sqlx::query("VACUUM").execute(&pool).await.unwrap();
+    pool.close().await;
+
+    let target = workspace_fixture_dir();
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::copy(&path, target.join("0.3.1.sqlite")).expect("write the fixture");
+
+    let _ = std::fs::remove_dir_all(&staged);
+    let _ = std::fs::remove_dir_all(&work);
+
+    assert!(
+        target.join("0.3.1.sqlite").exists(),
+        "the fixture was not written"
+    );
+}
+
+/// A workspace with one row of every shape a migration touches, written in the
+/// 0.3.1 schema. "tarragon" appears in one page's body and nowhere else: it is
+/// what proves the search index was backfilled rather than merely rebuilt empty.
+async fn seed_shipped_workspace(pool: &SqlitePool) {
+    let t = "2026-07-01T09:00:00";
+
+    for (id, name, deleted) in [
+        ("folder-work", "Work", None::<&str>),
+        ("folder-old", "Archived", Some("2026-07-02T09:00:00")),
+    ] {
+        sqlx::query(
+            "INSERT INTO folders (id, name, parent_id, sort_order, color, icon, created_at, updated_at, deleted_at)
+             VALUES (?, ?, NULL, 0, NULL, NULL, ?, ?, ?)",
+        )
+        .bind(id).bind(name).bind(t).bind(t).bind(deleted)
+        .execute(pool).await.unwrap();
+    }
+
+    /// One seeded page. Named because a seven-wide tuple of `&str` and
+    /// `Option<&str>` is unreadable at the call sites below, where the whole
+    /// point is being able to see which column is which.
+    struct SeedPage {
+        id: &'static str,
+        title: &'static str,
+        text: &'static str,
+        status: &'static str,
+        completed_at: Option<&'static str>,
+        deleted_at: Option<&'static str>,
+        folder_id: Option<&'static str>,
+    }
+
+    let pages = [
+        SeedPage {
+            completed_at: None,
+            deleted_at: None,
+            folder_id: Some("folder-work"),
+            id: "page-plain",
+            status: "not_started",
+            text: "A note about tarragon and butter.",
+            title: "Weeknight pasta",
+        },
+        SeedPage {
+            completed_at: Some("2026-07-03T18:00:00"),
+            deleted_at: None,
+            folder_id: Some("folder-work"),
+            id: "page-done",
+            status: "done",
+            text: "Cut the tag.",
+            title: "Ship the release",
+        },
+        SeedPage {
+            completed_at: None,
+            deleted_at: None,
+            folder_id: None,
+            id: "page-sched",
+            status: "not_started",
+            text: "",
+            title: "Dentist",
+        },
+        SeedPage {
+            completed_at: None,
+            deleted_at: None,
+            folder_id: Some("folder-work"),
+            id: "page-recurring",
+            status: "not_started",
+            text: "",
+            title: "Standup",
+        },
+        SeedPage {
+            completed_at: None,
+            deleted_at: Some("2026-07-04T10:00:00"),
+            folder_id: None,
+            id: "page-trashed",
+            status: "not_started",
+            text: "",
+            title: "Abandoned draft",
+        },
+    ];
+    for page in &pages {
+        let text = page.text;
+        let content = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{{"type":"text","text":"{text}"}}]}}]}}"#
+        );
+        sqlx::query(
+            "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
+                                priority, tags, sort_order, scheduled_start, scheduled_end,
+                                completed_at, links, parent_id, last_opened_at, created_at,
+                                updated_at, deleted_at)
+             VALUES (?, ?, ?, NULL, ?, ?, ?, 0, '[]', 0, NULL, NULL, ?, NULL, NULL, NULL, ?, ?, ?)",
+        )
+        .bind(page.id)
+        .bind(page.folder_id)
+        .bind(page.title)
+        .bind(&content)
+        .bind(page.text)
+        .bind(page.status)
+        .bind(page.completed_at)
+        .bind(t)
+        .bind(t)
+        .bind(page.deleted_at)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    for (id, page, start) in [
+        ("sched-1", "page-sched", "2026-07-10T09:00:00"),
+        ("sched-2", "page-recurring", "2026-07-11T09:00:00"),
+        ("sched-3", "page-recurring", "2026-07-12T09:00:00"),
+    ] {
+        sqlx::query(
+            "INSERT INTO page_schedules (id, page_id, scheduled_start, scheduled_end, timezone,
+                                         rule_id, original_date, status, created_at)
+             VALUES (?, ?, ?, NULL, NULL, NULL, NULL, 'scheduled', ?)",
+        )
+        .bind(id)
+        .bind(page)
+        .bind(start)
+        .bind(t)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules (id, page_id, rrule, rrule_exdates, scheduled_start,
+                                            scheduled_end, timezone, created_at)
+         VALUES ('rule-1', 'page-recurring', 'FREQ=WEEKLY;BYDAY=MO', '[]', '2026-07-11T09:00:00',
+                 NULL, 'Europe/London', ?)",
+    )
+    .bind(t)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    for (id, name) in [("tag-work", "work"), ("tag-food", "food")] {
+        sqlx::query("INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)")
+            .bind(id)
+            .bind(name)
+            .bind(t)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+    for (page, tag) in [("page-plain", "tag-food"), ("page-done", "tag-work")] {
+        sqlx::query("INSERT INTO page_tags (page_id, tag_id) VALUES (?, ?)")
+            .bind(page)
+            .bind(tag)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('rem-1', 'page-sched', 15, ?)",
+    )
+    .bind(t)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
+         VALUES ('focus-1', 'page-plain', ?, '2026-07-01T09:25:00', 1500)",
+    )
+    .bind(t)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at, action)
+         VALUES ('notif-1', 'page-sched', 'sched-1', 'reminder', ?, NULL)",
+    )
+    .bind(t)
+    .execute(pool)
+    .await
+    .unwrap();
+}
