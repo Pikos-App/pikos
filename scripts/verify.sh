@@ -82,9 +82,11 @@ run_check() {
   fi
 }
 
-run_check "typecheck-desktop" pnpm --filter @pikos/desktop typecheck &
-run_check "typecheck-core"    pnpm --filter @pikos/core typecheck &
-run_check "typecheck-ui"      pnpm --filter @pikos/ui typecheck &
+# Every package that declares a typecheck, not a hand-listed three. The list used
+# to name desktop, core and ui, which left the parser bridge the CLI ships and the
+# whole marketing site checked by nothing. Turbo hashes content, so the packages
+# that did not change cost nothing to include.
+run_check "typecheck"         pnpm exec turbo typecheck &
 run_check "lint"              pnpm exec turbo lint &
 run_check "depcruise"         pnpm exec depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs &
 # Every Playwright project is grep-scoped by tag, so an untagged test runs in no
@@ -118,7 +120,7 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck-desktop typecheck-core typecheck-ui lint prettier depcruise e2e-tags ui-tokens tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
