@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // Pin a deterministic timezone so wall-clock-sensitive logic expands identically
@@ -8,13 +9,9 @@ import { defineConfig } from "vitest/config";
 process.env["TZ"] = "UTC";
 
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [["babel-plugin-react-compiler", {}]],
-      },
-    }),
-  ],
+  // Tests run the compiled components for the same reason production does; the
+  // shape of this is explained in vite.config.ts.
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

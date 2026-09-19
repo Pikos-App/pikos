@@ -29,6 +29,7 @@ export default tseslint.config(
           "./apps/desktop/tsconfig.app.json",
           "./apps/desktop/tsconfig.node.json",
           "./packages/core/tsconfig.json",
+          "./packages/pikos-bridge/tsconfig.json",
           "./packages/ui/tsconfig.json",
         ],
         tsconfigRootDir: import.meta.dirname,
