@@ -119,8 +119,16 @@ function originalDateInRuleBasis(occurrenceDate: string, ruleStart: string): str
   return time ? `${day}T${time}` : day;
 }
 
+// Reduced rather than spread: `Math.max(...array)` passes one argument per element and overflows
+// the stack somewhere around a hundred thousand, so creating a page in a large workspace threw
+// RangeError. Found by the scale benchmark at two million pages.
 function nextSortOrder(items: { sortOrder: number }[]): number {
-  return items.length === 0 ? 0 : Math.max(...items.map((i) => i.sortOrder)) + 1;
+  if (items.length === 0) return 0;
+  let max = -Infinity;
+  for (const item of items) {
+    if (item.sortOrder > max) max = item.sortOrder;
+  }
+  return max + 1;
 }
 
 /** All terms must be present, the last one as a prefix — the shape of the query
