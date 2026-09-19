@@ -107,6 +107,31 @@ describe("PagesContext — a failed write is surfaced", () => {
     off();
   });
 
+  // `scheduleOnce` rethrows, for the one caller that deletes a page whose schedule
+  // never landed. Every other caller drops the promise, so keying the report to
+  // `rethrow` left a failed calendar drag, date pick and date clear all silent.
+  it("reports a failed schedule even though the write also rethrows", async () => {
+    const hook = await setup();
+    let id = "";
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "A" });
+      id = p.id;
+    });
+
+    const { off, seen } = captureNotices();
+    vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule").mockRejectedValue(
+      new Error("disk is full")
+    );
+
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(id, "2026-09-18").catch(() => undefined);
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatch(/scheduling this page/);
+    off();
+  });
+
   it("names what the user was doing when a reorder fails", async () => {
     const hook = await setup();
     const ids: string[] = [];

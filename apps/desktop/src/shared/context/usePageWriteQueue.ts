@@ -45,14 +45,17 @@ export interface OptimisticWrite<T> {
    *  "reordering pages", "moving a page to a folder". Reads as "Storage error
    *  while <notice>." A generic save message stands in when it is omitted.
    *
-   *  Who reports a failure follows `rethrow`, and only that: a write that
-   *  rethrows is being awaited by a caller that branches on it, and that caller
-   *  owns the message — raising one here too would toast the same failure twice.
-   *  Everything else is fire-and-forget and is reported from here. Before that,
-   *  the only surface was `pageErrors`, which the editor reads for the one page
-   *  it has open, so a status ticked from a list, the calendar or a search result
-   *  rolled back in silence. With no telemetry, a failure nobody is shown is a
-   *  failure nobody can report. */
+   *  Supplying this is what makes the queue report, and `rethrow` no longer
+   *  decides it. A fire-and-forget write is reported from here whether or not it
+   *  names an action; a write that also rethrows is reported from here only when
+   *  it names one, so a caller raising its own message leaves this out and does
+   *  not toast the same failure twice. Keying it to `rethrow` alone was wrong:
+   *  `scheduleOnce` and `clearSchedule` rethrow for the one caller that undoes a
+   *  half-finished create, while ten others call them fire-and-forget, and those
+   *  ten went silent. Before any of it the only surface was `pageErrors`, which
+   *  the editor reads for the one page it has open, so a status ticked from a
+   *  list, the calendar or a search result rolled back in silence. With no
+   *  telemetry, a failure nobody is shown is a failure nobody can report. */
   notice?: string;
   /** Serialise the write on this page's queue. Omit for writes that aren't
    *  scoped to one page (bulk status, folder reorder). */
@@ -143,8 +146,10 @@ export function usePageWriteQueue({
         rollback();
         const storageError = toStorageError(err);
         if (errorIds && errorIds.length > 0) recordPageErrors(errorIds, storageError);
+        if (notice !== undefined || !rethrow) {
+          postNotice(storageErrorUserMessage(storageError, notice ?? "saving your changes"));
+        }
         if (rethrow) throw err;
-        postNotice(storageErrorUserMessage(storageError, notice ?? "saving your changes"));
         return undefined;
       }
     }

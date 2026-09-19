@@ -49,7 +49,10 @@ export function useCalendarPageCreate(
       // title and no date. The usual cleanup for an empty page runs when its popover closes, and
       // the popover only opens on success, so this is the only place that can take it back.
       if (created) await deletePage(created);
-      showNotice(storageErrorUserMessage(toStorageError(e), "creating the page"));
+      // Only the create leg needs a message from here. Past it, the failure came
+      // from scheduleOnce, which names the action itself, and posting again would
+      // raise two toasts for one gesture.
+      if (!created) showNotice(storageErrorUserMessage(toStorageError(e), "creating the page"));
     }
   }
 
