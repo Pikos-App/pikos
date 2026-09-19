@@ -1,31 +1,65 @@
-import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
-import { nowLocalISO } from "@pikos/core";
+import type { PagePriority, PageRecurrenceRule, PageStatus, PageSummary } from "@pikos/core";
+import { getVisiblePages, isDateGroupedView, sortPages, withTodayOccurrences } from "@pikos/core";
 import { useState } from "react";
 
-import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
+import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
+import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
 
 export const UNDO_TOAST_DURATION_MS = 8000;
 
+const NO_RULES: PageRecurrenceRule[] = [];
+
 export function usePageList() {
-  const { folders, pages, recurrenceRules, updatePage } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
-  const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
+  const {
+    expandRecurrenceRange,
+    folders,
+    listOverridesForRules,
+    overridesVersion,
+    pages,
+    recurrenceRules,
+    updatePage,
+  } = usePages();
+  const togglePageStatus = useRecurringStatusToggle();
+  const { activeViewId, openPage, setActivePage } = useUI();
+  const sortMode = useActiveSortMode();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
   const completed = useCompletedPages(activeViewId);
+  const isTodayView = activeViewId === "today";
 
-  const filtered = getVisiblePages(pages, activeViewId).filter((p) => !hiddenIds.has(p.id));
-  const visiblePages =
-    activeViewId === "today" ? filtered : sortPages(filtered, getSortMode(activeViewId));
+  // The same expansion the calendar grid renders, so the two can't disagree
+  // about today. No rules outside Today keeps other views off the round-trip.
+  const expanded = useRecurrenceExpansion({
+    days: [new Date()],
+    expandRecurrenceRange,
+    listOverridesForRules,
+    overridesVersion,
+    pages,
+    recurrenceRules: isTodayView ? recurrenceRules : NO_RULES,
+  });
+
+  // Swap occurrences in before the view filter runs: the filter judges a page by
+  // its head, and a series with an occurrence today is exactly the case where the
+  // head is on some other day.
+  const candidates = isTodayView ? withTodayOccurrences(pages, expanded) : pages;
+  const withOccurrences = getVisiblePages(candidates, activeViewId).filter(
+    (p) => !hiddenIds.has(p.id)
+  );
+  // Today and Upcoming are ordered by their sections (overdue/today, then day
+  // groups), so running sortPages here would only churn an order the section
+  // builders are about to replace.
+  const visiblePages = isDateGroupedView(activeViewId)
+    ? withOccurrences
+    : sortPages(withOccurrences, sortMode);
 
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 
@@ -51,18 +85,15 @@ export function usePageList() {
   }
 
   function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
-    const isDone = currentStatus === "done";
-    // Recurring pages route through the gap-resolution dialog (which fast-
-    // paths to advance when there's no gap). Non-recurring or un-completing
-    // a done page just flips status directly.
-    if (!isDone && recurrenceRules.some((r) => r.pageId === pageId)) {
-      requestRecurringComplete(pageId);
-      return;
-    }
-    updatePage(pageId, {
-      completedAt: isDone ? null : nowLocalISO(),
-      status: isDone ? "not_started" : "done",
-    });
+    const nextStatus: PageStatus = currentStatus === "done" ? "not_started" : "done";
+    // The rendered row first: on Today it can be an occurrence standing in for
+    // its series, and the tick has to land on the date shown. Then the series
+    // itself (in `pages`), then a done clone (in completedPages).
+    const page =
+      visiblePages.find((p) => p.id === pageId) ??
+      pages.find((p) => p.id === pageId) ??
+      completed.completedPages.find((p) => p.id === pageId);
+    if (page) togglePageStatus(page, nextStatus);
   }
 
   function handlePriorityChange(pageId: string, priority: PagePriority) {

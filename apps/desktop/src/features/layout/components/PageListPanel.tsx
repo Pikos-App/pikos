@@ -1,18 +1,27 @@
 import { SortableContext } from "@dnd-kit/sortable";
-import type { PageSummary } from "@pikos/core";
-import { nowLocalISO } from "@pikos/core";
+import type { PageSummary, VirtualRow } from "@pikos/core";
+import {
+  buildPageListRows,
+  groupTodayPages,
+  groupUpcomingPages,
+  nowLocalISO,
+  occurrenceDateOf,
+  partitionToggleSelection,
+  shouldHideSidebar,
+} from "@pikos/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
-import { shouldHideSidebar, useLayoutMode } from "@/features/layout/breakpoints";
-import { groupTodayPages, PageListItem, usePageList } from "@/features/pages";
-import { partitionToggleSelection } from "@/features/pages/utils/toggleSelection";
+import { useLayoutMode } from "@/features/layout/breakpoints";
+import { PageListItem, useMoveOverdueToToday, usePageList } from "@/features/pages";
+import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -22,8 +31,6 @@ import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import { isArrowKeyConsumer, isInteractiveTarget } from "@/shared/keyboard/isInteractiveTarget";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
-import { buildPageListRows } from "../utils/buildPageListRows";
-import type { VirtualRow } from "../utils/buildPageListRows";
 import { PageListEmptyState } from "./PageListEmptyState";
 import { PageListHeader, viewName } from "./PageListHeader";
 
@@ -52,10 +59,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     setRenamingId,
     visiblePages,
   } = usePageList();
-  const { clearSchedule, completeRecurringPage, recurrenceRules, setPagesStatus } = usePages();
+  const {
+    clearSchedule,
+    completeRecurringPage,
+    completeSyncedOccurrence,
+    recurrenceRules,
+    setPagesStatus,
+    uncompleteRecurringHead,
+  } = usePages();
   const {
     activeViewId,
-    getSortMode,
     openDialog,
     openSortMenu,
     setOpenDialog,
@@ -74,11 +87,15 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     togglePageSelection,
   } = useSelection();
   const { isDraggingOverCalendar } = useCalendarDnD();
-  const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
+  const { moveOverdueToToday } = useMoveOverdueToToday();
+  const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
-  const { density } = useListSettings();
-  const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
-  const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage("pikos:overdueCollapsed", true);
+  const { density } = useInterfaceSettings();
+  const [showRelative, setShowRelative] = useLocalStorage(STORAGE_KEYS.showRelativeDates, false);
+  const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage(
+    STORAGE_KEYS.overdueCollapsed,
+    true
+  );
   // Completed accordion resets to collapsed on every view navigation (no persistence).
   // Storing { viewId, collapsed } means the value auto-resets whenever activeViewId changes.
   const [completedCollapseState, setCompletedCollapseState] = useState<{
@@ -111,16 +128,19 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const navRafRef = useRef<number | null>(null);
 
   const isTodayView = activeViewId === "today";
-  // Re-renders once per minute so overdue/today grouping stays current as time passes.
+  const isUpcomingView = activeViewId === "upcoming";
+  // Re-renders once per minute so the overdue/today split follows the date over midnight.
   useMinuteTick();
   const { overdue, today } = isTodayView
     ? groupTodayPages(visiblePages)
     : { overdue: [], today: [] };
+  const daySections = isUpcomingView ? groupUpcomingPages(visiblePages) : [];
 
   const { pageToRowIndex, rows } = buildPageListRows({
     completedCollapsed,
     completedHasMore,
     completedPages,
+    daySections,
     isTodayView,
     overdue,
     overdueCollapsed,
@@ -203,7 +223,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   }
 
-  useKeyboardShortcut("Mod+Backspace", deleteSelectedOrActive);
+  useKeyboardShortcut("Mod+Backspace", deleteSelectedOrActive, {
+    group: "Navigation",
+    label: "Delete page",
+  });
   // Alias that also fires inside text inputs and the Tiptap editor, so the
   // user can delete the active page from the title/subtitle inputs or while
   // writing content. Gated to avoid surprise-deletes when a modal dialog
@@ -211,11 +234,15 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   // different mental context where the activePage isn't what's being acted on.
   useKeyboardShortcut("Mod+Shift+Backspace", deleteSelectedOrActive, {
     allowInInputs: true,
+    group: "Navigation",
+    label: "Delete page (works in text inputs)",
     preventDefault: true,
     when: () => openDialog === null && !settingsOpen,
   });
 
   useKeyboardShortcut("Escape", () => clearSelection(), {
+    group: "Page list",
+    label: "Clear multi-selection",
     when: () => selectedPageIds.size > 0,
   });
 
@@ -230,7 +257,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       // toggle never fired.
       listRef.current?.focus();
     },
-    { preventDefault: true }
+    { group: "Page list", label: "Select all open pages in folder", preventDefault: true }
   );
 
   // Space: toggle completion. Registered globally so it works after Cmd+A
@@ -251,11 +278,24 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     // Recurring completion clones + advances the head, so it can't be a plain
     // flip. Complete each one at a time — awaited, never concurrently — so the
     // writers don't race the WAL pool, and never through the gap dialog (its
-    // single pending slot would drop all but the last of a bulk selection).
-    // Bulk uses the default "advance" policy; un-completing is a plain flip.
+    // single pending slot would drop all but the last of a bulk selection), so a
+    // bulk tick completes one occurrence each and leaves any backlog alone.
     for (const p of recurring) {
-      if (p.status === "done") await setPagesStatus([p.id], "not_started", null);
-      else await completeRecurringPage(p.id, "advance");
+      if (p.status === "done") {
+        if (!(await uncompleteRecurringHead(p.id)))
+          await setPagesStatus([p.id], "not_started", null);
+        continue;
+      }
+      // An occurrence row names its own date; a head lets the backend derive it.
+      const occurrence = occurrenceDateOf(p);
+      if (occurrence && p.scheduledStart) {
+        await completeSyncedOccurrence({
+          occurrenceDate: occurrence,
+          pageId: p.id,
+          scheduledStart: p.scheduledStart,
+          ...(p.scheduledEnd ? { scheduledEnd: p.scheduledEnd } : {}),
+        });
+      } else await completeRecurringPage(p.id);
     }
   }
   useKeyboardShortcut(
@@ -269,6 +309,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       }
     },
     {
+      group: "Page list",
+      label: "Toggle completion",
       preventDefault: true,
       when: () =>
         !renamingId &&
@@ -303,11 +345,15 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     });
   }
   useKeyboardShortcut("ArrowUp", (e) => navigateFromKey(e, -1), {
+    group: "Page list",
+    label: "Select previous page",
     preventDefault: true,
     repeat: true,
     when: canNavigatePages,
   });
   useKeyboardShortcut("ArrowDown", (e) => navigateFromKey(e, 1), {
+    group: "Page list",
+    label: "Select next page",
     preventDefault: true,
     repeat: true,
     when: canNavigatePages,
@@ -381,32 +427,58 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   function renderVirtualRow(row: VirtualRow) {
     switch (row.type) {
       case "empty-state":
-        return <PageListEmptyState activeViewId={activeViewId} />;
+        return (
+          <PageListEmptyState
+            activeViewId={activeViewId}
+            isExternalCalendar={
+              folders.find((f) => f.id === activeViewId)?.isExternalCalendar ?? false
+            }
+          />
+        );
 
-      case "section-header":
+      case "section-header": {
+        // Overdue is the one header that also carries an action, so it can't be
+        // a single button any more — a button inside a button is invalid, and
+        // the collapse toggle has to stay the row-wide target it always was.
+        const isOverdueHeader = row.key === "overdue-header";
         return row.collapsible ? (
-          <button
-            className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-            onClick={row.key === "overdue-header" ? toggleOverdue : undefined}
-          >
-            <ChevronRight
-              className={cn("transition-transform", !row.collapsed && "rotate-90")}
-              size={12}
-            />
-            {row.label}
-            <span className="ml-1 tabular-nums">· {row.count}</span>
-          </button>
+          <div className="flex w-full items-center border-b border-border pr-2 text-muted-foreground">
+            <button
+              className="type-ui-sm flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left hover:text-foreground"
+              onClick={isOverdueHeader ? toggleOverdue : undefined}
+            >
+              <ChevronRight
+                className={cn("transition-transform", !row.collapsed && "rotate-90")}
+                size={12}
+              />
+              {row.label}
+              <span className="ml-1 tabular-nums">· {row.count}</span>
+            </button>
+            {isOverdueHeader && (
+              <button
+                className="type-ui-sm shrink-0 rounded px-1.5 py-0.5 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
+                onClick={() => moveOverdueToToday(overdue)}
+              >
+                Move to today
+              </button>
+            )}
+          </div>
         ) : (
           <div className="type-ui-sm border-b border-border px-3 py-1.5 text-muted-foreground">
             {row.label}
             <span className="ml-1 tabular-nums">· {row.count}</span>
           </div>
         );
+      }
 
       case "page": {
         // Only show insertion line for active pages (not completed).
+        // Date-grouped views have no manual order to insert into.
         const showLine =
-          !isTodayView && insertBeforeId === row.page.id && pageIds.includes(row.page.id);
+          !isTodayView &&
+          !isUpcomingView &&
+          insertBeforeId === row.page.id &&
+          pageIds.includes(row.page.id);
         return (
           <div className="relative">
             {showLine && (
@@ -422,7 +494,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       case "completed-toggle":
         return (
           <div className="relative">
-            {!isTodayView && insertBeforeId === null && (
+            {!isTodayView && !isUpcomingView && insertBeforeId === null && (
               <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
                 <InsertionLine />
               </div>

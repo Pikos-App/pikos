@@ -5,7 +5,7 @@
 // so this spec only verifies UI-shell state: right-panel mode, sidebar
 // collapsed-ness, calendar reference week, and per-view sort mode.
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod } from "./fixtures";
 
 // ─── Right panel mode (editor ↔ calendar) ───────────────────────────────────
 

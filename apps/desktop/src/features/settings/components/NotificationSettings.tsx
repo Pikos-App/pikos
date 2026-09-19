@@ -1,18 +1,18 @@
-import { AlertTriangle, X } from "lucide-react";
+import type { NotificationHistoryEntry } from "@pikos/core";
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { ReminderLeadTime } from "@/shared/context/AppSettingsContext";
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
+
+import { NotificationHistory } from "./NotificationHistory";
+import { SettingPicker } from "./SettingPicker";
 
 const log = createLogger("NotificationSettings");
 
@@ -22,9 +22,14 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 10, label: "10 min before" },
   { id: 15, label: "15 min before" },
   { id: 30, label: "30 min before" },
+  { id: 60, label: "1 hour before" },
+  { id: 120, label: "2 hours before" },
+  { id: 1440, label: "1 day before" },
 ];
 
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+/** Enough to cover the log's 30-day retention for a normal week of reminders
+ *  without turning the settings panel into an unbounded list. */
+const HISTORY_LIMIT = 50;
 
 function formatTime24to12(time: string): string {
   const parts = time.split(":").map(Number);
@@ -34,6 +39,11 @@ function formatTime24to12(time: string): string {
   const hour12 = h % 12 || 12;
   return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
 }
+
+const HOUR_PICKER_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const id = `${String(i).padStart(2, "0")}:00`;
+  return { id, label: formatTime24to12(id) };
+});
 
 export function NotificationSettings() {
   const {
@@ -61,30 +71,57 @@ export function NotificationSettings() {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [permissionError, setPermissionError] = useState(false);
 
+  const { storage } = useWorkspace();
+  const ui = useUI();
+  const [history, setHistory] = useState<NotificationHistoryEntry[]>([]);
+
+  /** The scheduler writes the log from Rust on its own tick, so the panel can
+   *  only ever show a snapshot — hence the explicit refresh alongside the load.
+   *  Written as a promise chain, not `await`: the mount effect below calls it,
+   *  and the state update has to land in a callback rather than in the effect
+   *  body for react-compiler to accept it. */
+  function loadHistory(): Promise<void> {
+    if (!storage) return Promise.resolve();
+    return storage
+      .listNotificationHistory(HISTORY_LIMIT)
+      .then(setHistory)
+      .catch((e: unknown) => {
+        // Nothing here is load-bearing for the settings the user came for, so a
+        // failed read leaves the section empty rather than taking the panel down.
+        log.warn("loadHistory failed", e instanceof Error ? e.name : "unknown");
+      });
+  }
+
+  /** `null` is the platform's "can't tell you" — no host shell (browser
+   *  preview) or an OS with no notion of the permission. Surfaced as warn since
+   *  the user expected notifications to work. Promise chain for the same reason
+   *  as loadHistory above. */
+  function checkPermission(): Promise<boolean | null> {
+    return getPlatform()
+      .checkNotificationPermission()
+      .then((granted) => {
+        if (granted === null) log.warn("checkPermission unavailable on this platform");
+        setPermissionGranted(granted);
+        return granted;
+      });
+  }
+
   useEffect(() => {
     void checkPermission();
   }, []);
 
-  async function checkPermission() {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const granted = await invoke<boolean>("check_notification_permission");
-      setPermissionGranted(granted);
-      return granted;
-    } catch (e) {
-      // Tauri unavailable (browser preview) or OS unsupported. Falls back
-      // to "unknown" UI state — surface as warn since the user expected
-      // notifications to work.
-      log.warn("checkPermission failed", e instanceof Error ? e.name : "unknown");
-      setPermissionGranted(null);
-      return null;
-    }
+  useEffect(() => {
+    void loadHistory();
+  }, [storage]);
+
+  function handleOpenPage(pageId: string) {
+    ui.setSettingsOpen(false);
+    ui.openPage(pageId);
   }
 
   async function handleRequestPermission() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const granted = await invoke<boolean>("request_notification_permission");
+      const granted = await getPlatform().requestNotificationPermission();
       log.info(`Permission request: ${granted ? "granted" : "denied"}`);
       setPermissionGranted(granted);
       setPermissionError(false);
@@ -108,7 +145,7 @@ export function NotificationSettings() {
   const disabled = !notificationsEnabled;
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <section className="mb-8">
         <h2 className="mb-1 text-base font-semibold">Notifications</h2>
         <p className="mb-4 text-sm text-muted-foreground">
@@ -242,21 +279,12 @@ export function NotificationSettings() {
             {overdueAlerts && (
               <div className="mt-3 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Fire at</span>
-                <Select onValueChange={setSummaryTime} value={summaryTime}>
-                  <SelectTrigger
-                    aria-label="Daily summary time"
-                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOUR_OPTIONS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {formatTime24to12(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SettingPicker
+                  label="Daily summary time"
+                  onChange={setSummaryTime}
+                  options={HOUR_PICKER_OPTIONS}
+                  value={summaryTime}
+                />
               </div>
             )}
           </div>
@@ -283,40 +311,42 @@ export function NotificationSettings() {
 
             {quietHoursEnabled && (
               <div className="mt-3 flex items-center gap-2">
-                <Select onValueChange={setQuietHoursStart} value={quietHoursStart}>
-                  <SelectTrigger
-                    aria-label="Quiet hours start"
-                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOUR_OPTIONS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {formatTime24to12(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SettingPicker
+                  label="Quiet hours start"
+                  onChange={setQuietHoursStart}
+                  options={HOUR_PICKER_OPTIONS}
+                  value={quietHoursStart}
+                />
                 <span className="text-xs text-muted-foreground">to</span>
-                <Select onValueChange={setQuietHoursEnd} value={quietHoursEnd}>
-                  <SelectTrigger
-                    aria-label="Quiet hours end"
-                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOUR_OPTIONS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {formatTime24to12(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SettingPicker
+                  label="Quiet hours end"
+                  onChange={setQuietHoursEnd}
+                  options={HOUR_PICKER_OPTIONS}
+                  value={quietHoursEnd}
+                />
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Recent notifications */}
+      <section className="mb-8">
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Recent notifications</h2>
+          <button
+            aria-label="Refresh notification history"
+            className="rounded-md border border-border bg-background p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() => void loadHistory()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          What Pikos sent you over the last 30 days, including anything quiet hours silenced.
+        </p>
+        <div className="rounded-lg border border-border bg-card px-4">
+          <NotificationHistory entries={history} onOpenPage={handleOpenPage} />
         </div>
       </section>
     </div>

@@ -7,7 +7,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 // ─── Full golden path: create → search → edit → revisit ─────────────────────
 //
@@ -162,7 +162,7 @@ appTest("Mod+1 switches active view to the first folder @tier2", async ({ app })
   );
 
   await app.keyboard.press(mod("Mod+1"));
-  const folderBtn = app.getByRole("button", { name: "Active", exact: true });
+  const folderBtn = app.getByRole("button", { exact: true, name: "Active" });
   await expect(folderBtn).toHaveAttribute("aria-current", "true");
 });
 
@@ -295,4 +295,38 @@ appTest("Arrow keys drive a focused dropdown, not the page list @tier2", async (
 
   await app.keyboard.press("Escape");
   await expect(alphabetical).not.toBeVisible();
+});
+
+// ─── A focus session's hidden panels leave the Tab order ────────────────────
+//
+// The panels a session hides are zero-width, not unmounted, and their contents
+// overflow rather than clip — so left to themselves they keep taking Tab focus
+// while nothing is on screen, and the user tabs through furniture they cannot
+// see. Both panels sit above the editor in the document, so the first Tab from
+// the top is the whole question: it must land in the editor.
+
+appTest("a focus session's hidden panels leave the Tab order @tier2", async ({ app }) => {
+  await quickAdd(app, "focus target");
+  await app.locator("[data-page-list-item]").getByText("focus target").click();
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+
+  // Start at <body>: Tiptap owns Tab and never gives focus up, so a walk that
+  // starts inside the editor would pass whatever the panels did.
+  await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  // Everything focusable in the two panels: the sidebar, and the page list's
+  // toolbar plus its rows.
+  const hiddenPanels = app.locator(
+    'nav[aria-label="Workspace navigation"], [aria-label="Page actions"], [role="group"][aria-label="Inbox"]'
+  );
+
+  // Naming the element the first Tab lands on would pin this to one platform.
+  // macOS keeps buttons out of the Tab order, so there the first Tab reaches the
+  // editor; everywhere else it stops at the first of the eleven buttons the
+  // editor pane puts above it, the focus timer's among them. What has to hold on
+  // both is that no step of the walk lands in a panel that is not on screen.
+  for (let i = 0; i < 6; i++) {
+    await app.keyboard.press("Tab");
+    await expect(hiddenPanels.locator(":focus")).toHaveCount(0);
+  }
 });

@@ -8,7 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 /** Click the right-panel header's calendar toggle. Mirrors the helper used in
  *  calendar.spec.ts / recurring.spec.ts so we exercise the same shell-ready
@@ -158,7 +158,7 @@ appTest(
     await app.keyboard.press(mod("Mod+k"));
     const palette = app.getByRole("dialog", { name: "Search pages" });
     await expect(palette).toBeVisible();
-    await palette.getByPlaceholder("Search pages…").fill("alpha");
+    await palette.getByPlaceholder("Search pages, or > for commands…").fill("alpha");
     await expect(palette.getByText("alpha proposal")).toBeVisible();
     await app.keyboard.press("Enter");
     await expect(palette).not.toBeVisible();
@@ -184,12 +184,12 @@ appTest(
 
     await app.keyboard.press(mod("Mod+k"));
     await expect(palette).toBeVisible();
-    await palette.getByPlaceholder("Search pages…").fill("zenith");
+    await palette.getByPlaceholder("Search pages, or > for commands…").fill("zenith");
     await expect(palette.getByText("zenith proposal")).toBeVisible();
 
     // The old title must NOT match — proves the rename replaced rather than
     // appended a search-index entry.
-    await palette.getByPlaceholder("Search pages…").fill("alpha");
+    await palette.getByPlaceholder("Search pages, or > for commands…").fill("alpha");
     // FTS5 rebuild is debounced 150 ms; the retry-until-true semantics of
     // `not.toBeVisible({ timeout })` walk the wait for us — no bare sleep.
     await expect(palette.getByText("alpha proposal")).not.toBeVisible({ timeout: 1000 });
@@ -224,7 +224,7 @@ appTest(
     await quickAdd(app, "research notes");
 
     const sidebar = app.getByRole("group", { name: "Views and folders" });
-    const folderBtn = sidebar.getByRole("button", { name: "Work", exact: true });
+    const folderBtn = sidebar.getByRole("button", { exact: true, name: "Work" });
     await expect(folderBtn).toBeVisible();
 
     // Rename via context menu — Right-click → Rename → wait for focus → replace.
@@ -242,14 +242,14 @@ appTest(
     await app.keyboard.press("Enter");
 
     await expect(
-      sidebar.getByRole("button", { name: "Workstreams", exact: true })
+      sidebar.getByRole("button", { exact: true, name: "Workstreams" })
     ).toBeVisible();
     await expect(
-      sidebar.getByRole("button", { name: "Work", exact: true })
+      sidebar.getByRole("button", { exact: true, name: "Work" })
     ).not.toBeVisible();
 
     // Pages survive the rename — both still listed in the renamed folder.
-    await sidebar.getByRole("button", { name: "Workstreams", exact: true }).click();
+    await sidebar.getByRole("button", { exact: true, name: "Workstreams" }).click();
     const list = app.locator("[data-page-list-item]");
     await expect(list.filter({ hasText: "kickoff sync" })).toBeVisible();
     await expect(list.filter({ hasText: "research notes" })).toBeVisible();
@@ -418,7 +418,7 @@ appTest(
 
     // Sidebar folder buttons receive page drops via useThreePanelDnD.
     const sidebar = app.getByRole("group", { name: "Views and folders" });
-    const folder = sidebar.getByRole("button", { name: "Archive", exact: true });
+    const folder = sidebar.getByRole("button", { exact: true, name: "Archive" });
     const folderBox = await folder.boundingBox();
     if (!folderBox) throw new Error("folder missing");
 

@@ -1,31 +1,94 @@
 ---
 interface Props {
-  /** Current page path — used to omit self-links */
-  current?: string;
   /** Override default class on footer element */
   class?: string;
 }
-const { current = "/", class: className = "mt-24 mb-12" } = Astro.props;
+const { class: className = "mt-16" } = Astro.props;
 
-const links = [
-  { href: "/", label: "Home" },
-  { href: "/download", label: "Download" },
-  { href: "/backer", label: "Back Pikos" },
-  { href: "/import", label: "Import" },
-  { href: "/blog", label: "Blog" },
-  { href: "/release-notes", label: "Release Notes" },
-  { href: "https://github.com/Pikos-App/pikos", label: "Source" },
-  { href: "/feedback", label: "Feedback" },
+// Grouped rather than one list: flat, the footer had grown to thirteen links
+// wrapping across two lines, which reads as a pile rather than an index.
+const groups = [
+  {
+    heading: "Product",
+    links: [
+      { href: "/download", label: "Download" },
+      { href: "/guides", label: "Guides" },
+      { href: "/import", label: "Import" },
+      { href: "/compare", label: "Compare" },
+      { href: "/faq", label: "FAQ" },
+    ],
+  },
+  {
+    heading: "Project",
+    links: [
+      { href: "/blog", label: "Blog" },
+      { href: "/release-notes", label: "Release notes" },
+      { href: "/backer", label: "Back Pikos" },
+      { href: "/feedback", label: "Feedback" },
+    ],
+  },
+  {
+    heading: "Developers",
+    links: [
+      { href: "/cli", label: "CLI and MCP" },
+      { href: "https://github.com/Pikos-App/pikos", label: "Source" },
+    ],
+  },
+];
+
+const legal = [
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
 ];
+
+const linkClass =
+  "text-sm text-neutral-600 transition-colors hover:text-primary-500 dark:text-neutral-400 dark:hover:text-primary-400";
 ---
 
-<footer class={className}>
-  <div class="mx-auto flex max-w-xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 text-sm text-neutral-400 dark:text-neutral-500">
-    {links.filter((l) => l.href !== current).map((l) => (
-      <a href={l.href} class="transition-colors hover:text-primary-500 dark:hover:text-primary-400">{l.label}</a>
-    ))}
-    <span>Pikos by <a href="https://alexking.dev" class="text-primary-500 hover:underline">Alex King</a></span>
+<footer class={`border-t border-neutral-200 dark:border-neutral-800 ${className}`}>
+  <div class="mx-auto max-w-4xl px-6 pt-12 pb-10">
+
+    <!-- Brand block balances the columns: they run 5, 4 and 2 long, so without
+         something on the left the whole row reads as ragged empty space. -->
+    <div class="flex flex-col gap-10 md:flex-row md:justify-between md:gap-16">
+
+      <div class="max-w-xs">
+        <a href="/" class="flex items-center gap-2 text-base font-semibold text-neutral-900 transition-opacity hover:opacity-80 dark:text-neutral-50">
+          <svg viewBox="0 0 200 200" width="20" height="20" aria-hidden="true" class="shrink-0 text-brand-500 dark:text-brand-400">
+            <rect x="90" y="36" width="80" height="108" rx="9" fill="none" stroke="currentColor" stroke-width="12" opacity="0.6" />
+            <rect x="60" y="54" width="80" height="108" rx="9" fill="none" stroke="currentColor" stroke-width="12" opacity="0.9" />
+            <rect x="30" y="72" width="80" height="108" rx="9" fill="currentColor" />
+          </svg>
+          Pikos
+        </a>
+        <p class="mt-3 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
+          Notes, tasks and calendar in one app. On your device, no account.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-x-12 gap-y-8 sm:grid-cols-3 md:gap-x-16">
+        {groups.map((g) => (
+          <div>
+            <h2 class="text-xs font-semibold tracking-wide text-neutral-900 uppercase dark:text-neutral-100">{g.heading}</h2>
+            <ul class="mt-4 flex flex-col gap-2.5">
+              {g.links.map((l) => (
+                <li><a href={l.href} class={linkClass}>{l.label}</a></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+    </div>
+
+    <div class="mt-12 flex flex-col-reverse items-center gap-3 border-t border-neutral-200 pt-6 text-sm text-neutral-500 sm:flex-row sm:justify-between dark:border-neutral-800 dark:text-neutral-400">
+      <span>Pikos by <a href="https://alexking.dev" class="text-primary-500 hover:underline">Alex King</a></span>
+      <div class="flex gap-5">
+        {legal.map((l) => (
+          <a href={l.href} class="transition-colors hover:text-primary-500 dark:hover:text-primary-400">{l.label}</a>
+        ))}
+      </div>
+    </div>
+
   </div>
 </footer>

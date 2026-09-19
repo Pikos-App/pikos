@@ -1,14 +1,15 @@
 import { isOpen } from "@pikos/core";
-import { invoke } from "@tauri-apps/api/core";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { CSVColumnMappingPage, ImportPreviewModal, useImport } from "@/features/import";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
+import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { NotificationSettings } from "./NotificationSettings";
@@ -20,15 +21,6 @@ const DeveloperSettings = import.meta.env.DEV
   ? lazy(() => import("./DeveloperSettings").then((m) => ({ default: m.DeveloperSettings })))
   : null;
 
-function readLeftPanelWidth(): number {
-  try {
-    const raw = localStorage.getItem("pikos:leftPanelWidth");
-    return raw ? (JSON.parse(raw) as number) : 180;
-  } catch {
-    return 180;
-  }
-}
-
 export function SettingsPage() {
   const {
     activePageId,
@@ -39,7 +31,8 @@ export function SettingsPage() {
     settingsOpen,
     settingsSection: section,
   } = useUI();
-  const { workspace } = useWorkspace();
+  const { storage } = useWorkspace();
+  const { weekStart } = useAppSettings();
   const { clearLastImport, lastImportResult, undoLastImport } = useImportBatch();
 
   // Undo deletes the imported pages; if one is open in the editor, deselect it
@@ -50,7 +43,6 @@ export function SettingsPage() {
     await undoLastImport();
   }
   const isFullscreen = useIsFullscreen();
-  const [sidebarWidth] = useState(readLeftPanelWidth);
   const [usageStats, setUsageStats] = useState<UsageStatsData | null>(null);
   const {
     applyCSVMapping,
@@ -61,13 +53,16 @@ export function SettingsPage() {
     state: importState,
   } = useImport();
 
-  // Fetch usage stats eagerly so the Data tab renders instantly.
+  // Refetch on every open, not once per session: this panel stays mounted while
+  // closed, so keying on `storage` alone pinned every figure to app launch.
+  // Fetching on open still lands before the Data tab can be clicked.
   useEffect(() => {
-    if (!workspace) return;
-    invoke<UsageStatsData>("get_usage_stats")
+    if (!storage || !settingsOpen) return;
+    storage
+      .getUsageStats(weekStart)
       .then(setUsageStats)
       .catch(() => {});
-  }, [workspace]);
+  }, [storage, settingsOpen, weekStart]);
 
   // Close on Escape — go back from mapping/preview first, then close settings
   useEffect(() => {
@@ -102,7 +97,6 @@ export function SettingsPage() {
         active={section}
         onClose={() => setSettingsOpen(false)}
         onNavigate={setSettingsSection}
-        width={sidebarWidth}
       />
 
       {/* Content — mapping → preview → progress, or normal section */}
@@ -142,6 +136,7 @@ export function SettingsPage() {
         <div className="flex-1 overflow-y-auto p-8">
           {section === "general" && <GeneralSettings />}
           {section === "notifications" && <NotificationSettings />}
+          {section === "calendar-sync" && <CalendarSyncSettings />}
           {section === "data" && (
             <DataSettings
               importState={importState}

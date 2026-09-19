@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 
-interface TagsPopoverProps {
+export interface TagsPopoverProps {
   allTags: string[];
   selected: string[];
   /** Toggle a tag: add if absent, remove if present. Also called for new tag creation. */

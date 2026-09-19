@@ -5,26 +5,29 @@ import {
   DragOverlay,
   pointerWithin,
 } from "@dnd-kit/core";
+import { shouldHideSidebar, shouldOverlayPageList } from "@pikos/core";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
-import { shouldHideSidebar, shouldOverlayPageList, useLayoutMode } from "../breakpoints";
+import { useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
 import { useThreePanelDnD } from "../hooks/useThreePanelDnD";
 import { EditorPanel } from "./EditorPanel";
-import { PageListPanel } from "./PageListPanel";
+import { MiddlePanel } from "./MiddlePanel";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 
 const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 export function ThreePanelLayout() {
-  const { pageListDrawerOpen, setPageListDrawerOpen, sidebarCollapsed } = useUI();
+  const { focusZen, pageListDrawerOpen, setPageListDrawerOpen, sidebarCollapsed } = useUI();
+  const leftHidden = sidebarCollapsed || focusZen;
   const { clearSelection, selectedPageIds } = useSelection();
   const { isDraggingOverCalendar } = useCalendarDnD();
   const isFullscreen = useIsFullscreen();
@@ -56,14 +59,16 @@ export function ThreePanelLayout() {
   const left = usePanelResize({
     defaultWidth: 180,
     max: 320,
+    maxWindowShare: 0.2,
     min: 180,
-    storageKey: "pikos:leftPanelWidth",
+    storageKey: STORAGE_KEYS.leftPanelWidth,
   });
   const mid = usePanelResize({
     defaultWidth: 280,
     max: 480,
+    maxWindowShare: 0.3,
     min: 240,
-    storageKey: "pikos:midPanelWidth",
+    storageKey: STORAGE_KEYS.midPanelWidth,
   });
   const {
     activeFolderData,
@@ -102,13 +107,18 @@ export function ThreePanelLayout() {
           {/* Left folder sidebar — hidden at md/sm or when manually collapsed. */}
           <motion.div
             animate={{
-              opacity: sidebarCollapsed || hideSidebar ? 0 : 1,
-              width: sidebarCollapsed || hideSidebar ? 0 : left.width,
+              opacity: leftHidden || hideSidebar ? 0 : 1,
+              width: leftHidden || hideSidebar ? 0 : left.width,
             }}
             className={cn(
               "h-full shrink-0 overflow-hidden",
-              sidebarCollapsed || hideSidebar ? "pointer-events-none" : "pointer-events-auto"
+              leftHidden || hideSidebar ? "pointer-events-none" : "pointer-events-auto"
             )}
+            // A collapsed panel is zero-width, not unmounted, and its contents
+            // overflow rather than clip away — so without this the sidebar keeps
+            // taking Tab focus and stays in the accessibility tree while nothing
+            // is on screen. `pointer-events-none` only stops the mouse.
+            inert={leftHidden || hideSidebar}
             transition={PANEL_SPRING}
           >
             <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
@@ -118,16 +128,17 @@ export function ThreePanelLayout() {
           {!pageListOverlay && (
             <motion.div
               animate={{
-                opacity: sidebarCollapsed ? 0 : 1,
-                width: sidebarCollapsed ? 0 : mid.width,
+                opacity: leftHidden ? 0 : 1,
+                width: leftHidden ? 0 : mid.width,
               }}
               className={cn(
                 "h-full shrink-0 overflow-hidden",
-                sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+                leftHidden ? "pointer-events-none" : "pointer-events-auto"
               )}
+              inert={leftHidden}
               transition={PANEL_SPRING}
             >
-              <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
+              <MiddlePanel onResizeStart={mid.onResizeStart} width={mid.width} />
             </motion.div>
           )}
 
@@ -153,7 +164,7 @@ export function ThreePanelLayout() {
                   initial={{ x: "-100%" }}
                   transition={PANEL_SPRING}
                 >
-                  <PageListPanel onResizeStart={mid.onResizeStart} width={280} />
+                  <MiddlePanel onResizeStart={mid.onResizeStart} width={280} />
                 </motion.div>
               </>
             )}
@@ -174,7 +185,7 @@ export function ThreePanelLayout() {
         ) : activeFolderData ? (
           <div className="flex cursor-grabbing items-center gap-2 rounded bg-accent px-2 py-1.5 text-sm text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
             <span
-              className="h-2 w-2 shrink-0 rounded-full"
+              className="color-dot h-2 w-2 shrink-0 rounded-full"
               style={{
                 backgroundColor: activeFolderData.color ?? "hsl(var(--muted-foreground) / 0.4)",
               }}

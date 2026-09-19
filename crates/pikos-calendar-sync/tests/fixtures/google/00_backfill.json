@@ -1,0 +1,69 @@
+{
+  "kind": "calendar#events",
+  "summary": "Work",
+  "timeZone": "America/New_York",
+  "nextSyncToken": "TOKEN-1",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "ev-single",
+      "iCalUID": "uid-single@google.com",
+      "etag": "\"single-v1\"",
+      "status": "confirmed",
+      "summary": "Design review",
+      "description": "Bring the latest mocks.",
+      "location": "Studio B",
+      "attendees": [
+        { "email": "sam@example.com", "responseStatus": "accepted" },
+        { "email": "kai@example.com", "responseStatus": "needsAction" }
+      ],
+      "start": { "dateTime": "2026-06-10T14:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-06-10T15:00:00-04:00", "timeZone": "America/New_York" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-allday",
+      "iCalUID": "uid-allday@google.com",
+      "etag": "\"allday-v1\"",
+      "status": "confirmed",
+      "summary": "Offsite",
+      "start": { "date": "2026-06-15" },
+      "end": { "date": "2026-06-18" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-series",
+      "iCalUID": "uid-series@google.com",
+      "etag": "\"series-v1\"",
+      "status": "confirmed",
+      "summary": "Weekly sync",
+      "recurrence": [
+        "RRULE:FREQ=WEEKLY;BYDAY=MO",
+        "EXDATE;TZID=America/New_York:20260629T090000"
+      ],
+      "start": { "dateTime": "2026-06-01T09:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-06-01T09:30:00-04:00", "timeZone": "America/New_York" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-series_20260608T130000Z",
+      "iCalUID": "uid-series@google.com",
+      "etag": "\"series-ov-v1\"",
+      "status": "confirmed",
+      "summary": "Weekly sync",
+      "recurringEventId": "ev-series",
+      "originalStartTime": { "dateTime": "2026-06-08T09:00:00-04:00", "timeZone": "America/New_York" },
+      "start": { "dateTime": "2026-06-08T11:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-06-08T11:30:00-04:00", "timeZone": "America/New_York" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-series_20260615T130000Z",
+      "iCalUID": "uid-series@google.com",
+      "etag": "\"series-cx-v1\"",
+      "status": "cancelled",
+      "recurringEventId": "ev-series",
+      "originalStartTime": { "dateTime": "2026-06-15T09:00:00-04:00", "timeZone": "America/New_York" }
+    }
+  ]
+}

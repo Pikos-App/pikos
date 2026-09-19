@@ -1,41 +1,11 @@
 ---
 import Base from "../../layouts/Base.astro";
+import { formatDate, published } from "../../content/posts";
 import Footer from "../../components/Footer.astro";
 
-// Blog posts — add new entries here, newest first.
-// Each post must have a matching file at /src/pages/blog/[slug].astro
-const posts: { slug: string; title: string; description: string; date: string; tag: string }[] = [
-  {
-    slug: "the-code-is-public",
-    title: "The Code Is Public",
-    description: "The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust.",
-    date: "2026-06-10",
-    tag: "Transparency",
-  },
-  {
-    slug: "what-if-pikos-goes-away",
-    title: "What If Pikos Goes Away?",
-    description: "Your data is a file on your computer. The app works without a server. Here's what that means for longevity.",
-    date: "2026-06-10",
-    tag: "Philosophy",
-  },
-  {
-    slug: "buy-once",
-    title: "Buy Once",
-    description: "No subscription, now or ever. The desktop app is free. The paid versions will be one-time purchases.",
-    date: "2026-06-10",
-    tag: "Pricing",
-  },
-  {
-    slug: "your-data-stays-on-your-device",
-    title: "Your Data Stays on Your Device",
-    description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
-    date: "2026-05-09",
-    tag: "Privacy",
-  },
-];
 
-const tags = [...new Set(posts.map((p) => p.tag))];
+const visible = published();
+const tags = [...new Set(visible.map((p) => p.tag))];
 ---
 
 <Base title="Blog - Pikos" description="Articles about Pikos: the app, the architecture, the philosophy.">
@@ -70,12 +40,12 @@ const tags = [...new Set(posts.map((p) => p.tag))];
     </div>
 
     <div class="mt-10 space-y-6" id="posts">
-      {posts.map((post) => (
+      {visible.map((post) => (
         <article class="group" data-post-tag={post.tag}>
           <a href={`/blog/${post.slug}`} class="block rounded-lg border border-neutral-100 bg-white px-6 py-5 transition-colors hover:border-primary-400/30 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40">
             <div class="flex items-center gap-2">
               <time class="text-xs text-neutral-400 dark:text-neutral-500" datetime={post.date}>
-                {new Date(post.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                {formatDate(post.date)}
               </time>
               <span class="text-neutral-200 dark:text-neutral-700">&middot;</span>
               <span class="text-xs font-medium text-primary-500 dark:text-primary-400">{post.tag}</span>
@@ -89,7 +59,7 @@ const tags = [...new Set(posts.map((p) => p.tag))];
 
   </main>
 
-  <Footer current="/blog" />
+  <Footer />
 </Base>
 
 <style>

@@ -143,3 +143,41 @@ describe("collapse bands", () => {
     });
   });
 });
+
+describe("text size", () => {
+  it("defaults to the size an event title already rendered at", () => {
+    const { result } = setup();
+    expect(result.current.textSize).toBe(14);
+  });
+
+  it("steps the px ladder and holds at both ends", () => {
+    const { result } = setup();
+    act(() => result.current.stepTextSize(1));
+    expect(result.current.textSize).toBe(16);
+    act(() => result.current.setTextSize(28));
+    act(() => result.current.stepTextSize(1));
+    expect(result.current.textSize).toBe(28);
+    act(() => result.current.setTextSize(10));
+    act(() => result.current.stepTextSize(-1));
+    expect(result.current.textSize).toBe(10);
+  });
+
+  it("raises the hour height only once text outgrows the block", () => {
+    const { result } = setup();
+    // Compact is 40px an hour, so a 30-minute block is 20px and one line at 28px
+    // does not fit. At normal density the floor lands on exactly 64, which is
+    // what that density already was — the floor only ever adds, never trims.
+    act(() => result.current.setDensity("compact"));
+    const atDefault = result.current.metrics.hourHeight;
+    act(() => result.current.setTextSize(28));
+    expect(result.current.metrics.hourHeight).toBeGreaterThan(atDefault);
+  });
+
+  it("leaves a density already tall enough untouched", () => {
+    const { result } = setup();
+    act(() => result.current.setDensity("spacious"));
+    const atDefault = result.current.metrics.hourHeight;
+    act(() => result.current.setTextSize(16));
+    expect(result.current.metrics.hourHeight).toBe(atDefault);
+  });
+});

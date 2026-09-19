@@ -1,21 +1,25 @@
-import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
-import { getLocalTimezone, isDone, isTimedIso, nowLocalISO, snapAnchorToRule } from "@pikos/core";
-import { CalendarX, ExternalLink, Trash2 } from "lucide-react";
+import type { PagePriority, PageSummary } from "@pikos/core";
+import {
+  computeScheduleTransition,
+  getLocalTimezone,
+  isDone,
+  isTimedIso,
+  normalizeEndInput,
+  rruleToLabel,
+  snapAnchorToRule,
+  syncedScheduleLabel,
+} from "@pikos/core";
+import { CalendarOff, CalendarX, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { DateTimePicker } from "@/shared/components/DateTimePicker";
-import { FolderChip } from "@/shared/components/FolderChip";
-import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
-import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
-import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
-import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
+import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
+import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
-
 interface PageBlockPopoverProps {
   page: PageSummary;
   onClose?: () => void;
@@ -38,7 +42,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
     updatePage,
     updateRecurrence,
   } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
+  const togglePageStatus = useRecurringStatusToggle();
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
@@ -67,15 +71,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const done = isDone(page);
 
   function handleStatusToggle() {
-    const newStatus: PageStatus = done ? "not_started" : "done";
-    if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      requestRecurringComplete(page.id);
-      return;
-    }
-    updatePage(page.id, {
-      completedAt: newStatus === "done" ? nowLocalISO() : null,
-      status: newStatus,
-    });
+    togglePageStatus(page, done ? "not_started" : "done");
   }
 
   function handleTitleBlur(e: React.FocusEvent<HTMLInputElement>) {
@@ -158,6 +154,13 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
 
+  // Synced events own a locked mirror — title, folder, date, recurrence read-only
+  // here too (the backend would reject an edit). Body/priority/reminders stay open.
+  const locked = page.scheduleLocked;
+  const detached = page.syncState === "detached";
+  const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
+  const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "Calendar";
+
   function handleOpenPage(e: React.MouseEvent) {
     e.stopPropagation();
     openPage(page.id);
@@ -166,78 +169,149 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
   return (
     <div className="flex flex-col gap-3">
-      <input
-        autoFocus
-        className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
-        onBlur={handleTitleBlur}
-        onChange={handleTitleChange}
-        onFocus={(e) => {
-          const el = e.currentTarget;
-          requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-        }}
-        onKeyDown={handleTitleKeyDown}
-        placeholder="Untitled"
-        value={titleValue}
-      />
+      {/* No "synced from" banner for an active mirror — the block colour, the
+          Folder row, and the read-only fields already convey it. Detachment is a
+          real warning state, so it keeps its notice. */}
+      {detached && (
+        <div className="flex items-center gap-1.5 text-xs text-subtle">
+          <CalendarOff size={12} />
+          <span className="truncate">Disconnected from {calendarName}</span>
+        </div>
+      )}
+      {locked ? (
+        <div className="flex items-center gap-2">
+          <input
+            className="min-w-0 flex-1 cursor-default border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+            placeholder="Untitled"
+            readOnly
+            value={titleValue}
+          />
+          <SyncedLockHint />
+        </div>
+      ) : (
+        <input
+          autoFocus
+          className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+          onBlur={handleTitleBlur}
+          onChange={handleTitleChange}
+          onFocus={(e) => {
+            const el = e.currentTarget;
+            requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+          }}
+          onKeyDown={handleTitleKeyDown}
+          placeholder="Untitled"
+          value={titleValue}
+        />
+      )}
 
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Status</span>
-          <button
-            aria-label={done ? "Mark not done" : "Mark done"}
-            className="group/status inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
-            onClick={handleStatusToggle}
-          >
-            <TaskCheckbox
-              as="span"
-              checked={done}
-              className={!done ? "group-hover/status:border-foreground/60" : undefined}
-              onChange={handleStatusToggle}
-            />
-            <span>{done ? "Done" : "Open"}</span>
-          </button>
-        </div>
+        <PageMetadataChips
+          groups={[
+            {
+              chips: [{ kind: "status", props: { checked: done, onToggle: handleStatusToggle } }],
+              key: "Status",
+            },
+            {
+              chips: [
+                locked
+                  ? {
+                      id: "calendar",
+                      kind: "node",
+                      node: (
+                        <span className="cursor-default truncate text-sm text-muted-foreground">
+                          {calendarName}
+                        </span>
+                      ),
+                    }
+                  : {
+                      kind: "folder",
+                      props: { folders, onChange: handleFolderChange, value: page.folderId },
+                    },
+              ],
+              key: "Folder",
+            },
+            {
+              boxed: true,
+              chips: [
+                locked
+                  ? lockedSchedule
+                    ? {
+                        id: "schedule",
+                        kind: "node",
+                        node: (
+                          <span className="cursor-default text-sm text-muted-foreground">
+                            {lockedSchedule}
+                          </span>
+                        ),
+                      }
+                    : null
+                  : {
+                      kind: "date",
+                      props: {
+                        endValue: page.scheduledEnd ?? null,
+                        isDone: done,
+                        onChange: handleDateChange,
+                        onEndChange: handleEndChange,
+                        value: page.scheduledStart ?? null,
+                      },
+                    },
+                // A timed page reminds on a lead time; an all-day page has no
+                // start time to count back from, so its dropdown offers the
+                // day-before anchor instead — same split the editor byline makes.
+                !!page.scheduledStart && {
+                  kind: "reminder",
+                  props: {
+                    allDay: !isTimedIso(page.scheduledStart),
+                    iconSize: 12,
+                    pageId: page.id,
+                  },
+                },
+              ],
+              key: "Date",
+            },
+            {
+              chips: [
+                locked
+                  ? {
+                      id: "recurrence",
+                      kind: "node",
+                      node: (
+                        <span className="cursor-default truncate text-sm text-muted-foreground">
+                          {recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : "Does not repeat"}
+                        </span>
+                      ),
+                    }
+                  : {
+                      kind: "recurrence",
+                      props: {
+                        anchorDate: page.scheduledStart ?? null,
+                        onChange: (rrule) => void handleRecurrenceChange(rrule),
+                        rrule: recurrenceRule?.rrule ?? null,
+                      },
+                    },
+              ],
+              key: "Repeats",
+            },
+            {
+              chips: [
+                {
+                  kind: "priority",
+                  props: {
+                    onSelect: handlePriorityChange,
+                    priority: page.priority,
+                    variant: "byline",
+                  },
+                },
+              ],
+              key: "Priority",
+            },
+          ]}
+          layout="rows"
+        />
 
-        <div className="flex items-center gap-3">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Folder</span>
-          <FolderChip folders={folders} onChange={handleFolderChange} value={page.folderId} />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Date</span>
-          <div className="flex items-center gap-2">
-            <DateTimePicker
-              endValue={page.scheduledEnd ?? null}
-              isDone={done}
-              onChange={handleDateChange}
-              onEndChange={handleEndChange}
-              value={page.scheduledStart ?? null}
-            />
-            {/* Timed events only — all-day schedules don't fire reminders, so
-                hide the bell (matches notifications/scheduler behaviour). */}
-            {page.scheduledStart && isTimedIso(page.scheduledStart) && (
-              <ReminderDropdown iconSize={12} pageId={page.id} />
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Repeats</span>
-          <RecurrencePopover
-            anchorDate={page.scheduledStart ?? null}
-            onChange={(rrule) => void handleRecurrenceChange(rrule)}
-            rrule={recurrenceRule?.rrule ?? null}
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Priority</span>
-          <PriorityDropdown
-            onSelect={handlePriorityChange}
-            priority={page.priority}
-            variant="byline"
-          />
-        </div>
+        {locked && (
+          <SyncedEventDetails attendees={page.mirrorAttendees} location={page.mirrorLocation} />
+        )}
       </div>
 
       <div className="flex items-center justify-between border-t border-border/40 pt-1">
@@ -249,7 +323,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           Open page
         </button>
         <div className="flex items-center gap-2">
-          {onRemoveDate && page.scheduledStart && (
+          {onRemoveDate && page.scheduledStart && !locked && (
             <TooltipIconButton
               className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-foreground focus:outline-none"
               icon={<CalendarX size={11} />}

@@ -2,27 +2,33 @@ use serde::Serialize;
 
 use crate::error::AppResult;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SearchResponse {
     pub results: Vec<SearchResult>,
     /// Number of completed pages matching the query (always counted, even when excluded).
+    #[ts(type = "number")]
     pub completed_count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SearchResult {
     pub id: String,
     pub title: String,
     pub excerpt: String,
+    #[ts(type = "'title' | 'content' | 'subtitle' | 'both'")]
     pub match_source: String,
+    #[ts(type = "'not_started' | 'done'")]
     pub status: String,
     pub subtitle: Option<String>,
     pub scheduled_date: Option<String>,
+    #[ts(type = "0 | 1 | 2 | 3 | 4")]
     pub priority: i32,
     pub tags: Vec<String>,
-    /// First ~80 chars of body content — used as fallback line 2 when no metadata exists
+    /// First ~80 characters of the body, shown when there's no other metadata to show.
     pub content_preview: String,
 }
 
@@ -36,6 +42,7 @@ struct SearchRow {
     scheduled_start: Option<String>,
     priority: i32,
     tags: Option<String>,
+    mirror_search_text: Option<String>,
 }
 
 fn char_to_byte(s: &str, char_idx: usize) -> usize {
@@ -48,14 +55,51 @@ fn char_to_byte(s: &str, char_idx: usize) -> usize {
 /// Build an excerpt centered on the first occurrence of any search token.
 /// Strips the title and subtitle from the beginning of content_text so the
 /// excerpt only shows body content.
-/// All indexing is char-based to avoid panics on multi-byte UTF-8.
 fn build_excerpt(
     content_text: Option<&str>,
     title: &str,
     subtitle: Option<&str>,
     tokens: &[String],
 ) -> String {
-    let body = strip_title_subtitle(content_text, title, subtitle);
+    excerpt_around(
+        &join_blocks(strip_title_subtitle(content_text, title, subtitle)),
+        tokens,
+    )
+}
+
+/// One block per line, rejoined so two of them do not read as one sentence.
+///
+/// `content_text` keeps the document's line breaks, and every reader renders the excerpt as HTML,
+/// where a newline folds into a space: a hit at the end of "Measure the alcove" came out as
+/// "the alcove Order the desktop top". Blank lines are dropped, or an empty paragraph leaves a
+/// separator with nothing on either side of it.
+fn join_blocks(body: &str) -> String {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" \u{00B7} ")
+}
+
+/// A mirror's calendar-owned metadata as the excerpt, for a hit that lands only
+/// there — the room or an attendee. Fills the same `excerpt` rather than adding a
+/// metadata arm to `match_source`, so the row's existing quote-and-highlight path
+/// renders it unchanged; an empty excerpt leaves the row showing the page's date,
+/// which names nothing the query asked for.
+///
+/// The stored blob is newline-joined (`mirror_search_text`, reconciler.rs) and the
+/// row is one truncated line, so the parts are rejoined for display.
+fn build_mirror_excerpt(mirror_search_text: Option<&str>, tokens: &[String]) -> String {
+    let Some(text) = mirror_search_text else {
+        return String::new();
+    };
+    excerpt_around(&join_blocks(text), tokens)
+}
+
+/// Window `body` around the first occurrence of any token, snapped to word
+/// boundaries and elided at both cut edges. Empty when no token is present.
+/// All indexing is char-based to avoid panics on multi-byte UTF-8.
+fn excerpt_around(body: &str, tokens: &[String]) -> String {
     if body.is_empty() {
         return String::new();
     }
@@ -111,10 +155,7 @@ fn build_excerpt(
             };
             format!("{prefix}{slice}{suffix}")
         }
-        None => {
-            // No token found in body — match was in title/subtitle/tags only.
-            String::new()
-        }
+        None => String::new(),
     }
 }
 
@@ -188,6 +229,26 @@ fn strip_prefix_ci<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
     }
 }
 
+/// Split a query into runs of alphanumeric chars, every other character a separator.
+///
+/// This is FTS5's default `unicode61` tokenizer, reproduced — the index is the
+/// authority, not this function, so a query for "multi-color" finds the same rows as
+/// "multi color". It also keeps FTS5 from reading `-` as a NOT operator or column
+/// qualifier (`multi-color` → "no such column: color") and `'` as a phrase delimiter
+/// (`don't` → syntax error). The highlighter mirrors it through `ftsTokens`; both
+/// answer to `tests/fixtures/search-tokenization.json`.
+pub fn fts_tokens(query: &str) -> Vec<String> {
+    query
+        .split_whitespace()
+        .flat_map(|word| {
+            word.split(|c: char| !c.is_alphanumeric())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 /// Unified search: queries all FTS5 columns with bm25() weighting so title
 /// matches rank above content matches. Supports prefix matching on the last
 /// token (e.g. "morn" → "morning"). Returns up to 20 results with plain text
@@ -206,24 +267,7 @@ pub async fn search_pages_impl(
         });
     }
 
-    // Sanitize and build FTS5 prefix query.
-    // Split each whitespace-separated word into runs of alphanumeric chars;
-    // any other character (hyphen, apostrophe, paren, etc.) is treated as a
-    // token separator. This matches what FTS5's default unicode61 tokenizer
-    // does when indexing, so a query for "multi-color" finds the same docs as
-    // "multi color". Critically, it also prevents FTS5 from interpreting `-`
-    // as a NOT operator / column qualifier (e.g. `multi-color` → "no such
-    // column: color") or `'` as a phrase delimiter (`don't` → syntax error).
-    // The last token gets a trailing `*` for prefix matching.
-    let tokens: Vec<String> = q
-        .split_whitespace()
-        .flat_map(|word| {
-            word.split(|c: char| !c.is_alphanumeric())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>()
-        })
-        .collect();
+    let tokens = fts_tokens(q);
 
     if tokens.is_empty() {
         return Ok(SearchResponse {
@@ -245,7 +289,8 @@ pub async fn search_pages_impl(
         .collect::<Vec<_>>()
         .join(" ");
 
-    // bm25() weights: title=10, subtitle=5, content_text=1, tags=3
+    // bm25() weights: title=10, subtitle=5, content_text=1, tags=3,
+    // mirror_search_text=3 (structured and short, like tags)
     // Fetch raw content_text — excerpt is built in Rust for accurate windowing
     // deleted_at IS NULL is unconditional — trashed pages never appear in search.
     // When include_completed is false, completed pages are excluded entirely.
@@ -253,24 +298,26 @@ pub async fn search_pages_impl(
     // both notes and tasks).
     let sql = if include_completed {
         "SELECT pages.id, pages.title, pages.subtitle, pages.content_text,
-                pages.status, pages.scheduled_start, pages.priority, pages.tags
+                pages.status, pages.scheduled_start, pages.priority, pages.tags,
+                pages.mirror_search_text
          FROM pages_fts
          JOIN pages ON pages.rowid = pages_fts.rowid
          WHERE pages_fts MATCH ?1
            AND pages.deleted_at IS NULL
-         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0),
+         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0),
                   CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,
                   pages.updated_at DESC
          LIMIT 20"
     } else {
         "SELECT pages.id, pages.title, pages.subtitle, pages.content_text,
-                pages.status, pages.scheduled_start, pages.priority, pages.tags
+                pages.status, pages.scheduled_start, pages.priority, pages.tags,
+                pages.mirror_search_text
          FROM pages_fts
          JOIN pages ON pages.rowid = pages_fts.rowid
          WHERE pages_fts MATCH ?1
            AND pages.deleted_at IS NULL
            AND pages.status != 'done'
-         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0),
+         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0),
                   pages.updated_at DESC
          LIMIT 20"
     };
@@ -296,12 +343,17 @@ pub async fn search_pages_impl(
     let results = rows
         .into_iter()
         .map(|row| {
-            let excerpt = build_excerpt(
+            let body_excerpt = build_excerpt(
                 row.content_text.as_deref(),
                 &row.title,
                 row.subtitle.as_deref(),
                 &tokens,
             );
+            let excerpt = if body_excerpt.is_empty() {
+                build_mirror_excerpt(row.mirror_search_text.as_deref(), &tokens)
+            } else {
+                body_excerpt
+            };
 
             let title_lower = row.title.to_lowercase();
             let title_hit = tokens

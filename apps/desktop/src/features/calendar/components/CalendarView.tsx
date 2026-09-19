@@ -1,17 +1,24 @@
+import {
+  buildCalendarDays,
+  buildMonthGrid,
+  clampDayCount,
+  getCalendarDayCount,
+  monthGridDays,
+} from "@pikos/core";
 import { addDays, format, isSameDay } from "date-fns";
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 
-import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
-import { clampDayCount } from "@/shared/constants/calendar";
+import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import { calendarTextScale, useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 
-import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
-import { buildCalendarDays } from "../utils/calendarGeometry";
+import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
+import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
 /**
@@ -30,25 +37,32 @@ const COMPLETED_LOOKBACK_DAYS = 31;
  */
 export function CalendarView() {
   const {
-    createPage,
     deletePage,
+    expandRecurrenceRange,
     flushPage,
     getPage,
-    listSchedulesRange,
+    listOverridesForRules,
     mergePages,
+    overridesVersion,
     pages,
     recurrenceRules,
     rescheduleVirtualOccurrence,
     scheduleOnce,
   } = usePages();
   const { storage } = useWorkspace();
-  const { activeViewId, openPage, referenceDate } = useUI();
+  const { openPage, referenceDate, setReferenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
-  const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
-  const { dayCount: preferredDayCount } = useCalendarSettings();
+  const { weekStart } = useAppSettings();
+  const {
+    dayCount: preferredDayCount,
+    setViewMode,
+    textSize: calendarTextSize,
+    viewMode,
+  } = useCalendarSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
+  const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
 
   // Blur whatever had focus in the editor panel so no focus ring lingers.
   useEffect(() => {
@@ -59,7 +73,14 @@ export function CalendarView() {
   // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
   // would truncate day columns to unusable widths.
   const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(layoutMode));
-  const days = buildCalendarDays(referenceDate, dayCount, weekStart);
+  const isMonth = viewMode === "month";
+  // Month view's visible range is the padded grid (up to 42 days), not the
+  // month — recurrence expansion and the completed-page fetch below both key
+  // off `days`, so the padding rows get their occurrences too.
+  const monthWeeks = buildMonthGrid(referenceDate, weekStart);
+  const days = isMonth
+    ? monthGridDays(monthWeeks)
+    : buildCalendarDays(referenceDate, dayCount, weekStart);
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
 
@@ -95,7 +116,9 @@ export function CalendarView() {
 
   const expandedPages = useRecurrenceExpansion({
     days,
-    listSchedulesRange,
+    expandRecurrenceRange,
+    listOverridesForRules,
+    overridesVersion,
     pages: visiblePages,
     recurrenceRules,
   });
@@ -104,30 +127,11 @@ export function CalendarView() {
     openPage(pageId);
   }
 
-  async function handleCreatePage(day: Date, start: Date, end?: Date) {
-    // Default folder: active folder, then settings default, then Inbox.
-    const folderId =
-      activeViewId === "today" || activeViewId === "inbox" ? settingsDefaultFolder : activeViewId;
-
-    const page = await createPage({ folderId });
-    // Use local-time format (no Z suffix) — SQLite's date() functions require this.
-    const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
-    await scheduleOnce(page.id, fmt(start), end ? fmt(end) : undefined);
-    setAutoOpenPageId(page.id);
-  }
-
-  /** `end` is undefined for a single-day click; set by the drag-to-create
-   * gesture for a multi-day span. */
-  async function handleCreateAllDay(start: Date, end?: Date) {
-    const folderId = activeViewId === "today" || activeViewId === "inbox" ? null : activeViewId;
-    const page = await createPage({ folderId });
-    // Date-only strings → isAllDayPage() returns true.
-    await scheduleOnce(
-      page.id,
-      format(start, "yyyy-MM-dd"),
-      end ? format(end, "yyyy-MM-dd") : undefined
-    );
-    setAutoOpenPageId(page.id);
+  /** Month view's only navigation gesture: land on the picked day in the time
+   * grid, which is where every scheduling gesture lives. */
+  function handleOpenDay(day: Date) {
+    setReferenceDate(day);
+    setViewMode("time");
   }
 
   /**
@@ -170,18 +174,33 @@ export function CalendarView() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <WeekGrid
-        autoOpenPageId={autoOpenPageId}
-        days={days}
-        isCurrentWeek={isCurrentWeek}
-        onAutoOpenConsumed={handleAutoOpenConsumed}
-        onCreateAllDay={handleCreateAllDay}
-        onCreatePage={handleCreatePage}
-        onPageDoubleClick={handlePageDoubleClick}
-        onReschedule={handleReschedule}
-        pages={expandedPages}
-      />
+    // Overriding `--ui-text-scale` here is what makes the calendar's text size
+    // independent of the interface's: everything below inherits the calendar's
+    // value, everything above keeps the interface's.
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      style={{ "--ui-text-scale": calendarTextScale(calendarTextSize) } as CSSProperties}
+    >
+      {isMonth ? (
+        <MonthGrid
+          onOpenDay={handleOpenDay}
+          onPageDoubleClick={handlePageDoubleClick}
+          pages={expandedPages}
+          weeks={monthWeeks}
+        />
+      ) : (
+        <WeekGrid
+          autoOpenPageId={autoOpenPageId}
+          days={days}
+          isCurrentWeek={isCurrentWeek}
+          onAutoOpenConsumed={handleAutoOpenConsumed}
+          onCreateAllDay={createAllDayPage}
+          onCreatePage={(_day, start, end) => createTimedPage(start, end)}
+          onPageDoubleClick={handlePageDoubleClick}
+          onReschedule={handleReschedule}
+          pages={expandedPages}
+        />
+      )}
     </div>
   );
 }

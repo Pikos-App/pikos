@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "eslint.config.js",
+    "crates/pikos-db/tests/fixtures/**",
+    "crates/pikos-recurrence/tests/fixtures/**"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -10,11 +16,16 @@
       "persistent": true
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck"],
+      "inputs": ["src/**", "seeds/**", "tsconfig*.json", "vitest.config.ts", "package.json"]
     },
-    "lint": {},
+    "lint": {
+      "inputs": ["src/**", "seeds/**", "package.json"]
+    },
     "test": {
-      "outputs": ["coverage/**"]
+      "dependsOn": ["^test"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**", "seeds/**", "vitest.config.ts", "tsconfig*.json", "package.json"]
     }
   }
 }

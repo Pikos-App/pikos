@@ -1,7 +1,18 @@
 import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowUpDown, CalendarDays, FolderPlus, Hash, Inbox, Plus, Text } from "lucide-react";
+import {
+  ArrowUpDown,
+  CalendarDays,
+  CalendarRange,
+  ChevronRight,
+  FolderPlus,
+  Hash,
+  Inbox,
+  Plus,
+  Text,
+  Trash2,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import type React from "react";
 
@@ -12,15 +23,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
+import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
+import { useCalendarAccountGroups } from "../hooks/useCalendarAccountGroups";
 import { useFolderList } from "../hooks/useFolderList";
 import type { FolderSortOrder } from "../hooks/useFolderList";
+import { ExternalCalendarItem } from "./ExternalCalendarItem";
 import { FolderItem } from "./FolderItem";
 import { SmartViewEntry } from "./SmartViewEntry";
 
@@ -28,6 +44,7 @@ export function FolderList() {
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const {
     activeViewId,
+    externalFolders,
     folders,
     handleColorChange,
     handleCreateFolder,
@@ -41,10 +58,16 @@ export function FolderList() {
     setSortOrder,
     sortOrder,
     todayCount,
+    upcomingCount,
   } = useFolderList();
+  const calendarGroups = useCalendarAccountGroups(externalFolders);
   const { openSortMenu, setOpenSortMenu } = useUI();
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
+  const [calendarsCollapsed, setCalendarsCollapsed] = useLocalStorage(
+    STORAGE_KEYS.calendarsCollapsed,
+    false
+  );
 
   const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
     { icon: <ArrowUpDown size={13} />, label: "Manual", value: "manual" },
@@ -103,6 +126,17 @@ export function FolderList() {
           isDragOver={isPageOverToday}
           label="Today"
           onSelect={() => setActiveViewId("today")}
+        />
+        {/* Between Today and Inbox: the three read as one horizon — what is on
+            me now, what is coming, what is unplaced. Not a drop target, because
+            "upcoming" is a range of days, not a date a dropped page could take. */}
+        <SmartViewEntry
+          badge={upcomingCount}
+          icon={<CalendarRange size={16} />}
+          id="nav-upcoming"
+          isActive={activeViewId === "upcoming"}
+          label="Upcoming"
+          onSelect={() => setActiveViewId("upcoming")}
         />
         <SmartViewEntry
           badge={inboxCount}
@@ -226,6 +260,68 @@ export function FolderList() {
             Create a folder
           </button>
         )}
+
+        {externalFolders.length > 0 && (
+          <div className="mt-4 flex flex-col gap-0.5">
+            <button
+              aria-expanded={!calendarsCollapsed}
+              className="mb-1 flex items-center gap-1 px-2 text-left"
+              onClick={() => setCalendarsCollapsed((c) => !c)}
+            >
+              <ChevronRight
+                className={cn(
+                  "text-subtle transition-transform",
+                  !calendarsCollapsed && "rotate-90"
+                )}
+                size={11}
+              />
+              <span className="type-ui-sm tracking-wide text-subtle uppercase">Calendars</span>
+            </button>
+            {!calendarsCollapsed &&
+              calendarGroups.map((group) => {
+                const accountName = calendarGroups.length > 1 ? group.accountName : null;
+                return (
+                  <div
+                    aria-label={accountName ?? undefined}
+                    className="flex flex-col gap-0.5"
+                    key={group.accountId ?? "unlinked"}
+                    role={accountName ? "group" : undefined}
+                  >
+                    {accountName && (
+                      <span className="type-ui-sm truncate px-2 pt-1 text-subtle">
+                        {accountName}
+                      </span>
+                    )}
+                    {group.folders.map((folder) => (
+                      <ExternalCalendarItem
+                        folder={folder}
+                        isActive={activeViewId === folder.id}
+                        key={folder.id}
+                        onColorChange={(color) => handleColorChange(folder.id, color)}
+                        onSelect={() => setActiveViewId(folder.id)}
+                        pageCount={pageCountByFolder[folder.id] ?? 0}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </div>
+
+      {/* Trash sits under everything, behind the same hairline the sidebar puts
+          above Settings. It reads as a smart view because it behaves like one —
+          a place you go to see pages — but it is not somewhere pages live and
+          nothing can be dropped into it, so it must not sit in the scrolling
+          list beside Inbox and the folders. */}
+      <div className="shrink-0 border-t border-border-subtle px-1 py-2">
+        <SmartViewEntry
+          icon={<Trash2 size={16} />}
+          id="nav-trash"
+          isActive={activeViewId === "trash"}
+          label="Trash"
+          onSelect={() => setActiveViewId("trash")}
+        />
       </div>
     </div>
   );

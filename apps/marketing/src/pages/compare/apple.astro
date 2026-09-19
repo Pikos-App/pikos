@@ -1,0 +1,94 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
+
+const title = "Pikos vs Apple Notes, Reminders and Calendar";
+const description = "Apple's three apps are free, installed and sync everywhere. What they don't do is talk to each other. An honest comparison, including what Pikos doesn't do.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/compare" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Compare
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Pikos vs Apple Notes, Reminders and Calendar</h1>
+      <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+        Apple's apps are free, already on your machine, and sync to your phone without you setting anything up. That's a lot to be up against, and worth saying first.
+      </p>
+
+      <Prose class="mt-10">
+
+        <h2>The short version</h2>
+
+        <p>
+          Three good apps that don't know about each other. The note from a meeting is in Notes, the thing you agreed to do is in Reminders, the meeting is in Calendar, and nothing joins them up. You do the joining, every time, by remembering.
+        </p>
+
+        <p>
+          In Pikos those are one page. You write the note during the meeting, tick off what came out of it, and it's already sitting on the day it happened.
+        </p>
+
+        <h2>Stay with Apple's apps if</h2>
+
+        <p>
+          You want it to work on your iPhone this afternoon. Apple's sync is free, invisible and already on. Pikos syncs nothing yet and the iPhone app isn't out.
+        </p>
+
+        <p>
+          You use Siri, the Reminders widget, shared lists with family, or a location-based reminder. None of that exists in Pikos and some of it can't, because it's wired into the operating system.
+        </p>
+
+        <p>
+          You want to spend nothing, ever. The Pikos desktop download is free and staying free, but the App Store versions will be paid.
+        </p>
+
+        <h2>Try Pikos if</h2>
+
+        <p>
+          You've found yourself pasting between Notes and Reminders, or writing the same thing twice so it shows up in both.
+        </p>
+
+        <p>
+          You want the note and the day in front of you at once. Pikos puts the week beside the editor rather than in another app.
+        </p>
+
+        <p>
+          You want to keep your calendar where it is. Calendar sync is read-only and opt-in: your iCloud events arrive as pages you can write on, and nothing Pikos does is ever sent back to Apple. Your calendar cannot be damaged by trying this.
+        </p>
+
+        <h2>What Pikos doesn't do</h2>
+
+        <p>
+          No iPhone app yet, no sync yet, no Siri, no widgets, no sharing with your household, and it isn't free on the App Store. Against three apps that cost nothing and are already installed, Pikos has to be meaningfully better at one specific thing, which is keeping a note, a task and a day together.
+        </p>
+
+        <h2>Bringing things across</h2>
+
+        <p>
+          Calendar is the easy half: connect iCloud in Settings and your events show up as pages, read-only, without exporting anything.
+        </p>
+
+        <p>
+          Notes is the hard half and there's no one-click path. Apple Notes has no Markdown export, so the practical route is to select the notes you want, export them as PDF or copy them over by hand, or use a third-party exporter to get a Markdown folder that Pikos can import. For most people the honest answer is to leave old notes in Apple Notes and start new work in Pikos rather than migrating years of it.
+        </p>
+
+      </Prose>
+
+      <div class="mt-16 rounded-lg border border-neutral-200 bg-neutral-50 px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
+        <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          The feature-by-feature table, and comparisons with Obsidian, Notion, NotePlan, TickTick and Things, are on the <a href="/compare" class="font-medium text-primary-500 hover:underline dark:text-primary-400">comparison page</a>. Pikos is a <a href="/download" class="font-medium text-primary-500 hover:underline dark:text-primary-400">free download</a>, and connecting your iCloud calendar is read-only, so you can have a look without moving anything or giving anything up. <a href="/calendar-sync/icloud" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Here's how</a>.
+        </p>
+      </div>
+
+    </article>
+
+  </main>
+
+  <Footer />
+</Base>

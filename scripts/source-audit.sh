@@ -27,6 +27,7 @@ src_files() {
     'apps/desktop/src-tauri/src/**' \
     'packages/core/src/**' \
     'packages/ui/src/**' \
+    'crates/*/src/**' \
     "$@"
 }
 
@@ -38,6 +39,18 @@ rust_src_files() {
   src_files | grep -E '\.rs$'
 }
 
+# The CLI's whole output is println!, so it is the one crate exempt from the
+# debug-leftover check.
+app_rust_src_files() {
+  rust_src_files | grep -v '^crates/pikos-cli/'
+}
+
+# Every outbound request clones the shared client built here, so this is the one
+# file where a client may be constructed and the only place TLS, timeouts and the
+# user-agent are set.
+HTTP_CHOKEPOINT='crates/pikos-calendar-sync/src/http.rs'
+SYNC_CRATE='crates/pikos-calendar-sync/'
+
 # ── 1. Secrets (gitleaks) ──────────────────────────────────────────────────────
 if command -v gitleaks &>/dev/null; then
   if gitleaks dir . --no-banner --exit-code 1 &>/dev/null; then
@@ -47,9 +60,12 @@ if command -v gitleaks &>/dev/null; then
   fi
 else
   # Fallback: basic pattern grep if gitleaks not installed
+  # packages/recurrence-wasm/pkg is generated (base64-embedded wasm binary);
+  # random token-shaped substrings in the blob trip the patterns.
   hits=$(src_files '*.ts' '*.tsx' '*.js' '*.jsx' '*.rs' '*.json' '*.toml' '*.yaml' '*.yml' '*.env*' \
     | xargs grep -nE '(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AIza[a-zA-Z0-9_-]{35}|AKIA[A-Z0-9]{16}|xoxb-[0-9]|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY)' 2>/dev/null \
-    | grep -v 'node_modules' || true)
+    | grep -v 'node_modules' \
+    | grep -v 'packages/recurrence-wasm/pkg/' || true)
 
   if [ -n "$hits" ]; then
     fail "Possible secrets detected (install gitleaks for better coverage)" $hits
@@ -81,7 +97,7 @@ else
 fi
 
 # ── 4. Debug leftovers (Rust) ───────────────────────────────────────────────
-hits=$(rust_src_files \
+hits=$(app_rust_src_files \
   | xargs grep -nE '(^\s*dbg!\(|^\s*println!\()' 2>/dev/null \
   | grep -v '#\[cfg(test)\]' \
   | grep -v '#\[test\]' || true)
@@ -93,19 +109,44 @@ else
 fi
 
 # ── 5. Unauthorized network calls ───────────────────────────────────────────
-# The desktop app must not make network requests except via the Tauri updater plugin.
+# The desktop app must not make network requests except via the Tauri updater
+# plugin. Calendar sync is the single exception, and it is fenced three ways:
+# only that crate may declare an HTTP client, only its chokepoint may construct
+# one, and no other Rust source may name one at all.
 hits=$(ts_src_files \
   | xargs grep -nE '\b(fetch\s*\(|axios|XMLHttpRequest|navigator\.sendBeacon|new\s+WebSocket|\.get\s*\(\s*['\''"`]https?://|\.post\s*\(\s*['\''"`]https?://)' 2>/dev/null || true)
 
 rust_hits=$(rust_src_files \
+  | grep -v "^$SYNC_CRATE" \
   | xargs grep -nE '\b(reqwest::|hyper::|ureq::|surf::|attohttpc::|isahc::|Client::new|HttpClient)' 2>/dev/null \
   | grep -v 'tauri.plugin' || true)
+
+build_hits=$(rust_src_files \
+  | grep "^$SYNC_CRATE" \
+  | grep -v "^$HTTP_CHOKEPOINT$" \
+  | xargs grep -nE '(reqwest::Client(Builder)?::(builder|new)[[:space:]]*\(|^[[:space:]]*use[[:space:]]+reqwest::.*Client)' 2>/dev/null || true)
+
+dep_hits=$(git ls-files -- 'Cargo.toml' '*/Cargo.toml' \
+  | grep -v "^${SYNC_CRATE}Cargo.toml$" \
+  | xargs grep -nE '^[[:space:]]*(reqwest|hyper|ureq|surf|attohttpc|isahc)[[:space:]]*=' 2>/dev/null || true)
 
 all_network="$hits$rust_hits"
 if [ -n "$all_network" ]; then
   fail "Unauthorized network calls detected" $all_network
 else
-  pass "No unauthorized network calls"
+  pass "No unauthorized network calls" "outside the sync crate"
+fi
+
+if [ -n "$build_hits" ]; then
+  fail "HTTP client built outside $HTTP_CHOKEPOINT (clone the shared client instead)" $build_hits
+else
+  pass "One HTTP client chokepoint"
+fi
+
+if [ -n "$dep_hits" ]; then
+  fail "HTTP client dependency outside the sync crate" $dep_hits
+else
+  pass "One crate depends on an HTTP client"
 fi
 
 # ── 6. Analytics / telemetry SDK imports ────────────────────────────────────
@@ -148,10 +189,29 @@ fi
 # point invoked with a `format!`'d string — query/query_as/query_scalar/execute.
 # Dynamic WHERE clauses built via QueryBuilder.push_bind are safe.
 # To allow a call site where the interpolated value is a compile-time constant
-# (e.g. column whitelist, PRAGMA name), add `// sql-ok:` to the same line.
-hits=$(rust_src_files \
-  | xargs grep -nE '\b(execute|query|query_as|query_scalar)(::<[^>]+>)?\s*\(\s*&?format!' 2>/dev/null \
-  | grep -v '// sql-ok:' || true)
+# (e.g. column whitelist, PRAGMA name), add `// sql-ok:` by the call: the line
+# above it, the line itself, or either of the two after, since `format!(` wraps.
+hits=$(rust_src_files | python3 -c '
+import re, sys
+
+CALL = re.compile(r"\b(execute|query|query_as|query_scalar)(::<[^>]+>)?\s*\(\s*&?format!")
+
+for path in sys.stdin.read().split("\n"):
+    if not path:
+        continue
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        continue
+    for i, line in enumerate(lines):
+        if not CALL.search(line):
+            continue
+        # The annotation sits wherever it reads best: above the call, on it, or
+        # inside it, since format!( almost always wraps.
+        if any("sql-ok:" in w for w in lines[max(0, i - 1) : i + 3]):
+            continue
+        print("{}:{}:{}".format(path, i + 1, line.strip()))
+' 2>/dev/null || true)
 
 if [ -n "$hits" ]; then
   fail "Possible SQL injection (use sqlx parameterized queries or add '// sql-ok:' if interpolated value is constant)" $hits

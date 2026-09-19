@@ -7,7 +7,7 @@ import { GeneralSettingsPreferences } from "./GeneralSettingsPreferences";
 
 export function GeneralSettings() {
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <GeneralSettingsAbout />
       <GeneralSettingsPreferences />
       <GeneralSettingsFeedback />

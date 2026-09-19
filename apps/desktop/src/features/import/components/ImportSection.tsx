@@ -1,7 +1,6 @@
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, FileSpreadsheet, FolderOpen, Loader2 } from "lucide-react";
+
+import { getPlatform } from "@/shared/platform";
 
 import type { ImportState } from "../hooks/useImport";
 
@@ -28,12 +27,7 @@ export function ImportSection({
             ?.path
         : null;
     const selected =
-      testPath ??
-      (await openDialog({
-        directory: true,
-        multiple: false,
-        title: "Select Markdown / Obsidian Vault folder",
-      }));
+      testPath ?? (await getPlatform().pickDirectory("Select Markdown / Obsidian Vault folder"));
     if (!selected) return;
     await parseMarkdownDir(selected);
   }
@@ -47,13 +41,13 @@ export function ImportSection({
       parseCSVFile(testCsv);
       return;
     }
-    const selected = await openDialog({
-      filters: [{ extensions: ["csv"], name: "CSV" }],
-      multiple: false,
+    const selected = await getPlatform().pickFile({
+      extensions: ["csv"],
+      filterName: "CSV",
       title: "Select CSV export file",
     });
     if (!selected) return;
-    const content = await readTextFile(selected);
+    const content = await getPlatform().readTextFile(selected);
     parseCSVFile(content);
   }
 
@@ -105,7 +99,7 @@ function ImportSupportNote() {
   return (
     <button
       className="mb-3 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
-      onClick={() => void openUrl("https://pikos.app/import")}
+      onClick={() => void getPlatform().openExternal("https://pikos.app/import")}
     >
       <span>Supported tools and how each import works</span>
       <ExternalLink className="h-3 w-3 shrink-0" />

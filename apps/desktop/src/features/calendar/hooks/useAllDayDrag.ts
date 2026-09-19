@@ -1,15 +1,14 @@
-import type { PageSummary } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import type { CalendarMetrics, CollapseGeometry, PageSummary } from "@pikos/core";
+import {
+  computeAllDayEdgeResize,
+  isDone,
+  mapYToDate,
+  shiftAllDayEnd,
+  snapYCollapse,
+} from "@pikos/core";
 import { format } from "date-fns";
 import { useRef, useState } from "react";
 
-import { computeAllDayEdgeResize, shiftAllDayEnd } from "../utils/allDayLayout";
-import {
-  type CalendarMetrics,
-  type CollapseGeometry,
-  mapYToDate,
-  snapYCollapse,
-} from "../utils/calendarGeometry";
 import type { GhostContent } from "./useDragGhost";
 
 interface AllDayDragRefState {
@@ -116,6 +115,10 @@ export function useAllDayDrag({
     pageId: string;
     originalDate?: string;
   }) {
+    const page = pages.find((p) => p.id === pageId);
+    // Synced events own a locked schedule — never draggable.
+    if (page?.scheduleLocked) return;
+
     disableSelect("dragging-grab");
     allDayDragRef.current = { folderColor, pageId, ...(originalDate && { originalDate }) };
     allDayGhostPositionRef.current = null;
@@ -124,7 +127,6 @@ export function useAllDayDrag({
 
     // Render the ghost DOM once up-front. Position updates during the drag
     // go through positionGhost() — ref-based, no React re-render per frame.
-    const page = pages.find((p) => p.id === pageId);
     setGhostContent({
       folderColor,
       height: metrics.compactBlockHeight,
@@ -133,7 +135,10 @@ export function useAllDayDrag({
       title: page?.title ?? "Untitled",
     });
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      // A second finger landing mid-drag must not steer the gesture the first
+      // one started; mouse and pen are always primary.
+      if (!ev.isPrimary) return;
       const scrollEl = scrollRef.current;
       const columnsEl = dayColumnsRef.current;
       if (!scrollEl || !columnsEl) return;
@@ -182,9 +187,9 @@ export function useAllDayDrag({
       });
     }
 
-    function onUp(ev: MouseEvent) {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       cancelAnimationFrame(rafIdRef.current);
@@ -232,8 +237,29 @@ export function useAllDayDrag({
       );
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — unwind without rescheduling. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      cancelAnimationFrame(rafIdRef.current);
+      allDayDragRef.current = null;
+      allDayGhostPositionRef.current = null;
+      allDayHoverColumnRef.current = null;
+      setGhostContent(null);
+      setAllDayDraggingPageId(null);
+      setAllDayDragHoverIndex(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   /**
@@ -257,6 +283,8 @@ export function useAllDayDrag({
   }) {
     const page = pages.find((p) => p.id === pageId);
     if (!page?.scheduledStart) return;
+    // Synced events own a locked schedule — never resizable.
+    if (page.scheduleLocked) return;
     const startStr = page.scheduledStart;
     const endStr = page.scheduledEnd ?? page.scheduledStart;
     const anchorStr = edge === "start" ? endStr : startStr;
@@ -265,7 +293,8 @@ export function useAllDayDrag({
     allDayEdgeResizePreviewRef.current = { endDate: endStr, pageId, startDate: startStr };
     setAllDayEdgeResizePreview({ endDate: endStr, pageId, startDate: startStr });
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
       const idx = dayIndexFromClientX(ev.clientX);
       if (idx === null) return;
       const grabbedDay = days[idx];
@@ -279,9 +308,9 @@ export function useAllDayDrag({
       setAllDayEdgeResizePreview(next);
     }
 
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       const final = allDayEdgeResizePreviewRef.current;
@@ -292,8 +321,24 @@ export function useAllDayDrag({
       onReschedule(final.pageId, final.startDate, endArg, originalDate);
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — drop the preview, keep the stored span. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      allDayEdgeResizePreviewRef.current = null;
+      setAllDayEdgeResizePreview(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   return {

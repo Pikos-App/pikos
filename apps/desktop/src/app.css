@@ -75,6 +75,9 @@ button,
 
 @custom-variant dark (&:is(.dark *));
 
+/* GENERATED: design tokens — emitted from packages/ui/src/tokens.ts by scripts/gen-ui-tokens.mjs.
+   Edit the tokens, then re-run the generator; scripts/check-ui-tokens.sh fails the build on drift. */
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    PRIMITIVE COLOR SCALES
    Static values — available as Tailwind utilities (e.g. bg-primary-500).
@@ -430,6 +433,63 @@ button,
   --color-titlebar-border: var(--titlebar-border);
 }
 
+/* GENERATED: end design tokens */
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TEXT SIZE — one multiplier the whole type scale rides on
+   ═══════════════════════════════════════════════════════════════════════════════
+
+   `html` is 13px and Tailwind sizes both text and spacing in rem, so raising the
+   root would scale the layout too. That is the app-wide zoom PKOS-0067 rejected:
+   the window does not grow with it, so the calendar is what gets squeezed out.
+
+   Multiplying only the `--text-*` scale moves type without moving anything else,
+   and it reaches every `text-xs`/`text-sm` in the app rather than the handful of
+   call sites that adopted the `.type-*` classes. At scale 1 every value below is
+   byte-identical to the Tailwind default it replaces, so this is inert until a
+   setting moves it.
+
+   The calendar overrides `--ui-text-scale` on its own subtree, which is how one
+   variable serves two independent settings. */
+@theme {
+  /* Below Tailwind's scale. These existed as `text-[10px]` and `text-[11px]`
+     literals, which no theme value can reach; named here so they scale too. */
+  --text-3xs: calc(10px * var(--ui-text-scale, 1));
+  --text-3xs--line-height: calc(14px * var(--ui-text-scale, 1));
+  --text-2xs: calc(11px * var(--ui-text-scale, 1));
+  --text-2xs--line-height: calc(15px * var(--ui-text-scale, 1));
+  --text-xs: calc(0.75rem * var(--ui-text-scale, 1));
+  --text-xs--line-height: calc(1rem * var(--ui-text-scale, 1));
+  --text-sm: calc(0.875rem * var(--ui-text-scale, 1));
+  --text-sm--line-height: calc(1.25rem * var(--ui-text-scale, 1));
+  --text-base: calc(1rem * var(--ui-text-scale, 1));
+  --text-base--line-height: calc(1.5rem * var(--ui-text-scale, 1));
+  --text-lg: calc(1.125rem * var(--ui-text-scale, 1));
+  --text-lg--line-height: calc(1.75rem * var(--ui-text-scale, 1));
+  --text-xl: calc(1.25rem * var(--ui-text-scale, 1));
+  --text-xl--line-height: calc(1.75rem * var(--ui-text-scale, 1));
+  --text-2xl: calc(1.5rem * var(--ui-text-scale, 1));
+  --text-2xl--line-height: calc(2rem * var(--ui-text-scale, 1));
+
+  /* Settings is a reading column beside a nav, and both are measured in text.
+     Fixed rem widths here are what make a doubled label wrap every row into a
+     ragged two-line stack, so both widths ride the scale like the type does. */
+  --container-settings: calc(32rem * var(--ui-text-scale, 1));
+  --container-settings-nav: calc(14rem * var(--ui-text-scale, 1));
+
+  /* Padding and gaps *inside* a text row — the inset around a label, the space
+     between an icon and the word next to it. These belong to the type, so they
+     ride the scale: left fixed, a doubled label sits in the same tight box it
+     had at 13px. Structural spacing (panel gutters, grid gaps) stays on the
+     plain `--spacing` ladder, because moving that is the app-wide zoom
+     PKOS-0067 rejected. */
+  --spacing-ui-xs: calc(0.25rem * var(--ui-text-scale, 1));
+  --spacing-ui-sm: calc(0.375rem * var(--ui-text-scale, 1));
+  --spacing-ui-md: calc(0.625rem * var(--ui-text-scale, 1));
+  --spacing-ui-lg: calc(0.75rem * var(--ui-text-scale, 1));
+  --spacing-ui-xl: calc(1rem * var(--ui-text-scale, 1));
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    BASE STYLES
    ═══════════════════════════════════════════════════════════════════════════════ */
@@ -454,6 +514,16 @@ button,
     font-feature-settings:
       "kern" 1,
       "liga" 1;
+  }
+
+  /* Icons and colour dots carry their size as an SVG width/height attribute or
+     a rem utility, and the `--text-*` scale reaches neither. `zoom` multiplies
+     both the drawn mark and the box it reserves, so one rule scales all of them
+     and each keeps its size relative to the others. Scaling `--spacing` instead
+     would move the whole layout, which is the app-wide zoom PKOS-0067 rejected. */
+  .lucide,
+  .color-dot {
+    zoom: var(--ui-text-scale, 1);
   }
 
   /* Prevent text selection on UI chrome (not editor content) */
@@ -487,6 +557,12 @@ button,
     background: color-mix(in srgb, var(--color-primary-400) 25%, transparent);
   }
 
+  /* Radix tooltips are hoverable, so one covering a control eats its clicks.
+     Must target the wrapper — styling the content leaves it intercepting. */
+  [data-radix-popper-content-wrapper]:has(> [data-slot="tooltip-content"]) {
+    pointer-events: none;
+  }
+
   /* Reduced motion preference */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -509,19 +585,19 @@ button,
   /* Display & headings — used in editor, always include line-height */
   .type-display {
     font-family: var(--font-display);
-    font-size: 24px;
+    font-size: calc(24px * var(--ui-text-scale, 1));
     font-weight: 500;
     line-height: 1.3;
     letter-spacing: var(--tracking-tight);
   }
   .type-heading-lg {
-    font-size: 18px;
+    font-size: calc(18px * var(--ui-text-scale, 1));
     font-weight: 500;
     line-height: 1.4;
     letter-spacing: var(--tracking-tight);
   }
   .type-heading-sm {
-    font-size: 15px;
+    font-size: calc(15px * var(--ui-text-scale, 1));
     font-weight: 500;
     line-height: 1.4;
     letter-spacing: var(--tracking-tight);
@@ -530,27 +606,27 @@ button,
   /* Body — size + weight only. Use leading-relaxed (1.6) for paragraphs,
      leading-snug (1.375) for single-line UI contexts like list items. */
   .type-body {
-    font-size: 14px;
+    font-size: calc(14px * var(--ui-text-scale, 1));
     font-weight: 400;
   }
   .type-body-sm {
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-text-scale, 1));
     font-weight: 400;
   }
 
   /* UI — size + weight only. Compact by default (no forced line-height). */
   .type-ui {
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-text-scale, 1));
     font-weight: 500;
   }
   .type-ui-sm {
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-text-scale, 1));
     font-weight: 500;
   }
 
   .type-mono {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-text-scale, 1));
     font-weight: 400;
     line-height: 1.5;
   }

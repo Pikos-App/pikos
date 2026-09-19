@@ -37,9 +37,10 @@
  *   pnpm record:hero
  */
 
+import { join } from "path";
+
 import { test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { join } from "path";
 
 import { mod } from "./fixtures";
 
@@ -115,13 +116,6 @@ async function clickLocator(page: Page, locator: ReturnType<Page["locator"]>) {
   await page.waitForTimeout(150);
 }
 
-async function dblClickLocator(page: Page, locator: ReturnType<Page["locator"]>) {
-  await moveToLocator(page, locator);
-  await page.evaluate(() => window.__clickCursor());
-  await locator.dblclick();
-  await page.waitForTimeout(150);
-}
-
 async function typeSlowly(page: Page, text: string, delayMs = 55) {
   for (const char of text) {
     await page.keyboard.type(char, { delay: delayMs });
@@ -163,14 +157,6 @@ async function dragLocatorTo(
   await dragFromTo(page, box.x + box.width / 2, box.y + box.height / 2, targetX, targetY);
 }
 
-// ── Sidebar nav helper ───────────────────────────────────────────────────────
-
-function sidebarButton(page: Page, name: string) {
-  return page
-    .getByRole("group", { name: "Views and folders" })
-    .getByRole("button", { name })
-    .first();
-}
 
 // ── Type declarations ────────────────────────────────────────────────────────
 
@@ -363,11 +349,11 @@ for (const theme of ["dark", "light"] as const) {
     const monday = RECORDING_DATE;
 
     const ctx = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
       recordVideo: {
         dir: VIDEO_DIR,
-        size: { width: 1280, height: 800 },
+        size: { height: 800, width: 1280 },
       },
+      viewport: { height: 800, width: 1280 },
     });
 
     const page = await ctx.newPage();

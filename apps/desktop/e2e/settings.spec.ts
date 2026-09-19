@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { mod, test as appTest } from "./fixtures";
+import { test as appTest, mod, quickAdd } from "./fixtures";
 
 // ─── Opens settings and navigates every tab ─────────────────────────────────
 
@@ -15,9 +15,9 @@ appTest("settings opens and each tab renders @tier1", async ({ app }) => {
   await expect(app.getByRole("heading", { name: "Preferences" })).toBeVisible();
 
   await app.getByRole("button", { name: "Notifications" }).click();
-  await expect(app.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(app.getByRole("heading", { exact: true, name: "Notifications" })).toBeVisible();
 
-  await app.getByRole("button", { name: "Data", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "Data" }).click();
   await expect(app.getByRole("heading", { name: "Your Workspace" })).toBeVisible();
   await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
   await expect(app.getByRole("heading", { name: "Export" })).toBeVisible();
@@ -25,7 +25,7 @@ appTest("settings opens and each tab renders @tier1", async ({ app }) => {
   await app.getByRole("button", { name: "Shortcuts" }).click();
   await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
 
-  await app.getByRole("button", { name: "General", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "General" }).click();
   await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
 
   await app.keyboard.press("Escape");
@@ -63,10 +63,10 @@ appTest("Delete All Data dialog requires typing 'delete' to enable confirm @tier
   await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
 
   // Delete All Data lives on the Data settings page now — navigate there first.
-  await app.getByRole("button", { name: "Data", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "Data" }).click();
 
   // Danger Zone is at the bottom of Data; scroll the trigger into view.
-  const trigger = app.getByRole("button", { name: "Delete", exact: true });
+  const trigger = app.getByRole("button", { exact: true, name: "Delete" });
   await trigger.scrollIntoViewIfNeeded();
   await trigger.click();
 
@@ -86,4 +86,18 @@ appTest("Delete All Data dialog requires typing 'delete' to enable confirm @tier
   // Cancel out — clicking confirm would wipe the workspace and break later tests.
   await app.getByRole("button", { name: "Cancel" }).click();
   await expect(app.getByRole("alertdialog", { name: "Delete all Pikos data?" })).not.toBeVisible();
+});
+
+// ─── The Data tab reflects the workspace as it is now ───────────────────────
+
+// The panel stays mounted while closed, so a fetch keyed on anything that
+// doesn't change per-open pins every figure to app launch. Creating the page
+// first and opening settings after is what separates the two.
+appTest("Data tab reads the workspace as it is on open @tier2", async ({ app }) => {
+  await quickAdd(app, "Stand-up every monday at 9am");
+
+  await app.getByRole("button", { name: "Open settings" }).click();
+  await app.getByRole("button", { exact: true, name: "Data" }).click();
+
+  await expect(app.getByLabel("Recurring: in use")).toBeVisible();
 });

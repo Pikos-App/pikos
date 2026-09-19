@@ -1,10 +1,8 @@
-import type { PageSummary } from "@pikos/core";
+import type { OverflowPill as OverflowPillData, PageSummary } from "@pikos/core";
+import { formatTimeRange, parseLocalISO, viewerEnd, viewerStart } from "@pikos/core";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-import type { OverflowPill as OverflowPillData } from "../utils/calendarLayout";
-import { formatTimeRange } from "../utils/calendarTimeFormat";
 
 interface OverflowPillProps {
   pill: OverflowPillData;
@@ -30,6 +28,7 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
             "transition-colors hover:border-border/80 hover:bg-accent hover:text-foreground",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           )}
+          data-cal-no-create
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           style={{
@@ -46,8 +45,12 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
         <div className="type-ui-sm px-2 py-1 text-subtle">{items.length} events hidden</div>
         <div className="flex flex-col">
           {items.map((p) => {
-            const start = p.scheduledStart ? new Date(p.scheduledStart) : null;
-            const end = p.scheduledEnd ? new Date(p.scheduledEnd) : null;
+            // The cell placed these in the viewer's zone; the times listed under
+            // it have to agree or the popover contradicts the grid behind it.
+            const startIso = viewerStart(p);
+            const endIso = viewerEnd(p);
+            const start = startIso ? parseLocalISO(startIso) : null;
+            const end = endIso ? parseLocalISO(endIso) : null;
             const time =
               start && end
                 ? formatTimeRange(start, end)

@@ -50,7 +50,7 @@ export function DragGhostOverlay({
           <span
             className={cn(
               "min-w-0 truncate font-medium text-foreground",
-              content.height < 16 ? "-mt-px text-[10px] leading-none" : "type-body-sm"
+              content.height < 16 ? "-mt-px text-3xs leading-none" : "type-body-sm"
             )}
           >
             {content.title || "Untitled"}

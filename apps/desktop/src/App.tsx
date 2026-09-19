@@ -1,7 +1,8 @@
+import { isSmartViewId, toStorageError } from "@pikos/core";
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { RecurringCompleteDialog } from "@/features/calendar/components/RecurringCompleteDialog";
+import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapDialog";
 import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
@@ -11,12 +12,24 @@ import { Toast } from "@/shared/components/Toast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
-import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
-import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
+import {
+  CalendarSettingsProvider,
+  DEFAULT_CALENDAR_TEXT_SIZE,
+  useCalendarSettings,
+} from "@/shared/context/CalendarSettingsContext";
+import {
+  DEFAULT_EDITOR_FONT_SIZE,
+  EditorSettingsProvider,
+  useEditorSettings,
+} from "@/shared/context/EditorSettingsContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
-import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
+import {
+  DEFAULT_INTERFACE_TEXT_SCALE,
+  useInterfaceSettings,
+} from "@/shared/context/InterfaceSettingsContext";
+import { InterfaceSettingsProvider } from "@/shared/context/InterfaceSettingsContext";
 import { PagesProvider, usePages } from "@/shared/context/PagesContext";
-import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
+import { RecurringGapDialogProvider } from "@/shared/context/RecurringGapDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
@@ -27,8 +40,10 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useDeepLinkRouter } from "@/shared/deep-link/useDeepLinkRouter";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useExternalChangeReload } from "@/shared/hooks/useExternalChangeReload";
+import { useSyncAppliedReload } from "@/shared/hooks/useSyncAppliedReload";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { getPlatform } from "@/shared/platform";
 
 function useTrackPageOpened() {
   const { activePageId } = useUI();
@@ -111,12 +126,46 @@ function useMenuEvents() {
 }
 
 function useGlobalShortcuts() {
-  const { setActivePage, setActiveViewId, setSettingsOpen, setSettingsSection, settingsOpen } =
-    useUI();
+  const {
+    rightPanel,
+    setActivePage,
+    setActiveViewId,
+    setSettingsOpen,
+    setSettingsSection,
+    settingsOpen,
+  } = useUI();
   const { folders } = usePages();
+  const { setFontSize, stepFontSize } = useEditorSettings();
+  const { setTextScale: setInterfaceScale, stepTextScale: stepInterfaceScale } =
+    useInterfaceSettings();
+  const { setTextSize: setCalendarSize, stepTextSize: stepCalendarSize } = useCalendarSettings();
 
-  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), { allowInInputs: true });
-  useKeyboardShortcut("Mod+W", () => setActivePage(null), { allowInInputs: true });
+  // The size keys act on the panel in front of you, not on whatever holds focus.
+  // Settings is a full-window overlay, so while it is open it is that panel and
+  // the keys size the interface — which is what keeps the fix for "I cannot read
+  // this" from being reachable only by reading. PKOS-0067.
+  const sizeTarget = () => (settingsOpen ? "interface" : rightPanel);
+  const stepVisible = (direction: 1 | -1) => {
+    if (sizeTarget() === "interface") return stepInterfaceScale(direction);
+    if (sizeTarget() === "calendar") return stepCalendarSize(direction);
+    return stepFontSize(direction);
+  };
+  const resetVisible = () => {
+    if (sizeTarget() === "interface") return setInterfaceScale(DEFAULT_INTERFACE_TEXT_SCALE);
+    if (sizeTarget() === "calendar") return setCalendarSize(DEFAULT_CALENDAR_TEXT_SIZE);
+    return setFontSize(DEFAULT_EDITOR_FONT_SIZE);
+  };
+
+  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Settings",
+  });
+  useKeyboardShortcut("Mod+W", () => setActivePage(null), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Close page",
+  });
   // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
   // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
   useKeyboardShortcut(
@@ -125,8 +174,29 @@ function useGlobalShortcuts() {
       setSettingsSection("shortcuts");
       setSettingsOpen(true);
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Navigation", label: "Keyboard shortcuts" }
   );
+
+  // Allowed in inputs because the surface being sized is often one itself.
+  useKeyboardShortcut("Mod+=", () => stepVisible(1), {
+    allowInInputs: true,
+    group: "View",
+    label: "Increase text size",
+  });
+  // Same gesture on layouts where "+" needs Shift and on those where it doesn't.
+  // Unlabelled so the shortcuts page and the palette list one row, not three.
+  useKeyboardShortcut("Mod+Shift+Plus", () => stepVisible(1), { allowInInputs: true });
+  useKeyboardShortcut("Mod+Plus", () => stepVisible(1), { allowInInputs: true });
+  useKeyboardShortcut("Mod+-", () => stepVisible(-1), {
+    allowInInputs: true,
+    group: "View",
+    label: "Decrease text size",
+  });
+  useKeyboardShortcut("Mod+0", resetVisible, {
+    allowInInputs: true,
+    group: "View",
+    label: "Reset text size",
+  });
 
   // ⌘1-9 — switch to folder by index (1-based).
   // Use the Keyboard registry directly to register all 9 bindings in one effect,
@@ -149,11 +219,25 @@ function useGlobalShortcuts() {
           if (folder) setViewRef.current(folder.id);
         },
         id,
+        // Unlabelled on purpose: a label would put nine near-identical rows in
+        // both the shortcuts page and the command palette. Documented once, as
+        // a family, in ShortcutsSettings.
         scope: "global",
       });
     }
     return () => ids.forEach((id) => Keyboard.unregister(id));
   }, []);
+}
+
+/** Puts the interface text scale on the document root rather than on a wrapper.
+ *  Dialogs, dropdowns and tooltips portal to `body`, so a subtree style would
+ *  leave every menu in the app unscaled — the missed-surface failure this whole
+ *  change exists to avoid. */
+function useInterfaceTextScale() {
+  const { textScale } = useInterfaceSettings();
+  useEffect(() => {
+    document.documentElement.style.setProperty("--ui-text-scale", String(textScale));
+  }, [textScale]);
 }
 
 function AppShell() {
@@ -163,12 +247,14 @@ function AppShell() {
   useMenuEvents();
   useDeepLinkRouter();
   useExternalChangeReload();
+  useSyncAppliedReload();
   // Mark first usable render — workspace loaded, shell mounted, layout about to paint.
   // Perf tests measure boot time to this mark instead of domInteractive (which fires
   // before React mounts).
   useEffect(() => {
     performance.mark("pikos:ready");
   }, []);
+  useInterfaceTextScale();
   const updater = useUpdate();
   const { consumePendingNavigation } = useWorkspace();
   const ui = useUI();
@@ -183,11 +269,7 @@ function AppShell() {
   if (didInitRef.current == null) {
     didInitRef.current = true;
 
-    if (
-      ui.activeViewId !== "today" &&
-      ui.activeViewId !== "inbox" &&
-      !folders.some((f) => f.id === ui.activeViewId)
-    ) {
+    if (!isSmartViewId(ui.activeViewId) && !folders.some((f) => f.id === ui.activeViewId)) {
       ui.setActiveViewId("inbox");
     }
     if (ui.activePageId !== null && !pages.some((p) => p.id === ui.activePageId)) {
@@ -238,17 +320,40 @@ function AppShell() {
 }
 
 function WorkspaceLoadError({ error }: { error: unknown }) {
-  const detail = error instanceof Error ? error.message : String(error);
+  const storageError = toStorageError(error);
+  // A damaged file and a failed open read the same from here, and the answers
+  // are opposite: relaunching fixes a locked or missing path and does nothing at
+  // all for corruption, which needs a backup put back. The backend tells them
+  // apart by running an integrity check on the failure path.
+  const damaged = storageError.kind === "Corrupt";
+
   return (
     <div className="flex h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="w-full max-w-md">
-        <p className="text-lg font-medium">Couldn't open your workspace</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Quit and relaunch the app. If this keeps happening, file a bug — connect_db failures are
-          usually a path or permission problem on disk.
+        <p className="text-lg font-medium">
+          {damaged ? "Your workspace file is damaged" : "Couldn't open your workspace"}
         </p>
-        <pre className="mt-4 max-h-48 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
-          {detail}
+        {damaged ? (
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pikos keeps a snapshot before anything that rewrites your workspace. Putting one back
+              is the way out of this, and it takes a moment.
+            </p>
+            <button
+              className="mt-4 inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              onClick={() => void getPlatform().openBackupsDir()}
+            >
+              Show me the backups
+            </button>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Quit and relaunch the app. If this keeps happening, file a bug — it is usually a path or
+            permission problem on disk.
+          </p>
+        )}
+        <pre className="mt-4 max-h-48 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+          {storageError.message}
         </pre>
       </div>
     </div>
@@ -283,9 +388,9 @@ export default function App() {
                       <CalendarDnDProvider>
                         <EditorSettingsProvider>
                           <CalendarSettingsProvider>
-                            <ListSettingsProvider>
+                            <InterfaceSettingsProvider>
                               <UndoDeleteProvider>
-                                <RecurringCompleteDialogProvider>
+                                <RecurringGapDialogProvider>
                                   <TooltipProvider delayDuration={400}>
                                     <WorkspaceGate />
                                     <ErrorBoundary
@@ -297,12 +402,12 @@ export default function App() {
                                         />
                                       )}
                                     >
-                                      <RecurringCompleteDialog />
+                                      <RecurringGapDialog />
                                     </ErrorBoundary>
                                   </TooltipProvider>
-                                </RecurringCompleteDialogProvider>
+                                </RecurringGapDialogProvider>
                               </UndoDeleteProvider>
-                            </ListSettingsProvider>
+                            </InterfaceSettingsProvider>
                           </CalendarSettingsProvider>
                         </EditorSettingsProvider>
                       </CalendarDnDProvider>

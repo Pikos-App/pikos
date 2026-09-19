@@ -6,3 +6,4 @@ apps/desktop/src-tauri/
 **/build/
 **/node_modules/
 **/.turbo/
+packages/recurrence-wasm/pkg/

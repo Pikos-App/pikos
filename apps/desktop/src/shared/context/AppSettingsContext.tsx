@@ -1,12 +1,19 @@
-import { createContext, type ReactNode, useContext, useEffect } from "react";
+import { useEffect } from "react";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { createSettingsContext } from "@/shared/context/createSettingsContext";
+import { postNotice } from "@/shared/events/noticeBus";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+import { getPlatform } from "@/shared/platform";
 
 /** 0 = Sunday, 1 = Monday — matches date-fns weekStartsOn. */
 export type WeekStart = 0 | 1;
 
-/** Reminder lead time options in minutes. 0 = "at start time". */
-export type ReminderLeadTime = 0 | 5 | 10 | 15 | 30;
+/** Reminder lead time options in minutes. 0 = "at start time"; the longer end
+ *  (60 / 120 / 1440) is what the schema always accepted — the pickers just never
+ *  offered it — and the scheduler's arms do the date arithmetic in SQLite, so a
+ *  lead that crosses midnight fires on the right day. */
+export type ReminderLeadTime = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 1440;
 
 export interface AppSettingsValue {
   weekStart: WeekStart;
@@ -43,62 +50,66 @@ export interface AppSettingsValue {
   setQuietHoursEnd: (v: string) => void;
 }
 
-const AppSettingsContext = createContext<AppSettingsValue | null>(null);
-
-export function AppSettingsProvider({ children }: { children: ReactNode }) {
-  const [weekStart, setWeekStart] = useLocalStorage<WeekStart>("pikos:weekStart", 1);
+function useAppSettingsValue(): AppSettingsValue {
+  const [weekStart, setWeekStart] = useLocalStorage<WeekStart>(STORAGE_KEYS.weekStart, 1);
   const [defaultFolderId, setDefaultFolderId] = useLocalStorage<string | null>(
-    "pikos:defaultFolderId",
+    STORAGE_KEYS.defaultFolderId,
     null
   );
   const [notificationsEnabled, setNotificationsEnabled] = useLocalStorage<boolean>(
-    "pikos:notificationsEnabled",
+    STORAGE_KEYS.notificationsEnabled,
     true
   );
   const [defaultReminderMinutes, setDefaultReminderMinutes] = useLocalStorage<ReminderLeadTime>(
-    "pikos:defaultReminderMinutes",
+    STORAGE_KEYS.defaultReminderMinutes,
     10
   );
   const [skippedVersion, setSkippedVersion] = useLocalStorage<string | null>(
-    "pikos:skippedVersion",
+    STORAGE_KEYS.skippedVersion,
     null
   );
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useLocalStorage<boolean>(
-    "pikos:autoUpdateEnabled",
+    STORAGE_KEYS.autoUpdateEnabled,
     true
   );
-  const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
-  const [summaryTime, setSummaryTime] = useLocalStorage<string>("pikos:summaryTime", "07:00");
+  const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>(
+    STORAGE_KEYS.overdueAlerts,
+    true
+  );
+  const [summaryTime, setSummaryTime] = useLocalStorage<string>(STORAGE_KEYS.summaryTime, "07:00");
   const [quietHoursEnabled, setQuietHoursEnabled] = useLocalStorage<boolean>(
-    "pikos:quietHoursEnabled",
+    STORAGE_KEYS.quietHoursEnabled,
     false
   );
   const [quietHoursStart, setQuietHoursStart] = useLocalStorage<string>(
-    "pikos:quietHoursStart",
+    STORAGE_KEYS.quietHoursStart,
     "22:00"
   );
-  const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>("pikos:quietHoursEnd", "08:00");
+  const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>(
+    STORAGE_KEYS.quietHoursEnd,
+    "08:00"
+  );
 
-  // Sync notification settings to the Rust scheduler whenever they change.
-  // Wrapped in catch — Tauri IPC is unavailable in test/non-Tauri environments.
+  // Sync notification settings to the host scheduler whenever they change.
+  // Wrapped in catch — the no-op platform resolves, but a real host can still
+  // reject (scheduler not started yet), and a settings toggle must not throw.
   useEffect(() => {
-    if (import.meta.env["VITE_TEST_MODE"] === "true") return;
-    void import("@tauri-apps/api/core")
-      .then(({ invoke }) =>
-        invoke("update_notification_settings", {
-          settings: {
-            defaultMinutesBefore: defaultReminderMinutes,
-            enabled: notificationsEnabled,
-            overdueAlerts,
-            quietHoursEnabled,
-            quietHoursEnd,
-            quietHoursStart,
-            summaryTime,
-          },
-        })
-      )
+    void getPlatform()
+      .applyNotificationSettings({
+        defaultMinutesBefore: defaultReminderMinutes,
+        enabled: notificationsEnabled,
+        overdueAlerts,
+        quietHoursEnabled,
+        quietHoursEnd,
+        quietHoursStart,
+        summaryTime,
+      })
       .catch(() => {
-        // Tauri runtime not available (test environment)
+        // The settings persist locally either way, so the panel goes on showing
+        // reminders as on while nothing is scheduled to fire. That gap is the
+        // whole reason this says anything: a reminder that never arrives is
+        // indistinguishable from one that was never set.
+        postNotice("Saved, but reminders may not fire until you restart Pikos.");
       });
   }, [
     notificationsEnabled,
@@ -110,7 +121,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     quietHoursEnd,
   ]);
 
-  const value: AppSettingsValue = {
+  return {
     autoUpdateEnabled,
     defaultFolderId,
     defaultReminderMinutes,
@@ -134,13 +145,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     summaryTime,
     weekStart,
   };
-
-  return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useAppSettings(): AppSettingsValue {
-  const ctx = useContext(AppSettingsContext);
-  if (!ctx) throw new Error("useAppSettings must be used within <AppSettingsProvider>");
-  return ctx;
-}
+const appSettings = createSettingsContext("AppSettings", useAppSettingsValue);
+
+export const AppSettingsProvider = appSettings.Provider;
+export const useAppSettings = appSettings.useSettings;

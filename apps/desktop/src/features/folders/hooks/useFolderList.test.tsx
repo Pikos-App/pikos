@@ -103,6 +103,50 @@ describe("useFolderList — counts", () => {
   });
 });
 
+describe("useFolderList — upcoming smart view", () => {
+  it("upcomingCount counts open pages from today through today+6", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0)); // Mon 2026-06-15
+    try {
+      const hook = setup();
+      await init(hook);
+
+      await act(async () => {
+        const today = await hook.result.current.pages.createPage({ title: "Today" });
+        await hook.result.current.pages.scheduleOnce(today.id, "2026-06-15");
+        const lastDay = await hook.result.current.pages.createPage({ title: "Day seven" });
+        await hook.result.current.pages.scheduleOnce(lastDay.id, "2026-06-21T09:00:00");
+        const past = await hook.result.current.pages.createPage({ title: "Overdue" });
+        await hook.result.current.pages.scheduleOnce(past.id, "2026-06-14");
+        const beyond = await hook.result.current.pages.createPage({ title: "Day eight" });
+        await hook.result.current.pages.scheduleOnce(beyond.id, "2026-06-22");
+        const done = await hook.result.current.pages.createPage({ title: "Done" });
+        await hook.result.current.pages.scheduleOnce(done.id, "2026-06-16");
+        hook.result.current.pages.updatePage(done.id, { status: "done" });
+      });
+
+      await waitFor(() => {
+        expect(hook.result.current.folderList.upcomingCount).toBe(2);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps upcoming selected — it is a smart view, not a missing folder", async () => {
+    const hook = setup();
+    await init(hook);
+
+    act(() => hook.result.current.ui.setActiveViewId("upcoming"));
+
+    // The folder-view fallback resets any id that isn't a live folder to inbox;
+    // "upcoming" must not be caught by it.
+    await waitFor(() => {
+      expect(hook.result.current.folderList.activeViewId).toBe("upcoming");
+    });
+  });
+});
+
 describe("useFolderList — sorting", () => {
   it("manual: keeps workspace order unchanged", async () => {
     const hook = setup();

@@ -5,7 +5,25 @@ import Footer from "../components/Footer.astro";
 const title = "FAQ - Pikos";
 const description = "Common questions about Pikos, the free app that combines notes, tasks, and calendar, on your device, not in the cloud.";
 
+// The first few name no product, because someone who has not heard of Pikos
+// cannot ask a question containing the word. They are only worth having while
+// they stay questions a person would actually type: written to set up the
+// answer, they read as an advert and earn the distrust that comes with one.
 const faqs = [
+  {
+    q: "Which note-taking apps keep your data on your own computer?",
+    a: "Obsidian, Logseq and Things all do, and so does Pikos. Notion, Todoist and TickTick keep it on their servers. If local storage is what you're after, the question that usually narrows it is whether you need tasks and a calendar too, because that's where the local options thin out.",
+  },
+  {
+    q: "Is there a notes app that works without an account?",
+    a: "Several. Obsidian and Logseq don't need one, and neither does Pikos: no sign-up, no email, no login screen. Your notes are a file on your drive. Most of the cloud-based ones need an account before you can type a word.",
+  },
+  {
+    q: "Can I take notes on my calendar events?",
+    a: "In Pikos, yes. Connect iCloud, Google Calendar or any CalDAV server and your events turn up as pages you can write on, tag and search. It only reads the calendar, so nothing you write goes back to it.",
+    href: "/calendar-sync",
+    linkLabel: "How to connect a calendar",
+  },
   {
     q: "What is Pikos?",
     a: "A desktop app that puts notes, tasks, and a calendar in one window. Everything stored locally on your device. No account, no cloud, no subscription.",
@@ -20,11 +38,11 @@ const faqs = [
   },
   {
     q: "Does it work offline?",
-    a: "Your notes, tasks, and calendar all work fully offline. The app does check for new versions by default, and you can turn that off in Settings.",
+    a: "Your notes, tasks, and calendar all work fully offline. Two things use the network and both are visible: an update check at launch, which you can turn off in Settings, and calendar sync, which does nothing until you connect a calendar.",
   },
   {
     q: "Where is my data stored?",
-    a: "As a single file on your drive. You own it. You can back it up, copy it, or export it anytime. Pikos doesn't send your data anywhere on its own. Any network features the app gains later will be opt-in and off by default. Nothing leaves your device unless you turn it on.",
+    a: "As a single file on your drive. You own it. You can back it up, copy it, or export it anytime. Pikos doesn't send your data anywhere on its own, and the network features it has are opt-in and off until you turn them on. Calendar sync is the one that exists today, and it only reads.",
   },
   {
     q: "Can it replace Obsidian?",
@@ -36,7 +54,13 @@ const faqs = [
   },
   {
     q: "Does it have a calendar?",
-    a: "Yes. A week calendar built into the app. Drag tasks onto it to schedule them, click a slot to create a new event, and see your week alongside your notes.",
+    a: "Yes. A week calendar built into the app. Drag tasks onto it to schedule them, click a slot to create a new event, and see your week alongside your notes. It can also pull in the calendar you already use, read-only.",
+  },
+  {
+    q: "Can an AI assistant use my notes?",
+    a: "Yes, and locally. The Pikos command line tool includes an MCP server, so an agent can search, read, create and update your pages on your own machine. It opens no network port and needs no account, and deleting only moves a page to the trash, so nothing an agent does is one-way.",
+    href: "/cli",
+    linkLabel: "Set up the CLI and MCP server",
   },
   {
     q: "Does Pikos collect any data?",
@@ -120,7 +144,7 @@ const faqJsonLd = {
 
   </main>
 
-  <Footer current="/faq" />
+  <Footer />
 </Base>
 
 <style>

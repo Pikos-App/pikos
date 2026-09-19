@@ -1,21 +1,18 @@
 ---
 import Base from "./Base.astro";
 import Footer from "../components/Footer.astro";
+import { formatDate, postBySlug } from "../content/posts";
 
 interface Props {
-  title: string;
-  description: string;
-  date: string;
+  /** Looked up in src/content/posts.ts, which owns every post's title, description and date. */
+  slug: string;
   /** Optional OG image override (defaults to site-wide og.png) */
   ogImage?: string;
 }
 
-const { title, description, date, ogImage } = Astro.props;
-const formattedDate = new Date(date).toLocaleDateString("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
+const { slug, ogImage } = Astro.props;
+const { title, description, date } = postBySlug(slug);
+const formattedDate = formatDate(date);
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -49,7 +46,7 @@ const jsonLd = {
 
   </main>
 
-  <Footer current="/blog" />
+  <Footer />
 </Base>
 
 <style>

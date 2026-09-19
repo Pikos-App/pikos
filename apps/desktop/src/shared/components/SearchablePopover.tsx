@@ -99,14 +99,25 @@ export function SearchablePopoverItem({
   children,
   className,
   onClick,
+  selected,
 }: {
   children: ReactNode;
   className?: string;
   onClick: () => void;
+  /** Marks the current value. `data-selected` is also what a list scrolls to
+   *  when it opens, so pass it even where the styling is not wanted. */
+  selected?: boolean;
 }) {
   return (
     <button
-      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent ${className ?? ""}`}
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent ${
+        selected === undefined
+          ? ""
+          : selected
+            ? "font-medium text-foreground"
+            : "text-muted-foreground"
+      } ${className ?? ""}`}
+      data-selected={selected}
       onClick={onClick}
     >
       {children}

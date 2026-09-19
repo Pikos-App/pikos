@@ -1,13 +1,12 @@
 // useRecurringActions — routes recurring-page interactions on calendar blocks.
 //
-// Verifies the three branches the hook's caller (PageBlock, AllDayBar) cares
-// about: (1) a real-page status toggle without a rule writes status normally;
-// (2) a real-page status toggle WITH a rule routes through completeRecurring
-// (clone + advance); (3) skipOccurrence on a virtual page adds an exdate and
-// queues an undo via the UndoDeleteContext.
+// Verifies the branches the hook's caller (PageBlock, AllDayBar) cares about:
+// a status toggle with and without a rule; which blocks offer a checkbox at all;
+// and where the delete gesture lands — one occurrence for anything rendered as
+// one, the page trash for a real page.
 
 import type { PageSummary, VirtualOccurrence } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,9 +36,11 @@ function setup() {
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: "placeholder",
+    isRecurring: false,
     priority: 0,
     scheduledEnd: null,
     scheduledStart: null,
+    scheduleLocked: false,
     sortOrder: 0,
     status: "not_started",
     tags: [],
@@ -65,7 +66,7 @@ function setup() {
 }
 
 describe("useRecurringActions", () => {
-  it("isRecurring is false for plain (non-virtual) pages", async () => {
+  it("isVirtual is false for plain (non-virtual) pages", async () => {
     const hook = setup();
     await act(async () => {
       await hook.result.current.workspace.selectWorkspace();
@@ -82,10 +83,11 @@ describe("useRecurringActions", () => {
       hook.result.current.setTargetPage(page);
     });
 
-    expect(hook.result.current.actions.isRecurring).toBe(false);
+    expect(hook.result.current.actions.isVirtual).toBe(false);
+    expect(hook.result.current.actions.showsCheckbox).toBe(true);
   });
 
-  it("isRecurring is true when the page carries isVirtual", async () => {
+  it("a native virtual shows the repeat glyph, not a checkbox", async () => {
     const hook = setup();
     await act(async () => {
       await hook.result.current.workspace.selectWorkspace();
@@ -95,12 +97,14 @@ describe("useRecurringActions", () => {
       createdAt: "2026-01-01T00:00:00",
       folderId: null,
       id: "page-1",
+      isRecurring: false,
       isVirtual: true,
       originalDate: "2026-03-09",
       priority: 0,
       ruleId: "rule-1",
       scheduledEnd: "2026-03-09T10:00:00",
       scheduledStart: "2026-03-09T09:00:00",
+      scheduleLocked: false,
       sortOrder: 0,
       status: "not_started",
       tags: [],
@@ -112,7 +116,41 @@ describe("useRecurringActions", () => {
       hook.result.current.setTargetPage(virtual);
     });
 
-    expect(hook.result.current.actions.isRecurring).toBe(true);
+    expect(hook.result.current.actions.isVirtual).toBe(true);
+    expect(hook.result.current.actions.showsCheckbox).toBe(false);
+  });
+
+  it("a synced-origin virtual shows a checkbox — it resolves per instance", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+
+    const virtual: VirtualOccurrence = {
+      createdAt: "2026-01-01T00:00:00",
+      folderId: null,
+      id: "page-1",
+      isRecurring: false,
+      isVirtual: true,
+      originalDate: "2026-03-09",
+      priority: 0,
+      ruleId: "rule-1",
+      scheduledEnd: "2026-03-09T10:00:00",
+      scheduledStart: "2026-03-09T09:00:00",
+      scheduleLocked: true,
+      sortOrder: 0,
+      status: "not_started",
+      syncState: "active",
+      tags: [],
+      title: "Team standup",
+      updatedAt: "2026-01-01T00:00:00",
+    };
+
+    act(() => {
+      hook.result.current.setTargetPage(virtual);
+    });
+
+    expect(hook.result.current.actions.showsCheckbox).toBe(true);
   });
 
   it("toggleStatus does NOT route through completeRecurringPage when the page has no rule", async () => {
@@ -172,12 +210,10 @@ describe("useRecurringActions", () => {
       await Promise.resolve();
     });
 
-    expect(completeSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ nextScheduledStart: "2099-01-12T09:00:00", pageId })
-    );
+    expect(completeSpy).toHaveBeenCalledWith(expect.objectContaining({ pageId }));
   });
 
-  it("skipOccurrence on a virtual page adds an exdate and registers an undoable toast", async () => {
+  it("deleting a virtual dismisses it to the skip-set and registers an undoable toast", async () => {
     const hook = setup();
     await act(async () => {
       await hook.result.current.workspace.selectWorkspace();
@@ -201,12 +237,14 @@ describe("useRecurringActions", () => {
       createdAt: "2026-01-01T00:00:00",
       folderId: null,
       id: pageId,
+      isRecurring: false,
       isVirtual: true,
       originalDate: "2099-01-12",
       priority: 0,
       ruleId,
       scheduledEnd: null,
       scheduledStart: "2099-01-12T09:00:00",
+      scheduleLocked: false,
       sortOrder: 0,
       status: "not_started",
       tags: [],
@@ -219,21 +257,147 @@ describe("useRecurringActions", () => {
     });
 
     await act(async () => {
-      await hook.result.current.actions.skipOccurrence();
+      hook.result.current.actions.deleteBlock();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    const rule = hook.result.current.pages.recurrenceRules.find((r) => r.id === ruleId);
-    expect(rule?.rruleExdates).toEqual(["2099-01-12"]);
+    const page = hook.result.current.pages.pages.find((p) => p.id === pageId);
+    expect(page?.skippedOccurrences).toEqual(["2099-01-12"]);
     // The toast queue holds the undo action so the user can dismiss-or-undo.
     expect(hook.result.current.undo.toastItems.length).toBeGreaterThan(0);
   });
 
-  it("skipOccurrence is a no-op for non-virtual pages", async () => {
+  it("routes a scheduleLocked recurring toggle through the unified command with the client occurrence", async () => {
     const hook = setup();
     await act(async () => {
       await hook.result.current.workspace.selectWorkspace();
     });
-    const updateRuleSpy = vi.spyOn(MockStorageAdapter.prototype, "updateRecurrenceRule");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Synced standup" });
+      pageId = p.id;
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    // A locked (active-synced) recurring head. The completion reads lockedness off
+    // the stored row, not the toggle's input page, so mark it synced for real —
+    // faking `scheduleLocked` on the target alone leaves the store native.
+    await act(async () => {
+      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+      storage.markPageSynced(pageId, { state: "active", timezone: "America/New_York" });
+      await hook.result.current.workspace.reload();
+    });
+    const base = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      hook.result.current.setTargetPage(base);
+    });
+
+    await act(async () => {
+      hook.result.current.actions.toggleStatus();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Routed as synced: the one unified command is called with the client-supplied
+    // occurrence, not the bare native shape.
+    expect(completeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ occurrenceDate: "2099-01-05", pageId })
+    );
+  });
+
+  it("un-checking a done recurring head rewinds the last occurrence, not a plain flip", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Standup" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    // Complete once so the head carries a completed occurrence to rewind.
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId);
+    });
+
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
+    const liveHead = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      hook.result.current.setTargetPage({ ...liveHead, status: "done" });
+    });
+
+    await act(async () => {
+      hook.result.current.actions.toggleStatus();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(uncompleteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ occurrenceDate: "2099-01-05", pageId })
+    );
+  });
+
+  it("un-checking a recurring head with nothing completed falls back to a plain flip", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Standup" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
+    const liveHead = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      hook.result.current.setTargetPage({ ...liveHead, status: "done" });
+    });
+
+    await act(async () => {
+      hook.result.current.actions.toggleStatus();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // No completed occurrence to rewind → the plain-flip fallback runs instead.
+    expect(uncompleteSpy).not.toHaveBeenCalled();
+    expect(hook.result.current.pages.pages.find((p) => p.id === pageId)?.status).toBe(
+      "not_started"
+    );
+  });
+
+  it("deleting a real page trashes the page", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    const deleteSpy = vi.spyOn(MockStorageAdapter.prototype, "softDeletePage");
 
     let pageId!: string;
     await act(async () => {
@@ -247,9 +411,57 @@ describe("useRecurringActions", () => {
     });
 
     await act(async () => {
-      await hook.result.current.actions.skipOccurrence();
+      hook.result.current.actions.deleteBlock();
+      await Promise.resolve();
     });
 
-    expect(updateRuleSpy).not.toHaveBeenCalled();
+    expect(deleteSpy).toHaveBeenCalledWith(pageId);
+  });
+
+  it("deleting a moved synced instance dismisses that occurrence, never the series", async () => {
+    // A moved instance is shaped from its series page, so a page-level delete here
+    // would trash the whole series — every other occurrence with it.
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    const deleteSpy = vi.spyOn(MockStorageAdapter.prototype, "softDeletePage");
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Team standup" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+      storage.markPageSynced(p.id, { state: "active", timezone: "America/New_York" });
+      await hook.result.current.workspace.reload();
+    });
+
+    const series = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      // No `isVirtual`: a materialised override renders as the page itself, moved.
+      hook.result.current.setTargetPage({
+        ...series,
+        originalDate: "2099-01-12",
+        scheduledStart: "2099-01-14T09:00:00",
+      } as PageSummary);
+    });
+
+    await act(async () => {
+      hook.result.current.actions.deleteBlock();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(
+      hook.result.current.pages.pages.find((p) => p.id === pageId)?.skippedOccurrences
+    ).toEqual(["2099-01-12"]);
   });
 });

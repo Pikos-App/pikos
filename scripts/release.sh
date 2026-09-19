@@ -27,6 +27,18 @@ fi
 
 # Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
+
+# A prerelease left in the manifests by scripts/release-beta.sh breaks the
+# arithmetic below, and the dangerous half is silent: from 0.4.0-beta.1 a `minor`
+# bump yields 0.5.0, skipping the very release the beta was for. (`patch` is
+# harmless by comparison — it dies on a bad math expression.) Refuse instead.
+if [[ "$CURRENT" == *-* ]]; then
+  echo "Error: $TAURI_CONF is at $CURRENT, which is a prerelease."
+  echo "Reset tauri.conf.json, apps/desktop/package.json and src-tauri/Cargo.toml"
+  echo "to the last stable version, then cut the release."
+  exit 1
+fi
+
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
 case "$BUMP" in
@@ -101,8 +113,14 @@ else
   sed -i "s/^version = \"$CURRENT\"/version = \"$NEW\"/" "$CARGO_TOML"
 fi
 
-# Update Cargo.lock
-(cd "$ROOT/apps/desktop/src-tauri" && cargo generate-lockfile 2>/dev/null || true)
+# Pick up the version bump in Cargo.lock. Deliberately NOT `cargo
+# generate-lockfile`, which re-resolves the entire graph rather than editing the
+# one line that changed: measured on the 0.4.0 tree it moved 364 dependency
+# versions and pulled in crates that were not there before, so the release would
+# have built against a dependency set nothing had tested. Reading the metadata
+# updates the lockfile minimally instead. The diff it produces should be a single
+# version line; anything more means something else moved and wants looking at.
+(cd "$ROOT/apps/desktop/src-tauri" && cargo metadata --format-version 1 >/dev/null 2>&1 || true)
 
 # Commit and tag (include release notes so the workflow can read them, and the
 # website changelog so the marketing site ships the entry with the release).

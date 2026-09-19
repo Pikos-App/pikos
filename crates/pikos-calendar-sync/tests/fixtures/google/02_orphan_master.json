@@ -1,0 +1,11 @@
+{
+  "kind": "calendar#event",
+  "id": "ev-standup",
+  "iCalUID": "uid-standup@google.com",
+  "etag": "\"standup-v1\"",
+  "status": "confirmed",
+  "summary": "Standup",
+  "recurrence": ["RRULE:FREQ=DAILY;COUNT=10"],
+  "start": { "dateTime": "2026-06-20T09:00:00-04:00", "timeZone": "America/New_York" },
+  "end": { "dateTime": "2026-06-20T09:15:00-04:00", "timeZone": "America/New_York" }
+}

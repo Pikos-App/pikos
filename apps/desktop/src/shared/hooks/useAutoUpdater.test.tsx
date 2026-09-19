@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
+import { onFlushPending } from "@/shared/pendingWrites";
 
 import { useAutoUpdater } from "./useAutoUpdater";
 
@@ -109,5 +110,44 @@ describe("doInstall error path", () => {
     expect(result.current.status.message).not.toContain("releases.pikos.app");
     expect(result.current.status.message).not.toContain(".dmg");
     expect(result.current.status.message.toLowerCase()).toContain("install");
+  });
+});
+
+// Relaunch restarts the process without closing the window, so nothing the write
+// queue listens for fires. Before this, clicking "Update now" with an editor open
+// dropped whatever was still sitting on the debounce.
+describe("doInstall flushes pending writes first", () => {
+  it("drains unwritten edits before the installer runs", async () => {
+    const order: string[] = [];
+    const off = onFlushPending(() => void order.push("flush"));
+    downloadAndInstall.mockImplementation(() => {
+      order.push("install");
+      return Promise.resolve();
+    });
+
+    const update = {
+      body: "notes",
+      date: undefined,
+      downloadAndInstall: (): Promise<void> => downloadAndInstall(),
+      version: "1.2.3",
+    };
+    check.mockResolvedValueOnce(update).mockResolvedValueOnce(update);
+
+    const { result } = renderHook(() => useAutoUpdater(), { wrapper });
+
+    await act(async () => {
+      result.current.checkForUpdates();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.status.state).toBe("available");
+
+    await act(async () => {
+      result.current.installUpdate();
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+
+    expect(order).toEqual(["flush", "install"]);
+    off();
   });
 });

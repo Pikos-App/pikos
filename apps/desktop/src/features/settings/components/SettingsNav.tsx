@@ -1,4 +1,4 @@
-import { Bell, Code2, Database, Keyboard, Settings, X } from "lucide-react";
+import { Bell, CalendarClock, Code2, Database, Keyboard, Settings, X } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import type { SettingsSection } from "@/shared/context/UIContext";
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { icon: Settings, id: "general", label: "General" },
   { icon: Bell, id: "notifications", label: "Notifications" },
+  { icon: CalendarClock, id: "calendar-sync", label: "Calendar Sync" },
   { icon: Database, id: "data", label: "Data" },
   { icon: Keyboard, id: "shortcuts", label: "Shortcuts" },
   ...(import.meta.env.DEV ? [{ icon: Code2, id: "developer" as const, label: "Developer" }] : []),
@@ -17,20 +18,14 @@ interface SettingsNavProps {
   active: SettingsSection;
   onNavigate: (section: SettingsSection) => void;
   onClose: () => void;
-  width: number;
 }
 
-export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavProps) {
+export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
   return (
-    <div
-      className="flex h-full shrink-0 flex-col border-r border-border bg-background"
-      style={{ width }}
-    >
+    <div className="flex h-full w-settings-nav shrink-0 flex-col border-r border-border bg-background">
       {/* Header */}
-      <div className="flex h-11 items-center justify-between border-b border-border px-3">
-        <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          Settings
-        </span>
+      <div className="flex min-h-11 items-center justify-between border-b border-border px-ui-lg">
+        <span className="type-ui-sm tracking-wide text-subtle uppercase">Settings</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -54,16 +49,16 @@ export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavP
         {NAV_ITEMS.map(({ icon: Icon, id, label }) => (
           <button
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+              "type-ui flex w-full items-center gap-ui-md rounded-md px-ui-md py-ui-sm transition-colors",
               active === id
-                ? "bg-accent font-medium text-accent-foreground"
+                ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             )}
             key={id}
             onClick={() => onNavigate(id)}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" />
-            {label}
+            <span className="truncate">{label}</span>
           </button>
         ))}
       </nav>

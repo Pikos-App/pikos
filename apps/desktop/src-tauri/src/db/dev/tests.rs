@@ -1,10 +1,14 @@
-use super::*;
+use super::export::*;
+use super::maintenance::*;
+use super::seed::*;
+use super::stats::*;
 use crate::db::DbState;
 use pikos_db::{
-    create_folder_impl, create_page_impl, insert_test_folder, insert_test_page, list_folders_impl,
-    list_pages_impl, now_iso, test_pool, NewFolder, NewPage, TestPage,
+    create_focus_session, create_folder_impl, create_page_impl, insert_test_folder,
+    insert_test_page, insert_test_page_sync, list_folders_impl, list_pages_impl, now_iso,
+    test_pool, NewFolder, NewPage, TestPage,
 };
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 
 // ── Local insert helpers ──────────────────────────────────────────────────────
@@ -126,6 +130,37 @@ async fn insert_rule(pool: &SqlitePool, id: &str, page_id: &str) {
     .unwrap();
 }
 
+/// A rule with an explicit RRULE, for the CSV `Repeat` column tests — the
+/// `insert_rule` above hardcodes `FREQ=DAILY`.
+async fn insert_rule_with_rrule(pool: &SqlitePool, id: &str, page_id: &str, rrule: &str) {
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, scheduled_start, timezone, created_at)
+         VALUES (?, ?, ?, '2026-05-22T09:00:00', 'America/New_York', ?)",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(rrule)
+    .bind(now_iso())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_reminder(pool: &SqlitePool, id: &str, page_id: &str, minutes_before: i64) {
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(minutes_before)
+    .bind(now_iso())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, duration_s: i64) {
     sqlx::query(
         "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
@@ -143,10 +178,50 @@ async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, durati
 
 // ── get_usage_stats_impl ───────────────────────────────────────────────────────
 
+/// SQLite's weekday numbering, which the frontend's `WeekStart` shares.
+const SUNDAY: i64 = 0;
+const MONDAY: i64 = 1;
+
+/// The card and its producer, end to end. Every other stats test here inserts the
+/// rows by hand, which measures the query and not the path a user's session takes;
+/// the "Focus time" card read zero for the whole life of the table, so the writer
+/// reaching it is the fact worth pinning.
+#[tokio::test]
+async fn usage_stats_count_sessions_written_by_the_focus_writer() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Deep work"))
+        .await
+        .unwrap();
+
+    create_focus_session(
+        &pool,
+        "p1",
+        "2026-06-01T09:00:00",
+        "2026-06-01T09:25:00",
+        1500,
+    )
+    .await
+    .unwrap();
+    create_focus_session(
+        &pool,
+        "p1",
+        "2026-06-01T14:00:00",
+        "2026-06-01T14:15:00",
+        900,
+    )
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    assert_eq!(s.total_focus_sessions, 2);
+    assert_eq!(s.total_focus_minutes, 40); // (1500 + 900) / 60
+    assert!(s.has_focus_sessions);
+}
+
 #[tokio::test]
 async fn usage_stats_empty_db_is_all_zeros() {
     let pool = test_pool().await;
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
 
     assert_eq!(s.total_pages, 0);
     assert_eq!(s.total_folders, 0);
@@ -163,6 +238,8 @@ async fn usage_stats_empty_db_is_all_zeros() {
     assert!(!s.has_subtasks);
     assert!(!s.has_tags);
     assert!(!s.has_priorities);
+    assert!(!s.has_reminders);
+    assert!(!s.has_calendar_sync);
     assert!(s.first_page_date.is_none());
     // Always 12 weeks of buckets, regardless of data.
     assert_eq!(s.weekly_activity.len(), 12);
@@ -196,7 +273,7 @@ async fn usage_stats_counts_totals_and_adoption() {
     insert_focus_session(&pool, "fs1", "p1", 600).await;
     insert_focus_session(&pool, "fs2", "p1", 600).await;
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
 
     assert_eq!(s.total_pages, 3);
     assert_eq!(s.total_folders, 1);
@@ -229,6 +306,157 @@ async fn usage_stats_counts_totals_and_adoption() {
     assert_eq!(created, 3);
 }
 
+/// SQLite's `weekday` modifier does nothing when the date already is that
+/// weekday, so the obvious "next Monday, then back a week" reads a Monday as
+/// belonging to the week before. Everything logged on a Monday used to land in
+/// the previous bucket.
+#[tokio::test]
+async fn usage_stats_count_monday_in_its_own_week() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
+
+    let monday: String = sqlx::query_scalar("SELECT date('now', '-6 days', 'weekday 1')")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
+         VALUES ('fs1', 'p1', ?, ?, 600)",
+    )
+    .bind(format!("{monday}T09:00:00"))
+    .bind(format!("{monday}T09:10:00"))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+
+    assert_eq!(
+        s.weekly_activity.last().unwrap().focus_minutes,
+        10,
+        "a Monday session belongs to the week that Monday opens"
+    );
+}
+
+/// The Data page was the last surface ignoring `weekStart`, so the same day's work
+/// fell in a different column than the calendar it came from. Sunday is the day
+/// that moves: it opens its own week for a Sunday-start user and closes the
+/// previous one for a Monday-start user.
+#[tokio::test]
+async fn usage_stats_bucket_weeks_on_the_users_week_start() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
+
+    let sunday: String = sqlx::query_scalar("SELECT date('now', '-6 days', 'weekday 0')")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
+         VALUES ('fs1', 'p1', ?, ?, 600)",
+    )
+    .bind(format!("{sunday}T09:00:00"))
+    .bind(format!("{sunday}T09:10:00"))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let sun = get_usage_stats_impl(&pool, SUNDAY).await.unwrap();
+    let mon = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+
+    let labels = |s: &UsageStats| -> Vec<String> {
+        s.weekly_activity.iter().map(|w| w.week.clone()).collect()
+    };
+    let (sun_labels, mon_labels) = (labels(&sun), labels(&mon));
+    assert!(
+        sun_labels.iter().all(|l| !mon_labels.contains(l)),
+        "every column moves; no week opens on both a Sunday and a Monday\n{sun_labels:?}\n{mon_labels:?}"
+    );
+
+    let total = |s: &UsageStats| -> i64 { s.weekly_activity.iter().map(|w| w.focus_minutes).sum() };
+    assert_eq!(
+        (total(&sun), total(&mon)),
+        (10, 10),
+        "the session is counted whichever day opens the week"
+    );
+    assert_eq!(
+        sun.weekly_activity.last().unwrap().focus_minutes,
+        10,
+        "the most recent Sunday opens the current week for a Sunday-start user"
+    );
+}
+
+/// An unrecognised modifier makes SQLite's `date()` answer NULL, which would empty
+/// every bar rather than fail, so the range is checked before the query runs.
+#[tokio::test]
+async fn usage_stats_reject_a_week_start_outside_the_week() {
+    let pool = test_pool().await;
+    assert!(get_usage_stats_impl(&pool, 7).await.is_err());
+    assert!(get_usage_stats_impl(&pool, -1).await.is_err());
+}
+
+/// The chart sums a week's sessions into whole minutes, truncating like the
+/// running total does — 90s + 90s is 3 minutes, not two rounded-up ones.
+#[tokio::test]
+async fn usage_stats_bucket_focus_minutes_into_the_current_week() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
+    insert_focus_session(&pool, "fs1", "p1", 90).await;
+    insert_focus_session(&pool, "fs2", "p1", 90).await;
+
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let latest = s.weekly_activity.last().unwrap();
+
+    assert_eq!(latest.focus_minutes, 3);
+    assert_eq!(
+        s.weekly_activity
+            .iter()
+            .map(|w| w.focus_minutes)
+            .sum::<i64>(),
+        3,
+        "no other week may carry the same sessions"
+    );
+}
+
+/// Both flags read a table the other adoption queries never touch, and a
+/// connected-but-empty calendar still counts as having used sync.
+#[tokio::test]
+async fn usage_stats_flags_reminders_and_a_connected_calendar() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Parent", "{}", "one two", 0, "[]").await;
+
+    assert!(
+        !get_usage_stats_impl(&pool, MONDAY)
+            .await
+            .unwrap()
+            .has_reminders
+    );
+    assert!(
+        !get_usage_stats_impl(&pool, MONDAY)
+            .await
+            .unwrap()
+            .has_calendar_sync
+    );
+
+    pikos_db::create_page_reminder(&pool, "p1", 30)
+        .await
+        .unwrap();
+    let now = pikos_db::now_iso();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'google', 'a@example.com', 'oauth', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    assert!(s.has_reminders);
+    assert!(s.has_calendar_sync);
+}
+
 #[tokio::test]
 async fn usage_stats_excludes_soft_deleted_pages() {
     let pool = test_pool().await;
@@ -236,7 +464,7 @@ async fn usage_stats_excludes_soft_deleted_pages() {
     insert_rich_page(&pool, "p2", "Gone", "{}", "x y z", 3, "[\"drop\"]").await;
     soft_delete(&pool, "p2").await;
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
     assert_eq!(s.total_pages, 1);
     assert_eq!(s.total_words, 2); // only the live page
                                   // adoption flags only reflect the surviving page
@@ -269,6 +497,42 @@ async fn reset_db_wipes_all_user_tables() {
             .await
             .unwrap();
         assert_eq!(count, expected, "table {table} not empty after reset");
+    }
+}
+
+/// Guards the stranded-account failure mode documented on `reset_db`.
+#[tokio::test]
+async fn reset_db_removes_connected_calendar_accounts() {
+    let pool = test_pool().await;
+    let now = pikos_db::now_iso();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'google', 'a@example.com', 'oauth', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sync_calendar
+         (id, account_id, calendar_id, display_name, enabled, sync_token, created_at, updated_at)
+         VALUES ('cal', 'acct', 'primary', 'Personal', 1, 'tok-123', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    reset_db_impl(&pool).await.unwrap();
+
+    for table in ["sync_account", "sync_calendar"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a constant from the hardcoded list above
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "{table} survived the reset");
     }
 }
 
@@ -468,6 +732,46 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     );
 }
 
+// ── fetch_export_pages ─────────────────────────────────────────────────────────
+
+async fn insert_synced_page(pool: &SqlitePool, id: &str, title: &str, sync_state: &str) {
+    insert_test_page(pool, TestPage::new(id, title))
+        .await
+        .unwrap();
+    insert_test_page_sync(pool, id, sync_state).await.unwrap();
+}
+
+async fn export_titles(pool: &SqlitePool, include_synced: bool) -> Vec<String> {
+    fetch_export_pages(pool, "id, title", include_synced)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get::<String, _>("title"))
+        .collect()
+}
+
+#[tokio::test]
+async fn export_drops_only_the_mirrors_the_user_never_actioned() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("native", "My Note"))
+        .await
+        .unwrap();
+    insert_synced_page(&pool, "bare", "Standup", "active").await;
+    insert_synced_page(&pool, "done", "Retro", "active").await;
+    set_completed(&pool, "done", "2026-05-01T12:00:00Z").await;
+    insert_synced_page(&pool, "severed", "Old 1:1", "detached").await;
+
+    let kept = export_titles(&pool, false).await;
+    assert!(!kept.contains(&"Standup".to_string()));
+    assert_eq!(
+        kept.len(),
+        3,
+        "native, completed mirror and detached all stay"
+    );
+
+    assert_eq!(export_titles(&pool, true).await.len(), 4);
+}
+
 // ── build_export_csv_impl ──────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -486,12 +790,12 @@ async fn export_csv_header_and_row_basics() {
     .await
     .unwrap();
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     let lines: Vec<&str> = csv.lines().collect();
 
     assert_eq!(
         lines[0],
-        "Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Created At,Updated At,Completed At"
+        "Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At"
     );
     assert_eq!(lines.len(), 2);
     let row = lines[1];
@@ -506,7 +810,7 @@ async fn export_csv_escapes_special_characters() {
     // Title with comma + quote, content with newline.
     insert_rich_page(&pool, "p1", "a, \"b\"", "{}", "line1\nline2", 0, "[]").await;
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     let row = csv.lines().nth(1).unwrap();
 
     // Comma+quote field → wrapped in quotes with "" escaping.
@@ -516,13 +820,25 @@ async fn export_csv_escapes_special_characters() {
 }
 
 #[tokio::test]
+async fn export_csv_excludes_un_actioned_mirrors_unless_asked() {
+    let pool = test_pool().await;
+    insert_synced_page(&pool, "bare", "Standup", "active").await;
+
+    let default = build_export_csv_impl(&pool, false).await.unwrap();
+    assert_eq!(default.lines().count(), 1, "header only");
+
+    let with_synced = build_export_csv_impl(&pool, true).await.unwrap();
+    assert!(with_synced.contains("Standup"));
+}
+
+#[tokio::test]
 async fn export_csv_excludes_soft_deleted() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Live", "{}", "", 0, "[]").await;
     insert_rich_page(&pool, "p2", "Gone", "{}", "", 0, "[]").await;
     soft_delete(&pool, "p2").await;
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     assert_eq!(csv.lines().count(), 2); // header + 1 live page
     assert!(csv.contains("Live"));
     assert!(!csv.contains("Gone"));
@@ -534,10 +850,95 @@ async fn export_csv_includes_completed_at() {
     insert_rich_page(&pool, "p1", "Done", "{}", "", 0, "[]").await;
     set_completed(&pool, "p1", "2026-05-01T12:00:00Z").await;
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     let row = csv.lines().nth(1).unwrap();
     assert!(row.ends_with("2026-05-01T12:00:00Z"));
     assert!(row.contains(",done,"));
+}
+
+// ── CSV Repeat / Reminder columns ─────────────────────────────────────────────
+// The importer has understood both since it shipped (`repeat`/`rrule` and
+// `reminder` are in its header heuristics), but the export emitted neither, so
+// a recurring page or a page with reminders came back through import as a plain
+// one-off. These pin the two cells to the exact formats `csv.ts` parses:
+// a bare RRULE (it strips at most a leading `RRULE:` and hands the rest to
+// `parseRrule`) and ISO-8601 durations (`parseDurationToMinutes`).
+
+/// Cell `i` of the single data row, by header name.
+fn csv_cell(csv: &str, column: &str) -> String {
+    let mut lines = csv.lines();
+    let idx = lines
+        .next()
+        .expect("header")
+        .split(',')
+        .position(|h| h == column)
+        .unwrap_or_else(|| panic!("no {column} column in the export header"));
+    lines
+        .next()
+        .expect("one data row")
+        .split(',')
+        .nth(idx)
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[tokio::test]
+async fn export_csv_emits_a_recurring_rule_the_importer_can_read_back() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Standup", "{}", "", 0, "[]").await;
+    // Semicolons inside an RRULE are why the cell has to survive CSV escaping.
+    insert_rule_with_rrule(&pool, "r1", "p1", "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2").await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+
+    // Verbatim and bare: no `RRULE:` prefix, no DTSTART — the anchor is the
+    // page's own Start Date column, which is how the importer pairs them.
+    assert!(
+        csv.contains("\"FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2\""),
+        "{csv}"
+    );
+}
+
+#[tokio::test]
+async fn export_csv_emits_reminders_as_iso_durations_soonest_first() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Review", "{}", "", 0, "[]").await;
+    insert_reminder(&pool, "rem-late", "p1", 60).await;
+    insert_reminder(&pool, "rem-early", "p1", 0).await;
+    insert_reminder(&pool, "rem-mid", "p1", 15).await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+
+    // `PT0S` for at-start, negative minute durations for "before" — the three
+    // shapes `parseDurationToMinutes`'s own doc comment names. Semicolon-joined
+    // so the cell needs no quoting.
+    assert_eq!(csv_cell(&csv, "Reminder"), "PT0S;-PT15M;-PT60M");
+}
+
+/// The `-1` sentinel is "no reminders on this page", which has no ISO-8601
+/// spelling — it must not leave as `-PT1M`, which would import as a real
+/// one-minute-before reminder the user never set.
+#[tokio::test]
+async fn export_csv_leaves_the_no_reminders_sentinel_out_of_the_cell() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Quiet", "{}", "", 0, "[]").await;
+    insert_reminder(&pool, "rem-none", "p1", -1).await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+    assert_eq!(csv_cell(&csv, "Reminder"), "");
+}
+
+#[tokio::test]
+async fn export_csv_leaves_repeat_and_reminder_empty_for_a_plain_page() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Plain", "{}", "", 0, "[]").await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+    assert_eq!(csv_cell(&csv, "Repeat"), "");
+    assert_eq!(csv_cell(&csv, "Reminder"), "");
+    // The two empty cells sit between End Date and Created At, so a plain page's
+    // row still lines up with the header.
+    assert_eq!(csv.lines().nth(1).unwrap().split(',').count(), 13);
 }
 
 // ── build_frontmatter ──────────────────────────────────────────────────────────
@@ -880,4 +1281,206 @@ fn collect_asset_paths_finds_nested_images_only() {
     let mut paths = Vec::new();
     collect_asset_paths(&doc, &mut paths);
     assert_eq!(paths, vec!["/a/one.png", "/a/two.png"]); // empty path skipped
+}
+
+// ── dev_seed_synced_calendar ───────────────────────────────────────────────────
+
+/// The seed's whole point is exercising surfaces no unit test reaches, so what it
+/// *contains* is the contract — and its TS twin (`apps/desktop/seeds/syncedCalendar.ts`)
+/// claims to mirror it. The recurring half drifted apart unnoticed once already.
+/// Each series below is the only way to reach some synced or detached behavior by
+/// hand, so dropping one costs a QA check silently.
+#[tokio::test]
+async fn seed_synced_calendar_carries_every_recurring_shape_qa_needs() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let series: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT p.title, ps.sync_state, r.rrule_exdates, r.rrule
+         FROM page_recurrence_rules r
+         JOIN pages p ON p.id = r.page_id
+         JOIN page_sync ps ON ps.page_id = r.page_id
+         ORDER BY p.title",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let by_title = |title: &str| {
+        series
+            .iter()
+            .find(|(t, _, _, _)| t == title)
+            .unwrap_or_else(|| panic!("seed dropped the {title} series"))
+            .clone()
+    };
+    let titles: Vec<&str> = series.iter().map(|(t, _, _, _)| t.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec![
+            "Detached sprint",
+            "Month-end close",
+            "On-call rotation",
+            "Recurring review",
+            "Release countdown",
+            "Swim class (term ends)",
+            "Weekly 1:1 (London)",
+        ]
+    );
+
+    // The edit lock is derived from a round-trip, so QA needs one rule of each
+    // verdict: a mid-day UNTIL locks the chip, BYMONTHDAY=-1 stays editable.
+    assert!(by_title("Swim class (term ends)").3.contains("T113000"));
+    assert_eq!(by_title("Month-end close").1, "detached");
+    assert!(by_title("Month-end close").3.contains("BYMONTHDAY=-1"));
+    // Finite, so the series can actually be driven to its terminal state.
+    assert!(by_title("Release countdown").3.contains("COUNT="));
+
+    // Timed, not date-only: a date-only exdate matches whether or not the render
+    // layer day-keys, so it would pin nothing.
+    let exdates: Vec<String> = serde_json::from_str(&by_title("Recurring review").2).unwrap();
+    assert_eq!(exdates.len(), 1);
+    assert!(exdates[0].contains("T10:00:00"), "{}", exdates[0]);
+
+    // A provider-moved instance keyed to an occurrence of its rule — in the rule's
+    // own basis, so the all-day series' key is date-only where the timed ones carry
+    // a time of day.
+    let moved: Vec<(String, String)> = sqlx::query_as(
+        "SELECT p.title, s.original_date FROM page_schedules s
+         JOIN pages p ON p.id = s.page_id
+         WHERE s.original_date IS NOT NULL ORDER BY p.title",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(moved.len(), 3);
+    assert_eq!(moved[0].0, "Detached sprint");
+    assert!(moved[0].1.contains("T07:15:00"), "{}", moved[0].1);
+    assert_eq!(moved[1].0, "On-call rotation");
+    assert_eq!(moved[1].1.len(), 10, "{}", moved[1].1);
+    assert_eq!(moved[2].0, "Recurring review");
+    assert!(moved[2].1.contains("T10:00:00"), "{}", moved[2].1);
+}
+
+/// The head floor and the render floor both key on `page_sync.created_at`, so a
+/// series seeded with the run's own timestamp can never read as overdue — and the
+/// synced arm of the gap dialog has no other way to be reached on a dev machine.
+#[tokio::test]
+async fn seed_synced_calendar_backdates_the_countdown_series_connect_day() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let connected: String = sqlx::query_scalar(
+        "SELECT ps.created_at FROM page_sync ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE p.title = 'Release countdown'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let floor = pikos_db::sync::local_day_of(&connected).expect("UTC-parseable connect day");
+    let expected = (chrono::Local::now() - chrono::Duration::days(5))
+        .format("%Y-%m-%d")
+        .to_string();
+    assert_eq!(floor, expected);
+
+    let base: String = sqlx::query_scalar("SELECT scheduled_start FROM pages WHERE title = ?")
+        .bind("Release countdown")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(base.starts_with(&expected), "{base}");
+}
+
+/// A detached row is one the product could have produced: detaching spends the
+/// source stamp, so the schedule rows carry no zone and the rule carries the
+/// device's. A row left on its source zone converts on every read that follows —
+/// invisible on a machine in that zone, an hour out everywhere else.
+#[tokio::test]
+async fn seed_synced_calendar_detaches_rows_the_way_the_reconciler_does() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let stranded: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT p.title, s.timezone FROM page_schedules s
+         JOIN pages p ON p.id = s.page_id
+         JOIN page_sync ps ON ps.page_id = p.id
+         WHERE ps.sync_state = 'detached' AND s.timezone IS NOT NULL",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(stranded.is_empty(), "{stranded:?}");
+
+    // All-day is the carve-out: date-only has nothing to convert, so detaching
+    // returns before it reaches the rule and the zone-less sentinel stands.
+    let rules: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT p.title, r.timezone, r.scheduled_start FROM page_recurrence_rules r
+         JOIN pages p ON p.id = r.page_id
+         JOIN page_sync ps ON ps.page_id = p.id
+         WHERE ps.sync_state = 'detached'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rules.len(), 4);
+    for (title, zone, start) in &rules {
+        let expected = if start.len() == 10 {
+            "UTC"
+        } else {
+            pikos_db::device_zone().name()
+        };
+        assert_eq!(zone, expected, "{title}");
+    }
+}
+
+/// Two one-off shapes with no other source: a multi-day all-day span (whose
+/// inclusive end is what a double-decrement would shorten) and a zone-less timed
+/// mirror (which floats, and whose reminders come from a third query).
+#[tokio::test]
+async fn seed_synced_calendar_carries_the_all_day_span_and_a_zoneless_mirror() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let (start, end): (String, String) =
+        sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE title = ?")
+            .bind("Product summit")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let day = |offset: i64| {
+        (chrono::Local::now().date_naive() + chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string()
+    };
+    assert_eq!(start, day(0));
+    assert_eq!(end, day(2));
+
+    let zone: Option<String> = sqlx::query_scalar(
+        "SELECT s.timezone FROM page_schedules s
+         JOIN pages p ON p.id = s.page_id
+         WHERE p.title = 'Contractor call (no zone)'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(zone, None);
+}
+
+/// Re-seeding drops the prior mock account and everything it owns — the dev
+/// workflow is "seed, poke at it, seed again", so a second run must not double up.
+#[tokio::test]
+async fn seed_synced_calendar_is_idempotent() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+    let after_first: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+    let after_second: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after_first, after_second);
 }

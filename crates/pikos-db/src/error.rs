@@ -41,6 +41,17 @@ pub enum AppError {
     #[error("invalid: {0}")]
     Invalid(String),
 
+    #[error("network: {0}")]
+    Network(String),
+
+    /// The workspace file itself is damaged: SQLite refused it, or an integrity
+    /// check found it inconsistent. Separate from `Db` because the answer is
+    /// different — no retry helps, and the app has a backups directory to point
+    /// the user at. Nothing else can offer that if this arrives as a generic
+    /// storage failure.
+    #[error("corrupt: {0}")]
+    Corrupt(String),
+
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -49,7 +60,7 @@ impl AppError {
     /// Stable, content-free kind tag for frontend branching. Lives next to
     /// the variant list so adding a variant produces a compile error here
     /// before reaching the wire format.
-    fn kind(&self) -> &'static str {
+    pub fn kind(&self) -> &'static str {
         match self {
             AppError::Db(_) => "Db",
             AppError::NotFound(_) => "NotFound",
@@ -57,6 +68,8 @@ impl AppError {
             AppError::Io(_) => "Io",
             AppError::Serde(_) => "Serde",
             AppError::Invalid(_) => "Invalid",
+            AppError::Network(_) => "Network",
+            AppError::Corrupt(_) => "Corrupt",
             AppError::Internal(_) => "Internal",
         }
     }

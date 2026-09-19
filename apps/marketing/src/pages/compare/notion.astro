@@ -1,0 +1,94 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
+
+const title = "Pikos vs Notion";
+const description = "Notion is better for working with other people. Pikos keeps your work on your own machine and opens instantly. An honest comparison, including what Pikos doesn't do.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/compare" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Compare
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Pikos vs Notion</h1>
+      <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+        Notion does notes, tasks and a calendar too, and reaches a lot further. The difference is where the work lives and who else can see it.
+      </p>
+
+      <Prose class="mt-10">
+
+        <h2>The short version</h2>
+
+        <p>
+          Notion is a workspace for a group. Databases, relations, permissions, templates for everything, and a page anyone with the link can open. If more than one person needs to see the thing you're writing, that's the whole argument and Pikos doesn't compete.
+        </p>
+
+        <p>
+          Pikos is a workspace for one person, on one machine. It opens instantly because there's nothing to fetch, it works the same on a plane, and nobody is hosting your notes.
+        </p>
+
+        <h2>Stay with Notion if</h2>
+
+        <p>
+          You share pages with anyone. Pikos has no collaboration, no comments, no sharing and no permissions. There's no server to host a shared page on, which is the point, and also the limit.
+        </p>
+
+        <p>
+          You use databases. Relations, rollups, filtered views over structured records: Pikos has none of it. It has pages with tags, folders, priorities and dates, and that's the ceiling.
+        </p>
+
+        <p>
+          You want your notes on the web, on a phone, and on someone else's computer. Notion is everywhere. Pikos is a Mac and Linux app today, with an iPhone app in the works.
+        </p>
+
+        <h2>Try Pikos if</h2>
+
+        <p>
+          You're the only person who ever reads your notes. Notion is built for teams, and a lot of what makes it good is doing nothing for you if you're the only one there.
+        </p>
+
+        <p>
+          The lag bothers you. Pikos reads a SQLite file on your disk, so a page opens in the time it takes to draw.
+        </p>
+
+        <p>
+          You'd rather not have your work on someone else's servers. Nothing you write in Pikos is sent anywhere. There's no account to make, so there's no account to lose access to.
+        </p>
+
+        <h2>What Pikos doesn't do</h2>
+
+        <p>
+          No collaboration, no sharing, no databases, no web version, no templates gallery, no AI writing features. Notion is a much bigger product and this is not a case where the smaller one quietly does more.
+        </p>
+
+        <h2>Moving your pages across</h2>
+
+        <p>
+          Notion exports Markdown. In Notion, open the workspace or page menu, choose <strong>Export</strong>, and pick Markdown &amp; CSV. You'll get a folder of <code>.md</code> files.
+        </p>
+
+        <p>
+          Pikos imports that folder directly: Settings, then the Data tab, then Select Folder next to Markdown. It walks subfolders, so the nesting Notion exports comes through as folders. Databases export as CSV and won't come across as structured records, because Pikos has nothing to put them in. Expect the prose to survive and the tables not to.
+        </p>
+
+      </Prose>
+
+      <div class="mt-16 rounded-lg border border-neutral-200 bg-neutral-50 px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
+        <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          The feature-by-feature table, and comparisons with Obsidian, NotePlan, TickTick and Things, are on the <a href="/compare" class="font-medium text-primary-500 hover:underline dark:text-primary-400">comparison page</a>. Pikos is a <a href="/download" class="font-medium text-primary-500 hover:underline dark:text-primary-400">free download</a> with no account, so trying it costs nothing but the disk space.
+        </p>
+      </div>
+
+    </article>
+
+  </main>
+
+  <Footer />
+</Base>

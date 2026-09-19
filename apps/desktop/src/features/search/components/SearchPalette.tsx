@@ -1,21 +1,65 @@
-// Single FTS5 query with bm25() weighting: title matches rank first,
-// content matches show a snippet below. Frontend handles highlighting.
+// Two ways in. A plain query is one FTS5 search with bm25() weighting: title
+// matches rank first, content matches show a snippet below, and the frontend
+// handles highlighting. A query carrying operators (`tag:`, `folder:`, `is:`,
+// `priority:`, `due:`) is a structured `listPages` filter instead — see
+// runFilteredSearch for how free text still reaches FTS5 on that path.
 
-import type { SearchResult } from "@pikos/core";
-import { isDone } from "@pikos/core";
-import { FileText, Search } from "lucide-react";
+import type {
+  Folder,
+  PageSummary,
+  ParsedSearchQuery,
+  SearchResponse,
+  SearchResult,
+  StorageAdapter,
+} from "@pikos/core";
+import {
+  buildSearchFilter,
+  ftsTokens,
+  isDone,
+  parseSearchQuery,
+  PRIORITY_LABELS,
+  viewerStart,
+} from "@pikos/core";
+import { Command, FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/shared/components/EmptyState";
-import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { formatCombo } from "@/shared/keyboard/formatCombo";
+import type { Binding } from "@/shared/keyboard/registry";
+import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 
 const log = createLogger("SearchPalette");
+
+/** FTS5 needs something to prefix-match on; below this the query is too broad to run. */
+const MIN_QUERY_LENGTH = 2;
+
+/** Leading character that turns the palette into a command list. */
+const COMMAND_PREFIX = ">";
+// The trailing space is functional: it leaves the caret past the prefix so the
+// first keystroke filters commands instead of sitting flush against ">".
+const COMMAND_PREFILL = `${COMMAND_PREFIX} `;
+
+type SearchPagesFn = (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
+
+/** Substring first, then a subsequence pass so ">tgsb" still finds "Toggle sidebar". */
+function commandMatches(label: string, filter: string): boolean {
+  if (filter === "") return true;
+  const haystack = label.toLowerCase();
+  if (haystack.includes(filter)) return true;
+  let i = 0;
+  for (const ch of haystack) {
+    if (ch === filter[i]) i++;
+    if (i === filter.length) return true;
+  }
+  return false;
+}
 
 function highlightText(text: string, queryWords: string[]): React.ReactNode {
   if (!text || queryWords.length === 0) return text;
@@ -47,7 +91,7 @@ function formatShortDate(iso: string): string {
   const [y, m, d] = datePart.split("-").map(Number);
   if (!y || !m || !d) return iso;
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 /** Second-line summary for title-only matches: date · priority · tags, falling back to subtitle, then content preview. */
@@ -57,10 +101,9 @@ function buildMetadataSummary(item: SearchResult): string {
   if (item.scheduledDate) {
     parts.push(formatShortDate(item.scheduledDate));
   }
-  // Only show priority if non-default (0 = none)
-  const label = PRIORITY_LABELS[item.priority];
-  if (label) {
-    parts.push(label);
+  // Tested against the value, not its label: PRIORITY_LABELS[0] is "None", which is truthy.
+  if (item.priority !== 0) {
+    parts.push(PRIORITY_LABELS[item.priority]);
   }
   if (item.tags.length > 0) {
     parts.push(item.tags.map((t) => `#${t}`).join(" "));
@@ -76,9 +119,69 @@ function buildMetadataSummary(item: SearchResult): string {
   return "";
 }
 
+/** A row for a page the filter path returned — no bm25 excerpt exists, so the
+ *  metadata line carries the second line (the same shape recents use). */
+function summaryToResult(page: PageSummary): SearchResult {
+  return {
+    contentPreview: "",
+    excerpt: "",
+    id: page.id,
+    matchSource: "title" as const,
+    priority: page.priority,
+    scheduledDate: viewerStart(page),
+    status: page.status,
+    subtitle: page.subtitle ?? null,
+    tags: page.tags,
+    title: page.title,
+  };
+}
+
+/**
+ * The operator path. `listPages` applies the structured filter; free text still
+ * goes through FTS5 and the two sets are intersected, so a mixed query keeps
+ * bm25 ranking and its excerpts. Residual text is deliberately not passed as
+ * `PageFilter.query` — that field is an unindexed LIKE scan list_pages_impl
+ * documents as test-only.
+ */
+async function runFilteredSearch(
+  parsed: ParsedSearchQuery,
+  opts: {
+    folders: Folder[];
+    includeCompleted: boolean;
+    searchPages: SearchPagesFn;
+    storage: StorageAdapter;
+  }
+): Promise<SearchResponse> {
+  const { filter, unresolvedFolder } = buildSearchFilter(parsed, opts.folders);
+  // A folder name nothing matches can't narrow to anything — returning the
+  // unfiltered set would quietly answer a different question.
+  if (unresolvedFolder !== null) return { completedCount: 0, results: [] };
+
+  const summaries = await opts.storage.listPages(filter);
+
+  let rows: SearchResult[];
+  if (parsed.text.length >= MIN_QUERY_LENGTH) {
+    const allowed = new Set(summaries.map((p) => p.id));
+    const { results } = await opts.searchPages(parsed.text, true);
+    rows = results.filter((r) => allowed.has(r.id));
+  } else {
+    // A single leftover character is below the FTS floor — match it on the title.
+    const needle = parsed.text.toLowerCase();
+    rows = summaries
+      .filter((p) => needle === "" || p.title.toLowerCase().includes(needle))
+      .map(summaryToResult);
+  }
+
+  return {
+    completedCount: rows.filter(isDone).length,
+    results: opts.includeCompleted ? rows : rows.filter((r) => !isDone(r)),
+  };
+}
+
 export function SearchPalette() {
   const { activePageId, dialogPrefill, openDialog, openPage, setOpenDialog } = useUI();
-  const { pages, searchPages } = usePages();
+  const { folders, pages, searchPages } = usePages();
+  const { storage } = useWorkspace();
 
   const isOpen = openDialog === "search";
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,29 +210,69 @@ export function SearchPalette() {
     }
   }
 
+  // ── Command mode ("> …") ─────────────────────────────────────────────────
+
+  const isCommandMode = query.startsWith(COMMAND_PREFIX);
+  const commandFilter = query.slice(COMMAND_PREFIX.length).trim().toLowerCase();
+
+  const [commands, setCommands] = useState<Binding[]>([]);
+  const [prevCommandMode, setPrevCommandMode] = useState(isCommandMode);
+  if (isCommandMode !== prevCommandMode) {
+    setPrevCommandMode(isCommandMode);
+    // Snapshot on entry. The registry is a module store, not React state, so
+    // reading it every render would tie the command list to unrelated renders;
+    // what's active can't change while the palette holds the keyboard anyway.
+    setCommands(isCommandMode ? Keyboard.listCommands() : []);
+    setResults([]);
+    setCompletedCount(0);
+  }
+
+  const commandItems = isCommandMode
+    ? commands.filter((c) => commandMatches(c.label ?? "", commandFilter))
+    : [];
+
   useKeyboardShortcut(
     "Mod+K",
     () => {
       if (!isOpen) setOpenDialog("search");
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Navigation", label: "Search pages" }
   );
 
-  // Focus input when palette opens.
-  useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    }
-  }, [isOpen]);
+  useKeyboardShortcut(
+    "Mod+Shift+K",
+    () => {
+      if (!isOpen) setOpenDialog("search", COMMAND_PREFILL);
+    },
+    { allowInInputs: true, group: "Navigation", label: "Run a command" }
+  );
 
   // ── Search with debounce ──────────────────────────────────────────────────
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) return;
+    // Command mode never touches the database.
+    if (q.startsWith(COMMAND_PREFIX)) return;
+    const parsedQuery = parseSearchQuery(q);
+    // Operators carry their own meaning, so `tag:x` runs on its own; plain text
+    // still waits for two characters before hitting the index.
+    if (!parsedQuery.hasOperators && q.length < MIN_QUERY_LENGTH) return;
+    if (parsedQuery.hasOperators && !storage) return;
 
     const timer = setTimeout(() => {
-      searchPages(q, showCompleted || undefined)
+      const search =
+        parsedQuery.hasOperators && storage
+          ? runFilteredSearch(parsedQuery, {
+              folders,
+              // `is:done` asks for completed pages outright — honour it whatever
+              // the toggle says, and let the toggle report that below.
+              includeCompleted: showCompleted || parsedQuery.status === "done",
+              searchPages,
+              storage,
+            })
+          : searchPages(q, showCompleted || undefined);
+
+      search
         .then(({ completedCount: count, results: res }) => {
           setResults(res);
           setCompletedCount(count);
@@ -141,7 +284,7 @@ export function SearchPalette() {
         });
     }, 150);
     return () => clearTimeout(timer);
-  }, [query, showCompleted, searchPages]);
+  }, [query, showCompleted, searchPages, folders, storage]);
 
   // ── Recent pages (shown when input is empty) ────────────────────────────
 
@@ -151,28 +294,29 @@ export function SearchPalette() {
         .filter((p) => p.lastOpenedAt && p.id !== activePageId)
         .sort((a, b) => (b.lastOpenedAt ?? "").localeCompare(a.lastOpenedAt ?? ""))
         .slice(0, 10)
-        .map((p) => ({
-          contentPreview: "",
-          excerpt: "",
-          id: p.id,
-          matchSource: "title" as const,
-          priority: p.priority,
-          scheduledDate: p.scheduledStart ?? null,
-          status: p.status,
-          subtitle: p.subtitle ?? null,
-          tags: p.tags,
-          title: p.title,
-        }));
+        .map(summaryToResult);
 
-  const displayItems = query.trim() ? results : recentItems;
-  const clampedIdx = Math.min(selectedIdx, Math.max(0, displayItems.length - 1));
+  const pageItems = query.trim() ? results : recentItems;
+  const displayCount = isCommandMode ? commandItems.length : pageItems.length;
+  const clampedIdx = Math.min(selectedIdx, Math.max(0, displayCount - 1));
 
   const trimmedQuery = query.trim();
-  const queryWords = trimmedQuery ? trimmedQuery.split(/\s+/).filter(Boolean) : [];
+  const parsed = parseSearchQuery(trimmedQuery);
+  // Highlight what the index matched, not what the user typed — "multi-color" is two
+  // tokens to FTS, so a page holding "multi color" is a hit with nothing to mark.
+  // On the operator path only the residual text reached the index.
+  const queryWords = ftsTokens(parsed.hasOperators ? parsed.text : trimmedQuery);
 
   function handleSelect(id: string) {
     openPage(id);
     resetAndClose();
+  }
+
+  function runCommand(binding: Binding) {
+    resetAndClose();
+    // Close first: the handler acts on the surface underneath, and several of
+    // them open a dialog of their own that would otherwise race this one for focus.
+    binding.handler(new KeyboardEvent("keydown"));
   }
 
   function resetAndClose() {
@@ -184,9 +328,9 @@ export function SearchPalette() {
     setShowCompleted(false);
   }
 
-  /** Index of the item in the flat displayItems list — drives keyboard selection. */
+  /** Index of the item in the flat result list — drives keyboard selection. */
   function getDisplayIndex(item: SearchResult): number {
-    return displayItems.indexOf(item);
+    return pageItems.indexOf(item);
   }
 
   function scrollToIdx(idx: number) {
@@ -202,7 +346,7 @@ export function SearchPalette() {
       setMouseMoved(false);
       setMouseActive(false);
       setSelectedIdx((i) => {
-        const next = Math.min(i + 1, displayItems.length - 1);
+        const next = Math.min(i + 1, displayCount - 1);
         scrollToIdx(next);
         return next;
       });
@@ -217,7 +361,12 @@ export function SearchPalette() {
       });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const item = displayItems[clampedIdx];
+      if (isCommandMode) {
+        const command = commandItems[clampedIdx];
+        if (command) runCommand(command);
+        return;
+      }
+      const item = pageItems[clampedIdx];
       if (item) handleSelect(item.id);
     }
   }
@@ -272,15 +421,49 @@ export function SearchPalette() {
                 : item.title || "Untitled"}
             </span>
             {isDone(item) && (
-              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/40">
-                Completed
-              </span>
+              <span className="ml-auto shrink-0 text-3xs text-muted-foreground/40">Completed</span>
             )}
           </span>
           {secondLine != null && (
             <span className="mt-0.5 block truncate text-xs text-subtle">{secondLine}</span>
           )}
         </div>
+      </button>
+    );
+  }
+
+  function renderCommand(binding: Binding, idx: number) {
+    return (
+      <button
+        className={cn(
+          "flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors",
+          idx === clampedIdx ? "bg-accent text-foreground" : mouseActive && "hover:bg-accent/50"
+        )}
+        key={binding.id}
+        onClick={() => runCommand(binding)}
+        onMouseEnter={() => {
+          if (mouseMoved) {
+            setMouseActive(true);
+            setSelectedIdx(idx);
+          }
+        }}
+        ref={(el) => {
+          if (el) itemRefs.current.set(idx, el);
+          else itemRefs.current.delete(idx);
+        }}
+      >
+        <Command className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        <span className="min-w-0 flex-1 truncate">{binding.label}</span>
+        <span className="flex shrink-0 items-center gap-1">
+          {formatCombo(binding.combo).map((token, i) => (
+            <kbd
+              className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-3xs leading-none text-muted-foreground"
+              key={i}
+            >
+              {token}
+            </kbd>
+          ))}
+        </span>
       </button>
     );
   }
@@ -292,13 +475,24 @@ export function SearchPalette() {
       <DialogContent
         aria-label="Search pages"
         className="top-[15%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
+        // Radix's focus scope selects an input's contents when it autofocuses,
+        // which makes the first keystroke replace a prefill rather than extend
+        // it. Focus it here instead, caret collapsed to the end.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          const input = inputRef.current;
+          if (!input) return;
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }}
         showCloseButton={false}
       >
         {/* Radix Dialog requires a title + description for screen readers
             even on a command-palette UI; sr-only keeps both invisible. */}
         <DialogTitle className="sr-only">Search pages</DialogTitle>
         <DialogDescription className="sr-only">
-          Search across all pages and folders. Use arrow keys to navigate results, Enter to open.
+          Search across all pages and folders, or start with &gt; to run a command. Use arrow keys
+          to navigate results, Enter to open.
         </DialogDescription>
         {/* Search input */}
         <div className="flex items-center gap-2 border-b border-border/40 px-4 py-3">
@@ -318,7 +512,7 @@ export function SearchPalette() {
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search pages…"
+            placeholder="Search pages, or > for commands…"
             ref={inputRef}
             spellCheck={false}
             value={query}
@@ -332,29 +526,47 @@ export function SearchPalette() {
             if (!mouseMoved) setMouseMoved(true);
           }}
         >
-          {/* Recent pages (no query) */}
-          {!trimmedQuery && recentItems.length > 0 && recentItems.map(renderItem)}
+          {isCommandMode ? (
+            <>
+              {/* Commands — whatever the keyboard registry has active right now */}
+              {commandItems.map(renderCommand)}
 
-          {/* Search results — bm25 ranked order, no section splits */}
-          {trimmedQuery && results.length > 0 && results.map(renderItem)}
+              {commandItems.length === 0 && <EmptyState compact message="No matching commands" />}
+            </>
+          ) : (
+            <>
+              {/* Recent pages (no query) */}
+              {!trimmedQuery && recentItems.length > 0 && recentItems.map(renderItem)}
 
-          {/* Empty state — search returned nothing (and no completed matches either) */}
-          {showEmpty && <EmptyState compact message="No pages found" />}
+              {/* Search results — bm25 ranked order, no section splits */}
+              {trimmedQuery && results.length > 0 && results.map(renderItem)}
 
-          {/* Toggle to include/hide completed pages */}
-          {trimmedQuery && (showCompleted || completedCount > 0) && (
-            <button
-              className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
-              onClick={() => setShowCompleted((v) => !v)}
-              type="button"
-            >
-              {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
-            </button>
-          )}
+              {/* Empty state — search returned nothing (and no completed matches either) */}
+              {showEmpty && <EmptyState compact message="No pages found" />}
 
-          {/* Empty state — no recent pages and no query */}
-          {!trimmedQuery && recentItems.length === 0 && (
-            <EmptyState compact message="No recent pages" />
+              {/* Toggle to include/hide completed pages. `is:done` already asked for
+                  them, so the toggle reports that state instead of offering to fight it. */}
+              {trimmedQuery &&
+                (showCompleted || completedCount > 0) &&
+                (parsed.status === "done" ? (
+                  <p className="px-4 py-1.5 text-xs text-muted-foreground/50">
+                    Showing completed — is:done
+                  </p>
+                ) : (
+                  <button
+                    className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+                    onClick={() => setShowCompleted((v) => !v)}
+                    type="button"
+                  >
+                    {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
+                  </button>
+                ))}
+
+              {/* Empty state — no recent pages and no query */}
+              {!trimmedQuery && recentItems.length === 0 && (
+                <EmptyState compact message="No recent pages" />
+              )}
+            </>
           )}
         </div>
       </DialogContent>

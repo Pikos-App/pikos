@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 interface TaskCheckboxProps {
   checked: boolean;
   onChange: (e: React.MouseEvent) => void;
-  /** Override the default border color (e.g. for priority or folder colors). */
+  /** Stroke color for an unchecked box. Pass it whenever the box sits on a
+   *  colored fill: the default neutral border is picked for a plain background
+   *  and sinks into a folder-colored chip, worst on the dark theme. Calendar
+   *  callers pass `folderColor ?? DEFAULT_EVENT_COLOR`, the same fallback the
+   *  chip background uses, so the stroke tracks the accent rather than the fill. */
   borderColor?: string | undefined;
   /** Render as span (inside buttons) or button (standalone). Default: button. */
   as?: "button" | "span";

@@ -4,26 +4,38 @@
 // - SQLite files in the workspace (default.sqlite + WAL/SHM, backups/, assets/,
 //   workspaces.json — everything under app_data_dir).
 // - Rotating log file under app_log_dir.
-// - All `pikos:*` keys in localStorage (theme, calendar/editor/list
-//   preferences, skipped update version, defaults).
+// - All `pikos:` keys in the preference store (calendar/editor/list preferences,
+//   skipped update version, defaults). The theme key predates that namespace
+//   (see shared/constants/storage.ts) and deliberately survives the wipe.
+// - Calendar-sync credentials in the OS keychain, and the OAuth grants they
+//   belong to. These sit outside app_data_dir, so they need their own pass.
 //
 // Relaunch is a hard process restart: in-memory caches in tauri-plugin-store,
 // the notification scheduler, and every React context all start over from
 // nothing.
 
-import { invoke } from "@tauri-apps/api/core";
-import { relaunch } from "@tauri-apps/plugin-process";
+import type { StorageAdapter } from "@pikos/core";
 import { load } from "@tauri-apps/plugin-store";
 
+import { STORAGE_KEY_PREFIX } from "@/shared/constants/storage";
+import { getKeyValueStore } from "@/shared/kv";
 import { createLogger } from "@/shared/logger";
-
-const LOCAL_STORAGE_PREFIX = "pikos:";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("deleteAllData");
 
-export async function deleteAllData(): Promise<void> {
-  // Rust side: drops the DB pool, then removes app_data_dir and app_log_dir.
-  await invoke("wipe_app_data");
+export async function deleteAllData(storage: StorageAdapter): Promise<void> {
+  // Must precede the wipe: the account ids this keys on live in the DB it deletes.
+  // Best-effort — an offline revoke can't strand the user with data they asked to
+  // delete.
+  try {
+    await storage.releaseSyncCredentials();
+  } catch (e) {
+    log.error("could not release calendar-sync credentials — wiping anyway", e);
+  }
+
+  // Drops the DB pool, then removes app_data_dir and app_log_dir.
+  await storage.wipeAllData();
 
   // Empty the in-memory workspaces store. wipe_app_data removed the file on
   // disk, but tauri-plugin-store re-saves every loaded store on RunEvent::Exit
@@ -51,17 +63,13 @@ export async function deleteAllData(): Promise<void> {
     log.error("could not empty workspaces store — relaunch may not reseed", e);
   }
 
-  // localStorage isn't owned by Tauri — clear our keys here.
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) keys.push(key);
-    }
-    for (const key of keys) localStorage.removeItem(key);
-  } catch {
-    // localStorage unavailable — nothing to clear.
+  // The preference store isn't part of the workspace the wipe destroys —
+  // clear our keys here. Theme survives: it predates the prefix (see
+  // shared/constants/storage.ts), so the sweep never names it.
+  const kv = getKeyValueStore();
+  for (const key of kv.keys()) {
+    if (key.startsWith(STORAGE_KEY_PREFIX)) kv.removeItem(key);
   }
 
-  await relaunch();
+  await getPlatform().relaunch();
 }

@@ -1,0 +1,100 @@
+{
+  "cases": [
+    {
+      "name": "an empty query matches nothing",
+      "query": "",
+      "folders": ["Work"],
+      "match": null
+    },
+    {
+      "name": "an empty workspace matches nothing",
+      "query": "work",
+      "folders": [],
+      "match": null
+    },
+    {
+      "name": "a query no folder contains matches nothing",
+      "query": "nope",
+      "folders": ["Work", "Home"],
+      "match": null
+    },
+    {
+      "name": "exact beats both prefix and substring",
+      "query": "work",
+      "folders": ["Work-Stuff", "Work", "Networking"],
+      "match": "Work"
+    },
+    {
+      "name": "exact ignores case on both sides",
+      "query": "WoRk",
+      "folders": ["work"],
+      "match": "work"
+    },
+    {
+      "name": "prefix beats substring",
+      "query": "work",
+      "folders": ["Networking", "Workshop"],
+      "match": "Workshop"
+    },
+    {
+      "name": "prefix ignores case",
+      "query": "proj",
+      "folders": ["PROJECTS"],
+      "match": "PROJECTS"
+    },
+    {
+      "name": "within a tier, workspace order decides",
+      "query": "work",
+      "folders": ["Workshop", "Working"],
+      "match": "Workshop"
+    },
+    {
+      "name": "a later exact still beats an earlier prefix",
+      "query": "work",
+      "folders": ["Workshop", "Work"],
+      "match": "Work"
+    },
+    {
+      "name": "substring matches mid-name",
+      "query": "work",
+      "folders": ["Home", "Networking"],
+      "match": "Networking"
+    },
+    {
+      "name": "substring ignores case",
+      "query": "archive",
+      "folders": ["MyArchive"],
+      "match": "MyArchive"
+    },
+    {
+      "name": "a real Inbox folder is matched like any other",
+      "query": "inbox",
+      "folders": ["Inbox"],
+      "match": "Inbox"
+    },
+    {
+      "name": "inbox is not reserved — a prefix match still wins",
+      "query": "inbox",
+      "folders": ["Inbox Zero"],
+      "match": "Inbox Zero"
+    },
+    {
+      "name": "a query longer than the name matches nothing",
+      "query": "workshop",
+      "folders": ["Work"],
+      "match": null
+    },
+    {
+      "name": "a multi-word name matches on its leading word",
+      "query": "engineering",
+      "folders": ["Personal", "Engineering Notes"],
+      "match": "Engineering Notes"
+    },
+    {
+      "name": "non-ASCII names fold too",
+      "query": "café",
+      "folders": ["CAFÉ Notes"],
+      "match": "CAFÉ Notes"
+    }
+  ]
+}

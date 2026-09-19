@@ -1,10 +1,14 @@
+import { MemoryKeyValueStore } from "@pikos/core";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+
+import { setKeyValueStore } from "@/shared/kv";
 
 import { useLocalStorage } from "./useLocalStorage";
 
 afterEach(() => {
   localStorage.clear();
+  setKeyValueStore(null);
 });
 
 describe("useLocalStorage", () => {
@@ -56,5 +60,30 @@ describe("useLocalStorage", () => {
 
     expect(result.current[0]).toEqual({ a: 2 });
     expect(JSON.parse(localStorage.getItem("obj")!)).toEqual({ a: 2 });
+  });
+
+  // The hook is the only writer the app has; the store under it is swappable so
+  // a host with no window.localStorage (a phone) can back the same keys.
+  it("writes through whatever key-value store is installed", () => {
+    const store = new MemoryKeyValueStore();
+    setKeyValueStore(store);
+
+    const { result } = renderHook(() => useLocalStorage("injected", 1));
+    act(() => {
+      result.current[1](7);
+    });
+
+    expect(store.getItem("injected")).toBe("7");
+    expect(localStorage.getItem("injected")).toBeNull();
+  });
+
+  it("reads the installed store rather than window.localStorage", () => {
+    const store = new MemoryKeyValueStore();
+    store.setItem("injected", JSON.stringify("from-store"));
+    localStorage.setItem("injected", JSON.stringify("from-window"));
+    setKeyValueStore(store);
+
+    const { result } = renderHook(() => useLocalStorage("injected", "fallback"));
+    expect(result.current[0]).toBe("from-store");
   });
 });

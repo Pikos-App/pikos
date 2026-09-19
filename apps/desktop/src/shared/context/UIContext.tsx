@@ -3,17 +3,23 @@
 // Multi-select state lives in SelectionContext (useSelection).
 // Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
 
-import type { PageSummary } from "@pikos/core";
+import type { PageSummary, SmartViewId, SortMode } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
-import type { SortMode } from "@/features/pages";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
-/** 'today' | 'inbox' | folderId (UUID string) */
-export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
+/** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
+export type ActiveViewId = SmartViewId | (string & NonNullable<unknown>);
 export type DialogId = "quick-add" | "search" | null;
 /** Settings overlay sections. Kept here so external triggers (menu / shortcuts) can deep-link. */
-export type SettingsSection = "general" | "notifications" | "data" | "shortcuts" | "developer";
+export type SettingsSection =
+  | "general"
+  | "notifications"
+  | "calendar-sync"
+  | "data"
+  | "shortcuts"
+  | "developer";
 
 export interface UIContextValue {
   /** ID of the currently selected page. Derive the full Page via useActivePage(). */
@@ -45,11 +51,25 @@ export interface UIContextValue {
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
+  /**
+   * A focus session is hiding the left panels. Every consumer that hides them
+   * must read this alongside `sidebarCollapsed` — the session hides the same
+   * two panels, it just doesn't own the preference.
+   *
+   * Deliberately *not* persisted, and deliberately not written through
+   * `sidebarCollapsed`: that flag is the user's standing choice, so a session
+   * that set it would survive the session, the app quit, and the next launch —
+   * panels gone with nothing left to explain why. Ending the session drops this
+   * and the standing choice reappears on its own. An explicit toggle mid-session
+   * clears it too, so the app stops fighting a decision the user just made.
+   */
+  focusZen: boolean;
+  setFocusZen: (v: boolean) => void;
   /** Page list overlay drawer open state. Only meaningful at the sm breakpoint. Not persisted. */
   pageListDrawerOpen: boolean;
   setPageListDrawerOpen: (v: boolean) => void;
   /** Per-view sort mode. Persisted to localStorage. */
-  getSortMode: (viewId: string) => SortMode;
+  getSortMode: (viewId: string, fallback?: SortMode) => SortMode;
   setSortMode: (viewId: string, mode: SortMode) => void;
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
@@ -80,26 +100,30 @@ const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
   const [activePageId, setActivePageId] = useLocalStorage<string | null>(
-    "pikos:lastActivePageId",
+    STORAGE_KEYS.lastActivePageId,
     null
   );
   const [activeViewId, setActiveViewId] = useLocalStorage<ActiveViewId>(
-    "pikos:lastActiveViewId",
+    STORAGE_KEYS.lastActiveViewId,
     "inbox"
   );
   const [rightPanel, setRightPanelRaw] = useLocalStorage<"editor" | "calendar">(
-    "pikos:rightPanel",
+    STORAGE_KEYS.rightPanel,
     "editor"
   );
   const [lastEditorPageId, setLastEditorPageId] = useLocalStorage<string | null>(
-    "pikos:lastEditorPageId",
+    STORAGE_KEYS.lastEditorPageId,
     null
   );
   const [referenceDateIso, setReferenceDateIso] = useLocalStorage<string>(
-    "pikos:calendarReferenceDate",
+    STORAGE_KEYS.calendarReferenceDate,
     new Date().toISOString()
   );
-  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage(
+    STORAGE_KEYS.sidebarCollapsed,
+    false
+  );
+  const [focusZen, setFocusZen] = useState(false);
   const [pageListDrawerOpen, setPageListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -114,7 +138,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     if (id !== null) setSettingsOpen(false);
   }
   const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
-    "pikos:sortModes",
+    STORAGE_KEYS.sortModes,
     {}
   );
 
@@ -170,8 +194,10 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setPageListDrawerOpen(false);
   }
 
-  function getSortMode(viewId: string): SortMode {
-    return sortModes[viewId] ?? "manual";
+  /** `fallback` lets a caller that knows what kind of view this is pick the
+   *  starting order (see `useActiveSortMode`); a stored choice still wins. */
+  function getSortMode(viewId: string, fallback: SortMode = "manual"): SortMode {
+    return sortModes[viewId] ?? fallback;
   }
 
   function setSortMode(viewId: string, mode: SortMode) {
@@ -184,6 +210,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     calendarScrollRequest,
     dialogPrefill,
     flashPageBlock,
+    focusZen,
     getSortMode,
     highlightedPageId,
     lastEditorPageId,
@@ -196,6 +223,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     rightPanel,
     setActivePage,
     setActiveViewId,
+    setFocusZen,
     setLastEditorPageId,
     setOpenDialog,
     setOpenSortMenu,

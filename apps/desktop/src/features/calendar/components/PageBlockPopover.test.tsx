@@ -1,0 +1,181 @@
+// PageBlockPopover — read-only mirror metadata on a synced (locked) event, and
+// the reminder bell's one real boundary (timed vs all-day, on every origin).
+
+import type { PageRecurrenceRule, PageSummary } from "@pikos/core";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
+import { renderWithProviders } from "@/test/renderWithProviders";
+
+import { PageBlockPopover } from "./PageBlockPopover";
+
+const mocks = vi.hoisted(() => ({ recurrenceRules: [] as PageRecurrenceRule[] }));
+
+vi.mock("@/shared/context/PagesContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/context/PagesContext")>()),
+  usePages: () => ({
+    clearSchedule: vi.fn(),
+    createFolder: vi.fn(),
+    createRecurrence: vi.fn(),
+    deleteRecurrence: vi.fn(),
+    folders: [],
+    maybeToggleRecurringOccurrence: vi.fn(),
+    recurrenceRules: mocks.recurrenceRules,
+    scheduleOnce: vi.fn(),
+    uncompleteRecurringOrFlip: vi.fn(),
+    updatePage: vi.fn(),
+    updateRecurrence: vi.fn(),
+  }),
+}));
+
+// globals: false in vitest config → @testing-library's auto-cleanup never runs.
+afterEach(cleanup);
+
+beforeEach(() => {
+  mocks.recurrenceRules = [];
+});
+
+function makePage(over: Partial<PageSummary>): PageSummary {
+  return {
+    createdAt: "2026-01-01T00:00:00",
+    folderId: null,
+    id: "p1",
+    isRecurring: false,
+    priority: 0,
+    scheduledEnd: "2099-01-05T10:00:00",
+    scheduledStart: "2099-01-05T09:00:00",
+    scheduleLocked: false,
+    sortOrder: 0,
+    status: "not_started",
+    tags: [],
+    title: "Standup",
+    updatedAt: "2026-01-01T00:00:00",
+    ...over,
+  };
+}
+
+function renderPopover(page: PageSummary) {
+  return renderWithProviders(
+    <AppSettingsProvider>
+      <TooltipProvider>
+        <PageBlockPopover onClose={vi.fn()} page={page} />
+      </TooltipProvider>
+    </AppSettingsProvider>
+  );
+}
+
+describe("PageBlockPopover — mirror metadata", () => {
+  it("renders location + attendees read-only on a locked event", () => {
+    renderPopover(
+      makePage({
+        mirrorAttendees: ["alex@example.com", "sam@example.com"],
+        mirrorLocation: "Zoom",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.getByText("Zoom")).toBeInTheDocument();
+    expect(screen.getByText("2 guests")).toBeInTheDocument();
+  });
+
+  it("omits mirror metadata on a native (unlocked) page", () => {
+    renderPopover(makePage({ mirrorAttendees: ["alex@example.com"], mirrorLocation: "Zoom" }));
+    expect(screen.queryByText("Zoom")).not.toBeInTheDocument();
+  });
+
+  // The lock icon is the only thing explaining the read-only title — the title
+  // itself is deliberately not a tooltip trigger, so nothing else says why.
+  it("marks a locked title with the read-only lock hint", () => {
+    renderPopover(makePage({ scheduleLocked: true, syncState: "active" }));
+    expect(screen.getByRole("img", { name: /are read-only for synced pages/ })).toBeInTheDocument();
+  });
+
+  it("leaves an unlocked title unmarked", () => {
+    renderPopover(makePage({}));
+    expect(
+      screen.queryByRole("img", { name: /are read-only for synced pages/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it("names the position of a locked BYSETPOS series", () => {
+    mocks.recurrenceRules = [
+      { id: "r1", pageId: "p1", rrule: "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3" } as PageRecurrenceRule,
+    ];
+    renderPopover(makePage({ scheduleLocked: true, syncState: "active" }));
+    expect(screen.getByText("every month on the 3rd Friday")).toBeInTheDocument();
+  });
+});
+
+describe("PageBlockPopover — reminder bell", () => {
+  const rule = { id: "r1", pageId: "p1", rrule: "FREQ=WEEKLY;BYDAY=MO" } as PageRecurrenceRule;
+
+  it("offers reminders on a locked timed recurring series", () => {
+    mocks.recurrenceRules = [rule];
+    renderPopover(
+      makePage({ scheduleLocked: true, syncState: "active", timezone: "Europe/Berlin" })
+    );
+    expect(screen.getByLabelText("Page reminders")).toBeInTheDocument();
+  });
+
+  // An all-day page has no start time to count a lead time back from, but it
+  // does have the day-before anchor — same split the editor byline makes, so
+  // the bell is offered here too and the dropdown carries the all-day options.
+  it("offers the day-before reminder on a locked all-day recurring series", async () => {
+    mocks.recurrenceRules = [rule];
+    renderPopover(
+      makePage({
+        scheduledEnd: "2099-01-06",
+        scheduledStart: "2099-01-05",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    const bell = screen.getByLabelText("Page reminders");
+    expect(bell).toBeInTheDocument();
+
+    fireEvent.pointerDown(bell, { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("menuitem", { name: /Day before at 9:00/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /10 min before/ })).not.toBeInTheDocument();
+  });
+
+  it("offers lead times on a timed page", async () => {
+    renderPopover(makePage({}));
+
+    fireEvent.pointerDown(screen.getByLabelText("Page reminders"), { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("menuitem", { name: /10 min before/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Day before at 9:00/ })).not.toBeInTheDocument();
+  });
+});
+
+// The lock is enforced in the backend and every write path already refuses, but a
+// control the user can reach and press only to have the change revert reads as the
+// app losing their edit. So the affordances have to be gone, not merely inert —
+// and each is a separate branch, which is why the absences are asserted one by one
+// against an unlocked control that proves the query would have found them.
+describe("PageBlockPopover — a locked mirror offers no schedule affordances", () => {
+  const schedulePicker = () => screen.queryByRole("button", { name: /^Scheduled:|^Set schedule$/ });
+  const folderPicker = () => screen.queryByRole("button", { name: /^Folder:/ });
+
+  it("drops the date and folder pickers", () => {
+    renderPopover(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    expect(schedulePicker()).not.toBeInTheDocument();
+    expect(folderPicker()).not.toBeInTheDocument();
+  });
+
+  it("keeps both on an unlocked page", () => {
+    renderPopover(makePage({ scheduleLocked: false, syncState: null }));
+
+    expect(schedulePicker()).toBeInTheDocument();
+    expect(folderPicker()).toBeInTheDocument();
+  });
+
+  it("keeps them on a detached page — the lock is what gates them, not the origin", () => {
+    renderPopover(makePage({ scheduleLocked: false, syncState: "detached" }));
+
+    expect(schedulePicker()).toBeInTheDocument();
+    expect(folderPicker()).toBeInTheDocument();
+  });
+});

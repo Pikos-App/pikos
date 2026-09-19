@@ -1,10 +1,10 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { Check, Copy, ExternalLink, Pencil, Unlink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("LinkPopover");
 
@@ -228,7 +228,7 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
   };
 
   const handleOpen = () => {
-    void openUrl(linkHref);
+    void getPlatform().openExternal(linkHref);
   };
 
   // Position is derived during render from editor state. A version counter

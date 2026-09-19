@@ -1,9 +1,22 @@
 // MD path: markdown string → parseMarkdownVault → convertMarkdownToTiptap → editor.getJSON()
 //          → editor.storage.markdown.getMarkdown() → parseMarkdownVault → verify metadata + content
 //
+// Both ends of that loop are tiptap-markdown, so it says nothing about the Markdown a
+// vault *export* writes — that is the Rust exporter, covered by
+// markdownExport.conformance.test.ts.
+//
 // CSV path: CSV string → prepareCSVRows + applyMappings → verify metadata fields
 //           → build CSV from output → re-parse → verify round-trip
 
+import type { CSVMappingConfig, ImportPage, VaultFile } from "@pikos/core";
+import {
+  applyMappings,
+  detectUniqueValues,
+  parseMarkdownVault,
+  prepareCSVRows,
+  suggestColumnMappings,
+  suggestValueMappings,
+} from "@pikos/core";
 import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
@@ -19,16 +32,6 @@ import { Markdown } from "tiptap-markdown";
 import { describe, expect, it } from "vitest";
 
 import { convertMarkdownToTiptap } from "./hooks/useImport";
-import {
-  applyMappings,
-  detectUniqueValues,
-  prepareCSVRows,
-  suggestColumnMappings,
-  suggestValueMappings,
-} from "./parsers/csv";
-import { parseMarkdownVault, type VaultFile } from "./parsers/markdown";
-import type { CSVMappingConfig, ImportPage } from "./parsers/types";
-
 function createTestEditor(): Editor {
   return new Editor({
     content: "",

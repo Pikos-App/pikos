@@ -7,9 +7,13 @@ interface Props {
 }
 const { current = "/" } = Astro.props;
 
+// A newcomer's questions, in order: what does it do, how does it compare, who is
+// building it. Release Notes sits in the footer instead, because it answers a
+// question only an existing user asks.
 const links = [
+  { href: "/guides", label: "Guides" },
+  { href: "/compare", label: "Compare" },
   { href: "/blog", label: "Blog" },
-  { href: "/release-notes", label: "Release Notes" },
 ];
 ---
 

@@ -4,10 +4,11 @@
   "license": "BUSL-1.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/adapters/MockStorageAdapter.ts"
   },
   "scripts": {
-    "lint": "eslint src",
+    "lint": "eslint src --cache --cache-location node_modules/.cache/eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -20,8 +21,8 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@pikos/recurrence-wasm": "workspace:*",
     "chrono-node": "^2.9.0",
-    "date-fns": "^4.1.0",
-    "rrule": "^2.8.1"
+    "date-fns": "^4.1.0"
   }
 }

@@ -1,27 +1,67 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
-
-import {
-  type CalendarCollapseConfig,
-  DEFAULT_COLLAPSE_CONFIG,
-} from "@/features/calendar/utils/calendarConstants";
+import type {
+  CalendarCollapseConfig,
+  CalendarDayCount,
+  CalendarDensity,
+  CalendarMetrics,
+  CalendarViewMode,
+  CollapseGeometry,
+} from "@pikos/core";
 import {
   buildCollapseGeometry,
-  type CalendarMetrics,
   clampBottomHour,
   clampTopHour,
-  type CollapseGeometry,
   computeCalendarMetrics,
-} from "@/features/calendar/utils/calendarGeometry";
-import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
+  DEFAULT_COLLAPSE_CONFIG,
+} from "@pikos/core";
+import { useState } from "react";
+
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { createSettingsContext } from "@/shared/context/createSettingsContext";
+import { stepTextSize, TEXT_SIZES, type TextSize } from "@/shared/context/textSizes";
+/** Event-title sizes in px, ascending. The calendar names a px like the editor
+ *  does rather than a word like the interface does, because both have one body
+ *  size everything else is relative to and the interface has none
+ *  (PKOS-0067 leaves the vocabulary per-area, the control shape shared).
+ *  13 is `type-body-sm`, what an event title renders at today. */
+export const CALENDAR_TEXT_SIZES = TEXT_SIZES;
+
+export type CalendarTextSize = TextSize;
+
+export const DEFAULT_CALENDAR_TEXT_SIZE: CalendarTextSize = 14;
+
+/** What an event title rendered at before this setting existed (`type-body-sm`),
+ *  and therefore what a chosen px is measured against. Not on the ladder: the
+ *  editor's rungs are, and the two rows offer the same options. */
+const CALENDAR_TEXT_BASE = 13;
+
+/** The multiplier the CSS and the hour-height floor both want. Derived rather
+ *  than stored, so the stored value stays the number the setting shows. */
+export function calendarTextScale(size: CalendarTextSize): number {
+  return size / CALENDAR_TEXT_BASE;
+}
+
+export const stepCalendarTextSize = stepTextSize;
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
-export type { CalendarDayCount };
+export type { CalendarDayCount, CalendarViewMode };
 
 export interface CalendarSettingsValue {
   dayCount: CalendarDayCount;
   setDayCount: (v: CalendarDayCount) => void;
+  /** Which shape the calendar renders: the day-count time grid, or month view.
+   * Persisted alongside — not inside — `dayCount`, so switching to month view
+   * and back restores the user's day count untouched, and a value already in
+   * localStorage keeps meaning exactly what it meant before month view existed. */
+  viewMode: CalendarViewMode;
+  setViewMode: (v: CalendarViewMode) => void;
   density: CalendarDensity;
   setDensity: (v: CalendarDensity) => void;
+  /** Event-title size in px, independent of the interface text size. Raising it
+   *  raises `metrics.hourHeight` when the text would otherwise be taller than
+   *  the block holding it. */
+  textSize: CalendarTextSize;
+  setTextSize: (v: CalendarTextSize) => void;
+  stepTextSize: (direction: 1 | -1) => void;
   /** Derived from density — convenient so callers don't recompute. */
   metrics: CalendarMetrics;
   /** Pixel layout of the collapsible bands at the current hourHeight. */
@@ -39,29 +79,41 @@ export interface CalendarSettingsValue {
   setHoveredBand: (v: "top" | "bottom" | null) => void;
 }
 
-export const CalendarSettingsContext = createContext<CalendarSettingsValue | null>(null);
-
-export function CalendarSettingsProvider({ children }: { children: ReactNode }) {
-  const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>("pikos:calendarDayCount", 7);
-  const [density, setDensity] = useLocalStorage<CalendarDensity>("pikos:calendarDensity", "normal");
+function useCalendarSettingsValue(): CalendarSettingsValue {
+  const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>(
+    STORAGE_KEYS.calendarDayCount,
+    7
+  );
+  const [viewMode, setViewMode] = useLocalStorage<CalendarViewMode>(
+    STORAGE_KEYS.calendarViewMode,
+    "time"
+  );
+  const [density, setDensity] = useLocalStorage<CalendarDensity>(
+    STORAGE_KEYS.calendarDensity,
+    "normal"
+  );
+  const [textSize, setTextSize] = useLocalStorage<CalendarTextSize>(
+    STORAGE_KEYS.calendarTextSize,
+    DEFAULT_CALENDAR_TEXT_SIZE
+  );
   const [topCollapsed, setTopCollapsedRaw] = useLocalStorage<boolean>(
-    "pikos:calendarTopCollapsed",
+    STORAGE_KEYS.calendarTopCollapsed,
     DEFAULT_COLLAPSE_CONFIG.topCollapsed
   );
   const [bottomCollapsed, setBottomCollapsedRaw] = useLocalStorage<boolean>(
-    "pikos:calendarBottomCollapsed",
+    STORAGE_KEYS.calendarBottomCollapsed,
     DEFAULT_COLLAPSE_CONFIG.bottomCollapsed
   );
   const [topHour, setTopHourRaw] = useLocalStorage<number>(
-    "pikos:calendarTopHour",
+    STORAGE_KEYS.calendarTopHour,
     DEFAULT_COLLAPSE_CONFIG.topHour
   );
   const [bottomHour, setBottomHourRaw] = useLocalStorage<number>(
-    "pikos:calendarBottomHour",
+    STORAGE_KEYS.calendarBottomHour,
     DEFAULT_COLLAPSE_CONFIG.bottomHour
   );
 
-  const metrics = computeCalendarMetrics(density);
+  const metrics = computeCalendarMetrics(density, calendarTextScale(textSize));
   const collapse: CalendarCollapseConfig = {
     bottomCollapsed,
     bottomHour,
@@ -76,7 +128,7 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
   // Ephemeral, not persisted — pointer-tracking state for the band hover sync.
   const [hoveredBand, setHoveredBand] = useState<"top" | "bottom" | null>(null);
 
-  const value: CalendarSettingsValue = {
+  return {
     collapse,
     dayCount,
     density,
@@ -88,18 +140,18 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
     setDayCount,
     setDensity,
     setHoveredBand,
+    setTextSize,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
+    setViewMode,
+    stepTextSize: (direction) => setTextSize((prev) => stepCalendarTextSize(prev, direction)),
+    textSize,
+    viewMode,
   };
-
-  return (
-    <CalendarSettingsContext.Provider value={value}>{children}</CalendarSettingsContext.Provider>
-  );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useCalendarSettings(): CalendarSettingsValue {
-  const ctx = useContext(CalendarSettingsContext);
-  if (!ctx) throw new Error("useCalendarSettings must be used within <CalendarSettingsProvider>");
-  return ctx;
-}
+const calendarSettings = createSettingsContext("CalendarSettings", useCalendarSettingsValue);
+
+export const CalendarSettingsContext = calendarSettings.Context;
+export const CalendarSettingsProvider = calendarSettings.Provider;
+export const useCalendarSettings = calendarSettings.useSettings;

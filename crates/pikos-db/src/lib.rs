@@ -9,25 +9,73 @@
 // borrow before pushing additional clauses — clippy flags this but it's required.
 #![allow(clippy::drop_non_drop)]
 
+pub mod backups;
 pub mod error;
+pub mod focus;
 pub mod folders;
 pub mod notification_log;
 pub mod pages;
 mod pool;
+pub mod reconciler;
+pub mod recurrence_derive;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
+pub mod sync;
+pub mod sync_commands;
+pub mod sync_delta;
 pub mod tags;
 pub mod tx;
 
+pub use backups::{list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind};
 pub use error::{AppError, AppResult};
+pub use focus::*;
 pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
-pub use pool::{now_iso, now_local_iso, open_pool};
+pub use pool::{
+    build_tiptap_doc, device_zone, extract_text_from_tiptap, migration_versions, now_iso,
+    now_local_iso, open_pool, today_local,
+};
 #[cfg(any(test, feature = "test-support"))]
-pub use pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
+pub use pool::{
+    insert_test_folder, insert_test_page, insert_test_page_sync,
+    insert_test_page_sync_connected_at, test_pool, TestPage, TEST_CONNECTED_LONG_AGO,
+};
+pub use reconciler::*;
+pub use recurrence_derive::*;
 pub use reminders::*;
 pub use schedules::*;
 pub use search::*;
+pub use sync::*;
+pub use sync_commands::*;
+pub use sync_delta::*;
 pub use tags::*;
+
+#[cfg(test)]
+#[path = "sync_conformance_tests.rs"]
+mod sync_conformance_tests;
+
+#[cfg(test)]
+#[path = "recurrence_conformance_tests.rs"]
+mod recurrence_conformance_tests;
+
+#[cfg(test)]
+#[path = "core_conformance_tests.rs"]
+mod core_conformance_tests;
+
+#[cfg(test)]
+#[path = "content_text_conformance_tests.rs"]
+mod content_text_conformance_tests;
+
+#[cfg(test)]
+#[path = "search_tokenization_conformance_tests.rs"]
+mod search_tokenization_conformance_tests;
+
+#[cfg(test)]
+#[path = "folder_matching_conformance_tests.rs"]
+mod folder_matching_conformance_tests;
+
+#[cfg(test)]
+#[path = "schedule_snap_conformance_tests.rs"]
+mod schedule_snap_conformance_tests;

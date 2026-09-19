@@ -1,53 +1,53 @@
-import type { PageStatus, PageSummary, VirtualOccurrence } from "@pikos/core";
-import { isDone, nowLocalISO } from "@pikos/core";
+import type { PageSummary } from "@pikos/core";
+import { isDone } from "@pikos/core";
 
-import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
+import { useRecurringGapDialog } from "@/shared/context/RecurringGapDialogContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
 interface UseRecurringActionsResult {
   /** True when the page is a virtual rrule occurrence (not a real DB page). */
-  isRecurring: boolean;
+  isVirtual: boolean;
+  /**
+   * Whether the block offers a checkbox. A synced-origin occurrence is ticked
+   * where it renders — completion records that this instance is resolved. A
+   * native virtual shows the repeat glyph instead and funnels to its head,
+   * which is always the next thing due.
+   */
+  showsCheckbox: boolean;
   /** Toggle status — routes through recurring completion for recurring pages. */
   toggleStatus: () => void;
-  /** Skip a virtual occurrence (add to exdates) with undo toast. No-op for non-virtual pages. */
-  skipOccurrence: () => Promise<void>;
+  /**
+   * The block's delete gesture. A rendered occurrence — a virtual, or a moved
+   * synced instance, which is shaped from its series page and would otherwise
+   * trash the whole series — dismisses that one date. Anything else is a real
+   * page and goes to the page trash.
+   */
+  deleteBlock: () => void;
 }
 
 export function useRecurringActions(page: PageSummary): UseRecurringActionsResult {
-  const { recurrenceRules, skipOccurrence: skipOccurrenceFn, updatePage } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
-  const { requestUndoableAction } = useUndoDelete();
+  const togglePageStatus = useRecurringStatusToggle();
+  const { requestDelete } = useRecurringGapDialog();
+  const { requestDeletePage } = useUndoDelete();
 
-  const isRecurring = "isVirtual" in page && (page as { isVirtual?: boolean }).isVirtual === true;
+  const isVirtual = "isVirtual" in page && (page as { isVirtual?: boolean }).isVirtual === true;
+  const isOccurrence = isVirtual || "originalDate" in page;
   const done = isDone(page);
 
   function toggleStatus() {
-    const newStatus: PageStatus = done ? "not_started" : "done";
-    if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      // Routes through the gap-resolution dialog. If today > head's
-      // scheduledStart there are missed days that need a policy decision;
-      // otherwise the request resolves immediately to advance.
-      requestRecurringComplete(page.id);
-      return;
-    }
-    updatePage(page.id, {
-      completedAt: newStatus === "done" ? nowLocalISO() : null,
-      status: newStatus,
-    });
+    togglePageStatus(page, done ? "not_started" : "done");
   }
 
-  async function handleSkipOccurrence() {
-    if (!isRecurring) return;
-    const virtual = page as VirtualOccurrence;
-    const undoFn = await skipOccurrenceFn(virtual.ruleId, virtual.originalDate);
-    const undoId = `skip:${virtual.ruleId}:${virtual.originalDate}`;
-    requestUndoableAction(undoId, `Skipped ${page.title || "occurrence"}`, undoFn);
+  function deleteBlock() {
+    if (isOccurrence) requestDelete(page);
+    else requestDeletePage(page);
   }
 
   return {
-    isRecurring,
-    skipOccurrence: handleSkipOccurrence,
+    deleteBlock,
+    isVirtual,
+    showsCheckbox: !isVirtual || !!page.syncState,
     toggleStatus,
   };
 }

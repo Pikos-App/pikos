@@ -1,9 +1,10 @@
 name: Validate
 
 # Reusable validation gate shared by CI (on PR/main push) and Release (on tag).
-# Three parallel jobs: verify (typecheck/lint/unit), e2e (Playwright tier1+tier2),
-# rust (fmt/check/clippy/test). Warn-only audit steps stay here so release runs
-# emit the same signals CI does.
+# Parallel jobs: verify (typecheck/lint), coverage (unit + thresholds), e2e
+# (Playwright tier1+tier2), rust (fmt/check/clippy/test), wasm (committed
+# recurrence pkg matches its crate). Warn-only audit steps stay here so release
+# runs emit the same signals CI does.
 
 on:
   workflow_call:
@@ -42,7 +43,10 @@ jobs:
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 
-      # Dep vulnerability gate — non-blocking for one cycle, then promote.
+      # Reports only. Most of what it finds is the Astro build toolchain and the
+      # test runner, neither of which reaches a user, so promoting this as-is
+      # would just pin the build red. Making it block needs a reviewed list of
+      # accepted advisory ids to fail against.
       - name: pnpm audit (high)
         continue-on-error: true
         run: pnpm audit --audit-level=high
@@ -116,7 +120,7 @@ jobs:
         run: |
           PKG=$(pnpm --filter @pikos/desktop exec playwright --version | awk '{print $NF}')
           if [ "$PKG" != "1.58.2" ]; then
-            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in ci.yml and _validate.yml."
+            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in _build.yml and _validate.yml."
             exit 1
           fi
 
@@ -189,28 +193,86 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri -> target
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+          # libdbus-1-dev backs the Linux keychain (keyring's sync-secret-service); without it
+          # pikos-calendar-sync fails at link time.
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
 
-      - name: Cargo fmt --check
+      # Two Cargo trees, both gated. The root workspace is `crates/*` and it
+      # *excludes* apps/desktop/src-tauri, so `--all` inside src-tauri resolves to
+      # that one standalone crate — running only there left pikos-db, -cli,
+      # -calendar-sync and -recurrence with no CI coverage at all. Mirrors the
+      # split .husky/pre-push already runs.
+      - name: Cargo fmt --check (workspace)
+        working-directory: .
+        run: cargo fmt --all --check
+
+      - name: Cargo clippy (workspace, zero warnings)
+        working-directory: .
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # pikos-cli's `add` tests drive the real NLP parser through the
+      # @pikos/bridge bundle and silently skip themselves when it is absent —
+      # so without this build step the CLI's whole parser surface passes
+      # vacuously here.
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Build the parser bridge
+        working-directory: .
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @pikos/bridge build
+
+      - name: Cargo test (workspace)
+        working-directory: .
+        run: cargo test --workspace --quiet
+
+      # The one test that asks the OS for its keychain. Every other keychain test injects a map,
+      # so a build naming no backend for this platform passes all of them and then forgets every
+      # password at runtime, which is what 0.4.0-beta.3 did.
+      - name: Linux keyring round-trip
+        working-directory: .
+        run: |
+          sudo apt-get install -y gnome-keyring dbus-x11 libsecret-tools
+          bash scripts/linux-keyring-check.sh
+
+      # The connect itself, against a CalDAV server that answers and a Secret Service
+      # that persists — the two things every other test of this path fakes. It is not
+      # the manual Linux matrix, which needs a desktop session, but it is the row
+      # underneath it: connecting works and the password is still there afterwards.
+      - name: Linux CalDAV connect round-trip
+        working-directory: .
+        run: |
+          sudo apt-get install -y gnome-keyring dbus-x11 libsecret-tools radicale
+          bash scripts/linux-sync-check.sh
+
+      - name: Cargo fmt --check (desktop crate)
         run: cargo fmt --check
 
-      - name: Cargo check (zero warnings)
+      - name: Cargo check (desktop crate, zero warnings)
         env:
           RUSTFLAGS: "-D warnings"
         run: cargo check
 
-      - name: Cargo clippy (zero warnings)
+      - name: Cargo clippy (desktop crate, zero warnings)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Cargo test
+      - name: Cargo test (desktop crate)
         run: cargo test --all --quiet
 
-      # cargo-audit gate — non-blocking for one cycle, then promote to blocking.
       # Cached binary so we don't reinstall every run.
       - name: Cache cargo-audit
         id: cache-cargo-audit
@@ -223,6 +285,85 @@ jobs:
         if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
         run: cargo install cargo-audit --locked
 
+      # Blocking. This tree is Pikos's own crates and the dependencies they chose,
+      # so an advisory here is a decision someone made. What it may stay quiet
+      # about, and why, is `.cargo/audit.toml`.
       - name: Cargo audit
+        working-directory: .
+        run: cargo audit
+
+      # Reports only. The desktop crate is outside the workspace and keeps its own
+      # lock, which is the one the shipped binary is built from, so it has to be
+      # audited separately — but its tree is mostly Tauri's and the advisories that
+      # land in it are rarely Pikos's to fix. Promoting it means deciding what to
+      # accept from a dependency nobody here controls.
+      - name: Cargo audit (desktop)
         continue-on-error: true
         run: cargo audit
+
+  # packages/core/src/generated mirrors pikos-db's wire structs and is committed, so
+  # it drifts the moment a Rust field changes without a regeneration — with every
+  # other gate still green, since both sides typecheck fine in isolation. Same
+  # artifact-freshness shape as the wasm job below.
+  bindings:
+    name: Bindings Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate the committed bindings
+        run: scripts/gen-ts-bindings.sh
+
+      - name: Fail if the bindings are stale
+        run: |
+          if [ -n "$(git status --porcelain packages/core/src/generated)" ]; then
+            echo "::error::packages/core/src/generated does not match pikos-db. Run scripts/gen-ts-bindings.sh and commit the result."
+            git --no-pager diff -- packages/core/src/generated
+            exit 1
+          fi
+
+  # packages/recurrence-wasm/pkg is a committed build artifact, so it can drift
+  # from the crate it was generated from with every other gate still green: the
+  # Rust tests cover the crate, the JS tests cover the stale pkg. Rebuilding and
+  # diffing is what ties them together. The script compiles inside a pinned
+  # container so this runner and a contributor's Mac emit the same bytes; rustc's
+  # wasm output is host-dependent, and no flag pins that (see the script).
+  wasm:
+    name: Wasm Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # No toolchain setup: the script compiles inside its own pinned image, and
+      # a runner-installed rustc or wasm-bindgen would not be the one it uses.
+      - name: Rebuild the committed pkg
+        run: scripts/build-recurrence-wasm.sh
+
+      - name: Fail if pkg is stale
+        run: |
+          if [ -n "$(git status --porcelain packages/recurrence-wasm/pkg)" ]; then
+            echo "::error::packages/recurrence-wasm/pkg does not match the recurrence crate. Run scripts/build-recurrence-wasm.sh and commit the result."
+            git status --porcelain packages/recurrence-wasm/pkg
+            exit 1
+          fi
+          echo "✓ pkg matches the crate"

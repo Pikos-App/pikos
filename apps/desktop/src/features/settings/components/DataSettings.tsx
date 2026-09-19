@@ -1,19 +1,22 @@
-import { storageErrorUserMessage, toStorageError } from "@pikos/core";
-import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { WorkspaceExportFormat } from "@pikos/core";
+import { formatTimeAgo, storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { Download, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { TypedConfirmDialog } from "@/components/ui/typed-confirm-dialog";
 import { ImportSection } from "@/features/import";
 import type { ImportState, LastImportResult } from "@/features/import";
-import { formatTimeAgo } from "@/features/import/parsers/utils";
 import { deleteAllData } from "@/lib/data/deleteAllData";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
+import { RestoreSection } from "./RestoreSection";
 import { UsageStats } from "./UsageStats";
 import type { UsageStatsData } from "./UsageStats";
 
@@ -79,12 +82,13 @@ function ExportRow({
         {done && (
           <button
             className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => void revealItemInDir(state.path)}
+            onClick={() => void getPlatform().revealInDir(state.path)}
           >
             Show in Finder
           </button>
         )}
         <button
+          aria-label={label}
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled || saving}
           onClick={onExport}
@@ -120,23 +124,29 @@ export function DataSettings({
   resetImport,
   usageStats,
 }: DataSettingsProps) {
-  const { workspace } = useWorkspace();
+  const { storage, workspace } = useWorkspace();
+  const { notificationsEnabled } = useAppSettings();
+  const { folders } = usePages();
   const { showNotice } = useUndoDelete();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [csvExport, setCsvExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
+  const [icsExport, setIcsExport] = useState<ExportState>({ status: "idle" });
+  const [includeSynced, setIncludeSynced] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const hasSyncedCalendar = folders.some((f) => f.isExternalCalendar);
+
   async function handleDeleteAll() {
-    if (deleting) return;
+    if (deleting || !storage) return;
     setDeleting(true);
     setDeleteOpen(false);
     showNotice("Deleting all data…", 5000);
     // Brief pause so the toast renders before relaunch tears down the WebView.
     await new Promise((r) => setTimeout(r, 800));
     try {
-      await deleteAllData();
+      await deleteAllData(storage);
       // On success, deleteAllData calls relaunch — no further UI needed.
     } catch (e) {
       log.error("deleteAllData failed", e);
@@ -145,53 +155,40 @@ export function DataSettings({
     }
   }
 
-  async function handleExportSqlite() {
-    setSqliteExport({ status: "saving" });
+  /** Every export row runs the same saving → done/error cycle; only the
+   *  adapter call and the failure verb differ. */
+  async function runExport(
+    setState: (next: ExportState) => void,
+    verb: string,
+    produce: () => Promise<string>
+  ) {
+    setState({ status: "saving" });
     try {
-      const dest = await invoke<string>("backup_db");
-      setSqliteExport({ path: dest, status: "done" });
+      setState({ path: await produce(), status: "done" });
     } catch (e: unknown) {
-      setSqliteExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your SQLite backup"),
-        status: "error",
-      });
+      setState({ message: storageErrorUserMessage(toStorageError(e), verb), status: "error" });
     }
   }
 
-  async function handleExportCsv() {
-    setCsvExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_csv");
-      setCsvExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setCsvExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your CSV"),
-        status: "error",
-      });
-    }
-  }
-
-  async function handleExportMarkdown() {
-    setMarkdownExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_markdown");
-      setMarkdownExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setMarkdownExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your Markdown"),
-        status: "error",
-      });
-    }
+  function exportAs(
+    format: WorkspaceExportFormat,
+    setState: (next: ExportState) => void,
+    verb: string
+  ) {
+    void runExport(setState, verb, () => {
+      if (!storage) throw new Error("Workspace not ready");
+      return storage.exportWorkspace(format, { includeSynced });
+    });
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       {/* ── Usage stats ────────────────────────────────────────────────── */}
       <SettingsSection
         description="Your data is stored locally and never leaves your device."
         title="Your Workspace"
       >
-        <UsageStats stats={usageStats} />
+        <UsageStats notificationsEnabled={notificationsEnabled} stats={usageStats} />
       </SettingsSection>
 
       {/* ── Import ──────────────────────────────────────────────────── */}
@@ -205,7 +202,7 @@ export function DataSettings({
                 {lastImportResult.folderCount > 0 &&
                   ` into ${lastImportResult.folderCount} folder${lastImportResult.folderCount !== 1 ? "s" : ""}`}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-2xs text-muted-foreground">
                 via {lastImportResult.source === "markdown" ? "Markdown" : "CSV"} ·{" "}
                 {formatTimeAgo(lastImportResult.importedAt)}
               </p>
@@ -234,6 +231,14 @@ export function DataSettings({
         />
       </SettingsSection>
 
+      {/* ── Restore ────────────────────────────────────────────────────── */}
+      <SettingsSection
+        description="Pikos snapshots your workspace before anything that rewrites it. Put one back if something has gone wrong."
+        title="Restore"
+      >
+        <RestoreSection />
+      </SettingsSection>
+
       {/* ── Export ─────────────────────────────────────────────────────── */}
       <SettingsSection description="Download your data in different formats." title="Export">
         <div className="rounded-lg border border-border bg-card px-4">
@@ -241,23 +246,53 @@ export function DataSettings({
             description="Full database backup. Best for restoring data."
             disabled={!workspace}
             label="Export as SQLite"
-            onExport={() => void handleExportSqlite()}
+            onExport={() =>
+              void runExport(setSqliteExport, "exporting your SQLite backup", () => {
+                if (!storage) throw new Error("Workspace not ready");
+                return storage.backupDatabase();
+              })
+            }
             state={sqliteExport}
           />
           <ExportRow
             description="Spreadsheet of all pages with metadata. Re-importable."
             disabled={!workspace}
             label="Export as CSV"
-            onExport={() => void handleExportCsv()}
+            onExport={() => exportAs("csv", setCsvExport, "exporting your CSV")}
             state={csvExport}
           />
           <ExportRow
             description="Markdown files with YAML frontmatter. Obsidian-compatible."
             disabled={!workspace}
             label="Export as Markdown"
-            onExport={() => void handleExportMarkdown()}
+            onExport={() => exportAs("markdown", setMarkdownExport, "exporting your Markdown")}
             state={markdownExport}
           />
+          <ExportRow
+            description="Scheduled pages as an .ics file. Opens in any calendar app."
+            disabled={!workspace}
+            label="Export as Calendar"
+            onExport={() => exportAs("ics", setIcsExport, "exporting your calendar")}
+            state={icsExport}
+          />
+          {hasSyncedCalendar && (
+            <div className="flex items-center justify-between gap-6 py-3">
+              <div className="min-w-0">
+                <label className="text-sm font-medium" htmlFor="export-include-synced">
+                  Include synced calendar events
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Adds events Pikos reads in from your connected calendars to the Markdown, CSV and
+                  Calendar exports. Ones you've completed or edited are always included.
+                </p>
+              </div>
+              <Switch
+                checked={includeSynced}
+                id="export-include-synced"
+                onCheckedChange={setIncludeSynced}
+              />
+            </div>
+          )}
         </div>
       </SettingsSection>
 
@@ -272,8 +307,8 @@ export function DataSettings({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Delete All Data</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Permanently deletes all pages, folders, tags, and settings on this device. This
-                cannot be undone.
+                Permanently deletes all pages, folders, tags, and settings on this device, and
+                disconnects any calendar account you've connected. This cannot be undone.
               </p>
             </div>
             <Button
@@ -294,7 +329,7 @@ export function DataSettings({
         cancelLabel="Cancel"
         confirmLabel="Delete Everything"
         confirmPhrase="delete"
-        description="This will permanently delete all pages, folders, tags, and settings on this device. Your data is stored locally and cannot be recovered after deletion."
+        description="This will permanently delete all pages, folders, tags, and settings on this device, and disconnect any calendar account you've connected. Your data is stored locally and cannot be recovered after deletion."
         onConfirm={() => void handleDeleteAll()}
         onOpenChange={setDeleteOpen}
         open={deleteOpen}

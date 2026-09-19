@@ -2,6 +2,7 @@ import { useDndMonitor } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder } from "@pikos/core";
+import { PALETTE_COLORS } from "@pikos/core";
 import { useState } from "react";
 
 import {
@@ -15,17 +16,6 @@ import {
 } from "@/components/ui/context-menu";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
-
-const COLORS = [
-  { label: "Red", value: "#E5534B" },
-  { label: "Orange", value: "#E09B4A" },
-  { label: "Yellow", value: "#C4A143" },
-  { label: "Green", value: "#57A872" },
-  { label: "Teal", value: "#3DBDA7" },
-  { label: "Blue", value: "#539BF5" },
-  { label: "Purple", value: "#9B8AE8" },
-  { label: "Pink", value: "#DB6C9E" },
-] as const;
 
 export interface FolderItemProps {
   folder: Folder;
@@ -97,7 +87,7 @@ export function FolderItem({
           onSelect={onSelect}
           prefix={
             <span
-              className="mt-0.75 h-2 w-2 shrink-0 rounded-sm"
+              className="color-dot mt-0.75 h-2 w-2 shrink-0 rounded-sm"
               style={{ backgroundColor: folder.color ?? "var(--text-tertiary)" }}
             />
           }
@@ -119,10 +109,10 @@ export function FolderItem({
         <ContextMenuSub>
           <ContextMenuSubTrigger>Color</ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            {COLORS.map(({ label, value }) => (
+            {PALETTE_COLORS.map(({ label, value }) => (
               <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
                 <span
-                  className="mr-2 h-3 w-3 shrink-0 rounded-full"
+                  className="color-dot mr-2 h-3 w-3 shrink-0 rounded-full"
                   style={{ backgroundColor: value }}
                 />
                 {label}

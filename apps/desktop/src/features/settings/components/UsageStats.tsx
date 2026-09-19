@@ -1,7 +1,10 @@
+import type { WorkspaceUsageStats, WorkspaceWeekActivity } from "@pikos/core";
 import {
   BarChart3,
+  BellRing,
   BookOpen,
   Calendar,
+  CalendarSync,
   CheckCircle2,
   Clock,
   FileText,
@@ -9,36 +12,18 @@ import {
   FolderOpen,
   Hash,
   Layers,
+  Repeat,
   Timer,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-interface WeekActivity {
-  week: string;
-  created: number;
-  edited: number;
-  completed: number;
-}
+import { weekLabel } from "../utils/weekLabel";
+import { FocusSummary } from "./FocusSummary";
 
-export interface UsageStatsData {
-  total_pages: number;
-  total_folders: number;
-  total_schedules: number;
-  total_focus_sessions: number;
-  total_focus_minutes: number;
-  total_completed: number;
-  total_words: number;
-  weekly_activity: WeekActivity[];
-  has_folders: boolean;
-  has_schedules: boolean;
-  has_recurring: boolean;
-  has_focus_sessions: boolean;
-  has_subtasks: boolean;
-  has_tags: boolean;
-  has_priorities: boolean;
-  first_page_date: string | null;
-}
+/** The shape now lives on the storage seam (`getUsageStats`); this alias keeps
+ *  the panel's long-standing local name for it. */
+export type UsageStatsData = WorkspaceUsageStats;
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -82,18 +67,19 @@ function StatCard({
         <span className="text-xs">{label}</span>
       </div>
       <span className="text-xl font-semibold tracking-tight tabular-nums">{value}</span>
-      {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
+      {sub && <span className="text-2xs text-muted-foreground">{sub}</span>}
     </div>
   );
 }
 
-function ActivityChart({ weeks }: { weeks: WeekActivity[] }) {
+function ActivityChart({ weeks }: { weeks: WorkspaceWeekActivity[] }) {
   const maxVal = Math.max(1, ...weeks.map((w) => Math.max(w.created, w.edited, w.completed)));
 
   return (
     <div className="space-y-2">
       <div className="flex items-end gap-1" style={{ height: 64 }}>
-        {weeks.map((w) => {
+        {weeks.map((w, i) => {
+          const label = weekLabel(weeks, i);
           const createdH = (w.created / maxVal) * 56;
           const editedH = (w.edited / maxVal) * 56;
           const completedH = (w.completed / maxVal) * 56;
@@ -105,25 +91,25 @@ function ActivityChart({ weeks }: { weeks: WeekActivity[] }) {
               <div
                 className="w-full max-w-[7px] rounded-t-sm bg-blue-500/60 transition-colors group-hover:bg-blue-500"
                 style={{ height: Math.max(createdH, w.created > 0 ? 2 : 0) }}
-                title={`${w.week}: ${w.created} created`}
+                title={`${label}: ${w.created} created`}
               />
               <div
                 className="w-full max-w-[7px] rounded-t-sm bg-violet-500/60 transition-colors group-hover:bg-violet-500"
                 style={{ height: Math.max(editedH, w.edited > 0 ? 2 : 0) }}
-                title={`${w.week}: ${w.edited} edited`}
+                title={`${label}: ${w.edited} edited`}
               />
               <div
                 className="w-full max-w-[7px] rounded-t-sm bg-emerald-500/60 transition-colors group-hover:bg-emerald-500"
                 style={{ height: Math.max(completedH, w.completed > 0 ? 2 : 0) }}
-                title={`${w.week}: ${w.completed} completed`}
+                title={`${label}: ${w.completed} completed`}
               />
             </div>
           );
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>{weeks[0]?.week}</span>
-        <span>{weeks[weeks.length - 1]?.week}</span>
+      <div className="flex justify-between text-3xs text-muted-foreground">
+        <span>{weekLabel(weeks, 0)}</span>
+        <span>{weekLabel(weeks, weeks.length - 1)}</span>
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5">
@@ -153,7 +139,10 @@ function FeatureBadge({
   label: string;
 }) {
   return (
+    // Colour is the only visual carrier of on/off, so the state is spelled out
+    // for anyone who can't read it — screen readers included.
     <div
+      aria-label={`${label}: ${active ? "in use" : "not used"}`}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
         active
@@ -167,7 +156,13 @@ function FeatureBadge({
   );
 }
 
-export function UsageStats({ stats }: { stats: UsageStatsData | null }) {
+export function UsageStats({
+  notificationsEnabled,
+  stats,
+}: {
+  notificationsEnabled: boolean;
+  stats: UsageStatsData | null;
+}) {
   if (!stats) return null;
 
   const memberDays = stats.first_page_date ? daysSince(stats.first_page_date) : 0;
@@ -218,6 +213,8 @@ export function UsageStats({ stats }: { stats: UsageStatsData | null }) {
         </div>
       )}
 
+      <FocusSummary stats={stats} />
+
       {/* Feature adoption */}
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -230,6 +227,18 @@ export function UsageStats({ stats }: { stats: UsageStatsData | null }) {
           <FeatureBadge active={stats.has_schedules} icon={Calendar} label="Scheduling" />
           <FeatureBadge active={stats.has_priorities} icon={Flag} label="Priorities" />
           <FeatureBadge active={stats.has_tags} icon={Hash} label="Tags" />
+          <FeatureBadge active={stats.has_recurring} icon={Repeat} label="Recurring" />
+          <FeatureBadge
+            active={notificationsEnabled && (stats.has_schedules || stats.has_reminders)}
+            icon={BellRing}
+            label="Notifications"
+          />
+          <FeatureBadge active={stats.has_focus_sessions} icon={Timer} label="Focus" />
+          <FeatureBadge
+            active={stats.has_calendar_sync}
+            icon={CalendarSync}
+            label="Calendar sync"
+          />
         </div>
       </div>
     </div>

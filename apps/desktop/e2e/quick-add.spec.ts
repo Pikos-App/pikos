@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { mod, test as appTest } from "./fixtures";
+import { test as appTest, mod } from "./fixtures";
 
 // ─── Basic Quick Add: chip defaults + NLP tokens ───────────────────────────
 
@@ -113,6 +113,26 @@ appTest("create recurring page shows recurrence label @tier2", async ({ app }) =
   ).toBeVisible();
 });
 
+// The chip preview runs on a 200ms debounce. Submit used to read the rrule from
+// that preview, so an Enter inside the window — pasting, or typing fast and
+// finishing on Enter — committed a plain page with the cadence silently dropped.
+// No wait here on purpose: the wait is what the bug hid behind.
+
+appTest("Quick Add keeps the cadence when Enter beats the preview @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every monday at 9am");
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  await app.locator("[data-page-list-item]").filter({ hasText: "standup" }).click();
+  await expect(
+    app.getByRole("button", { name: /recurrence: every week on Monday/i })
+  ).toBeVisible();
+});
+
 // ─── Create folder inline from FolderChip ──────────────────────────────────
 
 appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) => {
@@ -134,7 +154,7 @@ appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) =
   await expect(dialog).not.toBeVisible();
 
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  const folderBtn = sidebar.getByRole("button", { name: "Fresh Folder", exact: true });
+  const folderBtn = sidebar.getByRole("button", { exact: true, name: "Fresh Folder" });
   await expect(folderBtn).toBeVisible();
   await folderBtn.click();
   await expect(
