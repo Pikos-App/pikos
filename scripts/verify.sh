@@ -126,7 +126,7 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck lint prettier depcruise e2e-tags ui-tokens tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens shortcut-conflicts tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
