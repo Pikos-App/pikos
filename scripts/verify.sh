@@ -98,6 +98,12 @@ run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
 # old value with every check green. Pure node + string compare, same cheap-guard
 # reasoning as e2e-tags.
 run_check "ui-tokens"         bash scripts/check-ui-tokens.sh &
+# The keyboard registry logs a warning for a duplicate combo and registers both
+# anyway, so the winner is whichever component mounted last. Same cheap-guard
+# reasoning again: a text scan over call sites, catching what a runtime check
+# cannot, since the collisions that matter are the ones where two owners rarely
+# mount together.
+run_check "shortcut-conflicts" node scripts/check-shortcut-conflicts.mjs &
 
 # SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
 # runs the same desktop+core suite, with thresholds) is the single test pass.
