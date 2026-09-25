@@ -96,9 +96,34 @@ fn build_mirror_excerpt(mirror_search_text: Option<&str>, tokens: &[String]) -> 
     excerpt_around(&join_blocks(text), tokens)
 }
 
+/// Char index of the first whitespace at or after `target`.
+fn whitespace_at_or_after(body: &str, target: usize) -> Option<usize> {
+    let target_byte = char_to_byte(body, target);
+    body[target_byte..]
+        .find(char::is_whitespace)
+        .map(|b| body[..target_byte + b].chars().count())
+}
+
+/// Char index of the last whitespace before `target`.
+fn whitespace_before(body: &str, target: usize) -> Option<usize> {
+    let target_byte = char_to_byte(body, target);
+    body[..target_byte]
+        .rfind(char::is_whitespace)
+        .map(|b| body[..b].chars().count())
+}
+
 /// Window `body` around the first occurrence of any token, snapped to word
 /// boundaries and elided at both cut edges. Empty when no token is present.
 /// All indexing is char-based to avoid panics on multi-byte UTF-8.
+///
+/// Each edge snaps *outward*, to the edge of whatever word it lands in, so the
+/// window can only ever grow to a whole word. Snapping inward instead reads as an
+/// excerpt that starts mid-word — "r delivery" — which looks like corrupted data
+/// rather than like the sentence it came from, and on a body with a long unbroken
+/// run (a pasted URL) it has no boundary to move to at all. Growing outward also
+/// keeps the match inside the window by construction, where an inward snap on a
+/// body with one space could close the window past it and lose the match.
+/// `max_chars` is therefore a target, not a bound.
 fn excerpt_around(body: &str, tokens: &[String]) -> String {
     if body.is_empty() {
         return String::new();
@@ -122,24 +147,15 @@ fn excerpt_around(body: &str, tokens: &[String]) -> String {
     match match_char_pos {
         Some(pos) => {
             let half = max_chars / 2;
-            // Determine start/end in char indices, then snap to word boundaries
             let start_char = if pos > half {
-                let target = pos - half;
-                let target_byte = char_to_byte(body, target);
-                body[target_byte..]
-                    .find(char::is_whitespace)
-                    .map(|b| body[..target_byte + b].chars().count() + 1)
-                    .unwrap_or(target)
+                whitespace_before(body, pos - half)
+                    .map(|w| w + 1)
+                    .unwrap_or(0)
             } else {
                 0
             };
             let end_char = if pos + half < body_char_count {
-                let target = pos + half;
-                let target_byte = char_to_byte(body, target);
-                body[..target_byte]
-                    .rfind(char::is_whitespace)
-                    .map(|b| body[..b].chars().count())
-                    .unwrap_or(target)
+                whitespace_at_or_after(body, pos + half).unwrap_or(body_char_count)
             } else {
                 body_char_count
             };

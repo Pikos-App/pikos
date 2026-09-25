@@ -286,6 +286,30 @@ fn build_excerpt_joins_blocks_rather_than_running_them_together() {
     assert_eq!(out, "Measure the alcove \u{00B7} Order the desktop top");
 }
 
+/// A pasted URL is a word with no whitespace in it, so the edge the window wanted has no
+/// boundary to snap to. Cutting there is what makes an excerpt read as corrupted data.
+#[test]
+fn build_excerpt_never_cuts_a_word_in_half() {
+    // The hit sits far enough into the URL that the window's left edge lands inside it.
+    let body = "My Page\nSee https://example.com/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/motorized-standing-desk";
+    let out = build_excerpt(Some(body), "My Page", None, &["motorized".into()]);
+
+    let first = out.trim_start_matches('\u{2026}');
+    assert!(
+        first.starts_with("https://"),
+        "excerpt starts inside a word: {out:?}"
+    );
+}
+
+/// The window has to hold the match. Snapping inward on a body with one space closed both
+/// edges onto it and returned an excerpt of the wrong part of the page.
+#[test]
+fn build_excerpt_keeps_the_match_when_the_body_has_one_space() {
+    let body = "My Page\nSee ".to_string() + &"a".repeat(200) + "motorized" + &"b".repeat(200);
+    let out = build_excerpt(Some(&body), "My Page", None, &["motorized".into()]);
+    assert!(out.contains("motorized"), "{out:?}");
+}
+
 /// A mirror's metadata gets the same treatment, and it is the half a blank line tells apart:
 /// replacing every newline would leave an empty block between two separators.
 #[test]
