@@ -45,26 +45,29 @@ pub fn run() {
 
     logging::install_panic_hook();
 
-    // `mut` is needed under cfg(linux/windows) to chain the single-instance
-    // plugin; macOS routes URLs natively and doesn't need it.
-    #[allow(unused_mut)]
-    let mut builder = tauri::Builder::default();
+    let (sync_trigger_tx, sync_trigger_rx) = db::sync_loop::SyncTriggerSender::new();
 
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    // Registered on every desktop platform, macOS included. Two copies of Pikos
+    // against one profile is two notification schedulers and two sync loops on
+    // one SQLite file — reminders arrive twice, and because both copies claim
+    // the same bundle identifier, macOS is free to hand a notification click to
+    // whichever it likes. macOS does route deep-link URLs natively, which is
+    // what this cfg used to be about, but that says nothing about a second
+    // process: two bundles at different paths (an old build, a copy in
+    // ~/Downloads) are distinct to LaunchServices and both will run.
+    //
+    // This must stay first in the chain so a second launch exits during plugin
+    // setup, before the scheduler and the sync loop start.
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus the existing window. The URL itself is delivered by the
             // deep-link plugin's on_open_url handler registered in setup().
+            log::info!("second_instance_refused — focusing the running window");
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
-        }));
-    }
-
-    let (sync_trigger_tx, sync_trigger_rx) = db::sync_loop::SyncTriggerSender::new();
-
-    let builder = builder
+        }))
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())

@@ -28,6 +28,7 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
@@ -41,12 +42,6 @@ tokio = { version = "1", features = ["sync"] }
 tauri-plugin-log = "2"
 log = "0.4"
 thiserror = "2"
-
-# Single-instance is needed on Linux/Windows so deep-link URLs activated
-# while the app is already running route to the existing instance instead
-# of spawning a new one. macOS handles this natively via NSApplication.
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 # macOS foreground notifications. tauri-plugin-notification delivers via the
 # deprecated NSUserNotification API, which macOS suppresses while the app is
