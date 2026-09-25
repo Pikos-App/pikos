@@ -25,17 +25,7 @@ const SRC = join(ROOT, "apps/desktop/src");
 
 // Each entry silences one `scope::combo` and must say why it is not a defect.
 // Removing an entry is how a fix proves itself.
-const ALLOWED = new Map([
-  [
-    "modal::mod+backspace",
-    "The two calendar popovers both claim it. Known defect, not a decision — " +
-      "they do mount together, and the winner is whichever rendered last.",
-  ],
-  [
-    "modal::mod+shift+backspace",
-    "Same pair, same defect as modal::mod+backspace.",
-  ],
-]);
+const ALLOWED = new Map([]);
 
 // A scoped binding always beats a global one on the same combo — that is what
 // scopes are for, and it is invisible: the global shortcut simply stops working

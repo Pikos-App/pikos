@@ -19,7 +19,9 @@ import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
-import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
+
+import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
 interface PageBlockPopoverProps {
   page: PageSummary;
   onClose?: () => void;
@@ -46,13 +48,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
-  useKeyboardShortcut("Mod+Backspace", () => onDelete?.(), { scope: "modal" });
-  // Alias that overrides the OS line-delete inside the title input.
-  useKeyboardShortcut("Mod+Shift+Backspace", () => onDelete?.(), {
-    allowInInputs: true,
-    preventDefault: true,
-    scope: "modal",
-  });
+  useBlockDeleteShortcut(() => onDelete?.());
 
   // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);

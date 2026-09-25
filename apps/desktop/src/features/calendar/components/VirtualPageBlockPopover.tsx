@@ -7,7 +7,9 @@ import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
-import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
+
+import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
   onClose?: () => void;
@@ -60,12 +62,7 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
   }
 
   useKeyboardScope("modal");
-  useKeyboardShortcut("Mod+Backspace", () => onDelete(), { scope: "modal" });
-  useKeyboardShortcut("Mod+Shift+Backspace", () => onDelete(), {
-    allowInInputs: true,
-    preventDefault: true,
-    scope: "modal",
-  });
+  useBlockDeleteShortcut(onDelete);
 
   const rule = recurrenceRules.find((r) => r.id === page.ruleId);
   const folder = folders.find((f) => f.id === page.folderId);

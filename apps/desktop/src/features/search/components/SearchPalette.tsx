@@ -231,21 +231,25 @@ export function SearchPalette() {
     ? commands.filter((c) => commandMatches(c.label ?? "", commandFilter))
     : [];
 
-  useKeyboardShortcut(
-    "Mod+K",
-    () => {
-      if (!isOpen) setOpenDialog("search");
-    },
-    { allowInInputs: true, group: "Navigation", label: "Search pages" }
-  );
+  // Both open this palette, so both are inert once it is open — and the command
+  // list only offers what its `when` gate passes, so stating it here is what
+  // keeps either from being listed as a command that does nothing but close the
+  // dialog you ran it from.
+  const paletteClosed = () => !isOpen;
 
-  useKeyboardShortcut(
-    "Mod+Shift+K",
-    () => {
-      if (!isOpen) setOpenDialog("search", COMMAND_PREFILL);
-    },
-    { allowInInputs: true, group: "Navigation", label: "Run a command" }
-  );
+  useKeyboardShortcut("Mod+K", () => setOpenDialog("search"), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Search pages",
+    when: paletteClosed,
+  });
+
+  useKeyboardShortcut("Mod+Shift+K", () => setOpenDialog("search", COMMAND_PREFILL), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Run a command",
+    when: paletteClosed,
+  });
 
   // ── Search with debounce ──────────────────────────────────────────────────
 
