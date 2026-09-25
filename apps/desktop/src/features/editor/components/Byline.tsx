@@ -55,7 +55,9 @@ export function Byline({
         node: (
           <span className="inline-flex min-w-0 cursor-default items-center gap-1 text-subtle">
             <CalendarSync aria-hidden="true" className="shrink-0" size={13} />
-            <span className="max-w-[140px] truncate">{calendarName}</span>
+            <span className="max-w-[calc(140px*var(--ui-text-scale,1))] truncate">
+              {calendarName}
+            </span>
           </span>
         ),
       }

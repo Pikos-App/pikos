@@ -338,7 +338,7 @@ export function MetadataHeader({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[23px] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[23px] text-muted-foreground outline-none [border:none] placeholder:text-faint"
+            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[1.643em] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[1.643] text-muted-foreground outline-none [border:none] placeholder:text-faint"
             onBlur={() => {
               setSubtitleFocused(false);
               commitField();
@@ -366,7 +366,7 @@ export function MetadataHeader({
         ) : (
           <div
             aria-label="Page description"
-            className="type-body mt-1 min-h-[23px] w-full cursor-text leading-[23px] text-muted-foreground outline-none"
+            className="type-body mt-1 min-h-[1.643em] w-full cursor-text leading-[1.643] text-muted-foreground outline-none"
             onClick={handleSubtitleFocus}
             onFocus={handleSubtitleFocus}
             onKeyDown={(e) => {

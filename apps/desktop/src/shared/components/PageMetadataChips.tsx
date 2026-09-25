@@ -78,7 +78,10 @@ function StatusChip({
         onChange={onToggle}
       />
       {layout === "byline" ? (
-        <span className="inline-block w-[2.5rem]">{label}</span>
+        // Scales with the interface, like every size token: a `rem` is relative to the
+        // root, which the text scale does not touch, so at 200% the label outgrew its box
+        // and ran into the chip beside it.
+        <span className="inline-block w-[calc(2.5rem*var(--ui-text-scale,1))]">{label}</span>
       ) : (
         <span>{label}</span>
       )}
