@@ -68,6 +68,10 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     await invoke("update_notification_settings", { settings });
   }
 
+  async replayPendingNotificationClicks(): Promise<void> {
+    await invoke("replay_pending_notification_clicks");
+  }
+
   async pickDirectory(title: string): Promise<string | null> {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const selected = await open({ directory: true, multiple: false, title });

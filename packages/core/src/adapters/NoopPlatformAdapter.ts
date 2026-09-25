@@ -70,6 +70,11 @@ export class NoopPlatformAdapter implements PlatformAdapter {
     return Promise.resolve();
   }
 
+  replayPendingNotificationClicks(): Promise<void> {
+    this.record("replayPendingNotificationClicks");
+    return Promise.resolve();
+  }
+
   pickDirectory(title: string): Promise<string | null> {
     this.record("pickDirectory", title);
     return Promise.resolve(null);

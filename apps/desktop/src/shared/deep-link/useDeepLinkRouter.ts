@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 import { type DeepLinkAction, parseDeepLink } from "./parseDeepLink";
 
@@ -37,8 +38,23 @@ export function useDeepLinkRouter() {
       dispatch(uiRef.current, action);
     })
       .then((un) => {
-        if (cancelled) un();
-        else unlisten = un;
+        if (cancelled) {
+          un();
+          return;
+        }
+        unlisten = un;
+        // Only now can a notification clicked while Pikos was closed be
+        // delivered: the shell mounts after the workspace opens, and this line
+        // runs after the subscription above exists, so the two things a cold
+        // click needs — a database and a listener — are both in place.
+        void getPlatform()
+          .replayPendingNotificationClicks()
+          .catch((err: unknown) => {
+            log.error(
+              "failed to replay pending notification clicks",
+              err instanceof Error ? err.name : "unknown"
+            );
+          });
       })
       .catch((err: unknown) => {
         log.error(

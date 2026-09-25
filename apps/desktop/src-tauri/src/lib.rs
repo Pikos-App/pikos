@@ -71,6 +71,7 @@ pub fn run() {
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())
+        .manage(notifications::click::PendingClicks::default())
         .manage(sync_trigger_tx)
         .plugin(logging::build_plugin())
         .plugin(tauri_plugin_notification::init())

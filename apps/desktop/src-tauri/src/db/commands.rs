@@ -140,6 +140,7 @@ db_commands! {
         crate::notifications::scheduler::update_notification_settings,
         crate::notifications::scheduler::request_notification_permission,
         crate::notifications::scheduler::check_notification_permission,
+        crate::notifications::click::replay_pending_notification_clicks,
         crate::db::dev::backdate_page,
         crate::db::dev::backup_db,
         crate::db::dev::backup_db_before_import,
