@@ -2103,8 +2103,13 @@ async fn reschedule_virtual_re_arms_a_fired_reminder_on_the_moved_override() {
 
     let due = crate::notification_log::due_explicit_reminders(
         &pool,
-        "2026-06-13 13:49:00",
-        "2026-06-13 13:50:00",
+        &crate::notification_log::ReminderWindow::for_test(
+            "2026-06-13T13:50:00".parse().unwrap(),
+            "2026-06-13T13:50:00"
+                .parse::<chrono::NaiveDateTime>()
+                .unwrap()
+                .and_utc(),
+        ),
     )
     .await
     .unwrap();

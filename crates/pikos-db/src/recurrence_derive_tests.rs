@@ -11,12 +11,19 @@ use crate::{
     NewRecurrenceRule,
 };
 
+use crate::notification_log::ReminderWindow;
+
 fn local(s: &str) -> NaiveDateTime {
     NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").unwrap()
 }
 
 fn utc(s: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+}
+
+/// The tick window ending at `now`, read as the same instant in UTC.
+fn tick_window(now: NaiveDateTime) -> ReminderWindow {
+    ReminderWindow::for_test(now, now.and_utc())
 }
 
 async fn seed_series(
@@ -252,7 +259,7 @@ async fn two_occurrences_in_window_both_fire() {
     add_reminder(&pool, "head", 24 * 60 + 30).await;
     let now = local("2026-05-25T08:30:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 24 * 60 + 30)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 24 * 60 + 30)
         .await
         .unwrap();
 
@@ -274,7 +281,7 @@ async fn dedup_across_ticks_fires_each_occurrence_once() {
     add_reminder(&pool, "head", 30).await;
     let now = local("2026-05-25T08:30:00");
 
-    let first = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let first = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert_eq!(first.len(), 1);
@@ -286,7 +293,7 @@ async fn dedup_across_ticks_fires_each_occurrence_once() {
         .execute(&pool)
         .await
         .unwrap();
-    let second = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let second = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(
@@ -309,7 +316,7 @@ async fn an_unsupported_rule_series_is_skipped_not_fatal() {
     add_reminder(&pool, "bad", 30).await;
     let now = local("2026-05-25T08:30:00");
 
-    let first = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let first = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert_eq!(
@@ -323,7 +330,7 @@ async fn an_unsupported_rule_series_is_skipped_not_fatal() {
 
     // The bad rule persists, so a later tick must stay isolated (the good series
     // keeps firing) — the enumeration never errors out.
-    let second = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let second = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert_eq!(second.len(), 1, "still isolated on the next tick");
@@ -337,7 +344,7 @@ async fn past_occurrence_does_not_fire() {
     // 09:00 fires at 08:30; by 10:00 it's an hour past the window — no backfill.
     let now = local("2026-05-25T10:00:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(
@@ -354,7 +361,7 @@ async fn completed_occurrence_is_silent() {
     complete_via_set(&pool, "head", "2026-05-25").await;
     let now = local("2026-05-25T08:30:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(
@@ -375,7 +382,7 @@ async fn skipped_occurrence_is_silent() {
         .unwrap();
     let now = local("2026-05-25T08:30:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(
@@ -398,7 +405,7 @@ async fn legacy_rrule_exdate_occurrence_is_silent() {
         .unwrap();
     let now = local("2026-05-25T08:30:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(
@@ -428,7 +435,7 @@ async fn materialized_override_original_date_is_excluded_from_enumeration() {
     .unwrap();
     let now = local("2026-05-25T08:30:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(
@@ -456,10 +463,14 @@ async fn synced_series_fires_at_the_absolute_instant_seeking_from_a_far_base() {
 
     // 2026-05-25 09:00 America/New_York (EDT, UTC-4) = 13:00Z; lead 15 → 12:45Z.
     let now_utc = utc("2026-05-25T12:45:00Z");
-    let due =
-        occurrences_with_open_reminder_window(&pool, local("2026-05-25T05:45:00"), now_utc, 15, 60)
-            .await
-            .unwrap();
+    let due = occurrences_with_open_reminder_window(
+        &pool,
+        &ReminderWindow::for_test(local("2026-05-25T05:45:00"), now_utc),
+        15,
+        60,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].scheduled_start, "2026-05-25T09:00:00");
@@ -489,10 +500,14 @@ async fn synced_reminder_lead_straddling_a_spring_forward_still_fires_once() {
     add_reminder(&pool, "head", 60).await;
 
     let now_utc = utc("2026-03-08T06:30:00Z");
-    let due =
-        occurrences_with_open_reminder_window(&pool, local("2026-03-08T01:30:00"), now_utc, 15, 60)
-            .await
-            .unwrap();
+    let due = occurrences_with_open_reminder_window(
+        &pool,
+        &ReminderWindow::for_test(local("2026-03-08T01:30:00"), now_utc),
+        15,
+        60,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         due.len(),
@@ -529,8 +544,7 @@ async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
     // instant → no fire.
     let gap_tick = occurrences_with_open_reminder_window(
         &pool,
-        local("2026-03-08T01:30:00"),
-        utc("2026-03-08T06:30:00Z"),
+        &ReminderWindow::for_test(local("2026-03-08T01:30:00"), utc("2026-03-08T06:30:00Z")),
         15,
         60,
     )
@@ -544,8 +558,7 @@ async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
     // The next day's 02:30 EDT (UTC-4) = 06:30Z fires normally — only the gap drops.
     let next_day = occurrences_with_open_reminder_window(
         &pool,
-        local("2026-03-09T02:30:00"),
-        utc("2026-03-09T06:30:00Z"),
+        &ReminderWindow::for_test(local("2026-03-09T02:30:00"), utc("2026-03-09T06:30:00Z")),
         15,
         60,
     )
@@ -571,9 +584,14 @@ async fn detached_series_fires_on_device_local_wall_clock_not_source_zone() {
     // 15:45Z) would NOT be in-window — only the native (device-local 08:30 + 30 →
     // 09:00) interpretation fires. Firing here proves the detached row is native.
     let now_local = local("2026-05-25T08:30:00");
-    let due = occurrences_with_open_reminder_window(&pool, now_local, now_local.and_utc(), 15, 60)
-        .await
-        .unwrap();
+    let due = occurrences_with_open_reminder_window(
+        &pool,
+        &ReminderWindow::for_test(now_local, now_local.and_utc()),
+        15,
+        60,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         due.len(),
@@ -596,8 +614,7 @@ async fn active_synced_series_fires_the_default_reminder() {
 
     let due = occurrences_with_open_reminder_window(
         &pool,
-        local("2026-05-25T08:45:00"),
-        utc("2026-05-25T15:45:00Z"),
+        &ReminderWindow::for_test(local("2026-05-25T08:45:00"), utc("2026-05-25T15:45:00Z")),
         15,
         60,
     )
@@ -632,7 +649,7 @@ async fn all_day_series_never_fires() {
     add_reminder(&pool, "head", 30).await;
 
     let now = local("2026-05-25T00:00:00");
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert!(due.is_empty(), "all-day recurring series has no reminder");
@@ -650,7 +667,7 @@ async fn reminders_ignore_a_corrupted_display_cache() {
         .unwrap();
     let now = local("2026-05-25T08:30:00");
 
-    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+    let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
     assert_eq!(due.len(), 1, "a corrupted cache must not affect reminders");

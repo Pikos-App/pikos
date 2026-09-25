@@ -2,9 +2,23 @@ use super::*;
 use crate::pool::test_pool;
 
 // Scheduler tick window used across tests: a reminder is "due" if its fire time
-// (scheduled_start − minutes_before) lands in (WINDOW_START, NOW_TS].
+// (scheduled_start − minutes_before) lands in the half-open span `window()` returns.
 const NOW_TS: &str = "2026-05-25 09:00:00";
-const WINDOW_START: &str = "2026-05-25 08:59:00";
+
+/// The tick window the arms take, ending at `NOW_TS` in both readings.
+fn window() -> ReminderWindow {
+    window_at("2026-05-25T09:00:00")
+}
+
+/// A tick window ending at a wall-clock, read as the same instant in UTC.
+fn window_at(end: &str) -> ReminderWindow {
+    ReminderWindow::for_test(naive(end), naive(end).and_utc())
+}
+
+/// A tick window ending at an instant, for the arms that only read the absolute side.
+fn window_ending(end_utc: chrono::DateTime<chrono::Utc>) -> ReminderWindow {
+    ReminderWindow::for_test(end_utc.naive_utc(), end_utc)
+}
 
 async fn insert_page(pool: &sqlx::SqlitePool, id: &str, status: &str, created_at: &str) {
     sqlx::query(
@@ -101,9 +115,7 @@ async fn explicit_reminder_due_in_window_is_returned() {
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "p1", 10).await;
 
-    let due = due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let due = due_explicit_reminders(&pool, &window()).await.unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].schedule_id, "s1#10");
     assert_eq!(due[0].page_id, "p1");
@@ -119,7 +131,7 @@ async fn explicit_reminder_outside_window_is_skipped() {
     insert_schedule(&pool, "s1", "p1", "2026-05-25T10:00:00", "not_started").await;
     insert_reminder(&pool, "p1", 10).await;
 
-    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, &window())
         .await
         .unwrap()
         .is_empty());
@@ -133,7 +145,7 @@ async fn all_day_event_has_no_explicit_reminder() {
     insert_schedule(&pool, "s1", "p1", "2026-05-25", "not_started").await;
     insert_reminder(&pool, "p1", 0).await;
 
-    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, &window())
         .await
         .unwrap()
         .is_empty());
@@ -163,7 +175,7 @@ async fn explicit_reminder_excludes_done_and_deleted_and_already_fired() {
         .await
         .unwrap();
 
-    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, &window())
         .await
         .unwrap()
         .is_empty());
@@ -181,7 +193,7 @@ async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
     insert_reminder(&pool, "p1", 10).await; // fires 09:00
 
     // Tick A around 08:00 → only the 70-min lead is due; the scheduler logs it.
-    let tick_a = due_explicit_reminders(&pool, "2026-05-25 07:59:00", "2026-05-25 08:00:00")
+    let tick_a = due_explicit_reminders(&pool, &window_at("2026-05-25T08:00:00"))
         .await
         .unwrap();
     assert_eq!(tick_a.len(), 1);
@@ -196,7 +208,7 @@ async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
     .unwrap();
 
     // Tick B around 09:00 → the 10-min lead must still fire.
-    let tick_b = due_explicit_reminders(&pool, "2026-05-25 08:59:00", "2026-05-25 09:00:00")
+    let tick_b = due_explicit_reminders(&pool, &window_at("2026-05-25T09:00:00"))
         .await
         .unwrap();
     assert_eq!(
@@ -215,7 +227,7 @@ async fn none_sentinel_reminder_never_fires() {
     // -1 = "no reminders for this page" sentinel; filtered by minutes_before >= 0.
     insert_reminder(&pool, "p1", -1).await;
 
-    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, &window())
         .await
         .unwrap()
         .is_empty());
@@ -234,9 +246,7 @@ async fn floating_synced_oneoff_explicit_reminder_fires_on_native_path() {
         .await
         .unwrap();
 
-    let due = due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let due = due_explicit_reminders(&pool, &window()).await.unwrap();
     assert_eq!(
         due.len(),
         1,
@@ -258,7 +268,7 @@ async fn zoned_synced_oneoff_is_excluded_from_native_path() {
         .unwrap();
 
     assert!(
-        due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+        due_explicit_reminders(&pool, &window())
             .await
             .unwrap()
             .is_empty(),
@@ -301,7 +311,7 @@ async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
     insert_reminder(&pool, "p1", 10).await;
 
     // Global default deliberately differs — the explicit lead must win.
-    let due = due_synced_reminders(&pool, synced_oneoff_now(), 5)
+    let due = due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 5)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -314,7 +324,7 @@ async fn synced_oneoff_without_explicit_reminder_uses_the_global_default() {
     let pool = test_pool().await;
     seed_synced_oneoff(&pool, "p1", "s1").await;
 
-    let due = due_synced_reminders(&pool, synced_oneoff_now(), 10)
+    let due = due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 10)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -329,10 +339,12 @@ async fn synced_oneoff_none_sentinel_beats_the_global_default() {
     seed_synced_oneoff(&pool, "p1", "s1").await;
     insert_reminder(&pool, "p1", -1).await;
 
-    assert!(due_synced_reminders(&pool, synced_oneoff_now(), 10)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -357,10 +369,12 @@ async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
         .await
         .unwrap();
 
-    assert!(due_synced_reminders(&pool, synced_oneoff_now(), 5)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 5)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -372,7 +386,7 @@ async fn synced_oneoff_does_not_catch_up_a_past_instant() {
     insert_reminder(&pool, "p1", 10).await;
 
     let ten_min_late = naive("2026-05-25T13:00:00").and_utc(); // fire was 12:50
-    assert!(due_synced_reminders(&pool, ten_min_late, 5)
+    assert!(due_synced_reminders(&pool, &window_ending(ten_min_late), 5)
         .await
         .unwrap()
         .is_empty());
@@ -387,7 +401,7 @@ async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
     insert_reminder(&pool, "p1", 70).await; // fires 11:50 UTC
     insert_reminder(&pool, "p1", 10).await; // fires 12:50 UTC
 
-    let tick_a = due_synced_reminders(&pool, naive("2026-05-25T11:50:00").and_utc(), 5)
+    let tick_a = due_synced_reminders(&pool, &window_at("2026-05-25T11:50:00"), 5)
         .await
         .unwrap();
     assert_eq!(tick_a.len(), 1);
@@ -401,7 +415,7 @@ async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
     .await
     .unwrap();
 
-    let tick_b = due_synced_reminders(&pool, synced_oneoff_now(), 5)
+    let tick_b = due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 5)
         .await
         .unwrap();
     assert_eq!(tick_b.len(), 1, "second lead fires in its own tick");
@@ -417,9 +431,7 @@ async fn default_reminder_uses_global_lead_time() {
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
     // No page_reminders row → falls to the default path.
 
-    let due = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let due = due_default_reminders(&pool, 10, &window()).await.unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].schedule_id, "s1");
     assert_eq!(due[0].minutes_before, 10);
@@ -432,7 +444,7 @@ async fn default_reminder_skips_pages_with_explicit_reminders() {
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "p1", 10).await; // has explicit config
 
-    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+    assert!(due_default_reminders(&pool, 10, &window())
         .await
         .unwrap()
         .is_empty());
@@ -449,19 +461,19 @@ async fn floating_synced_oneoff_default_reminder_fires_on_native_path() {
         .await
         .unwrap();
 
-    let due = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let due = due_default_reminders(&pool, 10, &window()).await.unwrap();
     assert_eq!(
         due.len(),
         1,
         "floating synced one-off got no default reminder"
     );
     assert_eq!(due[0].schedule_id, "s1");
-    assert!(due_synced_reminders(&pool, synced_oneoff_now(), 10)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 // ─── daily summary dedup + logging ───────────────────────────────────────────
@@ -1016,7 +1028,7 @@ async fn due_recurring_reminders_fires_a_native_occurrence() {
     // 09:00 with a 30-min lead fires at 08:30 (device-local; native series).
     let now = naive("2026-05-25T08:30:00");
 
-    let due = due_recurring_reminders(&pool, now, now.and_utc(), 15)
+    let due = due_recurring_reminders(&pool, &window_ending(now.and_utc()), 15)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -1033,12 +1045,12 @@ async fn native_reminder_paths_skip_a_recurring_pages_anchor_row() {
     // The enumeration owns that occurrence, so firing off the anchor would double it.
     insert_schedule(&pool, "anchor", "rec", "2026-05-25T09:10:00", "not_started").await;
 
-    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+    assert!(due_default_reminders(&pool, 10, &window())
         .await
         .unwrap()
         .is_empty());
     insert_reminder(&pool, "rec", 10).await;
-    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, &window())
         .await
         .unwrap()
         .is_empty());
@@ -1063,9 +1075,7 @@ async fn native_default_path_fires_a_recurring_override_row() {
     )
     .await;
 
-    let via_schedule = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let via_schedule = due_default_reminders(&pool, 10, &window()).await.unwrap();
     assert_eq!(via_schedule.len(), 1);
     assert_eq!(via_schedule[0].schedule_id, "ov");
 }
@@ -1094,14 +1104,12 @@ async fn a_detached_overrides_reminder_fires_once_on_the_native_path() {
     )
     .await;
 
-    let due = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let due = due_default_reminders(&pool, 10, &window()).await.unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].schedule_id, "ov");
     assert_eq!(due[0].scheduled_start, "2026-05-25T09:10:00");
     assert!(
-        due_synced_override_reminders(&pool, override_now(), 10)
+        due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
             .await
             .unwrap()
             .is_empty(),
@@ -1130,7 +1138,7 @@ async fn trashing_the_page_silences_a_detached_overrides_reminder() {
     .await;
     soft_delete_page(&pool, "rec").await;
 
-    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+    assert!(due_default_reminders(&pool, 10, &window())
         .await
         .unwrap()
         .is_empty());
@@ -1218,7 +1226,7 @@ async fn synced_override_fires_at_moved_absolute_instant_with_default_lead() {
     )
     .await;
 
-    let due = due_synced_override_reminders(&pool, override_now(), 10)
+    let due = due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -1243,11 +1251,13 @@ async fn synced_override_uses_explicit_reminder_over_default() {
     insert_reminder(&pool, "rec", 30).await; // 09:00 EDT − 30 = 12:30 UTC
 
     // The default-lead instant (12:50) must NOT fire once an explicit lead exists.
-    assert!(due_synced_override_reminders(&pool, override_now(), 10)
-        .await
-        .unwrap()
-        .is_empty());
-    let due = due_synced_override_reminders(&pool, naive("2026-05-25T12:30:00").and_utc(), 10)
+    assert!(
+        due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let due = due_synced_override_reminders(&pool, &window_at("2026-05-25T12:30:00"), 10)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -1283,10 +1293,12 @@ async fn completed_or_skipped_synced_override_is_silent() {
     .await;
     set_skipped(&pool, "skip_ov", "2026-05-25").await;
 
-    assert!(due_synced_override_reminders(&pool, override_now(), 10)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -1307,10 +1319,12 @@ async fn already_fired_synced_override_is_silent() {
         .await
         .unwrap();
 
-    assert!(due_synced_override_reminders(&pool, override_now(), 10)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -1343,10 +1357,12 @@ async fn synced_override_path_ignores_floating_and_unsynced_rows() {
     )
     .await;
 
-    assert!(due_synced_override_reminders(&pool, override_now(), 10)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -1375,7 +1391,7 @@ async fn synced_override_fires_only_the_in_window_sibling() {
     )
     .await;
 
-    let due = due_synced_override_reminders(&pool, override_now(), 10)
+    let due = due_synced_override_reminders(&pool, &window_ending(override_now()), 10)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -1539,9 +1555,7 @@ async fn a_one_day_lead_fires_a_day_before_the_event() {
     insert_schedule(&pool, "s1", "p1", "2026-05-26T09:00:00", "not_started").await;
     insert_reminder(&pool, "p1", 1440).await;
 
-    let due = due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let due = due_explicit_reminders(&pool, &window()).await.unwrap();
     assert_eq!(due.len(), 1, "a 1-day lead must cross the date boundary");
     assert_eq!(due[0].schedule_id, "s1#1440");
     assert_eq!(due[0].minutes_before, 1440);
@@ -1557,16 +1571,14 @@ async fn long_and_short_leads_on_one_page_dedup_independently() {
     insert_reminder(&pool, "p1", 120).await; // fires 09:00
     insert_reminder(&pool, "p1", 10).await; // fires 10:50
 
-    let tick_a = due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
+    let tick_a = due_explicit_reminders(&pool, &window()).await.unwrap();
     assert_eq!(tick_a.len(), 1);
     assert_eq!(tick_a[0].schedule_id, "s1#120");
     log_reminder_fired(&pool, "p1", &tick_a[0].schedule_id, NOW_TS)
         .await
         .unwrap();
 
-    let tick_b = due_explicit_reminders(&pool, "2026-05-25 10:49:00", "2026-05-25 10:50:00")
+    let tick_b = due_explicit_reminders(&pool, &window_at("2026-05-25T10:50:00"))
         .await
         .unwrap();
     assert_eq!(tick_b.len(), 1, "the 10-minute lead is still owed");
@@ -1592,7 +1604,7 @@ async fn clearing_a_moved_rows_log_re_arms_a_long_lead() {
 
     assert_eq!(log_count(&pool, "reminder").await, 0);
     assert_eq!(
-        due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+        due_explicit_reminders(&pool, &window())
             .await
             .unwrap()
             .len(),
@@ -1627,16 +1639,14 @@ async fn a_synced_one_day_lead_holds_its_instant_across_a_dst_shift() {
         .unwrap();
     insert_reminder(&pool, "p1", 1440).await;
 
-    let due = due_synced_reminders(&pool, fire, 10).await.unwrap();
+    let due = due_synced_reminders(&pool, &window_ending(fire), 10)
+        .await
+        .unwrap();
     assert_eq!(due.len(), 1, "the long-lead synced reminder must be due");
     assert_eq!(due[0].schedule_id, "s1#1440");
 }
 
 // ─── due_day_before_reminders (all-day anchor) ───────────────────────────────
-
-/// The tick that contains 09:00 on 2026-05-25 — the anchor for an all-day event
-/// on the 26th.
-const DAY_BEFORE_WINDOW: (&str, &str) = (WINDOW_START, NOW_TS);
 
 async fn insert_all_day(pool: &sqlx::SqlitePool, id: &str, page_id: &str, date: &str) {
     insert_schedule(pool, id, page_id, date, "not_started").await;
@@ -1649,9 +1659,7 @@ async fn day_before_reminder_fires_at_nine_the_previous_day() {
     insert_all_day(&pool, "s1", "p1", "2026-05-26").await;
     insert_reminder(&pool, "p1", DAY_BEFORE_MINUTES).await;
 
-    let due = due_day_before_reminders(&pool, DAY_BEFORE_WINDOW.0, DAY_BEFORE_WINDOW.1)
-        .await
-        .unwrap();
+    let due = due_day_before_reminders(&pool, &window()).await.unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].schedule_id, "s1#-2");
     assert_eq!(due[0].page_id, "p1");
@@ -1667,12 +1675,10 @@ async fn day_before_reminder_is_silent_outside_its_tick() {
     insert_all_day(&pool, "s1", "p1", "2026-05-27").await;
     insert_reminder(&pool, "p1", DAY_BEFORE_MINUTES).await;
 
-    assert!(
-        due_day_before_reminders(&pool, DAY_BEFORE_WINDOW.0, DAY_BEFORE_WINDOW.1)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(due_day_before_reminders(&pool, &window())
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -1689,12 +1695,10 @@ async fn day_before_reminder_ignores_timed_rows_and_other_leads() {
     insert_all_day(&pool, "sa", "allday", "2026-05-26").await;
     insert_reminder(&pool, "allday", 10).await;
 
-    assert!(
-        due_day_before_reminders(&pool, DAY_BEFORE_WINDOW.0, DAY_BEFORE_WINDOW.1)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(due_day_before_reminders(&pool, &window())
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -1714,12 +1718,10 @@ async fn day_before_reminder_excludes_done_deleted_and_already_fired() {
         .await
         .unwrap();
 
-    assert!(
-        due_day_before_reminders(&pool, DAY_BEFORE_WINDOW.0, DAY_BEFORE_WINDOW.1)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(due_day_before_reminders(&pool, &window())
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -1732,7 +1734,7 @@ async fn day_before_reminder_holds_its_anchor_across_a_dst_shift() {
     insert_all_day(&pool, "s1", "p1", "2026-03-09").await;
     insert_reminder(&pool, "p1", DAY_BEFORE_MINUTES).await;
 
-    let due = due_day_before_reminders(&pool, "2026-03-08 08:59:00", "2026-03-08 09:00:00")
+    let due = due_day_before_reminders(&pool, &window_at("2026-03-08T09:00:00"))
         .await
         .unwrap();
     assert_eq!(due.len(), 1, "the anchor stays at 09:00 wall-clock on D-1");
@@ -1740,7 +1742,7 @@ async fn day_before_reminder_holds_its_anchor_across_a_dst_shift() {
     // Sanity: the same tick a day later finds nothing, so the assertion above is
     // about the anchor and not about a window wide enough to catch anything.
     assert!(
-        due_day_before_reminders(&pool, "2026-03-09 08:59:00", "2026-03-09 09:00:00")
+        due_day_before_reminders(&pool, &window_at("2026-03-09T09:00:00"))
             .await
             .unwrap()
             .is_empty()
@@ -1759,9 +1761,7 @@ async fn day_before_reminder_covers_a_synced_all_day_event() {
         .unwrap();
     insert_reminder(&pool, "p1", DAY_BEFORE_MINUTES).await;
 
-    let due = due_day_before_reminders(&pool, DAY_BEFORE_WINDOW.0, DAY_BEFORE_WINDOW.1)
-        .await
-        .unwrap();
+    let due = due_day_before_reminders(&pool, &window()).await.unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].schedule_id, "s1#-2");
 }
@@ -1775,12 +1775,12 @@ async fn the_day_before_sentinel_never_reads_as_a_lead_time() {
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:02:00", "not_started").await;
     insert_reminder(&pool, "p1", DAY_BEFORE_MINUTES).await;
 
-    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, &window())
         .await
         .unwrap()
         .is_empty());
     assert!(
-        due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+        due_default_reminders(&pool, 10, &window())
             .await
             .unwrap()
             .is_empty(),
@@ -1807,7 +1807,7 @@ async fn a_suppressed_reminder_is_logged_without_pinning_the_dedup() {
     assert_eq!(log_count(&pool, "suppressed").await, 1);
     assert_eq!(log_count(&pool, "reminder").await, 0);
     assert_eq!(
-        due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+        due_explicit_reminders(&pool, &window())
             .await
             .unwrap()
             .len(),

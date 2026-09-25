@@ -514,8 +514,13 @@ async fn moving_a_schedule_re_arms_a_fired_explicit_reminder() {
 
     let fired = crate::notification_log::due_explicit_reminders(
         &pool,
-        "2026-05-25 08:59:00",
-        "2026-05-25 09:00:00",
+        &crate::notification_log::ReminderWindow::for_test(
+            "2026-05-25T09:00:00".parse().unwrap(),
+            "2026-05-25T09:00:00"
+                .parse::<chrono::NaiveDateTime>()
+                .unwrap()
+                .and_utc(),
+        ),
     )
     .await
     .unwrap();
@@ -543,8 +548,13 @@ async fn moving_a_schedule_re_arms_a_fired_explicit_reminder() {
 
     let due = crate::notification_log::due_explicit_reminders(
         &pool,
-        "2026-05-25 10:59:00",
-        "2026-05-25 11:00:00",
+        &crate::notification_log::ReminderWindow::for_test(
+            "2026-05-25T11:00:00".parse().unwrap(),
+            "2026-05-25T11:00:00"
+                .parse::<chrono::NaiveDateTime>()
+                .unwrap()
+                .and_utc(),
+        ),
     )
     .await
     .unwrap();

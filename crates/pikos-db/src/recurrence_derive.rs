@@ -10,7 +10,7 @@
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use chrono::{Duration, NaiveDateTime};
 use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
@@ -386,11 +386,12 @@ struct ReminderSeries {
 /// an upper bound over every configured lead.
 pub async fn occurrences_with_open_reminder_window(
     pool: &SqlitePool,
-    now_local: NaiveDateTime,
-    now_utc: DateTime<Utc>,
+    window: &crate::notification_log::ReminderWindow,
     default_minutes: i64,
     max_lead: i64,
 ) -> AppResult<Vec<DueReminder>> {
+    let now_local = window.end_local();
+    let now_utc = window.end_utc();
     let series: Vec<ReminderSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, p.title, r.rrule, r.rrule_exdates,
                 r.scheduled_start AS base_start, r.scheduled_end AS base_end, r.timezone,
@@ -454,7 +455,7 @@ pub async fn occurrences_with_open_reminder_window(
 
         for occ in &occurrences {
             for lead in &leads {
-                if !fires_in_window(&s, &occ.scheduled_start, lead.minutes, now_local, now_utc) {
+                if !fires_in_window(&s, &occ.scheduled_start, lead.minutes, window) {
                     continue;
                 }
                 candidates.push(DueReminder {
@@ -562,25 +563,22 @@ async fn reminder_leads(
     Ok(leads)
 }
 
-/// Whether `scheduled_start - lead` lands in the inclusive 60-second window.
+/// Whether `scheduled_start - lead` lands in the tick's window. A synced series resolves to
+/// an instant; a native one stays device-local wall-clock.
 fn fires_in_window(
     series: &ReminderSeries,
     scheduled_start: &str,
     minutes_before: i64,
-    now_local: NaiveDateTime,
-    now_utc: DateTime<Utc>,
+    window: &crate::notification_log::ReminderWindow,
 ) -> bool {
     if series.synced {
         match synced_fire_instant(scheduled_start, &series.timezone, minutes_before) {
-            Some(fire) => fire >= now_utc - Duration::seconds(60) && fire <= now_utc,
+            Some(fire) => window.holds_utc(fire),
             None => false,
         }
     } else {
         match NaiveDateTime::parse_from_str(scheduled_start, WALL_FMT) {
-            Ok(start) => {
-                let fire = start - Duration::minutes(minutes_before);
-                fire >= now_local - Duration::seconds(60) && fire <= now_local
-            }
+            Ok(start) => window.holds_local(start - Duration::minutes(minutes_before)),
             Err(_) => false,
         }
     }

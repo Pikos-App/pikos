@@ -75,6 +75,14 @@ struct SchedulerRuntime {
     /// Local date of the last fired daily summary. Fast-path dedup; the DB
     /// marker row is the source of truth across restarts.
     last_summary_date: Option<NaiveDate>,
+    /// Where the last successful tick's window ended, so the next one starts
+    /// there instead of overlapping it. Ticks are meant to land a minute apart,
+    /// but tokio's timer does not advance while the machine sleeps, so after a
+    /// wake two can fall seconds apart with most of a minute in common — and a
+    /// reminder inside that overlap is collected by both. Only a tick that
+    /// finished sets it: a failed one leaves the window open so its reminders
+    /// are retried rather than skipped.
+    last_window_end: Option<chrono::DateTime<chrono::Local>>,
 }
 
 pub struct SchedulerRuntimeState(tokio::sync::Mutex<SchedulerRuntime>);
@@ -286,24 +294,15 @@ async fn collect_due(
         DueSummary::NotDue
     };
 
-    // Use space separator to match SQLite's datetime() output format.
-    // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
-    // lexicographic, so both sides must use the same separator.
-    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    let window_start = (*now - chrono::Duration::seconds(60))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    let window = pikos_db::ReminderWindow::ending_at(*now, runtime.last_window_end);
     let minutes = settings.default_minutes_before;
-    let now_utc = now.to_utc();
 
-    let mut reminders = pikos_db::due_explicit_reminders(pool, &window_start, &now_ts).await?;
-    reminders.extend(pikos_db::due_default_reminders(pool, minutes, &window_start, &now_ts).await?);
-    reminders.extend(pikos_db::due_day_before_reminders(pool, &window_start, &now_ts).await?);
-    reminders.extend(
-        pikos_db::due_recurring_reminders(pool, now.naive_local(), now_utc, minutes).await?,
-    );
-    reminders.extend(pikos_db::due_synced_reminders(pool, now_utc, minutes).await?);
-    reminders.extend(pikos_db::due_synced_override_reminders(pool, now_utc, minutes).await?);
+    let mut reminders = pikos_db::due_explicit_reminders(pool, &window).await?;
+    reminders.extend(pikos_db::due_default_reminders(pool, minutes, &window).await?);
+    reminders.extend(pikos_db::due_day_before_reminders(pool, &window).await?);
+    reminders.extend(pikos_db::due_recurring_reminders(pool, &window, minutes).await?);
+    reminders.extend(pikos_db::due_synced_reminders(pool, &window, minutes).await?);
+    reminders.extend(pikos_db::due_synced_override_reminders(pool, &window, minutes).await?);
 
     // Backstop: the six partition the schedules by construction, but nothing
     // logs between them any more, so an overlap would now deliver twice.
@@ -407,6 +406,8 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
             fire_reminder(app, &pool, row).await?;
         }
     }
+
+    app.state::<SchedulerRuntimeState>().lock().await.last_window_end = Some(now);
 
     Ok(())
 }

@@ -173,6 +173,7 @@ fn summary_does_not_refire_same_day() {
     let today = local_at(2026, 4, 18, 9, 0).date_naive();
     let rt = SchedulerRuntime {
         last_summary_date: Some(today),
+        ..SchedulerRuntime::default()
     };
     assert!(!should_fire_daily_summary(
         &rt,
@@ -188,6 +189,7 @@ fn summary_fires_next_day_after_previous() {
     let yesterday = local_at(2026, 4, 17, 8, 0).date_naive();
     let rt = SchedulerRuntime {
         last_summary_date: Some(yesterday),
+        ..SchedulerRuntime::default()
     };
     assert!(should_fire_daily_summary(
         &rt,
@@ -433,6 +435,64 @@ async fn a_quiet_hours_suppression_is_logged_without_arming_the_dedup() {
         .unwrap();
     assert!(!again.quiet);
     assert_eq!(again.reminders.len(), 5);
+}
+
+/// A reminder anchored on a whole minute sits exactly on a tick, which a closed window put
+/// inside that tick and the next one. Delivery survived it on the dedup row; suppression
+/// writes none, so the same silenced reminder was listed twice.
+#[tokio::test]
+async fn a_reminder_on_a_tick_boundary_is_collected_once() {
+    let pool = test_pool().await;
+    let first = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &first).await;
+    let quiet = settings_with_quiet("08:00", "10:00");
+
+    let batch = collect_due(&pool, &quiet, &SchedulerRuntime::default(), &first)
+        .await
+        .unwrap();
+    assert_eq!(batch.reminders.len(), 5);
+    for row in &batch.reminders {
+        record_suppressed(&pool, row, &first).await.unwrap();
+    }
+
+    let runtime = SchedulerRuntime {
+        last_window_end: Some(first),
+        ..SchedulerRuntime::default()
+    };
+    let next = local_at(2026, 5, 25, 9, 1);
+    let again = collect_due(&pool, &quiet, &runtime, &next).await.unwrap();
+    assert!(
+        again.reminders.is_empty(),
+        "the 09:00 reminders were collected again: {:?}",
+        again.reminders
+    );
+}
+
+/// After the machine sleeps, two ticks can land seconds apart. Without a floor their windows
+/// share most of a minute, and everything inside it is collected by both.
+#[tokio::test]
+async fn two_ticks_seconds_apart_do_not_share_a_window() {
+    let pool = test_pool().await;
+    let drifted = local_at(2026, 5, 25, 9, 0).with_second(57).unwrap();
+    seed_every_due_class(&pool, &local_at(2026, 5, 25, 9, 0)).await;
+    let quiet = settings_with_quiet("08:00", "10:00");
+
+    let batch = collect_due(&pool, &quiet, &SchedulerRuntime::default(), &drifted)
+        .await
+        .unwrap();
+    assert_eq!(batch.reminders.len(), 5, "the drifted tick owes them");
+
+    let runtime = SchedulerRuntime {
+        last_window_end: Some(drifted),
+        ..SchedulerRuntime::default()
+    };
+    let realigned = local_at(2026, 5, 25, 9, 1);
+    let again = collect_due(&pool, &quiet, &runtime, &realigned).await.unwrap();
+    assert!(
+        again.reminders.is_empty(),
+        "the overlapping 57 seconds were collected twice: {:?}",
+        again.reminders
+    );
 }
 
 #[tokio::test]
