@@ -141,7 +141,7 @@ describe("AddAccountDialog", () => {
     await waitFor(() =>
       expect(onConnect).toHaveBeenCalledWith({
         baseUrl: "https://caldav.example.com",
-        displayName: "me@example.com · https://caldav.example.com",
+        displayName: "me@example.com · https://caldav.example.com/",
         password: "app-pw",
         username: "me@example.com",
       })

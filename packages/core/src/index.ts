@@ -98,6 +98,7 @@ export { defaultColorForProvider, PALETTE_COLORS } from "./constants/colors";
 export type { PaletteColor } from "./constants/colors";
 export { NLP_PRIORITY_MAP, PRIORITY_COLORS, PRIORITY_LABELS } from "./constants/priorities";
 export * from "./errors";
+export { caldavAccountIdentity } from "./format/caldavIdentity";
 // ── Date/time formatting for chips, labels and pickers ──
 export {
   computeEndTimeLabel,

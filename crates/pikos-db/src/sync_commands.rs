@@ -112,6 +112,15 @@ pub async fn mark_account_disconnected_impl(pool: &sqlx::SqlitePool, id: &str) -
 /// still active: reconnecting an already-connected account must refresh it in place,
 /// never insert a second row — a duplicate account re-syncs every event twice (dedup
 /// is per-account). An active row wins the tiebreak in the unlikely event both exist.
+///
+/// **Matched without regard to case.** A hostname is case-insensitive by DNS, so
+/// `Caldav.fastmail.com` and `caldav.fastmail.com` are one server, and a person typing
+/// the second after the first has no reason to expect a second account — one that
+/// re-syncs every event again and leaves the first account's pages detached, because
+/// re-link is scoped by account. Emails are effectively case-insensitive too, so
+/// collapsing the whole identity rather than only its host half costs nothing real and
+/// needs no rewrite of rows already stored. Merging two spellings is the direction this
+/// is allowed to be wrong in; splitting them is not.
 pub async fn find_account_by_identity_impl(
     pool: &sqlx::SqlitePool,
     provider: &str,
@@ -119,7 +128,7 @@ pub async fn find_account_by_identity_impl(
 ) -> AppResult<Option<SyncAccount>> {
     let sql = format!(
         "SELECT {ACCOUNT_COLS} FROM sync_account
-         WHERE provider = ? AND display_name = ?
+         WHERE provider = ? AND display_name = ? COLLATE NOCASE
          ORDER BY disconnected ASC, created_at ASC LIMIT 1"
     );
     Ok(sqlx::query_as::<_, SyncAccount>(&sql)

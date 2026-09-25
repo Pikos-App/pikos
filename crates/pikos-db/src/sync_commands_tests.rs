@@ -604,3 +604,27 @@ async fn an_unchanged_re_discovery_does_not_restamp_the_folder() {
         "every discovery pass hits this, so an unchanged one must not churn updated_at"
     );
 }
+
+/// A hostname is case-insensitive by DNS, so reconnecting a server typed with a capital
+/// has to revive the account rather than open a second one beside it — which would
+/// re-sync every event and leave the first account's pages detached.
+#[tokio::test]
+async fn an_account_is_matched_whatever_case_the_server_was_typed_in() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(
+        &pool,
+        "caldav",
+        "you · https://Caldav.fastmail.com",
+        "basic",
+    )
+    .await
+    .unwrap()
+    .id;
+
+    let matched =
+        find_account_by_identity_impl(&pool, "caldav", "you · https://caldav.fastmail.com")
+            .await
+            .unwrap()
+            .expect("the same server, spelled in lower case");
+    assert_eq!(matched.id, acc);
+}

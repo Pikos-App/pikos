@@ -1,4 +1,5 @@
 import type { NewCaldavConnection } from "@pikos/core";
+import { caldavAccountIdentity } from "@pikos/core";
 import { CalendarDays, Loader2, Server } from "lucide-react";
 import { useState } from "react";
 
@@ -59,7 +60,7 @@ export function AddAccountDialog({
     try {
       await onConnect({
         baseUrl,
-        displayName: `${username.trim()} · ${baseUrl}`,
+        displayName: caldavAccountIdentity(username, baseUrl),
         password,
         username: username.trim(),
       });
