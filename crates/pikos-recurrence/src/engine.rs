@@ -338,7 +338,7 @@ pub fn expand_range(
         WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let range_start = parse_dt(range_start)?;
     let range_end = parse_dt(range_end)?;
-    let duration = timed_duration(&anchor, end);
+    let span = base_span(&anchor, end);
     // Day-key the exdates (like `oldest_open_occurrence`/`occurrences_in_window`):
     // a synced timed exdate is stored as full wall-clock, but occurrences match by
     // their day-only key, so an un-keyed timed exdate never matches and ghosts.
@@ -360,7 +360,7 @@ pub fn expand_range(
             continue;
         }
         out.push(Occurrence {
-            scheduled_end: duration.map(|mins| occ_end(&occ, mins)),
+            scheduled_end: span.map(|span| occ_end(&occ, span)),
             scheduled_start: occ.format(),
             original_date: date_str,
         });
@@ -520,7 +520,7 @@ pub fn oldest_open_occurrence(
     let rule = ParsedRule::parse(rrule)?;
     let anchor =
         WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
-    let duration = timed_duration(&anchor, end);
+    let span = base_span(&anchor, end);
     let excluded: HashSet<&str> = exclusions.iter().map(|s| date_key(s)).collect();
     let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
     // Day-keyed like `excluded`, so a floor given as full wall-clock compares
@@ -537,7 +537,7 @@ pub fn oldest_open_occurrence(
         }
         let occ = occ_wallclock(&anchor, date);
         return Ok(Some(Occurrence {
-            scheduled_end: duration.map(|mins| occ_end(&occ, mins)),
+            scheduled_end: span.map(|span| occ_end(&occ, span)),
             scheduled_start: occ.format(),
             original_date: date_str,
         }));
@@ -563,7 +563,7 @@ pub fn occurrences_in_window(
         WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let lo_dt = parse_dt(lo)?;
     let hi_dt = parse_dt(hi)?;
-    let duration = timed_duration(&anchor, end);
+    let span = base_span(&anchor, end);
     let excluded: HashSet<&str> = exclusions.iter().map(|s| date_key(s)).collect();
     let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
 
@@ -586,7 +586,7 @@ pub fn occurrences_in_window(
             continue;
         }
         out.push(Occurrence {
-            scheduled_end: duration.map(|mins| occ_end(&occ, mins)),
+            scheduled_end: span.map(|span| occ_end(&occ, span)),
             scheduled_start: occ.format(),
             original_date: date_str,
         });
@@ -675,23 +675,48 @@ fn occ_wallclock(anchor: &WallClock, date: NaiveDate) -> WallClock {
     }
 }
 
-/// Duration in minutes for a timed anchor with an end; `None` for all-day or
-/// when no end is set.
-fn timed_duration(anchor: &WallClock, end: Option<&str>) -> Option<i64> {
-    if anchor.is_all_day() {
-        return None;
-    }
-    let end = WallClock::parse(end?)?;
-    Some((end.as_datetime() - anchor.as_datetime()).num_minutes())
+/// How long a base occurrence lasts, in the unit its own kind is measured in.
+///
+/// An all-day span is a count of days and has no clock to carry: measuring it in
+/// minutes and rebuilding the end as a datetime is what collapsed a seven-day
+/// series into one bar per occurrence, and minted a done clone with no end at
+/// all. The day count is the difference between the two stored dates, so it holds
+/// whichever end convention the caller stores — carrying the delta reproduces the
+/// base either way.
+#[derive(Clone, Copy)]
+enum BaseSpan {
+    Minutes(i64),
+    Days(i64),
 }
 
-fn occ_end(start: &WallClock, minutes: i64) -> String {
-    let end = start.as_datetime() + chrono::Duration::minutes(minutes);
-    WallClock {
-        date: end.date(),
-        time: Some(end.time()),
+/// The base's span, or `None` when it has no end to carry.
+fn base_span(anchor: &WallClock, end: Option<&str>) -> Option<BaseSpan> {
+    let end = WallClock::parse(end?)?;
+    if anchor.is_all_day() {
+        Some(BaseSpan::Days((end.date - anchor.date).num_days()))
+    } else {
+        Some(BaseSpan::Minutes(
+            (end.as_datetime() - anchor.as_datetime()).num_minutes(),
+        ))
     }
-    .format()
+}
+
+fn occ_end(start: &WallClock, span: BaseSpan) -> String {
+    match span {
+        BaseSpan::Minutes(minutes) => {
+            let end = start.as_datetime() + chrono::Duration::minutes(minutes);
+            WallClock {
+                date: end.date(),
+                time: Some(end.time()),
+            }
+            .format()
+        }
+        BaseSpan::Days(days) => WallClock {
+            date: start.date + chrono::Duration::days(days),
+            time: None,
+        }
+        .format(),
+    }
 }
 
 fn parse_dt(s: &str) -> Result<NaiveDateTime, RecurrenceError> {

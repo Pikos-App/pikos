@@ -646,3 +646,25 @@ fn lists_occurrences_from_dtstart() {
         ]
     );
 }
+
+/// A monthly seven-day all-day series drew one day per occurrence, because the span was
+/// measured in minutes and an all-day base has no clock to measure.
+#[test]
+fn all_day_recurrence_preserves_a_multi_day_span() {
+    let occ = expand(
+        "FREQ=MONTHLY;BYMONTHDAY=1",
+        "2026-03-01",
+        Some("2026-03-08"),
+        "2026-03-01T00:00:00",
+        "2026-04-02T00:00:00",
+        &[],
+    );
+    assert_eq!(occ.len(), 2);
+    assert_eq!(occ[0].scheduled_end.as_deref(), Some("2026-03-08"));
+    assert_eq!(occ[1].scheduled_start, "2026-04-01");
+    assert_eq!(
+        occ[1].scheduled_end.as_deref(),
+        Some("2026-04-08"),
+        "the derived occurrence keeps the base's seven days"
+    );
+}
