@@ -1,4 +1,4 @@
-import type { PagePriority, PageRecurrenceRule, PageStatus, PageSummary } from "@pikos/core";
+import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
 import { getVisiblePages, isDateGroupedView, sortPages, withTodayOccurrences } from "@pikos/core";
 import { useState } from "react";
 
@@ -13,8 +13,6 @@ import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
 
 export const UNDO_TOAST_DURATION_MS = 8000;
-
-const NO_RULES: PageRecurrenceRule[] = [];
 
 export function usePageList() {
   const {
@@ -34,23 +32,23 @@ export function usePageList() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
   const completed = useCompletedPages(activeViewId);
-  const isTodayView = activeViewId === "today";
 
-  // The same expansion the calendar grid renders, so the two can't disagree
-  // about today. No rules outside Today keeps other views off the round-trip.
+  // The same expansion the calendar grid renders, so the two can't disagree about
+  // today. Keyed on the day and the rule set, so every view costs one expansion
+  // per day between them, not one per view switch.
   const expanded = useRecurrenceExpansion({
     days: [new Date()],
     expandRecurrenceRange,
     listOverridesForRules,
     overridesVersion,
     pages,
-    recurrenceRules: isTodayView ? recurrenceRules : NO_RULES,
+    recurrenceRules,
   });
 
   // Swap occurrences in before the view filter runs: the filter judges a page by
   // its head, and a series with an occurrence today is exactly the case where the
   // head is on some other day.
-  const candidates = isTodayView ? withTodayOccurrences(pages, expanded) : pages;
+  const candidates = withTodayOccurrences(pages, expanded);
   const withOccurrences = getVisiblePages(candidates, activeViewId).filter(
     (p) => !hiddenIds.has(p.id)
   );
@@ -86,8 +84,8 @@ export function usePageList() {
 
   function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
     const nextStatus: PageStatus = currentStatus === "done" ? "not_started" : "done";
-    // The rendered row first: on Today it can be an occurrence standing in for
-    // its series, and the tick has to land on the date shown. Then the series
+    // The rendered row first: it can be an occurrence standing in for its
+    // series, and the tick has to land on the date shown. Then the series
     // itself (in `pages`), then a done clone (in completedPages).
     const page =
       visiblePages.find((p) => p.id === pageId) ??

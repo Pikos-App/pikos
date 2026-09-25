@@ -35,7 +35,9 @@ import { viewerStart } from "../utils/syncedTime";
  * the expansion suppresses the head's own date anyway.
  *
  * Run this **before** the view filter, not after. The filter reads the head, and
- * the whole point is that the head is on the wrong day.
+ * the whole point is that the head is on the wrong day. Run it for every list,
+ * not only Today: a head nobody ticks is stale wherever it is shown, and a folder
+ * row that reads overdue while Today reads due in an hour is the same one page.
  */
 export function withTodayOccurrences(
   pages: PageSummary[],
