@@ -112,9 +112,8 @@ pub(crate) async fn resolve_click(
 
 /// Handle an OS notification click, or hold it until the shell can receive it.
 ///
-/// Generic over the runtime, like `toggle_sync_calendar`, so a `MockRuntime`
-/// test can drive the hold-then-replay sequence end to end — the part a pool
-/// alone cannot show.
+/// Generic over the runtime so a `MockRuntime` test can drive hold-then-replay,
+/// which a pool alone cannot show.
 pub async fn route_click<R: tauri::Runtime>(app: &AppHandle<R>, notification_id: &str) {
     if !app.state::<PendingClicks>().accept(notification_id).await {
         log::info!("notification_click_held (shell not listening yet)");
@@ -209,10 +208,6 @@ mod tests {
         assert_eq!(resolve_click(&pool, &id).await.unwrap(), "pikos://calendar");
     }
 
-    /// The cold-launch sequence, which is the whole point of the queue: the OS
-    /// delivers the click, the shell is not up, and the open must still be
-    /// recorded once it is. Before the queue existed this wrote nothing at all —
-    /// the pool was not open when the click arrived and nothing came back to it.
     #[tokio::test]
     async fn a_click_that_beat_the_shell_records_the_open_once_the_shell_arrives() {
         let pool = test_pool().await;

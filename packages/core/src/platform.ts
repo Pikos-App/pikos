@@ -76,10 +76,9 @@ export interface PlatformAdapter {
   requestNotificationPermission(): Promise<boolean>;
   /** Push the reminder settings to the host's scheduler. */
   applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void>;
-  /** Tell the host the app is ready to be navigated, so a notification clicked
-   *  while the app was closed can finally open its page. The host holds such a
-   *  click until this is called; calling it late only delays the page, calling
-   *  it twice does nothing. */
+  /** Tell the host the app can be navigated now. It holds a notification clicked
+   *  while the app was closed until this call, so calling it late delays the page
+   *  and calling it twice does nothing. */
   replayPendingNotificationClicks(): Promise<void>;
 
   // ─── Files ────────────────────────────────────────────────────────────────

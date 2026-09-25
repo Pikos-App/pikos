@@ -32,6 +32,29 @@ fn log_render_environment() {
     );
 }
 
+/// Refuse a second Pikos against one profile, on every desktop platform.
+///
+/// Two copies is two notification schedulers and two sync loops over one SQLite
+/// file, so a reminder arrives twice; and since both claim the same bundle
+/// identifier, macOS picks freely which one a notification click activates. The
+/// guard was `cfg(linux/windows)` on the grounds that macOS routes deep-link URLs
+/// natively, which is true and says nothing about a second process: two bundles
+/// at different paths are distinct to LaunchServices and both will run.
+///
+/// Goes first in the builder chain so a second launch exits during plugin setup,
+/// before the scheduler and the sync loop start.
+fn single_instance_guard() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // The URL itself arrives through the deep-link plugin's on_open_url
+        // handler registered in setup(), so only the window is handled here.
+        log::info!("second_instance_refused — focused the running window");
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
@@ -47,27 +70,8 @@ pub fn run() {
 
     let (sync_trigger_tx, sync_trigger_rx) = db::sync_loop::SyncTriggerSender::new();
 
-    // Registered on every desktop platform, macOS included. Two copies of Pikos
-    // against one profile is two notification schedulers and two sync loops on
-    // one SQLite file — reminders arrive twice, and because both copies claim
-    // the same bundle identifier, macOS is free to hand a notification click to
-    // whichever it likes. macOS does route deep-link URLs natively, which is
-    // what this cfg used to be about, but that says nothing about a second
-    // process: two bundles at different paths (an old build, a copy in
-    // ~/Downloads) are distinct to LaunchServices and both will run.
-    //
-    // This must stay first in the chain so a second launch exits during plugin
-    // setup, before the scheduler and the sync loop start.
     let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus the existing window. The URL itself is delivered by the
-            // deep-link plugin's on_open_url handler registered in setup().
-            log::info!("second_instance_refused — focusing the running window");
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
+        .plugin(single_instance_guard())
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())

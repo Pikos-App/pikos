@@ -43,10 +43,7 @@ export function useDeepLinkRouter() {
           return;
         }
         unlisten = un;
-        // Only now can a notification clicked while Pikos was closed be
-        // delivered: the shell mounts after the workspace opens, and this line
-        // runs after the subscription above exists, so the two things a cold
-        // click needs — a database and a listener — are both in place.
+        // After the subscription, never before: a held click emits immediately.
         void getPlatform()
           .replayPendingNotificationClicks()
           .catch((err: unknown) => {
