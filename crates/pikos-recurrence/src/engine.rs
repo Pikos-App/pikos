@@ -693,7 +693,11 @@ enum BaseSpan {
 fn base_span(anchor: &WallClock, end: Option<&str>) -> Option<BaseSpan> {
     let end = WallClock::parse(end?)?;
     if anchor.is_all_day() {
-        Some(BaseSpan::Days((end.date - anchor.date).num_days()))
+        // A same-day end says nothing an occurrence with no end does not already
+        // say, and emitting it would hand every single-day all-day series a
+        // redundant end it never had.
+        let days = (end.date - anchor.date).num_days();
+        (days > 0).then_some(BaseSpan::Days(days))
     } else {
         Some(BaseSpan::Minutes(
             (end.as_datetime() - anchor.as_datetime()).num_minutes(),
