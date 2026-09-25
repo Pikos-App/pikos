@@ -103,6 +103,9 @@ async fn set_parent(pool: &SqlitePool, child: &str, parent: &str) {
         .unwrap();
 }
 
+/// Writes the denorm alongside the row, as `refresh_schedule_denorm` does. A schedule row
+/// whose page carries no `scheduled_start` is a state no writer produces, and reading the
+/// stats against one measured the fixture rather than the app.
 async fn insert_schedule(pool: &SqlitePool, id: &str, page_id: &str, start: &str) {
     sqlx::query(
         "INSERT INTO page_schedules (id, page_id, scheduled_start, created_at) VALUES (?, ?, ?, ?)",
@@ -114,6 +117,12 @@ async fn insert_schedule(pool: &SqlitePool, id: &str, page_id: &str, start: &str
     .execute(pool)
     .await
     .unwrap();
+    sqlx::query("UPDATE pages SET scheduled_start = ? WHERE id = ?")
+        .bind(start)
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn insert_rule(pool: &SqlitePool, id: &str, page_id: &str) {
@@ -1483,4 +1492,40 @@ async fn seed_synced_calendar_is_idempotent() {
         .await
         .unwrap();
     assert_eq!(after_first, after_second);
+}
+
+/// The figure sits beside Pages, Folders and Completed, so it has to be a page count.
+/// Counting `page_schedules` rows read 271 against 324 real ones: a trashed page keeps its
+/// rows, and a recurring page has none at all.
+#[tokio::test]
+async fn usage_stats_count_scheduled_pages_not_schedule_rows() {
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-01T09:00:00"),
+            ..TestPage::new("kept", "Scheduled")
+        },
+    )
+    .await
+    .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-02T09:00:00"),
+            ..TestPage::new("trashed", "Scheduled then trashed")
+        },
+    )
+    .await
+    .unwrap();
+    insert_test_page(&pool, TestPage::new("unscheduled", "No date"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET deleted_at = '2026-05-01T00:00:00Z' WHERE id = 'trashed'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    assert_eq!(s.total_schedules, 1);
 }

@@ -95,9 +95,16 @@ pub(crate) async fn get_usage_stats_impl(
             .fetch_one(pool)
             .await?;
 
-    let total_schedules: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_schedules")
-        .fetch_one(pool)
-        .await?;
+    // Scheduled *pages*, the way the rest of the app defines scheduled
+    // (`PageFilter::has_schedule`), because this figure sits beside Pages, Folders
+    // and Completed and reads as one of them. Counting `page_schedules` rows
+    // instead both over- and under-counted: a trashed page keeps its rows, and a
+    // recurring page has none — its occurrences are virtual.
+    let total_schedules: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND scheduled_start IS NOT NULL",
+    )
+    .fetch_one(pool)
+    .await?;
 
     let total_focus_sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_sessions")
         .fetch_one(pool)
