@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
-import { PageListItem, useMoveOverdueToToday, usePageList } from "@/features/pages";
+import { PageListItem, useMoveOverdueToToday, usePageListContext } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
@@ -58,7 +58,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     renamingId,
     setRenamingId,
     visiblePages,
-  } = usePageList();
+  } = usePageListContext();
   const {
     clearSchedule,
     completeRecurringPage,
@@ -69,13 +69,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   } = usePages();
   const {
     activeViewId,
-    openDialog,
     openSortMenu,
     setOpenDialog,
     setOpenSortMenu,
     setSidebarCollapsed,
     setSortMode,
-    settingsOpen,
     sidebarCollapsed,
   } = useUI();
   const {
@@ -209,36 +207,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     const page = navigable[newIdx];
     if (page) handleSelectPage(page);
   }
-
-  function deleteSelectedOrActive() {
-    if (selectedPageIds.size > 0) {
-      const allPages = [...visiblePages, ...completedPages];
-      const selected = allPages.filter((p) => selectedPageIds.has(p.id));
-      for (const page of selected) {
-        handleDeleteRequest(page);
-      }
-      clearSelection();
-    } else if (activePage) {
-      handleDeleteRequest(activePage);
-    }
-  }
-
-  useKeyboardShortcut("Mod+Backspace", deleteSelectedOrActive, {
-    group: "Navigation",
-    label: "Delete page",
-  });
-  // Alias that also fires inside text inputs and the Tiptap editor, so the
-  // user can delete the active page from the title/subtitle inputs or while
-  // writing content. Gated to avoid surprise-deletes when a modal dialog
-  // (Quick Add, Search, Settings) is on top — those put the user in a
-  // different mental context where the activePage isn't what's being acted on.
-  useKeyboardShortcut("Mod+Shift+Backspace", deleteSelectedOrActive, {
-    allowInInputs: true,
-    group: "Navigation",
-    label: "Delete page (works in text inputs)",
-    preventDefault: true,
-    when: () => openDialog === null && !settingsOpen,
-  });
 
   useKeyboardShortcut("Escape", () => clearSelection(), {
     group: "Page list",

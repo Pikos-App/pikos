@@ -37,7 +37,7 @@ export interface TrashState {
  *  must not keep issuing reads, and every open should show current truth
  *  rather than what was there last time. */
 export function useTrash(active: boolean): TrashState {
-  const { storage } = useWorkspace();
+  const { on, storage } = useWorkspace();
   const { deletePage, restorePage } = usePages();
   const [entries, setEntries] = useState<TrashedPage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,6 +61,19 @@ export function useTrash(active: boolean): TrashState {
     if (active) void refresh();
     else setError(null);
   }, [active, storage]);
+
+  // A page can be deleted while the trash is the open view — from the calendar,
+  // or by a shortcut — and the row belongs in this list the moment it is. Without
+  // this the list only caught up when you left the view and came back, which is
+  // the one thing that re-runs the fetch above.
+  // `storage` is in the deps because `refresh` closes over it and it starts null:
+  // subscribing before the workspace loads would capture that null for good.
+  useEffect(() => {
+    if (!active) return;
+    return on("page:deleted", () => {
+      void refresh();
+    });
+  }, [active, on, storage]);
 
   /** Run a write, then re-read: the backend decides what survives (a mirror is
    *  kept), so the list is refetched rather than patched from the outcome. */
