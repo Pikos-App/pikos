@@ -420,3 +420,33 @@ appTest("a session under the floor toasts that nothing was recorded @tier2", asy
 
   await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
 });
+
+// ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
+
+// The editor's insert-link and the command palette both claim it. The editor's is
+// scoped, so it used to win outright and the palette could not be opened from the
+// one place you most want it. It now only claims the combo with a selection —
+// which is what a link is made out of — and the registry falls through otherwise.
+appTest("Cmd+Shift+K makes a link from a selection, opens the palette without one @tier2", async ({
+  app,
+}) => {
+  await quickAdd(app, "a page to write in");
+  await app.locator("[data-page-list-item]").filter({ hasText: "a page to write in" }).click();
+
+  const body = app.getByRole("textbox", { name: "Page content" });
+  await body.click();
+  await app.keyboard.type("link this phrase");
+
+  // No selection: the editor stands down and the palette opens.
+  await app.keyboard.press(mod("Mod+Shift+k"));
+  const palette = app.getByRole("dialog", { name: "Search pages" });
+  await expect(palette).toBeVisible();
+  await app.keyboard.press("Escape");
+  await expect(palette).not.toBeVisible();
+
+  // With a selection the editor takes it and the palette stays shut.
+  await body.click();
+  await app.keyboard.press(mod("Mod+a"));
+  await app.keyboard.press(mod("Mod+Shift+k"));
+  await expect(palette).not.toBeVisible();
+});

@@ -46,9 +46,9 @@ const ALLOWED_SHADOWING = new Map([
   ],
   [
     "mod+shift+k",
-    "The editor's insert-link shadows the global command palette. Known " +
-      "defect rather than a decision: it takes the combo exactly where the " +
-      "palette is most wanted, and nothing tells the user why nothing happened.",
+    "The editor's insert-link shadows the palette only while text is selected, " +
+      "which is what a link is made of; with no selection the registry falls " +
+      "through and the palette opens. Decided in Q18.",
   ],
 ]);
 

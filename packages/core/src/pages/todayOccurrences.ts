@@ -35,9 +35,13 @@ import { viewerStart } from "../utils/syncedTime";
  * the expansion suppresses the head's own date anyway.
  *
  * Run this **before** the view filter, not after. The filter reads the head, and
- * the whole point is that the head is on the wrong day. Run it for every list,
- * not only Today: a head nobody ticks is stale wherever it is shown, and a folder
- * row that reads overdue while Today reads due in an hour is the same one page.
+ * the whole point is that the head is on the wrong day.
+ *
+ * **Today only.** Everywhere else the head is the right answer: it sits on the
+ * oldest occurrence nobody has completed, which is what a folder list exists to
+ * show you. A synced meeting is a page like any other — you attend it, write in
+ * it, and completing it is what advances the series. Swapping today's occurrence
+ * in elsewhere would hide the one you still owe.
  */
 export function withTodayOccurrences(
   pages: PageSummary[],

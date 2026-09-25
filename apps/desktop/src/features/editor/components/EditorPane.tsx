@@ -226,6 +226,14 @@ export function EditorPane() {
 
   const [isAddingLink, setIsAddingLink] = useState(false);
 
+  // Only with a selection, which is what a link is made out of. Without one the
+  // registry falls through to the global binding and the command palette opens —
+  // the same split Notion, Linear and Docs give Cmd+K. Before the gate the editor
+  // took the combo outright, so the palette was unreachable from the one place
+  // you are most likely to reach for it, and nothing said why.
+  //
+  // The gate reads `editor.state` at key-press time rather than a rendered value,
+  // because a selection changes without re-rendering this component.
   useKeyboardShortcut(
     "Mod+Shift+K",
     () => {
@@ -233,7 +241,13 @@ export function EditorPane() {
       editor.view.dom.blur();
       setIsAddingLink(true);
     },
-    { allowInInputs: true, group: "Editor", label: "Insert / edit link", scope: "editor" }
+    {
+      allowInInputs: true,
+      group: "Editor",
+      label: "Insert / edit link",
+      scope: "editor",
+      when: () => !!editor && !editor.state.selection.empty,
+    }
   );
 
   if (!page) {
