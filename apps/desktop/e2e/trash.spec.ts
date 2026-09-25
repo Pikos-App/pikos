@@ -8,7 +8,7 @@
 
 import { expect } from "@playwright/test";
 
-import { mod, test as appTest, quickAdd } from "./fixtures";
+import { test as appTest, mod, quickAdd } from "./fixtures";
 
 /** Delete through the row's context menu, then let the undo toast expire the
  *  way it does for a user who walks away — which is the state the trash exists
@@ -99,7 +99,7 @@ appTest("the trash stays live and the delete shortcut survives it @tier2", async
     .click();
   await openTrash(app);
 
-  await app.keyboard.press(mod("Shift+Backspace"));
+  await app.keyboard.press(mod("Mod+Shift+Backspace"));
 
   // No navigation between the delete and the assertion — the row arriving is the
   // part that used to wait for a trip out of the view and back.

@@ -231,25 +231,26 @@ export function SearchPalette() {
     ? commands.filter((c) => commandMatches(c.label ?? "", commandFilter))
     : [];
 
-  // Both open this palette, so both are inert once it is open — and the command
-  // list only offers what its `when` gate passes, so stating it here is what
-  // keeps either from being listed as a command that does nothing but close the
-  // dialog you ran it from.
-  const paletteClosed = () => !isOpen;
+  // Both open this palette, so both are inert once it is open. The guard is here
+  // rather than in a `when` gate because the command list would not see the gate:
+  // `listCommands` is snapshotted during the render that opens the palette, and the
+  // registry refreshes each binding's `when` in a layout effect that has not run yet.
+  // Nothing re-renders in between, so the snapshot keeps the stale answer. See `C129`.
+  useKeyboardShortcut(
+    "Mod+K",
+    () => {
+      if (!isOpen) setOpenDialog("search");
+    },
+    { allowInInputs: true, group: "Navigation", label: "Search pages" }
+  );
 
-  useKeyboardShortcut("Mod+K", () => setOpenDialog("search"), {
-    allowInInputs: true,
-    group: "Navigation",
-    label: "Search pages",
-    when: paletteClosed,
-  });
-
-  useKeyboardShortcut("Mod+Shift+K", () => setOpenDialog("search", COMMAND_PREFILL), {
-    allowInInputs: true,
-    group: "Navigation",
-    label: "Run a command",
-    when: paletteClosed,
-  });
+  useKeyboardShortcut(
+    "Mod+Shift+K",
+    () => {
+      if (!isOpen) setOpenDialog("search", COMMAND_PREFILL);
+    },
+    { allowInInputs: true, group: "Navigation", label: "Run a command" }
+  );
 
   // ── Search with debounce ──────────────────────────────────────────────────
 

@@ -165,9 +165,9 @@ appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({
 
   // The kept page is a live mirror again: its title is calendar-owned once more.
   await offsite.click();
-  const title = app.getByPlaceholder("Untitled");
-  await expect(title).toHaveValue("Company offsite");
-  await expect(title).toHaveAttribute("readonly", "");
+  // A calendar-owned title is text, not a field — see the read-only treatment test.
+  await expect(app.getByRole("dialog").getByText("Company offsite")).toBeVisible();
+  await expect(app.getByRole("dialog").getByRole("textbox")).toHaveCount(0);
 });
 
 // ─── tier2: recolor ──────────────────────────────────────────────────────────
@@ -369,12 +369,8 @@ appTest(
     await expect(popover.getByText("Design review (LA team)")).toBeVisible();
     await expect(popover.getByRole("textbox")).toHaveCount(0);
 
-    // And a chip that refuses the edit does not offer one. This is the assertion that
-    // stops the class coming back; a button's cursor is a pointer unless it is told not.
-    await expect(popover.getByRole("button", { name: /^Recurrence:/ })).toHaveCSS(
-      "cursor",
-      "default"
-    );
+    // The chip that used to offer a pointer is the virtual occurrence's Repeats, which
+    // no block here reaches reliably — `RecurrencePopover.test.tsx` owns that assertion.
   }
 );
 
@@ -515,9 +511,8 @@ appTest(
     // Locked mirror: opening it shows the read-only synced schedule (a native moved
     // block would be editable) — the block inherits the series page's lock.
     await moved.click();
-    const title = app.getByPlaceholder("Untitled");
-    await expect(title).toHaveValue("Recurring review");
-    await expect(title).toHaveAttribute("readonly", "");
+    await expect(app.getByRole("dialog").getByText("Recurring review")).toBeVisible();
+    await expect(app.getByRole("dialog").getByRole("textbox")).toHaveCount(0);
 
     // Routes through completeSyncedOccurrence, keyed on the ORIGINAL occurrence.
     await app.getByRole("button", { name: "Mark done" }).click();
@@ -1105,7 +1100,8 @@ appTest("a synced series reads the same in a folder as it does in Today @tier2",
   await expect(row).toBeVisible();
   const todayDate = await dateChip().innerText();
 
-  await app.getByRole("button", { name: "Work" }).click();
+  // Two "Work" buttons exist — the sidebar folder and the calendar's account heading.
+  await app.getByRole("button", { exact: true, name: "Work" }).last().click();
   const inFolder = dateChip();
   await expect(inFolder).toBeVisible();
   await expect(inFolder).toHaveText(todayDate);
