@@ -271,7 +271,9 @@ export function RecurrencePopover({
         disabled
           ? "cursor-not-allowed text-muted-foreground/30"
           : effectiveReadOnly
-            ? "text-muted-foreground"
+            ? // A button carries a pointer cursor by default, which on a chip that
+              // refuses the edit is the surface offering something it will not do.
+              "cursor-default text-muted-foreground"
             : hasLabelContent
               ? "text-muted-foreground hover:text-foreground"
               : "text-muted-foreground/60 hover:text-muted-foreground"

@@ -175,13 +175,14 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         </div>
       )}
       {locked ? (
+        // Text, not a read-only input. The popover's focus trap lands on the first
+        // focusable thing it finds, and an input that takes focus and selects its
+        // own contents reads as a title about to be typed over — on the one page
+        // whose title cannot be typed over at all.
         <div className="flex items-center gap-2">
-          <input
-            className="min-w-0 flex-1 cursor-default border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
-            placeholder="Untitled"
-            readOnly
-            value={titleValue}
-          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            {titleValue || <span className="text-muted-foreground/40">Untitled</span>}
+          </span>
           <SyncedLockHint />
         </div>
       ) : (

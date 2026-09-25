@@ -359,13 +359,22 @@ appTest(
       app.getByRole("img", { name: "Disconnected from calendar" }).first()
     ).toBeVisible();
 
-    // Open a synced block's popover — title is read-only (schedule_locked). The
-    // block's accessible name is "<title>, <time>"; the comma distinguishes it
-    // from the like-named page-list item.
+    // Open a synced block's popover. The block's accessible name is
+    // "<title>, <time>"; the comma distinguishes it from the like-named page-list item.
     await app.getByRole("button", { name: /Design review \(LA team\),/ }).click();
-    const title = app.getByPlaceholder("Untitled");
-    await expect(title).toHaveValue("Design review (LA team)");
-    await expect(title).toHaveAttribute("readonly", "");
+    const popover = app.getByRole("dialog");
+
+    // The title is text on a calendar-owned page, not a field: an input that takes the
+    // popover's focus and selects itself reads as a title about to be typed over.
+    await expect(popover.getByText("Design review (LA team)")).toBeVisible();
+    await expect(popover.getByRole("textbox")).toHaveCount(0);
+
+    // And a chip that refuses the edit does not offer one. This is the assertion that
+    // stops the class coming back; a button's cursor is a pointer unless it is told not.
+    await expect(popover.getByRole("button", { name: /^Recurrence:/ })).toHaveCSS(
+      "cursor",
+      "default"
+    );
   }
 );
 
