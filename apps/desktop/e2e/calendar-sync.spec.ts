@@ -1086,3 +1086,31 @@ appTest(
     await expect(page.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
   }
 );
+
+// ─── tier2: a lapsed synced series reads right away from Today ───────────────
+
+// A synced series' head sits on its oldest un-ticked occurrence, and nobody ticks a
+// meeting, so the head stays on the connect day while the series goes on. Today
+// swapped in the real occurrence; every other list showed the stale head, in overdue
+// red, for a series that is not overdue and cannot be completed.
+appTest("a synced series reads the same in a folder as it does in Today @tier2", async ({ app }) => {
+  await seedSynced(app);
+
+  // "Release countdown" is seeded from the connect day −5 with COUNT=6, so its
+  // head is five days back and its last occurrence is today.
+  const row = app.locator("[data-page-list-item]").filter({ hasText: "Release countdown" }).first();
+  const dateChip = () => row.getByRole("button", { name: /Toggle date format/ });
+
+  await app.getByRole("button", { name: /^Today/ }).click();
+  await expect(row).toBeVisible();
+  const todayDate = await dateChip().innerText();
+
+  await app.getByRole("button", { name: "Work" }).click();
+  const inFolder = dateChip();
+  await expect(inFolder).toBeVisible();
+  await expect(inFolder).toHaveText(todayDate);
+
+  // The date being right is most of it; the red is the part that told the user they
+  // owed an action on a calendar Pikos only ever reads.
+  await expect(inFolder).not.toHaveClass(/text-status-overdue/);
+});

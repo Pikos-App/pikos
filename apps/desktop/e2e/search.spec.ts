@@ -228,6 +228,23 @@ appTest("Cmd+Shift+K opens in command mode and typing keeps the prefix @tier2", 
   await expect(dialog.getByRole("button", { name: /Keyboard shortcuts/ })).toBeVisible();
 });
 
+// Both shortcuts that open this palette are inert once it is open, so the command
+// list must not offer them: running one from inside only closes the dialog you ran
+// it from, which reads as the command failing rather than as it not applying.
+
+appTest("the command list leaves out the two commands that open it @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+Shift+k"));
+  const dialog = app.getByRole("dialog", { name: "Search pages" });
+  await expect(dialog).toBeVisible();
+
+  // A command that is listed is present: the absence below is a gate, not an
+  // empty list or a mistyped name.
+  await expect(dialog.getByRole("button", { name: /Keyboard shortcuts/ })).toBeVisible();
+
+  await expect(dialog.getByRole("button", { name: /Search pages/ })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /Run a command/ })).toHaveCount(0);
+});
+
 // The shortcuts settings page is rendered from the same registry the command
 // list reads, so a labelled binding shows up in both.
 

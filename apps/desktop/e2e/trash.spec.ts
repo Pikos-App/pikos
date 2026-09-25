@@ -8,7 +8,7 @@
 
 import { expect } from "@playwright/test";
 
-import { test as appTest, quickAdd } from "./fixtures";
+import { mod, test as appTest, quickAdd } from "./fixtures";
 
 /** Delete through the row's context menu, then let the undo toast expire the
  *  way it does for a user who walks away — which is the state the trash exists
@@ -74,4 +74,34 @@ appTest("emptying the trash destroys what was in it @tier2", async ({ app }) => 
   await app.getByRole("button", { name: /^Inbox/ }).click();
   await openTrash(app);
   await expect(app.getByText("The trash is empty.")).toBeVisible();
+});
+
+// ─── tier2: the trash takes the column without taking its behaviour ──────────
+
+// Both halves of one cause: the trash is its own panel, so opening it unmounts the
+// page list. The list caught up only on the way back in, and the delete shortcut —
+// registered inside the list — stopped working exactly where a user reaches for it.
+appTest("the trash stays live and the delete shortcut survives it @tier2", async ({ app }) => {
+  await quickAdd(app, "already in the bin");
+  await deleteAndLetUndoLapse(app, "already in the bin");
+  await quickAdd(app, "deleted while looking at the bin");
+
+  await openTrash(app);
+  const trash = app.getByRole("list", { name: "Deleted pages" });
+  await expect(trash).toContainText("already in the bin");
+
+  // Open the page the shortcut will act on, without leaving the trash view: the
+  // editor keeps an active page whichever panel holds the middle column.
+  await app.getByRole("button", { name: /^Inbox/ }).click();
+  await app
+    .locator("[data-page-list-item]")
+    .filter({ hasText: "deleted while looking at the bin" })
+    .click();
+  await openTrash(app);
+
+  await app.keyboard.press(mod("Shift+Backspace"));
+
+  // No navigation between the delete and the assertion — the row arriving is the
+  // part that used to wait for a trip out of the view and back.
+  await expect(trash).toContainText("deleted while looking at the bin");
 });

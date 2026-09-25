@@ -56,9 +56,38 @@ done
 
 hits=$(printf '%s\n' "$hits" | sed '/^$/d')
 
-if [ -z "$hits" ]; then
+# A second Pikos against one profile is two notification schedulers and two sync
+# loops over one SQLite file, and it announces itself here rather than on screen:
+# the reminder arrives twice and nothing says why. The single-instance guard makes
+# this unreachable, so a mismatch means the guard did not hold — which is worth a
+# release gate, because the symptom is otherwise indistinguishable from a bug in
+# the scheduler.
+starts=$(grep -cE 'Pikos .* starting on' "$filtered" || true)
+schedulers=$(grep -cF 'Notification scheduler started' "$filtered" || true)
+versions=$(grep -oE 'Pikos [^ ]+ starting on' "$filtered" | sort -u | wc -l | tr -d ' ')
+
+instance_fault=""
+if [ "$starts" -ne "$schedulers" ]; then
+  instance_fault="${starts} launch(es) but ${schedulers} scheduler(s)"
+elif [ "$versions" -gt 1 ]; then
+  instance_fault="$(grep -oE 'Pikos [^ ]+ starting on' "$filtered" | sort -u | tr '\n' ' ')"
+fi
+
+if [ -z "$hits" ] && [ -z "$instance_fault" ]; then
   echo "[log-check] clean${SINCE:+ since $SINCE}"
   exit 0
+fi
+
+if [ -n "$instance_fault" ]; then
+  echo
+  echo "[log-check] more than one Pikos ran against this profile: ${instance_fault}"
+  echo "  Every launch starts exactly one scheduler, and every launch in a session"
+  echo "  reports the same version. Check for a second copy of the app."
+fi
+
+if [ -z "$hits" ]; then
+  echo
+  exit 1
 fi
 
 # Collapse ids and timestamps so one recurring line reports as one finding with
