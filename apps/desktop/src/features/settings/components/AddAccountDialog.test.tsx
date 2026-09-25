@@ -140,7 +140,7 @@ describe("AddAccountDialog", () => {
 
     await waitFor(() =>
       expect(onConnect).toHaveBeenCalledWith({
-        baseUrl: "https://caldav.example.com",
+        baseUrl: "https://caldav.example.com/",
         displayName: "me@example.com · https://caldav.example.com/",
         password: "app-pw",
         username: "me@example.com",
@@ -148,7 +148,7 @@ describe("AddAccountDialog", () => {
     );
   });
 
-  it("defaults a bare host to https://", async () => {
+  it("reduces what was typed to one spelling of the server", async () => {
     const onConnect = vi.fn().mockResolvedValue(undefined);
     render({ onConnect });
     fireEvent.click(screen.getByText("CalDAV"));
@@ -161,7 +161,7 @@ describe("AddAccountDialog", () => {
 
     await waitFor(() =>
       expect(onConnect).toHaveBeenCalledWith(
-        expect.objectContaining({ baseUrl: "https://caldav.icloud.com" })
+        expect.objectContaining({ baseUrl: "https://caldav.icloud.com/" })
       )
     );
   });

@@ -1,5 +1,5 @@
 import type { NewCaldavConnection } from "@pikos/core";
-import { caldavAccountIdentity } from "@pikos/core";
+import { caldavAccountIdentity, caldavBaseUrl } from "@pikos/core";
 import { CalendarDays, Loader2, Server } from "lucide-react";
 import { useState } from "react";
 
@@ -53,10 +53,9 @@ export function AddAccountDialog({
   async function submit() {
     setBusy(true);
     setError(null);
-    // Default a bare host to https:// — users routinely type "caldav.icloud.com"
-    // without a scheme, which would otherwise fail discovery confusingly.
-    const trimmedUrl = serverUrl.trim();
-    const baseUrl = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`;
+    // One spelling for the server, used for both the connection and the identity
+    // that decides whether this is a new account — see `caldavBaseUrl`.
+    const baseUrl = caldavBaseUrl(serverUrl);
     try {
       await onConnect({
         baseUrl,
