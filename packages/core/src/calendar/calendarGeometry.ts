@@ -49,7 +49,7 @@ const EVENT_BLOCK_PADDING = 4;
  *  `textScale`. Below this the text is taller than the block that holds it, so
  *  raising the text size alone would silently clip instead of enlarging.
  *  At scale 1 this is 36px, under every density, so it is inert until the
- *  calendar text size is actually raised (PKOS-0067, C88). */
+ *  calendar text size is actually raised. */
 export function minHourHeightForTextScale(textScale: number): number {
   return 2 * (EVENT_LINE_HEIGHT * textScale + EVENT_BLOCK_PADDING);
 }

@@ -143,7 +143,7 @@ function useGlobalShortcuts() {
   // The size keys act on the panel in front of you, not on whatever holds focus.
   // Settings is a full-window overlay, so while it is open it is that panel and
   // the keys size the interface — which is what keeps the fix for "I cannot read
-  // this" from being reachable only by reading. PKOS-0067.
+  // this" from being reachable only by reading.
   const sizeTarget = () => (settingsOpen ? "interface" : rightPanel);
   const stepVisible = (direction: 1 | -1) => {
     if (sizeTarget() === "interface") return stepInterfaceScale(direction);

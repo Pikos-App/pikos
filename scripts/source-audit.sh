@@ -86,6 +86,21 @@ else
   pass "No hardcoded personal paths"
 fi
 
+# ── 2b. References nobody outside this machine can follow ───────────────────
+# `.agent/`, `.claude/` and `CLAUDE.md` are gitignored, so a decision-record id,
+# a backlog id or a path into them is a dead end for anyone reading the published
+# source. State the fact inline instead; the record is where the reasoning lives,
+# not where a reader of this file can go.
+hits=$(src_files \
+  | xargs grep -nE '(PKOS-[0-9]{4}|GAR-[0-9]{4}|SOLO-[0-9]{4}|\.agent/|\.claude/|`[A-Z][0-9]{1,3}`)' 2>/dev/null \
+  | grep -v 'node_modules' || true)
+
+if [ -n "$hits" ]; then
+  fail "References to gitignored records or paths" $hits
+else
+  pass "No references nobody outside can follow"
+fi
+
 # ── 3. Debug leftovers (JS/TS) ──────────────────────────────────────────────
 hits=$(ts_src_files \
   | xargs grep -nE '(^\s*console\.log\(|^\s*debugger\b)' 2>/dev/null || true)

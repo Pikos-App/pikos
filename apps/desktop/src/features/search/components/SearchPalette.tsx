@@ -235,7 +235,7 @@ export function SearchPalette() {
   // rather than in a `when` gate because the command list would not see the gate:
   // `listCommands` is snapshotted during the render that opens the palette, and the
   // registry refreshes each binding's `when` in a layout effect that has not run yet.
-  // Nothing re-renders in between, so the snapshot keeps the stale answer. See `C129`.
+  // Nothing re-renders in between, so the snapshot keeps the stale answer.
   useKeyboardShortcut(
     "Mod+K",
     () => {

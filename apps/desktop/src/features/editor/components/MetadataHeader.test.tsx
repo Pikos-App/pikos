@@ -345,7 +345,7 @@ describe("MetadataHeader — the caret stays where you put it", () => {
   });
 });
 
-// PKOS-0039 says the 800ms auto-save debounce is "flushed on blur". It was not:
+// The 800ms auto-save debounce is meant to flush on blur. It did not:
 // the only flush listened on `window`'s blur, which fires when the whole app
 // loses focus and never when focus moves between elements inside it. So moving
 // from the title into the body left the rename unwritten, and anything reading

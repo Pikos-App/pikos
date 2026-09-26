@@ -21,7 +21,7 @@ import { stepTextSize, TEXT_SIZES, type TextSize } from "@/shared/context/textSi
 /** Event-title sizes in px, ascending. The calendar names a px like the editor
  *  does rather than a word like the interface does, because both have one body
  *  size everything else is relative to and the interface has none
- *  (PKOS-0067 leaves the vocabulary per-area, the control shape shared).
+ *  — the vocabulary is per-area, only the control shape is shared.
  *  13 is `type-body-sm`, what an event title renders at today. */
 export const CALENDAR_TEXT_SIZES = TEXT_SIZES;
 
