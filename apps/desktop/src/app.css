@@ -477,6 +477,11 @@ button,
   --container-settings: calc(32rem * var(--ui-text-scale, 1));
   --container-settings-nav: calc(14rem * var(--ui-text-scale, 1));
 
+  /* How wide a chip's label may run before it truncates. Same reason as the two
+     above: a cap that does not ride the scale cuts a doubled label off mid-word
+     while the row it sits in has a whole free line beside it. */
+  --container-chip-label: calc(100px * var(--ui-text-scale, 1));
+
   /* Padding and gaps *inside* a text row — the inset around a label, the space
      between an icon and the word next to it. These belong to the type, so they
      ride the scale: left fixed, a doubled label sits in the same tight box it

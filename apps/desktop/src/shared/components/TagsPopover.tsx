@@ -52,7 +52,7 @@ export function TagsPopover({ allTags, onClose, onToggle, selected }: TagsPopove
                 )}
               >
                 {!hasSelected && <Hash aria-hidden="true" className="shrink-0" size={13} />}
-                <span className="max-w-[100px] truncate">{label}</span>
+                <span className="max-w-chip-label truncate">{label}</span>
               </button>
             }
           >
