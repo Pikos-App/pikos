@@ -98,7 +98,12 @@ export function Byline({
       };
 
   return (
-    <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
+    // Wraps rather than clips. Every chip used to shrink together inside an
+    // overflow-hidden row, so at a large interface size the labels went and the
+    // folder — the one a person turning the text up most needs — went first. Source
+    // order is the ranking: status, folder and date hold the first line, and tags
+    // are what moves down.
+    <div className="type-ui-sm flex flex-wrap items-center gap-ui-md pt-2 pb-4 text-subtle">
       <PageMetadataChips
         groups={[
           {

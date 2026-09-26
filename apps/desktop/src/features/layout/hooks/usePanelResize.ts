@@ -11,8 +11,8 @@ interface PanelResizeOptions {
   max: number;
   /** Share of the window this panel may not grow past, as a fraction. The two
    *  left panels' shares must sum to at most 0.5: the calendar is what a
-   *  growing panel eats, and losing it is the failure PKOS-0067 rejected
-   *  app-wide zoom to avoid. Only ever caps growth, never below `min`. */
+   *  growing panel eats, and losing it is why the interface scales its type
+   *  rather than zooming the whole app. Only ever caps growth, never below `min`. */
   maxWindowShare: number;
 }
 

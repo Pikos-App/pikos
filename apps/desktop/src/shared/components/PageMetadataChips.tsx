@@ -66,8 +66,8 @@ function StatusChip({
       aria-label={checked ? "Mark not done" : "Mark done"}
       className={
         layout === "byline"
-          ? "group/status inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
-          : "group/status inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+          ? "group/status inline-flex items-center gap-ui-sm rounded transition-colors hover:text-muted-foreground focus:outline-none"
+          : "group/status inline-flex items-center gap-ui-sm rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
       }
       onClick={onToggle}
     >
@@ -128,8 +128,8 @@ export function PageMetadataChips({ groups, layout }: PageMetadataChipsProps) {
       <div
         className={
           layout === "byline"
-            ? "inline-flex shrink-0 items-center gap-2"
-            : "flex items-center gap-2"
+            ? "inline-flex shrink-0 items-center gap-ui-md"
+            : "flex items-center gap-ui-md"
         }
       >
         {chips}
@@ -142,7 +142,12 @@ export function PageMetadataChips({ groups, layout }: PageMetadataChipsProps) {
       <>
         {visible.map((group) => (
           <div className="flex items-center gap-3" key={group.key}>
-            <span className="w-14 shrink-0 text-xs text-muted-foreground/50">{group.key}</span>
+            {/* The label column scales with the interface. Fixed at `w-14` the label
+                outgrew its own box at a large text size and ran into the value beside
+                it, so the row read as one word. */}
+            <span className="type-ui-sm w-[calc(3.5rem*var(--ui-text-scale,1))] shrink-0 text-muted-foreground/50">
+              {group.key}
+            </span>
             {renderChips(group)}
           </div>
         ))}

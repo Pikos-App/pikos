@@ -440,7 +440,7 @@ button,
    ═══════════════════════════════════════════════════════════════════════════════
 
    `html` is 13px and Tailwind sizes both text and spacing in rem, so raising the
-   root would scale the layout too. That is the app-wide zoom PKOS-0067 rejected:
+   root would scale the layout too. That is the app-wide zoom this deliberately is not:
    the window does not grow with it, so the calendar is what gets squeezed out.
 
    Multiplying only the `--text-*` scale moves type without moving anything else,
@@ -481,8 +481,8 @@ button,
      between an icon and the word next to it. These belong to the type, so they
      ride the scale: left fixed, a doubled label sits in the same tight box it
      had at 13px. Structural spacing (panel gutters, grid gaps) stays on the
-     plain `--spacing` ladder, because moving that is the app-wide zoom
-     PKOS-0067 rejected. */
+     plain `--spacing` ladder, because moving that is the app-wide zoom this
+     deliberately is not. */
   --spacing-ui-xs: calc(0.25rem * var(--ui-text-scale, 1));
   --spacing-ui-sm: calc(0.375rem * var(--ui-text-scale, 1));
   --spacing-ui-md: calc(0.625rem * var(--ui-text-scale, 1));
@@ -520,7 +520,8 @@ button,
      a rem utility, and the `--text-*` scale reaches neither. `zoom` multiplies
      both the drawn mark and the box it reserves, so one rule scales all of them
      and each keeps its size relative to the others. Scaling `--spacing` instead
-     would move the whole layout, which is the app-wide zoom PKOS-0067 rejected. */
+     would move the whole layout, which is the app-wide zoom this deliberately
+     is not. */
   .lucide,
   .color-dot {
     zoom: var(--ui-text-scale, 1);
@@ -612,6 +613,24 @@ button,
   .type-body-sm {
     font-size: calc(13px * var(--ui-text-scale, 1));
     font-weight: 400;
+  }
+
+  /* Controls — a square icon button and the icon inside it, both tracking the
+     interface scale.
+
+     Text tokens scale and control boxes did not, so at 200% an icon button stayed
+     28px while everything around it doubled: the calendar's view switcher collapsed
+     into a row of dense, touching squares with no gap to aim at. A control the user
+     turned the text up to reach is the last thing that should stay small.
+
+     Only the box. The icon inside already rides `--ui-text-scale` through the
+     `zoom` rule on `.lucide` further down, so sizing it here would scale it
+     twice. What was missing is the square it sits in, which stayed 28px while
+     the icon grew — hence a row of controls that touched and overlapped. */
+  .ui-control {
+    height: calc(1.75rem * var(--ui-text-scale, 1));
+    width: calc(1.75rem * var(--ui-text-scale, 1));
+    font-size: calc(14px * var(--ui-text-scale, 1));
   }
 
   /* UI — size + weight only. Compact by default (no forced line-height). */

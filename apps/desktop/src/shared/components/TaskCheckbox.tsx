@@ -34,7 +34,7 @@ export function TaskCheckbox({
       aria-checked={isSpan ? undefined : checked}
       aria-label={isSpan ? undefined : checked ? "Mark not done" : "Mark done"}
       className={cn(
-        "task-checkbox flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
+        "task-checkbox flex h-[calc(1rem*var(--ui-text-scale,1))] w-[calc(1rem*var(--ui-text-scale,1))] shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
         checked && "border-muted-foreground/40 bg-muted-foreground/40",
         !checked && !borderColor && "border-border-primary",
         className

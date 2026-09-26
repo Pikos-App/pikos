@@ -144,21 +144,25 @@ export function PageListItem({
           role={undefined}
           tabIndex={isActive ? 0 : -1}
         >
-          {/* Checkbox — border color encodes priority when not done */}
-          <TaskCheckbox
-            borderColor={
-              isOpen(page)
-                ? page.priority === 1
-                  ? "var(--color-status-overdue)"
-                  : page.priority === 2
-                    ? "var(--color-status-due-soon)"
-                    : undefined
-                : undefined
-            }
-            checked={isDone(page)}
-            className="mt-px"
-            onChange={() => onToggleStatus()}
-          />
+          {/* Checkbox — border color encodes priority when not done.
+              Centred on the title's line rather than the row's top edge: the row is
+              `items-start` so a two-line row keeps the box beside the title instead of
+              floating to the middle, and on a one-line row that left it sitting high. */}
+          <span className="type-body flex h-[1em] shrink-0 items-center leading-none">
+            <TaskCheckbox
+              borderColor={
+                isOpen(page)
+                  ? page.priority === 1
+                    ? "var(--color-status-overdue)"
+                    : page.priority === 2
+                      ? "var(--color-status-due-soon)"
+                      : undefined
+                  : undefined
+              }
+              checked={isDone(page)}
+              onChange={() => onToggleStatus()}
+            />
+          </span>
 
           {/* Content */}
           <div className="min-w-0 flex-1">

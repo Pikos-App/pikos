@@ -49,10 +49,10 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
       trigger={
         <button
           aria-label={`Folder: ${label}`}
-          className="inline-flex min-w-0 items-center gap-1 rounded text-sm text-subtle transition-colors hover:text-muted-foreground focus:outline-none"
+          className="inline-flex min-w-0 items-center gap-ui-xs rounded text-sm text-subtle transition-colors hover:text-muted-foreground focus:outline-none"
         >
           <FolderOpen aria-hidden="true" className="shrink-0" size={13} />
-          <span className="max-w-[100px] truncate">{label}</span>
+          <span className="max-w-[calc(100px*var(--ui-text-scale,1))] truncate">{label}</span>
         </button>
       }
     >

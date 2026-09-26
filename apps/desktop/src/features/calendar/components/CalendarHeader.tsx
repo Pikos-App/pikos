@@ -71,7 +71,7 @@ export function CalendarHeader({
         <TooltipTrigger asChild>
           <Button
             aria-label={`Previous ${unit}`}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={onPrevWeek}
             size="icon"
             variant="ghost"
@@ -89,7 +89,7 @@ export function CalendarHeader({
         <TooltipTrigger asChild>
           <Button
             aria-label={`Next ${unit}`}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={onNextWeek}
             size="icon"
             variant="ghost"
@@ -107,7 +107,7 @@ export function CalendarHeader({
         <TooltipTrigger asChild>
           <Button
             aria-label={isMonth ? "Jump to current month" : "Jump to current week"}
-            className="h-7 px-2 text-xs"
+            className="type-ui h-[calc(1.75rem*var(--ui-text-scale,1))] px-2"
             disabled={isCurrentPeriod}
             onClick={onToday}
             size="sm"
@@ -129,7 +129,7 @@ export function CalendarHeader({
           <Button
             aria-label="Time grid view"
             aria-pressed={!isMonth}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={() => onViewModeChange("time")}
             size="icon"
             variant={isMonth ? "ghost" : "secondary"}
@@ -148,7 +148,7 @@ export function CalendarHeader({
           <Button
             aria-label="Month view"
             aria-pressed={isMonth}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={() => onViewModeChange("month")}
             size="icon"
             variant={isMonth ? "secondary" : "ghost"}

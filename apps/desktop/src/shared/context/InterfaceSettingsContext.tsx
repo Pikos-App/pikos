@@ -7,9 +7,8 @@ export type ListDensity = "compact" | "cozy" | "spacious";
 /** Multipliers on the whole interface type scale, ascending. Not px, because
  *  this scales a scale: the sidebar, lists, dialogs and menus each keep their
  *  own relative sizes and move together. The top is 2× so text that starts at
- *  the app's 11px floor can reach the 22px the accessibility guidance asks for
- *  (PKOS-0067). */
-export const INTERFACE_TEXT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2] as const;
+ *  the app's 11px floor can reach the 22px the accessibility guidance asks for. */
+export const INTERFACE_TEXT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 2] as const;
 
 export type InterfaceTextScale = (typeof INTERFACE_TEXT_SCALES)[number];
 

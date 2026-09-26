@@ -373,7 +373,12 @@ export function PageBlock({
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-3" side="right" sideOffset={8}>
+      <PopoverContent
+        align="start"
+        className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
+        side="right"
+        sideOffset={8}
+      >
         {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}

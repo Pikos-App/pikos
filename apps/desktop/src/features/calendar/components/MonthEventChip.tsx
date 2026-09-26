@@ -91,7 +91,7 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-80 p-3"
+        className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         side="bottom"
