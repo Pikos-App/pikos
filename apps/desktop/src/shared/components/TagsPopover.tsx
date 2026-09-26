@@ -111,7 +111,11 @@ export function TagsPopover({ allTags, onClose, onToggle, selected }: TagsPopove
         </div>
       </TooltipTrigger>
 
-      {hasSelected && (
+      {/* Not while the menu is open. The tooltip is anchored to the trigger, which the
+          menu opens directly over, so it covered the search field — and typing there is
+          the only way to add or create a tag. Once the menu is up it lists the tags
+          anyway, so the tooltip has nothing left to say. */}
+      {hasSelected && !open && (
         <TooltipContent className="max-w-[260px]" side="bottom">
           {selected.map((t) => `#${t}`).join("  ")}
         </TooltipContent>
