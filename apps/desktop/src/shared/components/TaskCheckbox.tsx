@@ -2,6 +2,26 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * The three sizes a checkbox comes in, each as a `calc` against the interface
+ * text scale so the box tracks the type beside it.
+ *
+ * It is a prop rather than something a caller writes in `className` because a
+ * plain `h-3.5` there wins the tailwind-merge and silently pins the box: the
+ * calendar's blocks, all-day chips and month chips each did that, and stayed
+ * 12–14px while the calendar's own text size moved around them.
+ */
+const SIZE_CLASS = {
+  /** The page list and the editor byline. */
+  md: "h-[calc(1rem*var(--ui-text-scale,1))] w-[calc(1rem*var(--ui-text-scale,1))]",
+  /** A calendar block that has collapsed to a single line of micro type. */
+  micro: "h-[calc(0.625rem*var(--ui-text-scale,1))] w-[calc(0.625rem*var(--ui-text-scale,1))]",
+  /** Calendar blocks and all-day chips. */
+  sm: "h-[calc(0.875rem*var(--ui-text-scale,1))] w-[calc(0.875rem*var(--ui-text-scale,1))]",
+  /** Month chips, and any row too short for the default. */
+  xs: "h-[calc(0.75rem*var(--ui-text-scale,1))] w-[calc(0.75rem*var(--ui-text-scale,1))]",
+} as const;
+
 interface TaskCheckboxProps {
   checked: boolean;
   onChange: (e: React.MouseEvent) => void;
@@ -13,6 +33,8 @@ interface TaskCheckboxProps {
   borderColor?: string | undefined;
   /** Render as span (inside buttons) or button (standalone). Default: button. */
   as?: "button" | "span";
+  /** See `SIZE_CLASS`. Never set the box's height or width in `className`. */
+  size?: keyof typeof SIZE_CLASS;
   className?: string | undefined;
 }
 
@@ -22,6 +44,7 @@ export function TaskCheckbox({
   checked,
   className,
   onChange,
+  size = "md",
 }: TaskCheckboxProps) {
   // When rendered as a `<span>` we're nested inside an interactive parent
   // (a calendar block <button>). Exposing role="checkbox" there trips
@@ -34,7 +57,8 @@ export function TaskCheckbox({
       aria-checked={isSpan ? undefined : checked}
       aria-label={isSpan ? undefined : checked ? "Mark not done" : "Mark done"}
       className={cn(
-        "task-checkbox flex h-[calc(1rem*var(--ui-text-scale,1))] w-[calc(1rem*var(--ui-text-scale,1))] shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
+        "task-checkbox flex shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
+        SIZE_CLASS[size],
         checked && "border-muted-foreground/40 bg-muted-foreground/40",
         !checked && !borderColor && "border-border-primary",
         className

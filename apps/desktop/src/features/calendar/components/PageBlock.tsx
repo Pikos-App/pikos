@@ -251,8 +251,14 @@ export function PageBlock({
       as="span"
       borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
       checked={done}
-      className={cn(iconClass, "cursor-pointer!")}
+      className={cn(
+        !isMicro && isRenderingCompact && "mt-px",
+        !isMicro && !isRenderingCompact && "mt-[3px]",
+        isMicro && "rounded-[3px]",
+        "cursor-pointer!"
+      )}
       onChange={handleCheckboxClick}
+      size={isMicro ? "micro" : "sm"}
     />
   ) : (
     <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />

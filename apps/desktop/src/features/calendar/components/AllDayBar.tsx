@@ -162,8 +162,9 @@ export function AllDayBar({
               as="span"
               borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
               checked={done}
-              className="h-3.5 w-3.5 cursor-pointer!"
+              className="cursor-pointer!"
               onChange={handleCheckboxClick}
+              size="sm"
             />
           ) : (
             <Repeat2

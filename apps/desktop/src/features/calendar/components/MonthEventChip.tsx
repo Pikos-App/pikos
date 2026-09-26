@@ -78,8 +78,9 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
               as="span"
               borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
               checked={done}
-              className="h-3 w-3 shrink-0 cursor-pointer!"
+              className="cursor-pointer!"
               onChange={handleCheckboxClick}
+              size="xs"
             />
           ) : (
             <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
