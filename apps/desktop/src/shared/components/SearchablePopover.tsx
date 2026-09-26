@@ -110,7 +110,7 @@ export function SearchablePopoverItem({
 }) {
   return (
     <button
-      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent ${
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
         selected === undefined
           ? ""
           : selected
