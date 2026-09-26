@@ -446,7 +446,7 @@ test("3 Calendar @tour", async ({ page }) => {
       await row(page, "Water the plants")
         .getByRole("checkbox", { name: /Mark done/ })
         .click();
-      await expect(page.getByText(/earlier days? (are|is) still open/)).toBeVisible();
+      await expect(page.getByText(/other days? (are|is) still open/)).toBeVisible();
     });
     await t.capture(17, "Missed repeat: deleting a past occurrence", async () => {
       await t.launch(CALENDAR);
@@ -456,7 +456,7 @@ test("3 Calendar @tour", async ({ page }) => {
         .first()
         .click();
       await page.getByRole("button", { name: "Delete this occurrence" }).click();
-      await expect(page.getByText(/earlier days? (are|is) still open/)).toBeVisible();
+      await expect(page.getByText(/other days? (are|is) still open/)).toBeVisible();
     });
   });
 });

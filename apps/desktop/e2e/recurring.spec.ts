@@ -570,7 +570,7 @@ appTest("overdue tick → just this one keeps the gap and drops one clone @tier2
   const items = await seedOverdueDailyRecurring(page);
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
-  await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  await expect(page.getByText(/2 other days are still open/)).toBeVisible();
   // It names the page it is about to act on, and calls them days the way the body
   // does — it used to say "Mark complete" over a list of three days it never named.
   await expect(page.getByRole("dialog")).toContainText(/Mark .*standup.* done\?/);
@@ -579,7 +579,7 @@ appTest("overdue tick → just this one keeps the gap and drops one clone @tier2
   await expect(page.getByRole("button", { name: /This and everything before today/ })).toBeVisible();
 
   await page.getByRole("button", { name: /Just this one/ }).click();
-  await expect(page.getByText(/2 earlier days are still open/)).not.toBeVisible();
+  await expect(page.getByText(/2 other days are still open/)).not.toBeVisible();
 
   await page.getByRole("button", { exact: true, name: "Completed" }).click();
   await expect(
@@ -591,9 +591,9 @@ appTest("overdue tick → everything before today clones one done page per day @
   const items = await seedOverdueDailyRecurring(page);
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
-  await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  await expect(page.getByText(/2 other days are still open/)).toBeVisible();
   await page.getByRole("button", { name: /This and everything before today/ }).click();
-  await expect(page.getByText(/2 earlier days are still open/)).not.toBeVisible();
+  await expect(page.getByText(/2 other days are still open/)).not.toBeVisible();
 
   // Mon, Tue and Wed each land as their own done page; the head moves to today.
   await page.getByRole("button", { exact: true, name: "Completed" }).click();
@@ -628,7 +628,7 @@ async function deleteFirstOverdueVirtual(page: import("@playwright/test").Page) 
   await firstVirtual.scrollIntoViewIfNeeded();
   await firstVirtual.click();
   await page.getByRole("button", { name: "Delete this occurrence" }).click();
-  await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  await expect(page.getByText(/2 other days are still open/)).toBeVisible();
 
   return { before, calendar };
 }

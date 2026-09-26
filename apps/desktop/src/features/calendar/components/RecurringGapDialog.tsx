@@ -87,7 +87,7 @@ export function RecurringGapDialog() {
         <DialogTitle>{title}</DialogTitle>
         {pending ? (
           <DialogDescription className="type-ui-sm text-muted-foreground">
-            {others} earlier {others === 1 ? "day is" : "days are"} still open:{" "}
+            {others} other {others === 1 ? "day is" : "days are"} still open:{" "}
             <MissedDaysSummary dates={pending.missedDates} />.
           </DialogDescription>
         ) : null}

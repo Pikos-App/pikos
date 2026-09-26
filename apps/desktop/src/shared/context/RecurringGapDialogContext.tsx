@@ -81,6 +81,9 @@ function occurrenceExclusions(rule: PageRecurrenceRule, head: PageSummary | unde
  * — and it is itself part of the backlog whenever the gesture pointed elsewhere,
  * which is why the window opens a millisecond before its day rather than at the
  * head's own instant.
+ *
+ * So the dialog calls these days "other", never "earlier": a tick lands on the
+ * head, and every day left in this set is later than it.
  */
 function missedBefore(
   rule: PageRecurrenceRule,
