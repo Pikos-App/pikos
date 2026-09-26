@@ -956,3 +956,51 @@ async fn a_no_op_recompute_does_not_restamp_updated_at() {
 
     assert_eq!(before, after, "a head that didn't move writes nothing");
 }
+
+// ─── a multi-day all-day span across recurrence ──────────────────────────────
+
+/// A three-day all-day series must stay three days on every occurrence, on the
+/// head that advances past a completion and on the clone that completion mints.
+/// The span used to be measured in minutes, and an all-day base has no clock to
+/// measure, so every occurrence after the first collapsed to a single day. The
+/// functionality matrix claims all-day is orthogonal to recurrence; this is what
+/// makes that claim true rather than asserted.
+#[tokio::test]
+async fn completing_a_multi_day_all_day_occurrence_keeps_the_span() {
+    let pool = test_pool().await;
+    seed_series(
+        &pool,
+        "conf",
+        "FREQ=WEEKLY;BYDAY=MO",
+        "2026-03-02",
+        Some("2026-03-04"),
+    )
+    .await;
+    recompute(&pool, "conf").await;
+
+    let result = complete_recurring_page_impl(
+        &pool,
+        CompleteRecurringInput {
+            page_id: "conf".into(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.clone.scheduled_start.as_deref(), Some("2026-03-02"));
+    assert_eq!(
+        result.clone.scheduled_end.as_deref(),
+        Some("2026-03-04"),
+        "the completed copy keeps all three days"
+    );
+    assert_eq!(result.head.scheduled_start.as_deref(), Some("2026-03-09"));
+    assert_eq!(
+        result.head.scheduled_end.as_deref(),
+        Some("2026-03-11"),
+        "the advanced head keeps all three days"
+    );
+}

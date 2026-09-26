@@ -252,7 +252,10 @@ notification an all-day page can produce.
 over, where a timed one goes overdue at its start time.
 ²⁶ A recurring all-day series renders one bar per occurrence day rather than collapsing into a
 span, because virtual occurrences share the head's page id (`allDayLayout.ts`). Dragging one
-passes `originalDate`, so it keys an override exactly like a timed virtual (§6).
+passes `originalDate`, so it keys an override exactly like a timed virtual (§6). A series whose
+base covers several days keeps that width on every occurrence, on the head as it advances and on
+the copy a completion leaves behind: an all-day span is carried as whole days, not as the
+elapsed minutes a timed span uses.
 
 ## 4. Recurrence rule (the series itself)
 
