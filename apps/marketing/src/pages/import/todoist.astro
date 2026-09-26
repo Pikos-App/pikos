@@ -55,26 +55,26 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
         <h2>What comes across</h2>
 
         <ul>
-          <li><strong>Tasks</strong> — each task row becomes a Pikos page. Task titles (<code>CONTENT</code>) and descriptions (<code>DESCRIPTION</code>) are preserved.</li>
-          <li><strong>Notes</strong> — Todoist exports task comments as separate rows with <code>TYPE=note</code>. Pikos merges them into the previous task's body so you don't lose context.</li>
-          <li><strong>Priorities</strong> — Todoist's CSV uses 1–4 (where 1 is urgent and 4 is no priority in the UI). The importer maps <code>1 → Urgent</code>, <code>2 → High</code>, <code>3 → Medium</code>, <code>4 → None</code>.</li>
-          <li><strong>Fixed dates</strong> — date-only values like <code>2026-06-15</code> come across as all-day. Structured date-with-time values are preserved as timed events.</li>
-          <li><strong>Durations</strong> — if a task has <code>DURATION=30</code> and <code>DURATION_UNIT=minute</code>, Pikos uses that to compute the end time of a timed event.</li>
-          <li><strong>Labels</strong> — become Pikos tags.</li>
-          <li><strong>Deadlines</strong> — Todoist's optional <code>DEADLINE</code> field maps to the scheduled end date.</li>
+          <li><strong>Tasks</strong>: each task row becomes a Pikos page. Task titles (<code>CONTENT</code>) and descriptions (<code>DESCRIPTION</code>) are preserved.</li>
+          <li><strong>Notes</strong>: Todoist exports task comments as separate rows with <code>TYPE=note</code>. Pikos merges them into the previous task's body so you don't lose context.</li>
+          <li><strong>Priorities</strong>: Todoist's CSV uses 1–4 (where 1 is urgent and 4 is no priority in the UI). The importer maps <code>1 → Urgent</code>, <code>2 → High</code>, <code>3 → Medium</code>, <code>4 → None</code>.</li>
+          <li><strong>Fixed dates</strong>: date-only values like <code>2026-06-15</code> come across as all-day. Structured date-with-time values are preserved as timed events.</li>
+          <li><strong>Durations</strong>: if a task has <code>DURATION=30</code> and <code>DURATION_UNIT=minute</code>, Pikos uses that to compute the end time of a timed event.</li>
+          <li><strong>Labels</strong>: become Pikos tags.</li>
+          <li><strong>Deadlines</strong>: Todoist's optional <code>DEADLINE</code> field maps to the scheduled end date.</li>
         </ul>
 
         <h2>What doesn't come across</h2>
 
         <ul>
-          <li><strong>Projects (folders)</strong> — Todoist's CSV doesn't include the project name as a column; it's only in the filename. Imported tasks land in your Pikos Inbox by default. You can create a folder in Pikos first and move them after import, or rename the Inbox section if it's a one-off.</li>
-          <li><strong>Sub-tasks</strong> — Todoist signals nesting via an <code>INDENT</code> column rather than parent IDs, and the importer doesn't reconstruct hierarchy from indent levels. Sub-tasks land as flat sibling pages. Parent/child structure has to be rebuilt by hand in Pikos.</li>
-          <li><strong>Sections</strong> — Todoist sections within a project export as their own rows (<code>TYPE=section</code>) and the importer drops them entirely. The tasks underneath each section still come through, just without the section grouping.</li>
-          <li><strong>Recurring rules</strong> — Todoist stores repeats as natural-language phrases ("every Monday", "every 2 weeks at 9am") rather than as a structured rule. Each task imports with only its next due date; the repeat itself doesn't carry. Recurrence support for Todoist is on the roadmap.</li>
-          <li><strong>Natural-language dates</strong> — phrases like "tomorrow", "in 3 days", or "next Friday" don't parse on import. If your task uses one of these instead of a fixed date, it imports with no scheduled date and you'll need to re-set it in Pikos.</li>
-          <li><strong>Reminders</strong> — Todoist doesn't include reminder times in the CSV export. Re-add critical ones in Pikos.</li>
-          <li><strong>Completed tasks</strong> — Todoist's standard CSV export only includes active tasks. Completed history lives behind the "Activity log" view, which isn't part of the CSV.</li>
-          <li><strong>Filters, saved views, karma history</strong> — query definitions and gamification state aren't part of the export.</li>
+          <li><strong>Projects (folders)</strong>: Todoist's CSV doesn't include the project name as a column; it's only in the filename. Imported tasks land in your Pikos Inbox by default. You can create a folder in Pikos first and move them after import, or rename the Inbox section if it's a one-off.</li>
+          <li><strong>Sub-tasks</strong>: Todoist signals nesting via an <code>INDENT</code> column rather than parent IDs, and the importer doesn't reconstruct hierarchy from indent levels. Sub-tasks land as flat sibling pages. Parent/child structure has to be rebuilt by hand in Pikos.</li>
+          <li><strong>Sections</strong>: Todoist sections within a project export as their own rows (<code>TYPE=section</code>) and the importer drops them entirely. The tasks underneath each section still come through, just without the section grouping.</li>
+          <li><strong>Recurring rules</strong>: Todoist stores repeats as natural-language phrases ("every Monday", "every 2 weeks at 9am") rather than as a structured rule. Each task imports with only its next due date; the repeat itself doesn't carry. Recurrence support for Todoist is on the roadmap.</li>
+          <li><strong>Natural-language dates</strong>: phrases like "tomorrow", "in 3 days", or "next Friday" don't parse on import. If your task uses one of these instead of a fixed date, it imports with no scheduled date and you'll need to re-set it in Pikos.</li>
+          <li><strong>Reminders</strong>: Todoist doesn't include reminder times in the CSV export. Re-add critical ones in Pikos.</li>
+          <li><strong>Completed tasks</strong>: Todoist's standard CSV export only includes active tasks. Completed history lives behind the "Activity log" view, which isn't part of the CSV.</li>
+          <li><strong>Filters, saved views, karma history</strong>: query definitions and gamification state aren't part of the export.</li>
         </ul>
 
         <h2>If something goes sideways</h2>

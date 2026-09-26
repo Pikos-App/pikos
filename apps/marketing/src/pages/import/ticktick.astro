@@ -49,7 +49,7 @@ const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses
         <h2>3. Preview, then commit</h2>
 
         <p>
-          The preview shows every page that will be created, grouped by the list it came from. Skipped columns are listed with a short explanation (e.g. "Kanban column order — no equivalent in Pikos"), so nothing disappears silently. A <strong>Skip completed</strong> toggle lets you leave finished tasks behind if you only want to bring across active work.
+          The preview shows every page that will be created, grouped by the list it came from. Any column Pikos skips is listed with a short reason why, so nothing disappears silently. A <strong>Skip completed</strong> toggle lets you leave finished tasks behind if you only want to bring across active work.
         </p>
 
         <p>
@@ -59,28 +59,28 @@ const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses
         <h2>What comes across</h2>
 
         <ul>
-          <li><strong>Tasks</strong> — each becomes a Pikos page. Notes attached to tasks are kept as the page body.</li>
-          <li><strong>Lists</strong> — TickTick's "List Name" maps to a Pikos folder. (TickTick exports a "Folder Name" column too, but it's empty in practice, so the importer uses List Name instead.)</li>
-          <li><strong>Status</strong> — TickTick's codes (0 active, 1 completed, 2 archived, -1 completed recurring) map to Pikos's not-started or done states.</li>
-          <li><strong>Priority</strong> — TickTick's 0 / 1 / 3 / 5 maps to Pikos's None / Low / Medium / High respectively.</li>
-          <li><strong>Dates and times</strong> — start date, due date, and timestamps are preserved. TickTick's "Is All Day" flag is honored, so all-day events land in the calendar's all-day row (not as a midnight-to-midnight timed block). Multi-day all-day events keep their full span.</li>
-          <li><strong>Recurring rules</strong> — daily, weekly, monthly, and yearly repeats come across as proper recurrence rules in Pikos. The next occurrence is the head; the calendar projects future occurrences automatically. For a recurring task with completed history, each completed occurrence imports as its own done page; the active head imports separately with the rule attached.</li>
-          <li><strong>Reminders</strong> — TickTick stores reminder offsets as ISO 8601 durations (e.g. <code>-PT15M</code> for 15 minutes before, <code>-P1D</code> for a day before). Pikos parses each into a per-page reminder.</li>
-          <li><strong>Tags</strong> — kept as Pikos tags.</li>
-          <li><strong>Sub-tasks</strong> — parent/child relationships are reconstructed using TickTick's <code>taskId</code> and <code>parentId</code> columns.</li>
-          <li><strong>Emoji in list names</strong> — kept as-is. If you used emoji prefixes like "🏃 Breaks" or "💼 Work", those carry over into the folder name.</li>
+          <li><strong>Tasks</strong>: each becomes a Pikos page. Notes attached to tasks are kept as the page body.</li>
+          <li><strong>Lists</strong>: TickTick's "List Name" maps to a Pikos folder. (TickTick exports a "Folder Name" column too, but it's empty in practice, so the importer uses List Name instead.)</li>
+          <li><strong>Status</strong>: TickTick's codes (0 active, 1 completed, 2 archived, -1 completed recurring) map to Pikos's not-started or done states.</li>
+          <li><strong>Priority</strong>: TickTick's 0 / 1 / 3 / 5 maps to Pikos's None / Low / Medium / High respectively.</li>
+          <li><strong>Dates and times</strong>: start date, due date, and timestamps are preserved. TickTick's "Is All Day" flag is honored, so all-day events land in the calendar's all-day row (not as a midnight-to-midnight timed block). Multi-day all-day events keep their full span.</li>
+          <li><strong>Recurring rules</strong>: daily, weekly, monthly, and yearly repeats come across as proper recurrence rules in Pikos. The next occurrence is the head; the calendar projects future occurrences automatically. For a recurring task with completed history, each completed occurrence imports as its own done page; the active head imports separately with the rule attached.</li>
+          <li><strong>Reminders</strong>: TickTick stores reminder offsets as ISO 8601 durations (e.g. <code>-PT15M</code> for 15 minutes before, <code>-P1D</code> for a day before). Pikos parses each into a per-page reminder.</li>
+          <li><strong>Tags</strong>: kept as Pikos tags.</li>
+          <li><strong>Sub-tasks</strong>: parent/child relationships are reconstructed using TickTick's <code>taskId</code> and <code>parentId</code> columns.</li>
+          <li><strong>Emoji in list names</strong>: kept as-is. If you used emoji prefixes like "🏃 Breaks" or "💼 Work", those carry over into the folder name.</li>
         </ul>
 
         <h2>What doesn't come across</h2>
 
         <ul>
-          <li><strong>List colors and icons</strong> — TickTick's CSV doesn't include visual metadata for lists. Re-pick a color in Pikos after import. Emoji baked into list names do come across.</li>
-          <li><strong>Kanban columns</strong> — TickTick lets you arrange tasks in Kanban-style columns within a list. Pikos doesn't have a Kanban view, so column position is dropped.</li>
-          <li><strong>"Repeat after completion" semantics</strong> — TickTick supports two recurrence modes (fixed schedule and after-completion). The rule itself comes across, but Pikos currently treats all imported rules as fixed-schedule. After-completion mode is on the roadmap.</li>
-          <li><strong>Habit tracker</strong> — TickTick's habits are a separate data type and aren't part of the CSV export.</li>
-          <li><strong>Smart Lists and filters</strong> — these are query definitions, not data. Pikos has its own filtering, but the saved views don't carry over.</li>
-          <li><strong>Pomodoro history</strong> — not exported by TickTick.</li>
-          <li><strong>Attachments</strong> — TickTick stores attachments on its servers and they aren't included in the CSV. The text content of each task is preserved.</li>
+          <li><strong>List colors and icons</strong>: TickTick's CSV doesn't include visual metadata for lists. Re-pick a color in Pikos after import. Emoji baked into list names do come across.</li>
+          <li><strong>Kanban columns</strong>: TickTick lets you arrange tasks in Kanban-style columns within a list. Pikos doesn't have a Kanban view, so column position is dropped.</li>
+          <li><strong>"Repeat after completion" semantics</strong>: TickTick supports two recurrence modes (fixed schedule and after-completion). The rule itself comes across, but Pikos currently treats all imported rules as fixed-schedule. After-completion mode is on the roadmap.</li>
+          <li><strong>Habit tracker</strong>: TickTick's habits are a separate data type and aren't part of the CSV export.</li>
+          <li><strong>Smart Lists and filters</strong>: these are query definitions, not data. Pikos has its own filtering, but the saved views don't carry over.</li>
+          <li><strong>Pomodoro history</strong>: not exported by TickTick.</li>
+          <li><strong>Attachments</strong>: TickTick stores attachments on its servers and they aren't included in the CSV. The text content of each task is preserved.</li>
         </ul>
 
         <h2>If something goes sideways</h2>

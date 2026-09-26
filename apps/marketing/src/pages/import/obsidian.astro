@@ -55,34 +55,34 @@ const description = "Move an Obsidian vault into Pikos. Frontmatter, wikilinks, 
         <h2>What comes across</h2>
 
         <ul>
-          <li><strong>Frontmatter</strong> — Pikos reads the YAML block at the top of each file. Recognized keys:
+          <li><strong>Frontmatter</strong>: Pikos reads the YAML block at the top of each file. Recognized keys:
             <ul>
-              <li><code>tags</code> — inline arrays (<code>[a, b]</code>), comma-separated, or YAML lists all work</li>
-              <li><code>status</code> — values <code>done</code>, <code>completed</code>, or <code>x</code> mark the page complete; anything else stays open</li>
-              <li><code>priority</code> — numeric <code>1</code>–<code>4</code> (1 urgent, 4 low) or the keywords <code>urgent</code>, <code>high</code>, <code>medium</code>, <code>low</code></li>
-              <li><code>scheduled</code>, <code>due</code>, or <code>scheduled_start</code> — scheduled date (always imported as all-day)</li>
-              <li><code>created</code>, <code>date created</code>, or <code>created_at</code> — original creation timestamp</li>
-              <li><code>modified</code>, <code>date modified</code>, <code>updated</code>, or <code>updated_at</code> — original modification timestamp</li>
+              <li><code>tags</code>: inline arrays (<code>[a, b]</code>), comma-separated, or YAML lists all work</li>
+              <li><code>status</code>: values <code>done</code>, <code>completed</code>, or <code>x</code> mark the page complete; anything else stays open</li>
+              <li><code>priority</code>: numeric <code>1</code>–<code>4</code> (1 urgent, 4 low) or the keywords <code>urgent</code>, <code>high</code>, <code>medium</code>, <code>low</code></li>
+              <li><code>scheduled</code>, <code>due</code>, or <code>scheduled_start</code>: scheduled date (always imported as all-day)</li>
+              <li><code>created</code>, <code>date created</code>, or <code>created_at</code>: original creation timestamp</li>
+              <li><code>modified</code>, <code>date modified</code>, <code>updated</code>, or <code>updated_at</code>: original modification timestamp</li>
             </ul>
             Dates are parsed in ISO format and in the Obsidian Linter formats (e.g. "Monday, March 17th 2025, 11:03:04 am"). Unrecognized frontmatter keys are ignored, not flagged as errors.
           </li>
-          <li><strong>Folder structure</strong> — preserved. Nested paths flatten with a <code>/</code> separator (so <code>Projects/Work/Q3</code> becomes a folder named "Projects / Work / Q3"). Files in the vault root land in the Pikos Inbox.</li>
-          <li><strong>Wikilinks</strong> — <code>[[Page Name]]</code> stays as text. Pikos uses a different linking model, so they don't auto-resolve, but nothing is lost.</li>
-          <li><strong>Image embeds</strong> — both <code>![[image.png]]</code> and <code>![alt](path.png)</code> are copied into Pikos's asset store and rewritten to local paths. Supported extensions: <code>png</code>, <code>jpg</code>, <code>jpeg</code>, <code>gif</code>, <code>webp</code>, <code>svg</code>, <code>bmp</code>, <code>avif</code>. Extensionless wiki-embeds (<code>![[Screenshot]]</code>) are tried speculatively against those extensions; if no image is found, they're left as plain text.</li>
-          <li><strong>Callouts</strong> — <code>&gt; [!note] Title</code> becomes a styled blockquote with the type as a bold label (<code>&gt; <strong>Note:</strong> Title</code>).</li>
-          <li><strong>Tasks</strong> — checkbox items (<code>- [ ]</code> and <code>- [x]</code>) keep their checked state.</li>
-          <li><strong>Tables, code blocks, headings, lists, formatting</strong> — all preserved through the rich-text editor. Blank lines between blocks are preserved too, so paragraph spacing matches what you had in Obsidian.</li>
+          <li><strong>Folder structure</strong>: preserved. Nested paths flatten with a <code>/</code> separator (so <code>Projects/Work/Q3</code> becomes a folder named "Projects / Work / Q3"). Files in the vault root land in the Pikos Inbox.</li>
+          <li><strong>Wikilinks</strong>: <code>[[Page Name]]</code> stays as text. Pikos uses a different linking model, so they don't auto-resolve, but nothing is lost.</li>
+          <li><strong>Image embeds</strong>: both <code>![[image.png]]</code> and <code>![alt](path.png)</code> are copied into Pikos's asset store and rewritten to local paths. Supported extensions: <code>png</code>, <code>jpg</code>, <code>jpeg</code>, <code>gif</code>, <code>webp</code>, <code>svg</code>, <code>bmp</code>, <code>avif</code>. Extensionless wiki-embeds (<code>![[Screenshot]]</code>) are tried speculatively against those extensions; if no image is found, they're left as plain text.</li>
+          <li><strong>Callouts</strong>: <code>&gt; [!note] Title</code> becomes a styled blockquote with the type as a bold label (<code>&gt; <strong>Note:</strong> Title</code>).</li>
+          <li><strong>Tasks</strong>: checkbox items (<code>- [ ]</code> and <code>- [x]</code>) keep their checked state.</li>
+          <li><strong>Tables, code blocks, headings, lists, formatting</strong>: all preserved through the rich-text editor. Blank lines between blocks are preserved too, so paragraph spacing matches what you had in Obsidian.</li>
         </ul>
 
         <h2>What doesn't come across</h2>
 
         <ul>
-          <li><strong>Excalidraw drawings</strong> — files named <code>*.excalidraw.md</code> or <code>*.excalidraw</code> are skipped entirely. The preview reports the count.</li>
-          <li><strong>Non-Markdown files</strong> — anything other than <code>.md</code> that isn't an image embedded in a note (loose PDFs, audio, video, etc.) is counted as skipped in the preview. Only files referenced from a Markdown image embed are copied across.</li>
-          <li><strong>Plugins</strong> — Dataview queries are flagged as warnings so you know which pages lost dynamic content. Templater syntax is left as-is in the body (so unrendered template directives may show up as text).</li>
-          <li><strong>Mermaid diagrams</strong> — preserved as fenced code blocks; they don't render visually.</li>
-          <li><strong>Recurring schedules and end times</strong> — Obsidian frontmatter doesn't have a standard for either. Pikos imports a single all-day <code>scheduled</code> date per page; recurrence and end times need to be set in Pikos after import.</li>
-          <li><strong>Graph view, canvas, and link backreferences</strong> — Pikos isn't a knowledge graph tool. If that's the workflow you came for, this isn't the right move.</li>
+          <li><strong>Excalidraw drawings</strong>: files named <code>*.excalidraw.md</code> or <code>*.excalidraw</code> are skipped entirely. The preview reports the count.</li>
+          <li><strong>Non-Markdown files</strong>: anything other than <code>.md</code> that isn't an image embedded in a note (loose PDFs, audio, video, etc.) is counted as skipped in the preview. Only files referenced from a Markdown image embed are copied across.</li>
+          <li><strong>Plugins</strong>: Dataview queries are flagged as warnings so you know which pages lost dynamic content. Templater syntax is left as-is in the body (so unrendered template directives may show up as text).</li>
+          <li><strong>Mermaid diagrams</strong>: preserved as fenced code blocks; they don't render visually.</li>
+          <li><strong>Recurring schedules and end times</strong>: Obsidian frontmatter doesn't have a standard for either. Pikos imports a single all-day <code>scheduled</code> date per page; recurrence and end times need to be set in Pikos after import.</li>
+          <li><strong>Graph view, canvas, and link backreferences</strong>: Pikos isn't a knowledge graph tool. If that's the workflow you came for, this isn't the right move.</li>
         </ul>
 
         <h2>If something goes sideways</h2>
