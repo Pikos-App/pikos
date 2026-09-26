@@ -8,12 +8,13 @@
 import type { BackupEntry, BackupKind } from "@pikos/core";
 import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { EmptyState } from "@/shared/components/EmptyState";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+
+import { SettingsSection } from "./SettingsSection";
 
 const log = createLogger("RestoreSection");
 
@@ -91,25 +92,26 @@ export function RestoreSection() {
     }
   }
 
-  if (load.status === "loading") {
-    return <p className="px-4 py-3 text-xs text-muted-foreground">Looking for backups…</p>;
+  // Nothing to restore means nothing to show. An empty state earns its place when it
+  // tells you how to fill it, and this one cannot: you do not take a backup, Pikos
+  // does, before an update or an import. A heading explaining a thing you cannot act
+  // on is dead weight in the panel people open when they are already worried.
+  if (load.status === "loading" || (load.status === "ready" && load.backups.length === 0)) {
+    return null;
   }
 
+  // The read failing is worth saying out loud: the backups may be there and unreadable,
+  // which is the opposite of there being none.
   if (load.status === "error") {
-    return <p className="px-4 py-3 text-xs text-destructive">{load.message}</p>;
-  }
-
-  if (load.backups.length === 0) {
     return (
-      <EmptyState
-        compact
-        message="No backups yet. Pikos writes one before an update changes your workspace, and before an import."
-      />
+      <RestorePanel>
+        <p className="px-4 py-3 text-xs text-destructive">{load.message}</p>
+      </RestorePanel>
     );
   }
 
   return (
-    <>
+    <RestorePanel>
       {failure && (
         <p className="mb-3 text-xs text-destructive" role="alert">
           {failure}
@@ -156,6 +158,18 @@ export function RestoreSection() {
         open={chosen !== null}
         title={chosen ? `Restore the workspace from ${formatWhen(chosen.createdAt)}?` : ""}
       />
-    </>
+    </RestorePanel>
+  );
+}
+
+/** The heading travels with the contents, so hiding one hides the other. */
+function RestorePanel({ children }: { children: ReactNode }) {
+  return (
+    <SettingsSection
+      description="Pikos snapshots your workspace before anything that rewrites it. Put one back if something has gone wrong."
+      title="Restore"
+    >
+      {children}
+    </SettingsSection>
   );
 }

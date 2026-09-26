@@ -17,30 +17,11 @@ import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 
 import { RestoreSection } from "./RestoreSection";
+import { SettingsSection } from "./SettingsSection";
 import { UsageStats } from "./UsageStats";
 import type { UsageStatsData } from "./UsageStats";
 
 const log = createLogger("DataSettings");
-
-// ─── Shared layout ────────────────────────────────────────────────────────
-
-function SettingsSection({
-  children,
-  description,
-  title,
-}: {
-  children: React.ReactNode;
-  description?: string;
-  title: string;
-}) {
-  return (
-    <section className="mb-8">
-      <h2 className="mb-1 text-base font-semibold">{title}</h2>
-      {description && <p className="mb-4 text-sm text-muted-foreground">{description}</p>}
-      {children}
-    </section>
-  );
-}
 
 // ─── Export helpers ────────────────────────────────────────────────────────
 
@@ -231,13 +212,8 @@ export function DataSettings({
         />
       </SettingsSection>
 
-      {/* ── Restore ────────────────────────────────────────────────────── */}
-      <SettingsSection
-        description="Pikos snapshots your workspace before anything that rewrites it. Put one back if something has gone wrong."
-        title="Restore"
-      >
-        <RestoreSection />
-      </SettingsSection>
+      {/* ── Restore — renders nothing until there is a backup to put back ── */}
+      <RestoreSection />
 
       {/* ── Export ─────────────────────────────────────────────────────── */}
       <SettingsSection description="Download your data in different formats." title="Export">

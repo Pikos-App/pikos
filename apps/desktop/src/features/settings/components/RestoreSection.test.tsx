@@ -100,11 +100,17 @@ describe("RestoreSection", () => {
     expect(screen.queryByText(/page 3 is malformed/)).not.toBeInTheDocument();
   });
 
-  it("offers nothing to restore when no snapshot has been needed yet", async () => {
+  // The heading goes with the contents. An empty state here could not tell you how to
+  // fill it — you do not take a backup, Pikos does — so it was a section explaining
+  // something you cannot act on, in the panel people open when they are already worried.
+  it("shows nothing at all when no snapshot has been needed yet", async () => {
     vi.spyOn(MockStorageAdapter.prototype, "listBackups").mockResolvedValue([]);
     await render();
 
-    expect(await screen.findByText(/No backups yet/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Restore" })).not.toBeInTheDocument()
+    );
+    expect(screen.queryByText(/No backups yet/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Restore the backup/ })).not.toBeInTheDocument();
   });
 });
