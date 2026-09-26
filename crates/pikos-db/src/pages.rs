@@ -41,6 +41,7 @@ struct PageRow {
     created_at: String,
     updated_at: String,
     schedule_locked: bool,
+    detach_is_reversible: bool,
     sync_state: Option<String>,
     timezone: Option<String>,
     completed_occurrences: Option<String>,
@@ -101,6 +102,13 @@ pub struct Page {
     /// was deleted locally. `null` for a page created in Pikos.
     #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
+    /// Whether a detached page could rejoin its calendar, which is what the copy
+    /// splits on: the user wants to know if this is undoable, not how it happened.
+    /// True when the calendar is merely switched off or its account disconnected —
+    /// both of which the user can reverse. False when the event is gone from the
+    /// provider, which nothing here can undo. Meaningless unless `sync_state` is
+    /// `detached`; a live page reads false because nothing is switched off.
+    pub detach_is_reversible: bool,
     /// IANA zone the schedule was authored in. Only read for a page a calendar owns,
     /// which renders at its true instant — 3pm in Berlin shows as 2pm in London. A
     /// page created in Pikos floats: it shows at its wall-clock time everywhere.
@@ -138,6 +146,7 @@ impl From<PageRow> for Page {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
         Page {
+            detach_is_reversible: row.detach_is_reversible,
             id: row.id,
             folder_id: row.folder_id,
             title: row.title,
@@ -214,6 +223,7 @@ struct PageSummaryRow {
     created_at: String,
     updated_at: String,
     schedule_locked: bool,
+    detach_is_reversible: bool,
     sync_state: Option<String>,
     timezone: Option<String>,
     completed_occurrences: Option<String>,
@@ -256,6 +266,8 @@ pub struct PageSummary {
     /// See `Page::sync_state`.
     #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
+    /// See `Page::detach_is_reversible`.
+    pub detach_is_reversible: bool,
     /// See `Page::timezone`.
     pub timezone: Option<String>,
     /// See `Page::completed_occurrences`.
@@ -283,6 +295,7 @@ impl From<PageSummaryRow> for PageSummary {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
         PageSummary {
+            detach_is_reversible: row.detach_is_reversible,
             id: row.id,
             folder_id: row.folder_id,
             title: row.title,
@@ -328,6 +341,12 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
      AS schedule_locked\
      , (SELECT sync_state FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_state\
+     , EXISTS(SELECT 1 FROM page_sync sy \
+         JOIN sync_calendar sc ON sc.account_id = sy.account_id \
+              AND sc.calendar_id = sy.calendar_id \
+         JOIN sync_account sa ON sa.id = sc.account_id \
+         WHERE sy.page_id = pages.id \
+           AND (sc.enabled = 0 OR sa.disconnected = 1)) AS detach_is_reversible\
      , NULLIF((SELECT json_group_object(occurrence_date, clone_id) FROM completed_set \
          WHERE completed_set.page_id = pages.id), '{}') AS completed_occurrences\
      , NULLIF((SELECT json_group_array(occurrence_date) FROM skip_set \
