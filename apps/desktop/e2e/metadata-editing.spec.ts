@@ -122,7 +122,7 @@ appTest(
   }
 );
 
-// ─── Clear schedule via byline → page leaves Today ──────────────────────────
+// ─── No date via byline → page leaves Today ─────────────────────────────────
 
 appTest(
   "clearing schedule via byline removes the page from Today @tier2",
@@ -142,7 +142,7 @@ appTest(
 
     await app.getByRole("button", { name: /^Scheduled:/ }).click();
     const picker = app.getByRole("dialog", { name: "Schedule picker" });
-    await picker.getByRole("button", { exact: true, name: "Clear" }).click();
+    await picker.getByRole("button", { exact: true, name: "No date" }).click();
 
     await app.keyboard.press(mod("Mod+w")); // close active page so list refreshes
     await expect(app.getByRole("button", { name: "Set schedule" })).not.toBeVisible();

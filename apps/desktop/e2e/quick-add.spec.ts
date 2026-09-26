@@ -604,7 +604,7 @@ appTest("QuickAdd manual date override survives further typing @tier2", async ({
   await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
 
   await dialog.getByRole("button", { name: /Scheduled:/ }).click();
-  await app.getByRole("button", { name: /^Clear/ }).click();
+  await app.getByRole("button", { exact: true, name: "No date" }).click();
   await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
 
   // Type more text including a date — chip should NOT auto-fill (manual override).
