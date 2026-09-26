@@ -43,6 +43,7 @@ vi.mock("@/shared/context/PagesContext", async (importOriginal) => ({
 function makePage(over: Partial<PageSummary> & { id: string }): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     isRecurring: false,
     priority: 0,

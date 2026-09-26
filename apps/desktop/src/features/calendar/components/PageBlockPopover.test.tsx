@@ -40,6 +40,7 @@ beforeEach(() => {
 function makePage(over: Partial<PageSummary>): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -70,6 +71,7 @@ describe("PageBlockPopover — mirror metadata", () => {
   it("renders location + attendees read-only on a locked event", () => {
     renderPopover(
       makePage({
+        detachIsReversible: false,
         mirrorAttendees: ["alex@example.com", "sam@example.com"],
         mirrorLocation: "Zoom",
         scheduleLocked: true,
@@ -126,6 +128,7 @@ describe("PageBlockPopover — reminder bell", () => {
     mocks.recurrenceRules = [rule];
     renderPopover(
       makePage({
+        detachIsReversible: false,
         scheduledEnd: "2099-01-06",
         scheduledStart: "2099-01-05",
         scheduleLocked: true,

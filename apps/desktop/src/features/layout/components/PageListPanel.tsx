@@ -368,6 +368,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         isRenaming={renamingId === page.id}
         isSelected={selectedPageIds.has(page.id)}
         key={page.id}
+        menuActsOn={getSelectedPages(page.id)?.length ?? 1}
         onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
         onDelete={() => batchAction(page, (p) => handleDeleteRequest(p))}
         onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}

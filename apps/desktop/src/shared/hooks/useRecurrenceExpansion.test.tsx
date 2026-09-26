@@ -35,6 +35,7 @@ const EXPAND = (
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "page-1",
     isRecurring: false,
@@ -616,6 +617,7 @@ describe("useRecurrenceExpansion", () => {
     // dropped scheduleLocked gate — while its done clone (a separate page) stays.
     const head = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
+      detachIsReversible: false,
       scheduledStart: "2026-03-09T09:00:00",
       scheduleLocked: false,
     });
