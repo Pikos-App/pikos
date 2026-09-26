@@ -44,19 +44,21 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
   // Tue 10am and Thu 9am are intentionally empty so the recorded interactions
   // read cleanly.
   //
-  //  MON           TUE         WED         THU         FRI
-  //  ────────────  ──────────  ──────────  ──────────  ──────────
+  // Blocks marked ° come from the connected calendar, and are read-only in the app.
+  //
+  //         MON            TUE            WED            THU            FRI
+  //         ─────────────  ─────────────  ─────────────  ─────────────  ─────────────
   //  [all-day Thu: Dentist appt]
   //
-  //  9:00   Roadmap     Standup             (Draft       Deep work
-  //  10:00  planning    (Send recap         — dragged)   block
-  //  11:00              — recorded)         1:1 w/ Sam
+  //   9:00  Roadmap        Standup                       (Draft         Deep work
+  //  10:00  planning       (Send recap    Partner call°   dragged)      block
+  //  11:00                  recorded)                    1:1 w/ Sam     Coffee°
   //  12:00
-  //  1:00   Reply
-  //  2:00               Design     Focus               Budget review
-  //  3:00               review     time (RFC)
-  //  4:00                          Sprint demo
-  //  5:00                          Evening walk
+  //   1:00  Reply
+  //   2:00                 Design         Focus                         Budget review
+  //   3:00  Vendor demo°   review         time (RFC)     Hiring panel°
+  //   4:00                                Sprint demo
+  //   5:00                                Evening walk
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Work — Mon ───────────────────────────────────────────────────────────
@@ -399,6 +401,68 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     tags: ["hiring"],
     title: "Review candidate",
   });
+
+  // ── A connected calendar ─────────────────────────────────────────────────
+  // Google, not CalDAV: the mock's canned CalDAV calendars are Personal and Work,
+  // both of which this sidebar already has as native folders.
+
+  const mock = adapter as MockStorageAdapter;
+  const account = await adapter.connectGoogleAccount();
+  const team = account.calendars.find((c) => c.displayName === "Team")!;
+  const teamFolder = (await adapter.toggleSyncCalendar(team.id, true, "#0ea5e9")).folderId!;
+
+  async function syncedEvent(
+    title: string,
+    body: string,
+    start: string,
+    end: string,
+    location: string
+  ): Promise<void> {
+    const page = await mock.seedMirrorPage({
+      content: doc(p(body)),
+      folderId: teamFolder,
+      priority: 0,
+      scheduledEnd: end,
+      scheduledStart: start,
+      status: "not_started",
+      tags: [],
+      title,
+    });
+    mock.markPageSynced(page.id, {
+      location,
+      state: "active",
+      timezone: "America/Los_Angeles",
+    });
+  }
+
+  await syncedEvent(
+    "Vendor demo",
+    "They're walking through the analytics integration. Bring the pricing questions.",
+    `${mon}T15:00:00`,
+    `${mon}T16:00:00`,
+    "Zoom"
+  );
+  await syncedEvent(
+    "Partner call",
+    "Quarterly check-in. Renewal comes up in six weeks.",
+    `${wed}T10:00:00`,
+    `${wed}T11:00:00`,
+    "Zoom"
+  );
+  await syncedEvent(
+    "Hiring panel",
+    "Final round for the platform role. Focus on the systems design round.",
+    `${thu}T15:00:00`,
+    `${thu}T16:00:00`,
+    "Room 2A"
+  );
+  await syncedEvent(
+    "Coffee with Priya",
+    "Catch up on the API beta scoping.",
+    `${fri}T11:00:00`,
+    `${fri}T11:30:00`,
+    "Blue Bottle"
+  );
 }
 
 // ── Tiptap JSON helpers (browser-safe, no Node deps) ───────────────────────
