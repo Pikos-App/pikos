@@ -24,11 +24,6 @@ export default defineConfig({
       name: "perf",
       use: { ...devices["Desktop Safari"] },
     },
-    {
-      grep: /@recording/,
-      name: "recording",
-      use: { ...devices["Desktop Safari"] },
-    },
   ],
   // In CI the suite is sharded across a matrix; each shard emits a blob report
   // that the `e2e-report` job merges into one HTML report. Locally, write HTML

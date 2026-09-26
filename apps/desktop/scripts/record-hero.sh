@@ -7,11 +7,15 @@ set -euo pipefail
 # 2. Converts them to optimized .mp4 (H.264, silent, web-ready)
 # 3. Copies output to the marketing site's public/ directory
 #
-# Data is auto-seeded via VITE_SEED=marketing — no setup appears in the video.
+# Data is auto-seeded via the marketing seed — no setup appears in the video.
+#
+# The server is started by playwright.record.config.ts on its own port, with the
+# marketing seed and reuse disabled. Setting VITE_SEED here instead was the old
+# way and it silently did nothing whenever a dev server was already listening:
+# Playwright handed that one back and the recording ran against an empty calendar.
 #
 # Prerequisites:
 #   - ffmpeg installed (brew install ffmpeg)
-#   - Dev server running on :1420, or it will be auto-started by Playwright
 #
 # Usage:
 #   ./scripts/record-hero.sh
@@ -35,12 +39,8 @@ mkdir -p "$RECORDINGS_DIR"
 echo "Recording hero videos..."
 echo ""
 
-# Run Playwright — VITE_SEED=marketing auto-populates the app with demo data
 cd "$DESKTOP_DIR"
-VITE_TEST_MODE=true VITE_SEED=marketing npx playwright test e2e/record-hero.spec.ts \
-  --project=recording \
-  --timeout=120000 \
-  --reporter=list
+npx playwright test --config playwright.record.config.ts --reporter=list
 
 echo ""
 echo "Converting .webm → .mp4..."
