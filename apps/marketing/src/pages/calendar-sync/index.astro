@@ -44,7 +44,7 @@ const description = "Pull your calendar into Pikos. Works with Google Calendar, 
         </ul>
 
         <p>
-          Yahoo, mailbox.org, Posteo, Yandex and GMX all work, as does anything you run yourself like Nextcloud. If your provider has a calendar and mentions CalDAV anywhere in its help pages, it'll almost certainly connect. If yours gives you trouble, drop me a line at <a href="mailto:hello@pikos.app">hello@pikos.app</a> and I'll take a look.
+          Yahoo, mailbox.org, Posteo, Yandex, and GMX all work, as does anything you run yourself like Nextcloud. If your provider has a calendar and mentions CalDAV anywhere in its help pages, it'll almost certainly connect. If yours gives you trouble, drop me a line at <a href="mailto:hello@pikos.app">hello@pikos.app</a> and I'll take a look.
         </p>
 
         <h2>Calendars Pikos can't reach</h2>
@@ -54,7 +54,7 @@ const description = "Pull your calendar into Pikos. Works with Google Calendar, 
         </p>
 
         <ul>
-          <li><strong>Outlook, Microsoft 365 and Exchange.</strong> Microsoft has never supported CalDAV.</li>
+          <li><strong>Outlook, Microsoft 365, and Exchange.</strong> Microsoft has never supported CalDAV.</li>
           <li><strong>Proton.</strong> Proton Calendar is encrypted so that not even Proton can read it. That's the point of it, and it's why nothing else can read it either.</li>
           <li><strong>Tuta.</strong> Same story.</li>
           <li><strong>Notion Calendar.</strong> It reads other calendars rather than being one.</li>
@@ -67,18 +67,18 @@ const description = "Pull your calendar into Pikos. Works with Google Calendar, 
         <h2>What a synced event is</h2>
 
         <ul>
-          <li><strong>The schedule is locked.</strong> Title, time and recurrence come from your calendar and can't be edited or dragged in Pikos. That's how an event always matches the source.</li>
-          <li><strong>The notes are yours.</strong> Anything you write, tag or tick belongs to you, and sync never touches it. Turn the calendar off later and your notes stay put.</li>
+          <li><strong>The schedule is locked.</strong> Title, time, and recurrence come from your calendar and can't be edited or dragged in Pikos. That's how an event always matches the source, and it's <a href="/blog/read-only-on-purpose">a decision rather than a gap</a>.</li>
+          <li><strong>The notes are yours.</strong> Anything you write, tag, or tick belongs to you, and sync never touches it. Turn the calendar off later and your notes stay put.</li>
         </ul>
 
         <h2 id="other-caldav">Any other CalDAV server</h2>
 
         <p>
-          You need three things: the server URL, your username and an app password. Pikos finds your calendars from the base server URL, so there's no need to hunt down individual calendar addresses. Your provider's help pages will have it, usually something like <code>https://caldav.yourprovider.com</code>.
+          You need three things: the server URL, your username, and an app password. Pikos finds your calendars from the base server URL, so there's no need to hunt down individual calendar addresses. Your provider's help pages will have it, usually something like <code>https://caldav.yourprovider.com</code>.
         </p>
 
         <p>
-          Open Settings (<code>Cmd+,</code>), go to <strong>Calendar Sync</strong>, then <strong>Add account</strong> and choose <strong>CalDAV</strong>. Pikos lists the calendars holding events and you turn on the ones you want. Each gets its own folder and a colour you can change, and your password goes into the system keychain rather than the app's own files.
+          Open Settings (<code>Cmd+,</code>), go to <strong>Calendar Sync</strong>, then <strong>Add account</strong> and choose <strong>CalDAV</strong>. Pikos lists the calendars holding events and you turn on the ones you want. Each gets its own folder and a color you can change, and your password goes into the system keychain rather than the app's own files.
         </p>
 
         <h2 id="app-password">App passwords</h2>
