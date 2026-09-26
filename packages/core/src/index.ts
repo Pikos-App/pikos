@@ -105,7 +105,6 @@ export {
   DAYS_PRESETS,
   DURATION_PRESETS,
   formatDurationLabel,
-  formatTimeOfDay,
   formatTriggerLabel,
   parseCustomDurationStr,
   parseCustomTimeStr,
@@ -115,7 +114,7 @@ export {
 } from "./format/dateTimePicker";
 export type { TimeSlot } from "./format/dateTimePicker";
 export { formatDateRange } from "./format/formatDateRange";
-export { formatTime12h, formatTime12hParts } from "./format/formatTime";
+export { formatClockTime, formatTime12h, formatTime12hParts } from "./format/formatTime";
 export {
   formatCompactTime,
   formatLongDate,

@@ -2,6 +2,7 @@ import { addHours, format, getHours, getMinutes, isToday, isTomorrow, startOfDay
 
 import { isAllDayIso, parseLocalISO } from "../utils/dates";
 import { formatDateRange } from "./formatDateRange";
+import { formatClockTime } from "./formatTime";
 
 export function toISODateOnly(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -12,20 +13,6 @@ export function toISODateTime(date: Date, hour24: number, minute: number): strin
   const hourStr = String(hour24).padStart(2, "0");
   const minuteStr = String(minute).padStart(2, "0");
   return `${base}T${hourStr}:${minuteStr}:00`;
-}
-
-export function formatTimeOfDay(hour24: number, minute: number): string {
-  const displayHour = hour24 % 12 || 12;
-  const minuteStr = String(minute).padStart(2, "0");
-  const period = hour24 >= 12 ? "PM" : "AM";
-  return `${displayHour}:${minuteStr} ${period}`;
-}
-
-function formatTimeCompact(hour24: number, minute: number): string {
-  const displayHour = hour24 % 12 || 12;
-  const minuteStr = String(minute).padStart(2, "0");
-  const period = hour24 >= 12 ? "pm" : "am";
-  return `${displayHour}:${minuteStr}${period}`;
 }
 
 export function formatDurationLabel(totalMinutes: number): string {
@@ -41,7 +28,7 @@ export function computeEndTimeLabel(
   durationMinutes: number
 ): string {
   const totalMinutes = hour24 * 60 + minute + durationMinutes;
-  return formatTimeOfDay(Math.floor(totalMinutes / 60) % 24, totalMinutes % 60);
+  return formatClockTime(Math.floor(totalMinutes / 60) % 24, totalMinutes % 60);
 }
 
 export function formatTriggerLabel(
@@ -75,7 +62,7 @@ export function formatTriggerLabel(
     return {
       isDueSoon: dueSoon,
       isPast: isPast && !isDone,
-      label: `Today ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
+      label: `Today ${formatClockTime(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
   if (isTomorrow(date)) {
@@ -83,7 +70,7 @@ export function formatTriggerLabel(
     return {
       isDueSoon: dueSoon,
       isPast: false,
-      label: `Tomorrow ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
+      label: `Tomorrow ${formatClockTime(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
   const dateStr = format(date, "MMM d");
@@ -91,7 +78,7 @@ export function formatTriggerLabel(
     return {
       isDueSoon: dueSoon,
       isPast: isPast && !isDone,
-      label: `${dateStr} ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
+      label: `${dateStr} ${formatClockTime(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
   return { isDueSoon: dueSoon, isPast: isPast && !isDone, label: dateStr };
@@ -107,7 +94,7 @@ export interface TimeSlot {
 export const TIME_SLOTS: TimeSlot[] = Array.from({ length: 96 }, (_, idx) => {
   const hour24 = Math.floor(idx / 4);
   const minute = (idx % 4) * 15;
-  return { hour24, idx, label: formatTimeOfDay(hour24, minute), minute };
+  return { hour24, idx, label: formatClockTime(hour24, minute), minute };
 });
 
 export const DURATION_PRESETS = [

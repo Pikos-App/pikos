@@ -171,7 +171,7 @@ describe("PageListItem — a synced event shows the viewer's time", () => {
     // 11:00 in New York (UTC-4 in August) is 15:00 UTC.
     renderItem(syncedPage("2026-08-07T11:00:00", "America/New_York"), vi.fn());
 
-    expect(dateLabel()).toContain("3:00p");
+    expect(dateLabel()).toContain("3:00pm");
   });
 
   it("leaves a page with no zone on its stored time", () => {
@@ -179,6 +179,6 @@ describe("PageListItem — a synced event shows the viewer's time", () => {
     vi.setSystemTime(new Date("2026-08-07T09:00:00Z"));
     renderItem(makePage({ scheduledStart: "2026-08-07T11:00:00" }), vi.fn());
 
-    expect(dateLabel()).toContain("11:00a");
+    expect(dateLabel()).toContain("11:00am");
   });
 });

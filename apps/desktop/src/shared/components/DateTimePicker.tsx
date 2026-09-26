@@ -5,8 +5,8 @@ import {
   computeEndTimeLabel,
   DAYS_PRESETS,
   DURATION_PRESETS,
+  formatClockTime,
   formatDurationLabel,
-  formatTimeOfDay,
   formatTriggerLabel,
   isAllDayIso,
   parseCustomDurationStr,
@@ -219,7 +219,7 @@ export function DateTimePicker({
       applyTime(hour24, minute, false);
       scrollTimeListToSlot(hour24, minute);
     } else {
-      const label = formatTimeOfDay(hour24, minute);
+      const label = formatClockTime(hour24, minute);
       setCustomTimeEntry({ hour24, label, minute });
       const date = selectedDate ?? startOfDay(new Date());
       onChange(toISODateTime(date, hour24, minute));
@@ -607,7 +607,7 @@ export function DateTimePicker({
 
               {endTimeLabel !== null && selectedTime !== null && (
                 <p className="ml-auto text-xs text-foreground/60">
-                  {formatTimeOfDay(selectedTime.hour24, selectedTime.minute)}
+                  {formatClockTime(selectedTime.hour24, selectedTime.minute)}
                   <span className="mx-1 text-foreground/30">→</span>
                   {endTimeLabel}
                 </p>

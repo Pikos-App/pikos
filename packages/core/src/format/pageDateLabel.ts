@@ -6,6 +6,7 @@
 // way the rest of the app does — see UsageStats and the settings surfaces.
 
 import { isAllDayIso, parseLocalISO } from "../utils/dates";
+import { formatClockTime } from "./formatTime";
 
 export interface PageDateLabel {
   label: string;
@@ -15,10 +16,7 @@ export interface PageDateLabel {
 
 /** Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p. */
 export function formatCompactTime(date: Date): string {
-  const hours = date.getHours() % 12 || 12;
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-  const period = date.getHours() >= 12 ? "p" : "a";
-  return `${hours}:${minutes}${period}`;
+  return formatClockTime(date.getHours(), date.getMinutes());
 }
 
 /** Full-word date for a tooltip: "Monday, March 23, 2026". */
