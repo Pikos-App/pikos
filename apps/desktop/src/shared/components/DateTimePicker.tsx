@@ -410,7 +410,7 @@ export function DateTimePicker({
                 className="text-xs text-foreground/55 hover:text-foreground"
                 onClick={handleClearAll}
               >
-                Clear
+                No date
               </button>
             )}
           </div>

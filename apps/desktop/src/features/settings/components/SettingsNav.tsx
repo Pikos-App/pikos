@@ -8,7 +8,7 @@ import type { SettingsSection } from "@/shared/context/UIContext";
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { icon: Settings, id: "general", label: "General" },
   { icon: Bell, id: "notifications", label: "Notifications" },
-  { icon: CalendarClock, id: "calendar-sync", label: "Calendar Sync" },
+  { icon: CalendarClock, id: "calendar-sync", label: "Calendar sync" },
   { icon: Database, id: "data", label: "Data" },
   { icon: Keyboard, id: "shortcuts", label: "Shortcuts" },
   ...(import.meta.env.DEV ? [{ icon: Code2, id: "developer" as const, label: "Developer" }] : []),

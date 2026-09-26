@@ -140,7 +140,7 @@ appTest("move page to folder via context menu @tier1", async ({ app }) => {
   await expect(pageItem).toBeVisible();
 
   await pageItem.click({ button: "right" });
-  await app.getByRole("menuitem", { name: "Move to Folder" }).click();
+  await app.getByRole("menuitem", { name: "Move to folder" }).click();
   await app.getByRole("menuitem", { name: /Work/ }).click();
 
   await expect(pageItem).not.toBeVisible();

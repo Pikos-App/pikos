@@ -32,7 +32,7 @@ export function CalendarSyncSettings() {
     <div className="max-w-settings">
       <SettingsSection
         description="See your real calendar inside Pikos. Pikos only reads your events in. Your notes and pages never leave your device."
-        title="Calendar Sync"
+        title="Calendar sync"
       >
         <div className="flex flex-col gap-3">
           {!loading && accounts.length === 0 && (

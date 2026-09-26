@@ -294,7 +294,7 @@ export function PageListItem({
         )}
         {!page.scheduleLocked && (
           <ContextMenuSub>
-            <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
+            <ContextMenuSubTrigger>Move to folder</ContextMenuSubTrigger>
             <ContextMenuSubContent>
               <ContextMenuItem
                 className={cn(page.folderId === null && "font-medium")}
@@ -321,7 +321,7 @@ export function PageListItem({
           </ContextMenuSub>
         )}
         {page.scheduledStart && onClearDate && !page.scheduleLocked && (
-          <ContextMenuItem onSelect={onClearDate}>Clear Date</ContextMenuItem>
+          <ContextMenuItem onSelect={onClearDate}>No date</ContextMenuItem>
         )}
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
           {menuActsOn > 1 ? `Delete ${menuActsOn} pages` : "Delete"}

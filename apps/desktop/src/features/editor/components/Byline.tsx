@@ -182,7 +182,7 @@ export function Byline({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        aria-label="Save failed — click to retry"
+                        aria-label="Save failed. Click to retry"
                         className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
                         onClick={onErrorClick}
                       >

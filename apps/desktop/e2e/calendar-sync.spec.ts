@@ -17,7 +17,7 @@ async function openSyncPanel(app: Page) {
   await app.getByRole("button", { name: "Open settings" }).click();
   // Settings reopens on the tab it was last left on, and Developer's "Seed Mock
   // calendar sync" also matches loosely — the nav item is the exact name.
-  await app.getByRole("button", { exact: true, name: "Calendar Sync" }).click();
+  await app.getByRole("button", { exact: true, name: "Calendar sync" }).click();
 }
 
 /** Connect a mock CalDAV account, leaving the Sync panel open on its card. The
@@ -845,8 +845,8 @@ appTest(
     });
     // Delete stays — trashing a synced page is supported (it tombstones the link).
     await expect(app.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    await expect(app.getByRole("menuitem", { name: "Move to Folder" })).toHaveCount(0);
-    await expect(app.getByRole("menuitem", { name: "Clear Date" })).toHaveCount(0);
+    await expect(app.getByRole("menuitem", { name: "Move to folder" })).toHaveCount(0);
+    await expect(app.getByRole("menuitem", { name: "No date" })).toHaveCount(0);
     await expect(app.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
 
     await app.keyboard.press("Escape");
@@ -856,8 +856,8 @@ appTest(
     await app.locator("[data-page-list-item]").filter({ hasText: "Old planning" }).click({
       button: "right",
     });
-    await expect(app.getByRole("menuitem", { name: "Move to Folder" })).toBeVisible();
-    await expect(app.getByRole("menuitem", { name: "Clear Date" })).toBeVisible();
+    await expect(app.getByRole("menuitem", { name: "Move to folder" })).toBeVisible();
+    await expect(app.getByRole("menuitem", { name: "No date" })).toBeVisible();
     await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
   }
 );

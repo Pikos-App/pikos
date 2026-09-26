@@ -95,7 +95,7 @@ describe("PageListItem mirror-lock gating", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.getByText("Move to Folder")).toBeInTheDocument();
+    expect(screen.getByText("Move to folder")).toBeInTheDocument();
   });
 
   it("context menu omits Move to Folder for a schedule-locked (synced) page", () => {
@@ -103,18 +103,18 @@ describe("PageListItem mirror-lock gating", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.queryByText("Move to Folder")).not.toBeInTheDocument();
+    expect(screen.queryByText("Move to folder")).not.toBeInTheDocument();
   });
 
-  it("context menu offers Clear Date for a scheduled native page", () => {
+  it("context menu offers No date for a scheduled native page", () => {
     renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.getByText("Clear Date")).toBeInTheDocument();
+    expect(screen.getByText("No date")).toBeInTheDocument();
   });
 
-  it("context menu omits Clear Date for a schedule-locked (synced) page", () => {
+  it("context menu omits No date for a schedule-locked (synced) page", () => {
     renderItem(
       makePage({ scheduledStart: "2026-08-10", scheduleLocked: true, syncState: "active" }),
       vi.fn()
@@ -122,7 +122,7 @@ describe("PageListItem mirror-lock gating", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.queryByText("Clear Date")).not.toBeInTheDocument();
+    expect(screen.queryByText("No date")).not.toBeInTheDocument();
   });
 
   it("context menu keeps Move to Folder on a detached page", () => {
@@ -130,7 +130,7 @@ describe("PageListItem mirror-lock gating", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.getByText("Move to Folder")).toBeInTheDocument();
+    expect(screen.getByText("Move to folder")).toBeInTheDocument();
   });
 });
 

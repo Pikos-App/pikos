@@ -195,8 +195,8 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     const undo = await skipOccurrences(page.id, dates);
     const label =
       dates.length === 1
-        ? `Deleted one occurrence of “${page.title || "Untitled"}”`
-        : `Deleted ${dates.length} occurrences of “${page.title || "Untitled"}”`;
+        ? `Deleted one day of “${page.title || "Untitled"}”`
+        : `Deleted ${dates.length} days of “${page.title || "Untitled"}”`;
     requestUndoableAction(`skip:${page.id}:${gesturedDate}`, label, undo);
   }
 

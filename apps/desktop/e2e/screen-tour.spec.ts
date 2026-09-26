@@ -216,7 +216,7 @@ test("1 Lists @tour", async ({ page }) => {
     await t.capture(
       9,
       "Page menu: Move to Folder",
-      () => page.getByRole("menuitem", { name: "Move to Folder" }).hover(),
+      () => page.getByRole("menuitem", { name: "Move to folder" }).hover(),
       "keep"
     );
     await t.capture(10, "Rename, in place", async () => {
@@ -602,7 +602,7 @@ test("6 Settings @tour", async ({ page }) => {
     });
     await t.capture(4, "Notifications", () => openSection("Notifications"));
     await further(5, "Notifications, further down");
-    await t.capture(6, "Calendar Sync", () => openSection("Calendar Sync"));
+    await t.capture(6, "Calendar sync", () => openSection("Calendar sync"));
     await t.capture(7, "Add a calendar account", () =>
       settings.getByRole("button", { name: "Add account" }).click()
     );
@@ -613,7 +613,7 @@ test("6 Settings @tour", async ({ page }) => {
         .click()
     );
     await t.capture(9, "A connected account", async () => {
-      await openSection("Calendar Sync");
+      await openSection("Calendar sync");
       await settings.getByRole("button", { name: "Add account" }).click();
       await page
         .getByRole("dialog")
@@ -700,7 +700,7 @@ test("7 Folders and trash @tour", async ({ page }) => {
     );
     await t.capture(10, "Trash: empty the trash", async () => {
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "Empty Trash" }).click();
+      await page.getByRole("button", { name: "Empty trash" }).click();
     });
     await t.capture(11, "Trash, empty", async () => {
       await t.launch(TODAY);
@@ -823,7 +823,7 @@ test("10 A calendar's pages @tour", async ({ page }) => {
     await t.capture(8, "Settings, with the calendar connected", async () => {
       await t.launch(TODAY, origin);
       await page.keyboard.press(`${MODIFIER}+,`);
-      await page.getByRole("button", { exact: true, name: "Calendar Sync" }).click();
+      await page.getByRole("button", { exact: true, name: "Calendar sync" }).click();
       await page.waitForTimeout(500);
     });
   });

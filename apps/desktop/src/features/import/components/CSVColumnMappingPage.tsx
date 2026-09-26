@@ -141,10 +141,10 @@ export function CSVColumnMappingPage({
           <h2 className="text-lg font-semibold">Map CSV Columns</h2>
           <p className="text-sm text-muted-foreground">
             {initialConfig.detectedSource
-              ? `Auto-detected as ${initialConfig.detectedSource} — `
+              ? `Auto-detected as ${initialConfig.detectedSource}. `
               : ""}
             {mappedCount} of {headers.length} columns mapped
-            {!hasTitleMapped && <span className="ml-2 text-yellow-500">— Title is required</span>}
+            {!hasTitleMapped && <span className="ml-2 text-yellow-500">Title is required</span>}
           </p>
         </div>
       </div>
