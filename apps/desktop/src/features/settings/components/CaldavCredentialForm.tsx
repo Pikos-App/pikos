@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 
 import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
 
-const SERVER_HINT_ID = "caldav-server-url-hint";
-
 interface CaldavCredentialFormProps {
   password: string;
   onPasswordChange: (value: string) => void;
@@ -67,7 +65,6 @@ export function CaldavCredentialForm({
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Server URL</span>
             <input
-              aria-describedby={SERVER_HINT_ID}
               autoFocus
               className={FORM_INPUT}
               onChange={(e) => server.onUrlChange(e.target.value)}
@@ -75,13 +72,6 @@ export function CaldavCredentialForm({
               value={server.url}
             />
           </label>
-          {/* Outside the label, because a description is not part of the field's
-              name. The placeholder used to be a real iCloud URL, which read as a
-              value already filled in while Connect stayed grey saying nothing; this
-              carries what it was there to carry. */}
-          <span className="-mt-2 text-xs text-subtle" id={SERVER_HINT_ID}>
-            iCloud is https://caldav.icloud.com, Fastmail https://caldav.fastmail.com
-          </span>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Username</span>
             <input

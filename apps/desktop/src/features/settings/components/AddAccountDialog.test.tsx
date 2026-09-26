@@ -106,13 +106,6 @@ describe("AddAccountDialog", () => {
     expect(url.getAttribute("placeholder")).not.toContain("icloud.com");
   });
 
-  it("still says what an iCloud server URL is, beside the field", () => {
-    render();
-    fireEvent.click(screen.getByText("CalDAV"));
-
-    expect(screen.getByLabelText("Server URL")).toHaveAccessibleDescription(/caldav\.icloud\.com/);
-  });
-
   it("names the field a disabled Connect is waiting on", () => {
     render();
     fireEvent.click(screen.getByText("CalDAV"));
