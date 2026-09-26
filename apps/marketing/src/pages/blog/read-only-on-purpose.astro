@@ -53,7 +53,7 @@ import BlogPost from "../../layouts/BlogPost.astro";
   <h2>You can check this yourself</h2>
 
   <p>
-    You don't have to take my word for any of it. The code is public, so go and look. The whole CalDAV client can issue exactly two requests: <code>PROPFIND</code> and <code>REPORT</code>. Both are read operations. There is no <code>PUT</code>, no <code>POST</code> and no <code>DELETE</code> anywhere in the sync engine, because a request that could change your calendar was never written.
+    You don't have to take my word for any of it. The code is public, so go and look. The whole CalDAV client can issue exactly two requests: <code>PROPFIND</code> and <code>REPORT</code>. Both are read operations. There is no <code>PUT</code>, no <code>POST</code>, and no <code>DELETE</code> in it, because a request that could change your calendar was never written. Google is the one exception worth naming: signing in and signing out are themselves posts to Google, and every request after that reads.
   </p>
 
   <p>
