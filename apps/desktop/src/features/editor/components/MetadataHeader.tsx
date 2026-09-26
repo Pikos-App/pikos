@@ -257,8 +257,8 @@ export function MetadataHeader({
             <CalendarOff aria-hidden="true" className="shrink-0" size={14} />
             <span className="type-ui-sm">
               {page.detachIsReversible
-                ? `${calendarName} is turned off. Turn it back on and this page rejoins the calendar.`
-                : `Removed from ${calendarName}. This is a regular page now.`}
+                ? `The ${calendarName} calendar is turned off. Turn it back on and this page rejoins.`
+                : `Removed from the ${calendarName} calendar. This is a regular page now.`}
             </span>
           </div>
         )}

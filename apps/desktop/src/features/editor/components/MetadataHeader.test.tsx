@@ -132,20 +132,25 @@ describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own
 });
 
 // The notice splits on whether the detach can be undone, not on what caused it —
-// that is the only part the reader can act on.
+// that is the only part the reader can act on. Both arms name the thing as a
+// calendar: the folder carries the same name and stays in the sidebar, so a
+// notice saying only "Removed from Work" reads as contradicting the folder chip
+// beside it. Two screen reviews filed that as a bug.
 describe("MetadataHeader — detached notice", () => {
   it("says a page can rejoin when its calendar is only switched off", async () => {
     await renderHeader(
       makePage({ detachIsReversible: true, scheduleLocked: false, syncState: "detached" })
     );
-    expect(screen.getByText(/is turned off\. Turn it back on/)).toBeInTheDocument();
+    expect(screen.getByText(/The .* calendar is turned off\. Turn it back on/)).toBeInTheDocument();
   });
 
   it("says a page is its own when the event is gone from the provider", async () => {
     await renderHeader(
       makePage({ detachIsReversible: false, scheduleLocked: false, syncState: "detached" })
     );
-    expect(screen.getByText(/Removed from .*\. This is a regular page now\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Removed from the .* calendar\. This is a regular page now\./)
+    ).toBeInTheDocument();
   });
 
   it("omits the notice for an active synced page", async () => {

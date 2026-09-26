@@ -173,8 +173,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           <CalendarOff size={12} />
           <span className="truncate">
             {page.detachIsReversible
-              ? `${calendarName} is turned off`
-              : `Removed from ${calendarName}`}
+              ? `The ${calendarName} calendar is turned off`
+              : `Removed from the ${calendarName} calendar`}
           </span>
         </div>
       )}
