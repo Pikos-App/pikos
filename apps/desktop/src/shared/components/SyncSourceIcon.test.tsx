@@ -22,6 +22,6 @@ describe("SyncSourceIcon", () => {
 
   it("renders the broken-calendar glyph for a detached synced page", () => {
     render(<SyncSourceIcon syncState="detached" />);
-    expect(screen.getByLabelText("Disconnected from calendar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Not synced with a calendar")).toBeInTheDocument();
   });
 });

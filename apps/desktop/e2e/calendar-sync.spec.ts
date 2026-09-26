@@ -356,7 +356,7 @@ appTest(
       app.getByRole("img", { name: "Synced from external calendar" }).first()
     ).toBeVisible();
     await expect(
-      app.getByRole("img", { name: "Disconnected from calendar" }).first()
+      app.getByRole("img", { name: "Not synced with a calendar" }).first()
     ).toBeVisible();
 
     // Open a synced block's popover. The block's accessible name is

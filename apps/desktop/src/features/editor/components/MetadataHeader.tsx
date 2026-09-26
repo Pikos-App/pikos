@@ -256,7 +256,9 @@ export function MetadataHeader({
           <div className="mt-10 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90">
             <CalendarOff aria-hidden="true" className="shrink-0" size={14} />
             <span className="type-ui-sm">
-              Disconnected from {calendarName} — this is now a regular page you can edit.
+              {page.detachIsReversible
+                ? `${calendarName} is turned off. Turn it back on and this page rejoins the calendar.`
+                : `Removed from ${calendarName}. This is a regular page now.`}
             </span>
           </div>
         )}

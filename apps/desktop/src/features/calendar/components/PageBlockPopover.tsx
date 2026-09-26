@@ -171,7 +171,11 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
       {detached && (
         <div className="flex items-center gap-1.5 text-xs text-subtle">
           <CalendarOff size={12} />
-          <span className="truncate">Disconnected from {calendarName}</span>
+          <span className="truncate">
+            {page.detachIsReversible
+              ? `${calendarName} is turned off`
+              : `Removed from ${calendarName}`}
+          </span>
         </div>
       )}
       {locked ? (

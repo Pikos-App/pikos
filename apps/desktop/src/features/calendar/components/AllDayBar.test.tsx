@@ -19,6 +19,7 @@ afterEach(cleanup);
 function makePage(over: Partial<PageSummary>): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -65,7 +66,7 @@ function renderBar(page: PageSummary, onDragStart = vi.fn(), folderColor?: strin
 describe("AllDayBar — detached synced rendering", () => {
   it("shows the broken-sync glyph and is not struck through when not done", () => {
     renderBar(makePage({ status: "not_started", syncState: "detached" }));
-    expect(screen.getByLabelText("Disconnected from calendar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Not synced with a calendar")).toBeInTheDocument();
     expect(screen.getByText("Conference")).toBeInTheDocument();
     const bar = screen.getByRole("button", { name: "Conference" });
     expect(bar.className).not.toContain("opacity-50");
