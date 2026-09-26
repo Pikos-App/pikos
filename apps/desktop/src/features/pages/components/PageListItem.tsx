@@ -42,6 +42,10 @@ interface PageListItemProps {
   onClearDate?: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onRenameStart: () => void;
+  /** How many pages this row's context menu will act on — the selection it belongs
+   *  to, or 1. A menu that reads the same on one page and on five cannot say what a
+   *  click is about to do, and Delete is in it. */
+  menuActsOn?: number;
   onRenameChange?: (title: string) => void;
   onRenameCommit: (title: string) => void;
   onRenameCancel: () => void;
@@ -58,6 +62,7 @@ export function PageListItem({
   isActive,
   isRenaming,
   isSelected,
+  menuActsOn = 1,
   onClearDate,
   onDelete,
   onMoveToFolder,
@@ -281,7 +286,8 @@ export function PageListItem({
       </ContextMenuTrigger>
 
       <ContextMenuContent {...contextMenuContentProps}>
-        {!page.scheduleLocked && (
+        {/* One page has a name; a selection does not. */}
+        {!page.scheduleLocked && menuActsOn === 1 && (
           <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
             Rename
           </ContextMenuItem>
@@ -318,7 +324,7 @@ export function PageListItem({
           <ContextMenuItem onSelect={onClearDate}>Clear Date</ContextMenuItem>
         )}
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
-          Delete
+          {menuActsOn > 1 ? `Delete ${menuActsOn} pages` : "Delete"}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

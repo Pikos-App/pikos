@@ -186,6 +186,7 @@ describe("buildDayBlocks", () => {
       title: "Native 3pm",
     });
     const synced = makePage({
+      detachIsReversible: false,
       id: "synced",
       scheduledStart: "2026-03-15T15:00:00",
       scheduleLocked: true,
@@ -202,6 +203,7 @@ describe("buildDayBlocks", () => {
 
   it("all-day synced event never shifts", () => {
     const synced = makePage({
+      detachIsReversible: false,
       id: "allday",
       scheduledStart: "2026-03-15",
       scheduleLocked: true,

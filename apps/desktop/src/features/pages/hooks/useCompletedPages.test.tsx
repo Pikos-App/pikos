@@ -35,6 +35,7 @@ function fixtureDonePage(overrides: {
   return {
     completedAt: overrides.completedAt,
     createdAt: overrides.completedAt,
+    detachIsReversible: false,
     folderId: overrides.folderId ?? null,
     id: overrides.id,
     isRecurring: false,

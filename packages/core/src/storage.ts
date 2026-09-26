@@ -34,7 +34,13 @@ import type {
 // A page becomes recurring by gaining a rule, not by being written as one.
 export type NewPage = Omit<
   Page,
-  "id" | "createdAt" | "updatedAt" | "sortOrder" | "scheduleLocked" | "isRecurring"
+  | "id"
+  | "createdAt"
+  | "updatedAt"
+  | "sortOrder"
+  | "scheduleLocked"
+  | "isRecurring"
+  | "detachIsReversible"
 > & {
   /** Optional override for created_at (used during import to preserve original dates). */
   createdAt?: string;
@@ -42,7 +48,10 @@ export type NewPage = Omit<
   updatedAt?: string;
 };
 export type PageUpdate = Partial<
-  Omit<Page, "id" | "createdAt" | "updatedAt" | "scheduleLocked" | "isRecurring">
+  Omit<
+    Page,
+    "id" | "createdAt" | "updatedAt" | "scheduleLocked" | "isRecurring" | "detachIsReversible"
+  >
 >;
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),
 // never via createFolder/updateFolder — so it's excluded from both input shapes.

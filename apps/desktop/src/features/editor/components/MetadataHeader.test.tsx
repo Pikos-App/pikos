@@ -27,6 +27,7 @@ function makePage(over: Partial<Page>): Page {
   return {
     content: "",
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -130,15 +131,26 @@ describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own
   });
 });
 
+// The notice splits on whether the detach can be undone, not on what caused it —
+// that is the only part the reader can act on.
 describe("MetadataHeader — detached notice", () => {
-  it("shows the disconnected notice for a detached page", async () => {
-    await renderHeader(makePage({ scheduleLocked: false, syncState: "detached" }));
-    expect(screen.getByText(/Disconnected from/)).toBeInTheDocument();
+  it("says a page can rejoin when its calendar is only switched off", async () => {
+    await renderHeader(
+      makePage({ detachIsReversible: true, scheduleLocked: false, syncState: "detached" })
+    );
+    expect(screen.getByText(/is turned off\. Turn it back on/)).toBeInTheDocument();
   });
 
-  it("omits the disconnected notice for an active synced page", async () => {
+  it("says a page is its own when the event is gone from the provider", async () => {
+    await renderHeader(
+      makePage({ detachIsReversible: false, scheduleLocked: false, syncState: "detached" })
+    );
+    expect(screen.getByText(/Removed from .*\. This is a regular page now\./)).toBeInTheDocument();
+  });
+
+  it("omits the notice for an active synced page", async () => {
     await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
-    expect(screen.queryByText(/Disconnected from/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/turned off|Removed from/)).not.toBeInTheDocument();
   });
 });
 
@@ -146,6 +158,7 @@ describe("MetadataHeader — read-only mirror metadata", () => {
   it("renders location + attendees read-only on a locked page", async () => {
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         mirrorAttendees: ["alex@example.com", "sam@example.com"],
         mirrorLocation: "Room 4B",
         scheduleLocked: true,
@@ -169,6 +182,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
   it("shows the notice on a locked page with a pending description, revealing the text on View", async () => {
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda for the meeting.",
         scheduleLocked: true,
         syncState: "active",
@@ -197,6 +211,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
     const append = vi.fn();
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda for the meeting.",
         scheduleLocked: true,
         syncState: "active",
@@ -212,6 +227,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
     const append = vi.fn();
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda for the meeting.",
         scheduleLocked: true,
         syncState: "active",
@@ -228,6 +244,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
   it("offers no action that overwrites the body", async () => {
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda.",
         scheduleLocked: true,
         syncState: "active",

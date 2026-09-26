@@ -29,6 +29,7 @@ const native = makePage({
 });
 
 const synced = makePage({
+  detachIsReversible: false,
   id: "synced",
   scheduledStart: SOURCE_WALL_CLOCK,
   scheduleLocked: true,

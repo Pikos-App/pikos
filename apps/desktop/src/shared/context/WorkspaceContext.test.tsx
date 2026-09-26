@@ -914,6 +914,7 @@ describe("mergePages", () => {
       hook.result.current.mergePages([
         {
           createdAt: new Date().toISOString(),
+          detachIsReversible: false,
           folderId: null,
           id: "completed-1",
           isRecurring: false,
@@ -943,6 +944,7 @@ describe("mergePages", () => {
       hook.result.current.mergePages([
         {
           createdAt: page.createdAt,
+          detachIsReversible: false,
           folderId: null,
           id: page.id,
           isRecurring: false,
@@ -970,6 +972,7 @@ describe("mergePages", () => {
         {
           completedAt: "2026-03-01T10:00:00",
           createdAt: "2026-03-01T09:00:00",
+          detachIsReversible: false,
           folderId: null,
           id: "merged-1",
           isRecurring: false,

@@ -6,6 +6,7 @@ import { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./moveOverdueTo
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
     isRecurring: false,
@@ -94,6 +95,7 @@ describe("planMoveOverdueToToday — exclusions", () => {
     const plan = planMoveOverdueToToday(
       [
         makePage({
+          detachIsReversible: false,
           id: "s",
           scheduledStart: "2026-03-20T09:00:00",
           scheduleLocked: true,
@@ -111,6 +113,7 @@ describe("planMoveOverdueToToday — exclusions", () => {
     const plan = planMoveOverdueToToday(
       [
         makePage({
+          detachIsReversible: false,
           isRecurring: true,
           scheduledStart: "2026-03-20T09:00:00",
           scheduleLocked: true,

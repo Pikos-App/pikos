@@ -6,6 +6,7 @@ import { deriveTags, findRecurringOccurrenceClone, isDone, isOpen, toPageSummary
 function makeSummary(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "page-1",
     isRecurring: false,

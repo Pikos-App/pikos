@@ -18,6 +18,7 @@ import {
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
     isRecurring: false,
@@ -379,6 +380,7 @@ describe("belongsToView — past synced events", () => {
 
   it("keeps a past detached page — user-owned, keeps task semantics", () => {
     const page = makePage({
+      detachIsReversible: false,
       scheduledStart: "2026-07-30T09:00:00",
       scheduleLocked: false,
       syncState: "detached",
@@ -408,6 +410,7 @@ describe("belongsToView — past synced events", () => {
 describe("viewer-zone bucketing", () => {
   // 06:00 in Tokyo (UTC+9) is 21:00 the previous day in UTC.
   const tokyoMorning = makePage({
+    detachIsReversible: false,
     id: "tokyo",
     scheduledStart: "2026-08-08T06:00:00",
     scheduleLocked: true,
@@ -417,6 +420,7 @@ describe("viewer-zone bucketing", () => {
 
   // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC.
   const laEvening = makePage({
+    detachIsReversible: false,
     id: "la",
     scheduledStart: "2026-08-07T20:00:00",
     scheduleLocked: true,
@@ -439,6 +443,7 @@ describe("viewer-zone bucketing", () => {
 
   it("leaves an all-day synced page on its own date whatever the account's zone", () => {
     const allDay = makePage({
+      detachIsReversible: false,
       id: "all-day",
       scheduledStart: "2026-08-07",
       scheduleLocked: true,
@@ -459,6 +464,7 @@ describe("viewer-zone bucketing", () => {
     // 7th in Los Angeles (UTC-7) is 01:00 UTC on the 8th, so it is today while
     // the bare date reads as yesterday.
     const tokyoEarly = makePage({
+      detachIsReversible: false,
       id: "tokyo-early",
       scheduledStart: "2026-08-08T08:00:00",
       scheduleLocked: true,
@@ -466,6 +472,7 @@ describe("viewer-zone bucketing", () => {
       timezone: "Asia/Tokyo",
     });
     const laEvening = makePage({
+      detachIsReversible: false,
       id: "la-evening",
       scheduledStart: "2026-08-07T18:00:00",
       scheduleLocked: true,

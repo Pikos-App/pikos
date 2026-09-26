@@ -11,6 +11,7 @@ import { PageListItem } from "./PageListItem";
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-07-01T09:00:00Z",
+    detachIsReversible: false,
     folderId: null,
     id: "page-1",
     isRecurring: false,
@@ -145,6 +146,7 @@ describe("PageListItem — a synced event shows the viewer's time", () => {
 
   function syncedPage(start: string, timezone: string): PageSummary {
     return makePage({
+      detachIsReversible: false,
       scheduledStart: start,
       scheduleLocked: true,
       syncState: "active",

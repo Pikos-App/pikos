@@ -117,6 +117,7 @@ describe("completeRecurringPage payload", () => {
     await act(async () => {
       await hook.result.current.pages.completeRecurringPage(pageId, {
         ...head,
+        detachIsReversible: false,
         scheduleLocked: true,
         timezone: null,
       });
@@ -136,6 +137,7 @@ describe("completeRecurringPage payload", () => {
     await act(async () => {
       await hook.result.current.pages.completeRecurringPage(pageId, {
         ...stale,
+        detachIsReversible: false,
         scheduledStart: "2099-01-08T09:00:00",
         scheduleLocked: true,
         timezone: null,

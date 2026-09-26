@@ -26,6 +26,10 @@ export type PageSummary = {
    */
   syncState?: "active" | "detached" | "tombstoned" | null;
   /**
+   * See `Page::detach_is_reversible`.
+   */
+  detachIsReversible: boolean;
+  /**
    * See `Page::timezone`.
    */
   timezone?: string | null;

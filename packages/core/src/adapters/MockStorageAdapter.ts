@@ -303,6 +303,7 @@ export class MockStorageAdapter implements StorageAdapter {
         content: body,
         contentText: body,
         createdAt: stamp,
+        detachIsReversible: false,
         folderId: null,
         id: `seed-${i}`,
         isRecurring: false,
@@ -328,6 +329,7 @@ export class MockStorageAdapter implements StorageAdapter {
       // every save so FTS indexes the visible body, not the structural tokens.
       contentText: data.contentText ?? deriveContentText(data.content),
       createdAt: now(),
+      detachIsReversible: false,
       id: uuid(),
       isRecurring: false,
       scheduleLocked: false,
@@ -1048,6 +1050,7 @@ export class MockStorageAdapter implements StorageAdapter {
       completedOccurrences: null,
       content: head.content,
       createdAt: timestamp,
+      detachIsReversible: false,
       id: cloneId,
       scheduledEnd: cloneEnd,
       scheduledStart: cloneStart,
@@ -1435,7 +1438,15 @@ export class MockStorageAdapter implements StorageAdapter {
         continue;
       }
       if (this._isOwned(page)) {
-        this.pages.set(page.id, { ...page, scheduleLocked: false, syncState: "detached" });
+        // Reversible: teardown leaves the calendar row behind, switched off, so the
+        // user can switch it back on and the page rejoins. Mirrors the Rust derivation
+        // (`sc.enabled = 0 OR sa.disconnected = 1`).
+        this.pages.set(page.id, {
+          ...page,
+          detachIsReversible: true,
+          scheduleLocked: false,
+          syncState: "detached",
+        });
         detached.push(page.id);
       } else {
         this.pages.delete(page.id);

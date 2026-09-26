@@ -63,6 +63,15 @@ export type Page = {
    */
   syncState?: "active" | "detached" | "tombstoned" | null;
   /**
+   * Whether a detached page could rejoin its calendar, which is what the copy
+   * splits on: the user wants to know if this is undoable, not how it happened.
+   * True when the calendar is merely switched off or its account disconnected —
+   * both of which the user can reverse. False when the event is gone from the
+   * provider, which nothing here can undo. Meaningless unless `sync_state` is
+   * `detached`; a live page reads false because nothing is switched off.
+   */
+  detachIsReversible: boolean;
+  /**
    * IANA zone the schedule was authored in. Only read for a page a calendar owns,
    * which renders at its true instant — 3pm in Berlin shows as 2pm in London. A
    * page created in Pikos floats: it shows at its wall-clock time everywhere.

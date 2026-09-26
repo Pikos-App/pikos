@@ -21,6 +21,7 @@ import {
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "page-1",
     isRecurring: true,
@@ -125,6 +126,7 @@ describe("expandRecurrenceForRange", () => {
     // place. Applies to both native and synced under the unified sets model.
     const page = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
+      detachIsReversible: false,
       scheduleLocked: true,
     });
     const rule = makeRule();
@@ -143,6 +145,7 @@ describe("expandRecurrenceForRange", () => {
     // completedOccurrences. Both must drop out while an untouched date survives.
     const page = makePage({
       completedOccurrences: { "2026-03-16": "clone-1" },
+      detachIsReversible: false,
       scheduleLocked: true,
     });
     const rule = makeRule({ rruleExdates: ["2026-03-09"] });
@@ -163,6 +166,7 @@ describe("expandRecurrenceForRange", () => {
     // (its done clone renders), no longer gated on scheduleLocked.
     const page = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
+      detachIsReversible: false,
       scheduleLocked: false,
     });
     const rule = makeRule();
