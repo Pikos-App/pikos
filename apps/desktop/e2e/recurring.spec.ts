@@ -571,6 +571,10 @@ appTest("overdue tick → just this one keeps the gap and drops one clone @tier2
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
   await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  // It names the page it is about to act on, and calls them days the way the body
+  // does — it used to say "Mark complete" over a list of three days it never named.
+  await expect(page.getByRole("dialog")).toContainText(/Mark .*standup.* done\?/);
+  await expect(page.getByRole("dialog")).not.toContainText(/occurrence/i);
   await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /This and everything before today/ })).toBeVisible();
 

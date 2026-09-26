@@ -65,11 +65,16 @@ export function RecurringGapDialog() {
   const others = pending?.missedDates.length ?? 0;
   const total = others + 1;
   const isDelete = pending?.kind === "delete";
+  // Naming the page is the point: this dialog opens on a repeat with a backlog behind
+  // it, and "Delete occurrence" over "Deletes 3 days" asked you to remove several days
+  // of something it never identified. One word for the thing, too — the body counts
+  // days, so the title does not call them occurrences.
+  const name = pending ? `\u201C${pending.pageTitle}\u201D` : "";
   const title = isDelete
     ? pending?.syncedActive
-      ? "Remove from Pikos"
-      : "Delete occurrence"
-    : "Mark complete";
+      ? `Remove a day of ${name} from Pikos?`
+      : `Delete a day of ${name}?`
+    : `Mark ${name} done?`;
 
   return (
     <Dialog
