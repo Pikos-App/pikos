@@ -63,14 +63,20 @@ convert_to_mp4() {
 
   echo "  Converting: $(basename "$input") → $(basename "$output")"
 
-  # -ss 3.0 trims the page-load + inbox-flash + view-switch prefix so the
-  # recording starts on the fully-rendered calendar view with the cursor
-  # parked off-screen. Same view + cursor state as the final frame —
-  # required for the hero loop to read as a clean restart instead of a flash.
-  # The Playwright script holds the calendar untouched for ~2.2s after the
-  # initial Cmd+Shift+C so the trim has a wide window to land in.
+  # Each take writes its own measured prefix beside the .webm: page load, the
+  # inbox flash and the view switch, up to the frame the video should open on.
+  # That frame matches the final one, which is what makes the loop read as a
+  # restart rather than a jump. 3.0 is the old fixed guess, kept only so a
+  # missing sidecar still produces something.
+  local trim=3.0
+  if [ -f "$input.trim" ]; then
+    trim=$(<"$input.trim")
+  else
+    echo "  Warning: no $input.trim — falling back to a fixed ${trim}s cut"
+  fi
+
   # H.264, no audio, web-optimized (faststart moves moov atom to front).
-  ffmpeg -y -ss 3.0 -i "$input" \
+  ffmpeg -y -ss "$trim" -i "$input" \
     -c:v libx264 \
     -preset slow \
     -crf 23 \
@@ -80,6 +86,11 @@ convert_to_mp4() {
     -movflags +faststart \
     "$output" \
     -loglevel warning
+
+  # The poster fronts the video before it plays, under reduced motion, and if it
+  # fails to load. Taking it from the finished mp4's own first frame is what stops
+  # the two drifting: the pair it replaces were four months older than the video.
+  ffmpeg -y -i "$output" -frames:v 1 -update 1 -q:v 4 "${output%.mp4}.jpg" -loglevel warning
 
   local size
   size=$(du -h "$output" | cut -f1)
@@ -98,8 +109,10 @@ echo "Copying to marketing site..."
 mkdir -p "$MARKETING_PUBLIC"
 cp "$DARK_MP4" "$MARKETING_PUBLIC/pikos-hero-dark.mp4"
 cp "$LIGHT_MP4" "$MARKETING_PUBLIC/pikos-hero-light.mp4"
+cp "${DARK_MP4%.mp4}.jpg" "$MARKETING_PUBLIC/pikos-hero-dark.jpg"
+cp "${LIGHT_MP4%.mp4}.jpg" "$MARKETING_PUBLIC/pikos-hero-light.jpg"
 
 echo ""
-echo "Done! Videos are at:"
-echo "  $MARKETING_PUBLIC/pikos-hero-dark.mp4"
-echo "  $MARKETING_PUBLIC/pikos-hero-light.mp4"
+echo "Done! Videos and posters are at:"
+echo "  $MARKETING_PUBLIC/pikos-hero-dark.mp4 + .jpg"
+echo "  $MARKETING_PUBLIC/pikos-hero-light.mp4 + .jpg"
