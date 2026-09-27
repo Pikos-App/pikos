@@ -1,7 +1,7 @@
 import type { NewCaldavConnection } from "@pikos/core";
 import { caldavAccountIdentity, caldavBaseUrl } from "@pikos/core";
 import { CalendarDays, Loader2, Server } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   Dialog,
@@ -12,6 +12,17 @@ import {
 } from "@/components/ui/dialog";
 
 import { CaldavCredentialForm } from "./CaldavCredentialForm";
+
+/**
+ * What the dialog is waiting on, which decides whether it may be dismissed.
+ *
+ * `connecting` is writing an account and has to finish. `awaitingGoogle` is waiting
+ * for a browser the user may already have closed, and nothing is persisted until the
+ * callback arrives, so abandoning it is safe and is the only way out. One boolean
+ * covered both, which made an abandoned Google attempt an undismissable dialog for
+ * the five minutes the loopback listener holds its port.
+ */
+type Progress = { kind: "idle" } | { kind: "connecting" } | { kind: "awaitingGoogle" };
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -32,8 +43,12 @@ export function AddAccountDialog({
   const [serverUrl, setServerUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<Progress>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
+  // Bumped when a Google attempt is abandoned, so the one still in flight knows
+  // its result is no longer wanted.
+  const googleAttempt = useRef(0);
+  const busy = progress.kind !== "idle";
 
   function reset() {
     setProvider("pick");
@@ -41,17 +56,18 @@ export function AddAccountDialog({
     setUsername("");
     setPassword("");
     setError(null);
-    setBusy(false);
+    setProgress({ kind: "idle" });
   }
 
   function close(next: boolean) {
-    if (busy) return;
+    if (progress.kind === "connecting") return;
+    if (progress.kind === "awaitingGoogle") googleAttempt.current += 1;
     if (!next) reset();
     onOpenChange(next);
   }
 
   async function submit() {
-    setBusy(true);
+    setProgress({ kind: "connecting" });
     setError(null);
     // One spelling for the server, used for both the connection and the identity
     // that decides whether this is a new account — see `caldavBaseUrl`.
@@ -69,23 +85,28 @@ export function AddAccountDialog({
       setError(
         e instanceof Error ? e.message : "Could not connect. Check the server and password."
       );
-      setBusy(false);
+      setProgress({ kind: "idle" });
     }
   }
 
   // The grant resolves only once the user finishes in their browser and can sit
   // pending a long time — the picker shows a waiting state so the click doesn't
-  // look inert.
+  // look inert. A dismissed dialog abandons the attempt: the account still lands if
+  // the user finishes in the browser, because `onConnectGoogle` has already done
+  // the work and refreshed the panel by the time this resolves.
   async function submitGoogle() {
-    setBusy(true);
+    const attempt = googleAttempt.current;
+    setProgress({ kind: "awaitingGoogle" });
     setError(null);
     try {
       await onConnectGoogle();
+      if (googleAttempt.current !== attempt) return;
       reset();
       onOpenChange(false);
     } catch (e) {
+      if (googleAttempt.current !== attempt) return;
       setError(e instanceof Error ? e.message : "Could not connect to Google. Try again.");
-      setBusy(false);
+      setProgress({ kind: "idle" });
     }
   }
 
@@ -130,7 +151,7 @@ export function AddAccountDialog({
                   {!googleAvailable
                     ? "Not available in this build"
                     : busy
-                      ? "Waiting for your browser. Finish signing in there."
+                      ? "Waiting for your browser. Finish signing in there, or close this to stop waiting."
                       : "Sign in with your Google account"}
                 </p>
               </div>
