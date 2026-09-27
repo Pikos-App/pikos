@@ -73,6 +73,20 @@ const faqs = [
     linkLabel: "Read why the code is public",
   },
   {
+    q: "Is Pikos open source?",
+    a: "No, it's source-available. The code is public so anyone can check what the app does, and you can build and run it for yourself. What the licence stops is selling Pikos or a copy of it. Every version becomes open source under Apache 2.0 four years after it's released.",
+  },
+  {
+    q: "Isn't a database file a kind of lock-in?",
+    a: "It's a fair question. Pikos keeps your workspace in one SQLite file, not a folder of Markdown, so if plain files are your line, Obsidian is the better pick. SQLite is an open, documented format that any SQLite tool can read, and the US Library of Congress lists it as a recommended format for keeping data long term. The schema is in the public code. And Pikos exports everything to Markdown, CSV and calendar files whenever you like, so leaving takes one export.",
+  },
+  {
+    q: "What happens if Pikos stops being developed?",
+    a: "The version you have keeps working. There's no server to switch off and no account to expire, and your data is a file on your computer that you can export at any time.",
+    href: "/blog/what-if-pikos-goes-away",
+    linkLabel: "What happens if Pikos goes away",
+  },
+  {
     q: "How do I back up my data?",
     a: "Copy the data file, or use the built-in export. Since it lives on your drive, Time Machine and any backup tool automatically include it.",
   },
