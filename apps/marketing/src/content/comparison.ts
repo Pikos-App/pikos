@@ -112,7 +112,7 @@ export const features: Feature[] = [
   { key: "notes", label: "Notes", longLabel: "Notes", onSite: true },
   { key: "tasks", label: "Tasks", longLabel: "Tasks", onSite: true },
   { key: "calendar", label: "Calendar", longLabel: "Calendar view", onSite: true },
-  { key: "onDevice", label: "On device", longLabel: "On-device storage", onSite: true },
+  { key: "onDevice", label: "On your computer", longLabel: "Stored on your computer", onSite: true },
   { key: "noAccount", label: "No account", longLabel: "No account required", onSite: true },
   { key: "phone", label: "Phone app", longLabel: "Phone app", onSite: true },
   { key: "sync", label: "Sync", longLabel: "Sync", onSite: true },

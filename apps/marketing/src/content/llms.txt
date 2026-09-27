@@ -1,15 +1,15 @@
 # Pikos
 
-> Notes, tasks, and calendar in one on-device desktop app.
+> Notes, tasks and calendar as one thing, in a desktop app that runs on your computer.
 
-Pikos is a desktop productivity app for macOS and Linux that combines notes, tasks, and a calendar into a single interface. All data is stored on the user's device. No account required, no sign-up, no cloud dependency.
+Pikos is a desktop app for macOS and Linux in which a note, a task and a calendar event are the same page. All data stays on the user's computer. No account, no sign-up, no subscription, and no Pikos server. The version a user downloads keeps working, because there is no server to switch off.
 
 ## Key Facts
 
 - Category: Productivity / Notes / Task Management / Calendar
 - Platform: macOS and Linux
 - Pricing: Free desktop download (no limits, no trial). A Mac App Store version (with iCloud sync) and an iPhone app are planned, each a one-time purchase. No subscriptions. A $29 Backer pre-order is available at pikos.app/backer for early supporters; backers receive the paid App Store apps free when they ship.
-- Data: Stored on device. Export anytime.
+- Data: Stored on the user's computer. Export any time to Markdown, CSV or calendar files.
 - Privacy: No telemetry, no tracking cookies, no personal data collection.
 - Source: Source-available. Full code public on GitHub (not open-source licensed).
 - Website: https://pikos.app
@@ -48,7 +48,7 @@ There is no Pikos server. No account, no telemetry, no analytics inside the app.
 
 - People who want notes, tasks, and a calendar in one app instead of three
 - Users who want their data stored on their own device
-- Anyone who wants a productivity app with no account, no subscription, and no cloud dependency
+- Anyone who wants a productivity app with no account, no subscription, and no server behind it
 - Obsidian users who wish they had built-in tasks and a calendar
 - TickTick or Todoist users who want a calendar view without a paid plan
 - Privacy-conscious users who don't want their data on someone else's server
