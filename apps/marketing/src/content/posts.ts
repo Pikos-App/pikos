@@ -23,7 +23,7 @@ export interface Post {
 export const posts: Post[] = [
   {
     slug: "read-only-on-purpose",
-    title: "Read Only, On Purpose",
+    title: "Read only, on purpose",
     description:
       "Pikos syncs your calendar in and never writes back. Two-way sync is the feature everyone advertises and the one that eats calendars, so Pikos cut it rather than deferring it.",
     date: "2026-09-20",
@@ -31,7 +31,7 @@ export const posts: Post[] = [
   },
   {
     slug: "your-calendar-inside-pikos",
-    title: "Your Calendar, Inside Pikos",
+    title: "Your calendar, inside Pikos",
     description:
       "Pikos 0.4.0 syncs your calendar in: iCloud, Google, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
     date: "2026-09-20",
@@ -39,7 +39,7 @@ export const posts: Post[] = [
   },
   {
     slug: "the-code-is-public",
-    title: "The Code Is Public",
+    title: "The code is public",
     description:
       "The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust.",
     date: "2026-06-10",
@@ -47,7 +47,7 @@ export const posts: Post[] = [
   },
   {
     slug: "what-if-pikos-goes-away",
-    title: "What If Pikos Goes Away?",
+    title: "What if Pikos goes away?",
     description:
       "Your data is a file on your computer. The app works without a server. Here's what that means for longevity.",
     date: "2026-06-10",
@@ -56,7 +56,7 @@ export const posts: Post[] = [
   },
   {
     slug: "buy-once",
-    title: "Buy Once",
+    title: "Buy once",
     description:
       "No subscription, now or ever. The desktop app is free. The paid versions will be one-time purchases.",
     date: "2026-06-10",
@@ -64,7 +64,7 @@ export const posts: Post[] = [
   },
   {
     slug: "your-data-stays-on-your-device",
-    title: "Your Data Stays on Your Device",
+    title: "Your data stays on your device",
     description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
     date: "2026-05-09",
     tag: "Privacy",
