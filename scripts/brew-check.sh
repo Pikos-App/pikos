@@ -7,7 +7,8 @@
 # and the cask keeps naming the version before it, or when Homebrew deprecates a stanza the tap
 # still uses. Both are invisible until somebody tries to install.
 #
-# Audits, and fetches to prove each URL and checksum resolve. It installs nothing.
+# Audits, and checks each URL and checksum against what GitHub publishes. It installs and
+# downloads nothing.
 set -uo pipefail
 
 TAP=${PIKOS_TAP:-pikos-app/tap}
@@ -23,21 +24,24 @@ check() { if "$@"; then return 0; else fail=1; return 1; fi; }
 brew tap "$TAP" >/dev/null 2>&1 || true
 
 step "audit"
-check brew audit --strict --cask "$CASK" || echo "   the cask has problems"
-check brew audit --strict --cask "$BETA" || echo "   the beta cask has problems"
-check brew audit --strict "$FORMULA" || echo "   the cli formula has problems"
-
-step "fetch, which verifies each url and checksum"
-check brew fetch --cask "$CASK" >/dev/null || echo "   the cask's download or checksum is wrong"
-check brew fetch "$FORMULA" >/dev/null || echo "   the formula's download or checksum is wrong"
-
+audit_log=$(mktemp)
+{
+  check brew audit --strict --cask "$CASK" || echo "   the cask has problems"
+  check brew audit --strict --cask "$BETA" || echo "   the beta cask has problems"
+  check brew audit --strict "$FORMULA" || echo "   the cli formula has problems"
+} > "$audit_log" 2>&1
+cat "$audit_log"
 # A deprecation warning is not an audit failure, and it is how a tap stops working a release later.
-step "deprecations"
-warnings=$(brew fetch --cask --force "$CASK" 2>&1 | grep -c "deprecated" || true)
-if [ "$warnings" -gt 0 ]; then
-  echo "   the cask uses $warnings deprecated stanza(s); brew fetch --cask --force names them"
+if grep -q "deprecated" "$audit_log"; then
+  echo "   the tap uses a deprecated stanza; the audit output above names it"
   fail=1
 fi
+
+# Against GitHub's published digests rather than `brew fetch`, which downloaded every asset each
+# run, and GitHub counts a runner's download exactly as it counts a person's.
+step "each url and checksum against what is published"
+check bash "$(brew --repository "$TAP")/.github/check-digests.sh" \
+  || echo "   the tap names an asset that is missing or has a different checksum"
 
 step "versions against what is published"
 cask_version_of() {
