@@ -110,8 +110,26 @@ describe("MonthGrid — grid rendering", () => {
 describe("MonthGrid — event chips", () => {
   it("renders a timed event with its start time in the cell it belongs to", () => {
     renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
-    const chip = screen.getByRole("button", { name: "9 AM Standup" });
+    const chip = screen.getByRole("button", { name: "Standup 9 AM" });
     expect(cell("Tuesday March 10, 2026")).toContainElement(chip);
+  });
+
+  // A month cell is an overview, so the title is what has to survive a narrow
+  // column. The time used to come first and refuse to shrink, which left chips
+  // reading "10:30am Standu…" — a time and nothing scannable.
+  it("puts the title before the time, and lets the time shrink first", () => {
+    renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
+    const chip = screen.getByRole("button", { name: "Standup 9 AM" });
+
+    const spans = [...chip.querySelectorAll("span")].filter((s) => s.textContent?.trim());
+    const title = spans.find((s) => s.textContent?.trim() === "Standup");
+    const time = spans.find((s) => s.textContent?.trim() === "9 AM");
+
+    expect(title).toBeDefined();
+    expect(time).toBeDefined();
+    expect(title!.compareDocumentPosition(time!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(time!.className).toContain("shrink-[9999]");
+    expect(title!.className).not.toContain("shrink-0");
   });
 
   it("colours a chip from its folder, matching the week grid's source", () => {
@@ -140,7 +158,7 @@ describe("MonthGrid — event chips", () => {
     vi.useFakeTimers();
     try {
       renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
-      fireEvent.click(screen.getByRole("button", { name: "9 AM Standup" }));
+      fireEvent.click(screen.getByRole("button", { name: "Standup 9 AM" }));
       // The chip discriminates click from double-click on a timer.
       act(() => {
         vi.runAllTimers();
@@ -159,9 +177,9 @@ describe("MonthGrid — overflow and click routing", () => {
 
   it("caps the chips and collapses the rest into a +K more pill", () => {
     renderGrid(crowd);
-    expect(screen.getByRole("button", { name: "1 AM Event 0" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "3 AM Event 2" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "4 AM Event 3" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Event 0 1 AM" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Event 2 3 AM" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Event 3 4 AM" })).not.toBeInTheDocument();
     expect(screen.getByText("+2 more")).toBeInTheDocument();
   });
 
@@ -194,7 +212,7 @@ describe("MonthGrid — overflow and click routing", () => {
     const { onOpenDay } = renderGrid([
       makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" }),
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "9 AM Standup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Standup 9 AM" }));
     expect(onOpenDay).not.toHaveBeenCalled();
   });
 });
