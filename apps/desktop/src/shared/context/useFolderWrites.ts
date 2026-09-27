@@ -6,6 +6,7 @@
 import type { Folder, FolderUpdate, PageSummary, StorageAdapter } from "@pikos/core";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
+import type { WorkspaceEventBus } from "../events/workspaceEvents";
 import type { OptimisticWrite } from "./usePageWriteQueue";
 
 export interface FolderWrites {
@@ -23,12 +24,14 @@ export interface FolderWrites {
 
 export function useFolderWrites({
   adapter,
+  emit,
   foldersRef,
   optimistic,
   setFolders,
   setPages,
 }: {
   adapter: StorageAdapter;
+  emit: WorkspaceEventBus["emit"];
   foldersRef: RefObject<Folder[]>;
   optimistic: <T>(spec: OptimisticWrite<T>) => Promise<T | undefined>;
   setFolders: Dispatch<SetStateAction<Folder[]>>;
@@ -59,12 +62,14 @@ export function useFolderWrites({
     setFolders((prev) => prev.filter((f) => f.id !== id));
     // Pages in the deleted folder are soft-deleted by the adapter
     setPages((prev) => prev.filter((p) => p.folderId !== id));
+    emit("folder:deleted", id);
   }
 
   async function softDeleteFolder(id: string) {
     await adapter.softDeleteFolder(id);
     setFolders((prev) => prev.filter((f) => f.id !== id));
     setPages((prev) => prev.filter((p) => p.folderId !== id));
+    emit("folder:deleted", id);
   }
 
   async function restoreFolder(id: string) {

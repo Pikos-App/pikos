@@ -34,6 +34,30 @@ describe("useTrash", () => {
     );
   });
 
+  // The route that stayed broken after the page one was fixed. Deleting a folder
+  // takes its pages with it, but the adapter soft-deletes those itself, so no page
+  // event fires and the open list showed none of them. The trash lists pages rather
+  // than folders, so the folder's own row is not expected here.
+  it("lists the pages a folder took with it when the folder was deleted elsewhere", async () => {
+    const hook = setup();
+    await waitFor(() => expect(hook.result.current.trash.loading).toBe(false));
+
+    let folderId = "";
+    await act(async () => {
+      const folder = await hook.result.current.pages.createFolder({ name: "Doomed folder" });
+      folderId = folder.id;
+      await hook.result.current.pages.createPage({ folderId, title: "Page inside" });
+    });
+
+    await act(async () => {
+      await hook.result.current.pages.softDeleteFolder(folderId);
+    });
+
+    await waitFor(() =>
+      expect(hook.result.current.trash.entries.map((e) => e.title)).toContain("Page inside")
+    );
+  });
+
   it("does not read the trash while it is closed", async () => {
     const hook = renderHookWithProviders(() => ({
       pages: usePages(),

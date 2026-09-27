@@ -62,17 +62,27 @@ export function useTrash(active: boolean): TrashState {
     else setError(null);
   }, [active, storage]);
 
-  // A page can be deleted while the trash is the open view — from the calendar,
-  // or by a shortcut — and the row belongs in this list the moment it is. Without
-  // this the list only caught up when you left the view and came back, which is
-  // the one thing that re-runs the fetch above.
+  // Something can be deleted while the trash is the open view — a page from the
+  // calendar or a shortcut, a folder from the sidebar — and the rows belong in this
+  // list the moment it happens. Without this the list only caught up when you left
+  // the view and came back, which is the one thing that re-runs the fetch above.
+  // A folder needs its own subscription: the adapter soft-deletes the folder's
+  // pages itself, so the page events never fire and a folder delete was the one
+  // route still leaving the list stale.
   // `storage` is in the deps because `refresh` closes over it and it starts null:
   // subscribing before the workspace loads would capture that null for good.
   useEffect(() => {
     if (!active) return;
-    return on("page:deleted", () => {
+    const offPage = on("page:deleted", () => {
       void refresh();
     });
+    const offFolder = on("folder:deleted", () => {
+      void refresh();
+    });
+    return () => {
+      offPage();
+      offFolder();
+    };
   }, [active, on, storage]);
 
   /** Run a write, then re-read: the backend decides what survives (a mirror is

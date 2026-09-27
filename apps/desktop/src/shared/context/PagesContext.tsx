@@ -231,7 +231,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     restoreFolder,
     softDeleteFolder,
     updateFolder,
-  } = useFolderWrites({ adapter, foldersRef, optimistic, setFolders, setPages });
+  } = useFolderWrites({ adapter, emit, foldersRef, optimistic, setFolders, setPages });
 
   // Page CRUD: create, delete (hard + soft), restore, reorder, bulk status.
   const {
