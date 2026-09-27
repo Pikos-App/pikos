@@ -11,7 +11,7 @@ interface Props {
 }
 
 const { slug, ogImage } = Astro.props;
-const { title, description, date } = postBySlug(slug);
+const { title, description, date, updated } = postBySlug(slug);
 const formattedDate = formatDate(date);
 
 const jsonLd = {
@@ -20,6 +20,7 @@ const jsonLd = {
   "headline": title,
   "description": description,
   "datePublished": date,
+  ...(updated && { "dateModified": updated.date }),
   "author": { "@type": "Person", "name": "Alex King" },
   "publisher": { "@type": "Organization", "name": "Pikos" },
 };
@@ -38,6 +39,11 @@ const jsonLd = {
     <article>
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{title}</h1>
       <time class="mt-3 block text-sm text-neutral-400 dark:text-neutral-500" datetime={date}>{formattedDate}</time>
+      {updated && (
+        <p class="mt-1 text-sm text-neutral-400 dark:text-neutral-500">
+          Updated <time datetime={updated.date}>{formatDate(updated.date)}</time>: {updated.note}
+        </p>
+      )}
 
       <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
         <slot />

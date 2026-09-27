@@ -16,6 +16,8 @@ export interface Post {
   /** ISO date. A date ahead of the build schedules the post; see `published`. */
   date: string;
   tag: string;
+  /** A correction after publishing. The original date stays, so the note says what changed. */
+  updated?: { date: string; note: string };
 }
 
 export const posts: Post[] = [
@@ -50,6 +52,7 @@ export const posts: Post[] = [
       "Your data is a file on your computer. The app works without a server. Here's what that means for longevity.",
     date: "2026-06-10",
     tag: "Philosophy",
+    updated: { date: "2026-09-27", note: "One sentence reworded in plainer language. Nothing it says changed." },
   },
   {
     slug: "buy-once",
@@ -65,6 +68,7 @@ export const posts: Post[] = [
     description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
     date: "2026-05-09",
     tag: "Privacy",
+    updated: { date: "2026-09-27", note: "One sentence reworded in plainer language. Nothing it says changed." },
   },
 ];
 
