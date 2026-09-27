@@ -60,6 +60,22 @@ if ! grep -q ">${NEW}<" "$MARKETING_NOTES"; then
   exit 1
 fi
 
+# The competitor comparison is dated, and a release is the moment its claims go
+# out again. Past three months, re-check it rather than republish it unread.
+# SKIP_COMPARISON_CHECK=1 lets an urgent hotfix through.
+COMPARISON="$ROOT/apps/marketing/src/content/comparison.ts"
+CHECKED=$(grep -o 'COMPARISON_CHECKED = "[0-9-]*"' "$COMPARISON" | cut -d'"' -f2) || {
+  echo "Error: no COMPARISON_CHECKED date found in $COMPARISON."
+  exit 1
+}
+IFS='-' read -r CHECKED_Y CHECKED_M _ <<< "$CHECKED"
+AGE_MONTHS=$(( ($(date +%Y) * 12 + 10#$(date +%m)) - (CHECKED_Y * 12 + 10#$CHECKED_M) ))
+if [ "$AGE_MONTHS" -gt 3 ] && [ "${SKIP_COMPARISON_CHECK:-}" != "1" ]; then
+  echo "Error: the competitor comparison was last checked $CHECKED, $AGE_MONTHS months ago."
+  echo "Re-check each app against its sources in $COMPARISON and move COMPARISON_CHECKED."
+  exit 1
+fi
+
 # ── Release-notes sign-off ───────────────────────────────────────────────────
 # Tagging triggers the publish pipeline and is irreversible, so require an
 # explicit human review of BOTH notes surfaces before proceeding.
