@@ -378,3 +378,35 @@ describe("minHourHeightForTextScale", () => {
     );
   });
 });
+
+// The tiers decide whether a block draws a time row and a second title line. They
+// were fixed pixel counts while the rows inside them scaled, so a raised calendar
+// text size crossed a tier the content no longer fitted and the block spilled its
+// checkbox and title past its own bottom edge.
+describe("block layout tiers", () => {
+  it("keeps the pixels the default calendar was tuned to", () => {
+    const metrics = computeCalendarMetrics("normal");
+    expect(metrics.timeRowMinHeight).toBe(40);
+    expect(metrics.twoLineTitleMinHeight).toBe(52);
+  });
+
+  it("raises both tiers with the calendar text size", () => {
+    const metrics = computeCalendarMetrics("normal", 2);
+    expect(metrics.timeRowMinHeight).toBe(80);
+    expect(metrics.twoLineTitleMinHeight).toBe(104);
+  });
+
+  it("holds a 45-minute block back from a time row it cannot fit at 2x", () => {
+    const metrics = computeCalendarMetrics("normal", 2);
+    const fortyFiveMinutes = metrics.hourHeight * 0.75;
+    const oneTitleLineAndATimeRow = 2 * (14 * 2) + 4;
+
+    expect(fortyFiveMinutes).toBeLessThan(oneTitleLineAndATimeRow);
+    expect(fortyFiveMinutes).toBeLessThan(metrics.timeRowMinHeight);
+  });
+
+  it("still lets a block show its time once it is genuinely tall enough", () => {
+    const metrics = computeCalendarMetrics("normal", 2);
+    expect(metrics.hourHeight * 1.5).toBeGreaterThanOrEqual(metrics.timeRowMinHeight);
+  });
+});

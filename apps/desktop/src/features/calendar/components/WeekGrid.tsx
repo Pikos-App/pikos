@@ -95,7 +95,11 @@ export function WeekGrid({
   const fillHourHeight = renderedHours > 0 ? (containerHeight - fixedBandTotal) / renderedHours : 0;
   const effectiveHourHeight = Math.max(settings.metrics.hourHeight, fillHourHeight);
   const geometry: CollapseGeometry = buildCollapseGeometry(settings.collapse, effectiveHourHeight);
+  // Only the height-derived values change when the grid stretches to fill its
+  // container. The block layout tiers come from the calendar text size, so they
+  // are carried over rather than recomputed from the stretched hour.
   const metrics: CalendarMetrics = {
+    ...settings.metrics,
     compactBlockHeight: effectiveHourHeight / 4,
     gridHeight: geometry.totalHeight,
     hourHeight: effectiveHourHeight,

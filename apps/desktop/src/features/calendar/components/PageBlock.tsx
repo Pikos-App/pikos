@@ -112,15 +112,16 @@ export function PageBlock({
     isMultiDayTimed && !isContinuationBefore
       ? formatMultiDayTimeRange(startDate, liveEndDate ?? endDate)
       : formatTimeRange(startDate, liveEndDate ?? endDate);
-  // Layout tiers by available height:
-  //   < 40px → 1-line title only (no time row — wouldn't fit cleanly)
-  //   40-52  → 1-line title + time row
-  //   ≥ 52px → 2-line title + time row
-  // This keeps short blocks (e.g. 45min, 48px) showing their time, while
-  // tall blocks still get a 2-line title for long page names.
+  // Layout tiers by available height, in the scaled units `CalendarMetrics` owns:
+  //   below the time-row tier   → 1-line title only (a time row wouldn't fit)
+  //   time-row tier             → 1-line title + time row
+  //   two-line tier and above   → 2-line title + time row
+  // This keeps short blocks (e.g. 45min) showing their time, while tall blocks
+  // still get a 2-line title for long page names.
   // `isCompactWidth` always forces a 1-line title regardless of height.
-  const showTimeLabel = !isRenderingCompact && displayHeight >= 40 && !isContinuationBefore;
-  const useTwoLineTitle = !isCompactWidth && displayHeight >= 52;
+  const showTimeLabel =
+    !isRenderingCompact && displayHeight >= metrics.timeRowMinHeight && !isContinuationBefore;
+  const useTwoLineTitle = !isCompactWidth && displayHeight >= metrics.twoLineTitleMinHeight;
   const done = isDone(page);
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.

@@ -32,6 +32,14 @@ export interface CalendarMetrics {
   compactBlockHeight: number;
   gridHeight: number;
   minResizeHeight: number;
+  /** The shortest block that can carry a time row under the title, and the
+   *  shortest that can give the title a second line. Both scale with the calendar
+   *  text size: they were fixed pixel counts, so raising the text size crossed them
+   *  while the rows inside had grown taller than the block — a 45-minute block at
+   *  200% cleared the 40px time-row bar with content that wanted about 60px, and
+   *  spilled its checkbox and title past its own bottom edge. */
+  timeRowMinHeight: number;
+  twoLineTitleMinHeight: number;
 }
 
 const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
@@ -54,6 +62,12 @@ export function minHourHeightForTextScale(textScale: number): number {
   return 2 * (EVENT_LINE_HEIGHT * textScale + EVENT_BLOCK_PADDING);
 }
 
+/** The tier heights the block layout was tuned to at scale 1. Scaled rather than
+ *  re-derived from `EVENT_LINE_HEIGHT`, so the default calendar keeps the exact
+ *  pixels the release was tested at and only a raised text size moves them. */
+const TIME_ROW_MIN_HEIGHT = 40;
+const TWO_LINE_TITLE_MIN_HEIGHT = 52;
+
 export function computeCalendarMetrics(density: CalendarDensity, textScale = 1): CalendarMetrics {
   const hourHeight = Math.max(DENSITY_HOUR_HEIGHT[density], minHourHeightForTextScale(textScale));
   return {
@@ -61,6 +75,8 @@ export function computeCalendarMetrics(density: CalendarDensity, textScale = 1):
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,
+    timeRowMinHeight: TIME_ROW_MIN_HEIGHT * textScale,
+    twoLineTitleMinHeight: TWO_LINE_TITLE_MIN_HEIGHT * textScale,
   };
 }
 
