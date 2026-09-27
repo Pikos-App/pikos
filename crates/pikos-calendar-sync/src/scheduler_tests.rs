@@ -4,7 +4,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sqlx::SqlitePool;
 
@@ -174,24 +174,36 @@ async fn empty_poll_reports_unchanged() {
     assert_eq!(changed, vec![false]);
 }
 
-/// A second focus trigger inside `min_focus_gap` is skipped — alt-tabbing must
-/// not hammer the provider.
+/// A second focus trigger inside `min_focus_gap` waits the gap out and then runs.
+///
+/// It used to be dropped, which is what a person felt as coming back to Pikos and
+/// seeing yesterday's calendar: a change made in the provider seconds after a pass
+/// waited for the *next* app switch, or for the five-minute poll. The gap still
+/// spaces the passes; it no longer loses one.
 #[tokio::test]
-async fn focus_debounced_within_gap() {
+async fn focus_inside_the_gap_waits_instead_of_being_dropped() {
+    const SHORT_GAP: Duration = Duration::from_millis(40);
     let pool = test_pool().await;
     seed_account(&pool, "acc1", "f1").await;
 
-    let provider = Shared::default().with_sync(Ok(delta(vec![])));
+    let provider = Shared::default()
+        .with_sync(Ok(delta(vec![])))
+        .with_sync(Ok(delta(vec![])));
+    let started = Instant::now();
     let (starts, ..) = drive(
         &pool,
         &[SyncTrigger::Focus, SyncTrigger::Focus],
         &provider,
-        GAP,
+        SHORT_GAP,
     )
     .await;
 
-    assert_eq!(starts, 1, "second focus inside the gap must be skipped");
-    assert_eq!(provider.calls.get(), 1);
+    assert_eq!(starts, 2, "the second focus still gets its pass");
+    assert_eq!(provider.calls.get(), 2);
+    assert!(
+        started.elapsed() >= SHORT_GAP,
+        "it waited the gap out rather than polling twice back to back"
+    );
 }
 
 /// A poke (calendar just enabled) bypasses the focus gap — the newly-enabled

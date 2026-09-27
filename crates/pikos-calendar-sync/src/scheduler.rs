@@ -26,7 +26,8 @@ mod scheduler_tests;
 /// Why the scheduler woke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncTrigger {
-    /// The app window gained focus. Debounced by [`SchedulerConfig::min_focus_gap`].
+    /// The app window gained focus. Delayed, never dropped, by
+    /// [`SchedulerConfig::min_focus_gap`].
     Focus,
     /// The periodic timer fired.
     Interval,
@@ -43,9 +44,17 @@ pub trait TriggerSource {
 }
 
 pub struct SchedulerConfig {
-    /// A `Focus` trigger within this gap of the last completed pass is skipped —
-    /// rapid app-switching must not hammer the providers. `Interval`/`Poke`
-    /// always run.
+    /// A `Focus` trigger this soon after the last completed pass waits out the
+    /// remainder and then runs, rather than being dropped. Returning to the window
+    /// has to end in a sync: dropping it meant a change made in the provider a few
+    /// seconds earlier stayed invisible until the next app switch, which is the
+    /// flipping-between-two-calendars case the short gap exists to serve.
+    /// `Interval` and `Poke` never wait.
+    ///
+    /// The cost is that an alt-tab burst runs one pass per focus event, spaced by
+    /// this gap, where dropping ran one. An unchanged etag or sync token writes
+    /// nothing, so those are the cheapest request a provider serves, and the gap is
+    /// what keeps them spaced.
     pub min_focus_gap: Duration,
 }
 
@@ -98,8 +107,9 @@ pub async fn run_sync_loop<T, P, F, PoolFut, PoolFn>(
     while let Some(trigger) = triggers.next().await {
         if trigger == SyncTrigger::Focus {
             if let Some(at) = last_pass {
-                if at.elapsed() < config.min_focus_gap {
-                    continue;
+                let since = at.elapsed();
+                if since < config.min_focus_gap {
+                    tokio::time::sleep(config.min_focus_gap - since).await;
                 }
             }
         }
