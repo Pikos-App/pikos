@@ -19,8 +19,8 @@ Pikos is a desktop productivity app for macOS and Linux that combines notes, tas
 
 - Rich text editor with slash commands, formatting toolbar, Markdown paste, and autosave
 - Task management with priorities (Urgent/High/Medium/Low), statuses, tags, and folders
-- Week calendar view with drag-to-schedule, timed and all-day events
-- External calendar sync: read-only, opt-in, from iCloud, Google Calendar, or any CalDAV server. Synced events become pages you can take notes on. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
+- Calendar showing one to seven days or a month, with drag-to-schedule, timed and all-day events
+- External calendar sync: read-only, opt-in, from iCloud, Google Calendar, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged or ticked off becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
 - Quick add with natural language parsing (extracts dates, priorities, tags, folders)
 - Full-text search with BM25 ranking
 - Recurring pages and recurring calendar events, sharing one recurrence engine
@@ -47,7 +47,7 @@ There is no Pikos server. No account, no telemetry, no analytics inside the app.
 ## Who Pikos Is For
 
 - People who want notes, tasks, and a calendar in one app instead of three
-- Users who care about data ownership and on-device storage
+- Users who want their data stored on their own device
 - Anyone who wants a productivity app with no account, no subscription, and no cloud dependency
 - Obsidian users who wish they had built-in tasks and a calendar
 - TickTick or Todoist users who want a calendar view without a paid plan

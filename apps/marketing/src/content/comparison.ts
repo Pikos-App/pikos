@@ -19,6 +19,7 @@ export interface ComparedApp {
   noAccount: Cell;
   phone: Cell;
   sync: Cell;
+  noSubscription: Cell;
   price: string;
   sourceAvailable: boolean;
   /** Where each fact was checked. Pikos has none because its row is owned by the release. */
@@ -28,19 +29,19 @@ export interface ComparedApp {
 export const COMPARISON_CHECKED = "2026-09-26";
 
 export const LEGEND =
-  "Price is the base app. Paid means that part costs extra on top of it, and Plugin means it needs a community plugin.";
+  "Price is the base app. Paid means that part costs extra on top of it, and Plugin means it needs a community plugin. No subscription means nothing in the row needs one; a one-off purchase doesn't count.";
 
 export const apps: ComparedApp[] = [
   {
     name: "Pikos",
     notes: true, tasks: true, calendar: true, onDevice: true, noAccount: true,
-    phone: false, sync: false, price: "Free", sourceAvailable: true,
+    phone: false, sync: false, noSubscription: true, price: "Free", sourceAvailable: true,
     sources: [],
   },
   {
     name: "NotePlan",
     notes: true, tasks: true, calendar: true, onDevice: true, noAccount: true,
-    phone: true, sync: true, price: "$99/yr", sourceAvailable: false,
+    phone: true, sync: true, noSubscription: false, price: "$99/yr", sourceAvailable: false,
     sources: [
       "https://noteplan.co/features",
       "https://noteplan.co/pricing",
@@ -51,31 +52,31 @@ export const apps: ComparedApp[] = [
   {
     name: "Notion",
     notes: true, tasks: true, calendar: true, onDevice: false, noAccount: false,
-    phone: true, sync: true, price: "Free", sourceAvailable: false,
+    phone: true, sync: true, noSubscription: true, price: "Free", sourceAvailable: false,
     sources: ["https://www.notion.com/pricing", "https://www.notion.com/help/use-pages-offline"],
   },
   {
     name: "Obsidian",
     notes: true, tasks: "Plugin", calendar: "Plugin", onDevice: true, noAccount: true,
-    phone: true, sync: "Paid", price: "Free", sourceAvailable: false,
+    phone: true, sync: "Paid", noSubscription: false, price: "Free", sourceAvailable: false,
     sources: ["https://obsidian.md/pricing", "https://obsidian.md/help/bases"],
   },
   {
     name: "Logseq",
     notes: true, tasks: true, calendar: "Plugin", onDevice: true, noAccount: true,
-    phone: true, sync: "Paid", price: "Free", sourceAvailable: true,
+    phone: true, sync: "Paid", noSubscription: false, price: "Free", sourceAvailable: true,
     sources: ["https://github.com/logseq/docs/blob/master/db-version.md"],
   },
   {
     name: "TickTick",
     notes: true, tasks: true, calendar: "Paid", onDevice: false, noAccount: false,
-    phone: true, sync: true, price: "Free", sourceAvailable: false,
+    phone: true, sync: true, noSubscription: false, price: "Free", sourceAvailable: false,
     sources: ["https://ticktick.com/upgrade", "https://help.ticktick.com/articles/7055780476358754304"],
   },
   {
     name: "Things",
     notes: false, tasks: true, calendar: false, onDevice: true, noAccount: true,
-    phone: "Paid", sync: true, price: "$49.99", sourceAvailable: false,
+    phone: "Paid", sync: true, noSubscription: true, price: "$49.99", sourceAvailable: false,
     sources: [
       "https://apps.apple.com/us/app/things-3/id904280696?mt=12",
       "https://apps.apple.com/us/app/things-3/id904237743",
@@ -86,7 +87,7 @@ export const apps: ComparedApp[] = [
   {
     name: "Todoist",
     notes: false, tasks: true, calendar: "Paid", onDevice: false, noAccount: false,
-    phone: true, sync: true, price: "Free", sourceAvailable: false,
+    phone: true, sync: true, noSubscription: false, price: "Free", sourceAvailable: false,
     sources: [
       "https://www.todoist.com/pricing",
       "https://todoist.com/help/articles/use-the-calendar-layout-in-todoist-lPHRQTu0o",
@@ -106,6 +107,7 @@ export const features: { key: FeatureKey; label: string; longLabel: string; onSi
   { key: "noAccount", label: "No account", longLabel: "No account required", onSite: true },
   { key: "phone", label: "Phone app", longLabel: "Phone app", onSite: true },
   { key: "sync", label: "Sync", longLabel: "Sync", onSite: true },
+  { key: "noSubscription", label: "No subscription", longLabel: "No subscription needed", onSite: true },
   { key: "price", label: "Price", longLabel: "Price", onSite: true },
   { key: "sourceAvailable", label: "Source", longLabel: "Source available", onSite: false },
 ];
