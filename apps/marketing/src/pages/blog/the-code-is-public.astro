@@ -15,7 +15,7 @@ import BlogPost from "../../layouts/BlogPost.astro";
   </p>
 
   <p>
-    A public codebase makes the claim auditable. You can read the Rust backend and see exactly where it makes network calls (the updater, and that's it). You can search the TypeScript frontend and confirm there are no tracking scripts. Even if you don't personally read the code, the fact that <em>anyone</em> can is the point.
+    A public codebase makes the claim auditable. You can read the Rust backend and see exactly where it makes network calls: the update check, and calendar sync once you connect a calendar. You can search the TypeScript frontend and confirm there are no tracking scripts. Even if you don't personally read the code, the fact that <em>anyone</em> can is the point.
   </p>
 
   <h2>Source-available, not open source</h2>
@@ -32,7 +32,7 @@ import BlogPost from "../../layouts/BlogPost.astro";
 
   <ul>
     <li>Read the code and understand how Pikos works</li>
-    <li>Audit the privacy claims: verify that no data leaves your device</li>
+    <li>Audit the privacy claims: verify what the app sends, and where</li>
     <li>Build from source and run a version you compiled yourself</li>
     <li>Report bugs and suggest improvements via GitHub Issues</li>
     <li>Reference the code in technical discussions or blog posts</li>

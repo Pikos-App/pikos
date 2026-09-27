@@ -44,6 +44,10 @@ export const posts: Post[] = [
       "The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust.",
     date: "2026-06-10",
     tag: "Transparency",
+    updated: {
+      date: "2026-09-27",
+      note: "Calendar sync arrived in 0.4.0, so the list of network calls now names it alongside the update check.",
+    },
   },
   {
     slug: "what-if-pikos-goes-away",
@@ -68,7 +72,7 @@ export const posts: Post[] = [
     description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
     date: "2026-05-09",
     tag: "Privacy",
-    updated: { date: "2026-09-27", note: "One sentence reworded in plainer language. Nothing it says changed." },
+    updated: { date: "2026-09-27", note: "Reworded one sentence in plainer language, and added CSV to the export formats it lists." },
   },
 ];
 
