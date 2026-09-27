@@ -59,7 +59,7 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
           <li><strong>Notes</strong>: Todoist exports task comments as separate rows with <code>TYPE=note</code>. Pikos merges them into the previous task's body so you don't lose context.</li>
           <li><strong>Priorities</strong>: Todoist's CSV uses 1–4 (where 1 is urgent and 4 is no priority in the UI). The importer maps <code>1 → Urgent</code>, <code>2 → High</code>, <code>3 → Medium</code>, <code>4 → None</code>.</li>
           <li><strong>Fixed dates</strong>: date-only values like <code>2026-06-15</code> come across as all-day. Structured date-with-time values are preserved as timed events.</li>
-          <li><strong>Durations</strong>: if a task has <code>DURATION=30</code> and <code>DURATION_UNIT=minute</code>, Pikos uses that to compute the end time of a timed event.</li>
+          <li><strong>Durations</strong>: a timed task's <code>DURATION</code> becomes its end time, read as minutes. Pikos doesn't read <code>DURATION_UNIT</code> yet, so a duration Todoist gives in days comes across as that many minutes.</li>
           <li><strong>Labels</strong>: become Pikos tags.</li>
           <li><strong>Deadlines</strong>: Todoist's optional <code>DEADLINE</code> field maps to the scheduled end date.</li>
         </ul>
@@ -80,7 +80,7 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
         <h2>If something goes sideways</h2>
 
         <p>
-          Imports are reversible. Pikos snapshots the database first, every imported page is tagged with the import batch, and Settings &rarr; Data &rarr; "Undo last import" removes the lot. You can re-export from Todoist and try again with no leftovers.
+          Imports are reversible. Pikos snapshots the database first, every imported page is tagged with the import batch, and Settings &rarr; Data &rarr; "Undo import" removes the lot. You can re-export from Todoist and try again with no leftovers.
         </p>
 
         <p>
