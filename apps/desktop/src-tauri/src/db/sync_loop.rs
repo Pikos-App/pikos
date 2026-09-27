@@ -15,10 +15,9 @@ use pikos_calendar_sync::{
 
 use super::DbState;
 
-/// Poll cadence while the app is open. Every install's Google polls draw on the
-/// project's one daily quota, which Google won't raise, so the background poll
-/// stays slow; switching back to the window is what makes a change feel immediate
-/// (`min_focus_gap`).
+/// Poll cadence while the app is open. Every install's Google polls draw on one
+/// shared per-minute project quota, so the background poll stays slow; switching
+/// back to the window is what makes a change feel immediate (`min_focus_gap`).
 const POLL_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 /// Covers the watcher's debounce tail after a pass's last write (the bracket around
