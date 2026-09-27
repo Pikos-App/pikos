@@ -1,9 +1,9 @@
 import template from "../content/llms.txt?raw";
-import { checkedMonth, comparisonMarkdown, LEGEND } from "../content/comparison";
+import { checkedMonth, comparisonMarkdown, features, legend } from "../content/comparison";
 
 const slots: Record<string, () => string> = {
   "{{comparison-table}}": comparisonMarkdown,
-  "{{legend}}": () => LEGEND,
+  "{{legend}}": () => legend(features),
   "{{checked}}": checkedMonth,
 };
 

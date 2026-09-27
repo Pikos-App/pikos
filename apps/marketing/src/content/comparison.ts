@@ -28,8 +28,6 @@ export interface ComparedApp {
 
 export const COMPARISON_CHECKED = "2026-09-26";
 
-export const LEGEND =
-  "Price is the base app. Paid means that part costs extra on top of it, and Plugin means it needs a community plugin. No subscription means nothing in the row needs one; a one-off purchase doesn't count.";
 
 export const apps: ComparedApp[] = [
   {
@@ -98,8 +96,19 @@ export const apps: ComparedApp[] = [
 
 type FeatureKey = Exclude<keyof ComparedApp, "name" | "sources">;
 
-/** `label` is the site's short column head; `longLabel` is the `llms.txt` row name. */
-export const features: { key: FeatureKey; label: string; longLabel: string; onSite: boolean }[] = [
+interface Feature {
+  key: FeatureKey;
+  /** The site's short column head. */
+  label: string;
+  /** The `llms.txt` row name. */
+  longLabel: string;
+  /** Off where the page is too narrow for it; `llms.txt` shows every feature. */
+  onSite: boolean;
+  /** Joins the legend wherever the feature is shown. */
+  note?: string;
+}
+
+export const features: Feature[] = [
   { key: "notes", label: "Notes", longLabel: "Notes", onSite: true },
   { key: "tasks", label: "Tasks", longLabel: "Tasks", onSite: true },
   { key: "calendar", label: "Calendar", longLabel: "Calendar view", onSite: true },
@@ -107,10 +116,18 @@ export const features: { key: FeatureKey; label: string; longLabel: string; onSi
   { key: "noAccount", label: "No account", longLabel: "No account required", onSite: true },
   { key: "phone", label: "Phone app", longLabel: "Phone app", onSite: true },
   { key: "sync", label: "Sync", longLabel: "Sync", onSite: true },
-  { key: "noSubscription", label: "No subscription", longLabel: "No subscription needed", onSite: true },
-  { key: "price", label: "Price", longLabel: "Price", onSite: true },
+  {
+    key: "noSubscription", label: "No subscription", longLabel: "No subscription needed", onSite: true,
+    note: "No subscription means nothing in the row needs one; a one-off purchase doesn't count.",
+  },
+  { key: "price", label: "Price", longLabel: "Price", onSite: false, note: "Price is the base app." },
   { key: "sourceAvailable", label: "Source", longLabel: "Source available", onSite: false },
 ];
+
+export function legend(shown: Feature[]): string {
+  const notes = shown.flatMap((f) => (f.note ? [f.note] : []));
+  return [...notes, "Paid means that part costs extra, and Plugin means it needs a community plugin."].join(" ");
+}
 
 /** "September 2026". Parsed by hand for the reason `formatDate` in `posts.ts` gives. */
 export function checkedMonth(): string {

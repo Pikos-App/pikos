@@ -1,7 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import Footer from "../../components/Footer.astro";
-import { apps, checkedMonth, features, LEGEND } from "../../content/comparison";
+import { apps, checkedMonth, features, legend } from "../../content/comparison";
 
 const title = "Pikos vs Notion, Obsidian, NotePlan and others";
 const description = "How Pikos compares to Notion, Obsidian, Logseq, NotePlan, TickTick, Things, Todoist, and the Apple apps. Honest feature comparison.";
@@ -25,7 +25,7 @@ const columns = features.filter((f) => f.onSite);
 
     <!-- Comparison table -->
     <div class="mt-12 overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-700">
-      <table class="w-full min-w-[40rem] text-sm">
+      <table class="w-full min-w-[36rem] text-sm">
         <thead>
           <tr class="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900">
             <th class="w-[100px] px-3 py-2.5 text-left text-xs font-semibold text-neutral-900 dark:text-neutral-50">App</th>
@@ -67,7 +67,7 @@ const columns = features.filter((f) => f.onSite);
     </div>
 
     <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">
-      {LEGEND} Checked in {checkedMonth()} against each app's own pricing and help pages. These apps change often, so if something here is out of date, <a href="/feedback" class="hover:text-primary-500 hover:underline dark:hover:text-primary-400">send a correction</a>.
+      {legend(columns)} Checked in {checkedMonth()} against each app's own pricing and help pages. These apps change often, so if something here is out of date, <a href="/feedback" class="hover:text-primary-500 hover:underline dark:hover:text-primary-400">send a correction</a>.
     </p>
 
     <!-- Prose comparison sections -->
