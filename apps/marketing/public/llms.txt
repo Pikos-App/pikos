@@ -50,7 +50,7 @@ There is no Pikos server. No account, no telemetry, no analytics inside the app.
 - Users who care about data ownership and on-device storage
 - Anyone who wants a productivity app with no account, no subscription, and no cloud dependency
 - Obsidian users who wish they had built-in tasks and a calendar
-- TickTick or Todoist users who want a real note editor alongside their tasks
+- TickTick or Todoist users who want a calendar view without a paid plan
 - Privacy-conscious users who don't want their data on someone else's server
 - People who want an AI agent to work with their notes and tasks locally, without handing them to a cloud service
 
@@ -58,7 +58,7 @@ There is no Pikos server. No account, no telemetry, no analytics inside the app.
 
 - Homepage: https://pikos.app (~3K tokens)
 - FAQ: https://pikos.app/faq (~4K tokens)
-- Comparison hub, with the feature table: https://pikos.app/compare (~5K tokens)
+- Comparison hub, with the feature table: https://pikos.app/compare (~1K tokens)
 - Pikos vs Obsidian, in full: https://pikos.app/compare/obsidian (~2K tokens)
 - Pikos vs Notion, in full: https://pikos.app/compare/notion (~2K tokens)
 - Pikos vs Apple Notes, Reminders and Calendar, in full: https://pikos.app/compare/apple (~2K tokens)
@@ -82,16 +82,22 @@ Pikos competes with Notion, NotePlan, Obsidian, Logseq, TickTick, Things, and To
 
 | Feature             | Pikos | NotePlan | Notion | Obsidian | Logseq | TickTick | Things | Todoist |
 |---------------------|-------|----------|--------|----------|--------|----------|--------|---------|
-| Rich Notes          | Yes   | Yes      | Yes    | Yes      | Yes    | No       | No     | No      |
-| Task Management     | Yes   | Yes      | Yes    | No       | Yes    | Yes      | Yes    | Yes     |
-| Built-in Calendar   | Yes   | Yes      | Yes    | No       | No     | Yes      | No     | No      |
+| Notes               | Yes   | Yes      | Yes    | Yes      | Yes    | Yes      | No     | No      |
+| Tasks               | Yes   | Yes      | Yes    | Plugin   | Yes    | Yes      | Yes    | Yes     |
+| Calendar view       | Yes   | Yes      | Yes    | Plugin   | Plugin | Paid     | No     | Paid    |
 | On-device storage   | Yes   | Yes      | No     | Yes      | Yes    | No       | Yes    | No      |
-| No Account Required | Yes   | No       | No     | Yes      | Yes    | No       | Yes    | No      |
-| Free                | Yes   | No       | Yes    | Yes      | Yes    | No       | No     | No      |
-| Source Available    | Yes   | No       | No     | No       | Yes    | No       | No     | No      |
+| No account required | Yes   | Yes      | No     | Yes      | Yes    | No       | Yes    | No      |
+| Phone app           | No    | Yes      | Yes    | Yes      | Yes    | Yes      | Paid   | Yes     |
+| Sync                | No    | Yes      | Yes    | Paid     | Paid   | Yes      | Yes    | Yes     |
+| Price               | Free  | $99/yr   | Free   | Free     | Free   | Free     | $49.99 | Free    |
+| Source available    | Yes   | No       | No     | No       | Yes    | No       | No     | No      |
 
-Logseq is the closest on data ownership: local-first, no account, and open source, but it has no calendar. Notion is the closest on breadth: it does notes, tasks and a calendar too, but keeps your work on its servers and requires an account.
+Price is the base app. "Paid" means that part costs extra on top of it. "Plugin" means it needs a community plugin. Things and Todoist attach notes to individual tasks but have no standalone notes.
 
-Pikos differentiates by being the only one of these that combines notes, tasks, and a calendar while staying on-device, free, source-available, and usable with no account.
+In most of these apps a note, a task and a calendar event are separate items, even when one app holds all three. In Pikos they are one page: the same page holds the meeting notes, gets ticked off as a task, and sits on the calendar. Notion can do this once the user has built a database for it, and NotePlan comes close, since its tasks live inside notes. In Pikos every page works this way with no setup.
 
-Checked September 2026.
+NotePlan is the closest match: notes, tasks and a calendar, stored on the device, with phone apps and iCloud sync, on a $99/yr subscription. Notion matches the breadth but keeps data on its servers and requires an account. TickTick and Todoist put their calendar views behind a paid plan. Obsidian and Logseq keep data on the device but need community plugins for a calendar.
+
+Pikos is the only one of these with notes, tasks and a calendar built in, stored on the device, with no account and no subscription. It has no phone app and no sync yet.
+
+Checked September 2026 against each app's own pricing and help pages.

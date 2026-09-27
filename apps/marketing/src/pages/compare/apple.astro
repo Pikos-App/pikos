@@ -4,7 +4,7 @@ import Footer from "../../components/Footer.astro";
 import Prose from "../../components/Prose.astro";
 
 const title = "Pikos vs Apple Notes, Reminders and Calendar";
-const description = "Apple's three apps are free, installed and sync everywhere. What they don't do is talk to each other. An honest comparison, including what Pikos doesn't do.";
+const description = "Apple's three apps are free, installed and sync everywhere. Reminders now show up in Calendar, but your notes still sit apart. An honest comparison, including what Pikos doesn't do.";
 ---
 
 <Base title={title} description={description}>
@@ -27,7 +27,7 @@ const description = "Apple's three apps are free, installed and sync everywhere.
         <h2>The short version</h2>
 
         <p>
-          Three good apps that don't know about each other. The note from a meeting is in Notes, the thing you agreed to do is in Reminders, the meeting is in Calendar, and nothing joins them up. You do the joining, every time, by remembering.
+          Three good apps that only partly know about each other. Reminders now show up in Calendar, which helps. Notes is still on its own. The note from a meeting is in Notes and the thing you agreed to do is in Reminders, joined only by a link if you think to add one.
         </p>
 
         <p>
@@ -75,7 +75,7 @@ const description = "Apple's three apps are free, installed and sync everywhere.
         </p>
 
         <p>
-          Notes is the hard half and there's no one-click path. Apple Notes has no Markdown export, so the practical route is to select the notes you want, export them as PDF or copy them over by hand, or use a third-party exporter to get a Markdown folder that Pikos can import. For most people the honest answer is to leave old notes in Apple Notes and start new work in Pikos rather than migrating years of it.
+          Notes takes one extra step. Since macOS 26, Apple Notes exports Markdown: select the notes you want, choose File, then Export as Markdown, and save them to a folder. Pikos imports that folder. Apple's export handles headings, lists and links well and tables less so. With years of notes, it's reasonable to leave the old ones where they are and start new work in Pikos.
         </p>
 
       </Prose>

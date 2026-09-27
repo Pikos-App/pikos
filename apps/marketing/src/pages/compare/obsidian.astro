@@ -19,7 +19,7 @@ const description = "Obsidian is the better tool for linking and building a know
     <article>
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Pikos vs Obsidian</h1>
       <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-        Both keep your notes on your own machine as files you can read without the app. They part company on what a note is for.
+        Both keep your notes on your own machine, with no account. They part company on what a note is for.
       </p>
 
       <Prose class="mt-10">
@@ -37,7 +37,7 @@ const description = "Obsidian is the better tool for linking and building a know
         <h2>Stay with Obsidian if</h2>
 
         <p>
-          You link notes heavily and use the graph. Pikos has search but no backlinks and no graph view, and that's a deliberate gap rather than a to-do.
+          You link notes heavily and use the graph. Pikos has search but no links between pages yet, and no graph view.
         </p>
 
         <p>
@@ -69,13 +69,13 @@ const description = "Obsidian is the better tool for linking and building a know
         <h2>What Pikos doesn't do</h2>
 
         <p>
-          No backlinks, no graph, no plugins, no phone app yet, no sync yet, and a much smaller community to ask when something breaks. Obsidian is nine years old and Pikos is not.
+          No backlinks, no graph, no plugins, no phone app yet, no sync yet, and a much smaller community to ask when something breaks. Obsidian has been around since 2020, and Pikos went public in June 2026.
         </p>
 
         <h2>Moving a vault across</h2>
 
         <p>
-          Pikos reads an Obsidian vault directly from disk, with no export step on the Obsidian side. Frontmatter, wikilinks, callouts and image attachments all come through. Point it at the folder you'd open in Obsidian and it walks the whole thing, skipping <code>.obsidian</code> and any other hidden directory.
+          Pikos reads an Obsidian vault directly from disk, with no export step on the Obsidian side. Frontmatter, callouts and image attachments come through. Wikilinks arrive as plain text, since Pikos doesn't link pages yet, and nested folders arrive as separate folders named after their path, like "Projects / Work". Point it at the folder you'd open in Obsidian and it walks the whole thing, skipping <code>.obsidian</code> and any other hidden directory.
         </p>
 
         <p>
