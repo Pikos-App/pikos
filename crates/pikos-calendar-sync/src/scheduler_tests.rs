@@ -161,7 +161,7 @@ async fn interval_pass_applies_delta_and_reports_changed() {
     assert_eq!(page_count(&pool).await, 1);
 }
 
-/// An empty poll — the common case every ~5 minutes — reports `changed: false`
+/// An empty poll — the common case on every interval tick — reports `changed: false`
 /// so the driver doesn't reload the frontend for nothing.
 #[tokio::test]
 async fn empty_poll_reports_unchanged() {

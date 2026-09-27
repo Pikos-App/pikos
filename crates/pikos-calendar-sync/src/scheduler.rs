@@ -52,7 +52,9 @@ pub struct SchedulerConfig {
 impl Default for SchedulerConfig {
     fn default() -> Self {
         Self {
-            min_focus_gap: Duration::from_secs(60),
+            // Short enough that flipping back from another calendar app picks up the
+            // change just made there; long enough to absorb an alt-tab burst.
+            min_focus_gap: Duration::from_secs(15),
         }
     }
 }
