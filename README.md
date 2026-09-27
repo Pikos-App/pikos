@@ -7,11 +7,11 @@
 
 # Pikos
 
-Notes, tasks, and calendar as one thing, on your computer.
+Notes, tasks, and calendar. One app, on your computer.
 
-Pikos is a desktop app where a note, a task, and a calendar event are the same page. No account, no subscription, and no Pikos server. Your data is a SQLite file on your machine.
+Pikos is a desktop app for macOS and Linux where a note, a task, and a calendar event are the same page. No account, no subscription, and no Pikos server. Your data is a SQLite file on your machine.
 
-An MCP server ships with it, so your own assistant can search, read, and write those notes. Pikos itself sends nothing anywhere; a cloud assistant sends what it reads to its provider, and a local model keeps everything on your machine. Pikos has no AI features of its own: it's the data layer, not the model.
+AI never gets in your way: Pikos opens to your page, not a chat box. If you want AI help, an MCP server ships with it, so the assistant you already use can search, read, and write your notes. Pikos itself sends nothing anywhere; a cloud assistant sends what it reads to its provider, and a local model keeps everything on your machine.
 
 **[Website](https://pikos.app)** &middot; **[Download](https://pikos.app/download)** &middot; **[Blog](https://pikos.app/blog)**
 
