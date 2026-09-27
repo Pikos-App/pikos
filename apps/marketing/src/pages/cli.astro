@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 
 const title = "Pikos CLI and MCP server";
-const description = "Let an assistant read and write your notes, tasks and calendar over MCP, without any of it leaving your machine. Plus a command line for the same workspace. No account, no server, no port.";
+const description = "Let an assistant read and write your notes, tasks, and calendar over MCP. Pikos itself sends nothing anywhere. Plus a command line for the same workspace. No account, no server, no port.";
 
 const mcpConfig = `{
   "mcpServers": {
@@ -23,7 +23,10 @@ const mcpConfig = `{
 
     <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">An agent on your own notes</h1>
     <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-      Your assistant can search, read and write everything in Pikos, and none of it leaves your machine. There's no account to connect, no API key to paste, and no Pikos server in the middle. <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos mcp</code> talks to whatever started it over stdin and stdout, and that's the whole network story.
+      Your assistant can search, read, and write everything in Pikos. There's no account to connect, no API key to paste, and no Pikos server in the middle. <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos mcp</code> talks to whatever started it over stdin and stdout, and that's the whole of Pikos's network story.
+    </p>
+    <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+      Where your notes go after that is up to the assistant. Claude, ChatGPT, and other cloud assistants send what they read to their provider, the same as anything else you share with them. A model running on your own computer keeps it all there.
     </p>
     <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
       The same <code class="rounded bg-neutral-100 px-1 py-0.5 text-sm dark:bg-neutral-800">pikos</code> command works from a terminal, against the same SQLite file the app uses.
@@ -49,10 +52,10 @@ const mcpConfig = `{
       </p>
       <pre class="mt-3 overflow-x-auto rounded-lg bg-neutral-100 p-4 text-sm leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{mcpConfig}</pre>
       <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        That block works in Claude Desktop, Claude Code, and anything else that reads an MCP server config. The agent can search and read pages, list them with the full filter set, create and update them, change status, complete, delete and restore, and work with folders and reminders. Each tool runs the same code the matching subcommand does, so the two can't drift apart.
+        That block works in Claude Desktop, Claude Code, and anything else that reads an MCP server config. The agent can search and read pages, list them with the full filter set, create and update them, and complete, delete, or restore them. It can also work with folders and reminders. Each tool runs the same code the matching subcommand does, so the two can't drift apart.
       </p>
       <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <strong class="font-medium text-neutral-900 dark:text-neutral-50">It never opens a port.</strong> The server talks over stdin and stdout to the process that started it, and there's a test in the suite that fails if it ever opens a listening socket. Your notes are readable by the agent on your machine and by nothing else.
+        <strong class="font-medium text-neutral-900 dark:text-neutral-50">It never opens a port.</strong> The server talks over stdin and stdout to the process that started it, and there's a test in the suite that fails if it ever opens a listening socket. Pikos hands your notes to the assistant that started it and to nothing else.
       </p>
     </section>
 
@@ -64,10 +67,10 @@ pikos add "Email Sam tomorrow 2pm #work !high"
 pikos list --tag work --status not_started
 pikos search "quarterly review"</pre>
       <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        Quick add understands the same natural language the app does, so dates, tags, folders and priorities come out of the sentence you type. Add <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">--json</code> to any command to get machine-readable output instead of a table.
+        Quick add understands the same natural language the app does, so dates, tags, folders, and priorities come out of the sentence you type. Add <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">--json</code> to any command to get machine-readable output instead of a table.
       </p>
       <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        One thing to know: <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">add</code> runs that parser in a short-lived Node process, so it needs Node on your PATH. Reading, listing, searching and completing are pure Rust and don't.
+        One thing to know: <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">add</code> runs that parser in a short-lived Node process, so it needs Node on your PATH. Reading, listing, searching, and completing are pure Rust and don't.
       </p>
     </section>
 
@@ -89,7 +92,7 @@ pikos search "quarterly review"</pre>
     <div class="mt-16 rounded-lg border border-neutral-200 bg-neutral-50 px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
       <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-50">Full reference</h2>
       <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        Every subcommand, every flag and every MCP tool is documented in the <a href="https://github.com/Pikos-App/pikos/blob/main/crates/pikos-cli/README.md" class="font-medium text-primary-500 hover:underline dark:text-primary-400">CLI readme</a>. Found a gap, or want a tool that isn't there? <a href="/feedback" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Tell me.</a>
+        Every subcommand, every flag, and every MCP tool is documented in the <a href="https://github.com/Pikos-App/pikos/blob/main/crates/pikos-cli/README.md" class="font-medium text-primary-500 hover:underline dark:text-primary-400">CLI readme</a>. Found a gap, or want a tool that isn't there? <a href="/feedback" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Tell me.</a>
       </p>
     </div>
 

@@ -12,7 +12,7 @@ const description = "Common questions about Pikos, the free app that combines no
 const faqs = [
   {
     q: "Which note-taking apps keep your data on your own computer?",
-    a: "Obsidian, Logseq and NotePlan all do, and so does Pikos. Notion, Todoist and TickTick keep it on their servers. If local storage is what you're after, the question that usually narrows it is whether you need tasks and a calendar too, because that's where the local options thin out.",
+    a: "Obsidian, Logseq, and NotePlan all do, and so does Pikos. Notion, Todoist, and TickTick keep it on their servers. If local storage is what you're after, the question that usually narrows it is whether you need tasks and a calendar too, because that's where the local options thin out.",
   },
   {
     q: "Is there a notes app that works without an account?",
@@ -20,13 +20,13 @@ const faqs = [
   },
   {
     q: "Can I take notes on my calendar events?",
-    a: "In Pikos, yes. Connect iCloud, Google Calendar or any CalDAV server and your events turn up as pages you can write on, tag and search. It only reads the calendar, so nothing you write goes back to it.",
+    a: "In Pikos, yes. Connect iCloud, Google Calendar, or any CalDAV server and your events turn up as pages you can write on, tag, and search. It only reads the calendar, so nothing you write goes back to it.",
     href: "/calendar-sync",
     linkLabel: "How to connect a calendar",
   },
   {
     q: "What is Pikos?",
-    a: "A desktop app that puts notes, tasks, and a calendar in one window. Everything stored locally on your device. No account, no cloud, no subscription.",
+    a: "A desktop app where a note, a task, and a calendar event are the same page. It runs on your computer, with no account and no subscription.",
   },
   {
     q: "Is Pikos free?",
@@ -58,7 +58,7 @@ const faqs = [
   },
   {
     q: "Can an AI assistant use my notes?",
-    a: "Yes, and locally. The Pikos command line tool includes an MCP server, so an agent can search, read, create and update your pages on your own machine. It opens no network port and needs no account, and deleting only moves a page to the trash, so nothing an agent does is one-way.",
+    a: "Yes, if you want it to. The Pikos command line tool includes an MCP server, so an assistant can search, read, create, and update your pages. Pikos itself sends nothing anywhere and needs no account. A cloud assistant like Claude sends what it reads to its provider, the same as anything you share with it, while a model running on your own computer keeps everything there. Deleting only moves a page to the trash, so nothing an assistant does is one-way.",
     href: "/cli",
     linkLabel: "Set up the CLI and MCP server",
   },
@@ -78,7 +78,7 @@ const faqs = [
   },
   {
     q: "Isn't a database file a kind of lock-in?",
-    a: "It's a fair question. Pikos keeps your workspace in one SQLite file, not a folder of Markdown, so if plain files are your line, Obsidian is the better pick. SQLite is an open, documented format that any SQLite tool can read, and the US Library of Congress lists it as a recommended format for keeping data long term. The schema is in the public code. And Pikos exports everything to Markdown, CSV and calendar files whenever you like, so leaving takes one export.",
+    a: "It's a fair question. Pikos keeps your workspace in one SQLite file, not a folder of Markdown, so if plain files are your line, Obsidian is the better pick. SQLite is an open, documented format that any SQLite tool can read, and the US Library of Congress lists it as a recommended format for keeping data long term. The schema is in the public code. And Pikos exports everything to Markdown, CSV, and calendar files whenever you like, so leaving takes one export.",
   },
   {
     q: "What happens if Pikos stops being developed?",
@@ -110,7 +110,7 @@ const faqs = [
   },
   {
     q: "What makes it different?",
-    a: "Plenty of apps now do notes, tasks and a calendar. In Pikos they're one page: a note you can tick off and put on a day, with nothing to set up. It runs on your computer with no account, the desktop app is free, and there's no subscription.",
+    a: "Plenty of apps now do notes, tasks, and a calendar. In Pikos they're one page: a note you can tick off and put on a day, with nothing to set up. It runs on your computer with no account, the desktop app is free, and there's no subscription.",
     href: "/compare",
     linkLabel: "See how it compares",
   },
