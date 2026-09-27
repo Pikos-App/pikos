@@ -487,7 +487,9 @@ async fn two_ticks_seconds_apart_do_not_share_a_window() {
         ..SchedulerRuntime::default()
     };
     let realigned = local_at(2026, 5, 25, 9, 1);
-    let again = collect_due(&pool, &quiet, &runtime, &realigned).await.unwrap();
+    let again = collect_due(&pool, &quiet, &runtime, &realigned)
+        .await
+        .unwrap();
     assert!(
         again.reminders.is_empty(),
         "the overlapping 57 seconds were collected twice: {:?}",

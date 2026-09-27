@@ -407,7 +407,10 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
         }
     }
 
-    app.state::<SchedulerRuntimeState>().lock().await.last_window_end = Some(now);
+    app.state::<SchedulerRuntimeState>()
+        .lock()
+        .await
+        .last_window_end = Some(now);
 
     Ok(())
 }
