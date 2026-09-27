@@ -81,7 +81,8 @@ pub async fn connect_caldav(
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let claimed = claim_account(pool, PROVIDER_CALDAV, &display_name, "basic").await?;
+    let identity = caldav_stored_identity(pool, &display_name).await?;
+    let claimed = claim_account(pool, PROVIDER_CALDAV, &identity, "basic").await?;
     let stored = keychain
         .store(&claimed.account.id, &blob)
         .map_err(|e| AppError::Internal(e.user_message()));
@@ -169,6 +170,41 @@ struct Claimed {
     /// Only a row this connect created may be taken back out when the credential cannot be
     /// stored. An account that already existed still has its own working credential.
     created: bool,
+}
+
+/// The spelling an existing CalDAV account is stored under, when this identity is
+/// the same user and server written a different way.
+///
+/// Identity is matched as a string, and the lookup's `COLLATE NOCASE` already absorbs
+/// a difference in case. A trailing slash it does not. Before the connect dialog
+/// reduced the typed URL it stored whatever was typed, so an account added in
+/// `0.4.0-beta` carries `https://caldav.fastmail.com` where a fresh connect now builds
+/// `https://caldav.fastmail.com/`. Missing that row adds a second account for one
+/// server and leaves the first one's pages detached, which is the failure reducing the
+/// URL was meant to end.
+///
+/// Resolved on connect rather than by rewriting stored identities, so no migration is
+/// owed and a workspace stays readable by the build that wrote it. The narrower
+/// reductions `URL` also applies — a default port, a dot segment — are deliberately
+/// not matched: comparing two spellings of a whole identity is sound, while reaching
+/// those would mean splitting it into a username and a URL and agreeing with the
+/// frontend on where the seam is.
+async fn caldav_stored_identity(pool: &SqlitePool, identity: &str) -> AppResult<String> {
+    if find_account_by_identity_impl(pool, PROVIDER_CALDAV, identity)
+        .await?
+        .is_some()
+    {
+        return Ok(identity.to_string());
+    }
+    let Some(without_slash) = identity.strip_suffix('/') else {
+        return Ok(identity.to_string());
+    };
+    Ok(
+        match find_account_by_identity_impl(pool, PROVIDER_CALDAV, without_slash).await? {
+            Some(existing) => existing.display_name,
+            None => identity.to_string(),
+        },
+    )
 }
 
 /// Reuse an existing account row on (re)connect, else create one. Shared by both

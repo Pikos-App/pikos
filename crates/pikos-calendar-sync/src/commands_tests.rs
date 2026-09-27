@@ -113,6 +113,87 @@ async fn is_dormant(pool: &sqlx::SqlitePool, id: &str) -> bool {
         == 1
 }
 
+async fn account_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sync_account")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A CalDAV account connected before the typed URL was reduced is still the same account.
+///
+/// Every `0.4.0-beta` account is this shape: its identity carries the URL as typed, with no
+/// trailing slash, and a fresh connect now builds one. Reconnecting had to find the dormant
+/// row and revive it, or the server arrives twice and the first copy's pages stay detached.
+#[tokio::test]
+async fn a_pre_reduction_identity_reconnects_to_its_own_account() {
+    const STORED: &str = "me@example.com · https://caldav.fastmail.com";
+    const TYPED: &str = "me@example.com · https://caldav.fastmail.com/";
+    let pool = test_pool().await;
+
+    let original = insert_sync_account_impl(&pool, PROVIDER_CALDAV, STORED, "basic")
+        .await
+        .unwrap();
+    mark_account_disconnected_impl(&pool, &original.id)
+        .await
+        .unwrap();
+
+    let identity = caldav_stored_identity(&pool, TYPED).await.unwrap();
+    let claimed = claim_account(&pool, PROVIDER_CALDAV, &identity, "basic")
+        .await
+        .unwrap();
+
+    assert!(
+        !claimed.created,
+        "the dormant account was revived rather than duplicated"
+    );
+    assert_eq!(claimed.account.id, original.id);
+    assert_eq!(account_count(&pool).await, 1, "one server, one account");
+}
+
+/// An identity nothing matches is used as typed, and one already stored with the slash
+/// matches itself without the fallback changing it.
+#[tokio::test]
+async fn an_unmatched_identity_is_left_as_it_was_typed() {
+    const TYPED: &str = "me@example.com · https://caldav.fastmail.com/";
+    let pool = test_pool().await;
+
+    assert_eq!(caldav_stored_identity(&pool, TYPED).await.unwrap(), TYPED);
+
+    insert_sync_account_impl(&pool, PROVIDER_CALDAV, TYPED, "basic")
+        .await
+        .unwrap();
+
+    assert_eq!(caldav_stored_identity(&pool, TYPED).await.unwrap(), TYPED);
+    assert_eq!(account_count(&pool).await, 1);
+}
+
+/// Two people on one server stay two accounts — the fallback keys on the whole identity,
+/// so a shared host cannot collapse them.
+#[tokio::test]
+async fn one_server_two_users_stays_two_accounts() {
+    let pool = test_pool().await;
+
+    insert_sync_account_impl(
+        &pool,
+        PROVIDER_CALDAV,
+        "me@example.com · https://caldav.fastmail.com",
+        "basic",
+    )
+    .await
+    .unwrap();
+
+    let identity = caldav_stored_identity(&pool, "you@example.com · https://caldav.fastmail.com/")
+        .await
+        .unwrap();
+    let claimed = claim_account(&pool, PROVIDER_CALDAV, &identity, "basic")
+        .await
+        .unwrap();
+
+    assert!(claimed.created, "a different user is a different account");
+    assert_eq!(account_count(&pool).await, 2);
+}
+
 /// A password never reaches the database file.
 ///
 /// The claim the privacy page makes, and what a `strings` sweep over a real workspace is looking
