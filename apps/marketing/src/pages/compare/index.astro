@@ -1,31 +1,12 @@
 ---
 import Base from "../../layouts/Base.astro";
 import Footer from "../../components/Footer.astro";
+import { apps, checkedMonth, features, LEGEND } from "../../content/comparison";
 
 const title = "Pikos vs Notion, Obsidian, NotePlan and others";
 const description = "How Pikos compares to Notion, Obsidian, Logseq, NotePlan, TickTick, Things, Todoist, and the Apple apps. Honest feature comparison.";
 
-const apps = [
-  { name: "Pikos",    notes: true,  tasks: true,     calendar: true,     localFirst: true,  noAccount: true,  phone: false,  sync: false,  price: "Free" },
-  { name: "NotePlan", notes: true,  tasks: true,     calendar: true,     localFirst: true,  noAccount: true,  phone: true,   sync: true,   price: "$99/yr" },
-  { name: "Notion",   notes: true,  tasks: true,     calendar: true,     localFirst: false, noAccount: false, phone: true,   sync: true,   price: "Free" },
-  { name: "Obsidian", notes: true,  tasks: "Plugin", calendar: "Plugin", localFirst: true,  noAccount: true,  phone: true,   sync: "Paid", price: "Free" },
-  { name: "Logseq",   notes: true,  tasks: true,     calendar: "Plugin", localFirst: true,  noAccount: true,  phone: true,   sync: "Paid", price: "Free" },
-  { name: "TickTick", notes: true,  tasks: true,     calendar: "Paid",   localFirst: false, noAccount: false, phone: true,   sync: true,   price: "Free" },
-  { name: "Things",   notes: false, tasks: true,     calendar: false,    localFirst: true,  noAccount: true,  phone: "Paid", sync: true,   price: "$49.99" },
-  { name: "Todoist",  notes: false, tasks: true,     calendar: "Paid",   localFirst: false, noAccount: false, phone: true,   sync: true,   price: "Free" },
-];
-
-const columns = [
-  { key: "notes",      label: "Notes" },
-  { key: "tasks",      label: "Tasks" },
-  { key: "calendar",   label: "Calendar" },
-  { key: "localFirst", label: "On device" },
-  { key: "noAccount",  label: "No account" },
-  { key: "phone",      label: "Phone app" },
-  { key: "sync",       label: "Sync" },
-  { key: "price",      label: "Price" },
-];
+const columns = features.filter((f) => f.onSite);
 ---
 
 <Base title={title} description={description}>
@@ -66,7 +47,7 @@ const columns = [
                 {app.name}
               </td>
               {columns.map((col) => {
-                const val = app[col.key as keyof typeof app];
+                const val = app[col.key];
                 return (
                   <td class="px-2 py-2.5 text-center last:pr-3">
                     {val === true ? (
@@ -86,7 +67,7 @@ const columns = [
     </div>
 
     <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">
-      Price is the base app. Paid means that part costs extra on top of it, and Plugin means it needs a community plugin. Checked in September 2026 against each app's own pricing and help pages. These apps change often, so if something here is out of date, <a href="/feedback" class="hover:text-primary-500 hover:underline dark:hover:text-primary-400">send a correction</a>.
+      {LEGEND} Checked in {checkedMonth()} against each app's own pricing and help pages. These apps change often, so if something here is out of date, <a href="/feedback" class="hover:text-primary-500 hover:underline dark:hover:text-primary-400">send a correction</a>.
     </p>
 
     <!-- Prose comparison sections -->
