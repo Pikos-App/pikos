@@ -49,7 +49,7 @@ export function CalendarView() {
     rescheduleVirtualOccurrence,
     scheduleOnce,
   } = usePages();
-  const { storage } = useWorkspace();
+  const { on, storage } = useWorkspace();
   const { openPage, referenceDate, setReferenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
   const { weekStart } = useAppSettings();
@@ -63,6 +63,18 @@ export function CalendarView() {
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
   const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
+
+  // A deleted page gives up its claim on the auto-open. The block clears this by
+  // reporting its popover closed, and deleting the page from that very popover
+  // unmounts the block before it can — which left the id pointing at a page in the
+  // trash. Restoring it matched again, so a restore re-opened the naming popover
+  // for a page nobody had just made, with the empty-title cleanup still attached to
+  // dismissing it.
+  useEffect(() => {
+    return on("page:deleted", (id) => {
+      setAutoOpenPageId((current) => (current === id ? null : current));
+    });
+  }, [on]);
 
   // Blur whatever had focus in the editor panel so no focus ring lingers.
   useEffect(() => {
