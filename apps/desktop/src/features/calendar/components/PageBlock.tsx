@@ -23,11 +23,6 @@ import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
-/** The block's own vertical padding (`py-0.5`), and the title's line height
- *  (`leading-tight`). Both feed the ceiling a short block puts on its contents. */
-const BLOCK_PADDING_PX = 4;
-const TITLE_LINE_HEIGHT = 1.25;
-
 /**
  * Bottom-edge handle height (px) for the duration resize gesture. Drops to 3px
  * on short blocks (< 30px) so the handle stays well under a third of block height.
@@ -127,12 +122,6 @@ export function PageBlock({
   const showTimeLabel =
     !isRenderingCompact && displayHeight >= metrics.timeRowMinHeight && !isContinuationBefore;
   const useTwoLineTitle = !isCompactWidth && displayHeight >= metrics.twoLineTitleMinHeight;
-  // The ceiling the title and checkbox obey, from the room this block actually
-  // has: its own height, less its padding, split across the rows it is about to
-  // draw. A block tall enough for the type never reaches it.
-  const rowsDrawn = (useTwoLineTitle ? 2 : 1) + (showTimeLabel ? 1 : 0);
-  const perRowPx = Math.max((displayHeight - BLOCK_PADDING_PX) / rowsDrawn, 1);
-  const titleCapPx = perRowPx / TITLE_LINE_HEIGHT;
   const done = isDone(page);
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.
@@ -236,8 +225,6 @@ export function PageBlock({
 
   const sharedStyle = {
     ...chipFolderStyle(folderColor),
-    // Read by `type-block-title`: the largest text this block can hold.
-    "--block-text-cap": `${titleCapPx}px`,
     // Full computed height — adjacent blocks touch directly. The bg-derived
     // outline (see app.css `[data-cal-page-id]`) of A.bottom and B.top
     // coincide at the same pixel and paint as one 1px seam. Cascaded blocks
@@ -271,7 +258,6 @@ export function PageBlock({
         isMicro && "rounded-[3px]",
         "cursor-pointer!"
       )}
-      maxPx={perRowPx}
       onChange={handleCheckboxClick}
       size={isMicro ? "micro" : "sm"}
     />
@@ -329,7 +315,7 @@ export function PageBlock({
               <span
                 className={cn(
                   "min-w-0 truncate font-medium text-foreground",
-                  isMicro ? "-mt-px text-3xs leading-none" : "type-block-title"
+                  isMicro ? "-mt-px text-3xs leading-none" : "type-body-sm"
                 )}
               >
                 {page.title || "Untitled"}

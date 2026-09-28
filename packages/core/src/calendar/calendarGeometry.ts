@@ -48,45 +48,34 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
   spacious: 88,
 };
 
-/** One line of event title at scale 1, plus the block's own vertical padding.
- *  An hour has to be twice this or a half-hour block clips its own title.
- *
- *  The line height is the rendered *line box*, not the font size: a block title is
- *  `type-body-sm` at `leading-tight`, so 13 × 1.25. It was 14 — the font size,
- *  rounded — which budgeted every block about two pixels short at scale 1 and
- *  proportionally more as the calendar text size rose, until a short block spilled
- *  its checkbox and title past its own bottom edge. The checkbox is 12 × scale and
- *  so never the binding constraint. */
-const EVENT_TITLE_FONT_PX = 13;
-const EVENT_TITLE_LINE_HEIGHT = 1.25;
-const EVENT_LINE_HEIGHT = EVENT_TITLE_FONT_PX * EVENT_TITLE_LINE_HEIGHT;
-const EVENT_BLOCK_PADDING = 4;
-
-/** The shortest hour that still lets a 30-minute block show one line of title at
- *  `textScale`. Below this the text is taller than the block that holds it, so
- *  raising the text size alone would silently clip instead of enlarging.
- *  At scale 1 this is 40.5px — under `normal` and `spacious`, so the calendar a
- *  user opens is decided by density, and half a pixel above `compact`, which asks
- *  for less height than its own text needs. */
-export function minHourHeightForTextScale(textScale: number): number {
-  return 2 * (EVENT_LINE_HEIGHT * textScale + EVENT_BLOCK_PADDING);
-}
-
-/** The tier heights the block layout was tuned to at scale 1. Scaled rather than
- *  re-derived from `EVENT_LINE_HEIGHT`, so the default calendar keeps the exact
- *  pixels the release was tested at and only a raised text size moves them. */
+/** The tier heights the block layout was tuned to at the default zoom. */
 const TIME_ROW_MIN_HEIGHT = 40;
 const TWO_LINE_TITLE_MIN_HEIGHT = 52;
 
-export function computeCalendarMetrics(density: CalendarDensity, textScale = 1): CalendarMetrics {
-  const hourHeight = Math.max(DENSITY_HOUR_HEIGHT[density], minHourHeightForTextScale(textScale));
+/**
+ * Density picks the hour height; zoom multiplies everything by the same number
+ * the text is multiplied by.
+ *
+ * The two used to move independently — density set the hour, the calendar text
+ * size set the type, and nothing made them agree. A block's height comes from its
+ * duration, so raising the text alone grew the contents inside a box that did not
+ * grow with them, and a short block clipped its checkbox to two slivers of its own
+ * border. A floor on the hour height was added to compensate and could not: it
+ * guaranteed a *half*-hour block, while the shortest block is a quarter of an hour.
+ *
+ * Scaling the hour by the same factor keeps every proportion fixed, so the zoomed
+ * calendar is the default one drawn larger and nothing can outgrow its container.
+ * `zoom` is 1 at the default text size, so the calendar a user opens is unchanged.
+ */
+export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): CalendarMetrics {
+  const hourHeight = DENSITY_HOUR_HEIGHT[density] * zoom;
   return {
     compactBlockHeight: hourHeight / 4,
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,
-    timeRowMinHeight: TIME_ROW_MIN_HEIGHT * textScale,
-    twoLineTitleMinHeight: TWO_LINE_TITLE_MIN_HEIGHT * textScale,
+    timeRowMinHeight: TIME_ROW_MIN_HEIGHT * zoom,
+    twoLineTitleMinHeight: TWO_LINE_TITLE_MIN_HEIGHT * zoom,
   };
 }
 

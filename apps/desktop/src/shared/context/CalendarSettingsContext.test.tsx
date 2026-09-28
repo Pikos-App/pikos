@@ -53,14 +53,10 @@ describe("density", () => {
     expect(result.current.metrics.hourHeight).toBe(64);
   });
 
-  // Compact asks for 40px an hour, which gives a half-hour block 20px to hold a
-  // line of title that needs 21.5 at the default text size of 14. The text floor
-  // lifts it to 43 rather than letting the block clip what it holds; the roomier
-  // densities are already past the floor and keep their own numbers.
-  it("metrics scale with density, with compact lifted to fit its text", () => {
+  it("metrics scale with density", () => {
     const { result } = setup();
     act(() => result.current.setDensity("compact"));
-    expect(result.current.metrics.hourHeight).toBe(43);
+    expect(result.current.metrics.hourHeight).toBe(40);
     act(() => result.current.setDensity("spacious"));
     expect(result.current.metrics.hourHeight).toBe(88);
   });
@@ -166,22 +162,25 @@ describe("text size", () => {
     expect(result.current.textSize).toBe(10);
   });
 
-  it("raises the hour height only once text outgrows the block", () => {
+  it("grows the hour along with the text", () => {
     const { result } = setup();
-    // Compact is 40px an hour, so a 30-minute block is 20px and one line at 28px
-    // does not fit. At normal density the floor lands on exactly 64, which is
-    // what that density already was — the floor only ever adds, never trims.
     act(() => result.current.setDensity("compact"));
     const atDefault = result.current.metrics.hourHeight;
     act(() => result.current.setTextSize(28));
     expect(result.current.metrics.hourHeight).toBeGreaterThan(atDefault);
   });
 
-  it("leaves a density already tall enough untouched", () => {
+  // Density and text size are separate settings that move the same thing, so they
+  // multiply rather than compete: the hour grows by exactly the factor the text
+  // does. Before, the text size only lifted an hour that was too short for it,
+  // which let the type outgrow the block holding it at every other size.
+  it("scales any density by the text size, in proportion", () => {
     const { result } = setup();
     act(() => result.current.setDensity("spacious"));
     const atDefault = result.current.metrics.hourHeight;
-    act(() => result.current.setTextSize(16));
-    expect(result.current.metrics.hourHeight).toBe(atDefault);
+    act(() => result.current.setTextSize(28));
+    expect(result.current.metrics.hourHeight).toBe(atDefault * 2);
+    act(() => result.current.setTextSize(10));
+    expect(result.current.metrics.hourHeight).toBeCloseTo(atDefault * (10 / 14));
   });
 });

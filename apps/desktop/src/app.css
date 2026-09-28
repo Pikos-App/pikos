@@ -619,17 +619,6 @@ button,
     font-size: calc(13px * var(--ui-text-scale, 1));
     font-weight: 400;
   }
-  /* `type-body-sm`, but never taller than the box holding it. A calendar block's
-     height comes from its duration, so a quarter-hour block cannot honour a
-     raised calendar text size — at full zoom its scaled text and checkbox were
-     clipped to slivers. Every block follows the one rule instead: show the
-     largest text that fits, up to what the setting asks for. The ceiling is
-     `--block-text-cap`, which the block sets from its own height; without it
-     this is exactly `type-body-sm`. */
-  .type-block-title {
-    font-size: min(calc(13px * var(--ui-text-scale, 1)), var(--block-text-cap, 1000px));
-    font-weight: 400;
-  }
 
   /* Controls — a square icon button and the icon inside it, both tracking the
      interface scale.

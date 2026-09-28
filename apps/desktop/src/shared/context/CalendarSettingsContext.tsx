@@ -34,10 +34,21 @@ export const DEFAULT_CALENDAR_TEXT_SIZE: CalendarTextSize = 14;
  *  editor's rungs are, and the two rows offer the same options. */
 const CALENDAR_TEXT_BASE = 13;
 
-/** The multiplier the CSS and the hour-height floor both want. Derived rather
- *  than stored, so the stored value stays the number the setting shows. */
+/** The multiplier the CSS wants, against what a title rendered at before the
+ *  setting existed. Derived rather than stored, so the stored value stays the
+ *  number the setting shows. */
 export function calendarTextScale(size: CalendarTextSize): number {
   return size / CALENDAR_TEXT_BASE;
+}
+
+/** How much larger the calendar is than the one a user opens, which is what the
+ *  hour height is multiplied by. Measured against the default size rather than
+ *  the type baseline, so the default calendar is exactly its density and only a
+ *  changed setting moves it. Text grows by this same factor, which is the point:
+ *  the zoomed calendar is the default one drawn larger, and nothing inside a
+ *  block can outgrow the block. */
+export function calendarZoom(size: CalendarTextSize): number {
+  return size / DEFAULT_CALENDAR_TEXT_SIZE;
 }
 
 export const stepCalendarTextSize = stepTextSize;
@@ -113,7 +124,7 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     DEFAULT_COLLAPSE_CONFIG.bottomHour
   );
 
-  const metrics = computeCalendarMetrics(density, calendarTextScale(textSize));
+  const metrics = computeCalendarMetrics(density, calendarZoom(textSize));
   const collapse: CalendarCollapseConfig = {
     bottomCollapsed,
     bottomHour,
