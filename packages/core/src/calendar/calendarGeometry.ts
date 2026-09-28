@@ -49,6 +49,9 @@ export interface CalendarMetrics {
   allDayBarHeight: number;
   allDayRowHeight: number;
   allDayTopPadding: number;
+  /** What the calendar is multiplied by. Carried so a threshold measured in
+   *  pixels can scale with it and mean the same thing at every zoom. */
+  zoom: number;
 }
 
 const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
@@ -88,6 +91,7 @@ export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): Cale
     minResizeHeight: (15 / 60) * hourHeight,
     timeRowMinHeight: TIME_ROW_MIN_HEIGHT * zoom,
     twoLineTitleMinHeight: TWO_LINE_TITLE_MIN_HEIGHT * zoom,
+    zoom,
   };
 }
 

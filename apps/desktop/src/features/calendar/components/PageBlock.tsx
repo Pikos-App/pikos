@@ -98,8 +98,10 @@ export function PageBlock({
   // While being resized, a compact chip grows into a tall block.
   const isRenderingCompact = isCompact && !isResizing;
   // At compact density a 15-min block is ~10px; default type-body-sm is too tall
-  // to fit. Below 16px we switch to a tighter micro variant (10px text, 10px checkbox).
-  const isMicro = isRenderingCompact && displayHeight < 16;
+  // to fit. Below that we switch to a tighter micro variant (10px text, 10px
+  // checkbox). Scaled, or the same event drew a small round checkbox at the default
+  // and a large square one zoomed in — one block, two treatments.
+  const isMicro = isRenderingCompact && displayHeight < 16 * metrics.zoom;
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
@@ -368,7 +370,11 @@ export function PageBlock({
                 <p
                   className={cn(
                     "type-body-sm min-w-0 text-left leading-tight font-medium text-foreground",
-                    useTwoLineTitle ? "line-clamp-2" : "truncate"
+                    // `break-words` because the clamp only ellipsizes where it
+                    // clamps: a single word wider than the column was sliced at the
+                    // edge with nothing to show it had been, which a large calendar
+                    // text size reaches easily.
+                    useTwoLineTitle ? "line-clamp-2 break-words" : "truncate"
                   )}
                 >
                   {page.title || "Untitled"}
