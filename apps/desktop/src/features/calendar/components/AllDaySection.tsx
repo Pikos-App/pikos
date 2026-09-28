@@ -135,9 +135,11 @@ export function AllDaySection({
                     // The same divider the time grid draws, rather than a look-alike:
                     // a pseudo-element at a different opacity antialiased differently
                     // on a fractional column edge, which read as the all-day lines
-                    // sitting a pixel off the ones below. `first:` drops the line at
-                    // the gutter, where the grid has none either.
-                    "relative min-w-0 flex-1 cursor-cell border-l border-border/50 first:border-l-0",
+                    // sitting a pixel off the ones below. Unlike the grid, the first
+                    // column keeps its border — the gutter beside it is empty here,
+                    // so the line closes the row, where in the grid it would fence
+                    // off the hour labels.
+                    "relative min-w-0 flex-1 cursor-cell border-l border-border/50",
                     weekend && "bg-white/[0.012]",
                     (isAllDayTarget || isTimedTarget) && "bg-accent/30"
                   )}

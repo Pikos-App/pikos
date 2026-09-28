@@ -30,11 +30,7 @@ export function DayHeaderRow({ days, onCreateDragStart, today }: DayHeaderRowPro
           <div
             aria-label={format(day, "EEEE, MMMM d")}
             className={cn(
-              "flex min-w-0 flex-1 cursor-cell items-center justify-center gap-1 border-l border-border/40 py-1.5",
-              // Not `first:` — the gutter spacer is this row's first child, so that
-              // variant matched the spacer and left Monday with a divider the grid
-              // below it does not draw at the gutter edge.
-              i === 0 && "border-l-0",
+              "flex min-w-0 flex-1 cursor-cell items-center justify-center gap-1 border-l border-border/40 py-1.5 first:border-l-0",
               isWeekend(day) ? "bg-white/[0.012]" : ""
             )}
             key={day.toISOString()}

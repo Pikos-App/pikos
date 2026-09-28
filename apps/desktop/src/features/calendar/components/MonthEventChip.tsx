@@ -85,10 +85,6 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
           ) : (
             <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
-          {/* No time on a month chip. A month cell is an overview and the width is
-              the scarce thing: the time cost most of it and left the title unreadable,
-              which is the one part that makes a row scannable. The time stays in the
-              chip's accessible name, and the day view is where it is read. */}
           <span className="min-w-0 truncate text-left">{page.title || "Untitled"}</span>
           <SyncSourceIcon className="ml-auto h-3 w-3 shrink-0" syncState={page.syncState} />
         </button>
