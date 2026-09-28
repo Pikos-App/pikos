@@ -24,7 +24,7 @@ import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
-/** The block's own vertical padding (`py-0.5`), which its contents sit inside. */
+/** The block's own vertical padding at the default zoom, which its contents sit inside. */
 const BLOCK_PADDING_PX = 4;
 
 /**
@@ -132,7 +132,7 @@ export function PageBlock({
   // A block is as tall as its duration, so the shortest ones are smaller than the
   // scaled checkbox. Left to itself the box was clipped to the two vertical edges
   // of its own square, which reads as a rendering fault rather than a small box.
-  const checkboxMaxPx = Math.max(displayHeight - BLOCK_PADDING_PX, 1);
+  const checkboxMaxPx = Math.max(displayHeight - BLOCK_PADDING_PX * metrics.zoom, 1);
   const done = isDone(page);
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.
@@ -250,13 +250,16 @@ export function PageBlock({
   // One unified 14px icon size across chip + stacked layouts; only micro shrinks
   // (10px) to fit the compact-density quarter-hour row. Vertical offsets align
   // the hollow-square checkbox with the text's glyph cap-height, not the flex
-  // line-box edge (which sits ~2-3px above cap-top for type-body-sm).
+  // line-box edge (which sits ~2-3px above cap-top for type-body-sm). They and the
+  // block's insets ride `--calendar-zoom`: tuned in px at one size, a fixed offset
+  // left the checkbox riding above the title and the title hugging the top edge
+  // once the text grew.
   // Micro also tightens the corner radius — --radius-sm on a 10px square reads
   // as fully round, so we drop to 2px to preserve the checkbox silhouette.
   const iconClass = cn(
     isMicro ? "h-2.5 w-2.5 rounded-[3px]" : "h-3.5 w-3.5",
-    !isMicro && isRenderingCompact && "mt-px",
-    !isMicro && !isRenderingCompact && "mt-[3px]"
+    !isMicro && isRenderingCompact && "mt-[calc(1px*var(--calendar-zoom,1))]",
+    !isMicro && !isRenderingCompact && "mt-[calc(3px*var(--calendar-zoom,1))]"
   );
   const checkbox = showsCheckbox ? (
     <TaskCheckbox
@@ -264,8 +267,8 @@ export function PageBlock({
       borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
       checked={done}
       className={cn(
-        !isMicro && isRenderingCompact && "mt-px",
-        !isMicro && !isRenderingCompact && "mt-[3px]",
+        !isMicro && isRenderingCompact && "mt-[calc(1px*var(--calendar-zoom,1))]",
+        !isMicro && !isRenderingCompact && "mt-[calc(3px*var(--calendar-zoom,1))]",
         isMicro && "rounded-[3px]",
         "cursor-pointer!"
       )}
@@ -327,7 +330,9 @@ export function PageBlock({
               <span
                 className={cn(
                   "min-w-0 truncate font-medium text-foreground",
-                  isMicro ? "-mt-px text-3xs leading-none" : "type-body-sm"
+                  isMicro
+                    ? "-mt-[calc(1px*var(--calendar-zoom,1))] text-3xs leading-none"
+                    : "type-body-sm"
                 )}
               >
                 {page.title || "Untitled"}
@@ -345,7 +350,7 @@ export function PageBlock({
           <button
             aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
             className={cn(
-              "absolute flex flex-col items-start overflow-hidden rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              "absolute flex flex-col items-start overflow-hidden rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs border-l-2 px-1.5 py-[calc(0.125rem*var(--calendar-zoom,1))] select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               done
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
@@ -390,7 +395,9 @@ export function PageBlock({
             )}
             {showTimeLabel && (
               // Indent matches the title's own left edge: checkbox 3.5 + gap 1
-              <p className="type-ui-sm mt-0.5 truncate pl-4.5 text-subtle">{timeLabel}</p>
+              <p className="type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] truncate pl-[calc(1.125rem*var(--calendar-zoom,1))] text-subtle">
+                {timeLabel}
+              </p>
             )}
             {resizeHandle}
           </button>
