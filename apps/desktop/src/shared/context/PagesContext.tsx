@@ -36,6 +36,7 @@ import type {
 } from "@pikos/core";
 import { createContext, type ReactNode, useContext } from "react";
 
+import { useAppSettings } from "./AppSettingsContext";
 import { useFolderWrites } from "./useFolderWrites";
 import { usePagesStore } from "./usePagesStore";
 import { usePageWriteQueue } from "./usePageWriteQueue";
@@ -180,6 +181,7 @@ const PagesContext = createContext<PagesContextValue | null>(null);
 export function PagesProvider({ children }: { children: ReactNode }) {
   const { adapter, eventBus, registerDataLoader } = useWorkspaceInternal();
   const { emit } = eventBus;
+  const { defaultFolderId } = useAppSettings();
 
   // Collections, their latest-state mirrors, derived tags, and the loader
   // WorkspaceContext dispatches on init/reload/resetAndSeed.
@@ -242,7 +244,16 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     restorePage,
     setPagesStatus,
     softDeletePage,
-  } = usePageWrites({ adapter, cancelPendingWrite, emit, optimistic, pagesRef, setPages });
+  } = usePageWrites({
+    adapter,
+    cancelPendingWrite,
+    defaultFolderId,
+    emit,
+    foldersRef,
+    optimistic,
+    pagesRef,
+    setPages,
+  });
 
   // The one-off schedule block — which is also how a recurring series' anchor moves.
   const { clearSchedule, scheduleOnce } = useScheduleWrites({

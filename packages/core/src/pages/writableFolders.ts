@@ -29,3 +29,24 @@ export function folderIdForNewPage(
     null
   );
 }
+
+/**
+ * Where a restored page belongs when the folder it remembers has gone — deleted
+ * along with it, or emptied from the trash while the page waited there. Without
+ * this the page came back pointing at a folder that no longer exists, so it was
+ * restored into nowhere.
+ *
+ * The keep test is existence rather than writability, which matters for a synced
+ * page: its calendar folder is deliberately not writable, and judging it by that
+ * list would evict every mirror from the calendar it belongs to. Only the fallback
+ * asks what can hold a page, on the same ladder a new one takes.
+ */
+export function folderIdForRestoredPage(
+  rememberedFolderId: string | null,
+  folders: Folder[],
+  defaultFolderId: string | null
+): string | null {
+  if (rememberedFolderId === null) return null;
+  if (folders.some((folder) => folder.id === rememberedFolderId)) return rememberedFolderId;
+  return writableFolders(folders).find((folder) => folder.id === defaultFolderId)?.id ?? null;
+}

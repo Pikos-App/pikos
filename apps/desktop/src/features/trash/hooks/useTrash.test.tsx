@@ -58,6 +58,36 @@ describe("useTrash", () => {
     );
   });
 
+  // Restoring the page without its folder used to put it back pointing at a folder
+  // that no longer existed, so it came back into nowhere.
+  it("puts a restored page in the default folder when its own folder is gone", async () => {
+    const hook = setup();
+    await waitFor(() => expect(hook.result.current.trash.loading).toBe(false));
+
+    let folderId = "";
+    let pageId = "";
+    await act(async () => {
+      const folder = await hook.result.current.pages.createFolder({ name: "Doomed folder" });
+      folderId = folder.id;
+      const page = await hook.result.current.pages.createPage({ folderId, title: "Homeless" });
+      pageId = page.id;
+    });
+
+    await act(async () => {
+      await hook.result.current.pages.softDeleteFolder(folderId);
+      await hook.result.current.pages.deleteFolder(folderId);
+    });
+    await act(async () => {
+      await hook.result.current.trash.restore(pageId);
+    });
+
+    const restored = hook.result.current.pages.pages.find((p) => p.id === pageId);
+    expect(restored).toBeDefined();
+    expect(restored!.folderId).not.toBe(folderId);
+    // No default folder is configured here, and the ladder's last rung is Inbox.
+    expect(restored!.folderId).toBeNull();
+  });
+
   it("does not read the trash while it is closed", async () => {
     const hook = renderHookWithProviders(() => ({
       pages: usePages(),

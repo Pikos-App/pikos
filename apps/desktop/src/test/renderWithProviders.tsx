@@ -38,27 +38,31 @@ import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 // that never touch it should not pay to load a 1,400-line adapter.
 setMockStorageFactory(() => new MockStorageAdapter());
 
+// Settings sit outermost, as they do in App.tsx: they are plain preferences with
+// no workspace behind them, and PagesProvider reads the default folder to decide
+// where a restored page lands when its own folder has gone. Nested inside, that
+// read threw and every spec rendering this tree failed on it.
 function TestProviders({ children }: { children: ReactNode }) {
   return (
-    <WorkspaceProvider>
-      <PagesProvider>
-        <ImportProvider>
-          <UIProvider>
-            <SelectionProvider>
-              <CalendarDnDProvider>
-                <UndoDeleteProvider>
-                  <RecurringGapDialogProvider>
-                    <InterfaceSettingsProvider>
-                      <AppSettingsProvider>{children}</AppSettingsProvider>
-                    </InterfaceSettingsProvider>
-                  </RecurringGapDialogProvider>
-                </UndoDeleteProvider>
-              </CalendarDnDProvider>
-            </SelectionProvider>
-          </UIProvider>
-        </ImportProvider>
-      </PagesProvider>
-    </WorkspaceProvider>
+    <AppSettingsProvider>
+      <WorkspaceProvider>
+        <PagesProvider>
+          <ImportProvider>
+            <UIProvider>
+              <SelectionProvider>
+                <CalendarDnDProvider>
+                  <UndoDeleteProvider>
+                    <RecurringGapDialogProvider>
+                      <InterfaceSettingsProvider>{children}</InterfaceSettingsProvider>
+                    </RecurringGapDialogProvider>
+                  </UndoDeleteProvider>
+                </CalendarDnDProvider>
+              </SelectionProvider>
+            </UIProvider>
+          </ImportProvider>
+        </PagesProvider>
+      </WorkspaceProvider>
+    </AppSettingsProvider>
   );
 }
 

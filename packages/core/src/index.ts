@@ -203,7 +203,11 @@ export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";
 export { groupUpcomingPages } from "./pages/upcoming";
 export type { UpcomingDaySection } from "./pages/upcoming";
-export { folderIdForNewPage, writableFolders } from "./pages/writableFolders";
+export {
+  folderIdForNewPage,
+  folderIdForRestoredPage,
+  writableFolders,
+} from "./pages/writableFolders";
 // ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";

@@ -4,8 +4,8 @@
 // and anything recurring (useRecurringWrites) — those defer to a queue or to a
 // backend recompute in ways plain page CRUD does not.
 
-import type { Page, PageStatus, PageSummary, StorageAdapter } from "@pikos/core";
-import { toPageSummary } from "@pikos/core";
+import type { Folder, Page, PageStatus, PageSummary, StorageAdapter } from "@pikos/core";
+import { folderIdForRestoredPage, toPageSummary } from "@pikos/core";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
@@ -27,14 +27,18 @@ export interface PageWrites {
 export function usePageWrites({
   adapter,
   cancelPendingWrite,
+  defaultFolderId,
   emit,
+  foldersRef,
   optimistic,
   pagesRef,
   setPages,
 }: {
   adapter: StorageAdapter;
   cancelPendingWrite: (id: string) => void;
+  defaultFolderId: string | null;
   emit: WorkspaceEventBus["emit"];
+  foldersRef: RefObject<Folder[]>;
   optimistic: <T>(spec: OptimisticWrite<T>) => Promise<T | undefined>;
   pagesRef: RefObject<PageSummary[]>;
   setPages: Dispatch<SetStateAction<PageSummary[]>>;
@@ -93,8 +97,16 @@ export function usePageWrites({
 
   async function restorePage(id: string) {
     await adapter.restorePage(id);
-    const page = await adapter.getPage(id);
+    let page = await adapter.getPage(id);
     if (page) {
+      // A page deleted with its folder remembers a folder that may no longer exist,
+      // and came back pointing at nothing. Reparent before it reaches the store, so
+      // the list never holds a page whose folder cannot be found.
+      const home = folderIdForRestoredPage(page.folderId, foldersRef.current, defaultFolderId);
+      if (home !== page.folderId) {
+        await adapter.updatePage(id, { folderId: home });
+        page = (await adapter.getPage(id)) ?? page;
+      }
       const summary = toPageSummary(page);
       // Dedupe: never blind-append. If a copy is somehow still present
       // (delete/undo race), replace it rather than create a duplicate.

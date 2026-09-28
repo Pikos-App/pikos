@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Folder } from "../types";
-import { folderIdForNewPage, writableFolders } from "./writableFolders";
+import { folderIdForNewPage, folderIdForRestoredPage, writableFolders } from "./writableFolders";
 
 function makeFolder(name: string, isExternalCalendar = false): Folder {
   return {
@@ -55,5 +55,39 @@ describe("folderIdForNewPage", () => {
 
   it("returns Inbox when there is no default", () => {
     expect(folderIdForNewPage("today", FOLDERS, null)).toBeNull();
+  });
+});
+
+describe("folderIdForRestoredPage", () => {
+  it("leaves a page where it was when its folder is still there", () => {
+    expect(folderIdForRestoredPage("work", FOLDERS, "home")).toBe("work");
+  });
+
+  // The folder went to the trash with the page, or was emptied from it while the
+  // page waited. Either way the remembered id names nothing.
+  it("falls to the default when the remembered folder is gone", () => {
+    expect(folderIdForRestoredPage("deleted", FOLDERS, "home")).toBe("home");
+  });
+
+  it("falls to Inbox when the default is gone too", () => {
+    expect(folderIdForRestoredPage("deleted", FOLDERS, "also-gone")).toBeNull();
+  });
+
+  it("falls to Inbox when there is no default", () => {
+    expect(folderIdForRestoredPage("deleted", FOLDERS, null)).toBeNull();
+  });
+
+  it("leaves a page already in Inbox in Inbox", () => {
+    expect(folderIdForRestoredPage(null, FOLDERS, "home")).toBeNull();
+  });
+
+  // A synced page's calendar folder is deliberately unwritable. Judging the keep
+  // test by writability would evict every mirror from the calendar it belongs to.
+  it("keeps a synced page in its calendar folder", () => {
+    expect(folderIdForRestoredPage("fastmail", FOLDERS, "home")).toBe("fastmail");
+  });
+
+  it("never parks a page in a calendar folder when its own is gone", () => {
+    expect(folderIdForRestoredPage("deleted", FOLDERS, "fastmail")).toBeNull();
   });
 });
