@@ -132,8 +132,12 @@ export function AllDaySection({
                 <div
                   aria-label={`All-day events, ${format(day, "EEEE MMMM d")}`}
                   className={cn(
-                    "relative min-w-0 flex-1 cursor-cell",
-                    "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border/40",
+                    // The same divider the time grid draws, rather than a look-alike:
+                    // a pseudo-element at a different opacity antialiased differently
+                    // on a fractional column edge, which read as the all-day lines
+                    // sitting a pixel off the ones below. `first:` drops the line at
+                    // the gutter, where the grid has none either.
+                    "relative min-w-0 flex-1 cursor-cell border-l border-border/50 first:border-l-0",
                     weekend && "bg-white/[0.012]",
                     (isAllDayTarget || isTimedTarget) && "bg-accent/30"
                   )}
