@@ -2,20 +2,17 @@ import { useLayoutEffect, useRef } from "react";
 
 import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
-import { useWindowWidth } from "@/shared/hooks/useWindowWidth";
 
 interface PanelResizeOptions {
   storageKey: string;
   defaultWidth: number;
   min: number;
   max: number;
-  /** Share of the window this panel may not grow past, as a fraction. The two
-   *  left panels' shares must sum to at most 0.5: the calendar is what a
-   *  growing panel eats, and losing it is why the interface scales its type
-   *  rather than zooming the whole app. Only ever caps growth, and never below
-   *  `min` at the current text size — a share is screen px and `min` is base px,
-   *  so comparing them directly renders a panel too narrow for its own text. */
-  maxWindowShare: number;
+  /** The widest this panel may draw on screen, once the calendar and the other
+   *  panel have taken theirs. A panel yields to its own `min` before it yields
+   *  to this: a ceiling narrower than the text needs crushes the panel, and the
+   *  breakpoints already hide one a window genuinely cannot hold. */
+  ceiling: number;
 }
 
 interface PanelResize {
@@ -33,19 +30,18 @@ interface PanelResize {
  * and going back to 100% leaves the panel stuck wide.
  */
 export function usePanelResize({
+  ceiling,
   defaultWidth,
   max,
-  maxWindowShare,
   min,
   storageKey,
 }: PanelResizeOptions): PanelResize {
   const [storedBaseWidth, setStoredBaseWidth] = useLocalStorage(storageKey, defaultWidth);
   const { textScale } = useInterfaceSettings();
-  const windowWidth = useWindowWidth();
 
-  const baseWidth = Math.max(min, Math.min(max, storedBaseWidth));
-  const cap = Math.max(min * textScale, Math.floor(windowWidth * maxWindowShare));
-  const width = Math.min(Math.round(baseWidth * textScale), cap);
+  const maxBase = Math.max(min, Math.min(max, Math.floor(ceiling / textScale)));
+  const baseWidth = Math.max(min, Math.min(maxBase, storedBaseWidth));
+  const width = Math.round(baseWidth * textScale);
 
   const widthRef = useRef(width);
   useLayoutEffect(() => {
@@ -62,7 +58,7 @@ export function usePanelResize({
     const onMove = (ev: MouseEvent) => {
       // The cursor moves in screen px; the store holds base px.
       const base = (startWidth + ev.clientX - startX) / textScale;
-      setStoredBaseWidth(Math.round(Math.max(min, Math.min(max, base))));
+      setStoredBaseWidth(Math.round(Math.max(min, Math.min(maxBase, base))));
     };
     const onUp = () => {
       delete handle.dataset["dragging"];
