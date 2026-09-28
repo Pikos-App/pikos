@@ -857,5 +857,13 @@ test("11 Text size @tour", async ({ page }) => {
     await t.capture(7, "Calendar text at its smallest, 10px", () =>
       t.launch({ ...CALENDAR, "pikos:calendarTextSize": 10 })
     );
+    // The top of the ladder, and the frame this tour was missing: every other text
+    // shot moves the *interface* scale, which leaves the blocks alone. Raising the
+    // calendar's own size grows the rows inside a block whose height comes from the
+    // event's duration, so this is where a checkbox and a title spill past the
+    // bottom edge — which is what they did until the layout tiers learned to scale.
+    await t.capture(8, "Calendar text at its largest, 28px", () =>
+      t.launch({ ...CALENDAR, "pikos:calendarTextSize": 28 })
+    );
   });
 });
