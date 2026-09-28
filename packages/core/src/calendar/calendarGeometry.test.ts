@@ -357,10 +357,21 @@ describe("collapsedBandInnerOffset", () => {
 });
 
 describe("minHourHeightForTextScale", () => {
-  it("is inert at the default scale", () => {
-    // 36px, below every density, so raising calendar text is the only thing
-    // that can move the hour height.
-    expect(minHourHeightForTextScale(1)).toBeLessThan(computeCalendarMetrics("compact").hourHeight);
+  it("leaves the default calendar untouched at the default scale", () => {
+    // The floor is 40.5px at scale 1 — under `normal` and `spacious`, so the
+    // calendar a user opens is decided by density alone.
+    expect(minHourHeightForTextScale(1)).toBeLessThan(computeCalendarMetrics("normal").hourHeight);
+    expect(minHourHeightForTextScale(1)).toBeLessThan(
+      computeCalendarMetrics("spacious").hourHeight
+    );
+  });
+
+  // `compact` asks for 40px an hour, which leaves a half-hour block half a pixel
+  // short of one line of title. The floor wins there, by design: a density that
+  // cannot fit the text it holds is the bug this function exists to prevent.
+  it("lifts compact density to the height its own text needs", () => {
+    expect(computeCalendarMetrics("compact").hourHeight).toBe(minHourHeightForTextScale(1));
+    expect(computeCalendarMetrics("compact").hourHeight).toBeGreaterThan(40);
   });
 
   it("raises the hour height once text outgrows the block holding it", () => {
@@ -409,4 +420,21 @@ describe("block layout tiers", () => {
     const metrics = computeCalendarMetrics("normal", 2);
     expect(metrics.hourHeight * 1.5).toBeGreaterThanOrEqual(metrics.timeRowMinHeight);
   });
+});
+
+// The defect a person reported: zoom the calendar and a short block's checkbox and
+// title hang outside it. The hour floor is what stops that, and it only works if it
+// is derived from the line box the block actually renders.
+describe("a half-hour block holds its own title", () => {
+  const ONE_LINE_PLUS_PADDING = (scale: number) => 13 * 1.25 * scale + 4;
+
+  for (const density of ["compact", "normal", "spacious"] as const) {
+    for (const size of [10, 13, 14, 20, 28]) {
+      it(`fits at ${density} density and ${size}px text`, () => {
+        const scale = size / 13;
+        const halfHour = computeCalendarMetrics(density, scale).hourHeight / 2;
+        expect(halfHour).toBeGreaterThanOrEqual(ONE_LINE_PLUS_PADDING(scale));
+      });
+    }
+  }
 });

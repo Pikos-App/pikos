@@ -53,10 +53,14 @@ describe("density", () => {
     expect(result.current.metrics.hourHeight).toBe(64);
   });
 
-  it("metrics scale with density", () => {
+  // Compact asks for 40px an hour, which gives a half-hour block 20px to hold a
+  // line of title that needs 21.5 at the default text size of 14. The text floor
+  // lifts it to 43 rather than letting the block clip what it holds; the roomier
+  // densities are already past the floor and keep their own numbers.
+  it("metrics scale with density, with compact lifted to fit its text", () => {
     const { result } = setup();
     act(() => result.current.setDensity("compact"));
-    expect(result.current.metrics.hourHeight).toBe(40);
+    expect(result.current.metrics.hourHeight).toBe(43);
     act(() => result.current.setDensity("spacious"));
     expect(result.current.metrics.hourHeight).toBe(88);
   });

@@ -49,15 +49,25 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
 };
 
 /** One line of event title at scale 1, plus the block's own vertical padding.
- *  An hour has to be twice this or a half-hour block clips its own title. */
-const EVENT_LINE_HEIGHT = 14;
+ *  An hour has to be twice this or a half-hour block clips its own title.
+ *
+ *  The line height is the rendered *line box*, not the font size: a block title is
+ *  `type-body-sm` at `leading-tight`, so 13 × 1.25. It was 14 — the font size,
+ *  rounded — which budgeted every block about two pixels short at scale 1 and
+ *  proportionally more as the calendar text size rose, until a short block spilled
+ *  its checkbox and title past its own bottom edge. The checkbox is 12 × scale and
+ *  so never the binding constraint. */
+const EVENT_TITLE_FONT_PX = 13;
+const EVENT_TITLE_LINE_HEIGHT = 1.25;
+const EVENT_LINE_HEIGHT = EVENT_TITLE_FONT_PX * EVENT_TITLE_LINE_HEIGHT;
 const EVENT_BLOCK_PADDING = 4;
 
 /** The shortest hour that still lets a 30-minute block show one line of title at
  *  `textScale`. Below this the text is taller than the block that holds it, so
  *  raising the text size alone would silently clip instead of enlarging.
- *  At scale 1 this is 36px, under every density, so it is inert until the
- *  calendar text size is actually raised. */
+ *  At scale 1 this is 40.5px — under `normal` and `spacious`, so the calendar a
+ *  user opens is decided by density, and half a pixel above `compact`, which asks
+ *  for less height than its own text needs. */
 export function minHourHeightForTextScale(textScale: number): number {
   return 2 * (EVENT_LINE_HEIGHT * textScale + EVENT_BLOCK_PADDING);
 }
