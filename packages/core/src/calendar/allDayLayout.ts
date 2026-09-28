@@ -360,13 +360,22 @@ export interface AllDayBarPosition {
 /**
  * Keeps the `AllDayBar` component ignorant of column-count math — only the
  * section that owns layout needs to know.
+ *
+ * Row geometry comes in rather than being read as constants, because the strip
+ * zooms with the rest of the calendar; the constants are the unzoomed defaults.
  */
-export function barPositionStyle(bar: AllDayBar, columnCount: number): AllDayBarPosition {
+export function barPositionStyle(
+  bar: AllDayBar,
+  columnCount: number,
+  rows: { rowHeight?: number; topPadding?: number } = {}
+): AllDayBarPosition {
+  const rowHeight = rows.rowHeight ?? ALL_DAY_ROW_HEIGHT;
+  const topPadding = rows.topPadding ?? ALL_DAY_TOP_PADDING;
   const widthPct = (bar.span / columnCount) * 100;
   const leftPct = (bar.startCol / columnCount) * 100;
   return {
     left: `${leftPct}%`,
-    top: ALL_DAY_TOP_PADDING + bar.row * ALL_DAY_ROW_HEIGHT,
+    top: topPadding + bar.row * rowHeight,
     // Terminating bars shrink 2px for a visual gap next to the day boundary.
     // Bars that continue off-view stay flush so they read as "runs off-screen".
     width: bar.continuesRight ? `${widthPct}%` : `calc(${widthPct}% - 2px)`,

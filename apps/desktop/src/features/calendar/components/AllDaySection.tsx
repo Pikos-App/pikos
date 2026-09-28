@@ -1,8 +1,5 @@
 import type { PageSummary } from "@pikos/core";
 import {
-  ALL_DAY_BAR_HEIGHT,
-  ALL_DAY_ROW_HEIGHT,
-  ALL_DAY_TOP_PADDING,
   assignStableAllDayRows,
   barPositionStyle,
   buildAllDayBars,
@@ -11,6 +8,7 @@ import {
 import { format } from "date-fns";
 
 import { cn } from "@/lib/utils";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { chipFolderStyle } from "../utils/calendarColors";
@@ -71,6 +69,7 @@ export function AllDaySection({
   timedDragTarget,
 }: AllDaySectionProps) {
   const { folders } = usePages();
+  const { metrics } = useCalendarSettings();
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
@@ -81,7 +80,7 @@ export function AllDaySection({
   // Reserve enough height for every row plus symmetric top/bottom padding.
   // min-h-full on the scroll container ensures backgrounds still reach the
   // bottom edge when the bar count is short.
-  const contentMinHeight = ALL_DAY_TOP_PADDING * 2 + rowCount * ALL_DAY_ROW_HEIGHT;
+  const contentMinHeight = metrics.allDayTopPadding * 2 + rowCount * metrics.allDayRowHeight;
 
   // Auto-open fires on at most one bar. `!continuesLeft` rules out week-crossed
   // continuation bars (autoOpen targets a newly-created page, which always
@@ -101,8 +100,8 @@ export function AllDaySection({
   // Ghost row matches where assignAllDayRows will actually place the new bar
   // on commit, so there's no visual jump when the ghost becomes a real bar.
   const previewTopPx = previewBounds
-    ? ALL_DAY_TOP_PADDING +
-      firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * ALL_DAY_ROW_HEIGHT
+    ? metrics.allDayTopPadding +
+      firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * metrics.allDayRowHeight
     : 0;
 
   function handleColumnPointerDown(e: React.PointerEvent, dayIndex: number) {
@@ -172,7 +171,10 @@ export function AllDaySection({
                     onDoubleClick={onPageDoubleClick}
                     onDragStart={onChipDragStart}
                     onEdgeResizeStart={onEdgeResizeStart}
-                    position={barPositionStyle(bar, columnCount)}
+                    position={barPositionStyle(bar, columnCount, {
+                      rowHeight: metrics.allDayRowHeight,
+                      topPadding: metrics.allDayTopPadding,
+                    })}
                   />
                 );
               })}
@@ -184,7 +186,7 @@ export function AllDaySection({
                 className="pointer-events-none absolute rounded-sm border-l-[2px]"
                 style={{
                   ...chipFolderStyle(),
-                  height: ALL_DAY_BAR_HEIGHT,
+                  height: metrics.allDayBarHeight,
                   left: `${(previewBounds.lo / columnCount) * 100}%`,
                   top: previewTopPx,
                   width: `calc(${((previewBounds.hi - previewBounds.lo + 1) / columnCount) * 100}% - 2px)`,

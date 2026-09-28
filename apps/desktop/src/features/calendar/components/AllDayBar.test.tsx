@@ -9,6 +9,7 @@ import type { AllDayBar as AllDayBarData, PageSummary } from "@pikos/core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { AllDayBar } from "./AllDayBar";
@@ -50,15 +51,19 @@ function makeBar(page: PageSummary): AllDayBarData {
 }
 
 function renderBar(page: PageSummary, onDragStart = vi.fn(), folderColor?: string) {
+  // The bar sizes its contents from the calendar's own metrics, so it needs the
+  // settings around it the way it has them in the app.
   renderWithProviders(
-    <AllDayBar
-      bar={makeBar(page)}
-      draggingPageId={null}
-      folderColor={folderColor}
-      onDoubleClick={vi.fn()}
-      onDragStart={onDragStart}
-      position={{}}
-    />
+    <CalendarSettingsProvider>
+      <AllDayBar
+        bar={makeBar(page)}
+        draggingPageId={null}
+        folderColor={folderColor}
+        onDoubleClick={vi.fn()}
+        onDragStart={onDragStart}
+        position={{}}
+      />
+    </CalendarSettingsProvider>
   );
   return onDragStart;
 }

@@ -13,7 +13,7 @@ import type { CSSProperties } from "react";
  * one. `ALL_DAY_BAR_HEIGHT` still owns the number; these two must agree.
  */
 export const CHIP_BASE_CLASSES =
-  "type-body-sm h-[19px] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
+  "type-body-sm h-[calc(19px*var(--calendar-zoom,1))] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
 
 /** Accepts #RRGGBB or RRGGBB; falls back to muted indigo if the hex cannot be parsed. */
 export function hexToRgba(hex: string, alpha: number): string {

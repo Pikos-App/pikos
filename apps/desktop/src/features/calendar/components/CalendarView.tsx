@@ -10,7 +10,11 @@ import { type CSSProperties, useEffect, useState } from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
-import { calendarTextScale, useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import {
+  calendarTextScale,
+  calendarZoom,
+  useCalendarSettings,
+} from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
@@ -18,7 +22,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
-import { CALENDAR_GUTTER_VAR, calendarGutterPx } from "../utils/gutterWidth";
+import { CALENDAR_GUTTER_VAR, CALENDAR_ZOOM_VAR, calendarGutterPx } from "../utils/gutterWidth";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
@@ -196,6 +200,7 @@ export function CalendarView() {
         {
           "--ui-text-scale": calendarTextScale(calendarTextSize),
           [CALENDAR_GUTTER_VAR]: `${calendarGutterPx(calendarTextScale(calendarTextSize))}px`,
+          [CALENDAR_ZOOM_VAR]: calendarZoom(calendarTextSize),
         } as CSSProperties
       }
     >

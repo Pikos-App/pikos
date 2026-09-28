@@ -23,6 +23,9 @@ import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
+/** The block's own vertical padding (`py-0.5`), which its contents sit inside. */
+const BLOCK_PADDING_PX = 4;
+
 /**
  * Bottom-edge handle height (px) for the duration resize gesture. Drops to 3px
  * on short blocks (< 30px) so the handle stays well under a third of block height.
@@ -122,6 +125,10 @@ export function PageBlock({
   const showTimeLabel =
     !isRenderingCompact && displayHeight >= metrics.timeRowMinHeight && !isContinuationBefore;
   const useTwoLineTitle = !isCompactWidth && displayHeight >= metrics.twoLineTitleMinHeight;
+  // A block is as tall as its duration, so the shortest ones are smaller than the
+  // scaled checkbox. Left to itself the box was clipped to the two vertical edges
+  // of its own square, which reads as a rendering fault rather than a small box.
+  const checkboxMaxPx = Math.max(displayHeight - BLOCK_PADDING_PX, 1);
   const done = isDone(page);
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.
@@ -258,6 +265,7 @@ export function PageBlock({
         isMicro && "rounded-[3px]",
         "cursor-pointer!"
       )}
+      maxPx={checkboxMaxPx}
       onChange={handleCheckboxClick}
       size={isMicro ? "micro" : "sm"}
     />

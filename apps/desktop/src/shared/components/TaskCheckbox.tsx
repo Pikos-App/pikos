@@ -35,6 +35,12 @@ interface TaskCheckboxProps {
   as?: "button" | "span";
   /** See `SIZE_CLASS`. Never set the box's height or width in `className`. */
   size?: keyof typeof SIZE_CLASS;
+  /** Ceiling in px, for a box whose container cannot grow to hold it. A calendar
+   *  block is as tall as its duration, so a short one is smaller than the scaled
+   *  box and clipped it to two slivers of its own border. Clamps the sized class
+   *  rather than replacing it, so the box still tracks the type until it runs out
+   *  of room. */
+  maxPx?: number | undefined;
   className?: string | undefined;
 }
 
@@ -43,6 +49,7 @@ export function TaskCheckbox({
   borderColor,
   checked,
   className,
+  maxPx,
   onChange,
   size = "md",
 }: TaskCheckboxProps) {
@@ -69,7 +76,10 @@ export function TaskCheckbox({
       }}
       onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
       role={isSpan ? undefined : "checkbox"}
-      style={!checked && borderColor ? { borderColor } : undefined}
+      style={{
+        ...(!checked && borderColor ? { borderColor } : {}),
+        ...(maxPx === undefined ? {} : { maxHeight: maxPx, maxWidth: maxPx }),
+      }}
       tabIndex={isSpan ? undefined : -1}
     >
       {checked && <Check className="text-white" size={9} strokeWidth={2} />}

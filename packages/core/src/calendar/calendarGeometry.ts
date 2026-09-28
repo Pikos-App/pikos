@@ -13,6 +13,9 @@ import {
 } from "date-fns";
 
 import {
+  ALL_DAY_BAR_HEIGHT,
+  ALL_DAY_ROW_HEIGHT,
+  ALL_DAY_TOP_PADDING,
   type CalendarCollapseConfig,
   COLLAPSED_BAND_HEIGHT,
   HOUR_HEIGHT,
@@ -40,6 +43,12 @@ export interface CalendarMetrics {
    *  spilled its checkbox and title past its own bottom edge. */
   timeRowMinHeight: number;
   twoLineTitleMinHeight: number;
+  /** The all-day strip's row geometry. Here rather than read as constants so it
+   *  zooms with everything else — left fixed, its bars stayed 19px tall while the
+   *  text inside them grew, which is the same way a timed block used to break. */
+  allDayBarHeight: number;
+  allDayRowHeight: number;
+  allDayTopPadding: number;
 }
 
 const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
@@ -70,6 +79,9 @@ const TWO_LINE_TITLE_MIN_HEIGHT = 52;
 export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): CalendarMetrics {
   const hourHeight = DENSITY_HOUR_HEIGHT[density] * zoom;
   return {
+    allDayBarHeight: ALL_DAY_BAR_HEIGHT * zoom,
+    allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
+    allDayTopPadding: ALL_DAY_TOP_PADDING * zoom,
     compactBlockHeight: hourHeight / 4,
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,

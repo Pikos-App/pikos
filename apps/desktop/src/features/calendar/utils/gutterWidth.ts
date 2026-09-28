@@ -24,3 +24,7 @@ export const CALENDAR_GUTTER_VAR = "--calendar-gutter";
 
 /** Tailwind width bound to that property, so a site cannot drift from the others. */
 export const CALENDAR_GUTTER_WIDTH = "w-[var(--calendar-gutter,3.5rem)]";
+
+/** The zoom factor, for the chip heights that have to track it in CSS. Set beside
+ *  the gutter on the calendar root, and exactly 1 at the default text size. */
+export const CALENDAR_ZOOM_VAR = "--calendar-zoom";

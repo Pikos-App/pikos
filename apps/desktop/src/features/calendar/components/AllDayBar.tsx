@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
@@ -60,6 +61,10 @@ export function AllDayBar({
 }: AllDayBarProps) {
   const { continuesLeft, continuesRight, page } = bar;
   const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
+  const { metrics } = useCalendarSettings();
+  // The bar's height is the strip's row geometry, so its contents cannot exceed it
+  // — the same ceiling a timed block puts on its own checkbox.
+  const barContentMaxPx = Math.max(metrics.allDayBarHeight - 2, 1);
 
   const {
     handleClick,
@@ -163,6 +168,7 @@ export function AllDayBar({
               borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
               checked={done}
               className="cursor-pointer!"
+              maxPx={barContentMaxPx}
               onChange={handleCheckboxClick}
               size="sm"
             />
