@@ -2,6 +2,7 @@ import type { CalendarBlock, VirtualOccurrence } from "@pikos/core";
 import {
   crossingMidnightsCount,
   DEFAULT_EVENT_COLOR,
+  fallsShortOf,
   formatMultiDayTimeRange,
   formatTimeRange,
   isDone,
@@ -98,10 +99,8 @@ export function PageBlock({
   // While being resized, a compact chip grows into a tall block.
   const isRenderingCompact = isCompact && !isResizing;
   // At compact density a 15-min block is ~10px; default type-body-sm is too tall
-  // to fit. Below that we switch to a tighter micro variant (10px text, 10px
-  // checkbox). Scaled, or the same event drew a small round checkbox at the default
-  // and a large square one zoomed in — one block, two treatments.
-  const isMicro = isRenderingCompact && displayHeight < 16 * metrics.zoom;
+  // to fit, so it switches to a tighter micro variant (10px text, 10px checkbox).
+  const isMicro = isRenderingCompact && fallsShortOf(displayHeight, metrics.fullChipMinHeight);
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
@@ -125,8 +124,11 @@ export function PageBlock({
   // still get a 2-line title for long page names.
   // `isCompactWidth` always forces a 1-line title regardless of height.
   const showTimeLabel =
-    !isRenderingCompact && displayHeight >= metrics.timeRowMinHeight && !isContinuationBefore;
-  const useTwoLineTitle = !isCompactWidth && displayHeight >= metrics.twoLineTitleMinHeight;
+    !isRenderingCompact &&
+    !fallsShortOf(displayHeight, metrics.timeRowMinHeight) &&
+    !isContinuationBefore;
+  const useTwoLineTitle =
+    !isCompactWidth && !fallsShortOf(displayHeight, metrics.twoLineTitleMinHeight);
   // A block is as tall as its duration, so the shortest ones are smaller than the
   // scaled checkbox. Left to itself the box was clipped to the two vertical edges
   // of its own square, which reads as a rendering fault rather than a small box.

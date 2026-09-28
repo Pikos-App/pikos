@@ -4,14 +4,21 @@ import { makePage } from "./calendar.testHelpers";
 import {
   CASCADE_OFFSET_PCT,
   COMPACT_BLOCK_HEIGHT,
+  DEFAULT_COLLAPSE_CONFIG,
   GRID_HEIGHT,
   GRID_START_HOUR,
   HOUR_HEIGHT,
   MAX_VISIBLE_CASCADE_DEPTH,
   OVERFLOW_MIN_WIDTH_PX,
 } from "./calendarConstants";
-import { buildCollapseGeometry, collapsedBandInnerOffset } from "./calendarGeometry";
+import {
+  buildCollapseGeometry,
+  collapsedBandInnerOffset,
+  computeCalendarMetrics,
+  fallsShortOf,
+} from "./calendarGeometry";
 import { buildDayBlocks, collapseUnderWidth, remapBlocksForCollapse } from "./calendarLayout";
+import type { CalendarDensity } from "./dayCount";
 
 // ─── collapseUnderWidth ──────────────────────────────────────────────────────
 
@@ -1133,5 +1140,79 @@ describe("remapBlocksForCollapse — boundary cases", () => {
     const r = remapBlocksForCollapse([block(64 * 9, 64, "middle")], g);
     expect(r.visible[0]!.straddlesTopBand).toBeUndefined();
     expect(r.visible[0]!.straddlesBottomBand).toBeUndefined();
+  });
+});
+
+describe("block treatment across the calendar text-size ladder", () => {
+  const TEXT_SIZE_RUNGS = [10, 12, 14, 16, 18, 20, 22, 24, 28];
+  const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
+  const day = new Date(2026, 2, 15);
+
+  function at(minutes: number): string {
+    const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+    const mm = String(minutes % 60).padStart(2, "0");
+    return `2026-03-15T${hh}:${mm}:00`;
+  }
+
+  function layOut(
+    density: CalendarDensity,
+    textSize: number,
+    pages: ReturnType<typeof makePage>[]
+  ) {
+    const metrics = computeCalendarMetrics(density, textSize / 14);
+    const geometry = buildCollapseGeometry(DEFAULT_COLLAPSE_CONFIG, metrics.hourHeight);
+    const { visible } = remapBlocksForCollapse(buildDayBlocks(pages, day, metrics), geometry);
+    return { blocks: visible, metrics };
+  }
+
+  function treatment(density: CalendarDensity, textSize: number, start: number, minutes: number) {
+    const page = makePage({ scheduledEnd: at(start + minutes), scheduledStart: at(start) });
+    const { blocks, metrics } = layOut(density, textSize, [page]);
+    const b = blocks[0]!;
+    return {
+      fullChip: !fallsShortOf(b.height, metrics.fullChipMinHeight),
+      isCompact: b.isCompact,
+      timeRow: !fallsShortOf(b.height, metrics.timeRowMinHeight),
+      twoLineTitle: !fallsShortOf(b.height, metrics.twoLineTitleMinHeight),
+    };
+  }
+
+  it("gives every block the treatment it has at the default text size", () => {
+    for (const density of DENSITIES) {
+      for (let start = 7 * 60; start < 21 * 60; start += 15) {
+        for (const minutes of [15, 30, 45, 60, 75, 90]) {
+          const expected = treatment(density, 14, start, minutes);
+          for (const size of TEXT_SIZE_RUNGS) {
+            expect(
+              treatment(density, size, start, minutes),
+              `${density} ${size}px ${at(start)}+${minutes}`
+            ).toEqual(expected);
+          }
+        }
+      }
+    }
+  });
+
+  it("cascades or splits overlapping blocks the same way at every text size", () => {
+    for (const density of DENSITIES) {
+      for (const gap of [0, 15, 30, 45, 60, 75]) {
+        for (const guestMinutes of [15, 90]) {
+          const pages = [
+            makePage({ id: "host", scheduledEnd: at(12 * 60), scheduledStart: at(9 * 60) }),
+            makePage({
+              id: "guest",
+              scheduledEnd: at(9 * 60 + gap + guestMinutes),
+              scheduledStart: at(9 * 60 + gap),
+            }),
+          ];
+          const columns = (size: number) =>
+            layOut(density, size, pages).blocks.map((b) => [b.page.id, b.leftPct, b.widthPct]);
+          const expected = columns(14);
+          for (const size of TEXT_SIZE_RUNGS) {
+            expect(columns(size), `${density} ${size}px gap ${gap}`).toEqual(expected);
+          }
+        }
+      }
+    }
   });
 });

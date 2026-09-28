@@ -59,6 +59,7 @@ export {
   collapsedBandPillHeight,
   computeCalendarMetrics,
   DEFAULT_METRICS,
+  fallsShortOf,
   mapDateToY,
   mapHourToY,
   mapYToDate,

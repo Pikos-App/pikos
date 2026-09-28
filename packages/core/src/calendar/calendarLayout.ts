@@ -12,7 +12,6 @@ import { resolveSyncedInstant } from "../utils/syncedTime";
 import { isAllDayPage } from "./allDayLayout";
 import {
   CASCADE_OFFSET_PCT,
-  CHIP_STACKED_THRESHOLD,
   COMPACT_BLOCK_HEIGHT,
   MAX_VISIBLE_CASCADE_DEPTH,
   MIN_TIMED_MINUTES,
@@ -24,6 +23,7 @@ import {
   collapsedBandInnerOffset,
   type CollapseGeometry,
   DEFAULT_METRICS,
+  fallsShortOf,
   mapHourToY,
   timeToY,
 } from "./calendarGeometry";
@@ -175,11 +175,11 @@ export function remapBlocksForCollapse(
     const startHour = b.top / hourHeight;
     const endHour = (b.top + b.height) / hourHeight;
 
-    if (config.topCollapsed && endHour <= config.topHour) {
+    if (config.topCollapsed && !fallsShortOf(config.topHour, endHour)) {
       topCollapsedPageIds.push(b.page.id);
       continue;
     }
-    if (config.bottomCollapsed && startHour >= config.bottomHour) {
+    if (config.bottomCollapsed && !fallsShortOf(startHour, config.bottomHour)) {
       bottomCollapsedPageIds.push(b.page.id);
       continue;
     }
@@ -193,8 +193,8 @@ export function remapBlocksForCollapse(
     // sit flush at the boundary (no visual cue that they extend into it).
     const rawTop = mapHourToY(startHour, geometry);
     const rawBottom = mapHourToY(endHour, geometry);
-    const straddlesTopBand = config.topCollapsed && startHour < config.topHour;
-    const straddlesBottomBand = config.bottomCollapsed && endHour > config.bottomHour;
+    const straddlesTopBand = config.topCollapsed && fallsShortOf(startHour, config.topHour);
+    const straddlesBottomBand = config.bottomCollapsed && fallsShortOf(config.bottomHour, endHour);
     const newTop = straddlesTopBand
       ? geometry.topBandHeight - collapsedBandInnerOffset(geometry.topBandHeight) + 1
       : rawTop;
@@ -299,7 +299,7 @@ export function buildDayBlocks(
 
   for (const cluster of clusters) {
     const assignments = assignColumns(cluster);
-    const components = findTextCollisionComponents(cluster);
+    const components = findTextCollisionComponents(cluster, metrics.zoom);
 
     for (let i = 0; i < cluster.length; i++) {
       const raw = cluster[i]!;
@@ -387,7 +387,7 @@ export function buildDayBlocks(
  * point reminders inside it from collapsing every chip into a tiny sub-column
  * — the chips render almost-full-width within their host instead.
  */
-function findTextCollisionComponents(cluster: RawBlock[]): number[][] {
+function findTextCollisionComponents(cluster: RawBlock[], zoom: number): number[][] {
   const adj: number[][] = cluster.map(() => []);
   for (let i = 0; i < cluster.length; i++) {
     for (let j = i + 1; j < cluster.length; j++) {
@@ -400,7 +400,7 @@ function findTextCollisionComponents(cluster: RawBlock[]): number[][] {
       // near-identical times — they're short enough that 30 min apart already
       // gives them their own visual row.
       const threshold = a.isCompact && b.isCompact ? CHIP_COLLISION_GAP_PX : CASCADE_MIN_TOP_GAP_PX;
-      if (gap < threshold) {
+      if (fallsShortOf(gap, threshold * zoom)) {
         adj[i]!.push(j);
         adj[j]!.push(i);
       }
@@ -584,7 +584,7 @@ function buildRawBlock(
     endY = Math.min(rawGridHeight, top + heightFromDuration);
   }
   const height = Math.max(endY - top, 4);
-  const isCompact = !isContinuationAfter && height < CHIP_STACKED_THRESHOLD;
+  const isCompact = !isContinuationAfter && fallsShortOf(height, metrics.stackedBlockMinHeight);
   const overlapEnd = isContinuationAfter
     ? visualEnd
     : new Date(visualStart.getTime() + visualDurationMin * 60_000);

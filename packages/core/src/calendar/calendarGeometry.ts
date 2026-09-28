@@ -17,6 +17,7 @@ import {
   ALL_DAY_ROW_HEIGHT,
   ALL_DAY_TOP_PADDING,
   type CalendarCollapseConfig,
+  CHIP_STACKED_THRESHOLD,
   COLLAPSED_BAND_HEIGHT,
   HOUR_HEIGHT,
   MAX_BOTTOM_HOUR,
@@ -43,6 +44,13 @@ export interface CalendarMetrics {
    *  spilled its checkbox and title past its own bottom edge. */
   timeRowMinHeight: number;
   twoLineTitleMinHeight: number;
+  /** The shortest block that stacks its title over a time row rather than
+   *  rendering as a one-line chip, and the shortest chip that keeps the body type
+   *  rather than dropping to micro. Scaled for the same reason as the tiers above:
+   *  fixed, they turned a quarter-hour chip into a clipped stacked block at the
+   *  largest text size and swapped its title between two type sizes on the way. */
+  stackedBlockMinHeight: number;
+  fullChipMinHeight: number;
   /** The all-day strip's row geometry. Here rather than read as constants so it
    *  zooms with everything else — left fixed, its bars stayed 19px tall while the
    *  text inside them grew, which is the same way a timed block used to break. */
@@ -63,6 +71,27 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
 /** The tier heights the block layout was tuned to at the default zoom. */
 const TIME_ROW_MIN_HEIGHT = 40;
 const TWO_LINE_TITLE_MIN_HEIGHT = 52;
+const FULL_CHIP_MIN_HEIGHT = 16;
+
+/** Far below a visible pixel or a millisecond, far above the rounding a zoomed
+ *  position carries. */
+const ROUNDING_TOLERANCE = 1e-6;
+
+/**
+ * Whether a value derived from block pixels falls short of a threshold, where
+ * landing exactly on it is reaching it.
+ *
+ * Block heights, gaps and edges are whole quarter-hours, and several thresholds
+ * sit exactly on one: a quarter hour at normal density is the full-chip bar, an
+ * hour at compact is the time-row bar, an event ending at 10 PM ends on the
+ * collapsed band's edge. At the default zoom both sides are exact and the tie
+ * resolves one way. Zoomed, a height or hour arrives through a subtraction or a
+ * division and lands a rounding error either side, so a plain `<` gave the same
+ * block a different treatment on alternate rungs of the text-size ladder.
+ */
+export function fallsShortOf(value: number, threshold: number): boolean {
+  return value < threshold - ROUNDING_TOLERANCE;
+}
 
 /**
  * Density picks the hour height; zoom multiplies everything by the same number
@@ -86,9 +115,11 @@ export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): Cale
     allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
     allDayTopPadding: ALL_DAY_TOP_PADDING * zoom,
     compactBlockHeight: hourHeight / 4,
+    fullChipMinHeight: FULL_CHIP_MIN_HEIGHT * zoom,
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,
+    stackedBlockMinHeight: CHIP_STACKED_THRESHOLD * zoom,
     timeRowMinHeight: TIME_ROW_MIN_HEIGHT * zoom,
     twoLineTitleMinHeight: TWO_LINE_TITLE_MIN_HEIGHT * zoom,
     zoom,
