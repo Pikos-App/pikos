@@ -108,28 +108,21 @@ describe("MonthGrid — grid rendering", () => {
 });
 
 describe("MonthGrid — event chips", () => {
-  it("renders a timed event with its start time in the cell it belongs to", () => {
+  it("renders a timed event in the cell it belongs to", () => {
     renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
     const chip = screen.getByRole("button", { name: "Standup 9 AM" });
     expect(cell("Tuesday March 10, 2026")).toContainElement(chip);
   });
 
-  // A month cell is an overview, so the title is what has to survive a narrow
-  // column. The time used to come first and refuse to shrink, which left chips
-  // reading "10:30am Standu…" — a time and nothing scannable.
-  it("puts the title before the time, and lets the time shrink first", () => {
+  // A month cell is an overview and its width is the scarce thing. The time used
+  // to lead the chip and refuse to shrink, leaving "10:30am Standu…" — a time and
+  // nothing scannable. It is off the chip entirely now, and stays in the name.
+  it("shows the title alone, keeping the time in the accessible name", () => {
     renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
     const chip = screen.getByRole("button", { name: "Standup 9 AM" });
 
-    const spans = [...chip.querySelectorAll("span")].filter((s) => s.textContent?.trim());
-    const title = spans.find((s) => s.textContent?.trim() === "Standup");
-    const time = spans.find((s) => s.textContent?.trim() === "9 AM");
-
-    expect(title).toBeDefined();
-    expect(time).toBeDefined();
-    expect(title!.compareDocumentPosition(time!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(time!.className).toContain("shrink-[9999]");
-    expect(title!.className).not.toContain("shrink-0");
+    expect(chip).toHaveTextContent("Standup");
+    expect(chip).not.toHaveTextContent("9 AM");
   });
 
   it("colours a chip from its folder, matching the week grid's source", () => {

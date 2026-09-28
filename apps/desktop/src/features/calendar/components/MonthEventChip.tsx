@@ -85,17 +85,11 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
           ) : (
             <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
+          {/* No time on a month chip. A month cell is an overview and the width is
+              the scarce thing: the time cost most of it and left the title unreadable,
+              which is the one part that makes a row scannable. The time stays in the
+              chip's accessible name, and the day view is where it is read. */}
           <span className="min-w-0 truncate text-left">{page.title || "Untitled"}</span>
-          {/* The title leads and the time yields: a month cell is an overview, and a
-              chip showing "10:30am Standu…" has told you nothing you can scan. The
-              outsized shrink factor is what orders the two — flex shrinks every item
-              at once, so the time needs to give up its width long before the title
-              gives up any. */}
-          {timeLabel && (
-            <span className="min-w-0 shrink-[9999] truncate text-subtle tabular-nums">
-              {timeLabel}
-            </span>
-          )}
           <SyncSourceIcon className="ml-auto h-3 w-3 shrink-0" syncState={page.syncState} />
         </button>
       </PopoverTrigger>
