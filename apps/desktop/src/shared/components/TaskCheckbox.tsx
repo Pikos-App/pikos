@@ -14,8 +14,6 @@ import { cn } from "@/lib/utils";
 const SIZE_CLASS = {
   /** The page list and the editor byline. */
   md: "h-[calc(1rem*var(--ui-text-scale,1))] w-[calc(1rem*var(--ui-text-scale,1))]",
-  /** A calendar block that has collapsed to a single line of micro type. */
-  micro: "h-[calc(0.625rem*var(--ui-text-scale,1))] w-[calc(0.625rem*var(--ui-text-scale,1))]",
   /** Calendar blocks and all-day chips. */
   sm: "h-[calc(0.875rem*var(--ui-text-scale,1))] w-[calc(0.875rem*var(--ui-text-scale,1))]",
   /** Month chips, and any row too short for the default. */

@@ -1209,7 +1209,6 @@ describe("block treatment across the calendar text-size ladder", () => {
     const { blocks, metrics } = layOut(density, textSize, [page]);
     const b = blocks[0]!;
     return {
-      fullChip: !fallsShortOf(b.height, metrics.fullChipMinHeight),
       isCompact: b.isCompact,
       timeRow: !fallsShortOf(b.height, metrics.timeRowMinHeight),
       twoLineTitle: !fallsShortOf(b.height, metrics.twoLineTitleMinHeight),
@@ -1253,5 +1252,53 @@ describe("block treatment across the calendar text-size ladder", () => {
         }
       }
     }
+  });
+});
+
+describe("block height floor", () => {
+  const day = new Date(2026, 2, 15);
+  const compact = computeCalendarMetrics("compact");
+
+  it("draws an item with no end time at compact density as tall as a normal quarter hour", () => {
+    const [b] = buildDayBlocks([makePage({ scheduledStart: "2026-03-15T09:00:00" })], day, compact);
+    expect(b!.height).toBe(16);
+  });
+
+  it("sets a floored item beside the event it would otherwise cover", () => {
+    const pages = [
+      makePage({ id: "reminder", scheduledStart: "2026-03-15T09:00:00" }),
+      makePage({
+        id: "call",
+        scheduledEnd: "2026-03-15T09:30:00",
+        scheduledStart: "2026-03-15T09:15:00",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day, compact);
+    const reminder = blocks.find((b) => b.page.id === "reminder")!;
+    const call = blocks.find((b) => b.page.id === "call")!;
+    expect(reminder.top + reminder.height).toBeGreaterThan(call.top);
+    expect(reminder.leftPct + reminder.widthPct).toBeLessThanOrEqual(call.leftPct);
+  });
+
+  it("keeps an item starting in the day's last minutes on the grid", () => {
+    const [b] = buildDayBlocks([makePage({ scheduledStart: "2026-03-15T23:55:00" })], day, compact);
+    expect(b!.top + b!.height).toBe(compact.hourHeight * 24);
+  });
+
+  it("grows a block squeezed against the evening band away from the band", () => {
+    const geometry = buildCollapseGeometry(DEFAULT_COLLAPSE_CONFIG, compact.hourHeight);
+    const start = `2026-03-15T${String(DEFAULT_COLLAPSE_CONFIG.bottomHour - 1)}:55:00`;
+    const end = `2026-03-15T${String(DEFAULT_COLLAPSE_CONFIG.bottomHour + 1)}:00:00`;
+    const blocks = buildDayBlocks(
+      [makePage({ scheduledEnd: end, scheduledStart: start })],
+      day,
+      compact
+    );
+    const [b] = remapBlocksForCollapse(blocks, geometry, compact.compactBlockHeight).visible;
+    expect(b!.straddlesBottomBand).toBe(true);
+    expect(b!.height).toBeGreaterThanOrEqual(compact.compactBlockHeight);
+    expect(b!.top + b!.height).toBe(
+      geometry.middleEnd + collapsedBandInnerOffset(geometry.bottomBandHeight) - 1
+    );
   });
 });

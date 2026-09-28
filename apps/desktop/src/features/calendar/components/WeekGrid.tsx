@@ -100,7 +100,7 @@ export function WeekGrid({
   // are carried over rather than recomputed from the stretched hour.
   const metrics: CalendarMetrics = {
     ...settings.metrics,
-    compactBlockHeight: effectiveHourHeight / 4,
+    compactBlockHeight: Math.max(effectiveHourHeight / 4, settings.metrics.compactBlockHeight),
     gridHeight: geometry.totalHeight,
     hourHeight: effectiveHourHeight,
     minResizeHeight: (15 / 60) * effectiveHourHeight,

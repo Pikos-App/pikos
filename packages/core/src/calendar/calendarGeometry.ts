@@ -32,7 +32,8 @@ import type { CalendarDayCount, CalendarDensity } from "./dayCount";
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {
   hourHeight: number;
-  /** Height of a 15-minute slot — the minimum block height for timed events. */
+  /** The shortest a timed block renders: a 15-minute slot, or `MIN_BLOCK_HEIGHT`
+   *  where the slot is shorter than that. */
   compactBlockHeight: number;
   gridHeight: number;
   minResizeHeight: number;
@@ -45,12 +46,10 @@ export interface CalendarMetrics {
   timeRowMinHeight: number;
   twoLineTitleMinHeight: number;
   /** The shortest block that stacks its title over a time row rather than
-   *  rendering as a one-line chip, and the shortest chip that keeps the body type
-   *  rather than dropping to micro. Scaled for the same reason as the tiers above:
-   *  fixed, they turned a quarter-hour chip into a clipped stacked block at the
-   *  largest text size and swapped its title between two type sizes on the way. */
+   *  rendering as a one-line chip. Scaled for the same reason as the tiers above:
+   *  fixed, it turned a quarter-hour chip into a clipped stacked block at the
+   *  largest text size. */
   stackedBlockMinHeight: number;
-  fullChipMinHeight: number;
   /** The all-day strip's row geometry. Here rather than read as constants so it
    *  zooms with everything else — left fixed, its bars stayed 19px tall while the
    *  text inside them grew, which is the same way a timed block used to break. */
@@ -71,7 +70,19 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
 /** The tier heights the block layout was tuned to at the default zoom. */
 const TIME_ROW_MIN_HEIGHT = 40;
 const TWO_LINE_TITLE_MIN_HEIGHT = 52;
-const FULL_CHIP_MIN_HEIGHT = 16;
+
+/**
+ * The floor on a timed block's height at the default zoom: a quarter hour at
+ * normal density, the shortest chip that holds the body type and a checkbox.
+ *
+ * A block was as tall as its duration, so at compact density an item with no end
+ * time was a 10px sliver with 10px type, and 7px zoomed out — too small to hit.
+ * It scales up with zoom but never below this, because zooming out is for seeing
+ * more of the day, not for making a target smaller than a pointer can land on.
+ * The layout reserves the extra height, so a floored block cascades beside its
+ * neighbour rather than covering it.
+ */
+const MIN_BLOCK_HEIGHT = 16;
 
 /** Far below a visible pixel or a millisecond, far above the rounding a zoomed
  *  position carries. */
@@ -82,12 +93,12 @@ const ROUNDING_TOLERANCE = 1e-6;
  * landing exactly on it is reaching it.
  *
  * Block heights, gaps and edges are whole quarter-hours, and several thresholds
- * sit exactly on one: a quarter hour at normal density is the full-chip bar, an
- * hour at compact is the time-row bar, an event ending at 10 PM ends on the
- * collapsed band's edge. At the default zoom both sides are exact and the tie
- * resolves one way. Zoomed, a height or hour arrives through a subtraction or a
- * division and lands a rounding error either side, so a plain `<` gave the same
- * block a different treatment on alternate rungs of the text-size ladder.
+ * sit exactly on one: an hour at compact is the time-row bar, and an event ending
+ * at 10 PM ends on the collapsed band's edge. At the default zoom both sides are
+ * exact and the tie resolves one way. Zoomed, a height or hour arrives through a
+ * subtraction or a division and lands a rounding error either side, so a plain `<`
+ * gave the same block a different treatment on alternate rungs of the text-size
+ * ladder.
  */
 export function fallsShortOf(value: number, threshold: number): boolean {
   return value < threshold - ROUNDING_TOLERANCE;
@@ -114,8 +125,7 @@ export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): Cale
     allDayBarHeight: ALL_DAY_BAR_HEIGHT * zoom,
     allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
     allDayTopPadding: ALL_DAY_TOP_PADDING * zoom,
-    compactBlockHeight: hourHeight / 4,
-    fullChipMinHeight: FULL_CHIP_MIN_HEIGHT * zoom,
+    compactBlockHeight: Math.max(hourHeight / 4, MIN_BLOCK_HEIGHT * Math.max(zoom, 1)),
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,

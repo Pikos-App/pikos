@@ -139,7 +139,7 @@ export function DayColumn({
     bottomCollapsedPageIds,
     topCollapsedPageIds,
     visible: blocks,
-  } = remapBlocksForCollapse(rawBlocks, geometry);
+  } = remapBlocksForCollapse(rawBlocks, geometry, metrics.compactBlockHeight);
   const showNowIndicator = isCurrentWeek && isSameDay(now, day);
   const weekend = day.getDay() === 0 || day.getDay() === 6;
 
@@ -416,19 +416,13 @@ export function DayColumn({
               <>
                 <span
                   className={cn(
-                    "flex shrink-0 items-center justify-center rounded-[2px] border",
-                    dragGhost.height < 16 ? "h-2.5 w-2.5" : "h-3.5 w-3.5",
+                    "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
                     dragGhost.isDone ? "border-foreground/40 bg-foreground/10" : "border-current/30"
                   )}
                 >
                   {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
                 </span>
-                <span
-                  className={cn(
-                    "min-w-0 truncate font-medium text-foreground",
-                    dragGhost.height < 16 ? "-mt-px text-3xs leading-none" : "type-body-sm"
-                  )}
-                >
+                <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
                   {dragGhost.title || "Untitled"}
                 </span>
               </>

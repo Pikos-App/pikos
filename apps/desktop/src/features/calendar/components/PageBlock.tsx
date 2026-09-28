@@ -98,9 +98,6 @@ export function PageBlock({
   const displayHeight = isResizing ? Math.max(resizeHeight, 0) : height;
   // While being resized, a compact chip grows into a tall block.
   const isRenderingCompact = isCompact && !isResizing;
-  // At compact density a 15-min block is ~10px; default type-body-sm is too tall
-  // to fit, so it switches to a tighter micro variant (10px text, 10px checkbox).
-  const isMicro = isRenderingCompact && fallsShortOf(displayHeight, metrics.fullChipMinHeight);
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
@@ -247,37 +244,30 @@ export function PageBlock({
     width: `calc(${widthPct}% - 2px)`,
   };
 
-  // One unified 14px icon size across chip + stacked layouts; only micro shrinks
-  // (10px) to fit the compact-density quarter-hour row. Vertical offsets align
+  // One unified 14px icon size across chip + stacked layouts. Vertical offsets align
   // the hollow-square checkbox with the text's glyph cap-height, not the flex
   // line-box edge (which sits ~2-3px above cap-top for type-body-sm). They and the
   // block's insets ride `--calendar-zoom`: tuned in px at one size, a fixed offset
   // left the checkbox riding above the title and the title hugging the top edge
   // once the text grew.
-  // Micro also tightens the corner radius — --radius-sm on a 10px square reads
-  // as fully round, so we drop to 2px to preserve the checkbox silhouette.
-  const iconClass = cn(
-    isMicro ? "h-2.5 w-2.5 rounded-[3px]" : "h-3.5 w-3.5",
-    !isMicro && isRenderingCompact && "mt-[calc(1px*var(--calendar-zoom,1))]",
-    !isMicro && !isRenderingCompact && "mt-[calc(3px*var(--calendar-zoom,1))]"
-  );
+  const iconOffset = isRenderingCompact
+    ? "mt-[calc(1px*var(--calendar-zoom,1))]"
+    : "mt-[calc(3px*var(--calendar-zoom,1))]";
   const checkbox = showsCheckbox ? (
     <TaskCheckbox
       as="span"
       borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
       checked={done}
-      className={cn(
-        !isMicro && isRenderingCompact && "mt-[calc(1px*var(--calendar-zoom,1))]",
-        !isMicro && !isRenderingCompact && "mt-[calc(3px*var(--calendar-zoom,1))]",
-        isMicro && "rounded-[3px]",
-        "cursor-pointer!"
-      )}
+      className={cn(iconOffset, "cursor-pointer!")}
       maxPx={checkboxMaxPx}
       onChange={handleCheckboxClick}
-      size={isMicro ? "micro" : "sm"}
+      size="sm"
     />
   ) : (
-    <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
+    <Repeat2
+      aria-label="Recurring"
+      className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", iconOffset)}
+    />
   );
 
   // Synced provenance: an active mirror dims-on-detach (never strikethrough —
@@ -327,23 +317,11 @@ export function PageBlock({
           >
             {showLabel && checkbox}
             {showLabel && (
-              <span
-                className={cn(
-                  "min-w-0 truncate font-medium text-foreground",
-                  isMicro
-                    ? "-mt-[calc(1px*var(--calendar-zoom,1))] text-3xs leading-none"
-                    : "type-body-sm"
-                )}
-              >
+              <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
                 {page.title || "Untitled"}
               </span>
             )}
-            {showLabel && (
-              <SyncSourceIcon
-                className={cn("ml-auto", isMicro ? "h-2.5 w-2.5" : "h-3 w-3")}
-                syncState={page.syncState}
-              />
-            )}
+            {showLabel && <SyncSourceIcon className="ml-auto h-3 w-3" syncState={page.syncState} />}
             {resizeHandle}
           </button>
         ) : (

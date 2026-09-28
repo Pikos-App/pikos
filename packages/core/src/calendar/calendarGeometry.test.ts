@@ -377,9 +377,17 @@ describe("zoom", () => {
   it("keeps a block's share of the hour fixed across zoom", () => {
     for (const zoom of [0.5, 1, 1.5, 2]) {
       const m = computeCalendarMetrics("normal", zoom);
-      expect(m.compactBlockHeight / m.hourHeight).toBeCloseTo(0.25);
       expect(m.timeRowMinHeight / m.hourHeight).toBeCloseTo(40 / 64);
       expect(m.twoLineTitleMinHeight / m.hourHeight).toBeCloseTo(52 / 64);
     }
+  });
+
+  it("floors a block at a normal quarter hour, scaled up with zoom but never down", () => {
+    expect(computeCalendarMetrics("normal").compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics("spacious").compactBlockHeight).toBe(22);
+    expect(computeCalendarMetrics("compact").compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics("compact", 2).compactBlockHeight).toBe(32);
+    expect(computeCalendarMetrics("compact", 10 / 14).compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics("normal", 10 / 14).compactBlockHeight).toBe(16);
   });
 });

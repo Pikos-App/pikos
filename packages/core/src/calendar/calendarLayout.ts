@@ -207,7 +207,8 @@ export interface RemappedBlocks {
 
 export function remapBlocksForCollapse(
   blocks: CalendarBlock[],
-  geometry: CollapseGeometry
+  geometry: CollapseGeometry,
+  minHeight = 4
 ): RemappedBlocks {
   const { config, hourHeight } = geometry;
   const visible: CalendarBlock[] = [];
@@ -238,16 +239,20 @@ export function remapBlocksForCollapse(
     const rawBottom = mapHourToY(endHour, geometry);
     const straddlesTopBand = config.topCollapsed && fallsShortOf(startHour, config.topHour);
     const straddlesBottomBand = config.bottomCollapsed && fallsShortOf(config.bottomHour, endHour);
-    const newTop = straddlesTopBand
+    let newTop = straddlesTopBand
       ? geometry.topBandHeight - collapsedBandInnerOffset(geometry.topBandHeight) + 1
       : rawTop;
-    const newBottom = straddlesBottomBand
+    let newBottom = straddlesBottomBand
       ? geometry.middleEnd + collapsedBandInnerOffset(geometry.bottomBandHeight) - 1
       : rawBottom;
-    const newHeight = Math.max(newBottom - newTop, 4);
+    // Squeezed against a band, a block grows away from it rather than into the pill.
+    if (newBottom - newTop < minHeight) {
+      if (straddlesBottomBand && !straddlesTopBand) newTop = newBottom - minHeight;
+      else newBottom = newTop + minHeight;
+    }
     visible.push({
       ...b,
-      height: newHeight,
+      height: newBottom - newTop,
       top: newTop,
       ...(straddlesTopBand ? { straddlesTopBand: true as const } : {}),
       ...(straddlesBottomBand ? { straddlesBottomBand: true as const } : {}),
@@ -606,16 +611,16 @@ function buildRawBlock(
   const visualStart = isContinuationBefore ? dayStart : realStart;
   const visualEnd = isContinuationAfter ? dayEnd : realEnd;
 
-  const top = timeToY(visualStart, metrics.hourHeight);
+  const startY = timeToY(visualStart, metrics.hourHeight);
   const visualDurationMin = Math.max(
     MIN_TIMED_MINUTES,
     Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
   );
   const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
-  // Raw 24h pixel height — `top` is computed in this same coord system via
+  // Raw 24h pixel height — `startY` is computed in this same coord system via
   // `timeToY`. `metrics.gridHeight` is the collapse-remapped total (smaller
   // than raw 24h when bands are collapsed); using it here would clamp end-of-
-  // day events to a y above their `top` and squash them to the 4px floor.
+  // day events to a y above their start and squash them to the height floor.
   // `remapBlocksForCollapse` projects raw → remapped coords downstream.
   const rawGridHeight = metrics.hourHeight * VISIBLE_HOURS;
   let endY: number;
@@ -624,13 +629,18 @@ function buildRawBlock(
   } else if (isContinuationBefore) {
     endY = timeToY(visualEnd, metrics.hourHeight);
   } else {
-    endY = Math.min(rawGridHeight, top + heightFromDuration);
+    endY = Math.min(rawGridHeight, startY + heightFromDuration);
   }
-  const height = Math.max(endY - top, 4);
+  const height = Math.max(endY - startY, metrics.compactBlockHeight);
+  // A floored block starting in the day's last minutes rises to stay on the grid.
+  const top = Math.min(startY, rawGridHeight - height);
   const isCompact = !isContinuationAfter && fallsShortOf(height, metrics.stackedBlockMinHeight);
+  // Overlap is decided in time, so a floored block claims the minutes its height
+  // covers — or a 9:00 reminder drawn 24 minutes tall would sit on a 9:15 event.
+  const overlapMin = Math.max(visualDurationMin, (height / metrics.hourHeight) * 60);
   const overlapEnd = isContinuationAfter
     ? visualEnd
-    : new Date(visualStart.getTime() + visualDurationMin * 60_000);
+    : new Date(visualStart.getTime() + overlapMin * 60_000);
 
   return {
     endDate: realEnd,
