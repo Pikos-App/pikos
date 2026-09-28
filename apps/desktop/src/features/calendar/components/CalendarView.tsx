@@ -18,6 +18,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
+import { CALENDAR_GUTTER_VAR, calendarGutterPx } from "../utils/gutterWidth";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
@@ -191,7 +192,12 @@ export function CalendarView() {
     // value, everything above keeps the interface's.
     <div
       className="flex min-h-0 flex-1 flex-col"
-      style={{ "--ui-text-scale": calendarTextScale(calendarTextSize) } as CSSProperties}
+      style={
+        {
+          "--ui-text-scale": calendarTextScale(calendarTextSize),
+          [CALENDAR_GUTTER_VAR]: `${calendarGutterPx(calendarTextScale(calendarTextSize))}px`,
+        } as CSSProperties
+      }
     >
       {isMonth ? (
         <MonthGrid
