@@ -10,6 +10,9 @@ import { ChevronsDownUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+
+import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
+
 function hourLabel(hour: number): string {
   return formatTime12hParts(hour % 24, 0);
 }
@@ -70,10 +73,8 @@ export function TimeGutter() {
   }
 
   return (
-    // Width rides the calendar's text scale: at 2x "10 PM" is wider than a fixed
-    // 3.5rem gutter, and the labels wrap into the grid rather than truncating.
     <div
-      className="relative w-[calc(3.5rem*var(--ui-text-scale,1))] shrink-0 whitespace-nowrap select-none"
+      className={cn(CALENDAR_GUTTER_WIDTH, "relative shrink-0 whitespace-nowrap select-none")}
       style={{ height: geometry.totalHeight }}
     >
       {collapse.topCollapsed ? (

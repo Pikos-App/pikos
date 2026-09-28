@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { chipFolderStyle } from "../utils/calendarColors";
+import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
 import { AllDayBar } from "./AllDayBar";
 
 interface AllDaySectionProps {
@@ -120,8 +121,7 @@ export function AllDaySection({
           bottom edge. */}
       <div className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden">
         <div className="flex min-h-full">
-          {/* Gutter spacer — aligns with TimeGutter's w-14 */}
-          <div className="w-14 shrink-0" />
+          <div className={cn(CALENDAR_GUTTER_WIDTH, "shrink-0")} />
 
           <div className="relative flex flex-1" style={{ minHeight: contentMinHeight }}>
             {days.map((day, dayIndex) => {

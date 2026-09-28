@@ -2,6 +2,8 @@ import { format, isSameDay } from "date-fns";
 
 import { cn } from "@/lib/utils";
 
+import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
+
 function isWeekend(day: Date) {
   const d = day.getDay();
   return d === 0 || d === 6;
@@ -21,8 +23,7 @@ export interface DayHeaderRowProps {
 export function DayHeaderRow({ days, onCreateDragStart, today }: DayHeaderRowProps) {
   return (
     <div className="flex shrink-0 border-t border-b border-border/40">
-      {/* Gutter spacer aligns with TimeGutter's 56px column. */}
-      <div className="w-14 shrink-0" />
+      <div className={cn(CALENDAR_GUTTER_WIDTH, "shrink-0")} />
       {days.map((day, i) => {
         const isToday = isSameDay(day, today);
         return (
