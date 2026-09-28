@@ -277,7 +277,21 @@ describe("usePanelResize", () => {
       min: 100,
       storageKey: "pikos:test:width2",
     });
-    expect(tiny.result.current.width).toBe(100);
+    expect(tiny.result.current.width).toBe(200);
+  });
+
+  it("keeps the panel at least its min at the current text size", () => {
+    setTextScale(2);
+    // The real sidebar on a window too narrow for its share to hold it: 180 base
+    // px of content needs 360 on screen, where a fifth of 1024 is 204.
+    const { result } = renderPanel({
+      defaultWidth: 180,
+      max: 320,
+      maxWindowShare: 0.2,
+      min: 180,
+      storageKey: "pikos:test:width",
+    });
+    expect(result.current.width).toBe(360);
   });
 
   it("clamps a drag to the bounds at the scale it is dragged", () => {

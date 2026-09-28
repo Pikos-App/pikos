@@ -12,7 +12,9 @@ interface PanelResizeOptions {
   /** Share of the window this panel may not grow past, as a fraction. The two
    *  left panels' shares must sum to at most 0.5: the calendar is what a
    *  growing panel eats, and losing it is why the interface scales its type
-   *  rather than zooming the whole app. Only ever caps growth, never below `min`. */
+   *  rather than zooming the whole app. Only ever caps growth, and never below
+   *  `min` at the current text size — a share is screen px and `min` is base px,
+   *  so comparing them directly renders a panel too narrow for its own text. */
   maxWindowShare: number;
 }
 
@@ -42,7 +44,7 @@ export function usePanelResize({
   const windowWidth = useWindowWidth();
 
   const baseWidth = Math.max(min, Math.min(max, storedBaseWidth));
-  const cap = Math.max(min, Math.floor(windowWidth * maxWindowShare));
+  const cap = Math.max(min * textScale, Math.floor(windowWidth * maxWindowShare));
   const width = Math.min(Math.round(baseWidth * textScale), cap);
 
   const widthRef = useRef(width);
