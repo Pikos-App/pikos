@@ -45,7 +45,7 @@ function makeCollapsedBandPill(
     edge === "top"
       ? bandTop + PILL_OUTER_EDGE_PAD
       : bandTop + bandHeight - pillHeight - PILL_OUTER_EDGE_PAD;
-  return { height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
+  return { countOnly: false, height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
 }
 
 export interface BlockDragStartInfo {
@@ -171,10 +171,11 @@ export function DayColumn({
     return () => ro.disconnect();
   }, []);
 
-  const { pill, visible: visibleBlocks } = collapseUnderWidth(
+  const { pills, visible: visibleBlocks } = collapseUnderWidth(
     blocks,
     columnWidth,
-    metrics.compactBlockHeight
+    metrics.compactBlockHeight,
+    metrics.zoom
   );
   const pagesById = new Map(pages.map((p) => [p.id, p]));
 
@@ -515,7 +516,14 @@ export function DayColumn({
             />
           );
         })}
-        {pill && <OverflowPill onOpen={onPageDoubleClick} pagesById={pagesById} pill={pill} />}
+        {pills.map((pill) => (
+          <OverflowPill
+            key={pill.pageIds[0]}
+            onOpen={onPageDoubleClick}
+            pagesById={pagesById}
+            pill={pill}
+          />
+        ))}
 
         {/* Collapsed-band overflow pills — one per band when there are pages
             whose entire span sits inside a collapsed time range. */}

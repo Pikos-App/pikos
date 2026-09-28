@@ -38,7 +38,8 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
             width: `calc(${pill.widthPct}% - 2px)`,
           }}
         >
-          +{pill.pageIds.length} more
+          +{pill.pageIds.length}
+          {!pill.countOnly && " more"}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-1.5" side="bottom" sideOffset={4}>

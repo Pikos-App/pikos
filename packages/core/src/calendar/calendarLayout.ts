@@ -63,8 +63,8 @@ export interface CalendarBlock {
 }
 
 /**
- * Data the overflow pill needs — separate from CalendarBlock so the pill
- * isn't a synthetic page. The pill replaces the slot of the rightmost
+ * Data an overflow pill needs — separate from CalendarBlock so the pill
+ * isn't a synthetic page. A pill replaces the slot of its cluster's rightmost
  * cascaded under-width event, with a min-width floor so "+N more" stays
  * legible on narrow columns. Renders as a single chip at the slot's top.
  */
@@ -79,6 +79,8 @@ export interface OverflowPill {
   widthPct: number;
   /** Page ids that were collapsed into this pill. */
   pageIds: string[];
+  /** Too narrow for "+N more", so the pill reads "+N". */
+  countOnly: boolean;
 }
 
 // ─── Overflow pill ──────────────────────────────────────────────────────────
@@ -86,39 +88,79 @@ export interface OverflowPill {
 /** Floor on the pill's chip height — below this, "+N more" wraps or clips. */
 const MIN_PILL_HEIGHT_PX = 14;
 
-/** Minimum pixel width for the pill — ensures "+N more" stays legible even
- * when the rightmost-cascaded slot is very narrow. */
+/** Minimum pixel width for the pill at the default zoom — ensures "+N more"
+ * stays legible even when the rightmost-cascaded slot is very narrow. */
 const PILL_MIN_WIDTH_PX = 64;
 
+/** Share of the column the pill may take, so it doesn't cover the event that
+ * stays visible beside it. Where that leaves less than the label needs, the pill
+ * drops the "more" rather than growing or clipping to "+3 mor". */
+const PILL_MAX_WIDTH_PCT = 50;
+
 /**
- * Collapses any blocks that would render narrower than OVERFLOW_MIN_WIDTH_PX
- * into a right-edge "+N more" pill. Returns the surviving blocks plus an
- * optional pill describing the collapsed ones. When `columnWidth <= 0` (no
- * measurement yet) returns the input unchanged so first paint isn't lossy.
+ * Collapses blocks that would render narrower than OVERFLOW_MIN_WIDTH_PX into a
+ * "+N more" pill per overlap cluster. Returns the surviving blocks plus the
+ * pills. When `columnWidth <= 0` (no measurement yet) returns the input
+ * unchanged so first paint isn't lossy.
  *
- * The pill anchors at the topmost collapsed block's `top` so it sits inside
- * the dense cluster rather than floating in empty space.
+ * A cluster's first event never collapses, and each cluster gets its own pill at
+ * its own rightmost collapsed slot. With one pill per day and no survivor, a
+ * 50/50 split whose halves both fell under the width floor vanished entirely,
+ * and its count joined a pill beside some other cluster hours away — a column
+ * narrowing by a pixel or two, as it does when the calendar text grows and
+ * widens the gutter, emptied whole mornings.
+ *
+ * The pill's width floor scales with the text, because its label does.
  */
 export function collapseUnderWidth(
   blocks: CalendarBlock[],
   columnWidth: number,
-  chipHeight: number = COMPACT_BLOCK_HEIGHT
-): { visible: CalendarBlock[]; pill: OverflowPill | null } {
-  if (columnWidth <= 0) return { pill: null, visible: blocks };
-  const collapsed: CalendarBlock[] = [];
-  const visible: CalendarBlock[] = [];
-  for (const b of blocks) {
-    const renderedWidth = (b.widthPct / 100) * columnWidth;
-    const tooDeep = b.cascadeDepth > MAX_VISIBLE_CASCADE_DEPTH;
-    const tooNarrow = renderedWidth < OVERFLOW_MIN_WIDTH_PX;
-    if (tooDeep || tooNarrow) {
-      collapsed.push(b);
-    } else {
-      visible.push(b);
-    }
+  chipHeight: number = COMPACT_BLOCK_HEIGHT,
+  zoom = 1
+): { visible: CalendarBlock[]; pills: OverflowPill[] } {
+  if (columnWidth <= 0) return { pills: [], visible: blocks };
+  const collapsedIds = new Set<string>();
+  const pills: OverflowPill[] = [];
+  for (const cluster of groupByPixelOverlap(blocks)) {
+    const first = cluster.reduce((best, b) =>
+      b.leftPct < best.leftPct || (b.leftPct === best.leftPct && b.top < best.top) ? b : best
+    );
+    const collapsed = cluster.filter(
+      (b) =>
+        b !== first &&
+        (b.cascadeDepth > MAX_VISIBLE_CASCADE_DEPTH ||
+          (b.widthPct / 100) * columnWidth < OVERFLOW_MIN_WIDTH_PX)
+    );
+    if (collapsed.length === 0) continue;
+    for (const b of collapsed) collapsedIds.add(b.page.id);
+    pills.push(pillFor(collapsed, columnWidth, chipHeight, zoom));
   }
-  if (collapsed.length === 0) return { pill: null, visible };
+  if (pills.length === 0) return { pills, visible: blocks };
+  return { pills, visible: blocks.filter((b) => !collapsedIds.has(b.page.id)) };
+}
 
+/** Blocks whose pixel spans connect, the same relation the layout cascades by.
+ *  Each cluster keeps the input order, which is the order a pill lists them in. */
+function groupByPixelOverlap(blocks: CalendarBlock[]): CalendarBlock[][] {
+  const clusterOf = new Map<CalendarBlock, number>();
+  let cluster = -1;
+  let clusterEnd = Number.NEGATIVE_INFINITY;
+  for (const b of [...blocks].sort((x, y) => x.top - y.top)) {
+    if (b.top >= clusterEnd) cluster++;
+    clusterEnd = Math.max(clusterEnd, b.top + b.height);
+    clusterOf.set(b, cluster);
+  }
+  const clusters: CalendarBlock[][] = Array.from({ length: cluster + 1 }, () => []);
+  for (const b of blocks) clusters[clusterOf.get(b)!]!.push(b);
+  return clusters;
+}
+
+function pillFor(
+  collapsed: CalendarBlock[],
+  columnWidth: number,
+  chipHeight: number,
+  zoom: number
+): OverflowPill {
   // Horizontal position: take the slot of the rightmost-cascaded collapsed
   // event. If that slot is too narrow to render "+N more" legibly, expand
   // the pill leftward to a minimum readable width.
@@ -126,7 +168,8 @@ export function collapseUnderWidth(
     (best, b) => (b.leftPct > best.leftPct ? b : best),
     collapsed[0]!
   );
-  const minPillPct = Math.min(50, (PILL_MIN_WIDTH_PX / columnWidth) * 100);
+  const labelPx = PILL_MIN_WIDTH_PX * zoom;
+  const minPillPct = Math.min(PILL_MAX_WIDTH_PCT, (labelPx / columnWidth) * 100);
   const widthPct = Math.max(slotHost.widthPct, minPillPct);
   const leftPct = Math.min(slotHost.leftPct, 100 - widthPct);
 
@@ -136,14 +179,14 @@ export function collapseUnderWidth(
   // never falls below the legible-text floor.
   const height = Math.max(chipHeight, MIN_PILL_HEIGHT_PX);
 
-  const pill: OverflowPill = {
+  return {
+    countOnly: fallsShortOf((widthPct / 100) * columnWidth, labelPx),
     height,
     leftPct,
     pageIds: collapsed.map((b) => b.page.id),
     top: slotHost.top,
     widthPct,
   };
-  return { pill, visible };
 }
 
 // ─── Collapsed-band remap ──────────────────────────────────────────────────

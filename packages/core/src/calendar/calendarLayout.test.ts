@@ -46,9 +46,9 @@ describe("collapseUnderWidth", () => {
 
   it("no measurement (columnWidth=0) → unchanged, no pill", () => {
     const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
-    const { pill, visible } = collapseUnderWidth(blocks, 0);
+    const { pills, visible } = collapseUnderWidth(blocks, 0);
     expect(visible).toBe(blocks);
-    expect(pill).toBe(null);
+    expect(pills).toEqual([]);
   });
 
   it("all blocks above threshold → no pill", () => {
@@ -56,7 +56,7 @@ describe("collapseUnderWidth", () => {
     const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
     const result = collapseUnderWidth(blocks, 200);
     expect(result.visible).toHaveLength(2);
-    expect(result.pill).toBe(null);
+    expect(result.pills).toEqual([]);
   });
 
   it("pill anchors at rightmost collapsed slot, expanded to PILL_MIN_WIDTH_PX", () => {
@@ -64,13 +64,13 @@ describe("collapseUnderWidth", () => {
     // 28px wide), expand left so the pill has a readable 32% width and
     // stays right-anchored. Pill is chip-shaped — anchored at slotHost.top.
     const blocks = [
-      makeBlock("wide", 0, 60),
+      makeBlock("wide", 0, 60, 0, 300),
       makeBlock("n1", 60, 13, 100),
       makeBlock("n2", 73, 13, 200),
       makeBlock("n3", 86, 14, 150),
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 200);
-    expect(visible.map((b) => b.page.id)).toEqual(["wide"]);
+    const [pill] = collapseUnderWidth(blocks, 200).pills;
+    expect(collapseUnderWidth(blocks, 200).visible.map((b) => b.page.id)).toEqual(["wide"]);
     expect(pill?.pageIds).toEqual(["n1", "n2", "n3"]);
     expect(pill?.widthPct).toBe(32);
     expect(pill?.leftPct).toBe(68);
@@ -80,46 +80,53 @@ describe("collapseUnderWidth", () => {
   it("pill widthPct caps at 50% on extremely narrow columns", () => {
     // Column 80px → uncapped floor would be 80%. Cap kicks in at 50%.
     const blocks = [makeBlock("a", 0, 30), makeBlock("b", 30, 30), makeBlock("c", 60, 40)];
-    const { pill } = collapseUnderWidth(blocks, 80);
-    // All three are under the 60px collapse threshold (24, 24, 32 px).
+    const [pill] = collapseUnderWidth(blocks, 80).pills;
+    // All three are under the 60px collapse threshold (24, 24, 32 px); the first stays.
     expect(pill?.widthPct).toBe(50);
     expect(pill?.leftPct).toBe(50);
   });
 
   it("pill height tracks the chipHeight argument so it scales with density", () => {
-    const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
+    const blocks = [
+      makeBlock("h", 0, 50, 0, 300),
+      makeBlock("n1", 50, 20, 100, 40),
+      makeBlock("n2", 70, 20, 200, 60),
+    ];
     // Compact: hourHeight=40 → compactBlockHeight=10, but the floor kicks in.
-    expect(collapseUnderWidth(blocks, 100, 10).pill?.height).toBe(14);
+    expect(collapseUnderWidth(blocks, 100, 10).pills[0]?.height).toBe(14);
     // Normal: hourHeight=64 → compactBlockHeight=16.
-    expect(collapseUnderWidth(blocks, 100, 16).pill?.height).toBe(16);
+    expect(collapseUnderWidth(blocks, 100, 16).pills[0]?.height).toBe(16);
     // Spacious: hourHeight=88 → compactBlockHeight=22.
-    expect(collapseUnderWidth(blocks, 100, 22).pill?.height).toBe(22);
+    expect(collapseUnderWidth(blocks, 100, 22).pills[0]?.height).toBe(22);
   });
 
   it("pill height defaults to COMPACT_BLOCK_HEIGHT when no chipHeight is passed", () => {
-    const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
-    expect(collapseUnderWidth(blocks, 100).pill?.height).toBe(COMPACT_BLOCK_HEIGHT);
+    const blocks = [makeBlock("h", 0, 50, 0, 300), makeBlock("n1", 50, 20, 100, 40)];
+    expect(collapseUnderWidth(blocks, 100).pills[0]?.height).toBe(COMPACT_BLOCK_HEIGHT);
   });
 
   it("uses OVERFLOW_MIN_WIDTH_PX as the threshold", () => {
     // Block at exactly threshold passes; one pixel under collapses.
     const ok = makeBlock("ok", 0, OVERFLOW_MIN_WIDTH_PX);
     const bad = makeBlock("bad", 50, OVERFLOW_MIN_WIDTH_PX - 1);
-    const { pill, visible } = collapseUnderWidth([ok, bad], 100);
+    const { pills, visible } = collapseUnderWidth([ok, bad], 100);
     expect(visible.map((b) => b.page.id)).toEqual(["ok"]);
-    expect(pill?.pageIds).toEqual(["bad"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["bad"]]);
   });
 
   it("conservation: every input block ends up either visible or in the pill", () => {
     // Mixed cluster — wide host, narrow chips of various widthPct/leftPct.
     const blocks = [
-      makeBlock("a", 0, 60), // wide → visible
+      makeBlock("a", 0, 60, 0, 400), // wide → visible
       makeBlock("b", 60, 12, 100), // narrow → collapsed
       makeBlock("c", 72, 14, 200), // narrow → collapsed
       makeBlock("d", 86, 14, 300), // narrow → collapsed
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 200);
-    const seen = new Set<string>([...visible.map((b) => b.page.id), ...(pill?.pageIds ?? [])]);
+    const { pills, visible } = collapseUnderWidth(blocks, 200);
+    const seen = new Set<string>([
+      ...visible.map((b) => b.page.id),
+      ...pills.flatMap((p) => p.pageIds),
+    ]);
     expect(seen.size).toBe(blocks.length);
     for (const b of blocks) expect(seen.has(b.page.id)).toBe(true);
   });
@@ -128,20 +135,20 @@ describe("collapseUnderWidth", () => {
     // One block per cascade depth, all 90 px wide (well above
     // OVERFLOW_MIN_WIDTH_PX) so width never gates collapse — only depth.
     const blocks = [
-      makeBlock("h", 0, 30, 0, 60, 0),
+      makeBlock("h", 0, 30, 0, 600, 0),
       ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) =>
         makeBlock(`v${i + 1}`, (i + 1) * 12, 30, (i + 1) * 50, 60, i + 1)
       ),
       makeBlock("over1", 60, 30, 400, 60, MAX_VISIBLE_CASCADE_DEPTH + 1),
       makeBlock("over2", 72, 30, 450, 60, MAX_VISIBLE_CASCADE_DEPTH + 2),
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 300);
+    const { pills, visible } = collapseUnderWidth(blocks, 300);
     const expectedVisible = [
       "h",
       ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) => `v${i + 1}`),
     ];
     expect(visible.map((b) => b.page.id)).toEqual(expectedVisible);
-    expect(pill?.pageIds).toEqual(["over1", "over2"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["over1", "over2"]]);
   });
 
   it("depth ≤ MAX_VISIBLE_CASCADE_DEPTH stays visible regardless of column width", () => {
@@ -154,8 +161,40 @@ describe("collapseUnderWidth", () => {
         makeBlock(`v${i + 1}`, 50, 50, (i + 1) * 50, 60, i + 1)
       ),
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 100);
-    expect(visible.length + (pill?.pageIds.length ?? 0)).toBe(blocks.length);
+    const { pills, visible } = collapseUnderWidth(blocks, 100);
+    expect(visible.length + pills.flatMap((p) => p.pageIds).length).toBe(blocks.length);
+  });
+
+  it("gives each overlap cluster its own pill, in that cluster", () => {
+    const blocks = [
+      makeBlock("morning", 0, 50, 100, 90),
+      makeBlock("morning-guest", 50, 50, 120, 60),
+      makeBlock("noon", 0, 50, 500, 90),
+      makeBlock("noon-guest", 50, 50, 520, 60),
+    ];
+    const { pills, visible } = collapseUnderWidth(blocks, 110);
+    expect(visible.map((b) => b.page.id)).toEqual(["morning", "noon"]);
+    expect(pills.map((p) => [p.pageIds, p.top])).toEqual([
+      [["morning-guest"], 120],
+      [["noon-guest"], 520],
+    ]);
+  });
+
+  it("keeps a cluster's first event when every block in it is too narrow", () => {
+    const blocks = [makeBlock("left", 0, 50, 100), makeBlock("right", 50, 50, 100)];
+    const { pills, visible } = collapseUnderWidth(blocks, 110);
+    expect(visible.map((b) => b.page.id)).toEqual(["left"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["right"]]);
+  });
+
+  it('widens the pill with the text, and drops the "more" past half the column', () => {
+    const blocks = [makeBlock("h", 0, 80, 0, 300), makeBlock("n", 80, 20, 100)];
+    const atDefault = collapseUnderWidth(blocks, 200, 16, 1).pills[0];
+    expect([atDefault?.widthPct, atDefault?.countOnly]).toEqual([32, false]);
+    const zoomed = collapseUnderWidth(blocks, 200, 16, 1.5).pills[0];
+    expect([zoomed?.widthPct, zoomed?.countOnly]).toEqual([48, false]);
+    const capped = collapseUnderWidth(blocks, 200, 16, 2).pills[0];
+    expect([capped?.widthPct, capped?.countOnly]).toEqual([50, true]);
   });
 });
 
