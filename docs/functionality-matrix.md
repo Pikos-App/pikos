@@ -531,8 +531,8 @@ occurrence (⁵³). `pikos list --due` was always denorm-based.
 ⁵⁵ Not built. `pages.links` is a write-through JSON column nothing populates or renders;
 there's no `[[` editor affordance and no backlink computation anywhere (the only Tiptap link
 extension is external URLs). Markdown import preserves `[[wikilinks]]` as plain text.
-⁵⁶ The UI's three exports are Markdown, **CSV** and a SQLite backup. A JSON export command
-exists in Rust with no UI caller and takes no origin filter. Markdown/CSV read `pages` minus
+⁵⁶ The UI's three exports are Markdown, **CSV** and a SQLite backup. There is no JSON
+export, in the interface or behind it. Markdown/CSV read `pages` minus
 trash (done included) and drop a live mirror the user never actioned, on the same ownership
 predicate teardown uses (`sync::PAGE_OWNED_SQL`); an off-by-default "include synced calendar
 events" toggle, shown only once a calendar folder exists, brings them back. Owned and detached
@@ -701,7 +701,8 @@ the background pass skips it outright rather than spending a 401 per pass. "Resy
 regardless of the flag and clears it on the first clean sync, so a manual retry is what takes
 the badge down.
 ⁷⁹ `release_all_credentials` runs before the wipe, dormant accounts included. Their ids are the
-keychain keys and the rows are about to go. `reset_db` (dev-only) misses the dormant sweep.
+keychain keys and the rows are about to go. The dev-only `reset_db` goes through the same path,
+so it sweeps dormant rows too.
 
 ---
 
