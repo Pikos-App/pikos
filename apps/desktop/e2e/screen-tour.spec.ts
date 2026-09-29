@@ -867,3 +867,29 @@ test("11 Text size @tour", async ({ page }) => {
     );
   });
 });
+
+/** The density × text-size cells, because the two multiply and a cell fails on its own.
+ *  Density sets the hour height and the text size sets a zoom over everything in a block,
+ *  so a block that reads correctly at normal × 14 can still clip at compact × 28: the
+ *  contents grew while the height, which comes from the event's duration, did not grow
+ *  with them. Section 11 moves one axis at a time and cannot see that. */
+const DENSITIES = ["compact", "normal", "spacious"] as const;
+const LADDER = [10, 14, 20, 28] as const;
+
+test("12 Calendar density and zoom @tour", async ({ page }) => {
+  await tour(page, "12 Calendar density and zoom", async (t) => {
+    let order = 0;
+    for (const density of DENSITIES) {
+      for (const size of LADDER) {
+        order += 1;
+        await t.capture(order, `${density} at ${String(size)}px`, () =>
+          t.launch({
+            ...CALENDAR,
+            "pikos:calendarDensity": density,
+            "pikos:calendarTextSize": size,
+          })
+        );
+      }
+    }
+  });
+});
