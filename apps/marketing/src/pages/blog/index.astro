@@ -5,7 +5,6 @@ import Footer from "../../components/Footer.astro";
 
 
 const visible = published();
-const tags = [...new Set(visible.map((p) => p.tag))];
 ---
 
 <Base title="Blog - Pikos" description="Articles about Pikos: the app, the architecture, the philosophy.">
@@ -21,27 +20,9 @@ const tags = [...new Set(visible.map((p) => p.tag))];
     <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Blog</h1>
     <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Honest writing about building Pikos: the app, the decisions, the trade-offs.</p>
 
-    <!-- Tag filters -->
-    <div class="mt-6 flex flex-wrap gap-2">
-      <button
-        data-tag="all"
-        class="tag-filter cursor-pointer rounded-full border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-600 transition-colors hover:border-primary-400 hover:text-primary-500 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-primary-500/40 dark:hover:text-primary-400"
-      >
-        All
-      </button>
-      {tags.map((tag) => (
-        <button
-          data-tag={tag}
-          class="tag-filter cursor-pointer rounded-full border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-600 transition-colors hover:border-primary-400 hover:text-primary-500 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-primary-500/40 dark:hover:text-primary-400"
-        >
-          {tag}
-        </button>
-      ))}
-    </div>
-
     <div class="mt-10 space-y-6" id="posts">
       {visible.map((post) => (
-        <article class="group" data-post-tag={post.tag}>
+        <article class="group">
           <a href={`/blog/${post.slug}`} class="block rounded-lg border border-neutral-100 bg-white px-6 py-5 transition-colors hover:border-primary-400/30 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40">
             <div class="flex items-center gap-2">
               <time class="text-xs text-neutral-400 dark:text-neutral-500" datetime={post.date}>
@@ -62,49 +43,4 @@ const tags = [...new Set(visible.map((p) => p.tag))];
   <Footer />
 </Base>
 
-<style>
 
-  .tag-filter[data-active] {
-    border-color: var(--color-primary-500);
-    color: var(--color-primary-500);
-    background-color: color-mix(in srgb, var(--color-primary-400) 10%, transparent);
-  }
-
-  :global(html.dark) .tag-filter[data-active] {
-    border-color: var(--color-primary-400);
-    color: var(--color-primary-400);
-    background-color: color-mix(in srgb, var(--color-primary-400) 10%, transparent);
-  }
-</style>
-
-<script>
-  const buttons = document.querySelectorAll<HTMLButtonElement>(".tag-filter");
-  const articles = document.querySelectorAll<HTMLElement>("#posts article");
-
-  function setFilter(tag: string) {
-    buttons.forEach((btn) => {
-      if (btn.dataset.tag === tag) {
-        btn.setAttribute("data-active", "");
-      } else {
-        btn.removeAttribute("data-active");
-      }
-    });
-
-    articles.forEach((article) => {
-      if (tag === "all" || article.dataset.postTag === tag) {
-        article.style.display = "";
-      } else {
-        article.style.display = "none";
-      }
-    });
-  }
-
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setFilter(btn.dataset.tag!);
-    });
-  });
-
-  // Default: show all
-  setFilter("all");
-</script>
