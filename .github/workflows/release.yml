@@ -155,6 +155,26 @@ jobs:
           PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
           PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
 
+      # Tauri notarizes and staples the .app, then builds the .dmg around the stapled copy. The
+      # disk image itself is never submitted, so it carries no ticket of its own — and a stapled
+      # app inside an unstapled .dmg still warns on first open, on exactly the machine that cannot
+      # reach Apple to ask. The .dmg is what people download, so it gets its own ticket.
+      - name: Notarize and staple the .dmg
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          dmg=$(find "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" \
+                  -maxdepth 1 -name "*.dmg" | head -1)
+          [ -n "$dmg" ] || { echo "::error::no .dmg to notarize"; exit 1; }
+          xcrun notarytool submit "$dmg" \
+            --key "$RUNNER_TEMP/apple-api-key.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$dmg"
+
       # The guard above proves the secrets were present; this proves they worked.
       # Signing and notarization can both fail into a build that still succeeds —
       # an expired certificate, a revoked key, a notarization ticket that never
