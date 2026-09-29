@@ -25,7 +25,14 @@ set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq xvfb dbus-x11 imagemagick x11-apps libgl1-mesa-dri >/dev/null 2>&1
-apt-get install -y -qq /artifacts/*.deb >/dev/null 2>&1
+
+# Tauri nests what it builds under the bundle directory, and that directory is what gets mounted
+# at /artifacts, so a glob at the mount root matches nothing and apt is handed the literal path.
+# It fails with exit 100 and, with stderr silenced, prints nothing at all — which reads exactly
+# like the app failing to paint. Find the package wherever it sits, and let apt's errors through.
+deb=$(find /artifacts -name '*.deb' | head -1)
+[ -n "$deb" ] || { echo "no .deb under /artifacts"; exit 1; }
+apt-get install -y -qq "$deb" >/dev/null
 
 # No GPU in a container, and WebKit's bubblewrap sandbox needs privileges a container does not
 # hand out. Both are about running here at all, not about what is being tested.
