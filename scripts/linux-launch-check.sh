@@ -24,11 +24,13 @@ cat > "$probe" <<'INNER'
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-# desktop-file-utils is here because the app registers its URL scheme on start and shells out to
-# `update-desktop-database`. Every real desktop ships it; a bare container does not, so without it
-# the app logs an error it would never log on a user's machine and the zero-errors check below
-# fails on the rig rather than on the build.
-apt-get install -y -qq xvfb dbus-x11 imagemagick x11-apps libgl1-mesa-dri desktop-file-utils >/dev/null 2>&1
+# desktop-file-utils and xdg-utils are here because the app registers its URL scheme on start, and
+# tauri-plugin-deep-link shells out to exactly two commands to do it: `update-desktop-database` and
+# `xdg-mime`. Every real desktop ships both; a bare container ships neither, so without them the app
+# logs errors it would never log on a user's machine and the zero-errors check below fails on the
+# rig rather than on the build.
+apt-get install -y -qq xvfb dbus-x11 imagemagick x11-apps libgl1-mesa-dri desktop-file-utils \
+  xdg-utils >/dev/null 2>&1
 
 # Tauri nests what it builds under the bundle directory, and that directory is what gets mounted
 # at /artifacts, so a glob at the mount root matches nothing and apt is handed the literal path.
