@@ -1,11 +1,10 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { invoke } from "@tauri-apps/api/core";
 import Image from "@tiptap/extension-image";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import { postNotice } from "@/shared/events/noticeBus";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("PikosImage");
 
@@ -19,15 +18,15 @@ function isImageFile(filename: string): boolean {
 }
 
 async function uploadFromPath(path: string): Promise<string> {
-  return invoke<string>("save_asset", { sourcePath: path });
+  return getPlatform().saveAsset(path);
 }
 
 async function uploadFromBytes(data: Uint8Array, ext: string): Promise<string> {
-  return invoke<string>("save_asset_bytes", { data: Array.from(data), ext });
+  return getPlatform().saveAssetBytes(data, ext);
 }
 
 function assetUrl(absolutePath: string): string {
-  return convertFileSrc(absolutePath);
+  return getPlatform().assetUrl(absolutePath);
 }
 
 async function handleFiles(files: File[], view: EditorView, pos?: number): Promise<boolean> {
@@ -184,21 +183,11 @@ export const PikosImage = Image.extend({
 });
 
 export async function insertImageFromDialog(view: EditorView): Promise<void> {
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const selected = await open({
-    filters: [
-      {
-        extensions: IMAGE_EXTENSIONS,
-        name: "Images",
-      },
-    ],
-    multiple: false,
+  const filePath = await getPlatform().pickFile({
+    extensions: [...IMAGE_EXTENSIONS],
+    filterName: "Images",
     title: "Select an image",
   });
-
-  if (!selected) return;
-
-  const filePath = typeof selected === "string" ? selected : selected[0];
   if (!filePath) return;
 
   try {

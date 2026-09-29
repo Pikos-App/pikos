@@ -1,0 +1,44 @@
+# The subject line, and only the subject line. `type(scope): subject`, lowercase,
+# imperative, no trailing period — `~/.claude/rules/commits.md` owns the format
+# and this enforces the half a regex can see.
+#
+# Worth having because the log had drifted to 103 of 400 commits outside the set,
+# with `bug` (55) more common than `fix` (43) and `feature` (44) more common than
+# `feat` (51). Nothing read a commit message before this.
+#
+# `release:` is the one type outside Conventional Commits, and only release.sh
+# writes it. Merges and reverts carry git's own wording and are left alone.
+
+subject=$(head -1 "$1")
+
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*|"#"*) exit 0 ;;
+esac
+
+if printf '%s' "$subject" | grep -qE '^release: v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+  exit 0
+fi
+
+types='feat|fix|docs|refactor|test|perf|chore|build|ci'
+
+if ! printf '%s' "$subject" | grep -qE "^($types)(\([a-z0-9,/-]+\))?: .+"; then
+  echo "✗ commit message: '$subject'"
+  echo ""
+  echo "  Wanted: type(scope): subject   — scope optional, lowercase"
+  echo "  Types:  feat fix docs refactor test perf chore build ci"
+  echo ""
+  echo "  Not 'feature' (that is feat), not 'bug' or 'update' (that is fix),"
+  echo "  not 'style' (that is refactor or chore)."
+  exit 1
+fi
+
+if printf '%s' "$subject" | grep -qE '^[a-z]+(\([a-z0-9,/-]+\))?: [A-Z]'; then
+  echo "✗ commit message starts its subject with a capital: '$subject'"
+  echo "  Lowercase, imperative: 'fix(sync): drain pages added mid-teardown'"
+  exit 1
+fi
+
+if printf '%s' "$subject" | grep -qE '\.$'; then
+  echo "✗ commit message ends in a period: '$subject'"
+  exit 1
+fi

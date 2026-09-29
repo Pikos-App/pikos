@@ -1,4 +1,17 @@
-import type { PageSummary } from "@pikos/core";
+import type { CalendarBlock, OverflowPill as OverflowPillData, PageSummary } from "@pikos/core";
+import {
+  buildDayBlocks,
+  collapsedBandPillHeight,
+  collapseUnderWidth,
+  COMPACT_MODE_WIDTH_PX,
+  DRAG_THRESHOLD,
+  formatTimeRange,
+  GRID_END_HOUR,
+  GRID_START_HOUR,
+  mapHourToY,
+  mapYToDate,
+  remapBlocksForCollapse,
+} from "@pikos/core";
 import { isSameDay } from "date-fns";
 import { Check } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -8,21 +21,6 @@ import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { chipFolderStyle } from "../utils/calendarColors";
-import {
-  COMPACT_MODE_WIDTH_PX,
-  DRAG_THRESHOLD,
-  GRID_END_HOUR,
-  GRID_START_HOUR,
-} from "../utils/calendarConstants";
-import { collapsedBandPillHeight, mapHourToY, mapYToDate } from "../utils/calendarGeometry";
-import {
-  buildDayBlocks,
-  type CalendarBlock,
-  collapseUnderWidth,
-  type OverflowPill as OverflowPillData,
-  remapBlocksForCollapse,
-} from "../utils/calendarLayout";
-import { formatTimeRange } from "../utils/calendarTimeFormat";
 import { NowIndicator } from "./NowIndicator";
 import { OverflowPill } from "./OverflowPill";
 import { PageBlock } from "./PageBlock";
@@ -47,7 +45,7 @@ function makeCollapsedBandPill(
     edge === "top"
       ? bandTop + PILL_OUTER_EDGE_PAD
       : bandTop + bandHeight - pillHeight - PILL_OUTER_EDGE_PAD;
-  return { height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
+  return { countOnly: false, height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
 }
 
 export interface BlockDragStartInfo {
@@ -141,7 +139,7 @@ export function DayColumn({
     bottomCollapsedPageIds,
     topCollapsedPageIds,
     visible: blocks,
-  } = remapBlocksForCollapse(rawBlocks, geometry);
+  } = remapBlocksForCollapse(rawBlocks, geometry, metrics.compactBlockHeight);
   const showNowIndicator = isCurrentWeek && isSameDay(now, day);
   const weekend = day.getDay() === 0 || day.getDay() === 6;
 
@@ -173,10 +171,11 @@ export function DayColumn({
     return () => ro.disconnect();
   }, []);
 
-  const { pill, visible: visibleBlocks } = collapseUnderWidth(
+  const { pills, visible: visibleBlocks } = collapseUnderWidth(
     blocks,
     columnWidth,
-    metrics.compactBlockHeight
+    metrics.compactBlockHeight,
+    metrics.zoom
   );
   const pagesById = new Map(pages.map((p) => [p.id, p]));
 
@@ -184,10 +183,21 @@ export function DayColumn({
 
   const dragRef = useRef<{ startY: number; isDragging: boolean } | null>(null);
 
-  function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!e.isPrimary || e.button !== 0) return;
     // Don't create a block if a context menu is open — the click is targeting the menu.
     if (document.querySelector('[role="menu"]')) return;
+    // Presses that belong to something else: an event block, the overflow pill,
+    // a collapsed-band expander — or, since React bubbles portal events through
+    // the component tree rather than the DOM one, a popover rendered outside
+    // this column entirely.
+    //
+    // Filtered here rather than by calling stopPropagation() at each of those
+    // controls: pointerdown is also how Radix decides an open popover was
+    // dismissed from outside, so swallowing it there would strand it open.
+    const target = e.target as HTMLElement;
+    if (!containerRef.current?.contains(target)) return;
+    if (target.closest("[data-cal-page-id],[data-cal-no-create]")) return;
     // Commit any open popover's title input: e.preventDefault() below suppresses
     // the default focus/blur behavior, so we must flush it manually before the
     // input unmounts — otherwise the typed title is lost and the auto-created
@@ -200,8 +210,8 @@ export function DayColumn({
     const startY = e.clientY - rect.top;
     dragRef.current = { isDragging: false, startY };
 
-    function onMouseMove(ev: MouseEvent) {
-      if (!dragRef.current) return;
+    function onPointerMove(ev: PointerEvent) {
+      if (!ev.isPrimary || !dragRef.current) return;
       const currentRect = containerRef.current?.getBoundingClientRect();
       if (!currentRect) return;
       const currentY = ev.clientY - currentRect.top;
@@ -219,21 +229,21 @@ export function DayColumn({
       }
     }
 
-    function onMouseUp(ev: MouseEvent) {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+    function onPointerUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       if (!dragRef.current) return;
 
-      const { isDragging, startY: mouseDownY } = dragRef.current;
+      const { isDragging, startY: pressY } = dragRef.current;
       dragRef.current = null;
       setDraft(null);
 
       const currentRect = containerRef.current?.getBoundingClientRect();
-      const upY = currentRect ? ev.clientY - currentRect.top : mouseDownY;
-      const start = mapYToDate(mouseDownY, day, geometry);
+      const upY = currentRect ? ev.clientY - currentRect.top : pressY;
+      const start = mapYToDate(pressY, day, geometry);
 
       if (isDragging) {
-        const endY = Math.max(upY, mouseDownY + minDragHeight);
+        const endY = Math.max(upY, pressY + minDragHeight);
         const end = mapYToDate(endY, day, geometry);
         void onCreatePage(day, start, end > start ? end : undefined);
       } else {
@@ -241,15 +251,30 @@ export function DayColumn({
         // `blocks` includes both visible blocks AND those collapsed into the
         // overflow pill, so clicks above or below the pill (which sit on top
         // of collapsed-event slots) don't fire phantom pages.
-        const yOccupied = blocks.some((b) => mouseDownY >= b.top && mouseDownY <= b.top + b.height);
+        const yOccupied = blocks.some((b) => pressY >= b.top && pressY <= b.top + b.height);
         if (!yOccupied) {
           void onCreatePage(day, start);
         }
       }
     }
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    /** Platform-cancelled gesture — drop the draft, create nothing. */
+    function onPointerCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      dragRef.current = null;
+      setDraft(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
   }
 
   return (
@@ -302,10 +327,9 @@ export function DayColumn({
           Add). Tab/focus support deferred to the post-launch a11y backlog. Can't use
           role="button" here — it would nest inside the interactive page
           blocks rendered as children. */}
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-only drag-to-create; kbd path is Cmd+N */}
       <div
         className={cn("relative cursor-cell", isDropTarget && "bg-accent/30")}
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         ref={containerRef}
         style={{ height: metrics.gridHeight }}
       >
@@ -322,11 +346,11 @@ export function DayColumn({
               "absolute inset-x-0 top-0 cursor-pointer",
               hoveredBand === "top" && "bg-foreground/[0.04]"
             )}
+            data-cal-no-create
             onClick={(e) => {
               e.stopPropagation();
               setTopCollapsed(false);
             }}
-            onMouseDown={(e) => e.stopPropagation()}
             onMouseEnter={() => setHoveredBand("top")}
             onMouseLeave={() => setHoveredBand(null)}
             style={{ height: geometry.topBandHeight }}
@@ -340,11 +364,11 @@ export function DayColumn({
               "absolute inset-x-0 cursor-pointer",
               hoveredBand === "bottom" && "bg-foreground/[0.04]"
             )}
+            data-cal-no-create
             onClick={(e) => {
               e.stopPropagation();
               setBottomCollapsed(false);
             }}
-            onMouseDown={(e) => e.stopPropagation()}
             onMouseEnter={() => setHoveredBand("bottom")}
             onMouseLeave={() => setHoveredBand(null)}
             style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}
@@ -379,6 +403,7 @@ export function DayColumn({
                 ? "flex items-center gap-1 px-1.5"
                 : "flex flex-col items-start px-1.5 py-0.5"
             )}
+            data-drag-ghost
             style={{
               height: dragGhost.height,
               left: 2,
@@ -391,19 +416,13 @@ export function DayColumn({
               <>
                 <span
                   className={cn(
-                    "flex shrink-0 items-center justify-center rounded-[2px] border",
-                    dragGhost.height < 16 ? "h-2.5 w-2.5" : "h-3.5 w-3.5",
+                    "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
                     dragGhost.isDone ? "border-foreground/40 bg-foreground/10" : "border-current/30"
                   )}
                 >
                   {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
                 </span>
-                <span
-                  className={cn(
-                    "min-w-0 truncate font-medium text-foreground",
-                    dragGhost.height < 16 ? "-mt-px text-[10px] leading-none" : "type-body-sm"
-                  )}
-                >
+                <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
                   {dragGhost.title || "Untitled"}
                 </span>
               </>
@@ -451,6 +470,12 @@ export function DayColumn({
               ? Math.max(resizeGhost.bottom - block.top, 0)
               : undefined;
 
+          // Virtual/override occurrences share the series page id, so a moved
+          // override and a same-day occurrence of the same series would collide
+          // on a bare id key — disambiguate by occurrence date.
+          const occDate = (block.page as { originalDate?: string }).originalDate;
+          const blockKey = occDate ? `${block.page.id}:${occDate}` : block.page.id;
+
           return (
             <PageBlock
               autoOpenPopover={autoOpen}
@@ -458,7 +483,7 @@ export function DayColumn({
               folderColor={folderColor}
               isCompactWidth={isCompactWidth}
               isDragging={isBeingDragged}
-              key={block.page.id}
+              key={blockKey}
               onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
               onDragStart={(_clientX, clientY) => {
@@ -485,7 +510,14 @@ export function DayColumn({
             />
           );
         })}
-        {pill && <OverflowPill onOpen={onPageDoubleClick} pagesById={pagesById} pill={pill} />}
+        {pills.map((pill) => (
+          <OverflowPill
+            key={pill.pageIds[0]}
+            onOpen={onPageDoubleClick}
+            pagesById={pagesById}
+            pill={pill}
+          />
+        ))}
 
         {/* Collapsed-band overflow pills — one per band when there are pages
             whose entire span sits inside a collapsed time range. */}

@@ -190,6 +190,63 @@ async fn tag_match_returns_result() {
 }
 
 #[tokio::test]
+async fn a_metadata_only_hit_quotes_the_metadata() {
+    let pool = test_pool().await;
+    seed_pages(&pool).await;
+    insert_test_page(&pool, TestPage::new("p9", "Standup"))
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE pages SET mirror_search_text = 'Weyland Room' || CHAR(10) || 'priya@example.com'
+         WHERE id = 'p9'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    for query in ["weyland", "priya"] {
+        let resp = search_pages_impl(&pool, query.into(), None).await.unwrap();
+        let hit = resp
+            .results
+            .iter()
+            .find(|r| r.id == "p9")
+            .unwrap_or_else(|| panic!("{query} missed p9"));
+        assert!(
+            hit.excerpt.to_lowercase().contains(query),
+            "{query} excerpt: {:?}",
+            hit.excerpt
+        );
+        assert_eq!(
+            hit.match_source, "content",
+            "{query}: this label hides the excerpt"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_body_hit_outranks_the_metadata_for_the_excerpt() {
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            content_text: "moved to the annex",
+            ..TestPage::new("p1", "Standup")
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE pages SET mirror_search_text = 'Annex Room' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let resp = search_pages_impl(&pool, "annex".into(), None)
+        .await
+        .unwrap();
+    assert_eq!(resp.results[0].excerpt, "moved to the annex");
+}
+
+#[tokio::test]
 async fn empty_query_returns_empty() {
     let pool = test_pool().await;
     seed_pages(&pool).await;
@@ -218,6 +275,51 @@ fn build_excerpt_strips_title_and_subtitle() {
     );
     assert!(!out.starts_with("My Page"), "title leaked: {out:?}");
     assert!(out.contains("morning"), "{out:?}");
+}
+
+/// Two blocks of a page are two sentences, and HTML would fold the newline between them into a
+/// space: "the alcove Order the desktop top" reads as one phrase nobody wrote.
+#[test]
+fn build_excerpt_joins_blocks_rather_than_running_them_together() {
+    let body = "My Page\nMeasure the alcove\n\nOrder the desktop top";
+    let out = build_excerpt(Some(body), "My Page", None, &["alcove".into()]);
+    assert_eq!(out, "Measure the alcove \u{00B7} Order the desktop top");
+}
+
+/// A pasted URL is a word with no whitespace in it, so the edge the window wanted has no
+/// boundary to snap to. Cutting there is what makes an excerpt read as corrupted data.
+#[test]
+fn build_excerpt_never_cuts_a_word_in_half() {
+    // The hit sits far enough into the URL that the window's left edge lands inside it.
+    let body = "My Page\nSee https://example.com/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/motorized-standing-desk";
+    let out = build_excerpt(Some(body), "My Page", None, &["motorized".into()]);
+
+    let first = out.trim_start_matches('\u{2026}');
+    assert!(
+        first.starts_with("https://"),
+        "excerpt starts inside a word: {out:?}"
+    );
+}
+
+/// The window has to hold the match. Snapping inward on a body with one space closed both
+/// edges onto it and returned an excerpt of the wrong part of the page.
+#[test]
+fn build_excerpt_keeps_the_match_when_the_body_has_one_space() {
+    let body = "My Page\nSee ".to_string() + &"a".repeat(200) + "motorized" + &"b".repeat(200);
+    let out = build_excerpt(Some(&body), "My Page", None, &["motorized".into()]);
+    assert!(out.contains("motorized"), "{out:?}");
+}
+
+/// A mirror's metadata gets the same treatment, and it is the half a blank line tells apart:
+/// replacing every newline would leave an empty block between two separators.
+#[test]
+fn build_mirror_excerpt_joins_blocks_rather_than_running_them_together() {
+    let metadata = "Weyland Room  \n\n priya@example.com \nstandup";
+    let out = build_mirror_excerpt(Some(metadata), &["priya".into()]);
+    assert_eq!(
+        out,
+        "Weyland Room \u{00B7} priya@example.com \u{00B7} standup"
+    );
 }
 
 #[test]

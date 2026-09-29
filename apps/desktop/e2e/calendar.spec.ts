@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { test as appTest, expect, quickAdd } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
   // Click the right-panel header's "Calendar view" button rather than firing
@@ -225,6 +225,53 @@ appTest("drag right edge of multi-day chip extends the span @tier2", async ({ ap
   const extendedBox = await chips.first().boundingBox();
   if (!extendedBox) throw new Error("chip missing after resize");
   expect(extendedBox.width).toBeGreaterThan(chipBox.width);
+});
+
+appTest("all-day chip renders at its declared bar height @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+  const at = await centerOf(lastAllDayColumn(app));
+  await app.mouse.move(at.x, at.y);
+  await app.mouse.down();
+  await app.mouse.up();
+  await app.getByPlaceholder("Untitled").fill("Height check");
+  await app.keyboard.press("Enter");
+
+  const chip = calendarRegion(app).getByRole("button", { name: "Height check" }).first();
+  await expect(chip).toBeVisible();
+  const box = await chip.boundingBox();
+  if (!box) throw new Error("chip missing");
+  // ALL_DAY_BAR_HEIGHT, which the absolute row pitch is derived from. Asserted in
+  // a real browser because the height arrives as a Tailwind utility: declare the
+  // class somewhere Tailwind does not scan and it silently generates no rule,
+  // leaving the chip to collapse to its text height with the class still on it.
+  expect(box.height).toBe(19);
+});
+
+appTest("drag bottom edge of a timed block resizes without moving it @tier2", async ({ app }) => {
+  await quickAdd(app, "Standup today 10am");
+  await openCalendarMode(app);
+
+  const block = app.locator("[data-cal-page-id]").filter({ hasText: "Standup" }).first();
+  await expect(block).toBeVisible();
+  // The grid opens scrolled to an hour before now, so a fixed 10am block sits
+  // above the viewport for most of the day and the press below lands at a
+  // negative y. toBeVisible() does not catch it — the block is rendered and
+  // unclipped, just outside the scroll port.
+  await block.scrollIntoViewIfNeeded();
+  const before = await block.boundingBox();
+  if (!before) throw new Error("block missing");
+
+  await app.mouse.move(before.x + before.width / 2, before.y + before.height - 2);
+  await app.mouse.down();
+  await app.mouse.move(before.x + before.width / 2, before.y + before.height + 60, { steps: 10 });
+  await app.mouse.up();
+
+  const after = await block.boundingBox();
+  if (!after) throw new Error("block missing after resize");
+  // Grew downward and kept its start: a handle press that also armed the
+  // block's move drag would slide the top edge instead.
+  expect(after.height).toBeGreaterThan(before.height);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(4);
 });
 
 appTest(
@@ -583,4 +630,41 @@ appTest("Jump to current week button returns to today's week @tier2", async ({ a
   await todayBtn.click();
   await expect(heading).toHaveText(initialLabel ?? "");
   await expect(todayBtn).toBeDisabled();
+});
+
+// ─── Restoring is not creating ──────────────────────────────────────────────
+
+/** Restoring a page must not look like making one.
+ *
+ *  The auto-open above is keyed on the created page's id, and the block clears
+ *  that claim by reporting its popover closed. Deleting the page from inside that
+ *  very popover unmounts the block before it can, so the id stayed pointed at a
+ *  page now sitting in the trash — and restoring it matched again, reopening the
+ *  naming popover with the empty-title cleanup still wired to dismissing it. */
+appTest("a page restored from the trash opens no popover @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+  await lastAllDayColumn(app).click();
+
+  const titleInput = app.getByPlaceholder("Untitled");
+  await titleInput.fill("Restored not created");
+  await app.keyboard.press("Enter");
+  await expect(titleInput).not.toBeVisible();
+
+  // Delete from the block's own popover, which is the path that strands the claim.
+  await calendarRegion(app).getByText("Restored not created").click();
+  await app.getByRole("button", { name: "Delete" }).click();
+  await expect(calendarRegion(app).getByText("Restored not created")).not.toBeVisible();
+
+  // Let the undo toast lapse before restoring. While it is up the page is held in
+  // the hidden set, so a restore would be invisible for reasons of its own.
+  const toast = app.getByRole("alert", { name: /Restored not created/ });
+  await expect(toast).toBeVisible();
+  await expect(toast).not.toBeVisible({ timeout: 15_000 });
+
+  await app.getByRole("button", { exact: true, name: "Trash" }).click();
+  await app.getByRole("button", { name: "Restore Restored not created" }).click();
+
+  await openCalendarMode(app);
+  await expect(calendarRegion(app).getByText("Restored not created")).toBeVisible();
+  await expect(app.getByPlaceholder("Untitled")).not.toBeVisible();
 });

@@ -1,4 +1,4 @@
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 /**
  * Virtualized list tests — validates that keyboard navigation,

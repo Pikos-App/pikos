@@ -1,17 +1,11 @@
 // Renders in the settings content area (sidebar remains visible), not a modal.
 
+import type { ColumnMapping, CSVMappingConfig, PikosFieldKey, ValueMapping } from "@pikos/core";
+import { detectUniqueValues, suggestValueMappings } from "@pikos/core";
 import { ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
-
-import { detectUniqueValues, suggestValueMappings } from "../parsers/csv";
-import type {
-  ColumnMapping,
-  CSVMappingConfig,
-  PikosFieldKey,
-  ValueMapping,
-} from "../parsers/types";
 
 const PIKOS_FIELDS: { key: PikosFieldKey; label: string }[] = [
   { key: "title", label: "Title" },
@@ -147,10 +141,10 @@ export function CSVColumnMappingPage({
           <h2 className="text-lg font-semibold">Map CSV Columns</h2>
           <p className="text-sm text-muted-foreground">
             {initialConfig.detectedSource
-              ? `Auto-detected as ${initialConfig.detectedSource} — `
+              ? `Auto-detected as ${initialConfig.detectedSource}. `
               : ""}
             {mappedCount} of {headers.length} columns mapped
-            {!hasTitleMapped && <span className="ml-2 text-yellow-500">— Title is required</span>}
+            {!hasTitleMapped && <span className="ml-2 text-yellow-500">Title is required</span>}
           </p>
         </div>
       </div>
@@ -201,7 +195,7 @@ export function CSVColumnMappingPage({
                 <div className="w-40 shrink-0">
                   <p className="text-sm font-medium">{cm.csvHeader}</p>
                   {cm.sampleValues.length > 0 && (
-                    <p className="truncate font-mono text-[11px] text-muted-foreground">
+                    <p className="truncate font-mono text-2xs text-muted-foreground">
                       {cm.sampleValues[0]}
                     </p>
                   )}

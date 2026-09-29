@@ -1,0 +1,93 @@
+# Pikos
+
+> Notes, tasks, and calendar as one thing, in a desktop app that runs on your computer.
+
+Pikos is a desktop app for macOS and Linux in which a note, a task, and a calendar event are the same page. All data stays on the user's computer. No account, no sign-up, no subscription, and no Pikos server. The version a user downloads keeps working, because there is no server to switch off.
+
+## Key Facts
+
+- Category: Productivity / Notes / Task Management / Calendar
+- Platform: macOS and Linux
+- Pricing: Free desktop download (no limits, no trial). A Mac App Store version (with iCloud sync) and an iPhone app are planned, each a one-time purchase. No subscriptions. A $29 Backer pre-order is available at pikos.app/backer for early supporters; backers receive the paid App Store apps free when they ship.
+- Data: Stored on the user's computer. Export any time to Markdown, CSV, or calendar files.
+- Privacy: No telemetry, no tracking cookies, no personal data collection.
+- Source: Source-available. Full code public on GitHub (not open-source licensed).
+- Website: https://pikos.app
+- Contact: hello@pikos.app
+
+## What Pikos Does
+
+- Rich text editor with slash commands, formatting toolbar, Markdown paste, and autosave
+- Task management with priorities (Urgent/High/Medium/Low), statuses, tags, and folders
+- Calendar showing one to seven days or a month, with drag-to-schedule and both timed and all-day events
+- External calendar sync: read-only, opt-in, from iCloud, Google Calendar, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged, or ticked off becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
+- Quick add with natural language parsing (extracts dates, priorities, tags, folders)
+- Full-text search with BM25 ranking
+- Recurring pages and recurring calendar events, sharing one recurrence engine
+- Reminders and a notification history
+- Three-panel layout: sidebar, page list, and editor or calendar
+- Complete keyboard navigation
+- Light, dark, and system themes
+- Data export (SQLite backup, CSV, Markdown, ICS)
+- A command-line interface, `pikos`, that reads and writes the same workspace file
+- An MCP (Model Context Protocol) server, `pikos mcp`, over stdio, so an AI assistant can search, read, create, and update pages. It opens no network socket, and a test in the suite fails if it ever does. Pikos itself sends nothing anywhere, with no account, no API key, and no Pikos server involved. Where the content goes after that depends on the assistant: a cloud assistant sends what it reads to its provider, and a model running locally keeps everything on the user's computer
+- Pikos ships no AI features of its own: no chat panel, no summarise button, no bundled model. It is the local data layer another assistant reads, not an AI product
+
+## Network Behaviour
+
+Pikos works offline. Notes, tasks, and the calendar all function with no connection.
+
+It makes network requests in exactly two cases, both visible to the user:
+
+1. An update check against GitHub Releases at launch, which can be turned off in Settings.
+2. External calendar sync, if and only if you connect a calendar account. It is off until you do, it only reads, and it talks to your calendar provider and nothing else.
+
+There is no Pikos server. No account, no telemetry, no analytics inside the app.
+
+## Who Pikos Is For
+
+- People who want notes, tasks, and a calendar in one app instead of three
+- Users who want their data stored on their own device
+- Anyone who wants a productivity app with no account, no subscription, and no server behind it
+- Obsidian users who wish they had built-in tasks and a calendar
+- TickTick or Todoist users who want a calendar view without a paid plan
+- Privacy-conscious users who don't want their data on someone else's server
+- People who want an AI assistant to work with their notes and tasks when they choose to, including one running entirely on their own computer
+
+## Pages
+
+- Homepage: https://pikos.app (~3K tokens)
+- FAQ: https://pikos.app/faq (~4K tokens)
+- Comparison hub, with the feature table: https://pikos.app/compare (~1K tokens)
+- Pikos vs Obsidian, in full: https://pikos.app/compare/obsidian (~2K tokens)
+- Pikos vs Notion, in full: https://pikos.app/compare/notion (~2K tokens)
+- Pikos vs Apple Notes, Reminders, and Calendar, in full: https://pikos.app/compare/apple (~2K tokens)
+- Guides: https://pikos.app/guides (~1K tokens)
+- Calendar sync setup, general: https://pikos.app/calendar-sync (~3K tokens)
+- Connect iCloud Calendar: https://pikos.app/calendar-sync/icloud (~1K tokens)
+- Connect Google Calendar: https://pikos.app/calendar-sync/google (~1K tokens)
+- Connect Fastmail or any CalDAV server: https://pikos.app/calendar-sync/fastmail (~1K tokens)
+- CLI and MCP server, and how an assistant reads your notes: https://pikos.app/cli (~2K tokens)
+- Import: https://pikos.app/import (~2K tokens)
+- Blog: https://pikos.app/blog (~1K tokens)
+- Release Notes: https://pikos.app/release-notes (~4K tokens)
+- Download: https://pikos.app/download (~1K tokens)
+- Back Pikos: https://pikos.app/backer (~1K tokens)
+- Privacy Policy: https://pikos.app/privacy (~1K tokens)
+- Terms of Service: https://pikos.app/terms (~1K tokens)
+
+## Competitors and Alternatives
+
+Pikos competes with Notion, NotePlan, Obsidian, Logseq, TickTick, Things, and Todoist, and with the combination of Apple Notes, Reminders, and Calendar.
+
+{{comparison-table}}
+
+{{legend}} Things and Todoist attach notes to individual tasks but have no standalone notes.
+
+In most of these apps a note, a task, and a calendar event are separate items, even when one app holds all three. In Pikos they are one page: the same page holds the meeting notes, gets ticked off as a task, and sits on the calendar. Notion can do this once the user has built a database for it, and NotePlan comes close, since its tasks live inside notes. In Pikos every page works this way with no setup.
+
+NotePlan is the closest match: notes, tasks, and a calendar, stored on the device, with phone apps and iCloud sync, on a $99/yr subscription. Notion matches the breadth but keeps data on its servers and requires an account. TickTick and Todoist put their calendar views behind a paid plan. Obsidian and Logseq keep data on the device but need community plugins for a calendar.
+
+Pikos is the only one of these with notes, tasks, and a calendar built in, stored on the device, with no account and no subscription. It has no phone app and no sync yet.
+
+Checked {{checked}} against each app's own pricing and help pages.

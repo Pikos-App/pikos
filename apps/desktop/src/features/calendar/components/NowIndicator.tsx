@@ -1,6 +1,6 @@
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import { mapDateToY } from "@pikos/core";
 
-import { mapDateToY } from "../utils/calendarGeometry";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 
 export function NowIndicator({ now }: { now: Date }) {
   const { geometry } = useCalendarSettings();

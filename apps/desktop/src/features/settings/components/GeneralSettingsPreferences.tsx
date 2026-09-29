@@ -1,19 +1,30 @@
-import { cn } from "@/lib/utils";
+import type { CalendarDayCount, CalendarDensity } from "@pikos/core";
+import { writableFolders } from "@pikos/core";
+
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
-import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
 import { IS_LINUX } from "@/shared/constants/platform";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
-import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
-import type { LineWidth } from "@/shared/context/EditorSettingsContext";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
-import type { ListDensity } from "@/shared/context/ListSettingsContext";
+import {
+  CALENDAR_TEXT_SIZES,
+  type CalendarTextSize,
+  useCalendarSettings,
+} from "@/shared/context/CalendarSettingsContext";
+import { EDITOR_FONT_SIZES, useEditorSettings } from "@/shared/context/EditorSettingsContext";
+import type { EditorFontSize, LineWidth } from "@/shared/context/EditorSettingsContext";
+import {
+  INTERFACE_TEXT_SCALES,
+  type InterfaceTextScale,
+  useInterfaceSettings,
+} from "@/shared/context/InterfaceSettingsContext";
+import type { ListDensity } from "@/shared/context/InterfaceSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import type { ThemeMode } from "@/shared/context/ThemeContext";
 import { useTheme } from "@/shared/context/ThemeContext";
 
 import { SettingChoice } from "./SettingChoice";
+import { PickerTrigger } from "./SettingPicker";
+import { SettingSelect } from "./SettingSelect";
 import { SettingsSection } from "./SettingsSection";
 
 const THEME_OPTIONS: readonly { id: ThemeMode; label: string }[] = [
@@ -29,6 +40,10 @@ const LINE_WIDTH_OPTIONS: readonly { id: LineWidth; label: string }[] = [
   { id: "wide", label: "Wide" },
   { id: "full", label: "Full" },
 ];
+
+const FONT_SIZE_OPTIONS: readonly { id: EditorFontSize; label: string }[] = EDITOR_FONT_SIZES.map(
+  (size) => ({ id: size, label: String(size) })
+);
 
 const CALENDAR_DAY_COUNT_OPTIONS: readonly { id: CalendarDayCount; label: string }[] = [
   { id: 1, label: "1" },
@@ -50,6 +65,12 @@ const LIST_DENSITY_OPTIONS: readonly { id: ListDensity; label: string }[] = [
   { id: "spacious", label: "Spacious" },
 ];
 
+const TEXT_SCALE_OPTIONS: readonly { id: InterfaceTextScale; label: string }[] =
+  INTERFACE_TEXT_SCALES.map((scale) => ({ id: scale, label: `${Math.round(scale * 100)}%` }));
+
+const CALENDAR_TEXT_SIZE_OPTIONS: readonly { id: CalendarTextSize; label: string }[] =
+  CALENDAR_TEXT_SIZES.map((size) => ({ id: size, label: String(size) }));
+
 const WEEK_START_OPTIONS: readonly { id: WeekStart; label: string }[] = [
   { id: 1, label: "Monday" },
   { id: 0, label: "Sunday" },
@@ -59,18 +80,28 @@ export function GeneralSettingsPreferences() {
   const { folders } = usePages();
   const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
   const { mode, setTheme } = useTheme();
-  const { lineWidth, setLineWidth } = useEditorSettings();
+  const { fontSize, lineWidth, setFontSize, setLineWidth } = useEditorSettings();
   const {
     dayCount: calendarDayCount,
     density: calendarDensity,
     setDayCount: setCalendarDayCount,
     setDensity: setCalendarDensity,
+    setTextSize: setCalendarTextSize,
+    textSize: calendarTextSize,
   } = useCalendarSettings();
-  const { density: listDensity, setDensity: setListDensity } = useListSettings();
+  const {
+    density: listDensity,
+    setDensity: setListDensity,
+    setTextScale: setInterfaceTextScale,
+    textScale: interfaceTextScale,
+  } = useInterfaceSettings();
+  const defaultFolderChoices = writableFolders(folders);
+  const defaultFolderName =
+    defaultFolderChoices.find((f) => f.id === defaultFolderId)?.name ?? "Inbox";
 
   return (
     <SettingsSection title="Preferences">
-      <div className="rounded-lg border border-border bg-card px-4">
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
         <SettingChoice
           description="Choose how Pikos looks."
           label="Theme"
@@ -78,12 +109,30 @@ export function GeneralSettingsPreferences() {
           options={THEME_OPTIONS}
           value={mode}
         />
+      </div>
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
+        <SettingSelect
+          description="Text size in the sidebar, lists, dialogs and menus."
+          label="Interface text size"
+          onChange={setInterfaceTextScale}
+          options={TEXT_SCALE_OPTIONS}
+          value={interfaceTextScale}
+        />
         <SettingChoice
           description="How tightly rows pack in the page and folder lists."
-          label="List density"
+          label="Interface density"
           onChange={setListDensity}
           options={LIST_DENSITY_OPTIONS}
           value={listDensity}
+        />
+      </div>
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
+        <SettingSelect
+          description="Body text size in the editor."
+          label="Editor text size"
+          onChange={setFontSize}
+          options={FONT_SIZE_OPTIONS}
+          value={fontSize}
         />
         <SettingChoice
           description="How wide the text area is."
@@ -92,12 +141,14 @@ export function GeneralSettingsPreferences() {
           options={LINE_WIDTH_OPTIONS}
           value={lineWidth}
         />
-        <SettingChoice
-          description="Number of day columns in the calendar. Narrow windows may show fewer."
-          label="Calendar days shown"
-          onChange={setCalendarDayCount}
-          options={CALENDAR_DAY_COUNT_OPTIONS}
-          value={calendarDayCount}
+      </div>
+      <div className="mb-3 rounded-lg border border-border bg-card px-ui-xl">
+        <SettingSelect
+          description="Text size for event titles and time labels."
+          label="Calendar text size"
+          onChange={setCalendarTextSize}
+          options={CALENDAR_TEXT_SIZE_OPTIONS}
+          value={calendarTextSize}
         />
         <SettingChoice
           description="How tall each hour row renders."
@@ -107,13 +158,21 @@ export function GeneralSettingsPreferences() {
           value={calendarDensity}
         />
         <SettingChoice
+          description="Number of day columns in the calendar. Narrow windows may show fewer."
+          label="Calendar days shown"
+          onChange={setCalendarDayCount}
+          options={CALENDAR_DAY_COUNT_OPTIONS}
+          value={calendarDayCount}
+        />
+        <SettingChoice
           description="Controls the calendar and date picker layout."
           label="Week starts on"
           onChange={setWeekStart}
           options={WEEK_START_OPTIONS}
           value={weekStart}
         />
-
+      </div>
+      <div className="rounded-lg border border-border bg-card px-ui-xl">
         {/* Default folder uses a searchable popover, not a button group. */}
         <div className="flex items-center justify-between py-3">
           <div>
@@ -126,14 +185,14 @@ export function GeneralSettingsPreferences() {
             align="end"
             placeholder="Search folders…"
             trigger={
-              <button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent">
-                {folders.find((f) => f.id === defaultFolderId)?.name ?? "Inbox"}
-              </button>
+              <PickerTrigger ariaLabel={`Default folder for new pages: ${defaultFolderName}`}>
+                {defaultFolderName}
+              </PickerTrigger>
             }
           >
             {({ close }) => (
               <>
-                <SettingsPopoverItem
+                <SearchablePopoverItem
                   onClick={() => {
                     setDefaultFolderId(null);
                     close();
@@ -141,9 +200,9 @@ export function GeneralSettingsPreferences() {
                   selected={defaultFolderId === null}
                 >
                   Inbox
-                </SettingsPopoverItem>
-                {folders.map((f) => (
-                  <SettingsPopoverItem
+                </SearchablePopoverItem>
+                {defaultFolderChoices.map((f) => (
+                  <SearchablePopoverItem
                     key={f.id}
                     onClick={() => {
                       setDefaultFolderId(f.id);
@@ -152,7 +211,7 @@ export function GeneralSettingsPreferences() {
                     selected={defaultFolderId === f.id}
                   >
                     {f.name}
-                  </SettingsPopoverItem>
+                  </SearchablePopoverItem>
                 ))}
               </>
             )}
@@ -160,24 +219,5 @@ export function GeneralSettingsPreferences() {
         </div>
       </div>
     </SettingsSection>
-  );
-}
-
-function SettingsPopoverItem({
-  children,
-  onClick,
-  selected,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  selected: boolean;
-}) {
-  return (
-    <SearchablePopoverItem
-      className={cn(selected ? "font-medium text-foreground" : "text-muted-foreground")}
-      onClick={onClick}
-    >
-      {children}
-    </SearchablePopoverItem>
   );
 }

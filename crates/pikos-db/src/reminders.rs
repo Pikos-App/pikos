@@ -15,11 +15,13 @@ struct PageReminderRow {
     created_at: String,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq, Eq, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct PageReminder {
     pub id: String,
     pub page_id: String,
+    #[ts(type = "number")]
     pub minutes_before: i64,
     pub created_at: String,
 }

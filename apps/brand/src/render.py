@@ -7,6 +7,7 @@ Produces:
                         Plus light-mode mark variants (transparent bg)
 - macos/Pikos.iconset/  Apple iconset spec (10 PNGs: 1x + 2x for 5 sizes)
 - favicon/              favicon.ico (multi-size) + PNGs for <head> tags
+- oauth/                120×120 mark for third-party consent screens
 
 All outputs derive from src/pikos-master.svg — the same mark proportions
 are used everywhere for consistency at every rendering size.
@@ -24,8 +25,9 @@ SVG = ROOT / "svg"
 PNG = ROOT / "png"
 ICONSET = ROOT / "macos" / "Pikos.iconset"
 FAVICON = ROOT / "favicon"
+OAUTH = ROOT / "oauth"
 
-for d in (PNG, ICONSET, FAVICON):
+for d in (PNG, ICONSET, FAVICON, OAUTH):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -110,5 +112,16 @@ build_ico(
     [FAVICON / f"favicon-{s}.png" for s in (16, 32, 48)],
     FAVICON / "favicon.ico",
 )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 5. OAuth consent screen mark
+# ═══════════════════════════════════════════════════════════════════
+
+# Unlike the other outputs, oauth/ is committed — the file is uploaded to a
+# third-party console and reviewed there, so the exact bytes we shipped need
+# to stay recoverable without a working cairosvg install.
+print("\nRendering OAuth consent mark...")
+render(MASTER, OAUTH / "pikos-oauth-120.png", 120)
 
 print("\nDone.")

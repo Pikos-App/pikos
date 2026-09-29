@@ -1,0 +1,166 @@
+{
+  "cases": [
+    {
+      "name": "a paragraph projects to its text",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "paragraph", "content": [{ "type": "text", "text": "Hello world" }] }
+        ]
+      },
+      "text": "Hello world"
+    },
+    {
+      "name": "sibling blocks are separated by a newline",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "heading", "content": [{ "type": "text", "text": "Title" }] },
+          { "type": "paragraph", "content": [{ "type": "text", "text": "Body text" }] }
+        ]
+      },
+      "text": "Title\nBody text"
+    },
+    {
+      "name": "marked runs inside one block join without a separator",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              { "type": "text", "text": "bold", "marks": [{ "type": "bold" }] },
+              { "type": "text", "text": " and " },
+              { "type": "text", "text": "italic", "marks": [{ "type": "italic" }] }
+            ]
+          }
+        ]
+      },
+      "text": "bold and italic"
+    },
+    {
+      "name": "a blank line yields no line at all",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "paragraph", "content": [{ "type": "text", "text": "a" }] },
+          { "type": "paragraph" },
+          { "type": "paragraph", "content": [{ "type": "text", "text": "b" }] }
+        ]
+      },
+      "text": "a\nb"
+    },
+    {
+      "name": "task items are one line each",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "Buy milk" }] }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "Write tests" }] }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Buy milk\nWrite tests"
+    },
+    {
+      "name": "a nested list collapses into its parent item's line, unseparated",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "Level 1" }] },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [{ "type": "text", "text": "Level 2" }]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Level 1Level 2"
+    },
+    {
+      "name": "a code block keeps its body verbatim",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "codeBlock", "content": [{ "type": "text", "text": "const x = 1;" }] }
+        ]
+      },
+      "text": "const x = 1;"
+    },
+    {
+      "name": "a blockquote projects its paragraph",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              { "type": "paragraph", "content": [{ "type": "text", "text": "Quoted" }] }
+            ]
+          }
+        ]
+      },
+      "text": "Quoted"
+    },
+    {
+      "name": "outer whitespace is trimmed off the projection",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "paragraph", "content": [{ "type": "text", "text": "  padded  " }] }
+        ]
+      },
+      "text": "padded"
+    },
+    {
+      "name": "an empty text node under a container adds no line",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "text", "text": "a" },
+          { "type": "text", "text": "" },
+          { "type": "text", "text": "b" }
+        ]
+      },
+      "text": "a\nb"
+    },
+    {
+      "name": "an empty document projects to nothing",
+      "doc": {},
+      "text": ""
+    }
+  ]
+}

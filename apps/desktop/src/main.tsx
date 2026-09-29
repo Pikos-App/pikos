@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./App";
+import { loadMockStorage } from "./shared/adapters/mockStorageChunk";
 import { installGlobalErrorHandlers } from "./shared/logger";
 
 installGlobalErrorHandlers();
@@ -24,11 +25,22 @@ document.addEventListener("contextmenu", (e) => {
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", (e) => e.preventDefault());
 
-const root = document.getElementById("root");
-if (!root) throw new Error("#root element not found");
+async function mount() {
+  // Test-mode builds run against the in-memory adapter, which lives in its own
+  // chunk so production never downloads it. Fetch it before the first render —
+  // WorkspaceProvider picks its adapter synchronously.
+  if (import.meta.env["VITE_TEST_MODE"] === "true") {
+    await loadMockStorage();
+  }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+  const root = document.getElementById("root");
+  if (!root) throw new Error("#root element not found");
+
+  createRoot(root).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+}
+
+void mount();

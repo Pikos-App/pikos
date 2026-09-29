@@ -1,5 +1,6 @@
 use super::*;
 use chrono::TimeZone;
+use pikos_db::{insert_test_page, insert_test_page_sync, test_pool, TestPage};
 
 fn settings_with_quiet(start: &str, end: &str) -> NotificationSettings {
     NotificationSettings {
@@ -172,6 +173,7 @@ fn summary_does_not_refire_same_day() {
     let today = local_at(2026, 4, 18, 9, 0).date_naive();
     let rt = SchedulerRuntime {
         last_summary_date: Some(today),
+        ..SchedulerRuntime::default()
     };
     assert!(!should_fire_daily_summary(
         &rt,
@@ -187,6 +189,7 @@ fn summary_fires_next_day_after_previous() {
     let yesterday = local_at(2026, 4, 17, 8, 0).date_naive();
     let rt = SchedulerRuntime {
         last_summary_date: Some(yesterday),
+        ..SchedulerRuntime::default()
     };
     assert!(should_fire_daily_summary(
         &rt,
@@ -194,6 +197,333 @@ fn summary_fires_next_day_after_previous() {
         false,
         &local_at(2026, 4, 18, 8, 0)
     ));
+}
+
+// ─── collect_due ─────────────────────────────────────────────────────
+
+/// Device-local wall-clock `offset_min` from the tick clock — the form a native
+/// `page_schedules` row stores.
+fn local_wall(now: &chrono::DateTime<chrono::Local>, offset_min: i64) -> String {
+    (*now + chrono::Duration::minutes(offset_min))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+/// The same instant read in UTC — the fixtures' source zone. A zone that never
+/// shifts keeps the expected instants independent of the machine's own zone.
+fn utc_wall(now: &chrono::DateTime<chrono::Local>, offset_min: i64) -> String {
+    (now.to_utc() + chrono::Duration::minutes(offset_min))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+async fn insert_schedule(
+    pool: &SqlitePool,
+    id: &str,
+    page_id: &str,
+    scheduled_start: &str,
+    timezone: Option<&str>,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, timezone, status, created_at)
+         VALUES (?, ?, ?, ?, 'not_started', '2026-05-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_override(
+    pool: &SqlitePool,
+    id: &str,
+    page_id: &str,
+    scheduled_start: &str,
+    original_date: &str,
+    timezone: &str,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, timezone, rule_id, original_date, status, created_at)
+         VALUES (?, ?, ?, ?, (SELECT id FROM page_recurrence_rules WHERE page_id = ?), ?,
+                 'not_started', '2026-05-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .bind(page_id)
+    .bind(original_date)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_rule(pool: &SqlitePool, page_id: &str, base_start: &str) {
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, scheduled_start, timezone, created_at)
+         VALUES (?, ?, 'FREQ=DAILY', ?, 'UTC', '2026-05-01T00:00:00')",
+    )
+    .bind(format!("rule-{page_id}"))
+    .bind(page_id)
+    .bind(base_start)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_reminder(pool: &SqlitePool, page_id: &str, minutes_before: i64) {
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES (?, ?, ?, '2026-05-01T00:00:00')",
+    )
+    .bind(format!("rem-{page_id}"))
+    .bind(page_id)
+    .bind(minutes_before)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// One page per class the tick asks about — explicit lead, global default,
+/// native recurring, synced one-off, synced moved occurrence — every one of them
+/// due at `now` under a 10-minute global default.
+async fn seed_every_due_class(pool: &SqlitePool, now: &chrono::DateTime<chrono::Local>) {
+    for id in ["explicit", "default", "rec", "synced", "moved"] {
+        insert_test_page(pool, TestPage::new(id, id)).await.unwrap();
+    }
+
+    insert_schedule(pool, "s-explicit", "explicit", &local_wall(now, 15), None).await;
+    insert_reminder(pool, "explicit", 15).await;
+
+    insert_schedule(pool, "s-default", "default", &local_wall(now, 10), None).await;
+
+    insert_rule(pool, "rec", &local_wall(now, 30)).await;
+    insert_reminder(pool, "rec", 30).await;
+
+    insert_test_page_sync(pool, "synced", "active")
+        .await
+        .unwrap();
+    insert_schedule(pool, "s-synced", "synced", &utc_wall(now, 10), Some("UTC")).await;
+
+    insert_test_page_sync(pool, "moved", "active")
+        .await
+        .unwrap();
+    insert_rule(pool, "moved", &utc_wall(now, 0)).await;
+    insert_override(
+        pool,
+        "s-moved",
+        "moved",
+        &utc_wall(now, 10),
+        &utc_wall(now, 0),
+        "UTC",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn one_tick_collects_every_due_class_into_one_batch() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+
+    let batch = collect_due(&pool, &settings, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+
+    let mut found: Vec<&str> = batch
+        .reminders
+        .iter()
+        .map(|r| r.schedule_id.as_str())
+        .collect();
+    found.sort_unstable();
+    let recurring = format!("rec@{}#30", local_wall(&now, 30));
+    let mut expected = vec![
+        "s-explicit#15",
+        "s-default",
+        recurring.as_str(),
+        "s-synced#10",
+        "s-moved#10",
+    ];
+    expected.sort_unstable();
+    assert_eq!(found, expected);
+    assert!(matches!(batch.summary, DueSummary::Due { .. }));
+}
+
+/// The in-memory `last_summary_date` is lost on restart, so the log marker is
+/// what stops a second summary the same day.
+#[tokio::test]
+async fn a_summary_already_in_the_log_is_not_counted_again() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    pikos_db::log_daily_summary(&pool, &now.format("%Y-%m-%d %H:%M:%S").to_string())
+        .await
+        .unwrap();
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+
+    let batch = collect_due(&pool, &settings, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+
+    assert_eq!(batch.summary, DueSummary::AlreadyLogged);
+    assert_eq!(batch.reminders.len(), 5);
+}
+
+#[tokio::test]
+async fn quiet_hours_mark_the_batch_and_hold_the_summary() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+
+    let batch = collect_due(
+        &pool,
+        &settings_with_quiet("08:00", "10:00"),
+        &SchedulerRuntime::default(),
+        &now,
+    )
+    .await
+    .unwrap();
+
+    // The reminders are resolved so each can be recorded as silenced; `quiet` is
+    // what stops every one of them from being delivered.
+    assert!(batch.quiet);
+    assert_eq!(batch.reminders.len(), 5);
+    assert_eq!(batch.summary, DueSummary::NotDue);
+}
+
+#[tokio::test]
+async fn a_quiet_hours_suppression_is_logged_without_arming_the_dedup() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let quiet = settings_with_quiet("08:00", "10:00");
+
+    let batch = collect_due(&pool, &quiet, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+    for row in &batch.reminders {
+        record_suppressed(&pool, row, &now).await.unwrap();
+    }
+
+    let suppressed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notification_log WHERE type = 'suppressed'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(suppressed, 5);
+    let fired: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notification_log WHERE type = 'reminder'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(fired, 0, "a suppression is not a delivery");
+
+    // The same tick outside quiet hours still owes every one of them — the
+    // suppression rows are invisible to the dedup.
+    let mut loud = quiet.clone();
+    loud.quiet_hours_enabled = false;
+    let again = collect_due(&pool, &loud, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+    assert!(!again.quiet);
+    assert_eq!(again.reminders.len(), 5);
+}
+
+/// A reminder anchored on a whole minute sits exactly on a tick, which a closed window put
+/// inside that tick and the next one. Delivery survived it on the dedup row; suppression
+/// writes none, so the same silenced reminder was listed twice.
+#[tokio::test]
+async fn a_reminder_on_a_tick_boundary_is_collected_once() {
+    let pool = test_pool().await;
+    let first = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &first).await;
+    let quiet = settings_with_quiet("08:00", "10:00");
+
+    let batch = collect_due(&pool, &quiet, &SchedulerRuntime::default(), &first)
+        .await
+        .unwrap();
+    assert_eq!(batch.reminders.len(), 5);
+    for row in &batch.reminders {
+        record_suppressed(&pool, row, &first).await.unwrap();
+    }
+
+    let runtime = SchedulerRuntime {
+        last_window_end: Some(first),
+        ..SchedulerRuntime::default()
+    };
+    let next = local_at(2026, 5, 25, 9, 1);
+    let again = collect_due(&pool, &quiet, &runtime, &next).await.unwrap();
+    assert!(
+        again.reminders.is_empty(),
+        "the 09:00 reminders were collected again: {:?}",
+        again.reminders
+    );
+}
+
+/// After the machine sleeps, two ticks can land seconds apart. Without a floor their windows
+/// share most of a minute, and everything inside it is collected by both.
+#[tokio::test]
+async fn two_ticks_seconds_apart_do_not_share_a_window() {
+    let pool = test_pool().await;
+    let drifted = local_at(2026, 5, 25, 9, 0).with_second(57).unwrap();
+    seed_every_due_class(&pool, &local_at(2026, 5, 25, 9, 0)).await;
+    let quiet = settings_with_quiet("08:00", "10:00");
+
+    let batch = collect_due(&pool, &quiet, &SchedulerRuntime::default(), &drifted)
+        .await
+        .unwrap();
+    assert_eq!(batch.reminders.len(), 5, "the drifted tick owes them");
+
+    let runtime = SchedulerRuntime {
+        last_window_end: Some(drifted),
+        ..SchedulerRuntime::default()
+    };
+    let realigned = local_at(2026, 5, 25, 9, 1);
+    let again = collect_due(&pool, &quiet, &runtime, &realigned)
+        .await
+        .unwrap();
+    assert!(
+        again.reminders.is_empty(),
+        "the overlapping 57 seconds were collected twice: {:?}",
+        again.reminders
+    );
+}
+
+#[tokio::test]
+async fn an_all_day_page_reminds_the_day_before_at_nine() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    insert_test_page(&pool, TestPage::new("allday", "allday"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s-allday", "allday", "2026-05-26", None).await;
+    insert_reminder(&pool, "allday", pikos_db::DAY_BEFORE_MINUTES).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+
+    let batch = collect_due(&pool, &settings, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+
+    let found: Vec<&str> = batch
+        .reminders
+        .iter()
+        .map(|r| r.schedule_id.as_str())
+        .collect();
+    assert_eq!(found, ["s-allday#-2"]);
+    // An all-day event has no clock time, so the body says the day, not a lead.
+    assert_eq!(
+        format_lead_time(batch.reminders[0].minutes_before),
+        "tomorrow"
+    );
 }
 
 // ─── format helpers ──────────────────────────────────────────────────
@@ -206,6 +536,10 @@ fn lead_time_boundaries() {
     assert_eq!(format_lead_time(60), "in 1 hour");
     assert_eq!(format_lead_time(120), "in 2 hours");
     assert_eq!(format_lead_time(180), "in 3 hours");
+    assert_eq!(format_lead_time(1440), "in 1 day");
+    assert_eq!(format_lead_time(2880), "in 2 days");
+    assert_eq!(format_lead_time(1500), "in 25 hours");
+    assert_eq!(format_lead_time(pikos_db::DAY_BEFORE_MINUTES), "tomorrow");
 }
 
 #[test]

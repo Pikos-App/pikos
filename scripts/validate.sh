@@ -6,8 +6,9 @@ set -euo pipefail
 # doesn't have to re-run validation in CI. Also exposed as `pnpm preflight`.
 #
 # Ordered cheapest-/most-likely-to-fail first so it fails fast.
-# Skips the two warn-only CI gates (`pnpm audit`, `cargo audit`) — they are
-# continue-on-error in CI and never block a release.
+# Skips `pnpm audit`, which is still warn-only in CI. `cargo audit` on the
+# workspace blocks in CI now, so it runs here too; the desktop lock's audit stays
+# CI-side and warn-only.
 #
 # Escape hatch: SKIP_VALIDATE=1 (honored by release.sh) bypasses this entirely.
 
@@ -30,18 +31,64 @@ pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
 step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
 
+# ── bindings job ──────────────────────────────────────────────────────────────
+# packages/core/src/generated is committed, so it drifts the moment a pikos-db
+# wire struct changes without a regeneration — with every gate above still green,
+# because both sides typecheck fine in isolation. First of the two cargo steps:
+# it builds pikos-db natively, which warms the cache the rust steps below reuse.
+step "bindings freshness" "committed core/generated matches pikos-db"
+"$ROOT/scripts/gen-ts-bindings.sh" >/dev/null
+if [ -n "$(git -C "$ROOT" status --porcelain packages/core/src/generated)" ]; then
+  echo "packages/core/src/generated was stale — the regeneration is in your working tree. Commit it."
+  exit 1
+fi
+
+# app.css is the same arrangement one tier up: its token blocks are rendered from
+# packages/ui/src/tokens.ts, and a stale block is a wrong color in the shipped
+# build that no typecheck can see. Cheap enough to sit next to the bindings gate.
+step "token freshness" "committed app.css matches packages/ui tokens"
+"$ROOT/scripts/check-ui-tokens.sh"
+
 # ── rust job ──────────────────────────────────────────────────────────────────
-step "cargo fmt --check" ""
+step "wasm freshness" "committed recurrence pkg matches its crate"
+"$ROOT/scripts/build-recurrence-wasm.sh" >/dev/null
+if [ -n "$(git -C "$ROOT" status --porcelain packages/recurrence-wasm/pkg)" ]; then
+  echo "packages/recurrence-wasm/pkg was stale — the rebuild is in your working tree. Commit it."
+  exit 1
+fi
+
+# Two Cargo trees. The root workspace is `crates/*` and *excludes*
+# apps/desktop/src-tauri, so `--all` inside src-tauri covers that crate alone —
+# gating only there leaves pikos-db, -cli, -calendar-sync and -recurrence unchecked.
+step "cargo fmt --check" "workspace + desktop"
+(cd "$ROOT" && cargo fmt --all --check)
 (cd "$SRC_TAURI" && cargo fmt --check)
 
-step "cargo check" "zero warnings"
+step "cargo clippy (workspace)" "zero warnings"
+(cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
+
+step "cargo test (workspace)" "parser bridge rebuilt first"
+(cd "$ROOT" && pnpm --filter @pikos/bridge build >/dev/null)
+(cd "$ROOT" && cargo test --workspace --quiet)
+
+step "cargo check (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && RUSTFLAGS="-D warnings" cargo check)
 
-step "cargo clippy" "zero warnings"
+step "cargo clippy (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && cargo clippy --all-targets -- -D warnings)
 
-step "cargo test" ""
+step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)
+
+# Needs cargo-audit installed; CI caches it. Skipped rather than failed when it is
+# absent, because a missing tool is not a finding and this script is also the
+# pre-release gate on a machine that may never have installed it.
+if command -v cargo-audit &>/dev/null; then
+  step "cargo audit (workspace)" "accepted advisories in .cargo/audit.toml"
+  (cd "$ROOT" && cargo audit)
+else
+  step "cargo audit (workspace)" "skipped — cargo-audit not installed"
+fi
 
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────
 step "e2e" "Playwright tier1 + tier2"

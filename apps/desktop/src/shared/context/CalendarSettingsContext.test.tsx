@@ -143,3 +143,44 @@ describe("collapse bands", () => {
     });
   });
 });
+
+describe("text size", () => {
+  it("defaults to the size an event title already rendered at", () => {
+    const { result } = setup();
+    expect(result.current.textSize).toBe(14);
+  });
+
+  it("steps the px ladder and holds at both ends", () => {
+    const { result } = setup();
+    act(() => result.current.stepTextSize(1));
+    expect(result.current.textSize).toBe(16);
+    act(() => result.current.setTextSize(28));
+    act(() => result.current.stepTextSize(1));
+    expect(result.current.textSize).toBe(28);
+    act(() => result.current.setTextSize(10));
+    act(() => result.current.stepTextSize(-1));
+    expect(result.current.textSize).toBe(10);
+  });
+
+  it("grows the hour along with the text", () => {
+    const { result } = setup();
+    act(() => result.current.setDensity("compact"));
+    const atDefault = result.current.metrics.hourHeight;
+    act(() => result.current.setTextSize(28));
+    expect(result.current.metrics.hourHeight).toBeGreaterThan(atDefault);
+  });
+
+  // Density and text size are separate settings that move the same thing, so they
+  // multiply rather than compete: the hour grows by exactly the factor the text
+  // does. Before, the text size only lifted an hour that was too short for it,
+  // which let the type outgrow the block holding it at every other size.
+  it("scales any density by the text size, in proportion", () => {
+    const { result } = setup();
+    act(() => result.current.setDensity("spacious"));
+    const atDefault = result.current.metrics.hourHeight;
+    act(() => result.current.setTextSize(28));
+    expect(result.current.metrics.hourHeight).toBe(atDefault * 2);
+    act(() => result.current.setTextSize(10));
+    expect(result.current.metrics.hourHeight).toBeCloseTo(atDefault * (10 / 14));
+  });
+});

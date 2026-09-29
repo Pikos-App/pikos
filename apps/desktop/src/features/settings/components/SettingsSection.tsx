@@ -1,20 +1,22 @@
-// DataSettings still has its own local copy of this wrapper, pending unification.
+// A titled block in a settings panel. Shared so a section that decides for itself
+// whether it should appear at all can carry its own heading — hiding the contents
+// and leaving the title behind is worse than showing neither.
 
 import type { ReactNode } from "react";
 
-interface SettingsSectionProps {
-  title: string;
-  description?: string;
+export function SettingsSection({
+  children,
+  description,
+  title,
+}: {
   children: ReactNode;
-}
-
-export function SettingsSection({ children, description, title }: SettingsSectionProps) {
+  description?: string;
+  title: string;
+}) {
   return (
     <section className="mb-8">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-      </div>
+      <h2 className="mb-1 text-base font-semibold">{title}</h2>
+      {description && <p className="mb-4 text-sm text-muted-foreground">{description}</p>}
       {children}
     </section>
   );

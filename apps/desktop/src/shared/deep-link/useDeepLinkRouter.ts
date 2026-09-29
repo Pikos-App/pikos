@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 import { type DeepLinkAction, parseDeepLink } from "./parseDeepLink";
 
@@ -37,8 +38,20 @@ export function useDeepLinkRouter() {
       dispatch(uiRef.current, action);
     })
       .then((un) => {
-        if (cancelled) un();
-        else unlisten = un;
+        if (cancelled) {
+          un();
+          return;
+        }
+        unlisten = un;
+        // After the subscription, never before: a held click emits immediately.
+        void getPlatform()
+          .replayPendingNotificationClicks()
+          .catch((err: unknown) => {
+            log.error(
+              "failed to replay pending notification clicks",
+              err instanceof Error ? err.name : "unknown"
+            );
+          });
       })
       .catch((err: unknown) => {
         log.error(

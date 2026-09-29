@@ -1,6 +1,21 @@
 // All changes apply immediately via onChange — no internal uncommitted state.
 
-import { isAllDayIso, parseLocalISO } from "@pikos/core";
+import type { TimeSlot } from "@pikos/core";
+import {
+  computeEndTimeLabel,
+  DAYS_PRESETS,
+  DURATION_PRESETS,
+  formatClockTime,
+  formatDurationLabel,
+  formatTriggerLabel,
+  isAllDayIso,
+  parseCustomDurationStr,
+  parseCustomTimeStr,
+  parseLocalISO,
+  TIME_SLOTS,
+  toISODateOnly,
+  toISODateTime,
+} from "@pikos/core";
 import {
   addDays,
   addMinutes,
@@ -19,23 +34,9 @@ import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useMonthNav } from "@/shared/hooks/useMonthNav";
 
-import {
-  computeEndTimeLabel,
-  DAYS_PRESETS,
-  DURATION_PRESETS,
-  formatDurationLabel,
-  formatTimeOfDay,
-  formatTriggerLabel,
-  parseCustomDurationStr,
-  parseCustomTimeStr,
-  TIME_SLOTS,
-  type TimeSlot,
-  toISODateOnly,
-  toISODateTime,
-} from "./DateTimePicker.utils";
 import { CAL_HEIGHT, MiniCalendar } from "./MiniCalendar";
 
-interface DateTimePickerProps {
+export interface DateTimePickerProps {
   /** ISO 8601 date (date-only or datetime) or null (no schedule). */
   value: string | null;
   /** Called with an ISO string when a date/time is selected, or null to clear. */
@@ -218,7 +219,7 @@ export function DateTimePicker({
       applyTime(hour24, minute, false);
       scrollTimeListToSlot(hour24, minute);
     } else {
-      const label = formatTimeOfDay(hour24, minute);
+      const label = formatClockTime(hour24, minute);
       setCustomTimeEntry({ hour24, label, minute });
       const date = selectedDate ?? startOfDay(new Date());
       onChange(toISODateTime(date, hour24, minute));
@@ -409,7 +410,7 @@ export function DateTimePicker({
                 className="text-xs text-foreground/55 hover:text-foreground"
                 onClick={handleClearAll}
               >
-                Clear
+                No date
               </button>
             )}
           </div>
@@ -606,7 +607,7 @@ export function DateTimePicker({
 
               {endTimeLabel !== null && selectedTime !== null && (
                 <p className="ml-auto text-xs text-foreground/60">
-                  {formatTimeOfDay(selectedTime.hour24, selectedTime.minute)}
+                  {formatClockTime(selectedTime.hour24, selectedTime.minute)}
                   <span className="mx-1 text-foreground/30">→</span>
                   {endTimeLabel}
                 </p>

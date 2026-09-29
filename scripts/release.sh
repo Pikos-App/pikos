@@ -27,6 +27,18 @@ fi
 
 # Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
+
+# A prerelease left in the manifests by scripts/release-beta.sh breaks the
+# arithmetic below, and the dangerous half is silent: from 0.4.0-beta.1 a `minor`
+# bump yields 0.5.0, skipping the very release the beta was for. (`patch` is
+# harmless by comparison — it dies on a bad math expression.) Refuse instead.
+if [[ "$CURRENT" == *-* ]]; then
+  echo "Error: $TAURI_CONF is at $CURRENT, which is a prerelease."
+  echo "Reset tauri.conf.json, apps/desktop/package.json and src-tauri/Cargo.toml"
+  echo "to the last stable version, then cut the release."
+  exit 1
+fi
+
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
 case "$BUMP" in
@@ -45,6 +57,22 @@ TAG="v${NEW}"
 if ! grep -q ">${NEW}<" "$MARKETING_NOTES"; then
   echo "Error: $MARKETING_NOTES has no entry for ${NEW}."
   echo "Add the release-notes <article> (version + release date + notes) before releasing."
+  exit 1
+fi
+
+# The competitor comparison is dated, and a release is the moment its claims go
+# out again. Past three months, re-check it rather than republish it unread.
+# SKIP_COMPARISON_CHECK=1 lets an urgent hotfix through.
+COMPARISON="$ROOT/apps/marketing/src/content/comparison.ts"
+CHECKED=$(grep -o 'COMPARISON_CHECKED = "[0-9-]*"' "$COMPARISON" | cut -d'"' -f2) || {
+  echo "Error: no COMPARISON_CHECKED date found in $COMPARISON."
+  exit 1
+}
+IFS='-' read -r CHECKED_Y CHECKED_M _ <<< "$CHECKED"
+AGE_MONTHS=$(( ($(date +%Y) * 12 + 10#$(date +%m)) - (CHECKED_Y * 12 + 10#$CHECKED_M) ))
+if [ "$AGE_MONTHS" -gt 3 ] && [ "${SKIP_COMPARISON_CHECK:-}" != "1" ]; then
+  echo "Error: the competitor comparison was last checked $CHECKED, $AGE_MONTHS months ago."
+  echo "Re-check each app against its sources in $COMPARISON and move COMPARISON_CHECKED."
   exit 1
 fi
 
@@ -101,8 +129,14 @@ else
   sed -i "s/^version = \"$CURRENT\"/version = \"$NEW\"/" "$CARGO_TOML"
 fi
 
-# Update Cargo.lock
-(cd "$ROOT/apps/desktop/src-tauri" && cargo generate-lockfile 2>/dev/null || true)
+# Pick up the version bump in Cargo.lock. Deliberately NOT `cargo
+# generate-lockfile`, which re-resolves the entire graph rather than editing the
+# one line that changed: measured on the 0.4.0 tree it moved 364 dependency
+# versions and pulled in crates that were not there before, so the release would
+# have built against a dependency set nothing had tested. Reading the metadata
+# updates the lockfile minimally instead. The diff it produces should be a single
+# version line; anything more means something else moved and wants looking at.
+(cd "$ROOT/apps/desktop/src-tauri" && cargo metadata --format-version 1 >/dev/null 2>&1 || true)
 
 # Commit and tag (include release notes so the workflow can read them, and the
 # website changelog so the marketing site ships the entry with the release).

@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, mod, quickAdd } from "./fixtures";
 
 async function createFolder(app: Page, name: string) {
   await app
@@ -17,7 +17,7 @@ async function createFolder(app: Page, name: string) {
 
 appTest("create and navigate folders @tier1", async ({ app }) => {
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  const folderBtn = sidebar.getByRole("button", { name: "Projects", exact: true });
+  const folderBtn = sidebar.getByRole("button", { exact: true, name: "Projects" });
 
   // Click "New Folder" — creates folder, navigates to it, and enters rename mode
   await app
@@ -96,8 +96,8 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
 
   // Drag the LAST folder to the FIRST folder's position. dnd-kit activation
   // is 8 px — nudge before moving onto the target.
-  const lastFolder = sidebar.getByRole("button", { name: initial[2]!, exact: true });
-  const firstFolder = sidebar.getByRole("button", { name: initial[0]!, exact: true });
+  const lastFolder = sidebar.getByRole("button", { exact: true, name: initial[2]! });
+  const firstFolder = sidebar.getByRole("button", { exact: true, name: initial[0]! });
   const lastBox = await lastFolder.boundingBox();
   const firstBox = await firstFolder.boundingBox();
   if (!lastBox || !firstBox) throw new Error("folder box missing");

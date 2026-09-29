@@ -35,9 +35,12 @@ function fixtureDonePage(overrides: {
   return {
     completedAt: overrides.completedAt,
     createdAt: overrides.completedAt,
+    detachIsReversible: false,
     folderId: overrides.folderId ?? null,
     id: overrides.id,
+    isRecurring: false,
     priority: 0,
+    scheduleLocked: false,
     sortOrder: 0,
     status: "done",
     tags: [],

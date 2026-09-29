@@ -26,8 +26,10 @@ src/                    — React frontend
   components/ui/        — shadcn/ui components
 src-tauri/
   src/                  — Rust backend (Tauri commands, SQLite queries)
-  migrations/           — SQL schema migrations
 ```
+
+The SQL schema migrations live one level up, in `crates/pikos-db/migrations/` — the
+data layer is shared with the CLI, so it is not part of this app.
 
 ## Testing
 

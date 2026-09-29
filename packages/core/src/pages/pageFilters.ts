@@ -1,0 +1,191 @@
+import { addDays } from "date-fns";
+
+import type { PageSummary } from "../types";
+import { formatDateOnly, isAllDayIso, localToday, parseLocalISO } from "../utils/dates";
+import { isDone, isOpen } from "../utils/page";
+import { emojiAwareCompare } from "../utils/sort";
+import { viewerStart } from "../utils/syncedTime";
+
+export type SortMode = "manual" | "date" | "title" | "priority";
+
+/** The views that are computed from the pages themselves rather than folder
+ *  membership. Everything else is a folder id. */
+export const SMART_VIEW_IDS = ["today", "upcoming", "inbox", "trash"] as const;
+export type SmartViewId = (typeof SMART_VIEW_IDS)[number];
+
+export function isSmartViewId(viewId: string): viewId is SmartViewId {
+  return (SMART_VIEW_IDS as readonly string[]).includes(viewId);
+}
+
+/**
+ * The folder scope a view names — null for every smart view, since none of them
+ * is a place a page can live. Keeps the "is this id a folder?" question in one
+ * place so a fourth smart view can never leak its id into a `folderId` column.
+ *
+ * Answers membership, not permission: an external-calendar folder is a folder
+ * and comes back verbatim. Anything choosing where to *put* a page wants
+ * `folderIdForNewPage`, which also excludes the folders that can't hold one.
+ */
+export function folderIdForView(viewId: string): string | null {
+  return isSmartViewId(viewId) ? null : viewId;
+}
+
+/**
+ * Views whose order is derived from the schedule and rendered as sections, so a
+ * user-chosen sort (and manual drag-to-reorder) has nothing to act on.
+ */
+export function isDateGroupedView(viewId: string): boolean {
+  return viewId === "today" || viewId === "upcoming";
+}
+
+/** How many days the Upcoming view spans, counting today as day one. */
+export const UPCOMING_WINDOW_DAYS = 7;
+
+/** Last day (inclusive, 'YYYY-MM-DD') the Upcoming view reaches. */
+export function upcomingWindowEnd(todayStr: string): string {
+  return formatDateOnly(addDays(parseLocalISO(todayStr), UPCOMING_WINDOW_DAYS - 1));
+}
+
+/**
+ * True when the page belongs to the given view by scope alone — folder
+ * membership for folder views, no-folder for inbox, scheduled today/earlier
+ * for today, scheduled inside the next-7-days window for upcoming. Does NOT
+ * filter by completion status; callers compose with `isOpen` / `isDone` as
+ * needed.
+ *
+ * Upcoming deliberately starts at today rather than tomorrow: it answers "what
+ * is coming", and a window that opens at tomorrow leaves the reader guessing
+ * where today went. It deliberately stops at today — nothing overdue leaks in,
+ * because chasing what already slipped is the Today view's job and duplicating
+ * it here would give the same page two homes with two different meanings.
+ */
+export function belongsToView(page: PageSummary, viewId: string, todayStr: string): boolean {
+  if (viewId === "today") {
+    const start = viewerStart(page);
+    if (start == null) return false;
+    return start.slice(0, 10) <= todayStr;
+  }
+  if (viewId === "upcoming") {
+    const start = viewerStart(page);
+    if (start == null) return false;
+    const day = start.slice(0, 10);
+    return day >= todayStr && day <= upcomingWindowEnd(todayStr);
+  }
+  if (viewId === "inbox") return page.folderId === null;
+  // The trash reads deleted rows, which never reach this list — answering false
+  // stops the folder fallthrough treating "trash" as a folder id.
+  if (viewId === "trash") return false;
+  return page.folderId === viewId;
+}
+
+/**
+ * Convert a scheduledStart ISO string to a sort key (milliseconds).
+ * All-day strings ('YYYY-MM-DD') for today sort at "now" so they land
+ * between overdue (past) and upcoming (future) timed items.
+ * All-day strings for other days sort at midnight (start of day).
+ * Timed strings are parsed as Date so JS DST normalization applies.
+ */
+function toSortMs(page: PageSummary): number {
+  const iso = viewerStart(page) ?? "";
+  if (isAllDayIso(iso)) {
+    if (iso === localToday()) return Date.now();
+    return parseLocalISO(iso).getTime();
+  }
+  return parseLocalISO(iso).getTime();
+}
+
+/**
+ * Schedule order, soonest first — the ordering every date-grouped section uses,
+ * so a day group in Upcoming reads exactly like the Today view's sections do.
+ */
+export function compareByScheduledStart(a: PageSummary, b: PageSummary): number {
+  return toSortMs(a) - toSortMs(b);
+}
+
+/** Returns a new array. */
+export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
+  if (mode === "date") {
+    return [...pages].sort((a, b) => {
+      const aHas = a.scheduledStart != null;
+      const bHas = b.scheduledStart != null;
+      // Unscheduled items sink to the bottom
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      if (!aHas) return 0;
+      return toSortMs(a) - toSortMs(b);
+    });
+  }
+  if (mode === "title") {
+    return [...pages].sort((a, b) => emojiAwareCompare(a.title, b.title));
+  }
+  if (mode === "priority") {
+    // Lower priority number = higher urgency (1=urgent … 4=low). 0=none sinks to bottom.
+    // Within the same priority tier, sort by date ascending (soonest/most overdue first).
+    // Unscheduled items within a tier sort after scheduled ones.
+    return [...pages].sort((a, b) => {
+      const aP = a.priority === 0 ? 5 : a.priority;
+      const bP = b.priority === 0 ? 5 : b.priority;
+      if (aP !== bP) return aP - bP;
+      const aHas = a.scheduledStart != null;
+      const bHas = b.scheduledStart != null;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      if (!aHas) return 0;
+      return toSortMs(a) - toSortMs(b);
+    });
+  }
+  // manual — sort by sortOrder ascending
+  return [...pages].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export function getVisiblePages(pages: PageSummary[], activeViewId: string): PageSummary[] {
+  const today = localToday();
+  return pages.filter((p) => isOpen(p) && belongsToView(p, activeViewId, today));
+}
+
+function sortByCompletedDesc(pages: PageSummary[]): PageSummary[] {
+  return [...pages].sort((a, b) => {
+    const aTime = a.completedAt ? parseLocalISO(a.completedAt).getTime() : 0;
+    const bTime = b.completedAt ? parseLocalISO(b.completedAt).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+export function getCompletedTodayPages(pages: PageSummary[]): PageSummary[] {
+  const today = localToday();
+  return sortByCompletedDesc(
+    pages.filter((p) => isDone(p) && p.completedAt?.slice(0, 10) === today)
+  );
+}
+
+export function getCompletedViewPages(pages: PageSummary[], activeViewId: string): PageSummary[] {
+  const today = localToday();
+  return sortByCompletedDesc(
+    pages.filter((p) => isDone(p) && belongsToView(p, activeViewId, today))
+  );
+}
+
+/** Splits today-view pages into overdue (scheduled on an earlier day) and today.
+ *
+ * Overdue compares days, never the passing moment, so a page set for 9am today is still
+ * under Today at 2pm and reads as late only through its own red time. Grouping on the
+ * moment instead moved a page to Overdue the minute its time passed, which by the
+ * afternoon filled the section with the day's own plan and left it saying nothing about
+ * what needs rescheduling. It also split a timed page from an all-day one on the same
+ * date, which no one chose.
+ */
+export function groupTodayPages(pages: PageSummary[]): {
+  overdue: PageSummary[];
+  today: PageSummary[];
+} {
+  const todayStr = localToday();
+
+  function isOverdue(p: PageSummary): boolean {
+    const start = viewerStart(p);
+    if (!start) return false;
+    return start.slice(0, 10) < todayStr;
+  }
+
+  return {
+    overdue: pages.filter(isOverdue).sort(compareByScheduledStart),
+    today: pages.filter((p) => !isOverdue(p)).sort(compareByScheduledStart),
+  };
+}

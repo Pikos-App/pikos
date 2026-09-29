@@ -1,4 +1,4 @@
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -135,7 +135,7 @@ describe("requestDeleteFolder", () => {
     const items = hook.result.current.undo.toastItems;
     expect(items).toHaveLength(1);
     expect(items[0]!.id).toBe(`folder:${folderId}`);
-    expect(items[0]!.label).toBe("Deleted “Work (1 page)”");
+    expect(items[0]!.label).toBe("Deleted “Work” and 1 page");
     expect(items[0]!.duration).toBe(16000);
     expect(items[0]!.action?.label).toBe("Undo");
   });
@@ -148,7 +148,7 @@ describe("requestDeleteFolder", () => {
       hook.result.current.undo.requestDeleteFolder(folder, 3);
     });
 
-    expect(hook.result.current.undo.toastItems[0]!.label).toBe("Deleted “Work (3 pages)”");
+    expect(hook.result.current.undo.toastItems[0]!.label).toBe("Deleted “Work” and 3 pages");
   });
 
   it("omits suffix when page count is 0", async () => {

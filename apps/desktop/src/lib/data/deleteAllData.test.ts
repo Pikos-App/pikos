@@ -2,20 +2,28 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { StorageAdapter } from "@pikos/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deleteAllData } from "./deleteAllData";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────
 //
-// deleteAllData drives three Tauri boundaries: the wipe_app_data command, the
-// plugin-store (to neutralize the exit-save that would otherwise resurrect the
-// old workspace), and relaunch. We mock all three and assert the order of
-// effects — the store must be cleared so the relaunched app boots first-run and
-// reseeds the tutorial.
+// deleteAllData drives three boundaries: the storage adapter (credential
+// release + wipe), the plugin-store (to neutralize the exit-save that would
+// otherwise resurrect the old workspace), and the platform relaunch. We stand
+// in for all three and assert the order of effects — the store must be cleared
+// so the relaunched app boots first-run and reseeds the tutorial.
 
 const invoke = vi.fn<(cmd: string) => Promise<unknown>>();
 const relaunch = vi.fn<() => Promise<void>>();
+
+/** Storage double routing both calls through `invoke` so the existing
+ *  command-name assertions and ordering checks read unchanged. */
+const storage = {
+  releaseSyncCredentials: () => invoke("release_sync_credentials").then(() => undefined),
+  wipeAllData: () => invoke("wipe_app_data").then(() => undefined),
+} as unknown as StorageAdapter;
 const storeClear = vi.fn<() => Promise<void>>();
 const storeSet = vi.fn<(key: string, value: unknown) => Promise<void>>();
 const storeSave = vi.fn<() => Promise<void>>();
@@ -27,12 +35,8 @@ const load = vi.fn<
   }>
 >();
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (cmd: string): Promise<unknown> => invoke(cmd),
-}));
-
-vi.mock("@tauri-apps/plugin-process", () => ({
-  relaunch: (): Promise<void> => relaunch(),
+vi.mock("@/shared/platform", () => ({
+  getPlatform: () => ({ relaunch: (): Promise<void> => relaunch() }),
 }));
 
 vi.mock("@tauri-apps/plugin-store", () => ({
@@ -73,15 +77,36 @@ describe("deleteAllData", () => {
       return Promise.resolve();
     });
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(invoke).toHaveBeenCalledWith("wipe_app_data");
     // The store clear must happen so the plugin's exit-save can't write the old
     // workspace back — that's what forces the first-run tutorial reseed.
     expect(storeClear).toHaveBeenCalledTimes(1);
     expect(storeSave).toHaveBeenCalledTimes(1);
-    // Order: wipe → clear+save store → relaunch.
-    expect(order).toEqual(["invoke:wipe_app_data", "store.clear", "store.save", "relaunch"]);
+    // Order: release credentials → wipe → clear+save store → relaunch. The
+    // release runs first because the account ids it keys on live in the DB the
+    // wipe is about to delete.
+    expect(order).toEqual([
+      "invoke:release_sync_credentials",
+      "invoke:wipe_app_data",
+      "store.clear",
+      "store.save",
+      "relaunch",
+    ]);
+  });
+
+  it("still wipes when releasing sync credentials fails", async () => {
+    invoke.mockImplementation((cmd) =>
+      cmd === "release_sync_credentials"
+        ? Promise.reject(new Error("keychain unavailable"))
+        : Promise.resolve(undefined)
+    );
+
+    await deleteAllData(storage);
+
+    expect(invoke).toHaveBeenCalledWith("wipe_app_data");
+    expect(relaunch).toHaveBeenCalledTimes(1);
   });
 
   it("clears only pikos:* localStorage keys", async () => {
@@ -89,7 +114,7 @@ describe("deleteAllData", () => {
     localStorage.setItem("pikos:listSort", "manual");
     localStorage.setItem("other-app:foo", "keep");
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(localStorage.getItem("pikos:theme")).toBeNull();
     expect(localStorage.getItem("pikos:listSort")).toBeNull();
@@ -99,7 +124,7 @@ describe("deleteAllData", () => {
   it("still relaunches if clearing the store fails", async () => {
     load.mockRejectedValue(new Error("store unavailable"));
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(invoke).toHaveBeenCalledWith("wipe_app_data");
     expect(relaunch).toHaveBeenCalledTimes(1);
@@ -111,7 +136,7 @@ describe("deleteAllData", () => {
     // fallback must still empty the store so the relaunch reseeds.
     storeClear.mockRejectedValue(new Error("store.clear not allowed"));
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(storeSet).toHaveBeenCalledWith("workspaces", []);
     expect(storeSave).toHaveBeenCalledTimes(1);

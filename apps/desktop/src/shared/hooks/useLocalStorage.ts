@@ -1,24 +1,24 @@
 import { useState } from "react";
 
+import { getKeyValueStore } from "@/shared/kv";
+
 function readItem<T>(key: string, fallback: T): T {
+  const raw = getKeyValueStore().getItem(key);
+  if (raw === null) return fallback;
   try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
     return JSON.parse(raw) as T;
   } catch {
+    // Stored value isn't the shape this key used to hold — fall back rather
+    // than surface a parse error the user can do nothing about.
     return fallback;
   }
 }
 
 function writeItem<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // localStorage unavailable (e.g. private browsing) — ignore
-  }
+  getKeyValueStore().setItem(key, JSON.stringify(value));
 }
 
-/** useState backed by localStorage. Value is JSON-serialized. */
+/** useState backed by the platform key-value store. Value is JSON-serialized. */
 export function useLocalStorage<T>(
   key: string,
   defaultValue: T

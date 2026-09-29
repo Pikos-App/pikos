@@ -1,0 +1,101 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
+
+const title = "Connect an external calendar to Pikos";
+const description = "Pull your calendar into Pikos. Works with Google Calendar, iCloud, and any standard CalDAV server. Your events become real pages you can take notes on.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Connect an external calendar</h1>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Your real calendar, inside Pikos.</p>
+
+      <Prose class="mt-10">
+
+        <p>
+          Pikos reads your calendar over CalDAV (the open standard behind iCloud and most other providers) or straight from Google Calendar. Your events show up in the Pikos calendar as real pages. You can write notes on them, tag them, and find them in search. The schedule stays owned by your calendar, so an event always reflects what's actually on it.
+        </p>
+
+        <p>
+          It's read-only and opt-in. Nothing you write in Pikos goes back out to your provider, and only the calendars you turn on ever sync. Your notes and pages stay on your device.
+        </p>
+
+        <h2>Pick your provider</h2>
+
+        <p>
+          Find yours:
+        </p>
+
+        <ul>
+          <li><a href="/calendar-sync/google">Google Calendar</a>: sign in, no password to make</li>
+          <li><a href="/calendar-sync/icloud">iCloud</a>: app-specific password, then <code>caldav.icloud.com</code></li>
+          <li><a href="/calendar-sync/fastmail">Fastmail</a>: app password, then <code>caldav.fastmail.com</code></li>
+          <li><a href="#other-caldav">Anything else</a>: app password, then your provider's own <code>caldav.yourprovider.com</code></li>
+        </ul>
+
+        <p>
+          Yahoo, mailbox.org, Posteo, Yandex, and GMX all work, as does anything you run yourself like Nextcloud. If your provider has a calendar and mentions CalDAV anywhere in its help pages, it'll almost certainly connect. If yours gives you trouble, drop me a line at <a href="mailto:hello@pikos.app">hello@pikos.app</a> and I'll take a look.
+        </p>
+
+        <h2>Calendars Pikos can't reach</h2>
+
+        <p>
+          A few calendars don't use CalDAV at all, so there's no way for Pikos to read them:
+        </p>
+
+        <ul>
+          <li><strong>Outlook, Microsoft 365, and Exchange.</strong> Microsoft has never supported CalDAV.</li>
+          <li><strong>Proton.</strong> Proton Calendar is encrypted so that not even Proton can read it. That's the point of it, and it's why nothing else can read it either.</li>
+          <li><strong>Tuta.</strong> Same story.</li>
+          <li><strong>Notion Calendar.</strong> It reads other calendars rather than being one.</li>
+        </ul>
+
+        <p>
+          Better to know that now than after the download. If one of these is yours, <a href="mailto:hello@pikos.app">I'd still like to hear from you</a>. What people actually use is what decides where Pikos goes next.
+        </p>
+
+        <h2>What a synced event is</h2>
+
+        <ul>
+          <li><strong>The schedule is locked.</strong> Title, time, and recurrence come from your calendar and can't be edited or dragged in Pikos. That's how an event always matches the source, and it's <a href="/blog/read-only-on-purpose">a decision rather than a gap</a>.</li>
+          <li><strong>The notes are yours.</strong> Anything you write, tag, or tick belongs to you, and sync never touches it. Turn the calendar off later and your notes stay put.</li>
+        </ul>
+
+        <h2 id="other-caldav">Any other CalDAV server</h2>
+
+        <p>
+          You need three things: the server URL, your username, and an app password. Pikos finds your calendars from the base server URL, so there's no need to hunt down individual calendar addresses. Your provider's help pages will have it, usually something like <code>https://caldav.yourprovider.com</code>.
+        </p>
+
+        <p>
+          Open Settings with <code>Cmd+,</code>, or <code>Ctrl+,</code> on Linux, go to <strong>Calendar sync</strong>, then <strong>Add account</strong> and choose <strong>CalDAV</strong>. Pikos lists the calendars holding events and you turn on the ones you want. Each gets its own folder and a color you can change, and your password goes into the system keychain rather than the app's own files.
+        </p>
+
+        <h2 id="app-password">App passwords</h2>
+
+        <p>
+          Most providers won't take your normal account password for CalDAV, so you make an app password instead. It's a one-off password for a single app, and you can delete it whenever you like to cut Pikos off without touching your main login. Look for "app password" or "CalDAV access" in your provider's security settings. Google doesn't need one, because you sign in instead.
+        </p>
+
+        <p>
+          Ready to try? <a href="/download">Download Pikos</a>, then open Settings and find Calendar sync.
+        </p>
+
+      </Prose>
+    </article>
+
+  </main>
+
+  <Footer />
+</Base>
+

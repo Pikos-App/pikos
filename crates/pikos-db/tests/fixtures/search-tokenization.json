@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "name": "words split on whitespace",
+      "query": "team meeting",
+      "tokens": ["team", "meeting"]
+    },
+    {
+      "name": "a hyphen is a separator, not a NOT operator",
+      "query": "multi-color",
+      "tokens": ["multi", "color"]
+    },
+    {
+      "name": "an apostrophe is a separator, not a phrase delimiter",
+      "query": "don't",
+      "tokens": ["don", "t"]
+    },
+    {
+      "name": "punctuation around a word drops away",
+      "query": "(standup)",
+      "tokens": ["standup"]
+    },
+    {
+      "name": "digits are token characters",
+      "query": "q3 2026",
+      "tokens": ["q3", "2026"]
+    },
+    {
+      "name": "accented letters stay inside their token",
+      "query": "café",
+      "tokens": ["café"]
+    },
+    {
+      "name": "non-latin scripts are token characters too",
+      "query": "会議 notes",
+      "tokens": ["会議", "notes"]
+    },
+    {
+      "name": "runs of separators collapse",
+      "query": "a -- b",
+      "tokens": ["a", "b"]
+    },
+    {
+      "name": "a query of only separators has no tokens",
+      "query": "---",
+      "tokens": []
+    },
+    {
+      "name": "an empty query has no tokens",
+      "query": "",
+      "tokens": []
+    }
+  ]
+}

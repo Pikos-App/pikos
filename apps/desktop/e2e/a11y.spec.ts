@@ -13,7 +13,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 const SUPPRESSED_RULES = ["scrollable-region-focusable", "aria-required-children"];
 

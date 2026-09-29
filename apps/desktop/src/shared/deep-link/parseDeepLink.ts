@@ -3,6 +3,7 @@
 // Supported shapes:
 //   pikos://page/<uuid>            → navigate to a page
 //   pikos://today                  → smart view "Today"
+//   pikos://upcoming               → smart view "Upcoming"
 //   pikos://inbox                  → smart view "Inbox"
 //   pikos://calendar               → calendar at the current time (notification click)
 //   pikos://quick-add?text=...     → open quick-add prefilled
@@ -10,9 +11,11 @@
 //
 // Unknown or malformed URLs return null. The router treats null as a no-op.
 
+import type { SmartViewId } from "@pikos/core";
+
 export type DeepLinkAction =
   | { type: "page"; pageId: string }
-  | { type: "view"; viewId: "today" | "inbox" }
+  | { type: "view"; viewId: SmartViewId }
   | { type: "calendar" }
   | { type: "quick-add"; prefill: string }
   | { type: "search"; prefill: string };
@@ -43,6 +46,7 @@ export function parseDeepLink(raw: string): DeepLinkAction | null {
       return { pageId: id, type: "page" };
     }
     case "today":
+    case "upcoming":
     case "inbox":
       if (rest.length > 0) return null;
       return { type: "view", viewId: head };

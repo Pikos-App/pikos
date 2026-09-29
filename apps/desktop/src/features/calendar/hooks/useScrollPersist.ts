@@ -1,9 +1,10 @@
+import type { CollapseGeometry } from "@pikos/core";
+import { mapHourToY, mapYToHour, VISIBLE_HOURS } from "@pikos/core";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { VISIBLE_HOURS } from "../utils/calendarConstants";
-import { type CollapseGeometry, mapHourToY, mapYToHour } from "../utils/calendarGeometry";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { getKeyValueStore } from "@/shared/kv";
 
-const SCROLL_STORAGE_KEY = "pikos:calendarScrollHour";
 const SCROLL_PERSIST_DEBOUNCE_MS = 200;
 
 /** Values under 0.5h are treated as unset. An earlier scroll-clamp bug on
@@ -57,7 +58,7 @@ export function useScrollPersist({
   calendarScrollRequest,
   geometry,
   rightPanel,
-  storageKey = SCROLL_STORAGE_KEY,
+  storageKey = STORAGE_KEYS.calendarScrollHour,
 }: UseScrollPersistOptions): UseScrollPersistResult {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -120,7 +121,7 @@ export function useScrollPersist({
     if (restoredForSessionRef.current) return;
     restoredForSessionRef.current = true;
 
-    const raw = localStorage.getItem(storageKey);
+    const raw = getKeyValueStore().getItem(storageKey);
     const saved = raw !== null ? Number(raw) : NaN;
     const hasUsableSaved = Number.isFinite(saved) && saved >= MIN_USABLE_SAVED_HOUR;
     const scrollHour = hasUsableSaved
@@ -139,7 +140,7 @@ export function useScrollPersist({
       if (tid !== null) clearTimeout(tid);
       tid = setTimeout(() => {
         const scrollHour = mapYToHour(el.scrollTop, geometry);
-        localStorage.setItem(storageKey, String(scrollHour));
+        getKeyValueStore().setItem(storageKey, String(scrollHour));
       }, SCROLL_PERSIST_DEBOUNCE_MS);
     }
     el.addEventListener("scroll", handle, { passive: true });

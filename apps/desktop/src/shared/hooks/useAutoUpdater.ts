@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { createLogger } from "@/shared/logger";
+import { flushPendingWrites } from "@/shared/pendingWrites";
 
 const log = createLogger("AutoUpdater");
 
@@ -98,6 +99,10 @@ export function useAutoUpdater(): AutoUpdater {
         setStatus({ state: "up-to-date" });
         return;
       }
+      // Relaunch restarts the process without closing the window, so the write
+      // queue's close-time flush never runs. The user clicked this from a dialog
+      // they opened mid-session, most likely with an editor full of unsaved text.
+      await flushPendingWrites();
       await update.downloadAndInstall();
       log.info(`Update ${targetVersion} installed, relaunching`);
       const { relaunch } = await import("@tauri-apps/plugin-process");

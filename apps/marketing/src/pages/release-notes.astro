@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 ---
 
-<Base title="Release Notes - Pikos" description="What's new in Pikos. A running log of features, fixes, and improvements.">
+<Base title="Release notes - Pikos" description="What's new in Pikos. A running log of features, fixes, and improvements.">
 
   <main class="mx-auto max-w-2xl px-8 py-20">
 
@@ -13,10 +13,38 @@ import Footer from "../components/Footer.astro";
       Home
     </a>
 
-    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Release Notes</h1>
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Release notes</h1>
     <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">What ships in each release.</p>
 
     <div class="mt-12 space-y-16">
+
+      <!-- ── 0.4.0 ─────────────────────────────────────────────────────── -->
+      <article>
+        <div class="flex items-center gap-3">
+          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.4.0</h2>
+        </div>
+        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-09-28">September 28, 2026</time>
+
+        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+          <p>
+            Your real calendar, inside Pikos. Connect the calendar you already use and the meeting you're walking into becomes a page you can write notes on.
+          </p>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">New</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li><strong>Calendar sync.</strong> Connect Google Calendar, iCloud, or any CalDAV server. Your events arrive as real pages you can write on, tag, and search. It's read-only and opt-in, so nothing you do in Pikos is ever sent back out. <a href="/calendar-sync" class="text-primary-500 hover:underline dark:text-primary-400">How to set it up</a>.</li>
+            <li><strong>Focus timer.</strong> Start a session from any page and Pikos drops to just that page until you're done. It charts your focus time by week.</li>
+            <li><strong>Text size.</strong> The interface, the editor, and the calendar each scale on their own. Set them in settings, or press <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Cmd +</code> and <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Cmd -</code> (<code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Ctrl</code> on Linux), which size whichever panel you're looking at.</li>
+            <li><strong>MCP server.</strong> The command-line tool can hand your workspace to an AI agent over MCP, so an assistant can read and write pages with no Pikos account or server in the middle. <a href="/cli" class="text-primary-500 hover:underline dark:text-primary-400">What it does</a>.</li>
+          </ul>
+
+          <p>
+            0.4.0 upgrades your workspace and 0.3.1 can't open it afterwards. Pikos backs up the old one before it does, so nothing is lost either way.
+          </p>
+
+        </div>
+      </article>
 
       <!-- ── 0.3.1 ─────────────────────────────────────────────────────── -->
       <article>
@@ -28,7 +56,7 @@ import Footer from "../components/Footer.astro";
         <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
           <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Fixed</h3>
           <ul class="list-disc space-y-1.5 pl-5">
-            <li><strong>Linux:</strong> No more blank or white window on some distributions, including Fedora.</li>
+            <li><strong>Linux:</strong> An attempt at stopping the blank or white window on some distributions, including Fedora. It didn't work. The window still turns up on some setups and the cause is still open.</li>
           </ul>
         </div>
       </article>
@@ -60,7 +88,7 @@ import Footer from "../components/Footer.astro";
             <li>Autosave as you type</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Pages &amp; Organization</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Pages and organization</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Quick Add reads a single line of plain English: priority, due date, recurrence, tags, and folder all parsed from how you'd write it</li>
             <li>Optional one-line subtitle on every page, shown in the page list and on calendar blocks</li>
@@ -73,7 +101,7 @@ import Footer from "../components/Footer.astro";
             <li>Soft delete with undo; every view has its own Completed section</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Calendar &amp; Scheduling</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Calendar and scheduling</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Week view with all-day band, timed grid, and a live "now" indicator</li>
             <li>Click and drag to create a block, drag to reschedule, drag edges to resize</li>
@@ -92,7 +120,7 @@ import Footer from "../components/Footer.astro";
             <li>Results show priority, date, and tags inline</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Layout &amp; Navigation</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Layout and navigation</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Three-panel layout: sidebar, page list, and editor or calendar. Each resizable, widths remembered</li>
             <li>Toggle between editor and calendar without leaving the active page</li>
@@ -102,7 +130,7 @@ import Footer from "../components/Footer.astro";
             <li>First launch starts with a working tutorial, not an empty screen</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Import &amp; Export</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Import and export</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Import an Obsidian vault. Markdown files with YAML frontmatter become pages, and your folder structure carries over</li>
             <li>CSV import with a step to map columns to fields</li>
@@ -116,7 +144,7 @@ import Footer from "../components/Footer.astro";
             <li>The only outbound request is the update check on launch. You can turn it off.</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Appearance &amp; Platform</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Appearance and platform</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Light, dark, and (on macOS) system theme modes</li>
             <li>Native macOS app menu and window chrome; remembers window size and position between launches</li>
@@ -131,7 +159,7 @@ import Footer from "../components/Footer.astro";
 
   </main>
 
-  <Footer current="/release-notes" />
+  <Footer />
 </Base>
 
 <style>

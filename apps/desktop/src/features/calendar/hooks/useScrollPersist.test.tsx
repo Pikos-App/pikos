@@ -6,11 +6,12 @@
 // so we install a manual mock per test. A small Harness component attaches
 // the hook's scrollRef to a real div whose clientHeight we control.
 
+import type { CollapseGeometry } from "@pikos/core";
+import { buildCollapseGeometry } from "@pikos/core";
 import { act, render } from "@testing-library/react";
 import { type ReactNode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildCollapseGeometry, type CollapseGeometry } from "../utils/calendarGeometry";
 import { useScrollPersist } from "./useScrollPersist";
 
 const STORAGE_KEY = "pikos:test:scrollHour";

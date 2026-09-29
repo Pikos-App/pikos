@@ -3,6 +3,7 @@
 // panel is not calendar, click-delay open, double-click within delay,
 // drag-suppression, and timer cleanup on unmount.
 
+import { CLICK_DELAY } from "@pikos/core";
 import { act } from "@testing-library/react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUI } from "@/shared/context/UIContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
-import { CLICK_DELAY } from "../utils/calendarConstants";
 import { useCalendarBlockPopover } from "./useCalendarBlockPopover";
 
 beforeEach(() => {

@@ -3,7 +3,7 @@
 // on every page mutation. Reads folders/storage from WorkspaceContext and
 // dispatches soft-delete + reload through it on undo.
 
-import { getLocalTimezone } from "@pikos/core";
+import { getLocalTimezone, writableFolders } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useState } from "react";
 
 import type {
@@ -38,7 +38,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
     const folderIds: string[] = [];
     const pageIds: string[] = [];
 
-    const existingFoldersByName = new Map(folders.map((f) => [f.name, f]));
+    const existingFoldersByName = new Map(writableFolders(folders).map((f) => [f.name, f]));
 
     const folderKeyToId = new Map<string, string>();
     for (const f of data.folders) {

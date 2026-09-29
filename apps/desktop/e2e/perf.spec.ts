@@ -1,4 +1,4 @@
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 import { assertNoBlocking, assertPerf, observeLongTasks, readLongTasks } from "./perf-helpers";
 
 // ─── P1: App boot to interactive ────────────────────────────────────────────

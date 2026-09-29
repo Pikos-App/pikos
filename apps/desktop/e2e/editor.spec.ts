@@ -4,7 +4,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 async function openEditorForPage(app: Page, title: string) {
   await app.locator("[data-page-list-item]").getByText(title).click();
@@ -199,6 +199,32 @@ appTest("task checkbox toggles checked state @tier2", async ({ app }) => {
   await expect(checkbox).not.toBeChecked();
 });
 
+// A checkbox in the body is one line of a note; the page's own status is whether
+// the page is done. Nothing else pins them apart, and the two read identically on
+// screen — a tick next to text.
+
+appTest("ticking an inline task leaves the page's own status open @tier2", async ({ app }) => {
+  await quickAdd(app, "inline status test");
+  const editor = await openEditorForPage(app, "inline status test");
+
+  await app.keyboard.type("/");
+  await expect(app.locator(".slash-menu")).toBeVisible();
+  await app.keyboard.type("task");
+  await app.keyboard.press("Enter");
+  await app.keyboard.type("Toggle me");
+
+  const status = app.getByRole("button", { name: "Mark done" });
+  await expect(status).toHaveText("Open");
+
+  const checkbox = editor.locator("ul[data-type='taskList'] input[type='checkbox']");
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+
+  // A flipped page status renames the chip to "Mark not done", so this resolves
+  // to nothing rather than reading "Done".
+  await expect(status).toHaveText("Open");
+});
+
 // ─── Content persistence ────────────────────────────────────────────────────
 
 appTest("formatted content persists across page switches @tier1", async ({ app }) => {
@@ -225,7 +251,7 @@ appTest("formatted content persists across page switches @tier1", async ({ app }
 
 appTest("table toolbar appears when cursor is in table @tier2", async ({ app }) => {
   await quickAdd(app, "table toolbar test");
-  const editor = await openEditorForPage(app, "table toolbar test");
+  await openEditorForPage(app, "table toolbar test");
 
   await app.keyboard.type("/");
   await expect(app.locator(".slash-menu")).toBeVisible();
@@ -324,4 +350,103 @@ appTest("bubble toolbar inserts a link around the selection @tier2", async ({ ap
 
   const link = editor.locator('a[href="https://pikos.app"]');
   await expect(link).toHaveText("Pikos");
+});
+
+// ─── Focus timer clears the room and reports on the way out ─────────────────
+
+// The session hides the left panels for the duration. It must not write the
+// user's standing sidebar preference to do it: a run that ended by quitting the
+// app would otherwise leave the panels gone on the next launch, with nothing on
+// screen to explain why.
+
+appTest("a focus session hides the left panels and gives them back @tier2", async ({ app }) => {
+  await quickAdd(app, "Deep work");
+  await openEditorForPage(app, "Deep work");
+
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});
+
+// Opening the sidebar mid-session is an explicit decision, so the session stops
+// driving it — ending must not yank the panels away again.
+
+appTest("reopening the sidebar mid-session survives the session ending @tier2", async ({ app }) => {
+  await quickAdd(app, "Deep work");
+  await openEditorForPage(app, "Deep work");
+
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await app.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});
+
+// Ending a session is otherwise invisible — the row lands in a settings panel the
+// user isn't looking at — so both outcomes toast. The strings are unit-pinned in
+// useFocusTimer.test.ts; what nothing covered is that they reach the screen.
+//
+// A recorded session has to outrun the 30s discard floor, so the length arm runs
+// on the raw `page` fixture: clock.install must land before the first app script
+// reads Date.
+
+appTest("stopping a focus session toasts how long it ran @tier2", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
+  await page.clock.resume();
+  await page.goto("/");
+  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+  await quickAdd(page, "Deep work");
+  await openEditorForPage(page, "Deep work");
+
+  await page.getByRole("button", { name: "Start focus timer" }).click();
+  await page.clock.setFixedTime(new Date("2026-06-08T09:25:00"));
+  await page.getByRole("button", { name: "Stop focus timer" }).click();
+
+  await expect(page.getByRole("status", { name: "Focused for 25 minutes" })).toBeVisible();
+});
+
+appTest("a session under the floor toasts that nothing was recorded @tier2", async ({ app }) => {
+  await quickAdd(app, "Quick glance");
+  await openEditorForPage(app, "Quick glance");
+
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+
+  await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
+});
+
+// ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
+
+// The editor's insert-link and the command palette both claim it. The editor's is
+// scoped, so it used to win outright and the palette could not be opened from the
+// one place you most want it. It now only claims the combo with a selection —
+// which is what a link is made out of — and the registry falls through otherwise.
+appTest("Cmd+Shift+K makes a link from a selection, opens the palette without one @tier2", async ({
+  app,
+}) => {
+  await quickAdd(app, "a page to write in");
+  await app.locator("[data-page-list-item]").filter({ hasText: "a page to write in" }).click();
+
+  const body = app.getByRole("textbox", { name: "Page content" });
+  await body.click();
+  await app.keyboard.type("link this phrase");
+
+  // No selection: the editor stands down and the palette opens.
+  await app.keyboard.press(mod("Mod+Shift+k"));
+  const palette = app.getByRole("dialog", { name: "Search pages" });
+  await expect(palette).toBeVisible();
+  await app.keyboard.press("Escape");
+  await expect(palette).not.toBeVisible();
+
+  // With a selection the editor takes it and the palette stays shut.
+  await body.click();
+  await app.keyboard.press(mod("Mod+a"));
+  await app.keyboard.press(mod("Mod+Shift+k"));
+  await expect(palette).not.toBeVisible();
 });

@@ -7,12 +7,19 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import { isDone, isTimedIso, parseLocalISO } from "@pikos/core";
+import {
+  folderIdForView,
+  getVisiblePages,
+  isDateGroupedView,
+  isDone,
+  isTimedIso,
+  parseLocalISO,
+  sortPages,
+} from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
-import { getVisiblePages, sortPages } from "@/features/pages";
-import type { SortMode } from "@/features/pages";
+import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
@@ -32,9 +39,16 @@ function getPageDurationMs(page: PageSummary): number | undefined {
   return ms > 0 ? ms : undefined;
 }
 
+/** Excludes synced mirrors: the reconciler owns their schedule and folder, so the
+ *  backend rejects a drop that changes either and the page silently reverts. */
+function unlockedIds(ids: string[], pages: PageSummary[]): string[] {
+  return ids.filter((id) => !pages.find((p) => p.id === id)?.scheduleLocked);
+}
+
 export function useThreePanelDnD() {
   const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = usePages();
-  const { activeViewId, getSortMode } = useUI();
+  const { activeViewId } = useUI();
+  const sortMode = useActiveSortMode();
   const { clearSelection, selectedPageIds } = useSelection();
   const { callExternalDragUpdater, setIsDraggingOverCalendar } = useCalendarDnD();
 
@@ -77,7 +91,7 @@ export function useThreePanelDnD() {
   // While a page is being dragged, track cursor position and update the
   // WeekGrid ghost preview via callExternalDragUpdater.
   useEffect(() => {
-    if (!activePageData) {
+    if (!activePageData || activePageData.scheduleLocked) {
       calendarStartRef.current = null;
       callExternalDragUpdaterRef.current(-1, -1, undefined); // clear ghost
       return;
@@ -123,7 +137,6 @@ export function useThreePanelDnD() {
       // If dragging a selected item, drag all selected pages (in list order).
       // If dragging an unselected item, treat as single-drag and clear selection.
       if (selectedPageIds.has(String(active.id))) {
-        const sortMode: SortMode = activeViewId === "today" ? "date" : getSortMode(activeViewId);
         const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
         const ids = visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id);
         setDraggedPageIds(ids);
@@ -152,11 +165,13 @@ export function useThreePanelDnD() {
 
     // Calendar drop takes priority over list reorder.
     if (calendarStart && pageData) {
-      if (idsToMove.length <= 1) {
+      const targets = unlockedIds(idsToMove.length > 0 ? idsToMove : [pageData.id], pages);
+      if (targets.length === 1) {
         // Single-page drop: preserve existing behavior (keep duration)
+        const target = pages.find((p) => p.id === targets[0]) ?? pageData;
         let calendarEnd: string | undefined;
         if (isTimedIso(calendarStart)) {
-          const durationMs = getPageDurationMs(pageData);
+          const durationMs = getPageDurationMs(target);
           if (durationMs != null) {
             calendarEnd = format(
               new Date(new Date(calendarStart).getTime() + durationMs),
@@ -164,8 +179,8 @@ export function useThreePanelDnD() {
             );
           }
         }
-        void scheduleOnce(pageData.id, calendarStart, calendarEnd);
-      } else {
+        void scheduleOnce(target.id, calendarStart, calendarEnd);
+      } else if (targets.length > 1) {
         // Multi-page drop
         const isTimedDrop = isTimedIso(calendarStart);
         if (isTimedDrop) {
@@ -173,7 +188,7 @@ export function useThreePanelDnD() {
           // (15min gap after timed pages, 30min slots for point-in-time pages).
           const baseTime = new Date(calendarStart).getTime();
           let offset = 0;
-          for (const id of idsToMove) {
+          for (const id of targets) {
             const page = pages.find((p) => p.id === id);
             const durationMs = page ? getPageDurationMs(page) : undefined;
             const startTime = new Date(baseTime + offset);
@@ -189,7 +204,7 @@ export function useThreePanelDnD() {
           }
         } else {
           // All-day drop: all pages become all-day for that date
-          for (const id of idsToMove) {
+          for (const id of targets) {
             void scheduleOnce(id, calendarStart);
           }
         }
@@ -207,11 +222,10 @@ export function useThreePanelDnD() {
 
     if (at === "page" && ot === "page") {
       // Only reorder in manual sort mode — other modes lock DnD.
-      if (activeViewId === "today") return;
-      const currentSortMode = getSortMode(activeViewId);
-      if (currentSortMode !== "manual") return;
-      const visible = sortPages(getVisiblePages(pages, activeViewId), currentSortMode);
-      const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
+      if (isDateGroupedView(activeViewId)) return;
+      if (sortMode !== "manual") return;
+      const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
+      const folderId = folderIdForView(activeViewId);
 
       if (idsToMove.length > 1) {
         // Multi-page reorder: remove all dragged pages, reinsert as group at drop target.
@@ -243,7 +257,7 @@ export function useThreePanelDnD() {
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;
-      for (const id of idsToMove.length > 0 ? idsToMove : [String(active.id)]) {
+      for (const id of unlockedIds(idsToMove.length > 0 ? idsToMove : [String(active.id)], pages)) {
         updatePage(id, { folderId });
       }
       clearSelection();
@@ -252,7 +266,7 @@ export function useThreePanelDnD() {
       // with an all-day occurrence for today. For recurring pages this also
       // shifts the rule anchor (see scheduleOnce).
       const today = format(new Date(), "yyyy-MM-dd");
-      for (const id of idsToMove.length > 0 ? idsToMove : [String(active.id)]) {
+      for (const id of unlockedIds(idsToMove.length > 0 ? idsToMove : [String(active.id)], pages)) {
         void scheduleOnce(id, today);
       }
       clearSelection();

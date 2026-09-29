@@ -12,24 +12,21 @@
 // otherwise has to verify by hand.
 //
 // WHY IT LIVES IN THE DESKTOP CRATE (not pikos-db):
-// CI runs every Rust step from `apps/desktop/src-tauri` (see
-// .github/workflows/_validate.yml, `working-directory`). The root workspace
-// *excludes* that package, so `cargo test --all` there compiles pikos-db only as
-// a normal dependency and never runs pikos-db's own `#[cfg(test)]` modules.
-// Tests placed in pikos-db pass under `cargo test -p pikos-db` locally but would
-// be invisible to CI. The desktop crate's dev-deps enable pikos-db's
-// `test-support` feature precisely so its tests can reuse `test_pool` /
-// `insert_test_*` against the production migration tree — so these live here,
-// where CI actually executes them, and call pikos-db's public API.
+// These assert how the desktop app composes pikos-db's modules, so they belong
+// beside the code that does the composing. The desktop crate's dev-deps enable
+// pikos-db's `test-support` feature precisely so they can reuse `test_pool` /
+// `insert_test_*` against the production migration tree and call the public API.
 //
-// We test at the impl/pool level rather than through the Tauri command shims via
-// MockRuntime. The shims are deliberately thin (`state.get_pool().await?;
-// delegate to *_impl`) and carry no logic worth a MockRuntime harness — and the
-// asset/export shims resolve `app_data_dir()` / `$HOME/Downloads`, which under a
-// mock runtime would write to real OS locations. The data logic lives in the
-// `*_impl` functions, so that's where the value is. The export → re-import
-// round-trip and the asset-copy coverage live alongside the
+// We test at the impl/pool level rather than through the Tauri command shims. The
+// shims are deliberately thin (`state.get_pool().await?; delegate to *_impl`), so
+// the data logic — which is what these tests are about — lives in `*_impl`. The
+// export → re-import round-trip and the asset-copy coverage live alongside the
 // `build_export_json_impl` / `save_asset` code they exercise (db/dev, db/assets).
+// The wire *below* those shims is not covered here and is not meant to be: see
+// `ipc_tests.rs`, which drives real invokes through MockRuntime for the argument
+// deserialization no `*_impl` test can reach. Asset and export shims stay out of
+// that too — they resolve `app_data_dir()` / `$HOME/Downloads` and under a mock
+// runtime would write to real OS locations.
 //
 // Two groups below:
 //   1. `test_pool()` (in-memory, FK-on, full migration tree) for the multi-step
@@ -119,22 +116,22 @@ async fn recurring_completion_clone_is_searchable() {
     .await
     .unwrap();
 
-    // Complete today's occurrence and advance the head to tomorrow.
+    // The occurrence date isn't passed — it's derived server-side from the head.
     let result = complete_recurring_page_impl(
         &pool,
         CompleteRecurringInput {
             page_id: head.id.clone(),
-            next_scheduled_start: Some("2026-05-30T09:00:00".to_string()),
-            next_scheduled_end: None,
-            rule_id: None,
-            add_exdates: None,
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
     .unwrap();
 
     // The clone is a done snapshot of the occurrence just completed; the head
-    // stays open, advanced to the next date.
+    // stays open, recomputed to the next date.
     assert_eq!(result.clone.status, "done");
     assert_eq!(result.head.status, "not_started");
     assert_eq!(

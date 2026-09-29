@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "name": "an on-pattern start moves nothing",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "start": "2026-08-24T09:00:00",
+      "end": "2026-08-24T11:00:00",
+      "snappedStart": "2026-08-24T09:00:00",
+      "snappedEnd": "2026-08-24T11:00:00"
+    },
+    {
+      "name": "an off-pattern start carries its end the same distance",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "start": "2026-08-19T09:00:00",
+      "end": "2026-08-19T11:00:00",
+      "snappedStart": "2026-08-24T09:00:00",
+      "snappedEnd": "2026-08-24T11:00:00"
+    },
+    {
+      "name": "a multi-day span keeps its length across the snap",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "start": "2026-08-19T09:00:00",
+      "end": "2026-08-21T17:00:00",
+      "snappedStart": "2026-08-24T09:00:00",
+      "snappedEnd": "2026-08-26T17:00:00"
+    },
+    {
+      "name": "an all-day range shifts as dates, staying date-only",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "start": "2026-08-19",
+      "end": "2026-08-20",
+      "snappedStart": "2026-08-24",
+      "snappedEnd": "2026-08-25"
+    },
+    {
+      "name": "no end stays absent",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "start": "2026-08-19T09:00:00",
+      "end": null,
+      "snappedStart": "2026-08-24T09:00:00",
+      "snappedEnd": null
+    },
+    {
+      "name": "an unconstrained cadence anchors where it is told",
+      "rrule": "FREQ=DAILY;INTERVAL=3",
+      "start": "2026-08-19T09:00:00",
+      "end": "2026-08-19T10:00:00",
+      "snappedStart": "2026-08-19T09:00:00",
+      "snappedEnd": "2026-08-19T10:00:00"
+    },
+    {
+      "name": "the snap crosses a month boundary and the end follows",
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "start": "2026-08-27T09:00:00",
+      "end": "2026-08-27T10:30:00",
+      "snappedStart": "2026-09-01T09:00:00",
+      "snappedEnd": "2026-09-01T10:30:00"
+    },
+    {
+      "name": "an unparseable rule leaves both untouched",
+      "rrule": "NOT-A-RULE",
+      "start": "2026-08-19T09:00:00",
+      "end": "2026-08-19T11:00:00",
+      "snappedStart": "2026-08-19T09:00:00",
+      "snappedEnd": "2026-08-19T11:00:00"
+    },
+    {
+      "name": "an exhausted rule leaves both untouched",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260101T000000",
+      "start": "2026-08-19T09:00:00",
+      "end": "2026-08-19T11:00:00",
+      "snappedStart": "2026-08-19T09:00:00",
+      "snappedEnd": "2026-08-19T11:00:00"
+    }
+  ]
+}

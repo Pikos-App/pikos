@@ -37,9 +37,11 @@
  *   pnpm record:hero
  */
 
+import { writeFileSync } from "fs";
+import { join } from "path";
+
 import { test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { join } from "path";
 
 import { mod } from "./fixtures";
 
@@ -115,13 +117,6 @@ async function clickLocator(page: Page, locator: ReturnType<Page["locator"]>) {
   await page.waitForTimeout(150);
 }
 
-async function dblClickLocator(page: Page, locator: ReturnType<Page["locator"]>) {
-  await moveToLocator(page, locator);
-  await page.evaluate(() => window.__clickCursor());
-  await locator.dblclick();
-  await page.waitForTimeout(150);
-}
-
 async function typeSlowly(page: Page, text: string, delayMs = 55) {
   for (const char of text) {
     await page.keyboard.type(char, { delay: delayMs });
@@ -163,14 +158,6 @@ async function dragLocatorTo(
   await dragFromTo(page, box.x + box.width / 2, box.y + box.height / 2, targetX, targetY);
 }
 
-// ── Sidebar nav helper ───────────────────────────────────────────────────────
-
-function sidebarButton(page: Page, name: string) {
-  return page
-    .getByRole("group", { name: "Views and folders" })
-    .getByRole("button", { name })
-    .first();
-}
 
 // ── Type declarations ────────────────────────────────────────────────────────
 
@@ -185,7 +172,8 @@ declare global {
 
 // ── Recording flow ───────────────────────────────────────────────────────────
 
-async function recordHero(page: Page) {
+/** Returns the wall-clock moment the finished video should start from. */
+async function recordHero(page: Page): Promise<number> {
   await page.evaluate(INJECT_CURSOR);
   await page.evaluate(() => window.__moveCursor(-30, -30));
 
@@ -209,7 +197,13 @@ async function recordHero(page: Page) {
     // 40px (collapsed 0–6am band) + 2 × 64px (6–8am) = 168 → 8am at top.
     el.scrollTop = 168;
   });
-  await page.waitForTimeout(1300);
+
+  // The frame the finished video opens on: calendar framed, cursor not yet moved,
+  // which is also the state it ends in. Capture starts when the browser context is
+  // created, so everything before this is about:blank and the app painting in.
+  await page.waitForTimeout(400);
+  const cutAt = Date.now();
+  await page.waitForTimeout(900);
 
   // ── 2. Hover the Roadmap planning block, click its checkbox directly. ─
   // The block exposes a TaskCheckbox span (class `.task-checkbox`) that's
@@ -354,6 +348,8 @@ async function recordHero(page: Page) {
 
   // Long final hold so the seam absorbs the seed-data reset on loop.
   await page.waitForTimeout(3500);
+
+  return cutAt;
 }
 
 // ── Test definitions ─────────────────────────────────────────────────────────
@@ -363,12 +359,14 @@ for (const theme of ["dark", "light"] as const) {
     const monday = RECORDING_DATE;
 
     const ctx = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
       recordVideo: {
         dir: VIDEO_DIR,
-        size: { width: 1280, height: 800 },
+        size: { height: 800, width: 1280 },
       },
+      viewport: { height: 800, width: 1280 },
     });
+
+    const captureStartedAt = Date.now();
 
     const page = await ctx.newPage();
     await page.addInitScript(`localStorage.setItem('pikos-theme', '${theme}')`);
@@ -384,9 +382,16 @@ for (const theme of ["dark", "light"] as const) {
     await page.waitForSelector('[role="main"][aria-label="Workspace"]', { timeout: 10000 });
     await page.waitForTimeout(500);
 
-    await recordHero(page);
+    const cutAt = await recordHero(page);
 
     await ctx.close();
+
+    // record-hero.sh trims each take by its own measured prefix. A fixed cut can
+    // only ever suit one of the two: the first take waits on a cold Vite server,
+    // and the light video it fitted shipped with two seconds of white on the dark one.
+    const videoPath = await page.video()!.path();
+    writeFileSync(`${videoPath}.trim`, String((cutAt - captureStartedAt) / 1000));
+
     console.log(`\n  ✓ Recorded ${theme} mode video to ${VIDEO_DIR}/`);
   });
 }

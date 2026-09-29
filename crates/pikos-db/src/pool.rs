@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use pikos_recurrence::WallClock;
 use sqlx::migrate::Migrator;
 use sqlx::SqlitePool;
 
@@ -39,15 +40,149 @@ pub fn now_iso() -> String {
 /// `completed_at.slice(0,10) === localToday()` comparison fail whenever the UTC
 /// date differs from the local date (i.e. for much of every day off-UTC).
 pub fn now_local_iso() -> String {
-    chrono::Local::now()
-        .format("%Y-%m-%dT%H:%M:%S")
-        .to_string()
+    WallClock::timed(chrono::Local::now().naive_local()).format()
+}
+
+/// Today's local date, `YYYY-MM-DD` — the day key occurrence dates are compared
+/// against. Local for the same reason as [`now_local_iso`].
+pub fn today_local() -> String {
+    WallClock::all_day(chrono::Local::now().date_naive()).format()
+}
+
+/// The device's IANA zone, resolved once per process — the lookup reads OS config
+/// and one caller runs inside the detach transaction, where a per-value lookup
+/// would widen the write lock under a racing editor write. An OS zone chrono-tz
+/// can't parse falls back to UTC rather than being stored raw: an unparseable
+/// stamp is unusable by every layer that later reads it.
+///
+/// This crate's own tests pin UTC (the corpus convention), so no conversion
+/// assertion depends on the machine that ran it. `cfg(test)` does **not** reach a
+/// dependent crate's tests — those see the real zone, and must derive any
+/// expectation from this function rather than a literal.
+pub fn device_zone() -> chrono_tz::Tz {
+    #[cfg(test)]
+    {
+        chrono_tz::Tz::UTC
+    }
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static ZONE: OnceLock<chrono_tz::Tz> = OnceLock::new();
+        *ZONE.get_or_init(|| {
+            iana_time_zone::get_timezone()
+                .ok()
+                .and_then(|name| name.parse().ok())
+                .unwrap_or(chrono_tz::Tz::UTC)
+        })
+    }
+}
+
+/// Highest migration version this binary carries (down-migrations ignored;
+/// there are none today, but filter defensively).
+pub(crate) fn embedded_migration_max() -> i64 {
+    MIGRATOR
+        .iter()
+        .filter(|m| !m.migration_type.is_down_migration())
+        .map(|m| m.version)
+        .max()
+        .unwrap_or(0)
+}
+
+/// `(embedded, applied)` — the highest migration version this binary carries, and
+/// the highest applied to the workspace at `path` (`None` when the file has no
+/// `_sqlx_migrations` table yet).
+///
+/// [`open_pool`] migrates on connect, so a binary that does not own the workspace
+/// — the CLI shares one file with the installed desktop app — silently upgrades
+/// the schema and leaves the app unable to open it, since the migrator fails
+/// closed on the version it has never heard of. Such a caller compares these two
+/// first and refuses rather than migrate. Opens without `create_if_missing` and
+/// without running the migrator, so it never writes.
+pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(false)
+                .busy_timeout(Duration::from_secs(5)),
+        )
+        .await?;
+
+    let has_table: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations')",
+    )
+    .fetch_one(&pool)
+    .await?
+        != 0;
+    let applied = if has_table {
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await?
+    } else {
+        None
+    };
+    pool.close().await;
+
+    Ok((embedded_migration_max(), applied))
 }
 
 /// Open (or create) the SQLite workspace at `path`, apply migrations, and run
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.
 pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
+    match open_pool_inner(path).await {
+        Ok(pool) => Ok(pool),
+        Err(err) => Err(match integrity_failure(path).await {
+            Some(detail) => AppError::Corrupt(detail),
+            None => err,
+        }),
+    }
+}
+
+/// `PRAGMA quick_check` on the file, if it can be read at all. `Some` means the
+/// workspace is damaged and names how; `None` means the file is structurally
+/// fine and whatever went wrong upstream is the real error.
+///
+/// Every way `open_pool` can fail arrives as a sqlx error whose `Display` is a
+/// SQL fragment, and the two causes underneath want opposite answers: a damaged
+/// file is recoverable from the backups directory and never by retrying, while
+/// anything else is a bug to report. Only the file can tell them apart, which is
+/// why this runs on the failure path rather than the open path.
+///
+/// Deliberately `quick_check` and not `integrity_check`: the full check walks
+/// every index on what may be a large workspace, and this runs at a moment when
+/// the user is already staring at a window that will not open.
+async fn integrity_failure(path: &str) -> Option<String> {
+    if !std::path::Path::new(path).exists() {
+        return None;
+    }
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(false)
+                .read_only(true),
+        )
+        .await
+        .ok()?;
+
+    let result = sqlx::query_scalar::<_, String>("PRAGMA quick_check")
+        .fetch_one(&pool)
+        .await;
+    pool.close().await;
+
+    match result {
+        Ok(row) if row == "ok" => None,
+        Ok(row) => Some(row),
+        // The check itself could not run, which on a readable file means the
+        // header or the page structure is unreadable.
+        Err(e) => Some(e.to_string()),
+    }
+}
+
+async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -104,16 +239,7 @@ pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
 /// mutates the same file. Downgrade safety is handled separately: the sqlx
 /// migrator fails closed if the workspace is newer than the binary.
 async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppResult<()> {
-    // Highest migration version the binary knows about (down-migrations ignored;
-    // there are none today, but filter defensively).
-    let Some(known_max) = MIGRATOR
-        .iter()
-        .filter(|m| !m.migration_type.is_down_migration())
-        .map(|m| m.version)
-        .max()
-    else {
-        return Ok(());
-    };
+    let known_max = embedded_migration_max();
 
     // No `_sqlx_migrations` table => this file was just created. Nothing to back up.
     let migrations_table_exists: bool = sqlx::query_scalar::<_, i64>(
@@ -127,20 +253,22 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
     }
 
     // Up to date => no pending migrations => no risk worth snapshotting.
-    let applied_max: i64 = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
-        .fetch_one(pool)
-        .await?
-        .unwrap_or(0);
+    let applied_max: i64 =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(pool)
+            .await?
+            .unwrap_or(0);
     if applied_max >= known_max {
         return Ok(());
     }
 
     // Empty workspace => nothing to lose.
-    let has_data: bool =
-        sqlx::query_scalar::<_, i64>("SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM folders)")
-            .fetch_one(pool)
-            .await?
-            != 0;
+    let has_data: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM folders)",
+    )
+    .fetch_one(pool)
+    .await?
+        != 0;
     if !has_data {
         return Ok(());
     }
@@ -152,12 +280,7 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
 /// to the newest [`MAX_MIGRATION_BACKUPS`]. VACUUM INTO yields a consistent
 /// single-file copy even with the WAL open, avoiding the torn-copy risk of a raw
 /// `fs::copy` on a live database.
-async fn backup_for_migration(
-    pool: &SqlitePool,
-    path: &str,
-    from: i64,
-    to: i64,
-) -> AppResult<()> {
+async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64) -> AppResult<()> {
     let backup_dir = Path::new(path)
         .parent()
         .unwrap_or_else(|| Path::new("."))
@@ -223,9 +346,31 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
+/// Plain text → a Tiptap JSON document, one paragraph per line — the doc the
+/// editor produces for pasted text.
+///
+/// Paired with [`extract_text_from_tiptap`], and here rather than at either
+/// caller because the round trip has to hold: the reconciler hashes a seeded
+/// description through the extractor to decide whether the body is still
+/// pristine, so a builder that drifted from the projection would classify every
+/// synced page as user-edited.
+pub fn build_tiptap_doc(text: &str) -> String {
+    let content: Vec<serde_json::Value> = text
+        .split('\n')
+        .map(|line| {
+            if line.is_empty() {
+                serde_json::json!({ "type": "paragraph" })
+            } else {
+                serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+            }
+        })
+        .collect();
+    serde_json::json!({ "type": "doc", "content": content }).to_string()
+}
+
 /// Recursively extract plain text from a Tiptap JSON document. Mirrors the
 /// TypeScript `extractText()` so FTS content_text stays in sync.
-fn extract_text_from_tiptap(content: &str) -> String {
+pub fn extract_text_from_tiptap(content: &str) -> String {
     if content.is_empty() || content == "{}" {
         return String::new();
     }
@@ -239,7 +384,11 @@ fn extract_text_from_tiptap(content: &str) -> String {
 }
 
 fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
-    if let Some(text) = node.get("text").and_then(|t| t.as_str()) {
+    if let Some(text) = node
+        .get("text")
+        .and_then(|t| t.as_str())
+        .filter(|t| !t.is_empty())
+    {
         parts.push(text.to_string());
         return;
     }
@@ -299,6 +448,13 @@ pub async fn test_pool() -> SqlitePool {
 pub struct TempWalDb {
     pub pool: SqlitePool,
     path: PathBuf,
+}
+
+#[cfg(test)]
+impl TempWalDb {
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
 }
 
 #[cfg(test)]
@@ -393,6 +549,60 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
     .bind(name)
     .bind(&now)
     .bind(&now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// A connection date old enough that the synced head-floor never binds, so a
+/// fixture using any plausible occurrence date keeps testing what it meant to.
+/// Tests that exercise the floor itself pass their own date.
+#[cfg(any(test, feature = "test-support"))]
+pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00.000Z";
+
+/// Links an existing test page to a synced calendar (a `page_sync` row), creating
+/// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
+/// detached | tombstoned.
+#[cfg(any(test, feature = "test-support"))]
+pub async fn insert_test_page_sync(
+    pool: &SqlitePool,
+    page_id: &str,
+    sync_state: &str,
+) -> AppResult<()> {
+    insert_test_page_sync_connected_at(pool, page_id, sync_state, TEST_CONNECTED_LONG_AGO).await
+}
+
+/// [`insert_test_page_sync`] with an explicit `page_sync.created_at` — the anchor
+/// the head-floor derives from, i.e. when this calendar was connected. Pass the
+/// [`now_iso`] form the reconciler writes (UTC, trailing `Z`): the floor parses it
+/// as an instant, so a local wall-clock string here yields no floor at all.
+#[cfg(any(test, feature = "test-support"))]
+pub async fn insert_test_page_sync_connected_at(
+    pool: &SqlitePool,
+    page_id: &str,
+    sync_state: &str,
+    connected_at: &str,
+) -> AppResult<()> {
+    let now = now_iso();
+    sqlx::query(
+        "INSERT OR IGNORE INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('test-acct', 'caldav', 'Test', 'basic', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
+         VALUES (?, ?, 'test-acct', 'caldav', 'cal', ?, ?, ?, ?)",
+    )
+    .bind(format!("ps-{page_id}"))
+    .bind(page_id)
+    .bind(format!("href-{page_id}"))
+    .bind(format!("uid-{page_id}"))
+    .bind(sync_state)
+    .bind(connected_at)
     .execute(pool)
     .await?;
     Ok(())

@@ -44,10 +44,5 @@
       "eslint --fix"
     ],
     "*.{js,json,css,md}": "prettier --write --log-level warn"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

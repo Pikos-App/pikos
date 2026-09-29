@@ -7,9 +7,11 @@
 
 # Pikos
 
-Notes, tasks, and calendar. One app, on your device.
+Notes, tasks, and calendar. One app, on your computer.
 
-Pikos is a local-first desktop app that combines a rich text editor, task management, and a calendar into a single tool. No accounts, no cloud, no subscriptions. Your data is a SQLite file on your machine.
+Pikos is a desktop app for macOS and Linux where a note, a task, and a calendar event are the same page. No account, no subscription, and no Pikos server. Your data is a SQLite file on your machine.
+
+AI never gets in your way: Pikos opens to your page, not a chat box. If you want AI help, an MCP server ships with it, so the assistant you already use can search, read, and write your notes. Pikos itself sends nothing anywhere; a cloud assistant sends what it reads to its provider, and a local model keeps everything on your machine.
 
 **[Website](https://pikos.app)** &middot; **[Download](https://pikos.app/download)** &middot; **[Blog](https://pikos.app/blog)**
 
@@ -17,12 +19,34 @@ Pikos is a local-first desktop app that combines a rich text editor, task manage
 
 - **Rich text editor** — Headings, bold, italic, checklists, code blocks, blockquotes. Slash commands, format toolbar, Markdown paste support.
 - **Task management** — Status tracking, four-level priority, tags, smart views (Today, Inbox), drag-and-drop reordering.
-- **Built-in calendar** — Week view alongside the editor. Drag pages to schedule them. Click a time slot to create a page.
+- **Built-in calendar** — One to seven days, or a month, alongside the editor. Drag pages to schedule them. Click a time slot to create a page.
+- **Calendar sync** — Read-only, opt-in sync from iCloud, Google Calendar, or any CalDAV server. Your events arrive as pages you can take notes on. Nothing you write is sent back, and credentials go to the OS keychain.
 - **Full-text search** — FTS5-powered search across all page content. Ranked results with previews.
 - **Quick capture** — Natural language input: "Call dentist tomorrow high priority #health" creates a page with title, date, priority, and tag set automatically.
 - **Keyboard-first** — Every action has a shortcut. Navigate, create, schedule, and search without reaching for the mouse.
-- **Private by default** — Everything stored locally in SQLite. No accounts, no telemetry. The only network request is a version check at launch. Updates are never installed without your approval.
-- **Export** — SQLite backup, Markdown folder, or CSV at any time. Your data is portable.
+- **Private by default** — Everything stored locally in SQLite. No accounts, no telemetry. Two network requests, both visible: an update check at launch, which you can turn off, and calendar sync once you connect a calendar. Updates are never installed without your approval.
+- **Export** — SQLite backup, Markdown folder, CSV, or an `.ics` calendar of your scheduled pages, at any time. Your data is portable.
+- **Command line and MCP** — `pikos` reads and writes the same workspace file, and `pikos mcp` serves it to an AI agent over the Model Context Protocol. Local, no account, no listening socket.
+
+## Command line and MCP server
+
+`brew install pikos-app/tap/pikos-cli` puts `pikos` on your PATH. It opens the same
+workspace file the desktop app uses, so `pikos today`, `pikos add "Email Sam tomorrow 2pm
+#work"`, and `pikos search` work against your real notes.
+
+`pikos mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio,
+which lets an agent search, read, create, and update your pages. It opens no network socket,
+so nothing reaches your notes except the assistant that started it. Point a client at it:
+
+```json
+{ "mcpServers": { "pikos": { "command": "pikos", "args": ["mcp"] } } }
+```
+
+Every tool is a thin wrapper over the same code the subcommands use. Deleting only
+moves a page to the trash and restoring undoes it, so nothing an agent does is one-way, and
+the server refuses to migrate your workspace behind your back. Full reference:
+[`crates/pikos-cli/README.md`](crates/pikos-cli/README.md) and
+[pikos.app/cli](https://pikos.app/cli).
 
 ## Stack
 
@@ -47,11 +71,15 @@ pikos/
     mobile/         — iPhone app (placeholder, not started)
   packages/
     core/           — shared TypeScript library (types, utils, Quick Add parser, storage interface)
-    pikos-bridge/   — parser + recurrence logic exposed to the Rust CLI as a node subprocess
+    pikos-bridge/   — Quick Add parser exposed to the Rust CLI as a node subprocess
+    recurrence-wasm/— the Rust recurrence engine compiled to WebAssembly for the JS apps
     ui/             — shared UI components
   crates/
-    pikos-db/       — local SQLite data layer (schema, migrations, writer) shared by desktop and CLI
-    pikos-cli/      — command-line interface, headless access to the local workspace
+    pikos-db/         — local SQLite data layer (schema, migrations, writer) shared by desktop and CLI
+    pikos-cli/        — command-line interface, headless access to the local workspace
+    pikos-calendar-sync/ — read-only CalDAV and Google Calendar sync into the local workspace
+    pikos-recurrence/ — recurrence (RRULE) engine, single-sourced for native + wasm consumers
+    pikos-recurrence-wasm/ — wasm-bindgen bindings that build packages/recurrence-wasm
 ```
 
 ## Development
@@ -77,7 +105,7 @@ pnpm dev:desktop
 
 ## Data
 
-All data is stored in a local SQLite database. The schema is defined across migration files in [`apps/desktop/src-tauri/migrations/`](apps/desktop/src-tauri/migrations/). Every page is simultaneously a rich-text document, a trackable task, and a calendar event — one `pages` table with structured metadata columns alongside ProseMirror JSON content.
+All data is stored in a local SQLite database. The schema is defined across migration files in [`crates/pikos-db/migrations/`](crates/pikos-db/migrations/). Every page is simultaneously a rich-text document, a trackable task, and a calendar event: one `pages` table with structured metadata columns alongside ProseMirror JSON content.
 
 The database location follows your OS conventions:
 - **macOS**: `~/Library/Application Support/app.pikos.desktop/`

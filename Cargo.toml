@@ -5,3 +5,13 @@ members = ["crates/*"]
 # Linux, WebKit headers) that a plain `cargo check` on the workspace does not
 # provision; keep it standalone so workspace checks stay toolchain-agnostic.
 exclude = ["apps/desktop/src-tauri"]
+
+# Size-optimized profile for the WebAssembly build of the recurrence engine
+# (see scripts/build-recurrence-wasm.sh). Kept separate from `release` so the
+# native CLI/backend keep their default optimization settings.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

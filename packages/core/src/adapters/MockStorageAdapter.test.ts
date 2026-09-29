@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { StorageError, type StorageErrorKind } from "../errors";
 import type { Page, PageSummary } from "../types";
 import { MockStorageAdapter } from "./MockStorageAdapter";
 
@@ -10,6 +11,24 @@ let adapter: MockStorageAdapter;
 beforeEach(() => {
   adapter = new MockStorageAdapter();
 });
+
+/** Assert a storage op rejects with a StorageError of the given kind (and, if
+ *  provided, a message matching `messageRe`). Keeps the parity tests lint-clean:
+ *  matcher helpers like `expect.stringMatching` type as `any` inside toMatchObject. */
+async function expectRejection(
+  promise: Promise<unknown>,
+  kind: StorageErrorKind,
+  messageRe?: RegExp
+): Promise<void> {
+  const err: unknown = await promise.then(
+    () => null,
+    (e: unknown) => e
+  );
+  expect(err).toBeInstanceOf(StorageError);
+  const se = err as StorageError;
+  expect(se.kind).toBe(kind);
+  if (messageRe) expect(se.message).toMatch(messageRe);
+}
 
 /** Creates a page with sensible defaults and returns it. */
 async function createTestPage(overrides: Partial<Page> = {}): Promise<Page> {
@@ -189,50 +208,51 @@ describe("listPagesToday", () => {
   });
 });
 
-// ─── listPageSchedulesRange ──────────────────────────────────────────────────
+// ─── listPageSchedulesForRules ───────────────────────────────────────────────
 
-describe("listPageSchedulesRange", () => {
-  it("returns schedules within the date range", async () => {
+describe("listPageSchedulesForRules", () => {
+  it("returns a rule's override rows regardless of moved position", async () => {
     const page = await createTestPage();
+    // Two overrides for rule-A: one in-week, one moved months away — the
+    // exclusion set needs both, so position must not filter the moved one out.
     await adapter.createPageSchedule({
+      originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-03-15T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-03-16T11:00:00",
     });
     await adapter.createPageSchedule({
+      originalDate: "2026-03-23T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-03-20T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-09-01T11:00:00",
     });
+    // A plain (non-override) block and another rule's override are both excluded.
+    await adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-10T10:00:00" });
     await adapter.createPageSchedule({
+      originalDate: "2026-03-17T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-04-01T10:00:00",
+      ruleId: "rule-B",
+      scheduledStart: "2026-03-17T11:00:00",
     });
 
-    const results = await adapter.listPageSchedulesRange("2026-03-14", "2026-03-21");
-    expect(results).toHaveLength(2);
+    const results = await adapter.listPageSchedulesForRules(["rule-A"]);
+    expect(results.map((s) => s.originalDate)).toEqual([
+      "2026-03-16T09:00:00",
+      "2026-03-23T09:00:00",
+    ]);
   });
 
-  it("excludes schedules outside the range", async () => {
+  it("returns [] for an empty rule list", async () => {
     const page = await createTestPage();
     await adapter.createPageSchedule({
+      originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-04-01T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-03-16T11:00:00",
     });
 
-    const results = await adapter.listPageSchedulesRange("2026-03-01", "2026-03-31");
-    expect(results).toHaveLength(0);
-  });
-
-  it("includes multi-day events that overlap the range boundary", async () => {
-    const page = await createTestPage();
-    await adapter.createPageSchedule({
-      pageId: page.id,
-      scheduledEnd: "2026-03-17T12:00:00",
-      scheduledStart: "2026-03-13T10:00:00",
-    });
-
-    // Range starts after scheduledStart but before scheduledEnd
-    const results = await adapter.listPageSchedulesRange("2026-03-15", "2026-03-20");
-    expect(results).toHaveLength(1);
+    expect(await adapter.listPageSchedulesForRules([])).toEqual([]);
   });
 });
 
@@ -305,6 +325,30 @@ describe("searchPages", () => {
     const { results } = await adapter.searchPages("deleted");
     expect(results).toHaveLength(0);
   });
+
+  it("quotes a mirror's metadata when that is all the query hit", async () => {
+    const page = await createTestPage({ title: "Standup" });
+    adapter.markPageSynced(page.id, {
+      attendees: ["priya@example.com"],
+      location: "Weyland Room",
+      state: "active",
+    });
+
+    for (const query of ["weyland", "priya"]) {
+      const { results } = await adapter.searchPages(query);
+      expect(results[0]!.excerpt.toLowerCase()).toContain(query);
+      expect(results[0]!.matchSource).toBe("content");
+    }
+  });
+
+  it("prefers the body over a mirror's metadata for the excerpt", async () => {
+    const page = await createTestPage({ contentText: "moved to the annex", title: "Standup" });
+    adapter.markPageSynced(page.id, { location: "Annex Room", state: "active" });
+
+    const { results } = await adapter.searchPages("annex");
+    expect(results[0]!.excerpt).toContain("moved to the annex");
+    expect(results[0]!.excerpt).not.toContain("Annex Room");
+  });
 });
 
 // ─── matchesFilter (tested via listPages) ────────────────────────────────────
@@ -356,7 +400,9 @@ describe("matchesFilter (via listPages)", () => {
   });
 
   it("filters by query (title + content search)", async () => {
-    await createTestPage({ content: "lorem ipsum", title: "notes" });
+    // `contentText`, not `content`: the writer's LIKE reads the extracted text
+    // column, so a body the editor has not projected yet is not searchable.
+    await createTestPage({ contentText: "lorem ipsum", title: "notes" });
     await createTestPage({ title: "unrelated" });
 
     const results = await adapter.listPages({ query: "ipsum" });
@@ -547,6 +593,106 @@ describe("softDelete / restore", () => {
   });
 });
 
+// ─── trash ───────────────────────────────────────────────────────────────────
+
+describe("trash", () => {
+  it("lists newest deletion first, names the folder, and marks a mirror", async () => {
+    const folder = await adapter.createFolder({ name: "Work", parentId: null });
+    const filed = await createTestPage({ folderId: folder.id, title: "Filed" });
+    const loose = await createTestPage({ title: "Loose" });
+    const mirror = await createTestPage({ title: "Standup" });
+    adapter.markPageSynced(mirror.id, { state: "active" });
+    await createTestPage({ title: "Still here" });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    await adapter.softDeletePage(filed.id);
+    vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
+    await adapter.softDeletePage(mirror.id);
+    vi.setSystemTime(new Date("2026-01-03T00:00:00Z"));
+    await adapter.softDeletePage(loose.id);
+    vi.useRealTimers();
+
+    const trash = await adapter.listTrashedPages();
+
+    expect(trash.map((t) => t.title)).toEqual(["Loose", "Standup", "Filed"]);
+    expect(trash[2]!.folderName).toBe("Work");
+    expect(trash[0]!.folderName).toBeNull();
+    expect(trash[1]!.isSynced).toBe(true);
+    expect(trash[2]!.isSynced).toBe(false);
+  });
+
+  it("lists a page trashed with its folder, with no folder name to show", async () => {
+    const folder = await adapter.createFolder({ name: "Old project", parentId: null });
+    await createTestPage({ folderId: folder.id, title: "Inside it" });
+
+    await adapter.softDeleteFolder(folder.id);
+
+    const trash = await adapter.listTrashedPages();
+    expect(trash).toHaveLength(1);
+    expect(trash[0]!.title).toBe("Inside it");
+    expect(trash[0]!.folderName).toBeNull();
+  });
+
+  it("restoring takes a page back out of the trash", async () => {
+    const page = await createTestPage({ title: "Second thoughts" });
+    await adapter.softDeletePage(page.id);
+    await adapter.restorePage(page.id);
+
+    expect(await adapter.listTrashedPages()).toHaveLength(0);
+  });
+
+  it("sweeps what is past retention and leaves the rest its 30 days", async () => {
+    const old = await createTestPage({ title: "Long gone" });
+    const young = await createTestPage({ title: "Deleted yesterday" });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    await adapter.softDeletePage(old.id);
+    vi.setSystemTime(new Date("2026-03-01T00:00:00Z"));
+    await adapter.softDeletePage(young.id);
+    const purged = await adapter.purgeTrashedPages(30);
+    vi.useRealTimers();
+
+    expect(purged).toBe(1);
+    expect((await adapter.listTrashedPages()).map((t) => t.title)).toEqual(["Deleted yesterday"]);
+    expect(await adapter.getPage(old.id)).toBeNull();
+  });
+
+  it("keeps a mirror in the trash rather than letting the calendar resurrect it", async () => {
+    const mirror = await createTestPage({ title: "Standup" });
+    adapter.markPageSynced(mirror.id, { state: "active" });
+    const native = await createTestPage({ title: "My note" });
+    await adapter.softDeletePage(mirror.id);
+    await adapter.softDeletePage(native.id);
+
+    const purged = await adapter.purgeTrashedPages(0);
+
+    expect(purged).toBe(1);
+    const trash = await adapter.listTrashedPages();
+    expect(trash.map((t) => t.title)).toEqual(["Standup"]);
+    expect(trash[0]!.isSynced).toBe(true);
+  });
+});
+
+describe("clearPendingDescription", () => {
+  it("drops the parked text and leaves the rest of the mirror alone", async () => {
+    const page = await createTestPage({ title: "Team sync" });
+    adapter.markPageSynced(page.id, {
+      attendees: ["ana@example.com"],
+      location: "Room 4B",
+      pendingDescription: "New agenda.",
+    });
+
+    await adapter.clearPendingDescription(page.id);
+
+    const after = await adapter.getPage(page.id);
+    expect(after?.pendingDescription).toBeNull();
+    expect(after?.mirrorLocation).toBe("Room 4B");
+    expect(after?.scheduleLocked).toBe(true);
+  });
+});
+
 // ─── completeRecurringPage ───────────────────────────────────────────────────
 
 describe("completeRecurringPage", () => {
@@ -569,11 +715,7 @@ describe("completeRecurringPage", () => {
       timezone: "America/New_York",
     });
 
-    const result = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-23T09:00:00",
-      pageId: head.id,
-    });
+    const result = await adapter.completeRecurringPage({ pageId: head.id });
 
     // Clone should be done with the completed occurrence date
     expect(result.clone.status).toBe("done");
@@ -584,22 +726,25 @@ describe("completeRecurringPage", () => {
     expect(result.clone.completedAt).toBeDefined();
     expect(result.clone.id).not.toBe(head.id);
 
-    // Head should be advanced
+    // Head recomputes to the next Monday.
     expect(result.head.id).toBe(head.id);
     expect(result.head.status).toBe("not_started");
     expect(result.head.scheduledStart).toBe("2026-03-23T09:00:00");
     expect(result.head.title).toBe("Standup");
   });
 
-  it("marks head as done when no next occurrence (series finished)", async () => {
+  it("marks head as done when the series is exhausted", async () => {
     const head = await createTestPage({ title: "Limited series" });
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
-
-    const result = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: null, // no next occurrence
+    // A single-occurrence series: completing it leaves no next occurrence.
+    await adapter.createRecurrenceRule({
       pageId: head.id,
+      rrule: "FREQ=DAILY;COUNT=1",
+      scheduledStart: "2026-03-16T09:00:00",
+      timezone: "America/New_York",
     });
+
+    const result = await adapter.completeRecurringPage({ pageId: head.id });
 
     expect(result.head.status).toBe("done");
     expect(result.head.completedAt).toBeDefined();
@@ -609,12 +754,15 @@ describe("completeRecurringPage", () => {
     const content =
       '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Meeting notes"}]}]}';
     const head = await createTestPage({ content, title: "Weekly sync" });
-
-    const result = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-23",
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-22" });
+    await adapter.createRecurrenceRule({
       pageId: head.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-03-22",
+      timezone: "America/New_York",
     });
+
+    const result = await adapter.completeRecurringPage({ pageId: head.id });
 
     // Clone should have the content snapshot
     const cloneFull = await adapter.getPage(result.clone.id);
@@ -625,23 +773,17 @@ describe("completeRecurringPage", () => {
     const head = await createTestPage({ title: "Recurring" });
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16" });
     const originalId = head.id;
+    await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-16",
+      timezone: "America/New_York",
+    });
 
-    // Complete 3 times
-    await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-23",
-      pageId: originalId,
-    });
-    await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-30",
-      pageId: originalId,
-    });
-    const result3 = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-04-06",
-      pageId: originalId,
-    });
+    // Complete 3 times — the head recomputes one Monday forward each time.
+    await adapter.completeRecurringPage({ pageId: originalId });
+    await adapter.completeRecurringPage({ pageId: originalId });
+    const result3 = await adapter.completeRecurringPage({ pageId: originalId });
 
     // Head ID unchanged
     expect(result3.head.id).toBe(originalId);
@@ -653,14 +795,38 @@ describe("completeRecurringPage", () => {
     expect(donePages).toHaveLength(3);
   });
 
-  it("throws when page not found", () => {
-    expect(() =>
-      adapter.completeRecurringPage({
-        nextScheduledEnd: null,
-        nextScheduledStart: "2026-03-23",
-        pageId: "nonexistent",
-      })
-    ).toThrow("Page not found");
+  it("a supplied occurrence key routes a detached (unlocked) series through the occurrence path", async () => {
+    // Mirrors the backend's unlocked-with-key branch: a detached series' moved
+    // override completes on its own date, leaving the oldest-open head in place.
+    const head = await createTestPage({ title: "Detached series" });
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
+    await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-16T09:00:00",
+      timezone: "America/New_York",
+    });
+    // Connected long before the series' own dates, so the head floor never binds and
+    // the assertion below is about the occurrence path rather than about the floor.
+    adapter.markPageSynced(head.id, { state: "detached", syncedSince: "2000-01-01" });
+
+    const result = await adapter.completeRecurringPage({
+      occurrenceDate: "2026-03-23",
+      pageId: head.id,
+      scheduledStart: "2026-03-23T14:00:00",
+    });
+
+    expect(result.clone.scheduledStart).toBe("2026-03-23T14:00:00");
+    expect(result.head.completedOccurrences?.["2026-03-23"]).toBe(result.clone.id);
+    expect(result.head.scheduledStart).toBe("2026-03-16T09:00:00");
+  });
+
+  it("rejects with NotFound when page not found", async () => {
+    await expectRejection(
+      adapter.completeRecurringPage({ pageId: "nonexistent" }),
+      "NotFound",
+      /Page not found/
+    );
   });
 });
 
@@ -723,6 +889,62 @@ describe("recurrence exdates (skip occurrence)", () => {
 
     const occs = expandRecurrenceForRange(restored, page, rangeStart, rangeEnd);
     expect(occs).toHaveLength(3);
+  });
+});
+
+describe("expandRecurrenceRange (batched raw expansion)", () => {
+  it("expands multiple rules keyed by id, honoring rule EXDATEs only", async () => {
+    const a = await createTestPage({ title: "A" });
+    const b = await createTestPage({ title: "B" });
+    const ruleA = await adapter.createRecurrenceRule({
+      pageId: a.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-02T09:00:00",
+      timezone: "America/New_York",
+    });
+    const ruleB = await adapter.createRecurrenceRule({
+      pageId: b.id,
+      rrule: "FREQ=WEEKLY;BYDAY=WE",
+      scheduledStart: "2026-03-04T15:00:00",
+      timezone: "America/New_York",
+    });
+    const ruleBWithExdate = await adapter.addRuleExdates(ruleB.id, ["2026-03-11"]);
+
+    const out = await adapter.expandRecurrenceRange(
+      [ruleA, ruleBWithExdate],
+      "2026-03-09",
+      "2026-03-16"
+    );
+
+    const forA = out.find((r) => r.ruleId === ruleA.id);
+    expect(forA?.occurrences.map((o) => o.originalDate)).toEqual(["2026-03-09"]);
+    // Rule B's only in-range occurrence (Mar 11) is EXDATE'd, so it expands to nothing.
+    const forB = out.find((r) => r.ruleId === ruleB.id);
+    expect(forB?.occurrences).toEqual([]);
+  });
+
+  it("does NOT apply the completed/skip union — that stays a client concern", async () => {
+    const page = await createTestPage({ title: "Daily" });
+    await adapter.updatePage(page.id, { scheduledStart: "2026-03-09T09:00:00" });
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-03-09T09:00:00",
+      timezone: "America/New_York",
+    });
+    // Complete Mar 9 → it lands in the completed set, NOT in rrule_exdates, so the
+    // rule row passed here still carries no EXDATEs.
+    await adapter.completeRecurringPage({ pageId: page.id });
+
+    const out = await adapter.expandRecurrenceRange([rule], "2026-03-09", "2026-03-12");
+
+    // The completed Mar 9 still appears in the RAW expansion — the union is applied
+    // later, client-side. Only rule EXDATEs (none here) would remove it.
+    expect(out[0]?.occurrences.map((o) => o.originalDate)).toEqual([
+      "2026-03-09",
+      "2026-03-10",
+      "2026-03-11",
+    ]);
   });
 });
 
@@ -851,6 +1073,74 @@ describe("page reminders", () => {
   });
 });
 
+// ─── Notification history ────────────────────────────────────────────────────
+
+describe("notification history", () => {
+  it("is empty until the scheduler's stand-in seeds it", async () => {
+    expect(await adapter.listNotificationHistory(50)).toEqual([]);
+  });
+
+  it("returns newest first, capped at the limit, with the page title joined live", async () => {
+    const page = await createTestPage({ title: "Standup" });
+    adapter.seedNotificationHistory([
+      {
+        action: null,
+        firedAt: "2026-05-25 08:50:00",
+        id: "n1",
+        kind: "reminder",
+        pageId: page.id,
+        pageTitle: null,
+        scheduleId: "s1#10",
+      },
+      {
+        action: "opened",
+        firedAt: "2026-05-25 09:10:00",
+        id: "n2",
+        kind: "suppressed",
+        pageId: page.id,
+        pageTitle: null,
+        scheduleId: "s2#10",
+      },
+      {
+        action: null,
+        firedAt: "2026-05-25 07:00:00",
+        id: "n3",
+        kind: "overdue",
+        pageId: null,
+        pageTitle: null,
+        scheduleId: null,
+      },
+    ]);
+
+    const all = await adapter.listNotificationHistory(50);
+    expect(all.map((h) => h.id)).toEqual(["n2", "n1", "n3"]);
+    expect(all[0]?.pageTitle).toBe("Standup");
+    expect(all[0]?.action).toBe("opened");
+    // The summary marker names no page, so it joins to no title.
+    expect(all[2]?.pageTitle).toBeNull();
+
+    expect((await adapter.listNotificationHistory(1)).map((h) => h.id)).toEqual(["n2"]);
+  });
+
+  it("reads a renamed page under its current title", async () => {
+    const page = await createTestPage({ title: "Old name" });
+    adapter.seedNotificationHistory([
+      {
+        action: null,
+        firedAt: "2026-05-25 08:50:00",
+        id: "n1",
+        kind: "reminder",
+        pageId: page.id,
+        pageTitle: "Old name",
+        scheduleId: "s1#10",
+      },
+    ]);
+    await adapter.updatePage(page.id, { title: "New name" });
+
+    expect((await adapter.listNotificationHistory(10))[0]?.pageTitle).toBe("New name");
+  });
+});
+
 // ─── SQLite parity guarantees ────────────────────────────────────────────────
 // These tests pin behaviour the Rust adapter enforces via SQL — UNIQUE
 // constraints, FTS surface, soft-delete cascade. Drift here causes mock-only
@@ -939,18 +1229,20 @@ describe("parity: createRecurrenceRule enforces UNIQUE(page_id)", () => {
 });
 
 describe("parity: soft-delete cascades to schedules and rules", () => {
-  it("listPageSchedulesRange excludes schedules of soft-deleted pages", async () => {
+  it("listPageSchedulesForRules excludes overrides of soft-deleted pages", async () => {
     const page = await createTestPage({ title: "Hidden" });
     await adapter.createPageSchedule({
+      originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-03-15T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-03-16T11:00:00",
     });
 
-    const before = await adapter.listPageSchedulesRange("2026-03-01", "2026-03-31");
+    const before = await adapter.listPageSchedulesForRules(["rule-A"]);
     expect(before).toHaveLength(1);
 
     await adapter.softDeletePage(page.id);
-    const after = await adapter.listPageSchedulesRange("2026-03-01", "2026-03-31");
+    const after = await adapter.listPageSchedulesForRules(["rule-A"]);
     expect(after).toHaveLength(0);
   });
 
@@ -1162,32 +1454,27 @@ describe("schedule and rule updates", () => {
     expect(await adapter.getRecurrenceRule(page.id)).toBeNull();
   });
 
-  it("completeRecurringPage merges added exdates into the rule's current row", async () => {
+  it("completeRecurringPage records the set and leaves rule exdates untouched", async () => {
     const page = await createTestPage();
+    await adapter.updatePage(page.id, { scheduledStart: "2026-01-01T09:00:00" });
     const rule = await adapter.createRecurrenceRule({
       pageId: page.id,
       rrule: "FREQ=DAILY",
       scheduledStart: "2026-01-01T09:00:00",
       timezone: "America/Los_Angeles",
     });
-
-    // An exdate written after the caller computed its completion input (e.g.
-    // an interleaved skip) must survive the completion's merge.
+    // A pre-existing provider/legacy exdate must survive — native completion
+    // records the completed date in the set, never in rrule_exdates.
     await adapter.addRuleExdates(rule.id, ["2026-01-05"]);
 
-    const result = await adapter.completeRecurringPage({
-      addExdates: ["2026-01-01"],
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-01-02T09:00:00",
-      pageId: page.id,
-      ruleId: rule.id,
-    });
+    const result = await adapter.completeRecurringPage({ pageId: page.id });
 
-    expect(result.ruleExdates).toEqual(["2026-01-05", "2026-01-01"]);
-    expect((await adapter.getRecurrenceRule(page.id))?.rruleExdates).toEqual([
-      "2026-01-05",
-      "2026-01-01",
-    ]);
+    expect((await adapter.getRecurrenceRule(page.id))?.rruleExdates).toEqual(["2026-01-05"]);
+    expect((await adapter.getPage(page.id))?.completedOccurrences).toEqual({
+      "2026-01-01": result.clone.id,
+    });
+    // Head advanced past the completed date and the legacy exdate.
+    expect((await adapter.getPage(page.id))?.scheduledStart).toBe("2026-01-02T09:00:00");
   });
 
   it("addRuleExdates dedups and removeRuleExdate removes only its date", async () => {
@@ -1222,10 +1509,12 @@ describe("schedule and rule updates", () => {
       timezone: "America/Los_Angeles",
     });
 
-    expect(result.clone.status).toBe("not_started");
-    expect(result.clone.scheduledStart).toBe("2026-01-04T14:00:00");
+    const clone = result.clone;
+    if (!clone) throw new Error("a virtual occurrence materializes a clone");
+    expect(clone.status).toBe("not_started");
+    expect(clone.scheduledStart).toBe("2026-01-04T14:00:00");
     expect(result.ruleExdates).toEqual(["2026-01-03"]);
-    const schedules = await adapter.listPageSchedules(result.clone.id);
+    const schedules = await adapter.listPageSchedules(clone.id);
     expect(schedules).toHaveLength(1);
     expect(schedules[0]?.scheduledStart).toBe("2026-01-04T14:00:00");
 
@@ -1237,5 +1526,641 @@ describe("schedule and rule updates", () => {
         timezone: "America/Los_Angeles",
       })
     ).rejects.toThrow("Recurrence rule not found: missing");
+  });
+
+  it("rescheduleVirtualOccurrence moves an existing override row instead of cloning", async () => {
+    // A detached series' provider-moved instance. Re-timing it moves that row —
+    // cloning would leave the row to be re-mirrored on re-link, beside the clone.
+    const page = await createTestPage();
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-01-01T09:00:00",
+      timezone: "America/Los_Angeles",
+    });
+    const override = await adapter.createPageSchedule({
+      originalDate: "2026-01-03T09:00:00", // stored as full wall-clock; matched by day
+      pageId: page.id,
+      ruleId: rule.id,
+      scheduledStart: "2026-01-03T17:00:00",
+      timezone: "America/Los_Angeles",
+    });
+    adapter.markPageSynced(page.id, { state: "detached" });
+
+    const result = await adapter.rescheduleVirtualOccurrence({
+      originalDate: "2026-01-03",
+      ruleId: rule.id,
+      scheduledStart: "2026-01-05T14:00:00",
+      timezone: "America/Los_Angeles",
+    });
+
+    expect(result.clone).toBeNull();
+    expect(result.ruleExdates).toEqual([]);
+    const rows = await adapter.listPageSchedulesForRules([rule.id]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(override.id);
+    expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
+    // original_date survives, so a re-link can still claim this occurrence.
+    expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
+    expect(rows[0]?.timezone).toBeUndefined();
+  });
+
+  it("rescheduleVirtualOccurrence mints an override row on a detached series, no clone", async () => {
+    // Sync origin picks the arm: the occurrence stays in-series so a re-link
+    // reclaims it, rather than stranding a clone beside the re-mirrored slot.
+    const page = await createTestPage();
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-01-01T09:00:00",
+      timezone: "America/Los_Angeles",
+    });
+    adapter.markPageSynced(page.id, { state: "detached" });
+    const pagesBefore = (await adapter.listPages({})).length;
+
+    const result = await adapter.rescheduleVirtualOccurrence({
+      originalDate: "2026-01-03",
+      ruleId: rule.id,
+      scheduledStart: "2026-01-05T14:00:00",
+      timezone: "America/Los_Angeles",
+    });
+
+    expect(result.clone).toBeNull();
+    expect(result.ruleExdates).toEqual([]);
+    expect((await adapter.listPages({})).length).toBe(pagesBefore);
+
+    const rows = await adapter.listPageSchedulesForRules([rule.id]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
+    // The rule's time-of-day, matching what a provider's RECURRENCE-ID carries.
+    expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
+    expect(rows[0]?.timezone).toBeUndefined();
+  });
+});
+
+describe("synced occurrence completion (via unified completeRecurringPage)", () => {
+  // A synced series carries a rule (seeded while unlocked, mirroring the reconciler).
+  // The completeRecurringPage guard rejects a non-recurring page, so the rule must
+  // exist before markPageSynced locks it.
+  async function seedSyncedSeries(): Promise<Page> {
+    const series = await createTestPage({ title: "Weekly 1:1" });
+    await adapter.createRecurrenceRule({
+      pageId: series.id,
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+    return series;
+  }
+
+  it("records date → clone and produces a durable native done clone", async () => {
+    const series = await seedSyncedSeries();
+
+    const { clone } = await adapter.completeRecurringPage({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledEnd: "2026-03-09T14:30:00",
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    expect(clone.status).toBe("done");
+    expect(clone.scheduledStart).toBe("2026-03-09T14:00:00");
+    expect(clone.scheduleLocked).toBe(false);
+    expect(clone.syncState).toBeNull();
+
+    const updatedSeries = await adapter.getPage(series.id);
+    expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": clone.id });
+  });
+
+  it("a repeat completion of the same occurrence returns the existing clone, not a second one", async () => {
+    const series = await seedSyncedSeries();
+    const first = await adapter.completeRecurringPage({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    const second = await adapter.completeRecurringPage({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    expect(second.clone.id).toBe(first.clone.id);
+    const done = await adapter.listPages({ status: "done" });
+    expect(done.filter((p) => p.title === "Weekly 1:1")).toHaveLength(1);
+    const updatedSeries = await adapter.getPage(series.id);
+    expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": first.clone.id });
+  });
+
+  it("uncomplete deletes the clone and drops the date", async () => {
+    const series = await seedSyncedSeries();
+    const { clone } = await adapter.completeRecurringPage({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    await adapter.uncompleteRecurringOccurrence({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+    });
+
+    expect(await adapter.getPage(clone.id)).toBeNull();
+    const updatedSeries = await adapter.getPage(series.id);
+    expect(updatedSeries?.completedOccurrences).toBeNull();
+  });
+});
+
+// ─── Command-layer guard parity ──────────────────────────────────────────────
+// Guards the fidelity gap that once let a synced completion pass green here
+// while the backend rejected it. Locked-mirror ops reject with kind "Conflict";
+// completeRecurringPage validates the occurrence before minting a clone. See
+// ensure_page_schedule_unlocked (sync.rs) and complete_recurring_page (pages.rs).
+
+describe("command-layer guard parity (locked synced mirror)", () => {
+  const READONLY = /synced from an external calendar/;
+
+  /** An active synced series with a schedule + rule seeded while still unlocked
+   *  (mirroring the reconciler's raw-SQL writes), then locked. */
+  async function seedLockedSeries() {
+    const page = await createTestPage({ title: "Synced 1:1" });
+    const schedule = await adapter.createPageSchedule({
+      pageId: page.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    return { page, rule, schedule };
+  }
+
+  it("updatePage rejects a title or schedule edit but allows a body edit", async () => {
+    const { page } = await seedLockedSeries();
+    await expectRejection(adapter.updatePage(page.id, { title: "renamed" }), "Conflict", READONLY);
+    await expectRejection(
+      adapter.updatePage(page.id, { scheduledStart: "2026-03-10T14:00:00" }),
+      "Conflict"
+    );
+    // Body stays editable on a synced page.
+    const ok = await adapter.updatePage(page.id, { content: "notes" });
+    expect(ok.content).toBe("notes");
+  });
+
+  it("createPageSchedule rejects on a locked page", async () => {
+    const { page } = await seedLockedSeries();
+    await expectRejection(
+      adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-10T09:00:00" }),
+      "Conflict",
+      READONLY
+    );
+  });
+
+  it("updatePageSchedule + deletePageSchedule reject on a locked page", async () => {
+    const { schedule } = await seedLockedSeries();
+    await expectRejection(
+      adapter.updatePageSchedule(schedule.id, { scheduledStart: "2026-03-10T09:00:00" }),
+      "Conflict"
+    );
+    await expectRejection(adapter.deletePageSchedule(schedule.id), "Conflict");
+  });
+
+  it("createRecurrenceRule rejects on a locked page", async () => {
+    const page = await createTestPage({ title: "Locked" });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    await expectRejection(
+      adapter.createRecurrenceRule({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-09T14:00:00",
+        timezone: "Europe/London",
+      }),
+      "Conflict",
+      READONLY
+    );
+  });
+
+  it("updateRecurrenceRule / exdate writes / delete reject on a locked page", async () => {
+    const { rule } = await seedLockedSeries();
+    await expectRejection(
+      adapter.updateRecurrenceRule(rule.id, { rrule: "FREQ=DAILY" }),
+      "Conflict"
+    );
+    await expectRejection(adapter.addRuleExdates(rule.id, ["2026-03-16"]), "Conflict");
+    await expectRejection(adapter.removeRuleExdate(rule.id, "2026-03-16"), "Conflict");
+    await expectRejection(adapter.deleteRecurrenceRule(rule.id), "Conflict");
+  });
+
+  it("rescheduleVirtualOccurrence rejects on a locked series", async () => {
+    const { rule } = await seedLockedSeries();
+    await expectRejection(
+      adapter.rescheduleVirtualOccurrence({
+        originalDate: "2026-03-16",
+        ruleId: rule.id,
+        scheduledStart: "2026-03-16T15:00:00",
+        timezone: "Europe/London",
+      }),
+      "Conflict",
+      READONLY
+    );
+  });
+
+  it("a detached page is unlocked — the same ops succeed", async () => {
+    const page = await createTestPage({ title: "Detached" });
+    await adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-09T14:00:00" });
+    adapter.markPageSynced(page.id, { state: "detached", timezone: "Europe/London" });
+    const renamed = await adapter.updatePage(page.id, { title: "editable" });
+    expect(renamed.title).toBe("editable");
+  });
+});
+
+describe("completeRecurringPage occurrence validation", () => {
+  it("rejects a non-recurring page (both kinds) with Conflict", async () => {
+    const page = await createTestPage({ title: "One-off" });
+    await expectRejection(
+      adapter.completeRecurringPage({ pageId: page.id }),
+      "Conflict",
+      /only to a recurring series/
+    );
+  });
+
+  it("rejects a synced completion missing its occurrence date", async () => {
+    const page = await createTestPage({ title: "Synced" });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    await expectRejection(
+      adapter.completeRecurringPage({ pageId: page.id, scheduledStart: "2026-03-09T14:00:00" }),
+      "Conflict",
+      /requires an occurrence date/
+    );
+  });
+
+  it("rejects a synced occurrence that is not part of the series", async () => {
+    const page = await createTestPage({ title: "Synced" });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY", // Mondays from 2026-03-09
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    // 2026-03-10 is a Tuesday — not an occurrence of the weekly-Monday rule.
+    await expectRejection(
+      adapter.completeRecurringPage({
+        occurrenceDate: "2026-03-10",
+        pageId: page.id,
+        scheduledStart: "2026-03-10T14:00:00",
+      }),
+      "Conflict",
+      /not part of this synced series/
+    );
+  });
+});
+
+describe("markPageSynced (test seam)", () => {
+  it("active locks the schedule; detached leaves it editable", async () => {
+    const active = await createTestPage();
+    adapter.markPageSynced(active.id, { state: "active", timezone: "Asia/Tokyo" });
+    const a = await adapter.getPage(active.id);
+    expect(a?.scheduleLocked).toBe(true);
+    expect(a?.syncState).toBe("active");
+    expect(a?.timezone).toBe("Asia/Tokyo");
+
+    const detached = await createTestPage();
+    adapter.markPageSynced(detached.id, { state: "detached" });
+    const d = await adapter.getPage(detached.id);
+    expect(d?.scheduleLocked).toBe(false);
+    expect(d?.syncState).toBe("detached");
+  });
+
+  it("stamps read-only mirror metadata + a withheld description", async () => {
+    const page = await createTestPage();
+    adapter.markPageSynced(page.id, {
+      attendees: ["a@x.com", "b@x.com"],
+      location: "Zoom",
+      pendingDescription: "new agenda",
+      state: "active",
+    });
+    const p = await adapter.getPage(page.id);
+    expect(p?.mirrorLocation).toBe("Zoom");
+    expect(p?.mirrorAttendees).toEqual(["a@x.com", "b@x.com"]);
+    expect(p?.pendingDescription).toBe("new agenda");
+  });
+
+  it("stamps page_sync.user_modified, which no adapter call could reach", async () => {
+    const owned = await createTestPage();
+    adapter.markPageSynced(owned.id, { state: "active", userModified: true });
+    expect(adapter.isPageUserModified(owned.id)).toBe(true);
+
+    const bare = await createTestPage();
+    adapter.markPageSynced(bare.id, { state: "active" });
+    expect(adapter.isPageUserModified(bare.id)).toBe(false);
+  });
+
+  it("ownership survives a re-stamp, as the column does", async () => {
+    // A resync rewrites mirror metadata; it never clears the user's claim.
+    const page = await createTestPage();
+    adapter.markPageSynced(page.id, { state: "active", userModified: true });
+    adapter.markPageSynced(page.id, { location: "Room 2", state: "active" });
+    expect(adapter.isPageUserModified(page.id)).toBe(true);
+  });
+});
+
+describe("calendar sync — connect / disconnect dormancy", () => {
+  const conn = (displayName: string) => ({
+    baseUrl: "https://x",
+    displayName,
+    password: "pw",
+    username: "me",
+  });
+
+  it("connect returns canned calendars and lists the account", async () => {
+    const acc = await adapter.connectCaldavAccount(conn("me · https://x"));
+    expect(acc.calendars.map((c) => c.displayName)).toEqual(["Personal", "Work"]);
+    const status = await adapter.getSyncStatus();
+    expect(status).toHaveLength(1);
+    expect(status[0]?.id).toBe(acc.id);
+  });
+
+  it("disconnect goes dormant — hidden from status, not deleted", async () => {
+    const acc = await adapter.connectCaldavAccount(conn("me · https://x"));
+    await adapter.disconnectSyncAccount(acc.id);
+    expect(await adapter.getSyncStatus()).toHaveLength(0);
+  });
+
+  it("reconnecting the same account reuses the dormant row — no duplicate", async () => {
+    const first = await adapter.connectCaldavAccount(conn("me · https://x"));
+    await adapter.disconnectSyncAccount(first.id);
+
+    const again = await adapter.connectCaldavAccount(conn("me · https://x"));
+    expect(again.id).toBe(first.id);
+    expect(again.calendars).toHaveLength(2); // reused, not a fresh discovery
+    const status = await adapter.getSyncStatus();
+    expect(status).toHaveLength(1);
+    expect(status[0]?.id).toBe(first.id);
+  });
+
+  it("a different account after a disconnect is a new row, not the dormant one", async () => {
+    const first = await adapter.connectCaldavAccount(conn("me · https://x"));
+    await adapter.disconnectSyncAccount(first.id);
+
+    const other = await adapter.connectCaldavAccount(conn("someone · https://y"));
+    expect(other.id).not.toBe(first.id);
+    const status = await adapter.getSyncStatus();
+    expect(status).toHaveLength(1);
+    expect(status[0]?.id).toBe(other.id);
+  });
+
+  it("connecting an account that is still active reuses it rather than duplicating", async () => {
+    const first = await adapter.connectCaldavAccount(conn("me · https://x"));
+    const again = await adapter.connectCaldavAccount(conn("me · https://x"));
+
+    expect(again.id).toBe(first.id);
+    expect(await adapter.getSyncStatus()).toHaveLength(1);
+    expect(again.calendars).toHaveLength(2);
+  });
+});
+
+describe("calendar sync — teardown keeps the user's work", () => {
+  const conn = {
+    baseUrl: "https://x",
+    displayName: "me · https://x",
+    password: "pw",
+    username: "me",
+  };
+
+  /** Connect, enable "Personal", and mirror one event into its folder. A rule has
+   *  to exist before the mirror locks, exactly as the reconciler writes it. */
+  async function syncedPage(opts: { recurring?: boolean; title?: string } = {}) {
+    const account = await adapter.connectCaldavAccount(conn);
+    const cal = account.calendars[0]!;
+    const enabled = await adapter.toggleSyncCalendar(cal.id, true, "#7c9cf0");
+    const page = await adapter.seedMirrorPage({
+      content: "",
+      folderId: enabled.folderId!,
+      priority: 0,
+      scheduledStart: "2026-08-13T09:00:00",
+      status: "not_started",
+      tags: [],
+      title: opts.title ?? "Standup",
+    });
+    if (opts.recurring) {
+      await adapter.createRecurrenceRule({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-13T09:00:00",
+        timezone: "America/New_York",
+      });
+    }
+    adapter.markPageSynced(page.id, { state: "active" });
+    return { calendarId: cal.id, folderId: enabled.folderId!, pageId: page.id };
+  }
+
+  it("disable destroys a mirror the user never actioned, and its folder with it", async () => {
+    const { calendarId, folderId, pageId } = await syncedPage();
+
+    const off = await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect(await adapter.getPage(pageId)).toBeNull();
+    expect(off.detachedPages).toBe(0);
+    expect((await adapter.listFolders()).find((f) => f.id === folderId)).toBeUndefined();
+  });
+
+  it("disable detaches an edited mirror in place and leaves its folder as a regular one", async () => {
+    const { calendarId, folderId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { content: '{"type":"doc","content":[]}' });
+
+    const off = await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    const page = await adapter.getPage(pageId);
+    expect(page?.syncState).toBe("detached");
+    expect(page?.scheduleLocked).toBe(false);
+    expect(page?.folderId).toBe(folderId);
+    expect(off.detachedPages).toBe(1);
+    const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
+    expect(folder?.isExternalCalendar).toBe(false);
+  });
+
+  it("a mirror seeded already-owned detaches without anything touching it here", async () => {
+    // The seam the synced-calendar seed uses: a fixture can hand teardown a page
+    // the user "already" edited, which before this was only reachable by editing
+    // it in the test — so a seeded workspace lost a page the real writer keeps.
+    const { calendarId, pageId } = await syncedPage();
+    adapter.markPageSynced(pageId, { state: "active", userModified: true });
+
+    const off = await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+    expect(off.detachedPages).toBe(1);
+  });
+
+  it("a completed mirror counts as the user's even with nothing edited", async () => {
+    const { calendarId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { completedAt: "2026-08-13T10:00:00", status: "done" });
+
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+  });
+
+  it("re-enabling reclaims the folder teardown left behind, not a second one", async () => {
+    const { calendarId, folderId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { priority: 2 });
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    const on = await adapter.toggleSyncCalendar(calendarId, true, "#7c9cf0");
+
+    expect(on.folderId).toBe(folderId);
+    const personal = (await adapter.listFolders()).filter((f) => f.name === "Personal");
+    expect(personal).toHaveLength(1);
+    expect(personal[0]?.isExternalCalendar).toBe(true);
+  });
+
+  it("a trashed mirror keeps its trashed copy and loses only the link", async () => {
+    const { calendarId, pageId } = await syncedPage();
+    adapter.markPageSynced(pageId, { state: "tombstoned" });
+
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    const page = await adapter.getPage(pageId);
+    expect(page).not.toBeNull();
+    expect(page?.syncState).toBeNull();
+  });
+
+  it("a series whose only investment is a completed occurrence survives", async () => {
+    const { calendarId, pageId } = await syncedPage({ recurring: true, title: "Weekly sync" });
+    await adapter.completeRecurringPage({
+      occurrenceDate: "2026-08-13",
+      pageId,
+      scheduledStart: "2026-08-13T09:00:00",
+    });
+
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+  });
+
+  it("disconnecting the account tears its calendars down the same way", async () => {
+    const { folderId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { priority: 2 });
+    const [account] = await adapter.getSyncStatus();
+
+    await adapter.disconnectSyncAccount(account!.id);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+    const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
+    expect(folder?.isExternalCalendar).toBe(false);
+  });
+});
+
+// ─── Focus sessions ──────────────────────────────────────────────────────────
+//
+// The mock is where every UI test sees this write, so its two refusals have to
+// match the Rust writer's — a mock that accepts a zero-second session lets a
+// timer bug through and only shows up as a settings total nobody can explain.
+
+describe("createFocusSession", () => {
+  it("records a session and counts it into the usage stats", async () => {
+    const page = await createTestPage({ title: "Deep work" });
+
+    await adapter.createFocusSession({
+      durationS: 1500,
+      endedAt: "2026-06-01T09:25:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T09:00:00",
+    });
+    await adapter.createFocusSession({
+      durationS: 900,
+      endedAt: "2026-06-01T14:15:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T14:00:00",
+    });
+
+    const stats = await adapter.getUsageStats(1);
+    expect(stats.total_focus_sessions).toBe(2);
+    expect(stats.total_focus_minutes).toBe(40); // (1500 + 900) / 60
+    expect(stats.has_focus_sessions).toBe(true);
+  });
+
+  /// Each of these read a different source than the totals beside them, and two
+  /// of them disagreed with the writer until 2026-08-19: `has_priorities` tested
+  /// for a non-null priority, which every page has, and `has_subtasks` was a
+  /// hardcoded false.
+  it("derives every adoption flag the writer does", async () => {
+    const plain = await adapter.getUsageStats(1);
+    expect(plain.has_priorities).toBe(false);
+    expect(plain.has_subtasks).toBe(false);
+    expect(plain.has_reminders).toBe(false);
+    expect(plain.has_calendar_sync).toBe(false);
+
+    const parent = await createTestPage({ priority: 2 });
+    const child = await createTestPage();
+    await adapter.updatePage(child.id, { parentId: parent.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: parent.id });
+
+    const used = await adapter.getUsageStats(1);
+    expect(used.has_priorities).toBe(true);
+    expect(used.has_subtasks).toBe(true);
+    expect(used.has_reminders).toBe(true);
+  });
+
+  it("truncates partial minutes the way SQLite integer division does", async () => {
+    const page = await createTestPage();
+    await adapter.createFocusSession({
+      durationS: 119,
+      endedAt: "2026-06-01T09:02:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T09:00:00",
+    });
+    expect((await adapter.getUsageStats(1)).total_focus_minutes).toBe(1);
+  });
+
+  it("refuses a non-positive duration", async () => {
+    const page = await createTestPage();
+    for (const durationS of [0, -1]) {
+      await expect(
+        adapter.createFocusSession({
+          durationS,
+          endedAt: "2026-06-01T09:00:00",
+          pageId: page.id,
+          startedAt: "2026-06-01T09:00:00",
+        })
+      ).rejects.toThrow(/duration must be positive/);
+    }
+    expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+
+  it("refuses a session against a page that does not exist", async () => {
+    await expect(
+      adapter.createFocusSession({
+        durationS: 1500,
+        endedAt: "2026-06-01T09:25:00",
+        pageId: "ghost",
+        startedAt: "2026-06-01T09:00:00",
+      })
+    ).rejects.toThrow(/Page not found/);
+    expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+
+  it("clear() drops the sessions with everything else", async () => {
+    const page = await createTestPage();
+    await adapter.createFocusSession({
+      durationS: 1500,
+      endedAt: "2026-06-01T09:25:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T09:00:00",
+    });
+    adapter.clear();
+    expect(adapter.listFocusSessionsForTest()).toEqual([]);
   });
 });

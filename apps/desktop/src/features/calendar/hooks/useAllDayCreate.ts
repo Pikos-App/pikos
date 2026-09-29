@@ -13,19 +13,19 @@ export interface UseAllDayCreateOptions {
   /** Refs to the day-columns row — used to translate client X → day index. */
   dayColumnsRef: React.RefObject<HTMLDivElement | null>;
   /** Called on release. The span is materialised here; if `moved` was false
-   * (plain click) the caller receives just `start`. */
+   * (plain tap/click) the caller receives just `start`. */
   onCreateAllDay: (start: Date, end?: Date) => Promise<void> | void;
   /** Lock cursor / userSelect for the duration of the gesture. */
   disableSelect: (cursor: "dragging-grab" | "dragging-resize") => void;
   enableSelect: () => void;
-  /** Swallow the click that fires after mouseup so the next click doesn't
-   * open whatever's under the cursor. */
+  /** Swallow the click that fires after release so the next click doesn't
+   * open whatever's under the pointer. */
   eatNextClick: () => void;
 }
 
 export interface UseAllDayCreateResult {
   allDayCreatePreview: AllDayCreatePreview | null;
-  /** Bind to mousedown on the all-day row + the day header row. */
+  /** Bind to pointerdown on the all-day row + the day header row. */
   handleAllDayCreateDragStart: (args: {
     clientX: number;
     clientY: number;
@@ -38,7 +38,7 @@ export interface UseAllDayCreateResult {
 const CLICK_JITTER_PX = 4;
 
 /**
- * Mousedown-drag-mouseup in the all-day strip creates a new all-day page. A
+ * Press-drag-release in the all-day strip creates a new all-day page. A
  * plain click yields a single-day create; a drag across columns yields a
  * multi-day span. Renders an absolute ghost overlay while active so it does
  * NOT participate in row assignment (the overlay is not a PageSummary) —
@@ -83,7 +83,8 @@ export function useAllDayCreate({
     setAllDayCreatePreview({ endDayIndex: dayIndex, moved: false, startDayIndex: dayIndex });
     const originClientX = clientX;
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
       const state = allDayCreatePreviewRef.current;
       if (!state) return;
       const idx = dayIndexFromClientX(ev.clientX);
@@ -98,9 +99,9 @@ export function useAllDayCreate({
       setAllDayCreatePreview(next);
     }
 
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       const state = allDayCreatePreviewRef.current;
@@ -119,8 +120,24 @@ export function useAllDayCreate({
       void onCreateAllDay(startDay, state.moved && lo !== hi ? endDay : undefined);
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — drop the ghost, create nothing. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      allDayCreatePreviewRef.current = null;
+      setAllDayCreatePreview(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   return { allDayCreatePreview, handleAllDayCreateDragStart };

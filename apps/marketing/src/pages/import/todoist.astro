@@ -1,6 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import Footer from "../../components/Footer.astro";
+import Prose from "../../components/Prose.astro";
 
 const title = "Import from Todoist to Pikos";
 const description = "Move your Todoist projects into Pikos. Tasks, due dates, priorities, durations, and labels come across via CSV.";
@@ -19,7 +20,7 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from Todoist</h1>
       <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Export each project as CSV, then drop the file into Pikos.</p>
 
-      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+      <Prose class="mt-10">
 
         <p>
           Todoist exports per-project CSV files from its web app. Pikos auto-detects the format from the headers and brings across tasks, descriptions, fixed dates, priorities, and labels.
@@ -54,89 +55,43 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
         <h2>What comes across</h2>
 
         <ul>
-          <li><strong>Tasks</strong> — each task row becomes a Pikos page. Task titles (<code>CONTENT</code>) and descriptions (<code>DESCRIPTION</code>) are preserved.</li>
-          <li><strong>Notes</strong> — Todoist exports task comments as separate rows with <code>TYPE=note</code>. Pikos merges them into the previous task's body so you don't lose context.</li>
-          <li><strong>Priorities</strong> — Todoist's CSV uses 1–4 (where 1 is urgent and 4 is no priority in the UI). The importer maps <code>1 → Urgent</code>, <code>2 → High</code>, <code>3 → Medium</code>, <code>4 → None</code>.</li>
-          <li><strong>Fixed dates</strong> — date-only values like <code>2026-06-15</code> come across as all-day. Structured date-with-time values are preserved as timed events.</li>
-          <li><strong>Durations</strong> — if a task has <code>DURATION=30</code> and <code>DURATION_UNIT=minute</code>, Pikos uses that to compute the end time of a timed event.</li>
-          <li><strong>Labels</strong> — become Pikos tags.</li>
-          <li><strong>Deadlines</strong> — Todoist's optional <code>DEADLINE</code> field maps to the scheduled end date.</li>
+          <li><strong>Tasks</strong>: each task row becomes a Pikos page. Task titles (<code>CONTENT</code>) and descriptions (<code>DESCRIPTION</code>) are preserved.</li>
+          <li><strong>Notes</strong>: Todoist exports task comments as separate rows with <code>TYPE=note</code>. Pikos merges them into the previous task's body so you don't lose context.</li>
+          <li><strong>Priorities</strong>: Todoist's CSV uses 1–4 (where 1 is urgent and 4 is no priority in the UI). The importer maps <code>1 → Urgent</code>, <code>2 → High</code>, <code>3 → Medium</code>, <code>4 → None</code>.</li>
+          <li><strong>Fixed dates</strong>: date-only values like <code>2026-06-15</code> come across as all-day. Structured date-with-time values are preserved as timed events.</li>
+          <li><strong>Durations</strong>: a timed task's <code>DURATION</code> becomes its end time, read as minutes. Pikos doesn't read <code>DURATION_UNIT</code> yet, so a duration Todoist gives in days comes across as that many minutes.</li>
+          <li><strong>Labels</strong>: become Pikos tags.</li>
+          <li><strong>Deadlines</strong>: Todoist's optional <code>DEADLINE</code> field maps to the scheduled end date.</li>
         </ul>
 
         <h2>What doesn't come across</h2>
 
         <ul>
-          <li><strong>Projects (folders)</strong> — Todoist's CSV doesn't include the project name as a column; it's only in the filename. Imported tasks land in your Pikos Inbox by default. You can create a folder in Pikos first and move them after import, or rename the Inbox section if it's a one-off.</li>
-          <li><strong>Sub-tasks</strong> — Todoist signals nesting via an <code>INDENT</code> column rather than parent IDs, and the importer doesn't reconstruct hierarchy from indent levels. Sub-tasks land as flat sibling pages. Parent/child structure has to be rebuilt by hand in Pikos.</li>
-          <li><strong>Sections</strong> — Todoist sections within a project export as their own rows (<code>TYPE=section</code>) and the importer drops them entirely. The tasks underneath each section still come through, just without the section grouping.</li>
-          <li><strong>Recurring rules</strong> — Todoist stores repeats as natural-language phrases ("every Monday", "every 2 weeks at 9am") rather than as a structured rule. Each task imports with only its next due date; the repeat itself doesn't carry. Recurrence support for Todoist is on the roadmap.</li>
-          <li><strong>Natural-language dates</strong> — phrases like "tomorrow", "in 3 days", or "next Friday" don't parse on import. If your task uses one of these instead of a fixed date, it imports with no scheduled date and you'll need to re-set it in Pikos.</li>
-          <li><strong>Reminders</strong> — Todoist doesn't include reminder times in the CSV export. Re-add critical ones in Pikos.</li>
-          <li><strong>Completed tasks</strong> — Todoist's standard CSV export only includes active tasks. Completed history lives behind the "Activity log" view, which isn't part of the CSV.</li>
-          <li><strong>Filters, saved views, karma history</strong> — query definitions and gamification state aren't part of the export.</li>
+          <li><strong>Projects (folders)</strong>: Todoist's CSV doesn't include the project name as a column; it's only in the filename. Imported tasks land in your Pikos Inbox by default. You can create a folder in Pikos first and move them after import, or rename the Inbox section if it's a one-off.</li>
+          <li><strong>Sub-tasks</strong>: Todoist signals nesting via an <code>INDENT</code> column rather than parent IDs, and the importer doesn't reconstruct hierarchy from indent levels. Sub-tasks land as flat sibling pages. Parent/child structure has to be rebuilt by hand in Pikos.</li>
+          <li><strong>Sections</strong>: Todoist sections within a project export as their own rows (<code>TYPE=section</code>) and the importer drops them entirely. The tasks underneath each section still come through, just without the section grouping.</li>
+          <li><strong>Recurring rules</strong>: Todoist stores repeats as natural-language phrases ("every Monday", "every 2 weeks at 9am") rather than as a structured rule. Each task imports with only its next due date; the repeat itself doesn't carry.</li>
+          <li><strong>Natural-language dates</strong>: phrases like "tomorrow", "in 3 days", or "next Friday" don't parse on import. If your task uses one of these instead of a fixed date, it imports with no scheduled date and you'll need to re-set it in Pikos.</li>
+          <li><strong>Reminders</strong>: Todoist doesn't include reminder times in the CSV export. Re-add critical ones in Pikos.</li>
+          <li><strong>Completed tasks</strong>: Todoist's standard CSV export only includes active tasks. Completed history lives behind the "Activity log" view, which isn't part of the CSV.</li>
+          <li><strong>Filters, saved views, karma history</strong>: query definitions and gamification state aren't part of the export.</li>
         </ul>
 
         <h2>If something goes sideways</h2>
 
         <p>
-          Imports are reversible. Pikos snapshots the database first, every imported page is tagged with the import batch, and Settings &rarr; Data &rarr; "Undo last import" removes the lot. You can re-export from Todoist and try again with no leftovers.
+          Imports are reversible. Pikos snapshots the database first, every imported page is tagged with the import batch, and Settings &rarr; Data &rarr; "Undo import" removes the lot. You can re-export from Todoist and try again with no leftovers.
         </p>
 
         <p>
           Ready to try? <a href="/download">Download Pikos</a>. The CSV importer is in the Data tab.
         </p>
 
-      </div>
+      </Prose>
     </article>
 
   </main>
 
-  <Footer current="/import/todoist" />
+  <Footer />
 </Base>
 
-<style>
-
-  .prose :global(h2) {
-    padding-top: 1rem;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--color-neutral-900);
-  }
-  :global(html.dark) .prose :global(h2) {
-    color: var(--color-neutral-100);
-  }
-
-  .prose :global(p) {
-    margin-top: 1.5rem;
-  }
-
-  .prose :global(ul) {
-    margin-top: 1rem;
-    padding-left: 1.25rem;
-    list-style-type: disc;
-  }
-
-  .prose :global(li) {
-    margin-top: 0.375rem;
-  }
-
-  .prose :global(a) {
-    color: var(--color-primary-500);
-  }
-  :global(html.dark) .prose :global(a) {
-    color: var(--color-primary-400);
-  }
-  .prose :global(a:hover) {
-    text-decoration: underline;
-  }
-
-  .prose :global(code) {
-    border-radius: 0.25rem;
-    background-color: var(--color-neutral-150);
-    padding: 0.125rem 0.375rem;
-    font-size: 0.875rem;
-  }
-  :global(html.dark) .prose :global(code) {
-    background-color: var(--color-neutral-800);
-  }
-</style>

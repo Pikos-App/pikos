@@ -1,0 +1,27 @@
+{
+  "kind": "calendar#calendarList",
+  "items": [
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "alex@example.com",
+      "summary": "alex@example.com",
+      "backgroundColor": "#9fe1e7",
+      "accessRole": "owner",
+      "primary": true
+    },
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "team123@group.calendar.google.com",
+      "summary": "Team Calendar",
+      "summaryOverride": "Design Team",
+      "backgroundColor": "#f83a22",
+      "accessRole": "reader"
+    },
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "old456@group.calendar.google.com",
+      "summary": "Removed Calendar",
+      "deleted": true
+    }
+  ]
+}

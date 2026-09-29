@@ -2,11 +2,7 @@
 import BlogPost from "../../layouts/BlogPost.astro";
 ---
 
-<BlogPost
-  title="The Code Is Public"
-  description="The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust."
-  date="2026-06-10"
->
+<BlogPost slug="the-code-is-public">
 
   <p>
     Today I'm making the Pikos codebase publicly available. You can read every line of code that runs on your machine, build the app from source, and verify for yourself that it does what I say it does.
@@ -19,7 +15,7 @@ import BlogPost from "../../layouts/BlogPost.astro";
   </p>
 
   <p>
-    A public codebase makes the claim auditable. You can read the Rust backend and see exactly where it makes network calls (the updater, and that's it). You can search the TypeScript frontend and confirm there are no tracking scripts. Even if you don't personally read the code, the fact that <em>anyone</em> can is the point.
+    A public codebase makes the claim auditable. You can read the Rust backend and see exactly where it makes network calls: the update check, and calendar sync once you connect a calendar. You can search the TypeScript frontend and confirm there are no tracking scripts. Even if you don't personally read the code, the fact that <em>anyone</em> can is the point.
   </p>
 
   <h2>Source-available, not open source</h2>
@@ -36,7 +32,7 @@ import BlogPost from "../../layouts/BlogPost.astro";
 
   <ul>
     <li>Read the code and understand how Pikos works</li>
-    <li>Audit the privacy claims: verify that no data leaves your device</li>
+    <li>Audit the privacy claims: verify what the app sends, and where</li>
     <li>Build from source and run a version you compiled yourself</li>
     <li>Report bugs and suggest improvements via GitHub Issues</li>
     <li>Reference the code in technical discussions or blog posts</li>

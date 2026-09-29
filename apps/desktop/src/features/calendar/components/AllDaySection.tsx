@@ -1,21 +1,18 @@
 import type { PageSummary } from "@pikos/core";
-import { format } from "date-fns";
-
-import { cn } from "@/lib/utils";
-import { usePages } from "@/shared/context/PagesContext";
-
 import {
   assignStableAllDayRows,
   barPositionStyle,
   buildAllDayBars,
   firstFreeRowInSpan,
-} from "../utils/allDayLayout";
+} from "@pikos/core";
+import { format } from "date-fns";
+
+import { cn } from "@/lib/utils";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import { usePages } from "@/shared/context/PagesContext";
+
 import { chipFolderStyle } from "../utils/calendarColors";
-import {
-  ALL_DAY_BAR_HEIGHT,
-  ALL_DAY_ROW_HEIGHT,
-  ALL_DAY_TOP_PADDING,
-} from "../utils/calendarConstants";
+import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
 import { AllDayBar } from "./AllDayBar";
 
 interface AllDaySectionProps {
@@ -34,7 +31,7 @@ interface AllDaySectionProps {
     pageId: string;
     originalDate?: string;
   }) => void;
-  /** Mousedown on empty all-day cells — WeekGrid decides click-vs-drag at mouseup. */
+  /** Press on empty all-day cells — WeekGrid decides click-vs-drag at release. */
   onCreateDragStart: (info: { clientX: number; clientY: number; dayIndex: number }) => void;
   onEdgeResizeStart: (info: {
     clientX: number;
@@ -44,7 +41,7 @@ interface AllDaySectionProps {
     originalDate?: string;
   }) => void;
   onPageDoubleClick: (pageId: string) => void;
-  onResizeStart: (e: React.MouseEvent) => void;
+  onResizeStart: (e: React.PointerEvent<HTMLElement>) => void;
   pages: PageSummary[];
   timedDragTarget: { dayIndex: number; folderColor: string | undefined } | null;
 }
@@ -72,6 +69,7 @@ export function AllDaySection({
   timedDragTarget,
 }: AllDaySectionProps) {
   const { folders } = usePages();
+  const { metrics } = useCalendarSettings();
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
@@ -82,7 +80,7 @@ export function AllDaySection({
   // Reserve enough height for every row plus symmetric top/bottom padding.
   // min-h-full on the scroll container ensures backgrounds still reach the
   // bottom edge when the bar count is short.
-  const contentMinHeight = ALL_DAY_TOP_PADDING * 2 + rowCount * ALL_DAY_ROW_HEIGHT;
+  const contentMinHeight = metrics.allDayTopPadding * 2 + rowCount * metrics.allDayRowHeight;
 
   // Auto-open fires on at most one bar. `!continuesLeft` rules out week-crossed
   // continuation bars (autoOpen targets a newly-created page, which always
@@ -92,7 +90,7 @@ export function AllDaySection({
     ? (bars.find((b) => b.page.id === autoOpenPageId && !b.continuesLeft)?.key ?? null)
     : null;
 
-  // Normalise create-preview bounds (mousedown could drag in either direction).
+  // Normalise create-preview bounds (the drag could go in either direction).
   const previewBounds = createPreview
     ? {
         hi: Math.max(createPreview.startDayIndex, createPreview.endDayIndex),
@@ -102,14 +100,14 @@ export function AllDaySection({
   // Ghost row matches where assignAllDayRows will actually place the new bar
   // on commit, so there's no visual jump when the ghost becomes a real bar.
   const previewTopPx = previewBounds
-    ? ALL_DAY_TOP_PADDING +
-      firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * ALL_DAY_ROW_HEIGHT
+    ? metrics.allDayTopPadding +
+      firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * metrics.allDayRowHeight
     : 0;
 
-  function handleColumnMouseDown(e: React.MouseEvent, dayIndex: number) {
-    if (e.button !== 0) return;
-    // Prevent the native mousedown from starting a text selection — dragging
-    // the cursor across nearby bar labels would otherwise highlight them.
+  function handleColumnPointerDown(e: React.PointerEvent, dayIndex: number) {
+    if (!e.isPrimary || e.button !== 0) return;
+    // Prevent the native press from starting a text selection — dragging the
+    // pointer across nearby bar labels would otherwise highlight them.
     e.preventDefault();
     onCreateDragStart({ clientX: e.clientX, clientY: e.clientY, dayIndex });
   }
@@ -122,8 +120,7 @@ export function AllDaySection({
           bottom edge. */}
       <div className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden">
         <div className="flex min-h-full">
-          {/* Gutter spacer — aligns with TimeGutter's w-14 */}
-          <div className="w-14 shrink-0" />
+          <div className={cn(CALENDAR_GUTTER_WIDTH, "shrink-0")} />
 
           <div className="relative flex flex-1" style={{ minHeight: contentMinHeight }}>
             {days.map((day, dayIndex) => {
@@ -134,14 +131,20 @@ export function AllDaySection({
                 <div
                   aria-label={`All-day events, ${format(day, "EEEE MMMM d")}`}
                   className={cn(
-                    "relative min-w-0 flex-1 cursor-cell",
-                    "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border/40",
+                    // The same divider the time grid draws, rather than a look-alike:
+                    // a pseudo-element at a different opacity antialiased differently
+                    // on a fractional column edge, which read as the all-day lines
+                    // sitting a pixel off the ones below. Unlike the grid, the first
+                    // column keeps its border — the gutter beside it is empty here,
+                    // so the line closes the row, where in the grid it would fence
+                    // off the hour labels.
+                    "relative min-w-0 flex-1 cursor-cell border-l border-border/50",
                     weekend && "bg-white/[0.012]",
                     (isAllDayTarget || isTimedTarget) && "bg-accent/30"
                   )}
                   data-day-index={dayIndex}
                   key={day.toISOString()}
-                  onMouseDown={(e) => handleColumnMouseDown(e, dayIndex)}
+                  onPointerDown={(e) => handleColumnPointerDown(e, dayIndex)}
                   role="button"
                   tabIndex={-1}
                 />
@@ -168,7 +171,10 @@ export function AllDaySection({
                     onDoubleClick={onPageDoubleClick}
                     onDragStart={onChipDragStart}
                     onEdgeResizeStart={onEdgeResizeStart}
-                    position={barPositionStyle(bar, columnCount)}
+                    position={barPositionStyle(bar, columnCount, {
+                      rowHeight: metrics.allDayRowHeight,
+                      topPadding: metrics.allDayTopPadding,
+                    })}
                   />
                 );
               })}
@@ -180,7 +186,7 @@ export function AllDaySection({
                 className="pointer-events-none absolute rounded-sm border-l-[2px]"
                 style={{
                   ...chipFolderStyle(),
-                  height: ALL_DAY_BAR_HEIGHT,
+                  height: metrics.allDayBarHeight,
                   left: `${(previewBounds.lo / columnCount) * 100}%`,
                   top: previewTopPx,
                   width: `calc(${((previewBounds.hi - previewBounds.lo + 1) / columnCount) * 100}% - 2px)`,
@@ -194,12 +200,12 @@ export function AllDaySection({
       {/* Drag handle — bottom edge. Always-visible 3px bar so it stays
           grippable when the all-day section scrolls. `z-20` keeps it above
           the bars overlay so chips covering the bottom don't steal the
-          mousedown. */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only resize, kbd control deferred to the post-launch a11y backlog */}
+          press. `touch-none` because the bar's only gesture is the resize —
+          without it the browser claims a touch drag here for a scroll. */}
       <div
         aria-label="Resize all-day section"
-        className="absolute inset-x-0 bottom-0 z-20 h-[3px] cursor-row-resize bg-border/25 transition-colors duration-[var(--transition-fast)] hover:bg-border/60 active:bg-border/80"
-        onMouseDown={onResizeStart}
+        className="absolute inset-x-0 bottom-0 z-20 h-[3px] cursor-row-resize touch-none bg-border/25 transition-colors duration-[var(--transition-fast)] hover:bg-border/60 active:bg-border/80"
+        onPointerDown={onResizeStart}
         role="separator"
       />
     </div>

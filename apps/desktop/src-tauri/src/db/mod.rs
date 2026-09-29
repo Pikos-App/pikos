@@ -7,27 +7,28 @@ use crate::error::{AppError, AppResult};
 
 #[path = "assets/assets.rs"]
 pub mod assets;
-#[path = "dev/dev.rs"]
+pub mod commands;
 pub mod dev;
-#[path = "folders/folders.rs"]
-pub mod folders;
-pub mod notifications;
-#[path = "pages/pages.rs"]
-pub mod pages;
 #[path = "schedules/schedules.rs"]
 pub mod schedules;
-#[path = "search/search.rs"]
-pub mod search;
-pub mod tags;
+pub mod sync;
+pub mod sync_loop;
 #[path = "watch.rs"]
 mod watch;
+
+// The command modules `db_commands!` generates. They are declared in
+// `commands.rs` rather than written out per file, and surfaced here under the
+// names the rest of the app (and the IPC tests) know them by. `schedules` and
+// `sync` are not in this list because they also hold hand-written commands —
+// those modules pull their generated half in themselves.
+pub use commands::{focus, folders, notifications, pages, search, tags};
 
 /// Shared database state. None until connect_db is called.
 ///
 /// Tracks the canonical path of the currently-connected file so a repeated
 /// connect_db with the *same* path is a cheap no-op (frontend mount effect
 /// fires twice under React.StrictMode) while a *different* path is treated
-/// as a programming error — the caller should use `switch_workspace`.
+/// as a programming error — the app connects one workspace per launch.
 pub struct DbState {
     inner: Mutex<DbStateInner>,
 }
@@ -58,6 +59,13 @@ impl DbState {
                 AppError::Internal("No database connected. Call connect_db first.".into())
             })
             .cloned()
+    }
+
+    /// The workspace file this state is connected to. `None` matches an empty
+    /// pool. Read by maintenance commands that act on the file rather than on
+    /// the data inside it.
+    pub(crate) async fn current_path(&self) -> Option<PathBuf> {
+        self.inner.lock().await.path.clone()
     }
 
     /// Take ownership of the current pool, clearing state. Used by
@@ -105,10 +113,11 @@ fn canonicalize_path(path: &str) -> PathBuf {
 ///
 /// Idempotent: a second call with the **same** canonical path is a fast
 /// no-op (the React.StrictMode double-mount path emits a WARN so future
-/// regressions stay visible). A call with a **different** path returns an
-/// error pointing the caller at `switch_workspace` — silently re-mapping
-/// the connection would surprise the frontend, which assumes connect_db
-/// is the one-time bootstrap.
+/// regressions stay visible). A call with a **different** path is refused —
+/// silently re-mapping the connection would surprise the frontend, which
+/// assumes connect_db is the one-time bootstrap, and there is no runtime
+/// swap to fall back on: `WorkspaceContext` connects once on mount and a
+/// different workspace means relaunching the app.
 ///
 /// The mutex is held across `open_pool` so a concurrent second call (the
 /// dev StrictMode double-mount) waits and then hits the idempotency
@@ -129,7 +138,7 @@ pub async fn connect_db(
             return Ok(());
         }
         return Err(AppError::Conflict(
-            "DB already connected to a different workspace; call switch_workspace".into(),
+            "DB already connected to a different workspace; relaunch to open another one".into(),
         ));
     }
 
@@ -146,47 +155,26 @@ pub async fn connect_db(
     Ok(())
 }
 
-/// Switch the workspace at runtime — close the current pool (flushes WAL),
-/// open the new file, run migrations.
-///
-/// Without this command, workspace switching requires an app restart since
-/// `connect_db` is intentionally idempotent. The mutex is held for the full
-/// close+open cycle so a stray query during the swap fails fast rather than
-/// hitting a half-closed pool.
-#[tauri::command]
-pub async fn switch_workspace(path: String, state: tauri::State<'_, DbState>) -> AppResult<()> {
-    let canonical = canonicalize_path(&path);
-
-    let mut guard = state.inner.lock().await;
-    // Fast-path: same workspace — nothing to do.
-    if guard.path.as_ref() == Some(&canonical) {
-        return Ok(());
-    }
-
-    // Close the existing pool first so the WAL is flushed and SQLite file
-    // handles release before we open the new file. On Windows this is
-    // mandatory; on Unix it's good hygiene.
-    if let Some(old) = guard.pool.take() {
-        old.close().await;
-        log::info!("DB pool closed for workspace switch");
-    }
-    guard.path = None;
-
-    let pool = open_pool(&path).await?;
-    *guard = DbStateInner {
-        pool: Some(pool),
-        path: Some(canonical),
-    };
-    log::info!("DB switched to new workspace, migrations applied");
-    Ok(())
-}
-
-/// Shared by `connect_db` and `switch_workspace`: open via pikos-db (schema,
-/// migrations, pragmas, content_text backfill, FTS rebuild all live there) then
-/// run app-only housekeeping.
+/// The one place a pool is opened: pikos-db handles schema, migrations,
+/// pragmas, content_text backfill and the FTS rebuild, then this runs the
+/// app-only housekeeping on top.
 async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     let pool = pikos_db::open_pool(path).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
+    // The trash's other half. Soft-delete keeps a page forever on its own, so
+    // without a sweep the file only ever grows with work the user deleted — and
+    // "kept for 30 days", which the trash tells them, would be a promise nothing
+    // enforces. Once per launch beside the log prune, for the same reason it is
+    // there: retention is housekeeping, not something to make the user ask for,
+    // and a pool that has just opened is the one moment nothing else is writing.
+    let purged =
+        pikos_db::purge_trashed_pages_older_than(&pool, pikos_db::TRASH_RETENTION_DAYS).await?;
+    if purged > 0 {
+        log::info!(
+            "trash swept: {purged} page(s) past {TRASH_RETENTION_DAYS}-day retention destroyed",
+            TRASH_RETENTION_DAYS = pikos_db::TRASH_RETENTION_DAYS
+        );
+    }
     Ok(pool)
 }
 
@@ -197,9 +185,18 @@ async fn open_pool(path: &str) -> AppResult<SqlitePool> {
 
 // Cross-module workflow + real-pool integration tests. They drive pikos-db's
 // public API the way the app does (pages + folders + schedules + search through
-// one pool). They live in this crate, not pikos-db, because CI runs the Rust
-// suite from here — pikos-db's own #[cfg(test)] modules never execute in CI
-// (the root workspace excludes this package). See the file header for detail.
+// one pool). They live in this crate, not pikos-db, because what they assert is
+// how the *desktop app* composes those modules — that belongs beside the code
+// doing the composing, and this crate's dev-dependencies enable pikos-db's
+// `test-support` feature so the fixtures still come off the same migration tree.
+// Reaching CI is no longer part of the reason: `_validate.yml` gates both Cargo
+// trees, `cargo test --workspace` over the root (`crates/*`, which excludes this
+// package) and then this crate on its own, so pikos-db's `#[cfg(test)]` modules
+// run either way. See the file header for detail.
 #[cfg(test)]
 #[path = "workflows_tests.rs"]
 mod workflows_tests;
+
+#[cfg(test)]
+#[path = "ipc_tests.rs"]
+mod ipc_tests;

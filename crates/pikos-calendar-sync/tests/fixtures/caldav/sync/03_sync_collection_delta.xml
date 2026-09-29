@@ -1,0 +1,3 @@
+<?xml version='1.0' encoding='utf-8'?>
+<multistatus xmlns="DAV:"><sync-token>http://radicale.org/ns/sync/30f466c648c9038eb0e54329d840ba4bb25e9a652615aa50caeb2a27a0f6d804</sync-token><response><href>/testuser/work-calendar/trip.ics</href><status>HTTP/1.1 404 Not Found</status></response><response><href>/testuser/work-calendar/meeting.ics</href><propstat><prop><getetag>"7ef16d71d12abc059ee9d22d1df9737173875ed95048464df07a684ebd486501"</getetag></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>
+HTTP=207

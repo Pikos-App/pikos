@@ -5,11 +5,12 @@
 // data load via a registered loader callback.
 
 import type { StorageAdapter, Workspace } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
+import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@seeds/seedLoaders";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
+import { requireMockStorage } from "@/shared/adapters/mockStorageChunk";
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
 import {
   createWorkspaceEventBus,
@@ -18,19 +19,11 @@ import {
   type WorkspaceEventPayloadMap,
 } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("WorkspaceContext");
 
 type DataLoader = () => Promise<void>;
-
-type SeedScenario =
-  | "tutorial"
-  | "realistic"
-  | "stress"
-  | "notifications"
-  | "calendar"
-  | "calendar-colors"
-  | "calendar-edges";
 
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
@@ -67,10 +60,11 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceInternalValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  // Test mode reads the in-memory adapter out of its own chunk — see
+  // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
+  // time this runs, and what it throws if it isn't.
   const [adapter] = useState<StorageAdapter>(() =>
-    import.meta.env["VITE_TEST_MODE"] === "true"
-      ? new MockStorageAdapter()
-      : new TauriSQLiteAdapter()
+    import.meta.env["VITE_TEST_MODE"] === "true" ? requireMockStorage() : new TauriSQLiteAdapter()
   );
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -85,6 +79,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const nav = pendingNavigationRef.current;
     pendingNavigationRef.current = null;
     return nav;
+  }
+
+  function setPendingNavigation(nav: { pageId: string; folderId: string }) {
+    pendingNavigationRef.current = nav;
   }
 
   const eventBusRef = useRef(createWorkspaceEventBus());
@@ -113,35 +111,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     async function runInit(): Promise<void> {
       if (import.meta.env["VITE_TEST_MODE"] === "true") {
+        // The workspace identity below keys off the raw flag, not off whether a
+        // seed actually ran — an unrecognised VITE_SEED still names a seed
+        // workspace, as it always has.
         const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
-        if (seedScenario === "tutorial") {
-          const { seedTutorial } = await import("@/shared/seeds/tutorial");
-          const result = await seedTutorial(adapter);
-          if (result) {
-            pendingNavigationRef.current = {
-              folderId: result.folderId,
-              pageId: result.welcomePageId,
-            };
-          }
-        } else if (import.meta.env.DEV && seedScenario === "marketing") {
-          const { seedMarketing } = await import("@/shared/seeds/marketing");
-          await seedMarketing(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "realistic") {
-          const { seedRealistic } = await import("@/shared/seeds/realistic");
-          await seedRealistic(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "stress") {
-          const { seedStress } = await import("@/shared/seeds/stress");
-          await seedStress(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "calendar") {
-          const { seedCalendar } = await import("@/shared/seeds/calendar");
-          await seedCalendar(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "calendar-colors") {
-          const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
-          await seedCalendarColors(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "calendar-edges") {
-          const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
-          await seedCalendarEdgeCases(adapter);
-        }
+        await launchSeedLoader(seedScenario)?.({ adapter, phase: "launch", setPendingNavigation });
         await dataLoaderRef.current();
         setWorkspace({
           createdAt: new Date().toISOString(),
@@ -176,8 +150,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         // connectDb uses create_if_missing — silently recreates if file is gone (stale path)
         await connectDb(ws.dbPath);
 
-        const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-        await tauriInvoke("init_assets_dir");
+        await getPlatform().ensureAssetsDir();
 
         const now = new Date().toISOString();
         const updated: Workspace = { ...ws, lastOpenedAt: now };
@@ -239,15 +212,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await connectDb(dbPath);
 
       // Ensure the workspace assets directory exists alongside the DB
-      const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-      await tauriInvoke("init_assets_dir");
+      await getPlatform().ensureAssetsDir();
 
       // Seed tutorial data for first-time users (idempotent — skips if already seeded).
       // A seed failure must not block workspace creation: an empty workspace is
       // recoverable for the user, but a hard error screen here would lock them
       // out of an otherwise-working DB. Log and continue.
       try {
-        const { seedTutorial } = await import("@/shared/seeds/tutorial");
+        const { seedTutorial } = await import("@seeds/tutorial");
         const seedResult = await seedTutorial(adapter);
         if (seedResult) {
           log.info("Tutorial seed planted");
@@ -283,40 +255,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   async function resetAndSeed(scenario: SeedScenario): Promise<void> {
     if (!import.meta.env.DEV) return;
-    if (import.meta.env["VITE_TEST_MODE"] === "true") {
-      (adapter as MockStorageAdapter).clear();
-    } else {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("reset_db");
-    }
-    if (scenario === "tutorial") {
-      const { seedTutorial } = await import("@/shared/seeds/tutorial");
-      const result = await seedTutorial(adapter);
-      if (result) {
-        pendingNavigationRef.current = {
-          folderId: result.folderId,
-          pageId: result.welcomePageId,
-        };
-      }
-    } else if (scenario === "realistic") {
-      const { seedRealistic } = await import("@/shared/seeds/realistic");
-      await seedRealistic(adapter);
-    } else if (scenario === "stress") {
-      const { seedStress } = await import("@/shared/seeds/stress");
-      await seedStress(adapter);
-    } else if (scenario === "notifications") {
-      const { seedNotifications } = await import("@/shared/seeds/notifications");
-      await seedNotifications(adapter);
-    } else if (scenario === "calendar") {
-      const { seedCalendar } = await import("@/shared/seeds/calendar");
-      await seedCalendar(adapter);
-    } else if (scenario === "calendar-colors") {
-      const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
-      await seedCalendarColors(adapter);
-    } else if (scenario === "calendar-edges") {
-      const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
-      await seedCalendarEdgeCases(adapter);
-    }
+    await adapter.resetWorkspaceData();
+    await SEED_LOADERS[scenario]({ adapter, phase: "reset", setPendingNavigation });
     await dataLoaderRef.current();
   }
 

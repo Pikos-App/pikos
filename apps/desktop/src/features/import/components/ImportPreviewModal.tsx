@@ -1,6 +1,15 @@
 // Sits inside the settings content area (sidebar remains visible), not a modal.
 
-import { emojiAwareCompare, isDone, isOpen } from "@pikos/core";
+import type { ImportPage, ImportPlan } from "@pikos/core";
+import {
+  cleanTitle,
+  emojiAwareCompare,
+  formatSchedule,
+  isDone,
+  isOpen,
+  PRIORITY_COLORS,
+  PRIORITY_LABELS,
+} from "@pikos/core";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,11 +25,6 @@ import {
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { PRIORITY_COLORS, PRIORITY_LABELS } from "@/shared/constants/priorities";
-
-import type { ImportPage, ImportPlan } from "../parsers/types";
-import { cleanTitle, formatSchedule } from "../parsers/utils";
-
 function sortPagesCompletedLast(pages: ImportPage[]): ImportPage[] {
   return [...pages].sort((a, b) => {
     if (isDone(a) && isOpen(b)) return 1;
@@ -161,7 +165,7 @@ export function ImportPreviewModal({ onCancel, onConfirm, plan }: ImportPreviewM
               ))}
               {plan.warnings.map((w, i) => (
                 <li className="text-xs text-muted-foreground" key={`warn-${i}`}>
-                  {w.source && <span className="font-mono text-[10px]">{w.source}: </span>}
+                  {w.source && <span className="font-mono text-3xs">{w.source}: </span>}
                   {w.message}
                 </li>
               ))}
@@ -264,18 +268,18 @@ function FolderGroup({
               </span>
               {page.priority > 0 && (
                 <span
-                  className={cn("shrink-0 text-[10px] font-medium", PRIORITY_COLORS[page.priority])}
+                  className={cn("shrink-0 text-3xs font-medium", PRIORITY_COLORS[page.priority])}
                 >
                   {PRIORITY_LABELS[page.priority]}
                 </span>
               )}
               {page.scheduledStart && isOpen(page) && (
-                <span className="shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 text-3xs text-muted-foreground">
                   {formatSchedule(page.scheduledStart)}
                 </span>
               )}
               {page.tags.length > 0 && (
-                <span className="shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 text-3xs text-muted-foreground">
                   {page.tags.map((t) => `#${t}`).join(", ")}
                 </span>
               )}

@@ -26,7 +26,7 @@ export function TooltipIconButton({
         <button
           aria-label={label}
           className={cn(
-            "flex items-center justify-center rounded p-1 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary",
+            "flex shrink-0 items-center justify-center rounded p-1 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary",
             className
           )}
           type="button"
