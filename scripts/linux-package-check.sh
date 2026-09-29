@@ -30,6 +30,14 @@ cli=$(find "$ART" -name "pikos-cli-*linux*.tar.gz" | head -1)
 [ -n "$deb" ] || { echo "no .deb in $ART"; exit 1; }
 [ -n "$appimage" ] || { echo "no AppImage in $ART"; exit 1; }
 
+# $ART is what gets mounted at /artifacts, and Tauri nests what it builds under it — deb/ and
+# appimage/ — so the container needs each path relative to the mount. `basename` read correctly
+# and pointed at a file that was never there, which apt reports as "Unsupported file" rather
+# than as missing, so it looked like a bad package instead of a bad path.
+deb_rel=${deb#"$ART"/}
+appimage_rel=${appimage#"$ART"/}
+cli_rel=${cli#"$ART"/}
+
 fail=0
 run() { docker run --rm --platform linux/amd64 -v "$ART":/artifacts:ro "$1" bash -c "$2"; }
 
@@ -41,10 +49,10 @@ if [ -n "$deb" ]; then
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
       # `apt-get install ./x.deb` resolves the package own Depends; `dpkg -i` would not.
-      apt-get install -y -qq /artifacts/'"$(basename "$deb")"' >/dev/null
+      apt-get install -y -qq /artifacts/'"$deb_rel"' >/dev/null
       # Asked of dpkg rather than assumed to be /usr/bin/pikos: Tauri names the binary, and an
       # `ldd` on a path that does not exist fails in a way `grep "not found" || true` swallows.
-      package=$(dpkg-deb -f /artifacts/'"$(basename "$deb")"' Package)
+      package=$(dpkg-deb -f /artifacts/'"$deb_rel"' Package)
       bin=$(dpkg -L "$package" | grep -E "^/usr/bin/" | head -1)
       [ -n "$bin" ] && [ -x "$bin" ] || { echo "   the .deb installed no executable in /usr/bin"; exit 1; }
       missing=$(ldd "$bin" | grep "not found" || true)
@@ -60,7 +68,7 @@ if [ -n "$appimage" ]; then
     run "$image" '
       set -eu
       cd /tmp
-      cp /artifacts/'"$(basename "$appimage")"' app.AppImage && chmod +x app.AppImage
+      cp /artifacts/'"$appimage_rel"' app.AppImage && chmod +x app.AppImage
       # --appimage-extract needs no FUSE, which a container has not got, and this is about the
       # bundle contents rather than about FUSE.
       ./app.AppImage --appimage-extract >/dev/null
@@ -86,7 +94,7 @@ else
   echo "── CLI tarball on debian:12"
   run debian:12 '
     set -eu
-    cd /tmp && tar xzf /artifacts/'"$(basename "$cli")"'
+    cd /tmp && tar xzf /artifacts/'"$cli_rel"'
     bin=$(find . -type f -path "*/bin/pikos" | head -1)
     test -x "$bin" || { echo "   no pikos binary in the tarball"; exit 1; }
     "$bin" --version
