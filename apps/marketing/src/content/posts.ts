@@ -26,7 +26,7 @@ export const posts: Post[] = [
     title: "Read only, on purpose",
     description:
       "Pikos syncs your calendar in and never writes back. Two-way sync is the feature everyone advertises and the one that eats calendars, so Pikos cut it rather than deferring it.",
-    date: "2026-09-20",
+    date: "2026-09-28",
     tag: "Design",
   },
   {
@@ -34,7 +34,7 @@ export const posts: Post[] = [
     title: "Your calendar, inside Pikos",
     description:
       "Pikos 0.4.0 syncs your calendar in: iCloud, Google, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
-    date: "2026-09-20",
+    date: "2026-09-28",
     tag: "Features",
   },
   {
