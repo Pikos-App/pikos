@@ -7,4 +7,4 @@ Your real calendar, inside Pikos. Connect the calendar you already use and the m
 - **Text size.** The interface, the editor, and the calendar each scale on their own. Set them in settings, or press `Cmd +` and `Cmd -` (`Ctrl` on Linux), which size whichever panel you're looking at.
 - **MCP server.** The command-line tool can hand your workspace to an AI agent over MCP, so an assistant can read and write pages with no Pikos account or server in the middle.
 
-Plenty else got better along the way: a month view, an Upcoming list, a trash you can restore from, search operators in the command palette, and calendar export.
+0.4.0 upgrades your workspace and 0.3.1 can't open it afterwards. Pikos backs up the old one before it does, so nothing is lost either way.
