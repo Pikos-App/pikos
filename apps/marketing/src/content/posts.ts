@@ -16,38 +16,24 @@ export interface Post {
   /** ISO date. A date ahead of the build schedules the post; see `published`. */
   date: string;
   tag: string;
-  /** A correction after publishing. The original date stays, so the note says what changed. */
-  updated?: { date: string; note: string };
 }
 
 export const posts: Post[] = [
   {
-    slug: "read-only-on-purpose",
-    title: "Read only, on purpose",
-    description:
-      "Pikos syncs your calendar in and never writes back. Two-way sync is the feature everyone advertises and the one that eats calendars, so Pikos cut it rather than deferring it.",
-    date: "2026-09-28",
-    tag: "Design",
-  },
-  {
     slug: "your-calendar-inside-pikos",
     title: "Your calendar, inside Pikos",
     description:
-      "Pikos 0.4.0 syncs your calendar in: iCloud, Google, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
+      "Pikos 0.4.0 syncs your calendar in: Google, iCloud, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
     date: "2026-09-28",
-    tag: "Features",
+    tag: "Releases",
   },
   {
     slug: "the-code-is-public",
     title: "The code is public",
     description:
-      "The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust.",
+      "You can read every line of Pikos and check the privacy claims yourself, instead of taking my word for them.",
     date: "2026-06-10",
-    tag: "Transparency",
-    updated: {
-      date: "2026-09-27",
-      note: "Calendar sync arrived in 0.4.0, so the list of network calls now names it alongside the update check.",
-    },
+    tag: "Principles",
   },
   {
     slug: "what-if-pikos-goes-away",
@@ -55,8 +41,7 @@ export const posts: Post[] = [
     description:
       "Your data is a file on your computer. The app works without a server. Here's what that means for longevity.",
     date: "2026-06-10",
-    tag: "Philosophy",
-    updated: { date: "2026-09-27", note: "One sentence reworded in plainer language. Nothing it says changed." },
+    tag: "Principles",
   },
   {
     slug: "buy-once",
@@ -64,15 +49,14 @@ export const posts: Post[] = [
     description:
       "No subscription, now or ever. The desktop app is free. The paid versions will be one-time purchases.",
     date: "2026-06-10",
-    tag: "Pricing",
+    tag: "Principles",
   },
   {
     slug: "your-data-stays-on-your-device",
     title: "Your data stays on your device",
     description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
     date: "2026-05-09",
-    tag: "Privacy",
-    updated: { date: "2026-09-27", note: "Reworded one sentence in plainer language, and added CSV to the export formats it lists." },
+    tag: "Principles",
   },
 ];
 
