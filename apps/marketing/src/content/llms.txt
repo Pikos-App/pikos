@@ -20,7 +20,7 @@ Pikos is a desktop app for macOS and Linux in which a note, a task, and a calend
 - Rich text editor with slash commands, formatting toolbar, Markdown paste, and autosave
 - Task management with priorities (Urgent/High/Medium/Low), statuses, tags, and folders
 - Calendar showing one to seven days or a month, with drag-to-schedule and both timed and all-day events
-- External calendar sync: read-only, opt-in, from iCloud, Google Calendar, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged, or ticked off becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
+- External calendar sync: read-only, opt-in, from Google Calendar, iCloud, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged, or ticked off becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
 - Quick add with natural language parsing (extracts dates, priorities, tags, folders)
 - Full-text search with BM25 ranking
 - Recurring pages and recurring calendar events, sharing one recurrence engine
@@ -64,8 +64,8 @@ There is no Pikos server. No account, no telemetry, no analytics inside the app.
 - Pikos vs Apple Notes, Reminders, and Calendar, in full: https://pikos.app/compare/apple (~2K tokens)
 - Guides: https://pikos.app/guides (~1K tokens)
 - Calendar sync setup, general: https://pikos.app/calendar-sync (~3K tokens)
-- Connect iCloud Calendar: https://pikos.app/calendar-sync/icloud (~1K tokens)
 - Connect Google Calendar: https://pikos.app/calendar-sync/google (~1K tokens)
+- Connect iCloud Calendar: https://pikos.app/calendar-sync/icloud (~1K tokens)
 - Connect Fastmail or any CalDAV server: https://pikos.app/calendar-sync/fastmail (~1K tokens)
 - CLI and MCP server, and how an assistant reads your notes: https://pikos.app/cli (~2K tokens)
 - Import: https://pikos.app/import (~2K tokens)
