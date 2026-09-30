@@ -45,6 +45,13 @@ app_rust_src_files() {
   rust_src_files | grep -v '^crates/pikos-cli/'
 }
 
+# `docs/` ships, so a pointer into a gitignored record is as dead there as in
+# source, and check-doc-footnotes.py only counts footnote markers. Kept out of
+# src_files because every other check in this script is about code.
+published_docs() {
+  git ls-files -- 'docs/**' | grep -E '\.md$'
+}
+
 # Every outbound request clones the shared client built here, so this is the one
 # file where a client may be constructed and the only place TLS, timeouts and the
 # user-agent are set.
@@ -91,7 +98,7 @@ fi
 # a backlog id or a path into them is a dead end for anyone reading the published
 # source. State the fact inline instead; the record is where the reasoning lives,
 # not where a reader of this file can go.
-hits=$(src_files \
+hits=$({ src_files; published_docs; } \
   | xargs grep -nE '(PKOS-[0-9]{4}|GAR-[0-9]{4}|SOLO-[0-9]{4}|\.agent/|\.claude/|`[A-Z][0-9]{1,3}`)' 2>/dev/null \
   | grep -v 'node_modules' || true)
 
