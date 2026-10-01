@@ -254,7 +254,7 @@ async fn keep_or_release(
     }
 }
 
-async fn upsert_calendars(
+pub async fn upsert_calendars(
     pool: &SqlitePool,
     account_id: &str,
     remote: &[pikos_db::sync_delta::RemoteCalendar],

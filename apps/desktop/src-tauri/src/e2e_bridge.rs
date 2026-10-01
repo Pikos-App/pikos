@@ -34,6 +34,9 @@ use tokio::sync::{Mutex, OnceCell};
 use crate::db;
 use crate::error::{AppError, AppResult};
 
+#[path = "e2e_upstream.rs"]
+mod upstream;
+
 /// Must match `BRIDGE_ORIGIN` in `transport.ts`. Vite's HMR socket holds 1422.
 const PORT: u16 = 1423;
 
@@ -235,6 +238,27 @@ impl Bridge {
             "get_usage_stats" => {
                 let week_start = arg(&mut args, "week_start")?;
                 return reply(db::dev::get_usage_stats_impl(&pool, week_start).await);
+            }
+            // The poll the sync loop would run once the calendar changed upstream.
+            "upstream_sync" => {
+                let calendar: String = arg(&mut args, "calendar")?;
+                let events: Option<Vec<upstream::UpstreamEvent>> = arg(&mut args, "events")?;
+                let removals: Option<Vec<String>> = arg(&mut args, "removals")?;
+                let refresh: Option<bool> = arg(&mut args, "refresh")?;
+                return reply(
+                    upstream::sync(
+                        &pool,
+                        &calendar,
+                        events.unwrap_or_default(),
+                        removals.unwrap_or_default(),
+                        refresh.unwrap_or(false),
+                    )
+                    .await,
+                );
+            }
+            "upstream_discover" => {
+                let calendars = arg(&mut args, "calendars")?;
+                return reply(upstream::discover(&pool, calendars).await);
             }
             // The app also pokes the sync loop after enabling; the bridge runs none.
             "toggle_sync_calendar" => {
