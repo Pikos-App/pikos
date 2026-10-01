@@ -670,7 +670,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     if (result.end) {
       if (result.end.isCertain("hour") || result.end.isCertain("minute")) {
         chronoEnd = result.end.date();
-      } else if (result.end.isCertain("day")) {
+      } else if (result.end.isCertain("day") || result.end.isCertain("weekday")) {
         chronoEndDate = result.end.date();
       }
     }

@@ -1037,6 +1037,28 @@ describe("NL Page Creation Parser", () => {
         },
         input: "offsite April 18 to April 20",
       },
+      // A weekday end is certain of its weekday, not its day, and was dropped.
+      {
+        expected: {
+          input: { scheduledEnd: "2026-03-20", scheduledStart: "2026-03-16", title: "offsite" },
+          type: "single",
+        },
+        input: "offsite from Mon to Fri",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-03-20", scheduledStart: "2026-03-16", title: "offsite" },
+          type: "single",
+        },
+        input: "offsite Mon to Fri",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-03-23", scheduledStart: "2026-03-20", title: "retreat" },
+          type: "single",
+        },
+        input: "retreat Fri to Mon",
+      },
       // NOW=12:00, 3pm is future → today (2026-03-15). Time range stays single-day.
       {
         expected: {
