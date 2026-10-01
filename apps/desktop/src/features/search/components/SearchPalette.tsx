@@ -36,6 +36,8 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 import { flushPendingWrites } from "@/shared/pendingWrites";
 
+import { highlightText } from "../highlightText";
+
 const log = createLogger("SearchPalette");
 
 /** FTS5 needs something to prefix-match on; below this the query is too broad to run. */
@@ -60,28 +62,6 @@ function commandMatches(label: string, filter: string): boolean {
     if (i === filter.length) return true;
   }
   return false;
-}
-
-function highlightText(text: string, queryWords: string[]): React.ReactNode {
-  if (!text || queryWords.length === 0) return text;
-
-  const escaped = queryWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
-  const parts = text.split(pattern);
-
-  return parts.map((part, i) => {
-    const isMatch = pattern.test(part);
-    // Reset lastIndex since we're reusing the regex with `g` flag
-    pattern.lastIndex = 0;
-    if (isMatch) {
-      return (
-        <span className="font-medium text-primary" key={i}>
-          {part}
-        </span>
-      );
-    }
-    return part;
-  });
 }
 
 /** "2026-03-23" or "2026-03-23T10:00:00" → "Mar 23, 2026". */
@@ -311,10 +291,10 @@ export function SearchPalette() {
 
   const trimmedQuery = query.trim();
   const parsed = parseSearchQuery(trimmedQuery);
-  // Highlight what the index matched, not what the user typed — "multi-color" is two
-  // tokens to FTS, so a page holding "multi color" is a hit with nothing to mark.
-  // On the operator path only the residual text reached the index.
-  const queryWords = ftsTokens(parsed.hasOperators ? parsed.text : trimmedQuery);
+  // On the operator path only the residual text reached the index, so only it is
+  // highlighted; `highlightText` says how the text and its tokens are marked.
+  const searchedText = parsed.hasOperators ? parsed.text : trimmedQuery;
+  const queryWords = ftsTokens(searchedText);
 
   function handleSelect(id: string) {
     openPage(id);
@@ -394,9 +374,15 @@ export function SearchPalette() {
     // metadata summary for title-only
     let secondLine: React.ReactNode = null;
     if (item.matchSource === "subtitle" && item.subtitle) {
-      secondLine = queryWords.length > 0 ? highlightText(item.subtitle, queryWords) : item.subtitle;
+      secondLine =
+        queryWords.length > 0
+          ? highlightText(item.subtitle, queryWords, searchedText)
+          : item.subtitle;
     } else if (hasContentExcerpt) {
-      secondLine = queryWords.length > 0 ? highlightText(item.excerpt, queryWords) : item.excerpt;
+      secondLine =
+        queryWords.length > 0
+          ? highlightText(item.excerpt, queryWords, searchedText)
+          : item.excerpt;
     } else if (trimmedQuery) {
       const summary = buildMetadataSummary(item);
       if (summary) secondLine = summary;
@@ -426,7 +412,7 @@ export function SearchPalette() {
           <span className="flex items-center gap-1.5 truncate">
             <span className="truncate">
               {highlightTitle && queryWords.length > 0
-                ? highlightText(item.title || "Untitled", queryWords)
+                ? highlightText(item.title || "Untitled", queryWords, searchedText)
                 : item.title || "Untitled"}
             </span>
             {isDone(item) && (
