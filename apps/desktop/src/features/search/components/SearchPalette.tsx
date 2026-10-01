@@ -241,7 +241,7 @@ export function SearchPalette() {
     () => {
       if (!isOpen) setOpenDialog("search");
     },
-    { allowInInputs: true, group: "Navigation", label: "Search pages" }
+    { allowInInputs: true, group: "Navigation", inPalette: false, label: "Search pages" }
   );
 
   useKeyboardShortcut(
@@ -249,7 +249,7 @@ export function SearchPalette() {
     () => {
       if (!isOpen) setOpenDialog("search", COMMAND_PREFILL);
     },
-    { allowInInputs: true, group: "Navigation", label: "Run a command" }
+    { allowInInputs: true, group: "Navigation", inPalette: false, label: "Run a command" }
   );
 
   // ── Search with debounce ──────────────────────────────────────────────────

@@ -106,6 +106,20 @@ describe("register + handle", () => {
 
 // ─── Scope push/pop ordering ─────────────────────────────────────────────────
 
+describe("listCommands", () => {
+  it("leaves out a command marked as not for the palette", () => {
+    Keyboard.register({ combo: "Mod+n", handler: vi.fn(), id: "new", label: "New page" });
+    Keyboard.register({
+      combo: "Mod+k",
+      handler: vi.fn(),
+      id: "search",
+      inPalette: false,
+      label: "Search pages",
+    });
+    expect(Keyboard.listCommands().map((b) => b.label)).toEqual(["New page"]);
+  });
+});
+
 describe("scope push/pop", () => {
   it("top scope handler takes priority", () => {
     const globalHandler = vi.fn();

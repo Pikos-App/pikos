@@ -16,6 +16,10 @@ export type Binding = {
   label?: string;
   /** Section heading the shortcuts settings page files this under. */
   group?: string;
+  /** False for a command that opens the command palette: run from inside it, it
+   *  only closes the palette it was chosen in. Static rather than a `when` gate,
+   *  which the palette's snapshot reads a render stale. */
+  inPalette?: boolean;
   // The originating KeyboardEvent is passed so handlers can branch on e.g.
   // `e.repeat`. Handlers that don't need it can ignore the argument.
   handler: (e: KeyboardEvent) => void;
@@ -208,7 +212,7 @@ export const Keyboard = {
    */
   listCommands(): Binding[] {
     return Keyboard.listActiveBindings().filter(
-      (b) => b.label !== undefined && (b.when?.() ?? true)
+      (b) => b.label !== undefined && b.inPalette !== false && (b.when?.() ?? true)
     );
   },
 
