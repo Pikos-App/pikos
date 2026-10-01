@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { loadMockStorage } from "./shared/adapters/mockStorageChunk";
+import { STORAGE_BACKEND } from "./shared/constants/testMode";
 import { installGlobalErrorHandlers } from "./shared/logger";
 
 installGlobalErrorHandlers();
@@ -26,11 +27,13 @@ document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", (e) => e.preventDefault());
 
 async function mount() {
-  // Test-mode builds run against the in-memory adapter, which lives in its own
-  // chunk so production never downloads it. Fetch it before the first render —
-  // WorkspaceProvider picks its adapter synchronously.
-  if (import.meta.env["VITE_TEST_MODE"] === "true") {
+  // The in-memory adapter lives in its own chunk so production never downloads
+  // it. Fetch it before the first render, because WorkspaceProvider picks its
+  // adapter synchronously.
+  if (STORAGE_BACKEND === "mock") {
     await loadMockStorage();
+  } else if (STORAGE_BACKEND === "bridge") {
+    (await import("@bridge/transport")).installBridgeTransport();
   }
 
   const root = document.getElementById("root");

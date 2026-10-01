@@ -58,6 +58,11 @@ published_docs() {
 HTTP_CHOKEPOINT='crates/pikos-calendar-sync/src/http.rs'
 SYNC_CRATE='crates/pikos-calendar-sync/'
 
+# The browser test lane's writer: a server on localhost that answers the test page
+# and sends nothing out. It and its server-only, optional `hyper` compile only under
+# the `e2e-bridge` feature, which CI's test job enables and no release build does.
+E2E_BRIDGE='apps/desktop/src-tauri/src/e2e_bridge.rs'
+
 # ── 1. Secrets (gitleaks) ──────────────────────────────────────────────────────
 if command -v gitleaks &>/dev/null; then
   if gitleaks dir . --no-banner --exit-code 1 &>/dev/null; then
@@ -140,6 +145,7 @@ hits=$(ts_src_files \
 
 rust_hits=$(rust_src_files \
   | grep -v "^$SYNC_CRATE" \
+  | grep -v "^$E2E_BRIDGE$" \
   | xargs grep -nE '\b(reqwest::|hyper::|ureq::|surf::|attohttpc::|isahc::|Client::new|HttpClient)' 2>/dev/null \
   | grep -v 'tauri.plugin' || true)
 
@@ -150,7 +156,8 @@ build_hits=$(rust_src_files \
 
 dep_hits=$(git ls-files -- 'Cargo.toml' '*/Cargo.toml' \
   | grep -v "^${SYNC_CRATE}Cargo.toml$" \
-  | xargs grep -nE '^[[:space:]]*(reqwest|hyper|ureq|surf|attohttpc|isahc)[[:space:]]*=' 2>/dev/null || true)
+  | xargs grep -nE '^[[:space:]]*(reqwest|hyper|ureq|surf|attohttpc|isahc)[[:space:]]*=' 2>/dev/null \
+  | grep -vE '^apps/desktop/src-tauri/Cargo\.toml:[0-9]+:hyper = \{ version = "1", features = \["http1", "server"\], optional = true \}$' || true)
 
 all_network="$hits$rust_hits"
 if [ -n "$all_network" ]; then

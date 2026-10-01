@@ -7,7 +7,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { test as appTest, expect, mod, quickAdd } from "./fixtures";
+import { test as appTest, expect, mod, openCalendarMode, quickAdd, seedSynced } from "./fixtures";
 
 // Synced events render in the viewer's zone, so pin one and the seed's block
 // positions are the same everywhere.
@@ -48,29 +48,10 @@ async function disableCalendar(app: Page, name: string) {
   await expect(toggle).not.toBeChecked();
 }
 
-/** Wipe + load the mock synced-calendar seed via the Developer settings tab. */
-async function seedSynced(app: Page) {
-  await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: "Developer" }).click();
-  await app.getByRole("button", { name: "Seed Mock calendar sync" }).click();
-  await app.getByRole("button", { name: "Confirm" }).click();
-  // Seeding closes settings on success — the gear button reappearing signals done.
-  await expect(app.getByRole("button", { name: "Open settings" })).toBeVisible();
-}
-
-async function openCalendarMode(app: Page) {
-  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
-  await calendarBtn.waitFor({ state: "visible" });
-  if ((await calendarBtn.getAttribute("aria-pressed")) !== "true") {
-    await calendarBtn.click();
-  }
-  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-}
-
 // ─── tier1: add account ──────────────────────────────────────────────────────
 
 appTest(
-  "Calendar Sync panel adds a CalDAV account, calendars start off @tier1",
+  "Calendar Sync panel adds a CalDAV account, calendars start off @smoke @mock-only",
   async ({ app }) => {
     await openSyncPanel(app);
     await expect(
@@ -101,7 +82,7 @@ appTest(
 // ─── tier1: toggle ↔ sidebar folder (the highest-value smoke) ─────────────────
 
 appTest(
-  "enabling a calendar adds a sidebar folder, disabling removes it @tier1",
+  "enabling a calendar adds a sidebar folder, disabling removes it @smoke @mock-only",
   async ({ app }) => {
     await connectCaldav(app);
 
@@ -127,7 +108,7 @@ appTest(
 // the only toggle that overwrites the user's own arrangement — hence the confirm.
 // The whole round trip was manual QA until the mock learned to re-link.
 
-appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({ app }) => {
+appTest("turning a calendar back on reclaims the pages it kept @mock-only", async ({ app }) => {
   await seedSynced(app);
   await openCalendarMode(app);
 
@@ -172,7 +153,7 @@ appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({
 
 // ─── tier2: recolor ──────────────────────────────────────────────────────────
 
-appTest("recolor a synced calendar from the swatch palette @tier2", async ({ app }) => {
+appTest("recolor a synced calendar from the swatch palette @mock-only", async ({ app }) => {
   await connectCaldav(app);
   await app.getByRole("switch", { name: "Sync Personal" }).click();
 
@@ -186,7 +167,7 @@ appTest("recolor a synced calendar from the swatch palette @tier2", async ({ app
 
 // ─── tier2: resync + disconnect ──────────────────────────────────────────────
 
-appTest("resync then disconnect removes the account and its folder @tier2", async ({ app }) => {
+appTest("resync then disconnect removes the account and its folder @mock-only", async ({ app }) => {
   await connectCaldav(app);
   await app.getByRole("switch", { name: "Sync Personal" }).click();
 
@@ -214,7 +195,7 @@ appTest("resync then disconnect removes the account and its folder @tier2", asyn
 // stays manual — its OAuth can't run here.
 
 appTest(
-  "connecting the same CalDAV account again reuses it, no duplicates @tier2",
+  "connecting the same CalDAV account again reuses it, no duplicates @mock-only",
   async ({ app }) => {
     await connectCaldav(app);
     await app.getByRole("switch", { name: "Sync Personal" }).click();
@@ -236,47 +217,53 @@ appTest(
 // detaches in place and its folder stays behind as an ordinary one. The empty
 // case (folder disappears) is the tier1 toggle test above.
 
-appTest("disabling a calendar keeps an edited mirror and its folder @tier2", async ({ app }) => {
-  await seedSynced(app);
-  await openPersonalFolder(app);
+appTest(
+  "disabling a calendar keeps an edited mirror and its folder",
+  async ({ app }) => {
+    await seedSynced(app);
+    await openPersonalFolder(app);
 
-  // Deliberately not "Team standup": the seed plants that one already owned (its
-  // parked description implies an edit), so an edit there would prove nothing —
-  // it would detach whether or not this test typed a character. This mirror is
-  // bare until the keystrokes below, which is what the survivors arm is about.
-  const edited = app.locator("[data-page-list-item]").getByText("Design review (LA team)").first();
-  await edited.click();
-  // A locked title renders as static text; unlocking turns it into a button.
-  const editableTitle = app.getByRole("button", { name: "Page title" });
-  await expect(editableTitle).toHaveCount(0);
-  await app.getByRole("textbox", { name: "Page content" }).click();
-  await app.keyboard.type(" — my own notes");
-  // Two debounces sit between a keystroke and the write that claims ownership:
-  // the editor's (flushed by unmounting, i.e. moving off the page) and the pages
-  // context's own 800ms. Only the write marks the page the user's, so wait it out.
-  await app.locator("[data-page-list-item]").getByText("Company offsite").first().click();
-  await app.waitForTimeout(1000);
+    // Deliberately not "Team standup": the seed plants that one already owned (its
+    // parked description implies an edit), so an edit there would prove nothing —
+    // it would detach whether or not this test typed a character. This mirror is
+    // bare until the keystrokes below, which is what the survivors arm is about.
+    const edited = app
+      .locator("[data-page-list-item]")
+      .getByText("Design review (LA team)")
+      .first();
+    await edited.click();
+    // A locked title renders as static text; unlocking turns it into a button.
+    const editableTitle = app.getByRole("button", { name: "Page title" });
+    await expect(editableTitle).toHaveCount(0);
+    await app.getByRole("textbox", { name: "Page content" }).click();
+    await app.keyboard.type(" — my own notes");
+    // Two debounces sit between a keystroke and the write that claims ownership:
+    // the editor's (flushed by unmounting, i.e. moving off the page) and the pages
+    // context's own 800ms. Only the write marks the page the user's, so wait it out.
+    await app.locator("[data-page-list-item]").getByText("Company offsite").first().click();
+    await app.waitForTimeout(1000);
 
-  // Two all along: the realistic seed's own folder and the calendar's.
-  const personalFolders = app.getByRole("button", { name: "Personal" });
-  await expect(personalFolders).toHaveCount(2);
+    // Two all along: the realistic seed's own folder and the calendar's.
+    const personalFolders = app.getByRole("button", { name: "Personal" });
+    await expect(personalFolders).toHaveCount(2);
 
-  await openSyncPanel(app);
-  await disableCalendar(app, "Personal");
-  await app.keyboard.press("Escape");
+    await openSyncPanel(app);
+    await disableCalendar(app, "Personal");
+    await app.keyboard.press("Escape");
 
-  // Still two, so the calendar's folder stayed behind rather than being deleted
-  // with the sync. That it is now an ordinary folder is unit-pinned on the writer.
-  await expect(personalFolders).toHaveCount(2);
+    // Still two, so the calendar's folder stayed behind rather than being deleted
+    // with the sync. That it is now an ordinary folder is unit-pinned on the writer.
+    await expect(personalFolders).toHaveCount(2);
 
-  await edited.click();
-  await expect(editableTitle).toBeVisible();
-});
+    await edited.click();
+    await expect(editableTitle).toBeVisible();
+  }
+);
 
 // ─── tier2: two accounts, colliding calendar names ───────────────────────────
 
 appTest(
-  "same-named calendars on two accounts separate under account headings @tier2",
+  "same-named calendars on two accounts separate under account headings @mock-only",
   async ({ app }) => {
     await connectCaldav(app, "work@example.com");
     await app.getByRole("switch", { name: "Sync Personal" }).click();
@@ -312,7 +299,7 @@ appTest(
 // pill and stops existing for every other check here. Three of the five did.
 
 appTest(
-  "every seeded synced event that lands on today renders as its own block @tier2",
+  "every seeded synced event that lands on today renders as its own block",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarMode(app);
@@ -345,7 +332,7 @@ appTest(
 // ─── tier2: synced-block treatment ───────────────────────────────────────────
 
 appTest(
-  "synced events render source + detached treatment, schedule read-only @tier2",
+  "synced events render source + detached treatment, schedule read-only",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarMode(app);
@@ -378,7 +365,7 @@ appTest(
 
 // The only DOM-level proof that a calendar-owned block is immovable; every other
 // check of this invariant is at the isolated-hook level (useTimedDrag/useTimedResize).
-appTest("a synced block can't be dragged @tier2", async ({ app }) => {
+appTest("a synced block can't be dragged", async ({ app }) => {
   await seedSynced(app);
   await openCalendarMode(app);
 
@@ -412,9 +399,18 @@ appTest("a synced block can't be dragged @tier2", async ({ app }) => {
 
 /** Open an external-calendar folder by name. A same-named draggable user folder
  *  may also exist; the external one is the non-sortable sidebar item (external
- *  calendars aren't in the dnd reorder set). */
+ *  calendars aren't in the dnd reorder set).
+ *
+ *  Retried until the folder is current: dnd-kit stops every click for 50ms after a
+ *  drop, so one sent straight after a drag can vanish without a trace. */
 async function openCalendarFolder(app: Page, name: string) {
-  await app.locator(`[aria-label="${name}"]:not([aria-roledescription="sortable"])`).click();
+  const folder = app
+    .getByRole("group", { name: "Views and folders" })
+    .locator(`[aria-label="${name}"]:not([aria-roledescription="sortable"])`);
+  await expect(async () => {
+    await folder.click();
+    await expect(folder).toHaveAttribute("aria-current", "true", { timeout: 500 });
+  }).toPass();
 }
 
 async function openPersonalFolder(app: Page) {
@@ -426,7 +422,7 @@ function seriesRows(app: Page) {
 }
 
 appTest(
-  "completing a synced recurring occurrence drops one done clone, no read-only conflict @tier2",
+  "completing a synced recurring occurrence drops one done clone, no read-only conflict",
   async ({ app }) => {
     await seedSynced(app);
     await openPersonalFolder(app);
@@ -453,7 +449,7 @@ appTest(
 );
 
 appTest(
-  "unchecking a synced recurring done clone restores the occurrence @tier2",
+  "unchecking a synced recurring done clone restores the occurrence",
   async ({ app }) => {
     await seedSynced(app);
     await openPersonalFolder(app);
@@ -501,7 +497,7 @@ async function gotoMovedOverride(app: Page) {
 }
 
 appTest(
-  "a moved synced occurrence renders at its new slot, locked, and completes the original @tier2",
+  "a moved synced occurrence renders at its new slot, locked, and completes the original",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarMode(app);
@@ -534,7 +530,7 @@ appTest(
 // completions funnel to the head, which is always the next thing due.
 
 appTest(
-  "a synced virtual completes itself; a native virtual has no checkbox @tier2",
+  "a synced virtual completes itself; a native virtual has no checkbox",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarMode(app);
@@ -607,7 +603,7 @@ function sprintRows(app: Page) {
 }
 
 appTest(
-  "a detached series' moved occurrence is editable and completes its original date @tier2",
+  "a detached series' moved occurrence is editable and completes its original date",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarFolder(app, "Work");
@@ -645,7 +641,7 @@ appTest(
 );
 
 appTest(
-  "dragging a detached series' virtual leaves one block and no clone @tier2",
+  "dragging a detached series' virtual leaves one block and no clone",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarFolder(app, "Work");
@@ -687,7 +683,7 @@ appTest(
 // — the first plain virtual is day+21.
 
 appTest(
-  "a synced recurring occurrence's popover offers no editable date @tier2",
+  "a synced recurring occurrence's popover offers no editable date",
   async ({ app }) => {
     await seedSynced(app);
     await openCalendarMode(app);
@@ -721,7 +717,7 @@ appTest(
 // in by hand, sync never overwrites. The seed's "Team standup" carries a pending
 // description plus read-only location/attendees.
 appTest(
-  "a synced event shows the description-changed notice + read-only location/attendees @tier2",
+  "a synced event shows the description-changed notice + read-only location/attendees",
   async ({ app }) => {
     await seedSynced(app);
     await openPersonalFolder(app);
@@ -745,7 +741,7 @@ appTest(
 // and it gets the same scope question. Uses the raw `page` fixture because
 // clock.install must run before the first app script reads Date.
 
-appTest("an overdue synced series completes through the gap dialog @tier2", async ({ page }) => {
+appTest("an overdue synced series completes through the gap dialog @mock-only", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
   await page.clock.resume();
   await page.goto("/");
@@ -780,28 +776,31 @@ appTest("an overdue synced series completes through the gap dialog @tier2", asyn
 // Today's Overdue group, and the tick lands on the locked mirror instead of
 // being rejected read-only.
 
-appTest("a past synced one-off shows in Today and clears when ticked @tier2", async ({ app }) => {
-  await seedSynced(app);
+appTest(
+  "a past synced one-off shows in Today and clears when ticked",
+  async ({ app }) => {
+    await seedSynced(app);
 
-  await app.getByRole("button", { name: /^Today/ }).click();
-  await app.getByRole("button", { name: /^Overdue/ }).click();
+    await app.getByRole("button", { name: /^Today/ }).click();
+    await app.getByRole("button", { name: /^Overdue/ }).click();
 
-  const list = app.locator("[data-page-list-item]");
-  const signoff = list.filter({ hasText: "Budget sign-off" });
-  await expect(signoff).toBeVisible();
+    const list = app.locator("[data-page-list-item]");
+    const signoff = list.filter({ hasText: "Budget sign-off" });
+    await expect(signoff).toBeVisible();
 
-  await signoff.getByRole("checkbox", { name: "Mark done" }).click();
+    await signoff.getByRole("checkbox", { name: "Mark done" }).click();
 
-  await expect(signoff).not.toBeVisible();
+    await expect(signoff).not.toBeVisible();
 
-  // In Completed, not merely filtered out — the tick reached the locked mirror.
-  await app.getByRole("button", { name: /^Completed/ }).click();
-  await expect(signoff).toBeVisible();
-});
+    // In Completed, not merely filtered out — the tick reached the locked mirror.
+    await app.getByRole("button", { name: /^Completed/ }).click();
+    await expect(signoff).toBeVisible();
+  }
+);
 
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
-appTest("search finds a synced page @tier2", async ({ app }) => {
+appTest("search finds a synced page", async ({ app }) => {
   await seedSynced(app);
 
   await app.keyboard.press(mod("Mod+k"));
@@ -814,7 +813,7 @@ appTest("search finds a synced page @tier2", async ({ app }) => {
 // The row has to show what it matched: the query hits calendar-owned metadata and
 // nothing in the body, so the excerpt is the only place "Zoom" can appear. An exact
 // text match is the highlight — the word is its own element only once highlighted.
-appTest("search by room quotes the room on the result row @tier2", async ({ app }) => {
+appTest("search by room quotes the room on the result row", async ({ app }) => {
   await seedSynced(app);
 
   await app.keyboard.press(mod("Mod+k"));
@@ -835,7 +834,7 @@ appTest("search by room quotes the room on the result row @tier2", async ({ app 
 // lock state, which is the axis the fix keys on.
 
 appTest(
-  "a synced page's context menu offers no move, rename or date edit @tier2",
+  "a synced page's context menu offers no move, rename or date edit",
   async ({ app }) => {
     await seedSynced(app);
     await openPersonalFolder(app);
@@ -909,11 +908,22 @@ async function weekGridDropPoint(app: Page): Promise<{ x: number; y: number }> {
 }
 
 /** Drop a page-list row on the sidebar's Today row, which replaces the dropped
- *  page's schedule with an all-day occurrence today. */
-async function dragRowOntoTodayRow(app: Page, row: Locator): Promise<void> {
-  const target = await app.getByRole("button", { name: /^Today/ }).boundingBox();
-  if (!target) throw new Error("Today nav row missing a bounding box");
-  await dragRowToPoint(app, row, target.x + target.width / 2, target.y + target.height / 2);
+ *  page's schedule with an all-day occurrence today. `lands` waits for the row to
+ *  take the drop before releasing: released in the frame the pointer arrives, the
+ *  drop still belongs to the row it left. */
+async function dragRowOntoTodayRow(app: Page, row: Locator, lands = false): Promise<void> {
+  const todayRow = app.getByRole("button", { name: /^Today/ });
+  const target = await todayRow.boundingBox();
+  const rowBox = await row.boundingBox();
+  if (!target || !rowBox) throw new Error("Today nav row or page row missing a bounding box");
+  const startX = rowBox.x + rowBox.width / 2;
+  const startY = rowBox.y + rowBox.height / 2;
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  await app.mouse.move(startX + 16, startY, { steps: 4 });
+  await app.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+  if (lands) await expect(todayRow).toHaveAttribute("data-drag-over", "true");
+  await app.mouse.up();
 }
 
 /**
@@ -935,7 +945,7 @@ async function dragRowOntoCalendar(app: Page, rowText: string) {
 }
 
 appTest(
-  "a synced page can't be dragged from the list onto the calendar @tier2",
+  "a synced page can't be dragged from the list onto the calendar",
   async ({ app }) => {
     await seedSynced(app);
     await openPersonalFolder(app);
@@ -960,7 +970,7 @@ appTest(
 // structural rather than guarded, and the matrix warns that unifying the two sidebar
 // components would quietly hand the calendar folder a droppable. This pins the
 // outcome so such a refactor fails here instead of in a QA pass.
-appTest("a page can't be dropped onto a calendar folder @tier2", async ({ app }) => {
+appTest("a page can't be dropped onto a calendar folder", async ({ app }) => {
   await seedSynced(app);
   await openCalendarFolder(app, "Work");
 
@@ -1000,7 +1010,7 @@ appTest("a page can't be dropped onto a calendar folder @tier2", async ({ app })
 // save-failure chip: the one trace a refused write leaves once it has rolled
 // back (dragRowOntoCalendar above), and it needs the page open to show.
 
-appTest("a synced page can't be dropped onto the Today nav row @tier2", async ({ app }) => {
+appTest("a synced page can't be dropped onto the Today nav row", async ({ app }) => {
   await seedSynced(app);
   await openPersonalFolder(app);
 
@@ -1021,7 +1031,7 @@ appTest("a synced page can't be dropped onto the Today nav row @tier2", async ({
   const detachedDate = detached.getByRole("button", { name: /^Toggle date format:/ });
   const detachedBefore = await detachedDate.getAttribute("aria-label");
 
-  await dragRowOntoTodayRow(app, detached);
+  await dragRowOntoTodayRow(app, detached, true);
 
   await expect(detachedDate).not.toHaveAttribute("aria-label", detachedBefore!);
 });
@@ -1034,7 +1044,7 @@ appTest("a synced page can't be dropped onto the Today nav row @tier2", async ({
 // now, which only narrows the window. Raw `page` fixture because clock.install has
 // to run before the first app script reads Date.
 appTest(
-  "a mixed selection schedules the ordinary page and leaves the mirror @tier2",
+  "a mixed selection schedules the ordinary page and leaves the mirror @mock-only",
   async ({ page }) => {
     await page.clock.install({ time: new Date("2026-06-08T06:00:00") });
     await page.clock.resume();

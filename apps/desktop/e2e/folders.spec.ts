@@ -1,33 +1,14 @@
 import { expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
 
-import { test as appTest, mod, quickAdd } from "./fixtures";
-
-async function createFolder(app: Page, name: string) {
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type(name);
-  await app.keyboard.press("Enter");
-}
+import { test as appTest, createFolder, quickAdd } from "./fixtures";
 
 // ─── Create and navigate folders ───────────────────────────────────────────
 
-appTest("create and navigate folders @tier1", async ({ app }) => {
+appTest("create and navigate folders @smoke", async ({ app }) => {
   const sidebar = app.getByRole("group", { name: "Views and folders" });
   const folderBtn = sidebar.getByRole("button", { exact: true, name: "Projects" });
 
-  // Click "New Folder" — creates folder, navigates to it, and enters rename mode
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type("Projects");
-  await app.keyboard.press("Enter");
+  await createFolder(app, "Projects");
 
   await expect(folderBtn).toHaveAttribute("aria-current", "true");
   await expect(app.getByText("No pages")).toBeVisible();
@@ -69,7 +50,7 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
 // rendered position. A regression that ignored the drop event would
 // silently leave the order untouched.
 
-appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ app }) => {
+appTest("drag a folder to reorder its position in the sidebar", async ({ app }) => {
   // Seed three folders. New folders are inserted at the top of the list, so
   // creating in order Alpha → Beta → Gamma yields [Gamma, Beta, Alpha] in
   // the sidebar. Read the actual order before asserting reorder semantics.
@@ -78,7 +59,9 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
   await createFolder(app, "Gamma");
 
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  const folderItems = sidebar.locator('[role="button"][aria-label="Alpha"], [role="button"][aria-label="Beta"], [role="button"][aria-label="Gamma"]');
+  const folderItems = sidebar.locator(
+    '[role="button"][aria-label="Alpha"], [role="button"][aria-label="Beta"], [role="button"][aria-label="Gamma"]'
+  );
   await expect(folderItems).toHaveCount(3);
 
   // Capture initial top→bottom names so we can assert the order changed,
@@ -105,16 +88,12 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
   await app.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height / 2);
   await app.mouse.down();
   // Move up to cross the activation threshold, then onto the first folder.
-  await app.mouse.move(
-    lastBox.x + lastBox.width / 2,
-    lastBox.y + lastBox.height / 2 - 16,
-    { steps: 4 }
-  );
-  await app.mouse.move(
-    firstBox.x + firstBox.width / 2,
-    firstBox.y + firstBox.height / 2,
-    { steps: 10 }
-  );
+  await app.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height / 2 - 16, {
+    steps: 4,
+  });
+  await app.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2, {
+    steps: 10,
+  });
   await app.mouse.up();
 
   // The reorder is an optimistic update after dragEnd — DOM updates a tick

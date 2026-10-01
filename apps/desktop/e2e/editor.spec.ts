@@ -2,20 +2,11 @@
 // shortcuts, and content structure. All run against MockStorageAdapter
 // (VITE_TEST_MODE=true) so no Tauri backend is needed.
 
-import type { Page } from "@playwright/test";
-
-import { test as appTest, expect, mod, quickAdd } from "./fixtures";
-
-async function openEditorForPage(app: Page, title: string) {
-  await app.locator("[data-page-list-item]").getByText(title).click();
-  const editor = app.getByRole("textbox", { name: "Page content" });
-  await editor.click();
-  return editor;
-}
+import { test as appTest, expect, mod, openEditorForPage, quickAdd } from "./fixtures";
 
 // ─── Formatting via keyboard shortcuts ──────────────────────────────────────
 
-appTest("bold formatting via Cmd+B @tier2", async ({ app }) => {
+appTest("bold formatting via Cmd+B", async ({ app }) => {
   await quickAdd(app, "bold test");
   const editor = await openEditorForPage(app, "bold test");
 
@@ -27,7 +18,7 @@ appTest("bold formatting via Cmd+B @tier2", async ({ app }) => {
   await expect(editor.locator("strong")).toHaveText("bold text");
 });
 
-appTest("italic formatting via Cmd+I @tier2", async ({ app }) => {
+appTest("italic formatting via Cmd+I", async ({ app }) => {
   await quickAdd(app, "italic test");
   const editor = await openEditorForPage(app, "italic test");
 
@@ -39,7 +30,7 @@ appTest("italic formatting via Cmd+I @tier2", async ({ app }) => {
   await expect(editor.locator("em")).toHaveText("italic text");
 });
 
-appTest("strikethrough formatting via Cmd+Shift+S @tier2", async ({ app }) => {
+appTest("strikethrough formatting via Cmd+Shift+S", async ({ app }) => {
   await quickAdd(app, "strike test");
   const editor = await openEditorForPage(app, "strike test");
 
@@ -50,7 +41,7 @@ appTest("strikethrough formatting via Cmd+Shift+S @tier2", async ({ app }) => {
   await expect(editor.locator("s")).toHaveText("struck");
 });
 
-appTest("inline code via Cmd+E @tier2", async ({ app }) => {
+appTest("inline code via Cmd+E", async ({ app }) => {
   await quickAdd(app, "code test");
   const editor = await openEditorForPage(app, "code test");
 
@@ -63,7 +54,7 @@ appTest("inline code via Cmd+E @tier2", async ({ app }) => {
 
 // ─── Slash commands ─────────────────────────────────────────────────────────
 
-appTest("slash command inserts heading @tier2", async ({ app }) => {
+appTest("slash command inserts heading", async ({ app }) => {
   await quickAdd(app, "slash heading test");
   const editor = await openEditorForPage(app, "slash heading test");
 
@@ -79,7 +70,7 @@ appTest("slash command inserts heading @tier2", async ({ app }) => {
   await expect(editor.locator("h1")).toHaveText("My Heading");
 });
 
-appTest("slash command inserts bullet list @tier2", async ({ app }) => {
+appTest("slash command inserts bullet list", async ({ app }) => {
   await quickAdd(app, "slash list test");
   const editor = await openEditorForPage(app, "slash list test");
 
@@ -96,7 +87,7 @@ appTest("slash command inserts bullet list @tier2", async ({ app }) => {
   await expect(items).toHaveCount(2);
 });
 
-appTest("slash command inserts task list @tier2", async ({ app }) => {
+appTest("slash command inserts task list", async ({ app }) => {
   await quickAdd(app, "slash task test");
   const editor = await openEditorForPage(app, "slash task test");
 
@@ -112,7 +103,7 @@ appTest("slash command inserts task list @tier2", async ({ app }) => {
   await expect(taskList.locator("li")).toHaveCount(1);
 });
 
-appTest("slash command inserts code block @tier2", async ({ app }) => {
+appTest("slash command inserts code block", async ({ app }) => {
   await quickAdd(app, "slash code test");
   const editor = await openEditorForPage(app, "slash code test");
 
@@ -126,7 +117,7 @@ appTest("slash command inserts code block @tier2", async ({ app }) => {
   await expect(editor.locator("pre code")).toContainText("console.log");
 });
 
-appTest("slash command inserts blockquote @tier2", async ({ app }) => {
+appTest("slash command inserts blockquote", async ({ app }) => {
   await quickAdd(app, "slash quote test");
   const editor = await openEditorForPage(app, "slash quote test");
 
@@ -140,7 +131,7 @@ appTest("slash command inserts blockquote @tier2", async ({ app }) => {
   await expect(editor.locator("blockquote")).toContainText("Wise words");
 });
 
-appTest("slash command inserts horizontal rule @tier2", async ({ app }) => {
+appTest("slash command inserts horizontal rule", async ({ app }) => {
   await quickAdd(app, "slash hr test");
   const editor = await openEditorForPage(app, "slash hr test");
 
@@ -152,7 +143,7 @@ appTest("slash command inserts horizontal rule @tier2", async ({ app }) => {
   await expect(editor.locator("hr")).toBeVisible();
 });
 
-appTest("slash command inserts table @tier2", async ({ app }) => {
+appTest("slash command inserts table", async ({ app }) => {
   await quickAdd(app, "slash table test");
   const editor = await openEditorForPage(app, "slash table test");
 
@@ -167,7 +158,7 @@ appTest("slash command inserts table @tier2", async ({ app }) => {
   await expect(editor.locator("tr")).toHaveCount(3);
 });
 
-appTest("escape closes slash menu without inserting @tier2", async ({ app }) => {
+appTest("escape closes slash menu without inserting", async ({ app }) => {
   await quickAdd(app, "slash escape test");
   await openEditorForPage(app, "slash escape test");
 
@@ -179,7 +170,7 @@ appTest("escape closes slash menu without inserting @tier2", async ({ app }) => 
 
 // ─── Task list interaction ──────────────────────────────────────────────────
 
-appTest("task checkbox toggles checked state @tier2", async ({ app }) => {
+appTest("task checkbox toggles checked state", async ({ app }) => {
   await quickAdd(app, "checkbox test");
   const editor = await openEditorForPage(app, "checkbox test");
 
@@ -203,31 +194,35 @@ appTest("task checkbox toggles checked state @tier2", async ({ app }) => {
 // the page is done. Nothing else pins them apart, and the two read identically on
 // screen — a tick next to text.
 
-appTest("ticking an inline task leaves the page's own status open @tier2", async ({ app }) => {
-  await quickAdd(app, "inline status test");
-  const editor = await openEditorForPage(app, "inline status test");
+appTest(
+  "ticking an inline task leaves the page's own status open",
+  { tag: ["@EDIT-06"] },
+  async ({ app }) => {
+    await quickAdd(app, "inline status test");
+    const editor = await openEditorForPage(app, "inline status test");
 
-  await app.keyboard.type("/");
-  await expect(app.locator(".slash-menu")).toBeVisible();
-  await app.keyboard.type("task");
-  await app.keyboard.press("Enter");
-  await app.keyboard.type("Toggle me");
+    await app.keyboard.type("/");
+    await expect(app.locator(".slash-menu")).toBeVisible();
+    await app.keyboard.type("task");
+    await app.keyboard.press("Enter");
+    await app.keyboard.type("Toggle me");
 
-  const status = app.getByRole("button", { name: "Mark done" });
-  await expect(status).toHaveText("Open");
+    const status = app.getByRole("button", { name: "Mark done" });
+    await expect(status).toHaveText("Open");
 
-  const checkbox = editor.locator("ul[data-type='taskList'] input[type='checkbox']");
-  await checkbox.click();
-  await expect(checkbox).toBeChecked();
+    const checkbox = editor.locator("ul[data-type='taskList'] input[type='checkbox']");
+    await checkbox.click();
+    await expect(checkbox).toBeChecked();
 
-  // A flipped page status renames the chip to "Mark not done", so this resolves
-  // to nothing rather than reading "Done".
-  await expect(status).toHaveText("Open");
-});
+    // A flipped page status renames the chip to "Mark not done", so this resolves
+    // to nothing rather than reading "Done".
+    await expect(status).toHaveText("Open");
+  }
+);
 
 // ─── Content persistence ────────────────────────────────────────────────────
 
-appTest("formatted content persists across page switches @tier1", async ({ app }) => {
+appTest("formatted content persists across page switches @smoke", async ({ app }) => {
   await quickAdd(app, "persist-fmt-1");
   await quickAdd(app, "persist-fmt-2");
 
@@ -249,7 +244,7 @@ appTest("formatted content persists across page switches @tier1", async ({ app }
 
 // ─── Table toolbar ──────────────────────────────────────────────────────────
 
-appTest("table toolbar appears when cursor is in table @tier2", async ({ app }) => {
+appTest("table toolbar appears when cursor is in table", async ({ app }) => {
   await quickAdd(app, "table toolbar test");
   await openEditorForPage(app, "table toolbar test");
 
@@ -269,7 +264,7 @@ appTest("table toolbar appears when cursor is in table @tier2", async ({ app }) 
   await app.keyboard.press("ArrowDown");
 });
 
-appTest("table toolbar adds row below @tier2", async ({ app }) => {
+appTest("table toolbar adds row below", { tag: ["@EDIT-09:3"] }, async ({ app }) => {
   await quickAdd(app, "table addrow test");
   const editor = await openEditorForPage(app, "table addrow test");
 
@@ -286,26 +281,30 @@ appTest("table toolbar adds row below @tier2", async ({ app }) => {
   await expect(editor.locator("tr")).toHaveCount(4);
 });
 
-appTest("table toolbar adds and removes column @tier2", async ({ app }) => {
-  await quickAdd(app, "table col test");
-  const editor = await openEditorForPage(app, "table col test");
+appTest(
+  "table toolbar adds and removes column",
+  { tag: ["@EDIT-09:3"] },
+  async ({ app }) => {
+    await quickAdd(app, "table col test");
+    const editor = await openEditorForPage(app, "table col test");
 
-  // Insert a table (3 cols)
-  await app.keyboard.type("/");
-  await expect(app.locator(".slash-menu")).toBeVisible();
-  await app.keyboard.type("table");
-  await app.keyboard.press("Enter");
+    // Insert a table (3 cols)
+    await app.keyboard.type("/");
+    await expect(app.locator(".slash-menu")).toBeVisible();
+    await app.keyboard.type("table");
+    await app.keyboard.press("Enter");
 
-  await expect(editor.locator("th")).toHaveCount(3);
+    await expect(editor.locator("th")).toHaveCount(3);
 
-  await app.locator(".table-toolbar").getByRole("button", { name: "Add column after" }).click();
-  await expect(editor.locator("th")).toHaveCount(4);
+    await app.locator(".table-toolbar").getByRole("button", { name: "Add column after" }).click();
+    await expect(editor.locator("th")).toHaveCount(4);
 
-  await app.locator(".table-toolbar").getByRole("button", { name: "Delete column" }).click();
-  await expect(editor.locator("th")).toHaveCount(3);
-});
+    await app.locator(".table-toolbar").getByRole("button", { name: "Delete column" }).click();
+    await expect(editor.locator("th")).toHaveCount(3);
+  }
+);
 
-appTest("table toolbar deletes table @tier2", async ({ app }) => {
+appTest("table toolbar deletes table", { tag: ["@EDIT-09:3"] }, async ({ app }) => {
   await quickAdd(app, "table delete test");
   const editor = await openEditorForPage(app, "table delete test");
 
@@ -327,7 +326,7 @@ appTest("table toolbar deletes table @tier2", async ({ app }) => {
 // Link button (aria-label="Link") opens the LinkPopover, which exposes a
 // URL input that commits on Enter and wraps the selection in <a href>.
 
-appTest("bubble toolbar inserts a link around the selection @tier2", async ({ app }) => {
+appTest("bubble toolbar inserts a link around the selection", async ({ app }) => {
   await quickAdd(app, "link insert test");
   const editor = await openEditorForPage(app, "link insert test");
 
@@ -359,33 +358,40 @@ appTest("bubble toolbar inserts a link around the selection @tier2", async ({ ap
 // app would otherwise leave the panels gone on the next launch, with nothing on
 // screen to explain why.
 
-appTest("a focus session hides the left panels and gives them back @tier2", async ({ app }) => {
-  await quickAdd(app, "Deep work");
-  await openEditorForPage(app, "Deep work");
+appTest(
+  "a focus session hides the left panels and gives them back",
+  async ({ app }) => {
+    await quickAdd(app, "Deep work");
+    await openEditorForPage(app, "Deep work");
 
-  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
 
-  await app.getByRole("button", { name: "Start focus timer" }).click();
-  await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    await app.getByRole("button", { name: "Start focus timer" }).click();
+    await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
 
-  await app.getByRole("button", { name: "Stop focus timer" }).click();
-  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
-});
+    await app.getByRole("button", { name: "Stop focus timer" }).click();
+    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  }
+);
 
 // Opening the sidebar mid-session is an explicit decision, so the session stops
 // driving it — ending must not yank the panels away again.
 
-appTest("reopening the sidebar mid-session survives the session ending @tier2", async ({ app }) => {
-  await quickAdd(app, "Deep work");
-  await openEditorForPage(app, "Deep work");
+appTest(
+  "reopening the sidebar mid-session survives the session ending",
+  { tag: ["@EDIT-21"] },
+  async ({ app }) => {
+    await quickAdd(app, "Deep work");
+    await openEditorForPage(app, "Deep work");
 
-  await app.getByRole("button", { name: "Start focus timer" }).click();
-  await app.getByRole("button", { name: "Expand sidebar" }).click();
-  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await app.getByRole("button", { name: "Start focus timer" }).click();
+    await app.getByRole("button", { name: "Expand sidebar" }).click();
+    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
 
-  await app.getByRole("button", { name: "Stop focus timer" }).click();
-  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
-});
+    await app.getByRole("button", { name: "Stop focus timer" }).click();
+    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  }
+);
 
 // Ending a session is otherwise invisible — the row lands in a settings panel the
 // user isn't looking at — so both outcomes toast. The strings are unit-pinned in
@@ -395,7 +401,7 @@ appTest("reopening the sidebar mid-session survives the session ending @tier2", 
 // on the raw `page` fixture: clock.install must land before the first app script
 // reads Date.
 
-appTest("stopping a focus session toasts how long it ran @tier2", async ({ page }) => {
+appTest("stopping a focus session toasts how long it ran @mock-only", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
   await page.clock.resume();
   await page.goto("/");
@@ -411,15 +417,20 @@ appTest("stopping a focus session toasts how long it ran @tier2", async ({ page 
   await expect(page.getByRole("status", { name: "Focused for 25 minutes" })).toBeVisible();
 });
 
-appTest("a session under the floor toasts that nothing was recorded @tier2", async ({ app }) => {
-  await quickAdd(app, "Quick glance");
-  await openEditorForPage(app, "Quick glance");
+appTest(
+  "a session under the floor toasts that nothing was recorded",
+  async ({ app }) => {
+    await quickAdd(app, "Quick glance");
+    await openEditorForPage(app, "Quick glance");
 
-  await app.getByRole("button", { name: "Start focus timer" }).click();
-  await app.getByRole("button", { name: "Stop focus timer" }).click();
+    await app.getByRole("button", { name: "Start focus timer" }).click();
+    await app.getByRole("button", { name: "Stop focus timer" }).click();
 
-  await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
-});
+    await expect(
+      app.getByRole("status", { name: "Under 30 seconds — not recorded" })
+    ).toBeVisible();
+  }
+);
 
 // ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
 
@@ -427,26 +438,27 @@ appTest("a session under the floor toasts that nothing was recorded @tier2", asy
 // scoped, so it used to win outright and the palette could not be opened from the
 // one place you most want it. It now only claims the combo with a selection —
 // which is what a link is made out of — and the registry falls through otherwise.
-appTest("Cmd+Shift+K makes a link from a selection, opens the palette without one @tier2", async ({
-  app,
-}) => {
-  await quickAdd(app, "a page to write in");
-  await app.locator("[data-page-list-item]").filter({ hasText: "a page to write in" }).click();
+appTest(
+  "Cmd+Shift+K makes a link from a selection, opens the palette without one",
+  async ({ app }) => {
+    await quickAdd(app, "a page to write in");
+    await app.locator("[data-page-list-item]").filter({ hasText: "a page to write in" }).click();
 
-  const body = app.getByRole("textbox", { name: "Page content" });
-  await body.click();
-  await app.keyboard.type("link this phrase");
+    const body = app.getByRole("textbox", { name: "Page content" });
+    await body.click();
+    await app.keyboard.type("link this phrase");
 
-  // No selection: the editor stands down and the palette opens.
-  await app.keyboard.press(mod("Mod+Shift+k"));
-  const palette = app.getByRole("dialog", { name: "Search pages" });
-  await expect(palette).toBeVisible();
-  await app.keyboard.press("Escape");
-  await expect(palette).not.toBeVisible();
+    // No selection: the editor stands down and the palette opens.
+    await app.keyboard.press(mod("Mod+Shift+k"));
+    const palette = app.getByRole("dialog", { name: "Search pages" });
+    await expect(palette).toBeVisible();
+    await app.keyboard.press("Escape");
+    await expect(palette).not.toBeVisible();
 
-  // With a selection the editor takes it and the palette stays shut.
-  await body.click();
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.press(mod("Mod+Shift+k"));
-  await expect(palette).not.toBeVisible();
-});
+    // With a selection the editor takes it and the palette stays shut.
+    await body.click();
+    await app.keyboard.press(mod("Mod+a"));
+    await app.keyboard.press(mod("Mod+Shift+k"));
+    await expect(palette).not.toBeVisible();
+  }
+);

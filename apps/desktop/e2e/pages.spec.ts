@@ -1,10 +1,10 @@
 import { expect } from "@playwright/test";
 
-import { test as appTest, mod, quickAdd } from "./fixtures";
+import { test as appTest, createFolder, mod, quickAdd } from "./fixtures";
 
 // ─── Open page and edit content ────────────────────────────────────────────
 
-appTest("open page and edit content @tier1", async ({ app }) => {
+appTest("open page and edit content @smoke", async ({ app }) => {
   await quickAdd(app, "my test page");
   await quickAdd(app, "other page");
 
@@ -54,33 +54,36 @@ appTest("open page and edit content @tier1", async ({ app }) => {
 // Two characters, not one: the old bug re-placed the caret after the state
 // round-trip, so the first character landed correctly and every one after it
 // went to the end. "abcXdefY" instead of "abcXYdef".
-appTest("typing into the middle of a title or description stays there @tier1", async ({ app }) => {
-  await quickAdd(app, "abcdef");
+appTest(
+  "typing into the middle of a title or description stays there @smoke",
+  async ({ app }) => {
+    await quickAdd(app, "abcdef");
 
-  await app.locator("[data-page-list-item]").getByText("abcdef").click();
+    await app.locator("[data-page-list-item]").getByText("abcdef").click();
 
-  await app.getByLabel("Page title").click();
-  const titleInput = app.getByRole("textbox", { name: "Page title" });
-  await expect(titleInput).toBeFocused();
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.type("XY");
-  await expect(titleInput).toHaveValue("abcXYdef");
+    await app.getByLabel("Page title").click();
+    const titleInput = app.getByRole("textbox", { name: "Page title" });
+    await expect(titleInput).toBeFocused();
+    await app.keyboard.press("ArrowLeft");
+    await app.keyboard.press("ArrowLeft");
+    await app.keyboard.press("ArrowLeft");
+    await app.keyboard.type("XY");
+    await expect(titleInput).toHaveValue("abcXYdef");
 
-  await app.getByLabel("Page description").click();
-  const descInput = app.getByRole("textbox", { name: "Page description" });
-  await app.keyboard.type("abcdef");
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.type("XY");
-  await expect(descInput).toHaveValue("abcXYdef");
-});
+    await app.getByLabel("Page description").click();
+    const descInput = app.getByRole("textbox", { name: "Page description" });
+    await app.keyboard.type("abcdef");
+    await app.keyboard.press("ArrowLeft");
+    await app.keyboard.press("ArrowLeft");
+    await app.keyboard.press("ArrowLeft");
+    await app.keyboard.type("XY");
+    await expect(descInput).toHaveValue("abcXYdef");
+  }
+);
 
 // ─── Complete a page (toggle status) ───────────────────────────────────────
 
-appTest("complete a page via status toggle @tier1", async ({ app }) => {
+appTest("complete a page via status toggle @smoke", async ({ app }) => {
   await quickAdd(app, "task to complete");
 
   const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "task to complete" });
@@ -102,7 +105,7 @@ appTest("complete a page via status toggle @tier1", async ({ app }) => {
 
 // ─── Delete a page and undo ────────────────────────────────────────────────
 
-appTest("delete a page and undo @tier1", async ({ app }) => {
+appTest("delete a page and undo @smoke", { tag: ["@TRASH-02:3"] }, async ({ app }) => {
   await quickAdd(app, "page to delete");
 
   const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "page to delete" });
@@ -123,33 +126,31 @@ appTest("delete a page and undo @tier1", async ({ app }) => {
 
 // ─── Move page to folder via context menu ──────────────────────────────────
 
-appTest("move page to folder via context menu @tier1", async ({ app }) => {
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type("Work");
-  await app.keyboard.press("Enter");
+appTest(
+  "move page to folder via context menu @smoke",
+  { tag: ["@LIST-05"] },
+  async ({ app }) => {
+    await createFolder(app, "Work");
 
-  // Create the page from Inbox — quickAdd lands pages in the active view's folder.
-  await app.getByRole("button", { name: /Inbox/ }).click();
-  await quickAdd(app, "movable page");
+    // Create the page from Inbox — quickAdd lands pages in the active view's folder.
+    await app.getByRole("button", { name: /Inbox/ }).click();
+    await quickAdd(app, "movable page");
 
-  const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "movable page" });
-  await expect(pageItem).toBeVisible();
+    const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "movable page" });
+    await expect(pageItem).toBeVisible();
 
-  await pageItem.click({ button: "right" });
-  await app.getByRole("menuitem", { name: "Move to folder" }).click();
-  await app.getByRole("menuitem", { name: /Work/ }).click();
+    await pageItem.click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Move to folder" }).click();
+    await app.getByRole("menuitem", { name: /Work/ }).click();
 
-  await expect(pageItem).not.toBeVisible();
+    await expect(pageItem).not.toBeVisible();
 
-  await app.getByRole("button", { name: "Work" }).click();
-  await expect(
-    app.locator("[data-page-list-item]").filter({ hasText: "movable page" })
-  ).toBeVisible();
-});
+    await app.getByRole("button", { name: "Work" }).click();
+    await expect(
+      app.locator("[data-page-list-item]").filter({ hasText: "movable page" })
+    ).toBeVisible();
+  }
+);
 
 // ─── Drag-to-reorder within the page list ───────────────────────────────────
 //
@@ -161,7 +162,7 @@ appTest("move page to folder via context menu @tier1", async ({ app }) => {
 // A regression in the sortable wiring would leave drag-reorder silently
 // failing inside the page list even though folders still rearrange.
 
-appTest("drag a page above another reorders the page list @tier2", async ({ app }) => {
+appTest("drag a page above another reorders the page list", async ({ app }) => {
   await quickAdd(app, "alpha task");
   await quickAdd(app, "bravo task");
   await quickAdd(app, "charlie task");

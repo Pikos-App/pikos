@@ -12,6 +12,7 @@ import { createContext, type ReactNode, useContext, useEffect, useRef, useState 
 
 import { requireMockStorage } from "@/shared/adapters/mockStorageChunk";
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
+import { STORAGE_BACKEND } from "@/shared/constants/testMode";
 import {
   createWorkspaceEventBus,
   type WorkspaceEvent,
@@ -60,11 +61,12 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceInternalValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  // Test mode reads the in-memory adapter out of its own chunk — see
+  // The in-memory adapter comes out of its own chunk — see
   // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
-  // time this runs, and what it throws if it isn't.
+  // time this runs, and what it throws if it isn't. The bridge lane uses the
+  // real adapter with its transport already repointed in main.tsx.
   const [adapter] = useState<StorageAdapter>(() =>
-    import.meta.env["VITE_TEST_MODE"] === "true" ? requireMockStorage() : new TauriSQLiteAdapter()
+    STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter()
   );
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -110,8 +112,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     void initPromiseRef.current;
 
     async function runInit(): Promise<void> {
-      if (import.meta.env["VITE_TEST_MODE"] === "true") {
-        // The workspace identity below keys off the raw flag, not off whether a
+      if (STORAGE_BACKEND === "mock") {
+        // The workspace identity below keys off the backend, not off whether a
         // seed actually ran — an unrecognised VITE_SEED still names a seed
         // workspace, as it always has.
         const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
@@ -125,6 +127,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           name: seedScenario ? "Seed Workspace" : "Test Workspace",
         });
         setIsLoading(false);
+        return;
+      }
+
+      if (STORAGE_BACKEND === "bridge") {
+        await initBridgeWorkspace();
         return;
       }
 
@@ -174,6 +181,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // ─── selectWorkspace ───────────────────────────────────────────────────────
   // Creates the default workspace on first launch. Called by initWorkspace when no workspaces exist.
   // Safe to call concurrently — re-entrant callers share the in-flight promise.
+
+  /**
+   * Open the real writer from a browser, for the e2e bridge lane.
+   *
+   * None of the path resolution in `selectWorkspaceImpl` can be reused here:
+   * `appDataDir()` and the workspaces store are Tauri APIs, and the bridge lane
+   * has no Tauri. What it does share is the half worth testing, which is
+   * `connect_db` against a real file with real migrations behind it, so the
+   * per-spec token stands in for the resolved path and the rest of the sequence
+   * runs unchanged.
+   */
+  async function initBridgeWorkspace(): Promise<void> {
+    const token = (await import("@bridge/transport")).bridgeDbToken();
+    await connectDb(token);
+    const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
+    await launchSeedLoader(seedScenario)?.({ adapter, phase: "launch", setPendingNavigation });
+    await dataLoaderRef.current();
+    setWorkspace({
+      createdAt: new Date().toISOString(),
+      dbPath: token,
+      id: "bridge",
+      lastOpenedAt: new Date().toISOString(),
+      name: "Bridge Workspace",
+    });
+    setIsLoading(false);
+  }
 
   function selectWorkspace(): Promise<void> {
     return (initPromiseRef.current ??= selectWorkspaceImpl());

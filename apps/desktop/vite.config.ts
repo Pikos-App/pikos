@@ -20,6 +20,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Kept out of src/ so source-audit.sh can keep failing on any fetch( under
+      // src/ — see tsconfig.app.json's include list.
+      "@bridge": fileURLToPath(new URL("./bridge", import.meta.url)),
       // Dev/test fixtures live outside src so a grep (or an agent reading the
       // tree) doesn't pay for ~4k lines of seed data on every pass through the
       // app source. They are still bundled — lazily, via seedLoaders — so the

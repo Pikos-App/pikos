@@ -2,7 +2,8 @@ name: Validate
 
 # Reusable validation gate shared by CI (on PR/main push) and Release (on tag).
 # Parallel jobs: verify (typecheck/lint), coverage (unit + thresholds), e2e
-# (Playwright tier1+tier2), rust (fmt/check/clippy/test), wasm (committed
+# (Playwright, the @mock-only tests), e2e-bridge (every other test, against the
+# real writer), rust (fmt/check/clippy/test), wasm (committed
 # recurrence pkg matches its crate). Warn-only audit steps stay here so release
 # runs emit the same signals CI does.
 
@@ -94,14 +95,14 @@ jobs:
     # step below fails loudly if they drift.
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
-    # Shard the 150+ tests across parallel runners. fail-fast: false so one red
-    # shard doesn't cancel the others — a single run surfaces failures from every
-    # shard. Tune the shard count by editing this list (the denominator below is
-    # derived from it via strategy.job-total).
+    # Only the tests `e2e-bridge` doesn't take, so one shard covers them. fail-fast:
+    # false so one red shard doesn't cancel the others. Tune the shard count by
+    # editing this list (the denominator below is derived from it via
+    # strategy.job-total).
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1]
     steps:
       - uses: actions/checkout@v5
 
@@ -127,8 +128,9 @@ jobs:
       # --max-failures=1 stops this shard at its first failure (after the config's
       # retries) instead of grinding through the rest — sibling shards still run,
       # so we lose no cross-shard signal but skip the wasted minutes on a red shard.
+      # Every other test runs in `e2e-bridge` instead, not in both.
       - name: E2E tests (Playwright)
-        run: pnpm --filter @pikos/desktop exec playwright test --project=tier1 --project=tier2 --shard=${{ matrix.shard }}/${{ strategy.job-total }} --max-failures=1
+        run: pnpm --filter @pikos/desktop exec playwright test --project=e2e --grep @mock-only --shard=${{ matrix.shard }}/${{ strategy.job-total }} --max-failures=1
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -144,7 +146,7 @@ jobs:
   e2e-report:
     name: E2E Report
     if: ${{ !cancelled() }}
-    needs: e2e
+    needs: [e2e, e2e-bridge]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -176,6 +178,68 @@ jobs:
         with:
           name: playwright-report
           path: apps/desktop/playwright-report/
+          retention-days: 7
+
+  # Every test not tagged @mock-only, against the real Rust writer. Same
+  # container as `e2e`, so the browser is the one the mock lane uses; the bridge
+  # links the app crate, so the container also needs Rust and the Tauri build
+  # libraries the `rust` job installs. Most of the suite is here, so the shards are.
+  e2e-bridge:
+    name: E2E Tests, real writer (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install system dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y curl build-essential pkg-config tzdata libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      # Built here so the Playwright web-server timeout never covers a cold compile.
+      - name: Build the e2e bridge
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --features e2e-bridge --bin pikos-e2e-bridge
+
+      # The writer reads its zone from /etc/localtime on Linux, not TZ; the bridge
+      # refuses to start if the two disagree. Must match ZONE in the bridge config.
+      - name: Pin the container's zone to the lane's
+        run: ln -sf /usr/share/zoneinfo/America/New_York /etc/localtime
+
+      - name: E2E tests against the real writer (Playwright)
+        run: pnpm --filter @pikos/desktop test:e2e:bridge --shard=${{ matrix.shard }}/${{ strategy.job-total }} --max-failures=1
+
+      # Merged with the mock lane's shards by `e2e-report`.
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-bridge-${{ matrix.shard }}
+          path: apps/desktop/blob-report/
           retention-days: 7
 
   rust:

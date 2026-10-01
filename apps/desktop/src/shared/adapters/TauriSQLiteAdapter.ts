@@ -186,6 +186,17 @@ export const READ_COMMANDS = new Set([
   "list_backups",
 ]);
 
+export type CommandTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+
+let transport: CommandTransport = rawInvoke;
+
+/** Point the commands somewhere other than Tauri IPC. The e2e bridge lane uses
+ *  this to reach the real Rust writer from a browser, which has no IPC. A lane
+ *  that swaps the channel cannot see a defect in the channel itself. */
+export function setCommandTransport(next: CommandTransport): void {
+  transport = next;
+}
+
 // Rust commands serialize errors as { kind, message } (see
 // apps/desktop/src-tauri/src/error.rs::AppError). Convert at the boundary
 // into a typed StorageError so UI code can branch on `kind` and never
@@ -193,7 +204,7 @@ export const READ_COMMANDS = new Set([
 function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (import.meta.env.DEV) watchdog(command);
   if (WRITE_COMMANDS.has(command)) markLocalWrite();
-  return rawInvoke<T>(command, args).catch((err: unknown) => {
+  return transport<T>(command, args).catch((err: unknown) => {
     throw toStorageError(err);
   });
 }

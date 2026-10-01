@@ -10,6 +10,7 @@
 //! from that single list — the `#[tauri::command]` functions *and* the
 //! [`register`] call that puts them on the builder. Declaring a command is
 //! therefore the same act as registering it; there is no second list to forget.
+//! The e2e bridge's dispatcher comes off the same list, for the same reason.
 //!
 //! Commands with a real body stay hand-written where they live and are named in
 //! the `extras:` block, so they register through the same entry point. See
@@ -112,6 +113,46 @@ macro_rules! db_commands {
                 $($extra,)*
                 $($( $crate::db::$module::$name, )*)*
             ])
+        }
+
+        /// The declared commands again, reached by name over the e2e bridge
+        /// instead of over IPC. Generated from the same list as [`register`], so
+        /// a command cannot reach one transport and miss the other. The
+        /// `extras:` are not here: the bridge handles the few it needs itself.
+        #[cfg(feature = "e2e-bridge")]
+        pub mod bridge {
+            #[allow(unused_imports)]
+            use super::prelude::*;
+            use crate::e2e_bridge::{arg, reply, Args, Reply};
+            use serde_json::Value;
+
+            /// `None` when `command` is not one `db_commands!` declares.
+            ///
+            /// A command whose call builds the OS keychain is refused: it touches
+            /// the machine's real credentials, and most such commands also call a
+            /// provider's server. Matching on the declaration rather than a list
+            /// means a new such command is refused unasked.
+            pub async fn dispatch(
+                pool: &sqlx::SqlitePool,
+                command: &str,
+                mut args: Args,
+            ) -> Option<Reply> {
+                Some(match command {
+                    $($(
+                        stringify!($name) => async {
+                            if stringify!($($call),*).contains("Keychain") {
+                                return Err(Value::String(format!(
+                                    "{} reaches the OS keychain, which the e2e bridge refuses",
+                                    stringify!($name),
+                                )));
+                            }
+                            $( let $arg: $arg_ty = arg(&mut args, stringify!($arg))?; )*
+                            reply($($writer)::+(pool, $($call),*).await)
+                        }.await,
+                    )*)*
+                    _ => return None,
+                })
+            }
         }
     };
 }

@@ -1,10 +1,10 @@
 import { expect } from "@playwright/test";
 
-import { test as appTest, mod } from "./fixtures";
+import { test as appTest, createFolder, mod } from "./fixtures";
 
 // ─── Basic Quick Add: chip defaults + NLP tokens ───────────────────────────
 
-appTest("create page via Quick Add @tier1", async ({ app }) => {
+appTest("create page via Quick Add @smoke", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -33,7 +33,7 @@ appTest("create page via Quick Add @tier1", async ({ app }) => {
 // range (2–10 am) instead of a date span; (b) QuickAddDialog used to drop
 // `scheduledEnd` for all-day events, so the chip collapsed to the start day.
 
-appTest("Quick Add parses multi-day all-day ranges @tier2", async ({ app }) => {
+appTest("Quick Add parses multi-day all-day ranges", async ({ app }) => {
   // Dec 28–31 is the latest safe span in a calendar year; chrono.forwardDate
   // rolls it forward past Dec 28, so the exact label may carry a year suffix
   // in the narrow window where we're already past it. The regex tolerates both.
@@ -84,7 +84,7 @@ appTest("Quick Add parses multi-day all-day ranges @tier2", async ({ app }) => {
 
 // ─── Recurring page creation ───────────────────────────────────────────────
 
-appTest("create recurring page shows recurrence label @tier2", async ({ app }) => {
+appTest("create recurring page shows recurrence label", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -118,24 +118,28 @@ appTest("create recurring page shows recurrence label @tier2", async ({ app }) =
 // finishing on Enter — committed a plain page with the cadence silently dropped.
 // No wait here on purpose: the wait is what the bug hid behind.
 
-appTest("Quick Add keeps the cadence when Enter beats the preview @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "Quick Add keeps the cadence when Enter beats the preview",
+  { tag: ["@QADD-09:4"] },
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
 
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every monday at 9am");
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every monday at 9am");
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  await app.locator("[data-page-list-item]").filter({ hasText: "standup" }).click();
-  await expect(
-    app.getByRole("button", { name: /recurrence: every week on Monday/i })
-  ).toBeVisible();
-});
+    await app.locator("[data-page-list-item]").filter({ hasText: "standup" }).click();
+    await expect(
+      app.getByRole("button", { name: /recurrence: every week on Monday/i })
+    ).toBeVisible();
+  }
+);
 
 // ─── Create folder inline from FolderChip ──────────────────────────────────
 
-appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) => {
+appTest("create folder inline via QuickAdd FolderChip", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -172,7 +176,7 @@ appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) =
 // Regression guard for the "bulk 10 pages" bug. NLP bounded-recurrence inputs
 // ("every X + window") must produce ONE page with an rrule, not N copies.
 
-appTest("QuickAdd bounded recurrence creates 1 page with rrule @tier2", async ({ app }) => {
+appTest("QuickAdd bounded recurrence creates 1 page with rrule", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -200,7 +204,7 @@ appTest("QuickAdd bounded recurrence creates 1 page with rrule @tier2", async ({
 // "meditate 10 times" → the parser defaults to FREQ=DAILY + COUNT=10.
 // Verifies one page is created (not 10) and the chip shows the daily cadence.
 
-appTest("QuickAdd 'N times' defaults to daily recurring @tier2", async ({ app }) => {
+appTest("QuickAdd 'N times' defaults to daily recurring", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -224,7 +228,7 @@ appTest("QuickAdd 'N times' defaults to daily recurring @tier2", async ({ app })
 // pages — each on its own concrete date. Distinct from the recurring-template
 // path above.
 
-appTest("QuickAdd m/w/f creates 3 separate pages @tier2", async ({ app }) => {
+appTest("QuickAdd m/w/f creates 3 separate pages", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -249,29 +253,33 @@ appTest("QuickAdd m/w/f creates 3 separate pages @tier2", async ({ app }) => {
 // overwrite it. Verified on priority (cheapest chip to interact with) — the
 // same `*Manual` flag pattern guards date, folder, and rrule.
 
-appTest("QuickAdd manual priority override survives further typing @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "QuickAdd manual priority override survives further typing",
+  { tag: ["@QADD-09:4"] },
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
 
-  const input = app.getByRole("textbox", { name: "Quick add input" });
-  await input.fill("report !low");
-  await expect(dialog.getByRole("button", { name: "Priority: Low" })).toBeVisible({
-    timeout: 2000,
-  });
+    const input = app.getByRole("textbox", { name: "Quick add input" });
+    await input.fill("report !low");
+    await expect(dialog.getByRole("button", { name: "Priority: Low" })).toBeVisible({
+      timeout: 2000,
+    });
 
-  await dialog.getByRole("button", { name: "Priority: Low" }).click();
-  await app.getByRole("menuitem", { name: /High/ }).click();
-  await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Priority: Low" }).click();
+    await app.getByRole("menuitem", { name: /High/ }).click();
+    await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
 
-  // Keep typing — NLP re-parses and would normally set priority=low from !low.
-  // The manual flag should prevent the override.
-  await input.fill("report !low tomorrow");
-  // Wait for the parse to fire (200ms debounce) — the Date chip filling is the
-  // observable positive signal. Then assert priority is still High.
-  await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
-  await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
-});
+    // Keep typing — NLP re-parses and would normally set priority=low from !low.
+    // The manual flag should prevent the override.
+    await input.fill("report !low tomorrow");
+    // Wait for the parse to fire (200ms debounce) — the Date chip filling is the
+    // observable positive signal. Then assert priority is still High.
+    await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
+    await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
+  }
+);
 
 // ─── Manual rrule chip survives continued NLP typing ───────────────────────
 //
@@ -279,31 +287,35 @@ appTest("QuickAdd manual priority override survives further typing @tier2", asyn
 // (which would otherwise infer a different rrule) must not overwrite the
 // chip. Mirrors the priority-manual guard but exercises the rrule path.
 
-appTest("QuickAdd manual rrule override survives further typing @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "QuickAdd manual rrule override survives further typing",
+  { tag: ["@QADD-09:4"] },
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
 
-  const input = app.getByRole("textbox", { name: "Quick add input" });
+    const input = app.getByRole("textbox", { name: "Quick add input" });
 
-  // Type a date so the recurrence preset has an anchor (presets show
-  // weekday/day-of-month detail tied to anchorDate).
-  await input.fill("review tomorrow");
-  // Wait for the Date chip to fill — proves the 200ms NLP debounce fired.
-  await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
+    // Type a date so the recurrence preset has an anchor (presets show
+    // weekday/day-of-month detail tied to anchorDate).
+    await input.fill("review tomorrow");
+    // Wait for the Date chip to fill — proves the 200ms NLP debounce fired.
+    await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
 
-  await dialog.getByRole("button", { name: "Set recurrence" }).click();
-  await app.getByRole("button", { name: /^Daily/ }).click();
-  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
+    await dialog.getByRole("button", { name: "Set recurrence" }).click();
+    await app.getByRole("button", { name: /^Daily/ }).click();
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
 
-  // Keep typing with conflicting recurrence NLP (would normally infer WEEKLY).
-  // Add a tag so we have an observable signal that the parse actually fired —
-  // proving the manual override isn't just being checked before re-parse.
-  await input.fill("review tomorrow every monday #work");
-  await expect(dialog.getByRole("button", { name: /Tags: work/ })).toBeVisible({ timeout: 2000 });
-  // Manual chip wins — still daily, not weekly-on-Monday.
-  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
-});
+    // Keep typing with conflicting recurrence NLP (would normally infer WEEKLY).
+    // Add a tag so we have an observable signal that the parse actually fired —
+    // proving the manual override isn't just being checked before re-parse.
+    await input.fill("review tomorrow every monday #work");
+    await expect(dialog.getByRole("button", { name: /Tags: work/ })).toBeVisible({ timeout: 2000 });
+    // Manual chip wins — still daily, not weekly-on-Monday.
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
+  }
+);
 
 // ─── Recurrence chip alone (no NLP) creates a recurring page ───────────────
 //
@@ -311,34 +323,37 @@ appTest("QuickAdd manual rrule override survives further typing @tier2", async (
 // in the title — the chip falls back to today's date. Guards the
 // "rrule && !dateValue → setDateValue(localToday())" branch in QuickAdd.
 
-appTest("QuickAdd recurrence chip without NLP creates recurring page @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "QuickAdd recurrence chip without NLP creates recurring page",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
 
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup");
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup");
 
-  // No date typed yet — recurrence preset still selectable; date defaults to today.
-  await dialog.getByRole("button", { name: "Set recurrence" }).click();
-  await app.getByRole("button", { name: /^Daily/ }).click();
-  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
+    // No date typed yet — recurrence preset still selectable; date defaults to today.
+    await dialog.getByRole("button", { name: "Set recurrence" }).click();
+    await app.getByRole("button", { name: /^Daily/ }).click();
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
 
-  // Press Enter on the input (not the page) so the submit handler receives it.
-  await app.getByRole("textbox", { name: "Quick add input" }).press("Enter");
-  await expect(dialog).not.toBeVisible();
+    // Press Enter on the input (not the page) so the submit handler receives it.
+    await app.getByRole("textbox", { name: "Quick add input" }).press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  const pages = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
-  await expect(pages).toHaveCount(1);
+    const pages = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+    await expect(pages).toHaveCount(1);
 
-  // Open it and verify the byline shows recurrence in the icon-only chip's
-  // accessible name.
-  await pages.first().click();
-  await expect(app.getByRole("button", { name: /recurrence: every day/i })).toBeVisible();
-});
+    // Open it and verify the byline shows recurrence in the icon-only chip's
+    // accessible name.
+    await pages.first().click();
+    await expect(app.getByRole("button", { name: /recurrence: every day/i })).toBeVisible();
+  }
+);
 
 // ─── Stop repeating clears the rule via the byline popover ─────────────────
 
-appTest("byline 'Stop repeating' clears the recurrence rule @tier2", async ({ app }) => {
+appTest("byline 'Stop repeating' clears the recurrence rule", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -369,7 +384,7 @@ appTest("byline 'Stop repeating' clears the recurrence rule @tier2", async ({ ap
 // byline RecurrencePopover and picking a preset should attach a rule to the
 // page (and anchor to today if no date is set).
 
-appTest("add recurrence to a page from the byline @tier2", async ({ app }) => {
+appTest("add recurrence to a page from the byline", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -392,7 +407,7 @@ appTest("add recurrence to a page from the byline @tier2", async ({ app }) => {
 
 // ─── Empty input shakes (validation feedback) ─────────────────────────────
 
-appTest("empty Quick Add input shakes on submit @tier2", async ({ app }) => {
+appTest("empty Quick Add input shakes on submit", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -418,7 +433,7 @@ appTest("empty Quick Add input shakes on submit @tier2", async ({ app }) => {
 // must not fall back to inputValue (which still holds the raw tokens) —
 // otherwise pages get titled "tomorrow", "#work", "!high" etc.
 
-appTest("token-only Quick Add input creates an Untitled page @tier2", async ({ app }) => {
+appTest("token-only Quick Add input creates an Untitled page", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -430,9 +445,7 @@ appTest("token-only Quick Add input creates an Untitled page @tier2", async ({ a
 
   const untitled = app.locator("[data-page-list-item]").filter({ hasText: "Untitled" });
   await expect(untitled).toBeVisible();
-  const literalTomorrow = app
-    .locator("[data-page-list-item]")
-    .filter({ hasText: /^tomorrow$/i });
+  const literalTomorrow = app.locator("[data-page-list-item]").filter({ hasText: /^tomorrow$/i });
   await expect(literalTomorrow).toHaveCount(0);
 });
 
@@ -443,7 +456,7 @@ appTest("token-only Quick Add input creates an Untitled page @tier2", async ({ a
 // it. Guards the executeCreate `{id, title}` return-shape refactor and the
 // openPage() wiring in handleSubmitAndOpen.
 
-appTest("Shift+Enter adds page and opens it in the editor @tier2", async ({ app }) => {
+appTest("Shift+Enter adds page and opens it in the editor", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -468,27 +481,30 @@ appTest("Shift+Enter adds page and opens it in the editor @tier2", async ({ app 
 // input instead of staying on the chip trigger. Exercised on PriorityDropdown
 // — the smallest dropdown to interact with.
 
-appTest("priority dropdown close restores focus to Quick Add input @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "priority dropdown close restores focus to Quick Add input",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
 
-  const input = app.getByRole("textbox", { name: "Quick add input" });
-  await expect(input).toBeFocused();
+    const input = app.getByRole("textbox", { name: "Quick add input" });
+    await expect(input).toBeFocused();
 
-  // Open the dropdown and pick High. Radix sets aria-hidden on the rest of the
-  // page while the menu is open, so we can't assert input focus state in
-  // between — only after close. The contract we care about: after close,
-  // focus is back on the input (NOT on the chip trigger).
-  await dialog.getByRole("button", { name: "Priority: Priority" }).click();
-  await app.getByRole("menuitem", { name: /High/ }).click();
-  await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
-  await expect(input).toBeFocused();
-});
+    // Open the dropdown and pick High. Radix sets aria-hidden on the rest of the
+    // page while the menu is open, so we can't assert input focus state in
+    // between — only after close. The contract we care about: after close,
+    // focus is back on the input (NOT on the chip trigger).
+    await dialog.getByRole("button", { name: "Priority: Priority" }).click();
+    await app.getByRole("menuitem", { name: /High/ }).click();
+    await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
+    await expect(input).toBeFocused();
+  }
+);
 
 // ─── Cmd+Enter batch submit adds page and resets the form ──────────────────
 
-appTest("Cmd+Enter adds page in batch and clears the input @tier2", async ({ app }) => {
+appTest("Cmd+Enter adds page in batch and clears the input", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -503,7 +519,9 @@ appTest("Cmd+Enter adds page in batch and clears the input @tier2", async ({ app
 
   // Wait for the addedFeedback to clear (1s timeout in source) and the input
   // to remount.
-  await expect(app.getByRole("textbox", { name: "Quick add input" })).toBeVisible({ timeout: 2000 });
+  await expect(app.getByRole("textbox", { name: "Quick add input" })).toBeVisible({
+    timeout: 2000,
+  });
 
   const input2 = app.getByRole("textbox", { name: "Quick add input" });
   await input2.fill("second batch task");
@@ -520,7 +538,7 @@ appTest("Cmd+Enter adds page in batch and clears the input @tier2", async ({ app
 
 // ─── Numeric priority shortcut (!1 → urgent chip) ──────────────────────────
 
-appTest("!1 numeric priority maps to Urgent chip @tier2", async ({ app }) => {
+appTest("!1 numeric priority maps to Urgent chip", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -542,7 +560,7 @@ appTest("!1 numeric priority maps to Urgent chip @tier2", async ({ app }) => {
 
 // ─── 'today' keyword schedules for today ───────────────────────────────────
 
-appTest("bare 'today' schedules the page for today @tier2", async ({ app }) => {
+appTest("bare 'today' schedules the page for today", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -565,15 +583,9 @@ appTest("bare 'today' schedules the page for today @tier2", async ({ app }) => {
 // dialog routes it to folderId=null (Inbox is the implicit null-folder
 // view).
 
-appTest("~inbox folder query routes to Inbox @tier2", async ({ app }) => {
+appTest("~inbox folder query routes to Inbox", async ({ app }) => {
   // Create a real folder so the default folder isn't Inbox.
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type("Notes");
-  await app.keyboard.press("Enter");
+  await createFolder(app, "Notes");
 
   // Active folder is now "Notes". A new Quick Add inherits Notes as default.
   await app.keyboard.press(mod("Mod+n"));
@@ -594,23 +606,26 @@ appTest("~inbox folder query routes to Inbox @tier2", async ({ app }) => {
 
 // ─── Manual date override survives further NLP typing ──────────────────────
 
-appTest("QuickAdd manual date override survives further typing @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "QuickAdd manual date override survives further typing",
+  { tag: ["@QADD-09:4"] },
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
 
-  const input = app.getByRole("textbox", { name: "Quick add input" });
-  await input.fill("review tomorrow");
-  await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
+    const input = app.getByRole("textbox", { name: "Quick add input" });
+    await input.fill("review tomorrow");
+    await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
 
-  await dialog.getByRole("button", { name: /Scheduled:/ }).click();
-  await app.getByRole("button", { exact: true, name: "No date" }).click();
-  await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
+    await dialog.getByRole("button", { name: /Scheduled:/ }).click();
+    await app.getByRole("button", { exact: true, name: "No date" }).click();
+    await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
 
-  // Type more text including a date — chip should NOT auto-fill (manual override).
-  // Add a tag so we have a positive signal the parse actually fired.
-  await input.fill("review tomorrow next week #work");
-  await expect(dialog.getByRole("button", { name: /Tags: work/ })).toBeVisible({ timeout: 2000 });
-  await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
-});
-
+    // Type more text including a date — chip should NOT auto-fill (manual override).
+    // Add a tag so we have a positive signal the parse actually fired.
+    await input.fill("review tomorrow next week #work");
+    await expect(dialog.getByRole("button", { name: /Tags: work/ })).toBeVisible({ timeout: 2000 });
+    await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
+  }
+);

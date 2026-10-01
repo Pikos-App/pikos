@@ -91,7 +91,8 @@ else
 fi
 
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────
-step "e2e" "Playwright tier1 + tier2"
-pnpm --filter @pikos/desktop exec playwright test --project=tier1 --project=tier2
+step "e2e" "Playwright, as CI splits it: the real writer, then the mock-only tests"
+pnpm --filter @pikos/desktop test:e2e:bridge
+pnpm --filter @pikos/desktop exec playwright test --project=e2e --grep @mock-only
 
 printf "\n${BOLD}✓ All validation passed — safe to push the tag.${RESET}\n"

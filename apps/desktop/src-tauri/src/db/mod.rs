@@ -158,7 +158,7 @@ pub async fn connect_db(
 /// The one place a pool is opened: pikos-db handles schema, migrations,
 /// pragmas, content_text backfill and the FTS rebuild, then this runs the
 /// app-only housekeeping on top.
-async fn open_pool(path: &str) -> AppResult<SqlitePool> {
+pub(crate) async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     let pool = pikos_db::open_pool(path).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
     // The trash's other half. Soft-delete keeps a page forever on its own, so

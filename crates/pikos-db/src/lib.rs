@@ -27,7 +27,9 @@ pub mod sync_delta;
 pub mod tags;
 pub mod tx;
 
-pub use backups::{list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind};
+pub use backups::{
+    backups_dir, list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind,
+};
 pub use error::{AppError, AppResult};
 pub use focus::*;
 pub use folders::*;

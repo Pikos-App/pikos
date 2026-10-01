@@ -37,6 +37,7 @@ export function SmartViewEntry({
             ? "border-border bg-surface-nav-selected text-foreground"
             : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
       )}
+      data-drag-over={isDragOver ? "true" : undefined}
       id={id}
       onClick={onSelect}
       ref={dragRef}

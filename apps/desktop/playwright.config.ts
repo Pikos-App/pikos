@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { OWN_CONFIG_TAGS } from "./e2e/tags";
+
 const E2E_PORT = 1421;
 
 export default defineConfig({
@@ -10,13 +12,8 @@ export default defineConfig({
   fullyParallel: true,
   projects: [
     {
-      grep: /@tier1/,
-      name: "tier1",
-      use: { ...devices["Desktop Safari"] },
-    },
-    {
-      grep: /@tier2/,
-      name: "tier2",
+      grepInvert: OWN_CONFIG_TAGS,
+      name: "e2e",
       use: { ...devices["Desktop Safari"] },
     },
     {

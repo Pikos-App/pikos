@@ -28,6 +28,7 @@ src-tauri/target/
 
 # Playwright
 playwright-report/
+playwright-report-bridge/
 blob-report/
 all-blob-reports/
 test-results/

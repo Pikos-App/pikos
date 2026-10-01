@@ -204,6 +204,12 @@ one-shot `node` subprocess. Keeps that logic single-sourced in TypeScript.
 frontend: `TauriSQLiteAdapter` in production, `MockStorageAdapter` under
 `VITE_TEST_MODE=true`. Components never `invoke` a DB command directly.
 
+**Real writer (e2e)** — `pikos-db` behind the end-to-end tests: the browser's
+`TauriSQLiteAdapter` sends its commands over localhost to the e2e bridge
+(`pikos-e2e-bridge`), which runs them against a SQLite file of the test's own. Every
+e2e test runs there unless tagged `@mock-only`. Not to be confused with
+`@pikos/bridge`, which is the CLI's route to the TypeScript parser.
+
 **Workspace** — one SQLite file = one workspace, self-contained (no `workspace_id`
 column anywhere inside). Registry lives in `@tauri-apps/plugin-store`. A power-user
 concept, hidden from the default UI.

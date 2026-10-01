@@ -30,7 +30,7 @@ async function add(page: Page, input: string) {
 
 // ─── Upcoming groups the window by day ──────────────────────────────────────
 
-appTest("upcoming groups the next seven days by day @tier2", async ({ page }) => {
+appTest("upcoming groups the next seven days by day @mock-only", async ({ page }) => {
   await bootAt(page, "2026-06-15T09:00:00");
 
   await add(page, "site visit @today at 3pm");
@@ -53,7 +53,7 @@ appTest("upcoming groups the next seven days by day @tier2", async ({ page }) =>
 
 // ─── Upcoming is not a second Today ─────────────────────────────────────────
 
-appTest("upcoming leaves overdue pages to the Today view @tier2", async ({ page }) => {
+appTest("upcoming leaves overdue pages to the Today view @mock-only", async ({ page }) => {
   await bootAt(page, "2026-06-15T09:00:00");
 
   await add(page, "expense report @today at 3pm");
@@ -75,7 +75,7 @@ appTest("upcoming leaves overdue pages to the Today view @tier2", async ({ page 
 
 // ─── Bulk "Move to today" on the Overdue header ─────────────────────────────
 
-appTest("moving overdue pages to today clears the Overdue section @tier2", async ({ page }) => {
+appTest("moving overdue pages to today clears the Overdue section @mock-only", async ({ page }) => {
   await bootAt(page, "2026-06-15T09:00:00");
 
   await add(page, "expense report @today at 3pm");

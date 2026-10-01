@@ -2,6 +2,8 @@ use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 mod db;
+#[cfg(feature = "e2e-bridge")]
+pub mod e2e_bridge;
 #[path = "error/error.rs"]
 mod error;
 #[path = "logging/logging.rs"]
