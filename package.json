@@ -16,6 +16,7 @@
     "preflight": "bash scripts/validate.sh",
     "cleanup": "bash scripts/cleanup-builds.sh",
     "qa:build": "bash scripts/qa-build.sh",
+    "qa:marks": "node scripts/qa-marks.mjs",
     "fix:notifications": "bash scripts/reset-launch-services.sh",
     "audit:source": "bash scripts/source-audit.sh",
     "release": "bash scripts/release.sh",
