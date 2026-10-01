@@ -16,7 +16,7 @@ export type StorageLane = "bridge" | "mock";
 /** Tells one run's databases from the last, since a local bridge can outlive a run. */
 const RUN = Date.now().toString(36);
 
-export const test = base.extend<{ app: Page; storage: StorageLane }>({
+export const test = base.extend<{ app: Page; firstRun: boolean; storage: StorageLane }>({
   app: async ({ page }, use) => {
     await page.goto("/");
     // Workspace auto-creates on first launch — wait for it to be ready
@@ -25,15 +25,19 @@ export const test = base.extend<{ app: Page; storage: StorageLane }>({
   },
   // On the context rather than in `app`, so specs that navigate the raw `page`
   // themselves get the token too, and a reload keeps it.
-  context: async ({ context, storage }, use, testInfo) => {
+  context: async ({ context, firstRun, storage }, use, testInfo) => {
     if (storage === "bridge") {
       const token = `${RUN}-${testInfo.testId}-${testInfo.retry}`;
       await context.addInitScript({
         content: `window.__PIKOS_E2E_DB__ = ${JSON.stringify(token)};`,
       });
+      if (firstRun) await context.addInitScript({ content: "window.__PIKOS_E2E_FIRST_RUN__ = true;" });
     }
     await use(context);
   },
+  /** Launch as on a clean profile, through the app's first-launch path. Every other test
+   *  starts on an empty database, without the tutorial a first launch plants. */
+  firstRun: [false, { option: true }],
   // The real writer reads the machine's clock and the zone the lane started it in,
   // so a faked browser clock or a spec's own zone splits one app across two dates
   // or zones, a state production cannot reach. A pass there proves nothing, so the
