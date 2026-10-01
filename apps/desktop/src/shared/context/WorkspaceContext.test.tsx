@@ -413,6 +413,29 @@ describe("reorderPages — optimistic", () => {
 
 // ─── clearSchedule ────────────────────────────────────────────────────────────
 
+describe("a rule added or removed in the session", () => {
+  it("marks its page recurring, and unmarks it on removal", async () => {
+    const { hook, page } = await setup();
+    const isRecurring = () => hook.result.current.pages.find((p) => p.id === page.id)?.isRecurring;
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2099-01-05",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+    expect(isRecurring()).toBe(true);
+
+    await act(async () => {
+      await hook.result.current.deleteRecurrence(ruleId);
+    });
+    expect(isRecurring()).toBe(false);
+  });
+});
+
 describe("scheduleOnce on a recurring head", () => {
   // When the head moves (drag/edit), the rule's anchor must follow so
   // virtual expansion stops emitting past dates. Without anchor sync, the

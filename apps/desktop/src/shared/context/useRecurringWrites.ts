@@ -117,9 +117,17 @@ export function useRecurringWrites({
     ruleId: string,
     updates: RecurrenceRuleUpdate
   ): Promise<PageRecurrenceRule> {
+  /** `isRecurring` is the backend's projection, read with the page, so a rule
+   *  added or removed here leaves it stale until the next read unless it is
+   *  patched too. Stale, "Move to today" moved a new series as a plain page. */
+  function markRecurring(pageId: string, isRecurring: boolean): void {
+    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, isRecurring } : p)));
+  }
+
     const updated = await adapter.updateRecurrenceRule(ruleId, updates);
     setRecurrenceRules((prev) => prev.map((r) => (r.id === ruleId ? updated : r)));
     return updated;
+    markRecurring(data.pageId, true);
   }
 
   async function deleteRecurrence(ruleId: string): Promise<void> {
@@ -133,8 +141,10 @@ export function useRecurringWrites({
    * clone in the same update (the uncomplete path); the drop applies even if the head
    * fetch comes back empty. */
   async function patchRecomputedHead(pageId: string, dropCloneId?: string): Promise<void> {
+    const pageId = recurrenceRulesRef.current.find((r) => r.id === ruleId)?.pageId;
     const fresh = await adapter.getPage(pageId);
     setPages((prev) => {
+    if (pageId) markRecurring(pageId, false);
       const base = dropCloneId ? prev.filter((p) => p.id !== dropCloneId) : prev;
       if (!fresh) return base;
       return base.map((p) =>
