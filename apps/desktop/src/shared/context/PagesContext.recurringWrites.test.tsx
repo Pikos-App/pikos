@@ -69,6 +69,26 @@ describe("completeRecurringPage idempotency", () => {
     expect(doneStandups).toHaveLength(1);
   });
 
+  it("keeps one copy of the clone when a fetch lands it before the completion returns", async () => {
+    const { hook, pageId } = await setupRecurringPage();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked with .call(this, …) inside the mock below
+    const origComplete = MockStorageAdapter.prototype.completeRecurringPage;
+    vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage").mockImplementation(
+      async function (this: MockStorageAdapter, data) {
+        const result = await origComplete.call(this, data);
+        hook.result.current.pages.mergePages([result.clone]);
+        return result;
+      }
+    );
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId);
+    });
+
+    const pages = hook.result.current.pages.pages;
+    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
+  });
+
   it("clears the guard on settle so a later genuine completion still runs", async () => {
     const { hook, pageId } = await setupRecurringPage();
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");

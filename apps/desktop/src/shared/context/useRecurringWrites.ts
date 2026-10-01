@@ -77,6 +77,16 @@ export interface RecurringWrites {
   updateRecurrence: (ruleId: string, updates: RecurrenceRuleUpdate) => Promise<PageRecurrenceRule>;
 }
 
+/** Put a page a write returned into the list, replacing any copy already there.
+ *  It can be: an idempotent repeat returns the same clone, and a fetch that ran
+ *  while the write was in flight (the Completed section's, opened right after a
+ *  tick) can land it first. Appending blind listed the page twice. */
+function upsertPage(pages: PageSummary[], page: PageSummary): PageSummary[] {
+  return pages.some((p) => p.id === page.id)
+    ? pages.map((p) => (p.id === page.id ? page : p))
+    : [...pages, page];
+}
+
 export function useRecurringWrites({
   adapter,
   enqueue,
@@ -107,16 +117,6 @@ export function useRecurringWrites({
   const reschedulingVirtualRef = useRef<Set<string>>(new Set());
   const [overridesVersion, setOverridesVersion] = useState(0);
 
-  async function createRecurrence(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
-    const rule = await adapter.createRecurrenceRule(data);
-    setRecurrenceRules((prev) => [...prev, rule]);
-    return rule;
-  }
-
-  async function updateRecurrence(
-    ruleId: string,
-    updates: RecurrenceRuleUpdate
-  ): Promise<PageRecurrenceRule> {
   /** `isRecurring` is the backend's projection, read with the page, so a rule
    *  added or removed here leaves it stale until the next read unless it is
    *  patched too. Stale, "Move to today" moved a new series as a plain page. */
@@ -124,15 +124,27 @@ export function useRecurringWrites({
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, isRecurring } : p)));
   }
 
+  async function createRecurrence(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
+    const rule = await adapter.createRecurrenceRule(data);
+    setRecurrenceRules((prev) => [...prev, rule]);
+    markRecurring(data.pageId, true);
+    return rule;
+  }
+
+  async function updateRecurrence(
+    ruleId: string,
+    updates: RecurrenceRuleUpdate
+  ): Promise<PageRecurrenceRule> {
     const updated = await adapter.updateRecurrenceRule(ruleId, updates);
     setRecurrenceRules((prev) => prev.map((r) => (r.id === ruleId ? updated : r)));
     return updated;
-    markRecurring(data.pageId, true);
   }
 
   async function deleteRecurrence(ruleId: string): Promise<void> {
+    const pageId = recurrenceRulesRef.current.find((r) => r.id === ruleId)?.pageId;
     await adapter.deleteRecurrenceRule(ruleId);
     setRecurrenceRules((prev) => prev.filter((r) => r.id !== ruleId));
+    if (pageId) markRecurring(pageId, false);
   }
 
   /** Re-fetch a recurring head after a backend recompute (which returns void) and
@@ -141,10 +153,8 @@ export function useRecurringWrites({
    * clone in the same update (the uncomplete path); the drop applies even if the head
    * fetch comes back empty. */
   async function patchRecomputedHead(pageId: string, dropCloneId?: string): Promise<void> {
-    const pageId = recurrenceRulesRef.current.find((r) => r.id === ruleId)?.pageId;
     const fresh = await adapter.getPage(pageId);
     setPages((prev) => {
-    if (pageId) markRecurring(pageId, false);
       const base = dropCloneId ? prev.filter((p) => p.id !== dropCloneId) : prev;
       if (!fresh) return base;
       return base.map((p) =>
@@ -227,7 +237,7 @@ export function useRecurringWrites({
       // override fetch watches has changed — hence the explicit version bump.
       const { clone } = result;
       if (clone) {
-        setPages((prev) => [...prev, clone]);
+        setPages((prev) => upsertPage(prev, clone));
       } else {
         setOverridesVersion((v) => v + 1);
       }
@@ -319,10 +329,12 @@ export function useRecurringWrites({
       throw err;
     }
 
-    setPages((prev) => {
-      const updated = prev.map((p) => (p.id === pageId ? result.head : p));
-      return [...updated, result.clone];
-    });
+    setPages((prev) =>
+      upsertPage(
+        prev.map((p) => (p.id === pageId ? result.head : p)),
+        result.clone
+      )
+    );
     return result;
   }
 
@@ -411,14 +423,12 @@ export function useRecurringWrites({
     } finally {
       completingSyncedRef.current.delete(key);
     }
-    // Surface the done clone alongside the advanced head, deduped since an idempotent
-    // repeat re-returns the same clone already in state.
-    setPages((prev) => {
-      const withHead = prev.map((p) => (p.id === input.pageId ? result.head : p));
-      return prev.some((p) => p.id === result.clone.id)
-        ? withHead.map((p) => (p.id === result.clone.id ? result.clone : p))
-        : [...withHead, result.clone];
-    });
+    setPages((prev) =>
+      upsertPage(
+        prev.map((p) => (p.id === input.pageId ? result.head : p)),
+        result.clone
+      )
+    );
     return result;
   }
 
