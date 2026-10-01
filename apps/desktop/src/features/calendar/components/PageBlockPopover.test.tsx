@@ -182,3 +182,39 @@ describe("PageBlockPopover — a locked mirror offers no schedule affordances", 
     expect(folderPicker()).toBeInTheDocument();
   });
 });
+
+describe("PageBlockPopover — the delete names what it removes", () => {
+  function renderWithDelete(page: PageSummary) {
+    return renderWithProviders(
+      <AppSettingsProvider>
+        <TooltipProvider>
+          <PageBlockPopover onClose={vi.fn()} onDelete={vi.fn()} page={page} />
+        </TooltipProvider>
+      </AppSettingsProvider>
+    );
+  }
+
+  it("names a moved occurrence of an active mirror as a local-only removal", () => {
+    renderWithDelete({
+      ...makePage({ scheduleLocked: true, syncState: "active" }),
+      originalDate: "2099-01-03T09:00:00",
+    } as PageSummary);
+    expect(
+      screen.getByRole("button", { name: "Remove this occurrence from Pikos" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete page" })).toBeNull();
+  });
+
+  it("names a moved occurrence of an unlocked series as that occurrence", () => {
+    renderWithDelete({
+      ...makePage({ syncState: "detached" }),
+      originalDate: "2099-01-03T09:00:00",
+    } as PageSummary);
+    expect(screen.getByRole("button", { name: "Delete this occurrence" })).toBeInTheDocument();
+  });
+
+  it("names a real page as the page", () => {
+    renderWithDelete(makePage({}));
+    expect(screen.getByRole("button", { name: "Delete page" })).toBeInTheDocument();
+  });
+});

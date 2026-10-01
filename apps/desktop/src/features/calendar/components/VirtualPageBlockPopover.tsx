@@ -10,6 +10,7 @@ import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggl
 import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
 
 import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
+import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
   onClose?: () => void;
@@ -170,7 +171,7 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
           <TooltipIconButton
             className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
             icon={<CalendarX size={11} />}
-            label={locked ? "Remove this occurrence from Pikos" : "Delete this occurrence"}
+            label={occurrenceDeleteLabel(locked)}
             onClick={onDelete}
             shortcut="mod+backspace"
           />
