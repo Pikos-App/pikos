@@ -6,7 +6,7 @@
 // is exactly when a user is most likely to reach for one.
 
 import { useSelection } from "@/shared/context/SelectionContext";
-import { useUI } from "@/shared/context/UIContext";
+import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { usePageListContext } from "../PageListContext";
@@ -14,7 +14,6 @@ import { usePageListContext } from "../PageListContext";
 export function DeletePageShortcut() {
   const { activePage, completedPages, handleDeleteRequest, visiblePages } = usePageListContext();
   const { clearSelection, selectedPageIds } = useSelection();
-  const { openDialog, settingsOpen } = useUI();
 
   function deleteSelectedOrActive() {
     if (selectedPageIds.size > 0) {
@@ -34,13 +33,14 @@ export function DeletePageShortcut() {
   });
   // Reaches inside text inputs and the editor, so a page can be deleted while
   // writing it. A dialog on top means the active page is not what the user has
-  // in mind, so the gate keeps it from deleting one out from under them.
+  // in mind, so the gate keeps it from deleting one out from under them. Any
+  // dialog: a list of the known ones let the recurring gap dialog through.
   useKeyboardShortcut("Mod+Shift+Backspace", deleteSelectedOrActive, {
     allowInInputs: true,
     group: "Navigation",
     label: "Delete page (works in text inputs)",
     preventDefault: true,
-    when: () => openDialog === null && !settingsOpen,
+    when: () => !Keyboard.isModalOpen(),
   });
 
   return null;

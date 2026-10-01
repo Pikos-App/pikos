@@ -124,12 +124,14 @@ function isEditableTarget(target: EventTarget | null): boolean {
 // True while a modal (alert)dialog is mounted and open. Radix keeps the
 // content node mounted during the close animation, so we match on
 // data-state="open" to avoid suppressing shortcuts during the dismiss frame.
-// Covers both the shadcn Dialog and AlertDialog families via their slot names.
+// Covers both the shadcn Dialog and AlertDialog families via their slot names,
+// and `data-modal-surface`: a full-window overlay that isn't a Radix dialog, such
+// as Settings, which otherwise let Cmd+Backspace delete the page behind it.
 function isBlockingDialogOpen(): boolean {
   if (typeof document === "undefined") return false;
   return (
     document.querySelector(
-      '[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"]'
+      '[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"], [data-modal-surface]'
     ) !== null
   );
 }
@@ -195,6 +197,12 @@ export const Keyboard = {
         return; // stop at first match in current top scope
       }
     }
+  },
+
+  /** Whether a modal dialog or full-window surface is open — for a binding that
+   *  reaches into inputs but must still stand down under one. */
+  isModalOpen(): boolean {
+    return isBlockingDialogOpen();
   },
 
   listActiveBindings(): Binding[] {

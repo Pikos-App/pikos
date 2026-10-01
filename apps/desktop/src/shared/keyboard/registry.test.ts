@@ -256,6 +256,17 @@ describe("blocking dialog open", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it("suppresses a global shortcut while a full-window modal surface is open", () => {
+    const handler = vi.fn();
+    Keyboard.register({ combo: "Mod+Backspace", handler, id: "test-delete" });
+    const surface = document.createElement("div");
+    surface.setAttribute("data-modal-surface", "");
+    document.body.appendChild(surface);
+
+    Keyboard.handle(makeKeyEvent("Backspace", { ctrlKey: true }));
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("suppresses a global shortcut while an AlertDialog is open", () => {
     const handler = vi.fn();
     Keyboard.register({ combo: "Mod+Backspace", handler, id: "test-delete" });
