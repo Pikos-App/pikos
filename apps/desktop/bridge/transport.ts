@@ -52,6 +52,7 @@ export function installBridgeTransport(): void {
 declare global {
   interface Window {
     __PIKOS_E2E_DB__?: string;
+    __PIKOS_E2E_FIRST_RUN__?: boolean;
   }
 }
 
@@ -64,4 +65,10 @@ export function bridgeDbToken(): string {
     throw new Error("The bridge lane needs a database token, which the e2e fixtures plant per test");
   }
   return token;
+}
+
+/** Whether this tab launches as on a clean profile. The app decides that from its
+ *  workspace list, which is Tauri's and absent here, so the fixtures say it instead. */
+export function bridgeFirstRun(): boolean {
+  return window.__PIKOS_E2E_FIRST_RUN__ === true;
 }

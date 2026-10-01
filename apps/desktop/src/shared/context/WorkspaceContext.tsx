@@ -193,8 +193,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
    * runs unchanged.
    */
   async function initBridgeWorkspace(): Promise<void> {
-    const token = (await import("@bridge/transport")).bridgeDbToken();
+    const transport = await import("@bridge/transport");
+    const token = transport.bridgeDbToken();
     await connectDb(token);
+    if (transport.bridgeFirstRun()) await prepareFirstWorkspace();
     const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
     await launchSeedLoader(seedScenario)?.({ adapter, phase: "launch", setPendingNavigation });
     await dataLoaderRef.current();
@@ -206,6 +208,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       name: "Bridge Workspace",
     });
     setIsLoading(false);
+  }
+
+  /**
+   * What a first launch adds to a freshly connected database: the assets directory
+   * beside it, and the tutorial, opened on its welcome page. The seed is idempotent.
+   * A seed failure must not block workspace creation: an empty workspace is
+   * recoverable for the user, but a hard error screen here would lock them out of
+   * an otherwise-working DB. Log and continue.
+   */
+  async function prepareFirstWorkspace(): Promise<void> {
+    await getPlatform().ensureAssetsDir();
+    try {
+      const { seedTutorial } = await import("@seeds/tutorial");
+      const seedResult = await seedTutorial(adapter);
+      if (seedResult) {
+        log.info("Tutorial seed planted");
+        pendingNavigationRef.current = {
+          folderId: seedResult.folderId,
+          pageId: seedResult.welcomePageId,
+        };
+      }
+    } catch (seedError) {
+      log.error("Tutorial seed failed — continuing with empty workspace", seedError);
+    }
   }
 
   function selectWorkspace(): Promise<void> {
@@ -243,27 +269,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
 
       await connectDb(dbPath);
-
-      // Ensure the workspace assets directory exists alongside the DB
-      await getPlatform().ensureAssetsDir();
-
-      // Seed tutorial data for first-time users (idempotent — skips if already seeded).
-      // A seed failure must not block workspace creation: an empty workspace is
-      // recoverable for the user, but a hard error screen here would lock them
-      // out of an otherwise-working DB. Log and continue.
-      try {
-        const { seedTutorial } = await import("@seeds/tutorial");
-        const seedResult = await seedTutorial(adapter);
-        if (seedResult) {
-          log.info("Tutorial seed planted");
-          pendingNavigationRef.current = {
-            folderId: seedResult.folderId,
-            pageId: seedResult.welcomePageId,
-          };
-        }
-      } catch (seedError) {
-        log.error("Tutorial seed failed — continuing with empty workspace", seedError);
-      }
+      await prepareFirstWorkspace();
 
       const store = await load("workspaces.json", { autoSave: false, defaults: {} });
       const existing = (await store.get<Workspace[]>("workspaces")) ?? [];
