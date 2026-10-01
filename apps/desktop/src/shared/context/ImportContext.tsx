@@ -3,7 +3,7 @@
 // on every page mutation. Reads folders/storage from WorkspaceContext and
 // dispatches soft-delete + reload through it on undo.
 
-import { getLocalTimezone, writableFolders } from "@pikos/core";
+import { getLocalTimezone, isAllDayIso, parseLocalISO, writableFolders } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useState } from "react";
 
 import type {
@@ -26,6 +26,13 @@ export interface ImportContextValue {
 }
 
 const ImportContext = createContext<ImportContextValue | null>(null);
+
+/** A page's created, updated and completed dates are instants. A source that gives
+ *  only a day means that day here; stored as the bare date it read as midnight UTC,
+ *  a day early anywhere west of Greenwich. */
+function asInstant(value: string): string {
+  return isAllDayIso(value) ? parseLocalISO(value).toISOString() : value;
+}
 
 export function ImportProvider({ children }: { children: ReactNode }) {
   const { reload, storage } = useWorkspace();
@@ -68,9 +75,9 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         status: p.status,
         tags: tagsWithBatch,
         title: p.title,
-        ...(p.completedAt ? { completedAt: p.completedAt } : {}),
-        ...(p.createdAt ? { createdAt: p.createdAt } : {}),
-        ...(p.updatedAt ? { updatedAt: p.updatedAt } : {}),
+        ...(p.completedAt ? { completedAt: asInstant(p.completedAt) } : {}),
+        ...(p.createdAt ? { createdAt: asInstant(p.createdAt) } : {}),
+        ...(p.updatedAt ? { updatedAt: asInstant(p.updatedAt) } : {}),
       });
       pageIds.push(page.id);
 
