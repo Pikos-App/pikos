@@ -57,7 +57,7 @@ function item(overrides: Partial<ImportBatchItem> = {}): ImportBatchItem {
 }
 
 function batch(overrides: Partial<ImportBatchInput> = {}): ImportBatchInput {
-  return { batchTag: "import-2026", folders: [], pages: [], source: "ticktick", ...overrides };
+  return { folders: [], pages: [], source: "ticktick", ...overrides };
 }
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ describe("importBatch", () => {
       result = await hook.result.current.importBatch(
         batch({
           folders: [{ key: "f1", name: "Work" }],
-          pages: [item({ folderKey: "f1", title: "Task A" })],
+          pages: [item({ folderKey: "f1", tags: ["errands"], title: "Task A" })],
         })
       );
     });
@@ -90,7 +90,7 @@ describe("importBatch", () => {
     expect(result.pageIds).toHaveLength(1);
     const imported = hook.result.current.pages.find((p) => p.id === result.pageIds[0]);
     expect(imported?.title).toBe("Task A");
-    expect(imported?.tags).toContain("import-2026");
+    expect(imported?.tags).toEqual(["errands"]);
   });
 
   it("reuses an existing folder by name instead of creating a duplicate", async () => {

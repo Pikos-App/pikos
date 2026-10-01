@@ -65,7 +65,6 @@ export function ImportProvider({ children }: { children: ReactNode }) {
 
     for (const p of data.pages) {
       const folderId = p.folderKey ? (folderKeyToId.get(p.folderKey) ?? null) : null;
-      const tagsWithBatch = [...p.tags, data.batchTag];
 
       const page = await adapter.createPage({
         content: p.content,
@@ -73,7 +72,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         folderId,
         priority: p.priority,
         status: p.status,
-        tags: tagsWithBatch,
+        tags: p.tags,
         title: p.title,
         ...(p.completedAt ? { completedAt: asInstant(p.completedAt) } : {}),
         ...(p.createdAt ? { createdAt: asInstant(p.createdAt) } : {}),
