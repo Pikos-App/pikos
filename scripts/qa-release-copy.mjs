@@ -12,7 +12,7 @@
 // Reads the master and writes the copy in the working tree, so it runs where the
 // release is cut, not in CI.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
 
 import {
@@ -56,6 +56,50 @@ function parseArgs(argv) {
   return opts;
 }
 
+/** The release's mutation run, when one covers exactly this range. A survivor demotes the
+ *  automated rows its file reaches. */
+function readMutationRun(version, range) {
+  const none = (why) => ({
+    summary: [
+      "**Automated** means a test on the real writer carries the row's tag. " + why,
+      "so none of those tests has been shown failing when its row's code breaks.",
+    ],
+    survivorsByRow: new Map(),
+  });
+  const path = join(ROOT, ".agent/releases", version, "mutants.json");
+  if (!existsSync(path)) return none("No mutation run feeds these marks,");
+  const run = JSON.parse(readFileSync(path, "utf8"));
+  const resolve = (r) =>
+    r
+      .split("..")
+      .map((rev) => git("rev-parse", rev))
+      .join("..");
+  if (!run.complete) return none("The last mutation run was a sample,");
+  if (resolve(run.range) !== resolve(range)) {
+    return none(`The mutation run covers \`${run.range}\`, not this range,`);
+  }
+  const survivorsByRow = new Map();
+  for (const s of run.survivors) {
+    for (const row of s.rows) {
+      (survivorsByRow.get(row) ?? survivorsByRow.set(row, []).get(row)).push(
+        `\`${s.file}:${s.line}\` (${s.mutator})`
+      );
+    }
+  }
+  const { killedByE2e, killedByUnit, survived, total } = run.counts;
+  const stages = run.e2e
+    ? `${killedByUnit} by unit tests, ${killedByE2e} by e2e tests`
+    : `${killedByUnit} by unit tests, the e2e stage skipped`;
+  return {
+    summary: [
+      "**Automated** means a test on the real writer carries the row's tag, and no mutant survived in",
+      `code the row reaches. The mutation run broke the changed code ${total} ways: ${stages},`,
+      `${survived} survived. A row a survivor reaches is manual, with the survivor named.`,
+    ],
+    survivorsByRow,
+  };
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const range = `${opts.since}..${opts.until}`;
@@ -63,6 +107,7 @@ function main() {
   const { lines, sections } = readMaster();
   const automated = automatedRows();
   const graph = importGraph();
+  const mutation = readMutationRun(opts.version, range);
 
   /** Section key or row ID → why it is touched. */
   const reasons = new Map();
@@ -107,16 +152,19 @@ function main() {
   for (const s of sections) {
     for (const row of s.rows) {
       const touched = reasons.has(s.key) || reasons.has(row.id);
+      const survived = mutation.survivorsByRow.get(row.id) ?? [];
       const mark = !touched
         ? "untouched"
-        : automated[row.id] && !row.manualForGood
+        : automated[row.id] && !row.manualForGood && survived.length === 0
           ? "automated"
           : "manual";
       marks.set(row.id, mark);
       const tests =
         mark === "automated"
           ? ` (${automated[row.id].map((t) => t.split(" ")[0]).join(", ")})`
-          : "";
+          : touched && survived.length > 0
+            ? ` (tests missed a mutant at ${survived.join(", ")})`
+            : "";
       const box = mark === "manual" ? "- [ ]" : "- [x]";
       lines[row.line] = `${lines[row.line].replace(/^- \[[ x]\]/, box)} · **${mark}**${tests}`;
     }
@@ -151,8 +199,7 @@ function main() {
     "row when a person has driven it; mark a row **both**, with the reason, when a person drives an",
     "automated row anyway.",
     "",
-    "**Automated** means a test on the real writer carries the row's tag. No mutation run feeds these",
-    "marks, so none of those tests has been shown failing when its row's code breaks.",
+    ...mutation.summary,
     "",
     "| Rows | Count |",
     "| --- | --- |",

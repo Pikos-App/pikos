@@ -26,6 +26,9 @@ src-tauri/target/
 *.swp
 *.swo
 
+# Stryker's sandboxes, one per mutation run
+.stryker-tmp/
+
 # Playwright
 playwright-report/
 playwright-report-bridge/

@@ -37,10 +37,11 @@ export default defineConfig<{ storage: StorageLane }>({
   },
   webServer: [
     {
-      // Never reused: a bridge left running from an older build would test old code.
+      // Reused only when E2E_REUSE_BRIDGE is set, by a caller that built and started the
+      // bridge itself: a bridge left running from an older build would test old code.
       command: `TZ=${ZONE} cargo run --manifest-path src-tauri/Cargo.toml --features e2e-bridge --bin pikos-e2e-bridge`,
       port: BRIDGE_PORT,
-      reuseExistingServer: false,
+      reuseExistingServer: process.env["E2E_REUSE_BRIDGE"] === "1",
       stderr: "pipe",
       // A cold local build of the app crate takes minutes; CI builds it in a step first.
       timeout: 600_000,
