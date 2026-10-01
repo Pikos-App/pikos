@@ -139,16 +139,24 @@ describe("PageBlockPopover — reminder bell", () => {
     expect(bell).toBeInTheDocument();
 
     fireEvent.pointerDown(bell, { button: 0, ctrlKey: false });
-    expect(await screen.findByRole("menuitem", { name: /Day before at 9:00/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /10 min before/ })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /Day before at 9:00/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /10 min before/ })
+    ).not.toBeInTheDocument();
   });
 
   it("offers lead times on a timed page", async () => {
     renderPopover(makePage({}));
 
     fireEvent.pointerDown(screen.getByLabelText("Page reminders"), { button: 0, ctrlKey: false });
-    expect(await screen.findByRole("menuitem", { name: /10 min before/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Day before at 9:00/ })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /10 min before/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Day before at 9:00/ })
+    ).not.toBeInTheDocument();
   });
 });
 

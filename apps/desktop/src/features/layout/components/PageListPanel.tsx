@@ -414,6 +414,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         return row.collapsible ? (
           <div className="flex w-full items-center border-b border-border pr-2 text-muted-foreground">
             <button
+              aria-expanded={!row.collapsed}
               className="type-ui-sm flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left hover:text-foreground"
               onClick={isOverdueHeader ? toggleOverdue : undefined}
             >
@@ -470,6 +471,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               </div>
             )}
             <button
+              aria-expanded={!completedCollapsed}
               className="type-ui-sm flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
               onClick={toggleCompletedCollapsed}
             >

@@ -205,6 +205,7 @@ export function CSVColumnMappingPage({
 
                 <div className="relative">
                   <select
+                    aria-label={`Map column ${cm.csvHeader}`}
                     className={cn(
                       "appearance-none rounded-md border border-border bg-background px-3 py-1.5 pr-8 text-sm transition-colors hover:bg-accent",
                       cm.pikosField === "skip" && "text-muted-foreground",
@@ -300,6 +301,7 @@ function ValueMappingSection({
             <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
             <div className="relative">
               <select
+                aria-label={`Map ${field} value ${entry.sourceValue}`}
                 className="appearance-none rounded-md border border-border bg-background px-3 py-1.5 pr-8 text-sm transition-colors hover:bg-accent"
                 onChange={(e) => onChange(field, entry.sourceValue, e.target.value)}
                 value={entry.targetValue}
