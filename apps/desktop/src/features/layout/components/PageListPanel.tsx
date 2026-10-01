@@ -95,16 +95,17 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     true
   );
   // Completed accordion resets to collapsed on every view navigation (no persistence).
-  // Storing { viewId, collapsed } means the value auto-resets whenever activeViewId changes.
-  const [completedCollapseState, setCompletedCollapseState] = useState<{
-    viewId: string;
-    collapsed: boolean;
-  }>({ collapsed: true, viewId: activeViewId });
-  const completedCollapsed =
-    completedCollapseState.viewId !== activeViewId ? true : completedCollapseState.collapsed;
+  // Reset on the change itself: remembering which view it was opened on reopened it
+  // on a return to that view.
+  const [completedCollapsed, setCompletedCollapsed] = useState(true);
+  const [completedViewId, setCompletedViewId] = useState(activeViewId);
+  if (completedViewId !== activeViewId) {
+    setCompletedViewId(activeViewId);
+    setCompletedCollapsed(true);
+  }
   function toggleCompletedCollapsed() {
     const willExpand = completedCollapsed;
-    setCompletedCollapseState({ collapsed: !completedCollapsed, viewId: activeViewId });
+    setCompletedCollapsed(!completedCollapsed);
     if (willExpand) void onExpandCompleted();
   }
 
