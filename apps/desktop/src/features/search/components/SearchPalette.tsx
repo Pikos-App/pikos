@@ -34,6 +34,7 @@ import type { Binding } from "@/shared/keyboard/registry";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
+import { flushPendingWrites } from "@/shared/pendingWrites";
 
 const log = createLogger("SearchPalette");
 
@@ -265,7 +266,9 @@ export function SearchPalette() {
     if (parsedQuery.hasOperators && !storage) return;
 
     const timer = setTimeout(() => {
-      const search =
+      // Words typed a moment ago are still in the editor's and the queue's
+      // debounces, out of the index; write them first so they are found.
+      const search = flushPendingWrites().then(() =>
         parsedQuery.hasOperators && storage
           ? runFilteredSearch(parsedQuery, {
               folders,
@@ -275,7 +278,8 @@ export function SearchPalette() {
               searchPages,
               storage,
             })
-          : searchPages(q, showCompleted || undefined);
+          : searchPages(q, showCompleted || undefined)
+      );
 
       search
         .then(({ completedCount: count, results: res }) => {
