@@ -55,6 +55,32 @@ export function EditorPanel() {
     ui.setReferenceDate(new Date());
   }
 
+  // Here rather than in the calendar header, which mounts only while the calendar
+  // shows: the shortcuts page lists what has registered, and a Calendar section
+  // missing until the calendar was first opened documented nothing.
+  const calendarShown = () => ui.rightPanel === "calendar";
+  const unit = isMonth ? "month" : "week";
+  useKeyboardShortcut("ArrowLeft", handlePrevWeek, {
+    group: "Calendar",
+    label: `Previous ${unit}`,
+    when: calendarShown,
+  });
+  useKeyboardShortcut("ArrowRight", handleNextWeek, {
+    group: "Calendar",
+    label: `Next ${unit}`,
+    when: calendarShown,
+  });
+  useKeyboardShortcut("t", handleToday, {
+    group: "Calendar",
+    label: "Jump to today",
+    when: calendarShown,
+  });
+  useKeyboardShortcut("m", () => setViewMode(isMonth ? "time" : "month"), {
+    group: "Calendar",
+    label: isMonth ? "Switch to time grid" : "Switch to month view",
+    when: calendarShown,
+  });
+
   // min-w-0: a flex item defaults to min-width:auto and so refuses to shrink
   // below its content. The month grid is as wide as its widest row wants to be,
   // so without this the panel grows past the window and drags the whole
