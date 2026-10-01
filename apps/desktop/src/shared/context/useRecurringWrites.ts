@@ -80,7 +80,6 @@ export interface RecurringWrites {
 export function useRecurringWrites({
   adapter,
   enqueue,
-  flushPage,
   pagesRef,
   recurrenceRulesRef,
   setPages,
@@ -89,7 +88,6 @@ export function useRecurringWrites({
 }: {
   adapter: StorageAdapter;
   enqueue: <T>(pageId: string, fn: () => Promise<T>) => Promise<T>;
-  flushPage: (id: string) => Promise<void>;
   pagesRef: RefObject<PageSummary[]>;
   recurrenceRulesRef: RefObject<PageRecurrenceRule[]>;
   setPages: Dispatch<SetStateAction<PageSummary[]>>;
@@ -260,13 +258,6 @@ export function useRecurringWrites({
     if (completingRecurringRef.current.has(occKey)) return null;
     completingRecurringRef.current.add(occKey);
     try {
-      // Drain any pending debounced patch for this page before advancing the
-      // head. The head's denorm scheduledStart is written through the 800ms
-      // debounce (e.g. when a recurring page is quick-added). If that write is
-      // still pending when completion advances the head, it flushes *afterward*
-      // and reverts scheduledStart to the original date — the advanced head
-      // snaps back into Today alongside the done clone (two rows).
-      await flushPage(pageId);
       // The completion itself runs ON the per-page mutation queue: a drag's
       // scheduleOnce writes (including its trailing denorm updatePage) may
       // still be in flight, and a completion racing past them lets the stale

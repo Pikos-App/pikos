@@ -296,6 +296,23 @@ describe("mutation queue", () => {
     expect(hook.result.current.pageErrors.size).toBe(0);
   });
 
+  it("commits a pending debounced patch before a queued write, so it can't land after it", async () => {
+    const { hook, page } = await setup();
+    const moved = "2099-03-15T10:00:00";
+
+    act(() => {
+      hook.result.current.updatePage(page.id, { scheduledStart: "2099-03-10T09:00:00" });
+    });
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, moved);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+
+    expect(hook.result.current.pages.find((p) => p.id === page.id)?.scheduledStart).toBe(moved);
+  });
+
   it("continues executing queued writes after a failed write (queue never stalls)", async () => {
     const { hook, page } = await setup();
     const callOrder: string[] = [];

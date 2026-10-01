@@ -103,6 +103,10 @@ export function usePageWriteQueue({
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
 
   function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
+    // A patch still in its debounce was made first, so it is written first. Left
+    // to its timer it landed after this write and put back what this one replaced:
+    // a head moved within 800ms of its quick add snapped back to its old date.
+    commitPendingPatch(pageId);
     const prev = mutationQueues.current.get(pageId) ?? Promise.resolve();
     // Pass fn as both fulfilment and rejection handler so the queue never stalls
     // on a previous error.
@@ -167,16 +171,20 @@ export function usePageWriteQueue({
   }
 
   function cancelPendingWrite(id: string): void {
-    const timer = debounceTimers.current.get(id);
-    if (timer !== undefined) clearTimeout(timer);
-    debounceTimers.current.delete(id);
-    pendingPatches.current.delete(id);
+    takePendingPatch(id);
   }
 
   /** The write both the debounce timer and flushPage land in. The optimistic
    *  patch is already on screen by the time this runs — only the DB write and
-   *  its rollback happen here. */
-  function commitPatch(id: string, patch: PageUpdate, rethrow: boolean): Promise<void> {
+   *  its rollback happen here. `adoptEcho` false is for a patch committed ahead
+   *  of another write: its echo predates that write, and adopting it would put
+   *  back on screen what the later write's optimistic patch replaced. */
+  function commitPatch(
+    id: string,
+    patch: PageUpdate,
+    rethrow: boolean,
+    adoptEcho = true
+  ): Promise<void> {
     return optimistic({
       apply: () => {},
       errorIds: [id],
@@ -191,8 +199,10 @@ export function usePageWriteQueue({
       write: async () => {
         const updated = await adapter.updatePage(id, patch);
         snapshotsRef.current.delete(id);
-        const summary = toPageSummary(updated);
-        setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+        if (adoptEcho) {
+          const summary = toPageSummary(updated);
+          setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+        }
         emit("page:updated", updated);
       },
     }).then(() => undefined);
@@ -237,15 +247,25 @@ export function usePageWriteQueue({
     debounceTimers.current.set(id, timer);
   }
 
-  async function flushPage(id: string): Promise<void> {
+  /** Take a page's debounced patch off its timer, or undefined when none waits. */
+  function takePendingPatch(id: string): PageUpdate | undefined {
     const timer = debounceTimers.current.get(id);
     if (timer !== undefined) clearTimeout(timer);
     debounceTimers.current.delete(id);
-
     const accumulated = pendingPatches.current.get(id);
-    if (!accumulated) return;
     pendingPatches.current.delete(id);
+    return accumulated;
+  }
 
+  /** Queue a waiting patch now, reporting a failure the way its timer would have. */
+  function commitPendingPatch(id: string): void {
+    const accumulated = takePendingPatch(id);
+    if (accumulated) void commitPatch(id, accumulated, false, false);
+  }
+
+  async function flushPage(id: string): Promise<void> {
+    const accumulated = takePendingPatch(id);
+    if (!accumulated) return;
     return commitPatch(id, accumulated, true);
   }
 

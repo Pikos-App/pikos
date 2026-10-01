@@ -216,7 +216,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   const recurring = useRecurringWrites({
     adapter,
     enqueue,
-    flushPage,
     pagesRef,
     recurrenceRulesRef,
     setPages,
