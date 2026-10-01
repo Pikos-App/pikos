@@ -4,9 +4,12 @@
 // Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
 
 import type { PageSummary, SmartViewId, SortMode } from "@pikos/core";
+import { isSmartViewId } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { usePages } from "@/shared/context/PagesContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
@@ -99,6 +102,8 @@ export interface UIContextValue {
 const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
+  const { consumePendingNavigation, workspace } = useWorkspace();
+  const { folders, pages } = usePages();
   const [activePageId, setActivePageId] = useLocalStorage<string | null>(
     STORAGE_KEYS.lastActivePageId,
     null
@@ -192,6 +197,30 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setActivePageId(id);
     setRightPanelRaw("editor");
     setPageListDrawerOpen(false);
+  }
+
+  // The remembered view and page are checked against the workspace once it has
+  // loaded, and a first launch's tutorial navigation applied. Done here, during
+  // render, because this provider owns the state it corrects: from a child it was
+  // an update to another component mid-render, which React rejects. pages[] holds
+  // only open, undeleted pages, so a missing id covers every reason not to restore.
+  const [checkedWorkspaceId, setCheckedWorkspaceId] = useState<string | null>(null);
+  if (workspace && workspace.id !== checkedWorkspaceId) {
+    setCheckedWorkspaceId(workspace.id);
+    if (!isSmartViewId(activeViewId) && !folders.some((f) => f.id === activeViewId)) {
+      setActiveViewId("inbox");
+    }
+    if (activePageId !== null && !pages.some((p) => p.id === activePageId)) {
+      setActivePage(null);
+    }
+    if (lastEditorPageId !== null && !pages.some((p) => p.id === lastEditorPageId)) {
+      setLastEditorPageId(null);
+    }
+    const nav = consumePendingNavigation();
+    if (nav) {
+      setActiveViewId(nav.folderId);
+      openPage(nav.pageId);
+    }
   }
 
   /** `fallback` lets a caller that knows what kind of view this is pick the

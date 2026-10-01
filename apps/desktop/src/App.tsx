@@ -1,4 +1,4 @@
-import { isSmartViewId, toStorageError } from "@pikos/core";
+import { toStorageError } from "@pikos/core";
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -256,35 +256,8 @@ function AppShell() {
   }, []);
   useInterfaceTextScale();
   const updater = useUpdate();
-  const { consumePendingNavigation } = useWorkspace();
-  const ui = useUI();
-  const { folders, pages } = usePages();
   const { handleToastDismiss, toastItems } = useUndoDelete();
 
-  // One-shot: validate persisted view/page, then consume one-shot tutorial nav.
-  // pages[] only contains active (not_started, not soft-deleted) summaries, so a
-  // missing ID covers all the "shouldn't restore" cases — completed, soft-deleted,
-  // or genuinely gone.
-  const didInitRef = useRef<boolean | null>(null);
-  if (didInitRef.current == null) {
-    didInitRef.current = true;
-
-    if (!isSmartViewId(ui.activeViewId) && !folders.some((f) => f.id === ui.activeViewId)) {
-      ui.setActiveViewId("inbox");
-    }
-    if (ui.activePageId !== null && !pages.some((p) => p.id === ui.activePageId)) {
-      ui.setActivePage(null);
-    }
-    if (ui.lastEditorPageId !== null && !pages.some((p) => p.id === ui.lastEditorPageId)) {
-      ui.setLastEditorPageId(null);
-    }
-
-    const nav = consumePendingNavigation();
-    if (nav) {
-      ui.setActiveViewId(nav.folderId);
-      ui.openPage(nav.pageId);
-    }
-  }
   // Per-surface ErrorBoundary so a render error in one dialog/page can't
   // black-screen the rest of the shell. Each boundary uses a compact inline
   // fallback (PaneErrorFallback) — the app-level full-screen boundary in

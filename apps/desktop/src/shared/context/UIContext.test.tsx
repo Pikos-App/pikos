@@ -1,9 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 import { useUI } from "./UIContext";
+import { useWorkspace } from "./WorkspaceContext";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,6 +18,29 @@ beforeEach(() => {
 });
 afterEach(() => {
   localStorage.clear();
+});
+
+describe("once the workspace loads", () => {
+  async function loadWith(viewId: string, pageId: string | null) {
+    localStorage.setItem(STORAGE_KEYS.lastActiveViewId, JSON.stringify(viewId));
+    localStorage.setItem(STORAGE_KEYS.lastActivePageId, JSON.stringify(pageId));
+    const hook = renderHookWithProviders(() => ({ ui: useUI(), workspace: useWorkspace() }));
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    return hook.result.current.ui;
+  }
+
+  it("drops a remembered folder and page the workspace no longer has", async () => {
+    const ui = await loadWith("deleted-folder", "deleted-page");
+    expect(ui.activeViewId).toBe("inbox");
+    expect(ui.activePageId).toBeNull();
+  });
+
+  it("keeps a remembered view that still exists", async () => {
+    const ui = await loadWith("today", null);
+    expect(ui.activeViewId).toBe("today");
+  });
 });
 
 // ─── setActivePage ──────────────────────────────────────────────────────────
