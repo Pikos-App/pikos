@@ -303,8 +303,8 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
 
     let mut folder_ids = Vec::new();
     for (i, (name, color, cal_id)) in [
-        ("Personal (synced)", "#7c9cf0", "mock-personal"),
-        ("Work (synced)", "#f0a37c", "mock-work"),
+        ("Personal", "#7c9cf0", "mock-personal"),
+        ("Work", "#f0a37c", "mock-work"),
     ]
     .into_iter()
     .enumerate()
