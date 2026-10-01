@@ -1296,6 +1296,16 @@ task,Take out the trash,,3,2,,,every Friday,en,,,,,`;
     expect(plan.pages[0]!.body).toBe("Only on Tuesdays\n\nFollow up next week");
   });
 
+  it("nests an indented task under the task above it at the next level up", () => {
+    const { plan } = runFullPipeline(todoistCSV);
+    const chores = plan.pages[1]!;
+    expect(chores.sourceId).toBeTruthy();
+    expect(plan.pages[2]!.sourceParentId).toBe(chores.sourceId);
+    expect(plan.pages[3]!.sourceParentId).toBe(chores.sourceId);
+    expect(plan.pages[0]!.sourceParentId).toBeFalsy();
+    expect(chores.sourceParentId).toBeFalsy();
+  });
+
   it("maps Todoist priority correctly (1=urgent, 3=medium, 4=none)", () => {
     const { plan } = runFullPipeline(todoistCSV);
     expect(plan.pages[0]!.priority).toBe(1); // Todoist 1 → urgent
