@@ -328,13 +328,14 @@ export class MockStorageAdapter implements StorageAdapter {
       // Mirror the Rust adapter, which extracts plain text from Tiptap JSON on
       // every save so FTS indexes the visible body, not the structural tokens.
       contentText: data.contentText ?? deriveContentText(data.content),
-      createdAt: now(),
+      // Supplied by an import, and kept, as the Rust writer keeps them.
+      createdAt: data.createdAt ?? now(),
       detachIsReversible: false,
       id: uuid(),
       isRecurring: false,
       scheduleLocked: false,
       sortOrder: nextSortOrder([...this.pages.values()]),
-      updatedAt: now(),
+      updatedAt: data.updatedAt ?? now(),
     };
     this.pages.set(page.id, page);
     return page;
@@ -1635,8 +1636,13 @@ export class MockStorageAdapter implements StorageAdapter {
       total_focus_sessions: this.focusSessions.length,
       total_folders: this.folders.size,
       total_pages: pages.length,
-      total_schedules: this.schedules.size,
-      total_words: 0,
+      // Pages with a date, as `get_usage_stats` counts them, not schedule rows.
+      total_schedules: pages.filter((p) => p.scheduledStart != null).length,
+      // Same count as `get_usage_stats`: spaces plus one, per non-empty body.
+      total_words: pages
+        .map((p) => p.contentText ?? "")
+        .filter((text) => text !== "")
+        .reduce((sum, text) => sum + text.split(" ").length, 0),
       weekly_activity: [],
     });
   }
