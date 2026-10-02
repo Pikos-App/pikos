@@ -13,7 +13,10 @@
 use std::path::Path;
 use std::time::Instant;
 
-use pikos_db::{create_page_impl, get_page, open_pool, update_page_impl, PageUpdate};
+use pikos_db::{
+    create_page_impl, get_page, list_pages_impl, open_pool, update_page_impl, PageFilter,
+    PageUpdate,
+};
 use serde_json::json;
 
 use crate::error::{classify, CliError};
@@ -311,6 +314,20 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
                 },
             )
             .await
+        })
+        .await?,
+    );
+    timings.push(
+        time_it("load open pages (app)", || async {
+            list_pages_impl(
+                &pool,
+                Some(PageFilter {
+                    status: Some("not_started".into()),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .map_err(classify)
         })
         .await?,
     );

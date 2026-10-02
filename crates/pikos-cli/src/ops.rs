@@ -10,9 +10,10 @@ use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
     get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
-    list_pages_impl, now_local_iso, restore_page_impl, search_pages_impl, soft_delete_page_impl,
-    today_local, update_page_impl, CompleteRecurringInput, Folder, NewFolder, NewRecurrenceRule,
-    Page, PageFilter, PageReminder, PageSummary, PageUpdate, SearchResponse,
+    list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_pages_impl,
+    soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput, Folder,
+    NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder, PageSummary,
+    PageUpdate, SearchResponse,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -95,16 +96,14 @@ pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<PageSumma
     if !q.tags.is_empty() {
         filter.tags = Some(q.tags.clone());
     }
-    let mut pages = list_pages_impl(pool, Some(filter))
+    let order = if q.modified {
+        PageOrder::RecentlyUpdated
+    } else {
+        PageOrder::SortOrder
+    };
+    list_pages_window(pool, Some(filter), order, q.limit)
         .await
-        .map_err(classify)?;
-    if q.modified {
-        pages.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    }
-    if let Some(n) = q.limit {
-        pages.truncate(n);
-    }
-    Ok(pages)
+        .map_err(classify)
 }
 
 // ─── Folders ────────────────────────────────────────────────────────────────

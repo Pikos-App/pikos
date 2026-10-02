@@ -1008,6 +1008,33 @@ pub async fn list_pages_impl(
     pool: &sqlx::SqlitePool,
     filter: Option<PageFilter>,
 ) -> AppResult<Vec<PageSummary>> {
+    list_pages_window(pool, filter, PageOrder::SortOrder, None).await
+}
+
+/// The order [`list_pages_window`] returns pages in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageOrder {
+    /// The user's manual order.
+    SortOrder,
+    /// Most recently edited first, manual order among ties.
+    RecentlyUpdated,
+}
+
+/// [`list_pages_impl`] with an order and at most `limit` rows, both applied in the query, so a
+/// short list costs the same however large the workspace is.
+///
+/// A tag filter is the exception: tags match against the page's JSON tag list in Rust, so with
+/// one set every candidate row is still fetched and the limit applies after the match.
+pub async fn list_pages_window(
+    pool: &sqlx::SqlitePool,
+    filter: Option<PageFilter>,
+    order: PageOrder,
+    limit: Option<usize>,
+) -> AppResult<Vec<PageSummary>> {
+    let filter_tags = filter
+        .as_ref()
+        .and_then(|f| f.tags.clone())
+        .filter(|tags| !tags.is_empty());
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE deleted_at IS NULL"
     ));
@@ -1054,7 +1081,14 @@ pub async fn list_pages_impl(
         }
     }
 
-    builder.push(" ORDER BY sort_order ASC");
+    builder.push(match order {
+        PageOrder::SortOrder => " ORDER BY sort_order ASC",
+        PageOrder::RecentlyUpdated => " ORDER BY updated_at DESC, sort_order ASC",
+    });
+    if let (Some(n), None) = (limit, &filter_tags) {
+        builder.push(" LIMIT ");
+        builder.push_bind(i64::try_from(n).unwrap_or(i64::MAX));
+    }
 
     let rows = builder
         .build_query_as::<PageSummaryRow>()
@@ -1063,12 +1097,10 @@ pub async fn list_pages_impl(
 
     let mut summaries: Vec<PageSummary> = rows.into_iter().map(PageSummary::from).collect();
 
-    // Tags filter is post-query (JSON array in SQLite is opaque)
-    if let Some(f) = &filter {
-        if let Some(filter_tags) = &f.tags {
-            if !filter_tags.is_empty() {
-                summaries.retain(|page| filter_tags.iter().all(|tag| page.tags.contains(tag)));
-            }
+    if let Some(filter_tags) = &filter_tags {
+        summaries.retain(|page| filter_tags.iter().all(|tag| page.tags.contains(tag)));
+        if let Some(n) = limit {
+            summaries.truncate(n);
         }
     }
 
