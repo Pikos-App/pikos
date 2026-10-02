@@ -2,7 +2,8 @@
 // Mutation-test a release's changed code, so that a row marked automated has tests that
 // were seen failing when its code broke.
 //
-//   pnpm qa:mutants <version> [--since <rev>] [--unit-only] [--reuse-unit] [--limit <n>]
+//   pnpm qa:mutants <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--limit <n>]
+//                             [--uncommitted]
 //
 // Two stages. Stryker (TypeScript) and cargo-mutants (Rust) break each changed line and
 // run the unit tests. A mutant they miss is then applied to the working tree, and the
@@ -15,17 +16,19 @@
 // A survivor that changes nothing anyone could observe goes on the skip list where it
 // lives, with the reason, so it is judged once rather than every release:
 // `// Stryker disable next-line <Mutator>: <why>`, or an `exclude_re` in
-// `.cargo/mutants.toml`.
+// `.cargo/mutants.toml`. Where a comment can't single it out, `qa-mutants-skip.json`
+// names it by what it changes, with the same reason.
 //
 // Stryker cannot load its vitest plugin from pnpm's linked store, so it runs from a flat
-// install of pinned versions in `node_modules/.cache`, made on first use.
+// install of pinned versions in `~/.cache`, made on first use. Outside the repo: inside it,
+// pnpm adopts the folder into the workspace and rewrites the lockfile.
 //
 // Runs at the release candidate, where the release is cut, with its source committed: it
 // edits source files in place during the e2e stage and puts each one back.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -38,7 +41,7 @@ import {
   sectionsReachedBy,
 } from "./lib/qa-rows.mjs";
 
-const STRYKER_HOME = join(ROOT, "node_modules/.cache/pikos-stryker");
+const STRYKER_HOME = join(homedir(), ".cache/pikos-stryker");
 const STRYKER_PACKAGES = [
   "@stryker-mutator/core@10.0.0",
   "@stryker-mutator/vitest-runner@10.0.0",
@@ -71,6 +74,12 @@ const RUST_ROOTS = [
 ];
 
 const WORK = mkdtempSync(join(tmpdir(), "qa-mutants-"));
+const SKIPPED = new Map(
+  JSON.parse(readFileSync(join(ROOT, "scripts/qa-mutants-skip.json"), "utf8")).map((s) => [
+    mutantKey(s),
+    s.why,
+  ])
+);
 
 /** Must match the ports and zone in `playwright.bridge.config.ts`. */
 const BRIDGE_PORT = 1423;
@@ -80,19 +89,29 @@ const DESKTOP = join(ROOT, "apps/desktop");
 const BRIDGE_BIN = join(DESKTOP, "src-tauri/target/debug/pikos-e2e-bridge");
 
 function parseArgs(argv) {
-  const opts = { limit: null, reuseUnit: false, since: null, unitOnly: false, version: null };
+  const opts = {
+    limit: null,
+    retry: false,
+    uncommitted: false,
+    reuseUnit: false,
+    since: null,
+    unitOnly: false,
+    version: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--since") opts.since = argv[++i];
     else if (arg === "--unit-only") opts.unitOnly = true;
     else if (arg === "--reuse-unit") opts.reuseUnit = true;
     else if (arg === "--limit") opts.limit = Number(argv[++i]);
+    else if (arg === "--retry") opts.retry = true;
+    else if (arg === "--uncommitted") opts.uncommitted = true;
     else if (!arg.startsWith("--") && !opts.version) opts.version = arg;
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!opts.version)
     throw new Error(
-      "usage: qa-mutants.mjs <version> [--since <rev>] [--unit-only] [--reuse-unit] [--limit <n>]"
+      "usage: qa-mutants.mjs <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--limit <n>] [--uncommitted]"
     );
   opts.since ??= git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*");
   return opts;
@@ -125,7 +144,14 @@ function ensureStryker() {
   );
   execFileSync(
     "pnpm",
-    ["--dir", STRYKER_HOME, "add", "--config.node-linker=hoisted", ...STRYKER_PACKAGES],
+    [
+      "--dir",
+      STRYKER_HOME,
+      "add",
+      "--ignore-workspace",
+      "--config.node-linker=hoisted",
+      ...STRYKER_PACKAGES,
+    ],
     {
       stdio: "inherit",
     }
@@ -396,6 +422,22 @@ function e2eStage(survivors, rowsFor) {
   }
 }
 
+/** Names a mutant by what it changes rather than where, so a line moved by an edit above
+ *  it is still the same mutant on the next run. */
+function mutantKey(m) {
+  return `${m.file}|${m.mutator}|${m.replacement}|${m.original}`;
+}
+
+/** The last run's outcome per mutant. A run written before outcomes were kept records only
+ *  survivors, so every other mutant it saw counts as killed by e2e. */
+function previousRun(path) {
+  if (!existsSync(path)) throw new Error(`--retry needs a previous run at ${path}`);
+  const run = JSON.parse(readFileSync(path, "utf8"));
+  if (run.outcomes) return new Map(Object.entries(run.outcomes));
+  const survived = new Set(run.survivors.map(mutantKey));
+  return { get: (key) => (survived.has(key) ? "Survived" : "KilledByE2e") };
+}
+
 /** Up to `n` mutants, taken a file at a time so a sample spans the diff. */
 function sample(mutants, n) {
   const byFile = Map.groupBy(mutants, (m) => m.file);
@@ -412,8 +454,12 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   const until = git("rev-parse", "HEAD");
   const dirty = git("status", "--porcelain", "--", ...MUTATED);
-  if (dirty) throw new Error(`source under test has uncommitted changes:\n${dirty}`);
+  if (dirty && !opts.uncommitted) {
+    throw new Error(`source under test has uncommitted changes:\n${dirty}`);
+  }
   const range = `${opts.since}..${until}`;
+  // A check of work in progress mutates the files as they stand, not the commit.
+  const diffBase = opts.uncommitted ? opts.since : range;
   const { sections } = readMaster();
   const automated = automatedRows();
   const graph = importGraph();
@@ -435,18 +481,27 @@ function main() {
 
   const reports = join(ROOT, ".agent/releases", opts.version, "mutants");
   mkdirSync(reports, { recursive: true });
-  const ranges = changedRanges(range, ["packages/core/src", "apps/desktop/src"]);
+  const ranges = changedRanges(diffBase, ["packages/core/src", "apps/desktop/src"]);
   const mutants = [
     ...strykerStage(ranges, reports, opts.reuseUnit),
-    ...cargoStage(range, reports, opts.reuseUnit),
+    ...cargoStage(diffBase, reports, opts.reuseUnit),
   ];
+  for (const m of mutants) if (SKIPPED.has(mutantKey(m))) m.status = "Ignored";
   const missed = mutants.filter((m) => m.status === "Survived" || m.status === "NoCoverage");
+  const dest = join(ROOT, ".agent/releases", opts.version, "mutants.json");
+  const previous = opts.retry ? previousRun(dest) : null;
+  if (previous) {
+    // The last run's e2e kills stand; only its survivors and anything new are tried again.
+    for (const m of missed)
+      if (previous.get(mutantKey(m)) === "KilledByE2e") m.status = "KilledByE2e";
+  }
+  const pending = missed.filter((m) => m.status !== "KilledByE2e");
   const tried = opts.limit
     ? sample(
-        missed.filter((m) => rowsFor(m.file).length > 0),
+        pending.filter((m) => rowsFor(m.file).length > 0),
         opts.limit
       )
-    : missed;
+    : pending;
   if (!opts.unitOnly) {
     console.log(`\ne2e stage: ${tried.length} of ${missed.length} mutant(s) the unit tests missed`);
     e2eStage(tried, rowsFor);
@@ -463,10 +518,12 @@ function main() {
       rows: rowsFor(file),
       status,
     }));
+  const outcomes = Object.fromEntries(mutants.map((m) => [mutantKey(m), m.status]));
   const count = (s) => mutants.filter((m) => m.status === s).length;
   const result = {
     counts: {
       killedByE2e: count("KilledByE2e"),
+      ignored: count("Ignored"),
       killedByUnit: count("Killed") + count("Timeout"),
       survived: survivors.length,
       total: mutants.length,
@@ -475,15 +532,17 @@ function main() {
         survivors.length -
         count("Killed") -
         count("Timeout") -
-        count("KilledByE2e"),
+        count("KilledByE2e") -
+        count("Ignored"),
     },
-    // A sampled run measures the stage; it proves nothing about the rows it skipped.
-    complete: !opts.limit,
+    // A sample proves nothing about the rows it skipped, and work in progress nothing about
+    // any commit, so the release copy reads neither.
+    complete: !opts.limit && !opts.uncommitted,
     e2e: !opts.unitOnly,
+    outcomes,
     range,
     survivors,
   };
-  const dest = join(ROOT, ".agent/releases", opts.version, "mutants.json");
   mkdirSync(join(ROOT, ".agent/releases", opts.version), { recursive: true });
   writeFileSync(dest, `${JSON.stringify(result, null, 2)}\n`);
   const demoted = new Set(survivors.flatMap((s) => s.rows));

@@ -1,0 +1,16 @@
+[
+  {
+    "file": "apps/desktop/src/features/layout/components/ThreePanelLayout.tsx",
+    "mutator": "ConditionalExpression",
+    "replacement": "true",
+    "original": "if (selectedPageIds.size > 0 && !target.closest(\"[data-page-item]\")) {",
+    "why": "Clearing on a press over a page leaves no trace: the click that follows sets the selection from the state it read before the press. The false variant on this line is a real one and is caught, so a source comment can't skip just this."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/WorkspaceContext.tsx",
+    "mutator": "BlockStatement",
+    "replacement": "{}",
+    "original": "} catch (seedError) {",
+    "why": "An empty catch still continues with an empty workspace; only the log line goes. Stryker reads skip comments only ahead of a statement, and a catch clause starts on the line that closes the try."
+  }
+]
