@@ -71,6 +71,7 @@ mod prelude {
 macro_rules! db_commands {
     (
         extras: [ $($extra:path),* $(,)? ];
+        dev_extras: [ $($dev_extra:path),* $(,)? ];
         $(
             $(#[$mod_attr:meta])*
             mod $module:ident {
@@ -109,11 +110,22 @@ macro_rules! db_commands {
         /// nothing itself, so there is no registration list to fall out of sync
         /// with the commands that exist.
         pub fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
-            builder.invoke_handler(tauri::generate_handler![
+            #[cfg(debug_assertions)]
+            return builder.invoke_handler(tauri::generate_handler![
+                $($extra,)*
+                $($dev_extra,)*
+                $($( $crate::db::$module::$name, )*)*
+            ]);
+            #[cfg(not(debug_assertions))]
+            return builder.invoke_handler(tauri::generate_handler![
                 $($extra,)*
                 $($( $crate::db::$module::$name, )*)*
-            ])
+            ]);
         }
+
+        /// The hand-written commands every build registers, debug or release.
+        #[cfg(test)]
+        pub const EXTRA_COMMANDS: &[&str] = &[$(stringify!($extra)),*];
 
         /// The declared commands again, reached by name over the e2e bridge
         /// instead of over IPC. Generated from the same list as [`register`], so
@@ -182,7 +194,6 @@ db_commands! {
         crate::notifications::scheduler::request_notification_permission,
         crate::notifications::scheduler::check_notification_permission,
         crate::notifications::click::replay_pending_notification_clicks,
-        crate::db::dev::backdate_page,
         crate::db::dev::backup_db,
         crate::db::dev::backup_db_before_import,
         crate::db::dev::list_backups,
@@ -191,9 +202,14 @@ db_commands! {
         crate::db::dev::export_ics,
         crate::db::dev::export_markdown,
         crate::db::dev::get_usage_stats,
+        crate::db::dev::wipe_app_data,
+    ];
+    // Debug builds only. Each deletes or rewrites data on one call, for the developer
+    // menu and the seed scripts, and a release has no business answering it.
+    dev_extras: [
+        crate::db::dev::backdate_page,
         crate::db::dev::reset_db,
         crate::db::dev::dev_seed_synced_calendar,
-        crate::db::dev::wipe_app_data,
     ];
 
     mod pages {
@@ -334,5 +350,23 @@ db_commands! {
         refresh_sync_account(account_id: String) -> Vec<CalendarSyncResult>
             = refresh_account_auto(Keychain::system(), &account_id);
         get_sync_status() -> Vec<AccountWithCalendars> = get_sync_status_impl();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The developer commands that delete or rewrite data on one call. Every build registers
+    /// `EXTRA_COMMANDS`, so none of these may be in it.
+    const DEV_ONLY: &[&str] = &["backdate_page", "reset_db", "dev_seed_synced_calendar"];
+
+    #[test]
+    fn a_release_build_registers_no_developer_command() {
+        for path in super::EXTRA_COMMANDS {
+            let name = path.rsplit("::").next().unwrap().trim();
+            assert!(
+                !DEV_ONLY.contains(&name),
+                "{path} is registered in release builds"
+            );
+        }
     }
 }

@@ -4,7 +4,7 @@
 //! - [`maintenance`] — reset, wipe, backup/vacuum, and dev backdating.
 //! - [`export`] — the JSON, Markdown and CSV exports.
 //! - [`ics`] — the `.ics` calendar export of the scheduled pages.
-//! - [`seed`] — the mock calendar-sync seed.
+//! - [`seed`] — the mock calendar-sync seed, in debug builds only.
 //!
 //! The globs below re-export each submodule's surface at `db::dev::*`, which is
 //! where `lib.rs` and `ipc_tests.rs` name these commands. A glob (rather than a
@@ -15,12 +15,14 @@
 mod export;
 mod ics;
 mod maintenance;
+#[cfg(debug_assertions)]
 mod seed;
 mod stats;
 
 pub use export::*;
 pub use ics::*;
 pub use maintenance::*;
+#[cfg(debug_assertions)]
 pub use seed::*;
 pub use stats::*;
 

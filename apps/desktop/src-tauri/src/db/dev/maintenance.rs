@@ -2,8 +2,6 @@
 //! footprint, taking backups, and the dev-only timestamp backdating the seed
 //! scripts drive.
 
-use pikos_calendar_sync::Keychain;
-use serde::Deserialize;
 use tauri::Manager;
 
 use crate::db::DbState;
@@ -15,16 +13,21 @@ use crate::error::{AppError, AppResult};
 /// Sync accounts are disconnected first, through the same path the settings panel
 /// uses — see `disconnect_all_accounts` for what that has to reach before the rows
 /// their keychain blobs are keyed to are gone.
+#[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
     let pool = state.get_pool().await?;
     // Best-effort: an unreachable provider must not block wiping local data.
-    if let Err(e) = pikos_calendar_sync::disconnect_all_accounts(&pool, Keychain::system()).await {
+    if let Err(e) =
+        pikos_calendar_sync::disconnect_all_accounts(&pool, pikos_calendar_sync::Keychain::system())
+            .await
+    {
         log::warn!("reset_db: could not disconnect the sync accounts: {e}");
     }
     reset_db_impl(&pool).await
 }
 
+#[cfg(debug_assertions)]
 pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let sessions = sqlx::query("DELETE FROM focus_sessions")
         .execute(pool)
@@ -162,7 +165,8 @@ pub async fn backup_db_before_import(
 
 // ── Seed helpers ─────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[cfg(debug_assertions)]
+#[derive(serde::Deserialize)]
 pub struct BackdateParams {
     pub id: String,
     pub created_at: Option<String>,
@@ -170,8 +174,8 @@ pub struct BackdateParams {
     pub completed_at: Option<String>,
 }
 
-/// Dev-only: overwrite timestamps on a page for realistic seed data.
-/// Not exposed in production — only called by seed scripts.
+/// Overwrite timestamps on a page for realistic seed data, from the seed scripts.
+#[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn backdate_page(
     state: tauri::State<'_, DbState>,
@@ -181,6 +185,7 @@ pub async fn backdate_page(
     backdate_page_impl(&pool, params).await
 }
 
+#[cfg(debug_assertions)]
 pub(crate) async fn backdate_page_impl(
     pool: &sqlx::SqlitePool,
     params: BackdateParams,
