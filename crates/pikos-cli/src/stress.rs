@@ -240,12 +240,31 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
         .await
         .map_err(|e| classify(e.into()))?;
 
-    // A page to read and update, taken from the seeded set rather than created, so the reads are
-    // against a row that has been sitting in the table rather than one still warm in the cache.
-    let sample_id: String = sqlx::query_scalar("SELECT id FROM pages LIMIT 1")
+    // Every read and update goes to a different page, picked across the whole table with a fixed
+    // seed. Reading one page over and over times a cache hit, not a workspace of this size.
+    let max_rowid: i64 = sqlx::query_scalar("SELECT MAX(rowid) FROM pages")
         .fetch_one(&pool)
         .await
         .map_err(|e| classify(e.into()))?;
+    let mut rng = Rng(0x5EED_0000_0000_BEEF);
+    let mut page_ids = Vec::new();
+    while page_ids.len() < 2 * (runs as usize + 1) {
+        let rowid = 1 + rng.below(max_rowid as usize) as i64;
+        let id: Option<String> =
+            sqlx::query_scalar("SELECT id FROM pages WHERE rowid = ? AND deleted_at IS NULL")
+                .bind(rowid)
+                .fetch_optional(&pool)
+                .await
+                .map_err(|e| classify(e.into()))?;
+        page_ids.extend(id);
+    }
+    let picked = std::cell::Cell::new(0);
+    let next_page = || {
+        let i = picked.get();
+        picked.set(i + 1);
+        page_ids[i].clone()
+    };
+    let pool_ref = &pool;
 
     // Opening happens once per process, so it has one sample whatever `runs` says.
     let mut timings = vec![Timing {
@@ -262,23 +281,27 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
         .await?,
     );
     timings.push(
-        time_it(runs, "read page", || async {
-            get_page(&pool, &sample_id).await.map_err(classify)
+        time_it(runs, "read page", || {
+            let id = next_page();
+            async move { get_page(pool_ref, &id).await.map_err(classify) }
         })
         .await?,
     );
     timings.push(
-        time_it(runs, "update page", || async {
-            update_page_impl(
-                &pool,
-                sample_id.clone(),
-                PageUpdate {
-                    title: Some("renamed".to_string()),
-                    ..Default::default()
-                },
-            )
-            .await
-            .map_err(classify)
+        time_it(runs, "update page", || {
+            let id = next_page();
+            async move {
+                update_page_impl(
+                    pool_ref,
+                    id,
+                    PageUpdate {
+                        title: Some("renamed".to_string()),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(classify)
+            }
         })
         .await?,
     );
