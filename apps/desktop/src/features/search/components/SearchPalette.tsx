@@ -162,6 +162,10 @@ async function runFilteredSearch(
   };
 }
 
+/** A keystroke this soon after the last is part of a burst: the search waits for the burst to end
+ *  rather than run for every key. A keystroke after a pause searches at once. */
+const SEARCH_BURST_MS = 150;
+
 export function SearchPalette() {
   const { activePageId, dialogPrefill, openDialog, openPage, setOpenDialog } = useUI();
   const { folders, pages, searchPages } = usePages();
@@ -238,7 +242,10 @@ export function SearchPalette() {
     { allowInInputs: true, group: "Navigation", inPalette: false, label: "Run a command" }
   );
 
-  // ── Search with debounce ──────────────────────────────────────────────────
+  // ── Search as you type ────────────────────────────────────────────────────
+
+  const lastInputAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const searchRequestRef = useRef(0);
 
   useEffect(() => {
     const q = query.trim();
@@ -250,7 +257,13 @@ export function SearchPalette() {
     if (!parsedQuery.hasOperators && q.length < MIN_QUERY_LENGTH) return;
     if (parsedQuery.hasOperators && !storage) return;
 
-    const timer = setTimeout(() => {
+    const now = performance.now();
+    const inBurst = now - lastInputAtRef.current < SEARCH_BURST_MS;
+    lastInputAtRef.current = now;
+    // Searches run as keys land, so an older one can finish after a newer one.
+    const request = ++searchRequestRef.current;
+
+    function run() {
       // Words typed a moment ago are still in the editor's and the queue's
       // debounces, out of the index; write them first so they are found.
       const search = flushPendingWrites().then(() =>
@@ -268,6 +281,7 @@ export function SearchPalette() {
 
       search
         .then(({ completedCount: count, completedCountCapped: capped, results: res }) => {
+          if (request !== searchRequestRef.current) return;
           setResults(res);
           setCompletedCount(count);
           setCompletedCountCapped(capped);
@@ -277,7 +291,13 @@ export function SearchPalette() {
           // class — never pass `err` directly, never log the query text.
           log.error("search failed", err instanceof Error ? err.name : "unknown");
         });
-    }, 150);
+    }
+
+    if (!inBurst) {
+      run();
+      return;
+    }
+    const timer = setTimeout(run, SEARCH_BURST_MS);
     return () => clearTimeout(timer);
   }, [query, showCompleted, searchPages, folders, storage]);
 
