@@ -273,7 +273,10 @@ mod tests {
     fn shifts_spring_forward_gap_forward_east_of_utc() {
         let utc = wall_clock_to_utc(BERLIN, dt("2026-03-29T02:30:00")).unwrap();
         assert_eq!(utc, dt("2026-03-29T01:30:00"));
-        assert_eq!(utc_to_wall_clock(BERLIN, utc), Some(dt("2026-03-29T03:30:00")));
+        assert_eq!(
+            utc_to_wall_clock(BERLIN, utc),
+            Some(dt("2026-03-29T03:30:00"))
+        );
     }
 
     #[test]
