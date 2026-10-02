@@ -157,16 +157,16 @@ fn shape_page(
     if rng.below(10) < 7 {
         page.folder_id = Some(folder_ids[rng.below(folder_ids.len())].clone());
     }
-    if i % 7 == 0 {
+    if i.is_multiple_of(7) {
         page.title = format!("Item {}", rng.below(1_000));
     }
-    if i % 11 == 0 {
+    if i.is_multiple_of(11) {
         page.title = format!("{}{}", EMOJI[rng.below(EMOJI.len())], page.title);
     }
-    if i % 13 == 0 {
+    if i.is_multiple_of(13) {
         page.title = TRICKY_TITLES[rng.below(TRICKY_TITLES.len())].to_string();
     }
-    if i % 17 == 0 {
+    if i.is_multiple_of(17) {
         page.title = "Same title".to_string();
     }
     page.priority = if rng.below(2) == 0 {
