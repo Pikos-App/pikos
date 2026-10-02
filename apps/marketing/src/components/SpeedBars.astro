@@ -3,41 +3,55 @@ import { type Corpus, fmtMs, fmtPages } from "../lib/speed";
 
 interface Props {
   corpora: Corpus[];
-  /** The action whose time is drawn beside each workspace size. */
-  op: string;
-  /** What the time bars measure, for the column heading. */
-  label: string;
 }
 
-const { corpora, op, label } = Astro.props;
+const { corpora } = Astro.props;
 const mostPages = Math.max(...corpora.map((c) => c.pages));
 // One millisecond fills the time bar, so a time that doesn't grow draws the same bar every row.
 const TIME_SCALE_MS = 1;
+
+// Class names are written out whole so Tailwind finds them: each action shows only while it's picked.
+const actions = [
+  { key: "search", op: "search a rare word", button: "Search", heading: "Time to search for a word", shown: "hidden group-data-[action=search]:flex" },
+  { key: "open", op: "read page", button: "Open", heading: "Time to open a page", shown: "hidden group-data-[action=open]:flex" },
+  { key: "save", op: "update page", button: "Save", heading: "Time to save an edit", shown: "hidden group-data-[action=save]:flex" },
+  { key: "create", op: "create page", button: "Create", heading: "Time to create a page", shown: "hidden group-data-[action=create]:flex" },
+];
 ---
 
-<div class="space-y-5">
-  <div class="hidden grid-cols-[6rem_1fr_11rem] gap-x-6 text-xs font-medium text-neutral-400 sm:grid dark:text-neutral-500">
-    <div>Pages</div>
-    <div>How full the workspace is</div>
-    <div>{label}</div>
+<div class="group" data-switch="action" data-action="search">
+  <div class="mb-6 flex justify-end">
+    <div class="inline-flex rounded-lg border border-neutral-200 p-0.5 text-xs font-medium dark:border-neutral-800">
+      {actions.map((a, i) => (
+        <button type="button" data-switch-value={a.key} aria-pressed={i === 0 ? "true" : "false"} class="rounded-md px-3 py-1.5 text-neutral-500 transition-colors hover:text-neutral-900 aria-pressed:bg-neutral-900 aria-pressed:text-white dark:text-neutral-400 dark:hover:text-neutral-100 dark:aria-pressed:bg-neutral-100 dark:aria-pressed:text-neutral-900">{a.button}</button>
+      ))}
+    </div>
   </div>
 
-  {corpora.map((c) => {
-    const pagesWidth = Math.max(0.6, (c.pages / mostPages) * 100);
-    const timeWidth = Math.min(100, (c.ops[op].ms / TIME_SCALE_MS) * 100);
-    return (
+  <div class="space-y-5">
+    <div class="hidden grid-cols-[6rem_1fr_11rem] gap-x-6 text-xs font-medium text-neutral-400 sm:grid dark:text-neutral-500">
+      <div>Pages</div>
+      <div>How full the workspace is</div>
+      <div>{actions.map((a) => <span class={a.shown}>{a.heading}</span>)}</div>
+    </div>
+
+    {corpora.map((c) => (
       <div class="grid grid-cols-[1fr_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[6rem_1fr_11rem]">
         <div class="text-sm font-semibold text-neutral-900 tabular-nums dark:text-neutral-50">{fmtPages(c.seeded)}</div>
         <div class="order-last col-span-2 h-3 rounded-full bg-neutral-100 sm:order-none sm:col-span-1 dark:bg-neutral-800">
-          <div class="h-3 rounded-full bg-neutral-400 dark:bg-neutral-500" style={`width: ${pagesWidth}%`}></div>
+          <div class="h-3 rounded-full bg-neutral-400 dark:bg-neutral-500" style={`width: ${Math.max(0.6, (c.pages / mostPages) * 100)}%`}></div>
         </div>
-        <div class="flex items-center gap-3">
-          <div class="hidden h-3 w-20 shrink-0 rounded-full bg-neutral-100 sm:block dark:bg-neutral-800">
-            <div class="h-3 rounded-full bg-primary-500 dark:bg-primary-400" style={`width: ${timeWidth}%`}></div>
-          </div>
-          <span class="whitespace-nowrap text-sm font-semibold text-primary-600 tabular-nums dark:text-primary-300">{fmtMs(c.ops[op].ms)} ms</span>
+        <div>
+          {actions.map((a) => (
+            <div class={`${a.shown} items-center gap-3`}>
+              <div class="hidden h-3 w-20 shrink-0 rounded-full bg-neutral-100 sm:block dark:bg-neutral-800">
+                <div class="h-3 rounded-full bg-primary-500 dark:bg-primary-400" style={`width: ${Math.max(3, Math.min(100, (c.ops[a.op].ms / TIME_SCALE_MS) * 100))}%`}></div>
+              </div>
+              <span class="whitespace-nowrap text-sm font-semibold text-primary-600 tabular-nums dark:text-primary-300">{fmtMs(c.ops[a.op].ms)} ms</span>
+            </div>
+          ))}
         </div>
       </div>
-    );
-  })}
+    ))}
+  </div>
 </div>
