@@ -23,10 +23,10 @@ mod stats;
 pub use export::*;
 pub use ics::*;
 pub use maintenance::*;
-#[cfg(debug_assertions)]
-pub use seed::*;
 #[cfg(all(not(debug_assertions), feature = "e2e-bridge"))]
 pub(crate) use seed::dev_seed_synced_calendar_impl;
+#[cfg(debug_assertions)]
+pub use seed::*;
 pub use stats::*;
 
 #[cfg(test)]

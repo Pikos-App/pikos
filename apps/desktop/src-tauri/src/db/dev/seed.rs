@@ -266,7 +266,9 @@ async fn insert_synced_recurring(
 
 #[cfg(debug_assertions)]
 #[tauri::command]
-pub async fn dev_seed_synced_calendar(state: tauri::State<'_, crate::db::DbState>) -> AppResult<()> {
+pub async fn dev_seed_synced_calendar(
+    state: tauri::State<'_, crate::db::DbState>,
+) -> AppResult<()> {
     let pool = state.get_pool().await?;
     dev_seed_synced_calendar_impl(&pool).await
 }
