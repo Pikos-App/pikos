@@ -210,6 +210,12 @@ impl Timing {
     }
 }
 
+/// How long one operation may spend on its measured runs before it stops early. Hundreds of runs of
+/// a sub-millisecond read cost nothing, while the same count of a seconds-long whole-table load
+/// would take most of an hour; the runs each operation actually got are in the output.
+const RUN_BUDGET: std::time::Duration = std::time::Duration::from_secs(10);
+const MIN_RUNS: usize = 5;
+
 async fn time_it<F, Fut, T>(runs: u32, name: &'static str, f: F) -> Result<Timing, CliError>
 where
     F: Fn() -> Fut,
@@ -219,10 +225,14 @@ where
     // than whatever the filesystem happened to be doing.
     let _ = f().await?;
     let mut samples = Vec::with_capacity(runs as usize);
+    let began = Instant::now();
     for _ in 0..runs {
         let start = Instant::now();
         f().await?;
         samples.push(start.elapsed().as_secs_f64() * 1000.0);
+        if samples.len() >= MIN_RUNS && began.elapsed() > RUN_BUDGET {
+            break;
+        }
     }
     samples.sort_by(f64::total_cmp);
     Ok(Timing { name, samples })
@@ -409,6 +419,7 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
                 "op": t.name,
                 "ms": t.percentile(0.5),
                 "p95_ms": t.percentile(0.95),
+                "p99_ms": t.percentile(0.99),
                 "min_ms": t.samples[0],
                 "max_ms": t.samples[t.samples.len() - 1],
                 "runs": t.samples.len(),
