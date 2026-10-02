@@ -106,20 +106,6 @@ describe("register + handle", () => {
 
 // ─── Scope push/pop ordering ─────────────────────────────────────────────────
 
-describe("listCommands", () => {
-  it("leaves out a command marked as not for the palette", () => {
-    Keyboard.register({ combo: "Mod+n", handler: vi.fn(), id: "new", label: "New page" });
-    Keyboard.register({
-      combo: "Mod+k",
-      handler: vi.fn(),
-      id: "search",
-      inPalette: false,
-      label: "Search pages",
-    });
-    expect(Keyboard.listCommands().map((b) => b.label)).toEqual(["New page"]);
-  });
-});
-
 describe("scope push/pop", () => {
   it("top scope handler takes priority", () => {
     const globalHandler = vi.fn();
@@ -456,9 +442,73 @@ describe("listActiveBindings", () => {
   });
 });
 
+// ─── listShortcutCatalog ────────────────────────────────────────────────────
+
+describe("listShortcutCatalog", () => {
+  it("lists a key once under its group, with the label it was last registered under", () => {
+    Keyboard.register({
+      combo: "ArrowLeft",
+      group: "Calendar",
+      handler: vi.fn(),
+      id: "a",
+      label: "Previous week",
+    });
+    Keyboard.unregister("a");
+    Keyboard.register({
+      combo: "ArrowLeft",
+      group: "Calendar",
+      handler: vi.fn(),
+      id: "b",
+      label: "Previous month",
+    });
+
+    const left = Keyboard.listShortcutCatalog().filter((d) => d.combo === "ArrowLeft");
+    expect(left).toEqual([{ combo: "ArrowLeft", group: "Calendar", label: "Previous month" }]);
+  });
+
+  it("files a labelled binding with no group under Other", () => {
+    Keyboard.register({ combo: "Mod+u", handler: vi.fn(), id: "e", label: "Ungrouped" });
+
+    const rows = Keyboard.listShortcutCatalog().filter((d) => d.combo === "Mod+u");
+    expect(rows).toEqual([{ combo: "Mod+u", group: "Other", label: "Ungrouped" }]);
+  });
+
+  it("keeps one key's rows apart when they belong to different groups", () => {
+    Keyboard.register({
+      combo: "Mod+j",
+      group: "Editor",
+      handler: vi.fn(),
+      id: "c",
+      label: "Link",
+    });
+    Keyboard.register({
+      combo: "Mod+j",
+      group: "Navigation",
+      handler: vi.fn(),
+      id: "d",
+      label: "Jump",
+    });
+
+    const rows = Keyboard.listShortcutCatalog().filter((d) => d.combo === "Mod+j");
+    expect(rows.map((d) => d.label).sort()).toEqual(["Jump", "Link"]);
+  });
+});
+
 // ─── listCommands ───────────────────────────────────────────────────────────
 
 describe("listCommands", () => {
+  it("leaves out a command marked as not for the palette", () => {
+    Keyboard.register({ combo: "Mod+n", handler: vi.fn(), id: "new", label: "New page" });
+    Keyboard.register({
+      combo: "Mod+k",
+      handler: vi.fn(),
+      id: "search",
+      inPalette: false,
+      label: "Search pages",
+    });
+    expect(Keyboard.listCommands().map((b) => b.label)).toEqual(["New page"]);
+  });
+
   it("lists labelled bindings and skips unlabelled ones", () => {
     Keyboard.register({ combo: "Mod+a", handler: vi.fn(), id: "c1", label: "Do the thing" });
     Keyboard.register({ combo: "Mod+b", handler: vi.fn(), id: "c2" });

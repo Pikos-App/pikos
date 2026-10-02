@@ -144,10 +144,11 @@ export type ShortcutDoc = {
 };
 
 const store = new Map<string, Binding & { parsed: NormalizedCombo }>();
-// Every labelled binding this session has seen, keyed by what makes it distinct.
-// Registrations come and go with their component — the calendar header and the
-// editor pane each unregister when their panel is hidden — and a reference list
-// that empties as you switch panels documents nothing. Entries are never evicted.
+// Every labelled binding this session has seen, one row per scope, key and group.
+// Registrations come and go with their component, and a reference list that empties
+// as you switch panels documents nothing, so entries are never evicted. A binding
+// whose label follows the view (the calendar's week or month) replaces its row
+// rather than adding a second one for the same key.
 const catalog = new Map<string, ShortcutDoc>();
 let activeScopes: string[] = ["global"]; // top is last
 
@@ -259,9 +260,10 @@ export const Keyboard = {
     }
 
     if (binding.label !== undefined) {
-      catalog.set(`${scope}::${binding.combo}::${binding.label}`, {
+      const group = binding.group ?? "Other";
+      catalog.set(`${scope}::${binding.combo}::${group}`, {
         combo: binding.combo,
-        group: binding.group ?? "Other",
+        group,
         label: binding.label,
       });
     }
