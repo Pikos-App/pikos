@@ -163,3 +163,96 @@ export function sectionsReachedBy(file, sections, graph) {
   }
   return reached;
 }
+
+/** The master's header: these touch every section. */
+export const FULL_SWEEP = [
+  { glob: "{pnpm-lock.yaml,**/Cargo.lock}", why: "a dependency changed" },
+  { glob: "crates/pikos-db/migrations/**", why: "a migration changed" },
+  {
+    diff: /"csp"|"security"/,
+    glob: "apps/desktop/src-tauri/tauri.conf.json",
+    why: "the CSP may have changed",
+  },
+];
+
+/**
+ * What a range of commits touches. `reasons` maps a section key, or a row ID a changed spec
+ * claims, to why; a changed spec touches every row its tests take, because a proof lasts
+ * only until the test changes. `sweep` names what triggered a full sweep, which touches
+ * every section unless `waive` says why not. `unmapped` lists changed files that ship
+ * behaviour and reach no section.
+ */
+export function touches({ automated, graph, range, sections, waive }) {
+  const changed = git("diff", "--name-only", range).split("\n").filter(Boolean);
+  const reasons = new Map();
+  const touch = (key, why) => (reasons.get(key) ?? reasons.set(key, new Set()).get(key)).add(why);
+
+  const sweep = FULL_SWEEP.flatMap(({ diff, glob, why }) =>
+    changed
+      .filter((f) => matchesGlob(f, glob))
+      .filter((f) => !diff || diff.test(git("diff", range, "--", f)))
+      .map((f) => `${why} (\`${f}\`)`)
+  );
+  if (sweep.length > 0 && !waive) {
+    for (const s of sections) touch(s.key, "full sweep");
+  }
+
+  const testsByFile = new Map();
+  for (const [row, tests] of Object.entries(automated)) {
+    for (const test of tests) {
+      const file = `apps/desktop/e2e/${test.split(":")[0]}`;
+      (testsByFile.get(file) ?? testsByFile.set(file, new Set()).get(file)).add(row);
+    }
+  }
+
+  const unmapped = [];
+  for (const file of changed) {
+    for (const row of testsByFile.get(file) ?? []) touch(row, `\`${file}\` changed`);
+    if (isNoBehaviour(file)) continue;
+    const direct = sectionsMatching(file, sections);
+    for (const s of direct) touch(s.key, `\`${file}\``);
+    let reached = direct.length > 0;
+    for (const importer of importers(file, graph)) {
+      for (const s of sectionsMatching(importer, sections)) {
+        touch(s.key, `\`${importer}\` imports \`${file}\``);
+        reached = true;
+      }
+    }
+    if (!reached && !FULL_SWEEP.some(({ glob }) => matchesGlob(file, glob))) unmapped.push(file);
+  }
+  return { reasons, sweep, unmapped };
+}
+
+export function isTouched(reasons, section, row) {
+  return reasons.has(section.key) || reasons.has(row.id);
+}
+
+/** The marks a person can add to a copy: untouched, automated, manual or both. */
+const MARK = /· \*\*(untouched|automated|manual|both)\*\*(.*)$/;
+
+/**
+ * A release copy as a person has left it: per row whether its box is ticked, its mark and
+ * what follows the mark (the tests, or the reason a row is driven anyway); the commit it
+ * was generated at; the lines of its sign-off section; any full-sweep waiver; and the
+ * release kind it was written for.
+ */
+export function readCopy(path) {
+  const text = readFileSync(path, "utf8");
+  const sha = /at `([0-9a-f]+)`/.exec(text)?.[1] ?? null;
+  const rows = new Map();
+  for (const line of text.split("\n")) {
+    const row = /^- \[([ x])\] \*\*([A-Z]+-\d+)\*\*/.exec(line);
+    if (!row) continue;
+    const mark = MARK.exec(line);
+    rows.set(row[2], {
+      mark: mark?.[1] ?? null,
+      tail: mark?.[2].trim() ?? "",
+      ticked: row[1] === "x",
+    });
+  }
+  const signOffAt = text.indexOf("\n## Sign-off");
+  const signOff = signOffAt === -1 ? [] : text.slice(signOffAt + 1).split("\n");
+  const waiver = /Waived: (.*)$/m.exec(text)?.[1] ?? null;
+  const kind = /for a (patch|minor|major) release/.exec(text)?.[1] ?? null;
+  return { kind, rows, sha, signOff, waiver };
+}
