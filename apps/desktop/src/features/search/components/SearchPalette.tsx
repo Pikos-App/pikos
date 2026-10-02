@@ -21,7 +21,7 @@ import {
   viewerStart,
 } from "@pikos/core";
 import { Command, FileText, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ import { formatCombo } from "@/shared/keyboard/formatCombo";
 import type { Binding } from "@/shared/keyboard/registry";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { lastOpened, opensVersion, subscribeToOpens } from "@/shared/lib/recentOpens";
 import { createLogger } from "@/shared/logger";
 import { flushPendingWrites } from "@/shared/pendingWrites";
 
@@ -282,13 +283,17 @@ export function SearchPalette() {
 
   // ── Recent pages (shown when input is empty) ────────────────────────────
 
-  const recentItems: SearchResult[] = query.trim()
-    ? []
-    : [...pages]
-        .filter((p) => p.lastOpenedAt && p.id !== activePageId)
-        .sort((a, b) => (b.lastOpenedAt ?? "").localeCompare(a.lastOpenedAt ?? ""))
-        .slice(0, 10)
-        .map(summaryToResult);
+  // Read so an open recorded while the palette is up reorders the list.
+  useSyncExternalStore(subscribeToOpens, opensVersion);
+  // Only while open: this walks every page, and the palette renders on every page switch.
+  const recentItems: SearchResult[] =
+    !isOpen || query.trim()
+      ? []
+      : pages
+          .filter((p) => lastOpened(p) !== null && p.id !== activePageId)
+          .sort((a, b) => (lastOpened(b) ?? "").localeCompare(lastOpened(a) ?? ""))
+          .slice(0, 10)
+          .map(summaryToResult);
 
   const pageItems = query.trim() ? results : recentItems;
   const displayCount = isCommandMode ? commandItems.length : pageItems.length;

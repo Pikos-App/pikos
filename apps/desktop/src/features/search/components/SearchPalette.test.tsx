@@ -407,3 +407,26 @@ describe("SearchPalette — command mode", () => {
     expect(screen.queryByRole("button", { name: /Gated away/ })).toBeNull();
   });
 });
+
+describe("SearchPalette — recent pages", () => {
+  it("lists pages opened this session, most recent first", async () => {
+    await setup([{ title: "Alpha" }, { title: "Beta" }, { title: "Gamma" }]);
+    const idOf = (title: string) => api().pages.pages.find((p) => p.title === title)!.id;
+
+    act(() => {
+      api().pages.recordPageOpened(idOf("Beta"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    act(() => {
+      api().pages.recordPageOpened(idOf("Alpha"));
+    });
+
+    await waitFor(() => {
+      const titles = screen
+        .getAllByRole("button")
+        .map((b) => b.textContent ?? "")
+        .filter((text) => /Alpha|Beta|Gamma/.test(text));
+      expect(titles.map((t) => t.match(/Alpha|Beta|Gamma/)![0])).toEqual(["Alpha", "Beta"]);
+    });
+  });
+});

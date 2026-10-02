@@ -36,6 +36,8 @@ import type {
 } from "@pikos/core";
 import { createContext, type ReactNode, useContext } from "react";
 
+import { recordOpen } from "@/shared/lib/recentOpens";
+
 import { useAppSettings } from "./AppSettingsContext";
 import { useFolderWrites } from "./useFolderWrites";
 import { usePagesStore } from "./usePagesStore";
@@ -60,6 +62,8 @@ export interface PagesContextValue {
   createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
+  /** Save that a page was just opened, leaving the page list alone; see `recentOpens`. */
+  recordPageOpened: (id: string) => void;
   flushPage: (id: string) => Promise<void>;
   deletePage: (id: string) => Promise<void>;
   /** Resolve the "calendar description changed" notice — see the adapter method. */
@@ -211,6 +215,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     updatePage,
   } = usePageWriteQueue({ adapter, emit, pagesRef, setPages });
 
+  function recordPageOpened(id: string): void {
+    const at = recordOpen(id);
+    // A lost open time costs a recent-pages entry, never data, so it isn't worth a notice.
+    enqueue(id, () => adapter.updatePage(id, { lastOpenedAt: at })).catch(() => undefined);
+  }
+
   // Rules, completion, uncomplete, skips, and virtual-occurrence materialisation
   // — every write that defers the head to the backend recompute.
   const recurring = useRecurringWrites({
@@ -328,6 +338,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     pageErrors,
     pages,
     patchFolderColor,
+    recordPageOpened,
     recurrenceRules,
     reorderFolders,
     reorderPages,

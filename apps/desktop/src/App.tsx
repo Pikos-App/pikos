@@ -47,13 +47,13 @@ import { getPlatform } from "@/shared/platform";
 
 function useTrackPageOpened() {
   const { activePageId } = useUI();
-  const { updatePage } = usePages();
+  const { recordPageOpened } = usePages();
   const prevIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (activePageId && activePageId !== prevIdRef.current) {
       prevIdRef.current = activePageId;
-      updatePage(activePageId, { lastOpenedAt: new Date().toISOString() });
+      recordPageOpened(activePageId);
     }
     if (!activePageId) prevIdRef.current = null;
   }, [activePageId]);
