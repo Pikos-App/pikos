@@ -7,7 +7,6 @@
 
 use chrono::Datelike;
 
-use crate::db::DbState;
 use crate::error::AppResult;
 
 // A doc node requires at least one block child (ProseMirror `block+`); an empty
@@ -265,8 +264,9 @@ async fn insert_synced_recurring(
     Ok(())
 }
 
+#[cfg(debug_assertions)]
 #[tauri::command]
-pub async fn dev_seed_synced_calendar(state: tauri::State<'_, DbState>) -> AppResult<()> {
+pub async fn dev_seed_synced_calendar(state: tauri::State<'_, crate::db::DbState>) -> AppResult<()> {
     let pool = state.get_pool().await?;
     dev_seed_synced_calendar_impl(&pool).await
 }

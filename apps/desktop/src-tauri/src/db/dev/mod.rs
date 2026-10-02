@@ -15,7 +15,8 @@
 mod export;
 mod ics;
 mod maintenance;
-#[cfg(debug_assertions)]
+// The seed's command is debug-only; the e2e bridge seeds through its impl in any build.
+#[cfg(any(debug_assertions, test, feature = "e2e-bridge"))]
 mod seed;
 mod stats;
 
@@ -24,6 +25,8 @@ pub use ics::*;
 pub use maintenance::*;
 #[cfg(debug_assertions)]
 pub use seed::*;
+#[cfg(all(not(debug_assertions), feature = "e2e-bridge"))]
+pub(crate) use seed::dev_seed_synced_calendar_impl;
 pub use stats::*;
 
 #[cfg(test)]

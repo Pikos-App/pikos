@@ -27,7 +27,8 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
     reset_db_impl(&pool).await
 }
 
-#[cfg(debug_assertions)]
+// The e2e bridge resets workspaces through this in any build it's part of.
+#[cfg(any(debug_assertions, test, feature = "e2e-bridge"))]
 pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let sessions = sqlx::query("DELETE FROM focus_sessions")
         .execute(pool)
@@ -165,7 +166,7 @@ pub async fn backup_db_before_import(
 
 // ── Seed helpers ─────────────────────────────────────────────────────────────
 
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, test))]
 #[derive(serde::Deserialize)]
 pub struct BackdateParams {
     pub id: String,
@@ -185,7 +186,7 @@ pub async fn backdate_page(
     backdate_page_impl(&pool, params).await
 }
 
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, test))]
 pub(crate) async fn backdate_page_impl(
     pool: &sqlx::SqlitePool,
     params: BackdateParams,
