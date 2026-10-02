@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
 
-import { test as appTest, createFolder, expect, mod, openEditorForPage, quickAdd } from "./fixtures";
+import {
+  test as appTest,
+  createFolder,
+  expect,
+  mod,
+  openEditorForPage,
+  quickAdd,
+} from "./fixtures";
 
 function paletteOf(app: Page) {
   return app.getByRole("dialog", { name: "Search pages" });
@@ -38,10 +45,27 @@ appTest(
       await expect(rows.first()).toHaveAccessibleName(/^zeppelin notes/);
     });
 
-    await appTest.step("SRCH-01 the body match shows a preview with the word highlighted", async () => {
-      const row = result(app, "summer travel");
-      await expect(row).toContainText("took a");
-      await expect(row.getByText("zeppelin", { exact: true })).toBeVisible();
+    await appTest.step(
+      "SRCH-01 the body match shows a preview with the word highlighted",
+      async () => {
+        const row = result(app, "summer travel");
+        await expect(row).toContainText("took a");
+        await expect(row.locator("mark")).toHaveText(["zeppelin"]);
+      }
+    );
+
+    await appTest.step("SRCH-01 a description match shows the description highlighted", async () => {
+      await quickAdd(app, "budget plan");
+      await openEditorForPage(app, "budget plan");
+      await app.getByRole("button", { name: "Page description" }).click();
+      await app.getByRole("textbox", { name: "Page description" }).fill("Review the harbour lease");
+      await app.keyboard.press("Enter");
+      await search(app, "harbour");
+      const row = result(app, "budget plan");
+      await expect(row).toContainText("Review the");
+      await expect(row.locator("mark")).toHaveText(["harbour"]);
+      await app.keyboard.press("Escape");
+      await search(app, "zeppelin");
     });
 
     await appTest.step("SRCH-01 choosing a result opens it", async () => {
@@ -147,7 +171,10 @@ appTest(
     async function run(label: string) {
       await app.locator("body").click({ position: { x: 0, y: 0 } });
       const palette = await search(app, `>${label}`);
-      await palette.getByRole("button", { name: new RegExp(`^${label}`) }).first().click();
+      await palette
+        .getByRole("button", { name: new RegExp(`^${label}`) })
+        .first()
+        .click();
       await expect(palette).not.toBeVisible();
     }
 
@@ -240,6 +267,20 @@ appTest(
         await expect(rows.filter({ hasText: "alpha page" })).toHaveCount(1);
       },
     };
+
+    await appTest.step(
+      "SRCH-05 Cmd+Shift+K opens the commands while typing in a page",
+      async () => {
+        await editor.click();
+        await app.keyboard.press(mod("Mod+Shift+K"));
+        const palette = app.getByRole("dialog", { name: "Search pages" });
+        await expect(palette.getByPlaceholder("Search pages, or > for commands…")).toHaveValue(
+          /^>/
+        );
+        await app.keyboard.press("Escape");
+        await expect(palette).not.toBeVisible();
+      }
+    );
 
     await appTest.step("SRCH-05 > lists exactly the commands with a known effect", async () => {
       const palette = await search(app, ">");

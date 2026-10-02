@@ -6,7 +6,7 @@ import { highlightText } from "./highlightText";
 
 function marked(text: string, typed: string): string[] {
   const { container } = render(<>{highlightText(text, ftsTokens(typed), typed)}</>);
-  return [...container.querySelectorAll("span")].map((span) => span.textContent ?? "");
+  return [...container.querySelectorAll("mark")].map((mark) => mark.textContent ?? "");
 }
 
 describe("highlightText", () => {
@@ -17,6 +17,16 @@ describe("highlightText", () => {
 
   it("marks the tokens when the typed text isn't there verbatim", () => {
     expect(marked("a multi color palette", "multi-color")).toEqual(["multi", "color"]);
+  });
+
+  it("ignores spaces around the typed text", () => {
+    expect(marked("Guests: sam@example.com", " sam@example.com ")).toEqual(["sam@example.com"]);
+  });
+
+  it("marks nothing when the index matched no tokens, even where the typed text appears", () => {
+    const { container } = render(<>{highlightText("Zoom call", [], "Zoom")}</>);
+    expect(container.querySelectorAll("mark")).toHaveLength(0);
+    expect(container.textContent).toBe("Zoom call");
   });
 
   it("matches the typed text regardless of case", () => {

@@ -374,15 +374,9 @@ export function SearchPalette() {
     // metadata summary for title-only
     let secondLine: React.ReactNode = null;
     if (item.matchSource === "subtitle" && item.subtitle) {
-      secondLine =
-        queryWords.length > 0
-          ? highlightText(item.subtitle, queryWords, searchedText)
-          : item.subtitle;
+      secondLine = highlightText(item.subtitle, queryWords, searchedText);
     } else if (hasContentExcerpt) {
-      secondLine =
-        queryWords.length > 0
-          ? highlightText(item.excerpt, queryWords, searchedText)
-          : item.excerpt;
+      secondLine = highlightText(item.excerpt, queryWords, searchedText);
     } else if (trimmedQuery) {
       const summary = buildMetadataSummary(item);
       if (summary) secondLine = summary;
@@ -411,8 +405,9 @@ export function SearchPalette() {
         <div className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 truncate">
             <span className="truncate">
-              {highlightTitle && queryWords.length > 0
-                ? highlightText(item.title || "Untitled", queryWords, searchedText)
+              {highlightTitle
+                ? // Stryker disable next-line StringLiteral: an untitled page never matches on its title
+                  highlightText(item.title || "Untitled", queryWords, searchedText)
                 : item.title || "Untitled"}
             </span>
             {isDone(item) && (
