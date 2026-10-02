@@ -138,7 +138,7 @@ pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
 const CHECKPOINT_EVERY: Duration = Duration::from_secs(30);
 
 /// Who copies the write-ahead log back into the database file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub enum Checkpoints {
     /// SQLite's default: whichever write takes the log past 1,000 pages does it, inline. Right for
     /// a short-lived process, which also checkpoints when it closes.
@@ -146,7 +146,33 @@ pub enum Checkpoints {
     /// A background task, every [`CHECKPOINT_EVERY`]. Inline checkpoints made one save in a
     /// hundred take 4 to 9 ms instead of 0.25 at 200,000 pages, and a long-running app can do the
     /// same copy where nobody is waiting on it. `PASSIVE` never blocks a writer.
-    Background,
+    Background(CheckpointHooks),
+}
+
+/// Run around each background checkpoint. A checkpoint writes the database file, so a process
+/// that watches that file for other writers sees one as an outside change unless it brackets them.
+#[derive(Debug, Clone, Copy)]
+pub struct CheckpointHooks {
+    pub before: fn(),
+    pub after: fn(),
+}
+
+impl CheckpointHooks {
+    pub const NONE: Self = Self {
+        before: || {},
+        after: || {},
+    };
+}
+
+/// One background checkpoint, inside its hooks.
+pub async fn checkpoint_once(pool: &SqlitePool, hooks: CheckpointHooks) -> AppResult<()> {
+    (hooks.before)();
+    let result = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
+        .execute(pool)
+        .await;
+    (hooks.after)();
+    result?;
+    Ok(())
 }
 
 /// [`open_pool`], choosing who checkpoints the write-ahead log.
@@ -155,17 +181,14 @@ pub async fn open_pool_checkpointing(
     checkpoints: Checkpoints,
 ) -> AppResult<SqlitePool> {
     let pool = open_pool_reporting_integrity(path, checkpoints).await?;
-    if checkpoints == Checkpoints::Background {
+    if let Checkpoints::Background(hooks) = checkpoints {
         let pool = pool.clone();
         tokio::spawn(async move {
             let mut every = tokio::time::interval(CHECKPOINT_EVERY);
             every.tick().await;
             while !pool.is_closed() {
                 every.tick().await;
-                if let Err(e) = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
-                    .execute(&pool)
-                    .await
-                {
+                if let Err(e) = checkpoint_once(&pool, hooks).await {
                     log::warn!("background checkpoint failed: {e}");
                 }
             }
@@ -247,7 +270,7 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
                 .pragma("mmap_size", "268435456")
                 .pragma(
                     "wal_autocheckpoint",
-                    if checkpoints == Checkpoints::Background {
+                    if matches!(checkpoints, Checkpoints::Background(_)) {
                         "0"
                     } else {
                         "1000"

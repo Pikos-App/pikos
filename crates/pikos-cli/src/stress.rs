@@ -15,8 +15,8 @@ use std::time::Instant;
 
 use pikos_db::{
     create_folder_impl, create_page_impl, create_recurrence_rule_impl, get_page, list_pages_impl,
-    open_pool, open_pool_checkpointing, update_page_impl, Checkpoints, NewFolder, NewPage,
-    NewRecurrenceRule, PageFilter, PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
+    open_pool, open_pool_checkpointing, update_page_impl, CheckpointHooks, Checkpoints, NewFolder,
+    NewPage, NewRecurrenceRule, PageFilter, PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
 };
 use serde_json::json;
 
@@ -375,7 +375,7 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
 
     let open_start = Instant::now();
     // Checkpointing the way the app does, so the bench times the database the app actually runs.
-    let pool = open_pool_checkpointing(&path, Checkpoints::Background)
+    let pool = open_pool_checkpointing(&path, Checkpoints::Background(CheckpointHooks::NONE))
         .await
         .map_err(classify)?;
     let open_ms = open_start.elapsed().as_secs_f64() * 1000.0;

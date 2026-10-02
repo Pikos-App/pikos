@@ -1172,7 +1172,7 @@ async fn only_a_background_checkpointing_pool_turns_inline_checkpoints_off() {
 
     let background = open_pool_checkpointing(
         dir.join("background.db").to_str().unwrap(),
-        Checkpoints::Background,
+        Checkpoints::Background(CheckpointHooks::NONE),
     )
     .await
     .unwrap();
