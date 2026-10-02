@@ -1153,3 +1153,29 @@ async fn seed_shipped_workspace(pool: &SqlitePool) {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn only_a_background_checkpointing_pool_turns_inline_checkpoints_off() {
+    let dir = std::env::temp_dir().join(format!("pkos_ckpt_{}", uuid::Uuid::new_v4()));
+    let setting = |pool: SqlitePool| async move {
+        sqlx::query_scalar::<_, i64>("PRAGMA wal_autocheckpoint")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+
+    let inline =
+        open_pool_checkpointing(dir.join("inline.db").to_str().unwrap(), Checkpoints::Inline)
+            .await
+            .unwrap();
+    assert_eq!(setting(inline).await, 1000);
+
+    let background = open_pool_checkpointing(
+        dir.join("background.db").to_str().unwrap(),
+        Checkpoints::Background,
+    )
+    .await
+    .unwrap();
+    assert_eq!(setting(background).await, 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}

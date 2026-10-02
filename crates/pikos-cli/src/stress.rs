@@ -14,8 +14,8 @@ use std::path::Path;
 use std::time::Instant;
 
 use pikos_db::{
-    create_page_impl, get_page, list_pages_impl, open_pool, update_page_impl, PageFilter,
-    PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
+    create_page_impl, get_page, list_pages_impl, open_pool, open_pool_checkpointing,
+    update_page_impl, Checkpoints, PageFilter, PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
 };
 use serde_json::json;
 
@@ -242,7 +242,10 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
     let path = require_scratch_db(db)?;
 
     let open_start = Instant::now();
-    let pool = open_pool(&path).await.map_err(classify)?;
+    // Checkpointing the way the app does, so the bench times the database the app actually runs.
+    let pool = open_pool_checkpointing(&path, Checkpoints::Background)
+        .await
+        .map_err(classify)?;
     let open_ms = open_start.elapsed().as_secs_f64() * 1000.0;
 
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")

@@ -159,7 +159,7 @@ pub async fn connect_db(
 /// pragmas, content_text backfill and the FTS rebuild, then this runs the
 /// app-only housekeeping on top.
 pub(crate) async fn open_pool(path: &str) -> AppResult<SqlitePool> {
-    let pool = pikos_db::open_pool(path).await?;
+    let pool = pikos_db::open_pool_checkpointing(path, pikos_db::Checkpoints::Background).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
     // The trash's other half. Soft-delete keeps a page forever on its own, so
     // without a sweep the file only ever grows with work the user deleted — and

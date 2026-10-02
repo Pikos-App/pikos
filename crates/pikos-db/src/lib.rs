@@ -37,7 +37,7 @@ pub use notification_log::*;
 pub use pages::*;
 pub use pool::{
     build_tiptap_doc, device_zone, extract_text_from_tiptap, migration_versions, now_iso,
-    now_local_iso, open_pool, today_local,
+    now_local_iso, open_pool, open_pool_checkpointing, today_local, Checkpoints,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{

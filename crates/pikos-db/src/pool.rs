@@ -131,7 +131,54 @@ pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.
 pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
-    match open_pool_inner(path).await {
+    open_pool_checkpointing(path, Checkpoints::Inline).await
+}
+
+/// How often a long-running process copies the write-ahead log back into the database.
+const CHECKPOINT_EVERY: Duration = Duration::from_secs(30);
+
+/// Who copies the write-ahead log back into the database file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Checkpoints {
+    /// SQLite's default: whichever write takes the log past 1,000 pages does it, inline. Right for
+    /// a short-lived process, which also checkpoints when it closes.
+    Inline,
+    /// A background task, every [`CHECKPOINT_EVERY`]. Inline checkpoints made one save in a
+    /// hundred take 4 to 9 ms instead of 0.25 at 200,000 pages, and a long-running app can do the
+    /// same copy where nobody is waiting on it. `PASSIVE` never blocks a writer.
+    Background,
+}
+
+/// [`open_pool`], choosing who checkpoints the write-ahead log.
+pub async fn open_pool_checkpointing(
+    path: &str,
+    checkpoints: Checkpoints,
+) -> AppResult<SqlitePool> {
+    let pool = open_pool_reporting_integrity(path, checkpoints).await?;
+    if checkpoints == Checkpoints::Background {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            let mut every = tokio::time::interval(CHECKPOINT_EVERY);
+            every.tick().await;
+            while !pool.is_closed() {
+                every.tick().await;
+                if let Err(e) = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
+                    .execute(&pool)
+                    .await
+                {
+                    log::warn!("background checkpoint failed: {e}");
+                }
+            }
+        });
+    }
+    Ok(pool)
+}
+
+async fn open_pool_reporting_integrity(
+    path: &str,
+    checkpoints: Checkpoints,
+) -> AppResult<SqlitePool> {
+    match open_pool_inner(path, checkpoints).await {
         Ok(pool) => Ok(pool),
         Err(err) => Err(match integrity_failure(path).await {
             Some(detail) => AppError::Corrupt(detail),
@@ -182,7 +229,7 @@ async fn integrity_failure(path: &str) -> Option<String> {
     }
 }
 
-async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
+async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -198,6 +245,14 @@ async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
                 .busy_timeout(Duration::from_secs(5))
                 .pragma("temp_store", "MEMORY")
                 .pragma("mmap_size", "268435456")
+                .pragma(
+                    "wal_autocheckpoint",
+                    if checkpoints == Checkpoints::Background {
+                        "0"
+                    } else {
+                        "1000"
+                    },
+                )
                 .foreign_keys(true),
         )
         .await?;
