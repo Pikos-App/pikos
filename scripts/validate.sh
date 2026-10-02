@@ -6,11 +6,6 @@ set -euo pipefail
 # doesn't have to re-run validation in CI. Also exposed as `pnpm preflight`.
 #
 # Ordered cheapest-/most-likely-to-fail first so it fails fast.
-# Skips `pnpm audit`, which is still warn-only in CI. `cargo audit` on the
-# workspace blocks in CI now, so it runs here too; the desktop lock's audit stays
-# CI-side and warn-only.
-#
-# Escape hatch: SKIP_VALIDATE=1 (honored by release.sh) bypasses this entirely.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC_TAURI="$ROOT/apps/desktop/src-tauri"
@@ -30,6 +25,9 @@ pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
 
 step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
+
+step "js audit" "shipped dependencies against scripts/js-audit-accepted.json"
+node "$ROOT/scripts/check-js-audit.mjs"
 
 # ── bindings job ──────────────────────────────────────────────────────────────
 # packages/core/src/generated is committed, so it drifts the moment a pikos-db
@@ -84,10 +82,11 @@ step "cargo test (desktop)" ""
 # absent, because a missing tool is not a finding and this script is also the
 # pre-release gate on a machine that may never have installed it.
 if command -v cargo-audit &>/dev/null; then
-  step "cargo audit (workspace)" "accepted advisories in .cargo/audit.toml"
+  step "cargo audit" "workspace + desktop, each against its own .cargo/audit.toml"
   (cd "$ROOT" && cargo audit)
+  (cd "$SRC_TAURI" && cargo audit)
 else
-  step "cargo audit (workspace)" "skipped — cargo-audit not installed"
+  step "cargo audit" "skipped — cargo-audit not installed"
 fi
 
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────

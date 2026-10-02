@@ -44,13 +44,8 @@ jobs:
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 
-      # Reports only. Most of what it finds is the Astro build toolchain and the
-      # test runner, neither of which reaches a user, so promoting this as-is
-      # would just pin the build red. Making it block needs a reviewed list of
-      # accepted advisory ids to fail against.
-      - name: pnpm audit (high)
-        continue-on-error: true
-        run: pnpm audit --audit-level=high
+      - name: JS audit (shipped dependencies)
+        run: node scripts/check-js-audit.mjs
 
   # The single unit-test pass: desktop + core with per-directory coverage
   # thresholds. Runs in parallel with `verify`.
@@ -356,13 +351,9 @@ jobs:
         working-directory: .
         run: cargo audit
 
-      # Reports only. The desktop crate is outside the workspace and keeps its own
-      # lock, which is the one the shipped binary is built from, so it has to be
-      # audited separately — but its tree is mostly Tauri's and the advisories that
-      # land in it are rarely Pikos's to fix. Promoting it means deciding what to
-      # accept from a dependency nobody here controls.
+      # The desktop crate is outside the workspace and keeps its own lock, the one the
+      # shipped binary is built from, with its own accepted list beside it.
       - name: Cargo audit (desktop)
-        continue-on-error: true
         run: cargo audit
 
   # packages/core/src/generated mirrors pikos-db's wire structs and is committed, so

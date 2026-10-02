@@ -1,0 +1,22 @@
+# What `cargo audit` may stay quiet about in the desktop lock, which is the one the shipped
+# app is built from. The rules for an entry are the workspace's `.cargo/audit.toml`; the
+# reachability test here takes the shipped targets:
+#
+#   cargo tree -i <crate> -e normal,build --target aarch64-apple-darwin   (and x86_64-unknown-linux-gnu)
+
+[advisories]
+ignore = [
+    # quick-xml 0.37 and 0.39: duplicate-attribute scan is quadratic, and NsReader allocates
+    # per namespace declaration. 0.37 comes only through tauri-winrt-notification, which no
+    # shipped target compiles. 0.39 is in the macOS binary through Tauri's plist, which reads
+    # only the app's own signed Info.plist, so no outside XML reaches it. The sync path's
+    # parser is our own dependency, at 0.41. Verified 2026-10-01.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+
+    # quinn-proto, rkyv, rsa: in the lockfile, compiled into no shipped target. Verified
+    # 2026-10-01.
+    "RUSTSEC-2026-0185",
+    "RUSTSEC-2026-0235",
+    "RUSTSEC-2023-0071",
+]
