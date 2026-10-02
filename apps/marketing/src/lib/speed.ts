@@ -1,5 +1,5 @@
-/** Milliseconds: the median run, the 95th percentile, and the slowest run. */
-export type Op = { ms: number; p95: number; max: number };
+/** Milliseconds: the median run, the time 99 in 100 runs beat, and the slowest; then how many runs. */
+export type Op = { ms: number; p99: number; max: number; runs: number };
 /** `seeded` is the size the workspace was built at; `pages` is what it held when timed. */
 export type Corpus = { seeded: number; pages: number; ops: Record<string, Op> };
 export type Row = { op: string; label: string; flat: boolean };

@@ -27,7 +27,7 @@ function arg(name, fallback) {
 
 const pikos = arg("--pikos", join(ROOT, "target/release/pikos"));
 const dir = arg("--dir", join(tmpdir(), "pikos-bench"));
-const runs = Number(arg("--runs", "20"));
+const runs = Number(arg("--runs", "200"));
 mkdirSync(dir, { recursive: true });
 
 const run = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 1 << 26 });
@@ -78,7 +78,7 @@ for (const [i, pages] of SIZES.entries()) {
     seeded: pages,
     pages: bench.pages,
     ops: Object.fromEntries(
-      bench.timings.map((t) => [t.op, { ms: t.ms, p95: t.p95_ms, max: t.max_ms }])
+      bench.timings.map((t) => [t.op, { ms: t.ms, p99: t.p99_ms, max: t.max_ms, runs: t.runs }])
     ),
   });
 }
