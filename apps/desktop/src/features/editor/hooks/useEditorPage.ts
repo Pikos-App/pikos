@@ -1,5 +1,5 @@
-// Debounces rapid activePageId changes (e.g. holding arrow key) to avoid
-// loading every intermediate page.
+// Loads the active page at once, but holds off while activePageId keeps changing (holding an arrow
+// key through a list) so only the page the burst stops on is fetched.
 
 import type { Page } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
@@ -8,7 +8,8 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-const DEBOUNCE_MS = 80;
+/** A change this soon after the last one is part of a burst, and waits for the burst to end. */
+const BURST_MS = 80;
 
 interface EditorPageState {
   /** Full page with content, or null if no page selected / still loading. */
@@ -25,6 +26,7 @@ export function useEditorPage(): EditorPageState {
 
   // Track the ID we're currently loading to avoid race conditions
   const loadingIdRef = useRef<string | null>(null);
+  const lastChangeAtRef = useRef(Number.NEGATIVE_INFINITY);
 
   useEffect(() => {
     if (activePageId === null) {
@@ -33,18 +35,25 @@ export function useEditorPage(): EditorPageState {
     }
 
     loadingIdRef.current = activePageId;
+    const now = performance.now();
+    const inBurst = now - lastChangeAtRef.current < BURST_MS;
+    lastChangeAtRef.current = now;
 
-    const timer = setTimeout(() => {
-      if (loadingIdRef.current !== activePageId) return;
-
-      void getPage(activePageId).then((loaded) => {
+    function load(id: string) {
+      if (loadingIdRef.current !== id) return;
+      void getPage(id).then((loaded) => {
         // Only apply if this is still the page we want
-        if (loadingIdRef.current === activePageId) {
+        if (loadingIdRef.current === id) {
           setLoadedPage(loaded);
         }
       });
-    }, DEBOUNCE_MS);
+    }
 
+    if (!inBurst) {
+      load(activePageId);
+      return;
+    }
+    const timer = setTimeout(() => load(activePageId), BURST_MS);
     return () => clearTimeout(timer);
   }, [activePageId]);
 
