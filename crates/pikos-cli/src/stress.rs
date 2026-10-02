@@ -199,26 +199,36 @@ pub async fn seed(
 /// is the adjective this whole exercise exists to replace.
 struct Timing {
     name: &'static str,
-    millis: f64,
+    /// Every measured run, in milliseconds, sorted.
+    samples: Vec<f64>,
 }
 
-async fn time_it<F, Fut, T>(name: &'static str, f: F) -> Result<Timing, CliError>
+impl Timing {
+    fn percentile(&self, p: f64) -> f64 {
+        let rank = (p * (self.samples.len() - 1) as f64).round() as usize;
+        self.samples[rank]
+    }
+}
+
+async fn time_it<F, Fut, T>(runs: u32, name: &'static str, f: F) -> Result<Timing, CliError>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, CliError>>,
 {
-    // Once to warm the page cache, then the measured run, so the number is steady-state rather
+    // Once to warm the page cache, then the measured runs, so the number is steady-state rather
     // than whatever the filesystem happened to be doing.
     let _ = f().await?;
-    let start = Instant::now();
-    f().await?;
-    Ok(Timing {
-        name,
-        millis: start.elapsed().as_secs_f64() * 1000.0,
-    })
+    let mut samples = Vec::with_capacity(runs as usize);
+    for _ in 0..runs {
+        let start = Instant::now();
+        f().await?;
+        samples.push(start.elapsed().as_secs_f64() * 1000.0);
+    }
+    samples.sort_by(f64::total_cmp);
+    Ok(Timing { name, samples })
 }
 
-pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
+pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), CliError> {
     let path = require_scratch_db(db)?;
 
     let open_start = Instant::now();
@@ -237,13 +247,14 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
         .await
         .map_err(|e| classify(e.into()))?;
 
+    // Opening happens once per process, so it has one sample whatever `runs` says.
     let mut timings = vec![Timing {
         name: "open workspace",
-        millis: open_ms,
+        samples: vec![open_ms],
     }];
 
     timings.push(
-        time_it("create page", || async {
+        time_it(runs, "create page", || async {
             let mut page = base_page(None, "benchmark page".to_string());
             page.content = "benchmark body".to_string();
             create_page_impl(&pool, page).await.map_err(classify)
@@ -251,13 +262,13 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
         .await?,
     );
     timings.push(
-        time_it("read page", || async {
+        time_it(runs, "read page", || async {
             get_page(&pool, &sample_id).await.map_err(classify)
         })
         .await?,
     );
     timings.push(
-        time_it("update page", || async {
+        time_it(runs, "update page", || async {
             update_page_impl(
                 &pool,
                 sample_id.clone(),
@@ -287,7 +298,7 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
             _ => "read huge page",
         };
         timings.push(
-            time_it(name, || async {
+            time_it(runs, name, || async {
                 get_page(&pool, &id).await.map_err(classify)
             })
             .await?,
@@ -299,7 +310,7 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
             _ => "save huge page",
         };
         timings.push(
-            time_it(name, || async {
+            time_it(runs, name, || async {
                 update_page_impl(
                     &pool,
                     id.clone(),
@@ -316,7 +327,7 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
     }
 
     timings.push(
-        time_it("list 50 pages", || async {
+        time_it(runs, "list 50 pages", || async {
             list_pages(
                 &pool,
                 ListQuery {
@@ -329,7 +340,7 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
         .await?,
     );
     timings.push(
-        time_it("load open pages (app)", || async {
+        time_it(runs, "load open pages (app)", || async {
             list_pages_impl(
                 &pool,
                 Some(PageFilter {
@@ -343,25 +354,25 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
         .await?,
     );
     timings.push(
-        time_it("search one word", || async {
+        time_it(runs, "search one word", || async {
             search(&pool, "quarterly", false, Some(50), DEFAULT_SEARCH_SCAN).await
         })
         .await?,
     );
     timings.push(
-        time_it("search one word, exact", || async {
+        time_it(runs, "search one word, exact", || async {
             search(&pool, "quarterly", false, Some(50), SearchScan::All).await
         })
         .await?,
     );
     timings.push(
-        time_it("search a rare word", || async {
+        time_it(runs, "search a rare word", || async {
             search(&pool, RARE_WORD, false, Some(50), DEFAULT_SEARCH_SCAN).await
         })
         .await?,
     );
     timings.push(
-        time_it("search two words", || async {
+        time_it(runs, "search two words", || async {
             search(&pool, "budget review", false, Some(50), DEFAULT_SEARCH_SCAN).await
         })
         .await?,
@@ -370,12 +381,32 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
     if json {
         crate::render::print_json(&json!({
             "pages": total,
-            "timings": timings.iter().map(|t| json!({"op": t.name, "ms": t.millis})).collect::<Vec<_>>(),
+            "runs": runs,
+            "timings": timings.iter().map(|t| json!({
+                "op": t.name,
+                "ms": t.percentile(0.5),
+                "p95_ms": t.percentile(0.95),
+                "min_ms": t.samples[0],
+                "max_ms": t.samples[t.samples.len() - 1],
+                "runs": t.samples.len(),
+            })).collect::<Vec<_>>(),
         }));
     } else {
-        println!("{total} pages in {path}\n");
+        println!("{total} pages in {path}, median of {runs} run(s)\n");
+        if runs > 1 {
+            println!("  {:<24} {:>8} {:>8}", "", "median", "p95");
+        }
         for t in &timings {
-            println!("  {:<22} {:>8.2} ms", t.name, t.millis);
+            if runs > 1 {
+                println!(
+                    "  {:<24} {:>8.2} {:>8.2}",
+                    t.name,
+                    t.percentile(0.5),
+                    t.percentile(0.95)
+                );
+            } else {
+                println!("  {:<24} {:>8.2}", t.name, t.percentile(0.5));
+            }
         }
     }
     Ok(())

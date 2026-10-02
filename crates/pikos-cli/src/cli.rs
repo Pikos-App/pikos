@@ -179,7 +179,15 @@ pub enum StressCommand {
         large_words: usize,
     },
     /// Time the operations that decide whether Pikos feels instant
-    Bench,
+    Bench {
+        #[arg(
+            long,
+            default_value_t = 1,
+            value_parser = clap::value_parser!(u32).range(1..),
+            help = "Times to measure each operation, reporting the median and the 95th percentile"
+        )]
+        runs: u32,
+    },
 }
 
 fn parse_scan(value: &str) -> Result<SearchScan, String> {
