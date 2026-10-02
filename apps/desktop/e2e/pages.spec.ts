@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { test as appTest, createFolder, mod, quickAdd } from "./fixtures";
+import { test as appTest, bridgeCall, createFolder, mod, quickAdd, ringDoorbell } from "./fixtures";
 
 // ─── Open page and edit content ────────────────────────────────────────────
 
@@ -196,3 +196,42 @@ appTest("drag a page above another reorders the page list", async ({ app }) => {
   const formerLastTitle = before[before.length - 1]!.trim().split("\n")[0]!;
   expect(after[0]!.trim().split("\n")[0]).toBe(formerLastTitle);
 });
+
+// ─── Outside changes ────────────────────────────────────────────────────────
+
+appTest(
+  "a page written outside the app shows once the doorbell rings, without a reload",
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "made in the app");
+    await bridgeCall(app, "create_page", {
+      data: {
+        completedAt: null,
+        content: "",
+        contentText: "",
+        folderId: null,
+        lastOpenedAt: null,
+        parentId: null,
+        priority: 0,
+        scheduledEnd: null,
+        scheduledStart: null,
+        status: "not_started",
+        subtitle: null,
+        tags: [],
+        title: "made outside",
+      },
+    });
+    const list = app.locator("[data-page-list-item]");
+    await expect(list.getByText("made in the app")).toBeVisible();
+    await expect(list.getByText("made outside")).toHaveCount(0);
+
+    // The app ignores the bell for 1.5 s after its own last write (`externalChange.ts`), so it
+    // rings until the change lands; the change counter in the large-workspace rebuild ends that.
+    await expect
+      .poll(async () => {
+        await ringDoorbell(app);
+        return list.getByText("made outside").count();
+      })
+      .toBe(1);
+  }
+);

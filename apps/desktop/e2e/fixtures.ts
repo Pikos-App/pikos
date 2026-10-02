@@ -139,6 +139,19 @@ export async function bridgeCall<T>(
   return payload.value as T;
 }
 
+/** Ring the bell sync and the CLI ring after writing the database, as Rust would. The test
+ *  build listens on an in-page emitter for it (`appEvents.ts`). */
+export async function ringDoorbell(
+  page: Page,
+  event: "calendar-sync:applied" | "workspace:external-change" = "workspace:external-change"
+) {
+  await page.evaluate((name) => {
+    (globalThis as unknown as { __PIKOS_E2E_EMIT__: (event: string) => void }).__PIKOS_E2E_EMIT__(
+      name
+    );
+  }, event);
+}
+
 /** Wipe + load the synced-calendar seed via the Developer settings tab. */
 export async function seedSynced(page: Page) {
   await page.getByRole("button", { name: "Open settings" }).click();
