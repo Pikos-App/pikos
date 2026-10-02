@@ -194,6 +194,7 @@ const TODOIST_ID_HEADERS = ["taskId", "parentId"];
 function preprocessTodoistRows(rows: Record<string, string>[]): Record<string, string>[] {
   const result: Record<string, string>[] = [];
   // The last task seen at each indent level, so a deeper row finds its parent.
+  // Stryker disable next-line ArrayDeclaration: the first row truncates the list before reading it
   const openAtLevel: string[] = [];
 
   for (const row of rows) {
@@ -212,8 +213,10 @@ function preprocessTodoistRows(rows: Record<string, string>[]): Record<string, s
       continue;
     }
 
-    const level = Math.max(1, Number.parseInt(row["INDENT"] ?? "", 10) || 1);
+    const level = Math.max(1, Number(row["INDENT"]) || 1);
+    // Stryker disable next-line ArithmeticOperator: the ids only need to be distinct
     const taskId = `todoist-${result.length + 1}`;
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: a top-level row looks up index -1 and finds no parent either way
     const parentId = level > 1 ? (openAtLevel[level - 2] ?? "") : "";
     openAtLevel.length = level - 1;
     openAtLevel.push(taskId);

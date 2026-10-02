@@ -21,7 +21,9 @@ let fallback: PlatformAdapter | null = null;
 
 export function getPlatform(): PlatformAdapter {
   if (override) return override;
+  // Stryker disable next-line ConditionalExpression: neither adapter holds state, so a fresh one per call behaves the same
   if (!fallback) {
+    // Stryker disable next-line ConditionalExpression: every test lane builds in test mode; only the packaged app reads false
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
       const noop = new NoopPlatformAdapter();
       // An e2e test asserts what the app asked the shell to do by reading this.

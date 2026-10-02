@@ -56,16 +56,23 @@ async function chooseIn(app: Page, setting: string, option: string) {
 
 /** A picker setting: open it by its "Name: value" trigger and pick an option. */
 async function pickIn(app: Page, setting: string, option: string) {
-  await settingsOf(app).getByRole("button", { name: new RegExp(`^${setting}:`) }).click();
+  await settingsOf(app)
+    .getByRole("button", { name: new RegExp(`^${setting}:`) })
+    .click();
   await app.getByRole("button", { exact: true, name: option }).click();
-  await expect(settingsOf(app).getByRole("button", { name: `${setting}: ${option}` })).toBeVisible();
+  await expect(
+    settingsOf(app).getByRole("button", { name: `${setting}: ${option}` })
+  ).toBeVisible();
 }
 
 appTest(
   "every preference applies at once and survives a relaunch",
   { tag: ["@SET-02"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "SET-02 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "SET-02 reloads, and the mock keeps nothing across a reload"
+    );
     await createFolder(app, "Errands");
     await quickAdd(app, "reading list");
     const editor = await openEditorForPage(app, "reading list");
@@ -82,7 +89,10 @@ appTest(
       columns: async () => {
         await openCalendarMode(app);
         const cells = calendar.getByLabel(/^All-day events,/);
-        const out = { count: await cells.count(), first: (await cells.first().getAttribute("aria-label")) ?? "" };
+        const out = {
+          count: await cells.count(),
+          first: (await cells.first().getAttribute("aria-label")) ?? "",
+        };
         await app.getByRole("button", { name: "Editor view" }).click();
         return out;
       },
@@ -96,7 +106,9 @@ appTest(
       },
       rowHeight: async () => (await row.boundingBox())?.height ?? 0,
       textScale: () =>
-        app.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ui-text-scale").trim()),
+        app.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--ui-text-scale").trim()
+        ),
     };
     const before = {
       calendarLabelSize: await measure.calendarLabelSize(),
@@ -129,15 +141,20 @@ appTest(
       await chooseIn(app, "Editor line width", "Narrow");
     });
 
-    await appTest.step("SET-02 calendar text size, density, days and week start apply", async () => {
-      await pickIn(app, "Calendar text size", "16");
-      await chooseIn(app, "Calendar density", "Spacious");
-      await chooseIn(app, "Calendar days shown", "3");
-      await chooseIn(app, "Week starts on", "Sunday");
-    });
+    await appTest.step(
+      "SET-02 calendar text size, density, days and week start apply",
+      async () => {
+        await pickIn(app, "Calendar text size", "16");
+        await chooseIn(app, "Calendar density", "Spacious");
+        await chooseIn(app, "Calendar days shown", "3");
+        await chooseIn(app, "Week starts on", "Sunday");
+      }
+    );
 
     await appTest.step("SET-02 default folder applies", async () => {
-      await settingsOf(app).getByRole("button", { name: /^Default folder for new pages:/ }).click();
+      await settingsOf(app)
+        .getByRole("button", { name: /^Default folder for new pages:/ })
+        .click();
       await app.getByPlaceholder("Search folders…").fill("Errands");
       await app
         .getByRole("dialog")
@@ -172,7 +189,9 @@ appTest(
         .getByRole("group", { name: "Views and folders" })
         .getByRole("button", { exact: true, name: "Errands" })
         .click();
-      await expect(app.locator("[data-page-list-item]").filter({ hasText: "sort the post" })).toBeVisible();
+      await expect(
+        app.locator("[data-page-list-item]").filter({ hasText: "sort the post" })
+      ).toBeVisible();
     });
 
     await appTest.step("SET-02 each survives a relaunch", async () => {
@@ -193,9 +212,15 @@ appTest(
       await expect(
         settingsOf(app).getByRole("button", { name: "Default folder for new pages: Errands" })
       ).toBeVisible();
-      await expect(
-        settingsOf(app).getByRole("group", { name: "Week starts on" }).getByRole("button", { name: "Sunday" })
-      ).toHaveAttribute("aria-pressed", "true");
+      const weekStart = settingsOf(app).getByRole("group", { name: "Week starts on" });
+      await expect(weekStart.getByRole("button", { name: "Sunday" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      );
+      await expect(weekStart.getByRole("button", { name: "Monday" })).toHaveAttribute(
+        "aria-pressed",
+        "false"
+      );
     });
   }
 );
@@ -213,10 +238,27 @@ appTest(
       }
     });
 
+    await appTest.step("SET-06 the palette's own keys are listed under Navigation", async () => {
+      const navigation = settings.getByRole("list", { name: "Navigation" });
+      for (const label of ["Search pages", "Run a command"]) {
+        await expect(navigation.getByText(label, { exact: true })).toBeVisible();
+      }
+    });
+
+    await appTest.step("SET-06 the calendar's keys are listed under Calendar", async () => {
+      const calendar = settings.getByRole("list", { name: "Calendar" });
+      for (const label of ["Previous week", "Next week", "Jump to today", "Switch to month view"]) {
+        await expect(calendar.getByText(label, { exact: true })).toBeVisible();
+      }
+    });
+
     await appTest.step("SET-06 no key is bound to two things", async () => {
       const byCombo = new Map<string, string[]>();
       for (const item of await settings.getByRole("listitem").all()) {
-        const [label, ...keys] = (await item.innerText()).split("\n").map((t) => t.trim()).filter(Boolean);
+        const [label, ...keys] = (await item.innerText())
+          .split("\n")
+          .map((t) => t.trim())
+          .filter(Boolean);
         const combo = keys.join("+");
         byCombo.set(combo, [...(byCombo.get(combo) ?? []), label!]);
       }
@@ -248,30 +290,32 @@ appTest(
 
 // SET-10 stays manual: Help → Report a Bug builds its URL in the native menu, which the lane
 // can't reach. This covers the Settings half, untagged because it can't claim the row.
-appTest("Copy email copies the address, and Report opens the bug page with version info", async ({ app, context }) => {
-  await context.grantPermissions(["clipboard-read"]);
-  const settings = await openSettings(app);
+appTest(
+  "Copy email copies the address, and Report opens the bug page with version info",
+  async ({ app, context }) => {
+    await context.grantPermissions(["clipboard-read"]);
+    const settings = await openSettings(app);
 
-  await appTest.step("Copy email puts the address on the clipboard and says Copied", async () => {
-    await settings.getByRole("button", { name: "Copy email" }).click();
-    await expect(settings.getByRole("button", { name: "Copied" })).toBeVisible();
-    expect(await app.evaluate(() => navigator.clipboard.readText())).toBe("hello@pikos.app");
-  });
+    await appTest.step("Copy email puts the address on the clipboard and says Copied", async () => {
+      await settings.getByRole("button", { name: "Copy email" }).click();
+      await expect(settings.getByRole("button", { name: "Copied" })).toBeVisible();
+      expect(await app.evaluate(() => navigator.clipboard.readText())).toBe("hello@pikos.app");
+    });
 
-  await appTest.step("Report opens pikos.app/bugs with os and version", async () => {
-    await settings.getByRole("button", { exact: true, name: "Report" }).click();
-    const opened = await app.evaluate(() =>
-      (
-        (window as unknown as { __PIKOS_PLATFORM_CALLS__: { args: unknown[]; method: string }[] })
-          .__PIKOS_PLATFORM_CALLS__
-      )
-        .filter((c) => c.method === "openExternal")
-        .map((c) => String(c.args[0]))
-    );
-    expect(opened).toHaveLength(1);
-    expect(opened[0]).toMatch(/^https:\/\/pikos\.app\/bugs\?os=\w+&version=\d+\.\d+\.\d+/);
-  });
-});
+    await appTest.step("Report opens pikos.app/bugs with os and version", async () => {
+      await settings.getByRole("button", { exact: true, name: "Report" }).click();
+      const opened = await app.evaluate(() =>
+        (
+          window as unknown as { __PIKOS_PLATFORM_CALLS__: { args: unknown[]; method: string }[] }
+        ).__PIKOS_PLATFORM_CALLS__
+          .filter((c) => c.method === "openExternal")
+          .map((c) => String(c.args[0]))
+      );
+      expect(opened).toHaveLength(1);
+      expect(opened[0]).toMatch(/^https:\/\/pikos\.app\/bugs\?os=\w+&version=\d+\.\d+\.\d+/);
+    });
+  }
+);
 
 appTest(
   "the Data panel counts this workspace and lights only the features in use",
@@ -283,7 +327,15 @@ appTest(
 
     await appTest.step("SET-11 an empty workspace lights nothing", async () => {
       await openSettings(app, "Data");
-      for (const feature of ["Notes", "Tasks", "Scheduling", "Priorities", "Tags", "Recurring", "Focus"]) {
+      for (const feature of [
+        "Notes",
+        "Tasks",
+        "Scheduling",
+        "Priorities",
+        "Tags",
+        "Recurring",
+        "Focus",
+      ]) {
         await expect(chip(feature, "not used")).toBeVisible();
       }
       await app.keyboard.press("Escape");
@@ -300,15 +352,18 @@ appTest(
     await expect(taxes).toHaveCount(0);
     await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
 
-    await appTest.step("SET-11 the figures read right, counting pages not schedule rows", async () => {
-      await openSettings(app, "Data");
-      await expect(card("Pages")).toContainText("3");
-      await expect(card("Words")).toContainText("3");
-      await expect(card("Completed")).toContainText("1");
-      await expect(card("Folders")).toContainText("1");
-      await expect(card("Scheduled")).toContainText("2");
-      await expect(card("Focus time")).toContainText(/^Focus time\s*0/);
-    });
+    await appTest.step(
+      "SET-11 the figures read right, counting pages not schedule rows",
+      async () => {
+        await openSettings(app, "Data");
+        await expect(card("Pages")).toContainText("3");
+        await expect(card("Words")).toContainText("3");
+        await expect(card("Completed")).toContainText("1");
+        await expect(card("Folders")).toContainText("1");
+        await expect(card("Scheduled")).toContainText("2");
+        await expect(card("Focus time")).toContainText(/^Focus time\s*0/);
+      }
+    );
 
     await appTest.step("SET-11 the chips light for what is in use and no more", async () => {
       for (const feature of ["Notes", "Tasks", "Scheduling", "Priorities", "Tags", "Recurring"]) {

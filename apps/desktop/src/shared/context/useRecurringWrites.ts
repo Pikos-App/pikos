@@ -83,7 +83,8 @@ export interface RecurringWrites {
  *  tick) can land it first. Appending blind listed the page twice. */
 function upsertPage(pages: PageSummary[], page: PageSummary): PageSummary[] {
   return pages.some((p) => p.id === page.id)
-    ? pages.map((p) => (p.id === page.id ? page : p))
+    ? // Stryker disable next-line ConditionalExpression: the copy already listed is the same page
+      pages.map((p) => (p.id === page.id ? page : p))
     : [...pages, page];
 }
 
@@ -141,9 +142,11 @@ export function useRecurringWrites({
   }
 
   async function deleteRecurrence(ruleId: string): Promise<void> {
+    // Stryker disable next-line OptionalChaining: a rule is only deleted from the state that lists it
     const pageId = recurrenceRulesRef.current.find((r) => r.id === ruleId)?.pageId;
     await adapter.deleteRecurrenceRule(ruleId);
     setRecurrenceRules((prev) => prev.filter((r) => r.id !== ruleId));
+    // Stryker disable next-line ConditionalExpression: marking no page is a no-op
     if (pageId) markRecurring(pageId, false);
   }
 

@@ -206,6 +206,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
   // only open, undeleted pages, so a missing id covers every reason not to restore.
   const [checkedWorkspaceId, setCheckedWorkspaceId] = useState<string | null>(null);
   if (workspace && workspace.id !== checkedWorkspaceId) {
+    // Stryker disable next-line CallExpression: checking again on every render reaches the same state
     setCheckedWorkspaceId(workspace.id);
     if (!isSmartViewId(activeViewId) && !folders.some((f) => f.id === activeViewId)) {
       setActiveViewId("inbox");

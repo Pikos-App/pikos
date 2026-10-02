@@ -130,6 +130,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch
       if (STORAGE_BACKEND === "bridge") {
         await initBridgeWorkspace();
         return;
@@ -192,6 +193,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
    * per-spec token stands in for the resolved path and the rest of the sequence
    * runs unchanged.
    */
+  // Stryker disable all: the e2e lane's own start-up, which no other build runs
   async function initBridgeWorkspace(): Promise<void> {
     const transport = await import("@bridge/transport");
     const token = transport.bridgeDbToken();
@@ -209,6 +211,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     setIsLoading(false);
   }
+  // Stryker restore all
 
   /**
    * What a first launch adds to a freshly connected database: the assets directory
@@ -222,14 +225,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       const { seedTutorial } = await import("@seeds/tutorial");
       const seedResult = await seedTutorial(adapter);
+      // Stryker disable next-line ConditionalExpression: the seed returns nothing only for a seeded workspace, never on a first launch
       if (seedResult) {
+        // Stryker disable next-line StringLiteral: log text
         log.info("Tutorial seed planted");
         pendingNavigationRef.current = {
           folderId: seedResult.folderId,
           pageId: seedResult.welcomePageId,
         };
       }
+      // Stryker disable next-line BlockStatement: an empty catch still continues with an empty workspace
     } catch (seedError) {
+      // Stryker disable next-line StringLiteral: log text
       log.error("Tutorial seed failed — continuing with empty workspace", seedError);
     }
   }

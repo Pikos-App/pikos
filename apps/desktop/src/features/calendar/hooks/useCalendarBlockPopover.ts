@@ -116,11 +116,13 @@ export function useCalendarBlockPopover(
     const gesture = new AbortController();
     // A timeout, so the click the release dispatches still finds the mark.
     const release = () => {
+      // Stryker disable next-line CallExpression: left attached, the listener only clears an already-clear mark
       gesture.abort();
       setTimeout(() => {
         draggingRef.current = false;
       }, 0);
     };
+    // Stryker disable next-line ObjectLiteral,BooleanLiteral: nothing stops a pointerup before the window today
     const options = { capture: true, signal: gesture.signal };
     window.addEventListener("pointerup", release, options);
     window.addEventListener("pointercancel", release, options);

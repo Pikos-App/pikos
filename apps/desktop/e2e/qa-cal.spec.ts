@@ -6,6 +6,7 @@ import {
   expect,
   gutterLabel,
   hourLineY,
+  mod,
   openCalendarMode,
   quickAdd,
   WRITE_QUEUE_DEBOUNCE_MS,
@@ -96,7 +97,8 @@ appTest(
     await openCalendarMode(app);
 
     await appTest.step("CAL-02 a drag from 9 to 11 AM creates a 9 to 11 page", async () => {
-      await gutterLabel(app, 11).scrollIntoViewIfNeeded();
+      // The grid opens scrolled to now, so after midday 9 AM starts above the view.
+      await gutterLabel(app, 9).scrollIntoViewIfNeeded();
       const x = await centerX(allDayCells(app).last());
       await drag(
         app,
@@ -104,7 +106,9 @@ appTest(
         { x, y: (await hourLineY(app, 11)) + INTO_THE_HOUR }
       );
       await nameTitle(app, "Deep work");
-      await expect(calendarOf(app).getByRole("button", { name: /^Deep work, 9–11/ })).toHaveCount(1);
+      await expect(calendarOf(app).getByRole("button", { name: /^Deep work, 9–11/ })).toHaveCount(
+        1
+      );
     });
   }
 );
@@ -167,7 +171,10 @@ appTest(
   "a timed block resizes and takes an inline title edit, and both stick",
   { tag: ["@CAL-06"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "CAL-06 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "CAL-06 reloads, and the mock keeps nothing across a reload"
+    );
     await openCalendarMode(app);
     const calendar = calendarOf(app);
 
@@ -197,14 +204,18 @@ appTest(
       await expect(titleInput).toHaveValue("Review");
       await titleInput.fill("Design review");
       await app.keyboard.press("Enter");
-      await expect(calendar.getByRole("button", { name: /^Design review, 2–4 PM$/ })).toHaveCount(1);
+      await expect(calendar.getByRole("button", { name: /^Design review, 2–4 PM$/ })).toHaveCount(
+        1
+      );
     });
 
     await appTest.step("CAL-06 after a relaunch both the length and the title stick", async () => {
       await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
       await app.reload();
       await openCalendarMode(app);
-      await expect(calendar.getByRole("button", { name: /^Design review, 2–4 PM$/ })).toHaveCount(1);
+      await expect(calendar.getByRole("button", { name: /^Design review, 2–4 PM$/ })).toHaveCount(
+        1
+      );
     });
   }
 );
@@ -259,13 +270,19 @@ appTest(
       await expect(calendarOf(app).getByRole("button", { name: /^Echo sync, / })).toHaveCount(1);
     });
 
-    await appTest.step("CAL-09 the toolbar opens month view and a day returns to the grid", async () => {
-      await app.getByRole("button", { name: "Month view" }).click();
-      await expect(month).toBeVisible();
-      await month.getByRole("button", { name: /^Go to / }).first().click();
-      await expect(calendarOf(app)).toBeVisible();
-      await expect(month).toHaveCount(0);
-    });
+    await appTest.step(
+      "CAL-09 the toolbar opens month view and a day returns to the grid",
+      async () => {
+        await app.getByRole("button", { name: "Month view" }).click();
+        await expect(month).toBeVisible();
+        await month
+          .getByRole("button", { name: /^Go to / })
+          .first()
+          .click();
+        await expect(calendarOf(app)).toBeVisible();
+        await expect(month).toHaveCount(0);
+      }
+    );
 
     await appTest.step("CAL-09 month view never widens the window", async () => {
       await app.getByRole("button", { name: "Month view" }).click();
@@ -314,7 +331,10 @@ appTest(
       );
       await nameTitle(app, "Early bird");
       await collapseTop.click();
-      await calendar.getByRole("button", { name: /^\d+ more events?$/ }).first().click();
+      await calendar
+        .getByRole("button", { name: /^\d+ more events?$/ })
+        .first()
+        .click();
       await expect(app.getByRole("button", { name: /^Early bird/ }).first()).toBeVisible();
       await app.keyboard.press("Escape");
     });
@@ -413,10 +433,28 @@ appTest(
       await app.keyboard.press("ArrowLeft");
       await app.keyboard.press("t");
       await expect(heading).toHaveText(monthLater(0));
+
+      await app.keyboard.press(mod("Mod+Shift+K"));
+      const palette = app.getByRole("dialog", { name: "Search pages" });
+      for (const label of ["Previous month", "Next month", "Switch to time grid"]) {
+        await expect(palette.getByRole("button", { name: new RegExp(`^${label}`) })).toBeVisible();
+      }
+      await app.keyboard.press("Escape");
+      await expect(palette).not.toBeVisible();
     });
 
     await appTest.step("CAL-12 m returns to the week grid", async () => {
       await app.keyboard.press("m");
+      await expect(calendarOf(app)).toBeVisible();
+      await expect.poll(() => firstDay(app)).toBe(today);
+    });
+
+    await appTest.step("CAL-12 the keys leave a hidden calendar alone", async () => {
+      await app.getByRole("button", { name: "Editor view" }).click();
+      await app.getByText("Folders", { exact: true }).click();
+      await app.keyboard.press("ArrowRight");
+      await app.keyboard.press("m");
+      await app.getByRole("button", { name: "Calendar view" }).click();
       await expect(calendarOf(app)).toBeVisible();
       await expect.poll(() => firstDay(app)).toBe(today);
     });
@@ -441,18 +479,24 @@ appTest(
     await app.keyboard.press("Escape");
     await app.keyboard.press("Escape");
 
-    await appTest.step("CAL-13 this week's chip has no handle on the side that continues", async () => {
-      await expect(startHandle).toHaveCount(1);
-      await expect(endHandle).toHaveCount(0);
-    });
+    await appTest.step(
+      "CAL-13 this week's chip has no handle on the side that continues",
+      async () => {
+        await expect(startHandle).toHaveCount(1);
+        await expect(endHandle).toHaveCount(0);
+      }
+    );
 
-    await appTest.step("CAL-13 next week's continuation carries the title, no handle before it", async () => {
-      // By label: the date picker's own "Next week" preset is still on screen.
-      await app.getByLabel("Next week", { exact: true }).click();
-      await expect(chip).toHaveText(/Conference/);
-      await expect(startHandle).toHaveCount(0);
-      await expect(endHandle).toHaveCount(1);
-    });
+    await appTest.step(
+      "CAL-13 next week's continuation carries the title, no handle before it",
+      async () => {
+        // By label: the date picker's own "Next week" preset is still on screen.
+        await app.getByLabel("Next week", { exact: true }).click();
+        await expect(chip).toHaveText(/Conference/);
+        await expect(startHandle).toHaveCount(0);
+        await expect(endHandle).toHaveCount(1);
+      }
+    );
 
     await appTest.step("CAL-13 the continuation's checkbox completes the page", async () => {
       const titleBox = await chip.getByText("Conference").boundingBox();
@@ -524,13 +568,16 @@ appTest(
       await expect(cells.last()).toHaveAttribute("aria-label", /^All-day events, Friday /);
     });
 
-    await appTest.step("CAL-17 a narrow window shows 3 of M–F, and widening restores it", async () => {
-      await app.setViewportSize({ height: 720, width: 700 });
-      await expect(cells).toHaveCount(3);
-      await app.setViewportSize({ height: 720, width: 1280 });
-      await expect(cells).toHaveCount(5);
-      await expect(cells.first()).toHaveAttribute("aria-label", /^All-day events, Monday /);
-    });
+    await appTest.step(
+      "CAL-17 a narrow window shows 3 of M–F, and widening restores it",
+      async () => {
+        await app.setViewportSize({ height: 720, width: 700 });
+        await expect(cells).toHaveCount(3);
+        await app.setViewportSize({ height: 720, width: 1280 });
+        await expect(cells).toHaveCount(5);
+        await expect(cells.first()).toHaveAttribute("aria-label", /^All-day events, Monday /);
+      }
+    );
 
     await appTest.step("CAL-17 a narrow window shows 3 of 5", async () => {
       await choose(app, "Calendar days shown", "5");
@@ -541,29 +588,25 @@ appTest(
   }
 );
 
-appTest(
-  "calendar density scales the hour rows",
-  { tag: ["@CAL-18"] },
-  async ({ app }) => {
-    // Short enough that no density stretches its hours to fill the grid.
-    await app.setViewportSize({ height: 600, width: 1280 });
-    const hourPitch = async () => (await hourLineY(app, 10)) - (await hourLineY(app, 9));
-    const pitches: number[] = [];
+appTest("calendar density scales the hour rows", { tag: ["@CAL-18"] }, async ({ app }) => {
+  // Short enough that no density stretches its hours to fill the grid.
+  await app.setViewportSize({ height: 600, width: 1280 });
+  const hourPitch = async () => (await hourLineY(app, 10)) - (await hourLineY(app, 9));
+  const pitches: number[] = [];
 
-    for (const density of ["Compact", "Normal", "Spacious"]) {
-      await appTest.step(`CAL-18 ${density} sets its own hour height`, async () => {
-        await choose(app, "Calendar density", density);
-        await openCalendarMode(app);
-        pitches.push(await hourPitch());
-      });
-    }
-
-    await appTest.step("CAL-18 the rows grow from compact to spacious", () => {
-      expect(new Set(pitches).size).toBe(3);
-      expect(pitches).toEqual([...pitches].sort((a, b) => a - b));
+  for (const density of ["Compact", "Normal", "Spacious"]) {
+    await appTest.step(`CAL-18 ${density} sets its own hour height`, async () => {
+      await choose(app, "Calendar density", density);
+      await openCalendarMode(app);
+      pitches.push(await hourPitch());
     });
   }
-);
+
+  await appTest.step("CAL-18 the rows grow from compact to spacious", () => {
+    expect(new Set(pitches).size).toBe(3);
+    expect(pitches).toEqual([...pitches].sort((a, b) => a - b));
+  });
+});
 
 appTest(
   "the calendar's scroll position persists, and starts near the current hour",

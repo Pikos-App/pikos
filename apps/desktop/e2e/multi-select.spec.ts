@@ -13,7 +13,7 @@ async function createPages(app: Page, titles: string[]) {
 
 appTest(
   "multi-select pages with Cmd+Click",
-  { tag: ["@LIST-09:6"] },
+  { tag: ["@LIST-09:8"] },
   async ({ app }) => {
     await createPages(app, ["alpha page", "beta page", "gamma page"]);
 
@@ -41,7 +41,7 @@ appTest(
 
 appTest(
   "multi-select range with Shift+Click",
-  { tag: ["@LIST-09:6"] },
+  { tag: ["@LIST-09:8"] },
   async ({ app }) => {
     await createPages(app, ["range-a", "range-b", "range-c", "range-d"]);
 
@@ -66,7 +66,7 @@ appTest(
 
 appTest(
   "Escape clears multi-selection",
-  { tag: ["@LIST-09:6"] },
+  { tag: ["@LIST-09:8"] },
   async ({ app }) => {
     await createPages(app, ["esc-page-1", "esc-page-2"]);
 
@@ -80,6 +80,43 @@ appTest(
     await expect(page2).toHaveAttribute("data-selected", "true");
 
     await app.keyboard.press("Escape");
+
+    await expect(page1).not.toHaveAttribute("data-selected");
+    await expect(page2).not.toHaveAttribute("data-selected");
+  }
+);
+
+appTest(
+  "Cmd+Click keeps every page it adds selected",
+  { tag: ["@LIST-09:8"] },
+  async ({ app }) => {
+    await createPages(app, ["keep-a", "keep-b", "keep-c"]);
+    const list = app.locator("[data-page-list-item]");
+    const pages = ["keep-a", "keep-b", "keep-c"].map((t) => list.filter({ hasText: t }));
+
+    await pages[0]!.click();
+    await pages[1]!.click({ modifiers: ["Meta"] });
+    await pages[2]!.click({ modifiers: ["Meta"] });
+
+    for (const page of pages) await expect(page).toHaveAttribute("data-selected", "true");
+  }
+);
+
+appTest(
+  "a click outside the list clears a multi-selection",
+  { tag: ["@LIST-09:8"] },
+  async ({ app }) => {
+    await createPages(app, ["out-1", "out-2"]);
+    const list = app.locator("[data-page-list-item]");
+    const page1 = list.filter({ hasText: "out-1" });
+    const page2 = list.filter({ hasText: "out-2" });
+
+    await page1.click();
+    await page2.click({ modifiers: ["Shift"] });
+    await expect(page2).toHaveAttribute("data-selected", "true");
+
+    // Not the editor: focusing it clears a selection on its own.
+    await app.getByText("Folders", { exact: true }).click();
 
     await expect(page1).not.toHaveAttribute("data-selected");
     await expect(page2).not.toHaveAttribute("data-selected");
@@ -103,7 +140,7 @@ appTest("Cmd+A selects all visible pages", async ({ app }) => {
 
 appTest(
   "Cmd+A then Space marks all selected pages as completed",
-  { tag: ["@LIST-09:6"] },
+  { tag: ["@LIST-09:8"] },
   async ({ app }) => {
     const titles = ["space-bulk-1", "space-bulk-2", "space-bulk-3"];
     await createPages(app, titles);
@@ -232,7 +269,7 @@ appTest(
 
 appTest(
   "bulk delete selected pages with Cmd+Backspace",
-  { tag: ["@LIST-09:6"] },
+  { tag: ["@LIST-09:8"] },
   async ({ app }) => {
     await createPages(app, ["del-bulk-1", "del-bulk-2", "del-bulk-3"]);
 
@@ -256,7 +293,7 @@ appTest(
 
 appTest(
   "plain click clears multi-selection",
-  { tag: ["@LIST-09:6"] },
+  { tag: ["@LIST-09:8"] },
   async ({ app }) => {
     await createPages(app, ["clear-sel-1", "clear-sel-2", "clear-sel-3"]);
 

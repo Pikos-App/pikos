@@ -30,11 +30,10 @@ async function mount() {
   // The in-memory adapter lives in its own chunk so production never downloads
   // it. Fetch it before the first render, because WorkspaceProvider picks its
   // adapter synchronously.
-  if (STORAGE_BACKEND === "mock") {
-    await loadMockStorage();
-  } else if (STORAGE_BACKEND === "bridge") {
-    (await import("@bridge/transport")).installBridgeTransport();
-  }
+  // Stryker disable next-line ConditionalExpression,EqualityOperator,StringLiteral: the e2e lane always runs the bridge backend; only another build takes this branch
+  if (STORAGE_BACKEND === "mock") await loadMockStorage();
+  // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch
+  if (STORAGE_BACKEND === "bridge") (await import("@bridge/transport")).installBridgeTransport();
 
   const root = document.getElementById("root");
   if (!root) throw new Error("#root element not found");

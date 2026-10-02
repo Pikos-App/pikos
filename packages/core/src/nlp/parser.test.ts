@@ -1142,6 +1142,12 @@ describe("NL Page Creation Parser", () => {
       },
     ];
     it.each(cases)("$input", runCase);
+
+    it("keeps no end that names only a month, rather than reading it as the 1st", () => {
+      const result = parseInput("trip from March 20 to April", NOW);
+      expect(result.type).toBe("single");
+      expect(result).not.toHaveProperty("input.scheduledEnd");
+    });
   });
 
   // ─── 8. RRULE validation ──────────────────────────────────────────────────

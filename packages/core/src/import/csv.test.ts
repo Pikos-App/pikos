@@ -1306,6 +1306,15 @@ task,Take out the trash,,3,2,,,every Friday,en,,,,,`;
     expect(chores.sourceParentId).toBeFalsy();
   });
 
+  it("imports a task indented two levels below the task above it at the top level", () => {
+    const header = todoistCSV.split("\n")[0]!;
+    const { plan } = runFullPipeline(
+      `${header}\ntask,Plan the trip,,4,1,,,,,,,,,\ntask,Book the ferry,,4,3,,,,,,,,,`
+    );
+    expect(plan.pages.map((p) => p.title)).toEqual(["Plan the trip", "Book the ferry"]);
+    expect(plan.pages[1]!.sourceParentId).toBeFalsy();
+  });
+
   it("maps Todoist priority correctly (1=urgent, 3=medium, 4=none)", () => {
     const { plan } = runFullPipeline(todoistCSV);
     expect(plan.pages[0]!.priority).toBe(1); // Todoist 1 → urgent

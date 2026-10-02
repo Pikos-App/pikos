@@ -93,6 +93,29 @@ describe("importBatch", () => {
     expect(imported?.tags).toEqual(["errands"]);
   });
 
+  it("keeps an imported page's completed and modified times", async () => {
+    const { hook } = await setup();
+
+    let result!: Awaited<ReturnType<typeof hook.result.current.importBatch>>;
+    await act(async () => {
+      result = await hook.result.current.importBatch(
+        batch({
+          pages: [
+            item({
+              completedAt: "2026-01-02T10:00:00.000Z",
+              status: "done",
+              updatedAt: "2026-01-03T11:00:00.000Z",
+            }),
+          ],
+        })
+      );
+    });
+
+    const imported = await hook.result.current.storage!.getPage(result.pageIds[0]!);
+    expect(imported?.completedAt).toBe("2026-01-02T10:00:00.000Z");
+    expect(imported?.updatedAt).toBe("2026-01-03T11:00:00.000Z");
+  });
+
   it("reuses an existing folder by name instead of creating a duplicate", async () => {
     const { hook } = await setup();
     await act(async () => {
