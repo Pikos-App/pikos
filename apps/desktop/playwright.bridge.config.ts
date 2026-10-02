@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 import type { StorageLane } from "./e2e/fixtures";
+import { largeTemplatePath } from "./e2e/largeWorkspace";
 import { MOCK_ONLY, OWN_CONFIG_TAGS } from "./e2e/tags";
 
 // The same spec bodies as the mock lane, against the real Rust writer and a real
@@ -39,7 +40,7 @@ export default defineConfig<{ storage: StorageLane }>({
     {
       // Reused only when E2E_REUSE_BRIDGE is set, by a caller that built and started the
       // bridge itself: a bridge left running from an older build would test old code.
-      command: `TZ=${ZONE} cargo run --manifest-path src-tauri/Cargo.toml --features e2e-bridge --bin pikos-e2e-bridge`,
+      command: `TZ=${ZONE} PIKOS_E2E_LARGE_TEMPLATE=${largeTemplatePath(ZONE)} cargo run --manifest-path src-tauri/Cargo.toml --features e2e-bridge --bin pikos-e2e-bridge`,
       port: BRIDGE_PORT,
       reuseExistingServer: process.env["E2E_REUSE_BRIDGE"] === "1",
       stderr: "pipe",

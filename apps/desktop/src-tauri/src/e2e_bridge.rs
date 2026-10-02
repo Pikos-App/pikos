@@ -286,11 +286,19 @@ impl Bridge {
             })
     }
 
-    /// Open the token's database, creating and migrating it on first use.
+    /// Open the token's database, creating and migrating it on first use. A token ending in
+    /// `__large` starts from a copy of the template `PIKOS_E2E_LARGE_TEMPLATE` names, which the
+    /// tests build once per day (`e2e/largeWorkspace.ts`).
     async fn pool(&self, token: &str) -> AppResult<SqlitePool> {
         let cell = self.cell(token).await?;
         let path = self.workspace_path(token);
         std::fs::create_dir_all(self.dir.join(token))?;
+        if token.ends_with("__large") && !std::path::Path::new(&path).exists() {
+            let template = std::env::var("PIKOS_E2E_LARGE_TEMPLATE").map_err(|_| {
+                AppError::Internal("a __large token needs PIKOS_E2E_LARGE_TEMPLATE".into())
+            })?;
+            std::fs::copy(&template, &path)?;
+        }
         cell.get_or_try_init(|| db::open_pool(&path)).await.cloned()
     }
 

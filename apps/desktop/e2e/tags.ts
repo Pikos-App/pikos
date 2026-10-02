@@ -5,3 +5,7 @@ export const OWN_CONFIG_TAGS = /@perf|@csp-prod|@recording|@tour/;
 /** Tests that can't run against the real writer: they fake the clock, set a zone
  *  of their own, or connect an account. Everything else runs there. */
 export const MOCK_ONLY = /@mock-only/;
+
+/** Tests that need the real writer's data itself, such as a 20,000-page workspace copied from
+ *  a template. The mock lane leaves them out. */
+export const REAL_WRITER_ONLY = /@large/;

@@ -2,6 +2,7 @@ import { test as base, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { BRIDGE_ORIGIN } from "../bridge/origin";
+import { ensureLargeTemplate, LARGE_TOKEN_SUFFIX } from "./largeWorkspace";
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 
@@ -16,22 +17,42 @@ export type StorageLane = "bridge" | "mock";
 /** Tells one run's databases from the last, since a local bridge can outlive a run. */
 const RUN = Date.now().toString(36);
 
-export const test = base.extend<{ app: Page; firstRun: boolean; storage: StorageLane }>({
-  app: async ({ page }, use) => {
+/** What a test's workspace starts with. `large` is a 20,000-page copy of a prebuilt template
+ *  (see `largeWorkspace.ts`), real writer only. */
+export type StartingWorkspace = "empty" | "large";
+
+export const test = base.extend<{
+  app: Page;
+  firstRun: boolean;
+  storage: StorageLane;
+  workspace: StartingWorkspace;
+}>({
+  app: async ({ page, workspace }, use) => {
     await page.goto("/");
-    // Workspace auto-creates on first launch — wait for it to be ready
-    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+    // Workspace auto-creates on first launch — wait for it to be ready. A large one loads every
+    // open page first until the views-on-demand rebuild lands, which takes seconds over the bridge.
+    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible(
+      workspace === "large" ? { timeout: 120_000 } : {}
+    );
     await use(page);
   },
   // On the context rather than in `app`, so specs that navigate the raw `page`
   // themselves get the token too, and a reload keeps it.
-  context: async ({ context, firstRun, storage }, use, testInfo) => {
+  context: async ({ context, firstRun, storage, workspace }, use, testInfo) => {
+    if (workspace === "large" && storage !== "bridge") {
+      throw new Error("A large workspace needs the real writer; tag the test @large");
+    }
     if (storage === "bridge") {
-      const token = `${RUN}-${testInfo.testId}-${testInfo.retry}`;
+      let token = `${RUN}-${testInfo.testId}-${testInfo.retry}`;
+      if (workspace === "large") {
+        ensureLargeTemplate(String(testInfo.project.use.timezoneId));
+        token += LARGE_TOKEN_SUFFIX;
+      }
       await context.addInitScript({
         content: `window.__PIKOS_E2E_DB__ = ${JSON.stringify(token)};`,
       });
-      if (firstRun) await context.addInitScript({ content: "window.__PIKOS_E2E_FIRST_RUN__ = true;" });
+      if (firstRun)
+        await context.addInitScript({ content: "window.__PIKOS_E2E_FIRST_RUN__ = true;" });
     }
     await use(context);
   },
@@ -57,6 +78,7 @@ export const test = base.extend<{ app: Page; firstRun: boolean; storage: Storage
     await use(page);
   },
   storage: ["mock", { option: true }],
+  workspace: ["empty", { option: true }],
 });
 
 /** Press a shortcut like "Mod+n", replacing Mod with the platform modifier. */

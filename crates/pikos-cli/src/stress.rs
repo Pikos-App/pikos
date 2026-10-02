@@ -308,6 +308,9 @@ pub async fn seed(
         create_page_impl(&pool, page).await.map_err(classify)?;
     }
 
+    // Closing the last connection checkpoints the write-ahead log into the file and removes it, so
+    // the seeded file is complete on its own and can be copied as a template.
+    pool.close().await;
     let elapsed = started.elapsed();
     if json {
         crate::render::print_json(&json!({

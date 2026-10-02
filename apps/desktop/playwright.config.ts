@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { OWN_CONFIG_TAGS } from "./e2e/tags";
+import { OWN_CONFIG_TAGS, REAL_WRITER_ONLY } from "./e2e/tags";
 
 const E2E_PORT = 1421;
 
@@ -12,7 +12,7 @@ export default defineConfig({
   fullyParallel: true,
   projects: [
     {
-      grepInvert: OWN_CONFIG_TAGS,
+      grepInvert: new RegExp(`${OWN_CONFIG_TAGS.source}|${REAL_WRITER_ONLY.source}`),
       name: "e2e",
       use: { ...devices["Desktop Safari"] },
     },
@@ -25,9 +25,7 @@ export default defineConfig({
   // In CI the suite is sharded across a matrix; each shard emits a blob report
   // that the `e2e-report` job merges into one HTML report. Locally, write HTML
   // directly.
-  reporter: process.env["CI"]
-    ? [["list"], ["blob"]]
-    : [["list"], ["html", { open: "never" }]],
+  reporter: process.env["CI"] ? [["list"], ["blob"]] : [["list"], ["html", { open: "never" }]],
   retries: process.env["CI"] ? 2 : 0,
   testDir: "./e2e",
   // Per-test budget. `timeout` is not a `use` option — it sat there for a long
