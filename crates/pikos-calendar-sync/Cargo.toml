@@ -60,7 +60,7 @@ keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"]
 keyring = "3.6.3"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
 # test-support re-exports test_pool + insert_test_* so the engine's Layer-3 tests
 # share pikos-db's migration tree + fixtures rather than carrying their own.
 pikos-db = { path = "../pikos-db", features = ["test-support"] }

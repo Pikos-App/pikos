@@ -217,6 +217,8 @@ async fn reconcile_batched(
             ..Default::default()
         };
         applied += reconcile_safe(pool, ctx, &sub).await?.applied;
+        #[cfg(test)]
+        pause_between_batches().await;
     }
 
     if tail.is_empty() && delta.removals.is_empty() {
@@ -234,6 +236,25 @@ async fn reconcile_batched(
     let mut outcome = reconcile_safe(pool, ctx, &sub).await?;
     outcome.applied += applied;
     Ok(outcome)
+}
+
+#[cfg(test)]
+tokio::task_local! {
+    /// Set by a test around one sync: after each committed batch the backfill hands the
+    /// test a resume handle and waits, so the test can act while no batch holds the write
+    /// lock. Task-local, so a test running beside it in the same binary never pauses.
+    pub(crate) static BATCH_GATE: tokio::sync::mpsc::UnboundedSender<tokio::sync::oneshot::Sender<()>>;
+}
+
+#[cfg(test)]
+async fn pause_between_batches() {
+    let Ok(gate) = BATCH_GATE.try_with(Clone::clone) else {
+        return;
+    };
+    let (resume, wait) = tokio::sync::oneshot::channel();
+    if gate.send(resume).is_ok() {
+        let _ = wait.await;
+    }
 }
 
 /// `reconcile` under WAL busy/snapshot retry. Its deferred read-then-write can
