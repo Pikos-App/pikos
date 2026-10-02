@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: scripts/release.sh <major|minor|patch>
+# Usage: scripts/release.sh <major|minor|patch> [--hotfix]
 # Bumps version in all manifest files, commits, tags, and pushes.
+#
+# Every bypass a release takes is written into its release record after the tag, beside
+# the QA counts (PKOS-0115), so skipping a gate is possible and never invisible.
 
 BUMP="${1:-}"
-if [[ ! "$BUMP" =~ ^(major|minor|patch)$ ]]; then
-  echo "Usage: scripts/release.sh <major|minor|patch>"
+HOTFIX="${2:-}"
+if [[ ! "$BUMP" =~ ^(major|minor|patch)$ ]] || [[ -n "$HOTFIX" && "$HOTFIX" != "--hotfix" ]]; then
+  echo "Usage: scripts/release.sh <major|minor|patch> [--hotfix]"
   exit 1
 fi
+if [[ -n "$HOTFIX" && "$BUMP" != "patch" ]]; then
+  echo "Error: only a patch can be cut as a hotfix."
+  exit 1
+fi
+RECORD=()
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
@@ -70,10 +79,43 @@ CHECKED=$(grep -o 'COMPARISON_CHECKED = "[0-9-]*"' "$COMPARISON" | cut -d'"' -f2
 }
 IFS='-' read -r CHECKED_Y CHECKED_M _ <<< "$CHECKED"
 AGE_MONTHS=$(( ($(date +%Y) * 12 + 10#$(date +%m)) - (CHECKED_Y * 12 + 10#$CHECKED_M) ))
-if [ "$AGE_MONTHS" -gt 3 ] && [ "${SKIP_COMPARISON_CHECK:-}" != "1" ]; then
-  echo "Error: the competitor comparison was last checked $CHECKED, $AGE_MONTHS months ago."
-  echo "Re-check each app against its sources in $COMPARISON and move COMPARISON_CHECKED."
-  exit 1
+if [ "$AGE_MONTHS" -gt 3 ]; then
+  if [ "${SKIP_COMPARISON_CHECK:-}" != "1" ]; then
+    echo "Error: the competitor comparison was last checked $CHECKED, $AGE_MONTHS months ago."
+    echo "Re-check each app against its sources in $COMPARISON and move COMPARISON_CHECKED."
+    exit 1
+  fi
+  RECORD+=("Bypass: SKIP_COMPARISON_CHECK=1, published a comparison last checked $CHECKED.")
+fi
+
+# The release's QA copy has to be finished, or for a hotfix its hotfix block signed
+# (PKOS-0118, PKOS-0117). SKIP_QA="<why>" lets a release through and records why.
+if [ -n "${SKIP_QA:-}" ]; then
+  RECORD+=("Bypass: SKIP_QA, the QA copy wasn't checked: ${SKIP_QA}")
+else
+  QA_LINE=$(node "$ROOT/scripts/check-release-qa.mjs" "$NEW" --kind "$BUMP" ${HOTFIX:+"$HOTFIX"}) || exit 1
+  RECORD+=("$QA_LINE")
+fi
+
+# The app's own log, from the day the QA pass ran: a warning the app emits about itself
+# is a defect or a line that shouldn't be there, and both want a decision before a tag.
+# SKIP_LOG_CHECK="<why>" lets a release through and records why.
+if [ -n "${SKIP_LOG_CHECK:-}" ]; then
+  RECORD+=("Bypass: SKIP_LOG_CHECK, the app log wasn't checked: ${SKIP_LOG_CHECK}")
+elif [ -n "${SKIP_QA:-}" ]; then
+  RECORD+=("The app log wasn't checked either: without the QA copy there is no pass date.")
+else
+  PASS_DATE=$(node "$ROOT/scripts/check-release-qa.mjs" "$NEW" ${HOTFIX:+"$HOTFIX"} --pass-date) || exit 1
+  bash "$ROOT/scripts/check-log-clean.sh" --since "$PASS_DATE" || exit 1
+  RECORD+=("App log clean since the QA pass on $PASS_DATE.")
+fi
+
+# The marketing site, built the way its host builds it, which isn't the way CI does.
+# SKIP_MARKETING_CHECK="<why>" lets a release through and records why.
+if [ -n "${SKIP_MARKETING_CHECK:-}" ]; then
+  RECORD+=("Bypass: SKIP_MARKETING_CHECK, the site wasn't built the host's way: ${SKIP_MARKETING_CHECK}")
+else
+  bash "$ROOT/scripts/check-marketing-build.sh" || exit 1
 fi
 
 # ── Release-notes sign-off ───────────────────────────────────────────────────
@@ -116,7 +158,10 @@ fi
 # SKIP_CI_CHECK=1 bypasses the gate; in that case keep hooks on as a fallback.
 HOOK_FLAG="--no-verify"
 bash "$ROOT/scripts/require-green-ci.sh" || exit 1
-if [ "${SKIP_CI_CHECK:-}" = "1" ]; then HOOK_FLAG=""; fi
+if [ "${SKIP_CI_CHECK:-}" = "1" ]; then
+  HOOK_FLAG=""
+  RECORD+=("Bypass: SKIP_CI_CHECK=1, tagged without a green CI run.")
+fi
 
 # Update version in all files
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -143,6 +188,12 @@ fi
 git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES" "$MARKETING_NOTES"
 git commit $HOOK_FLAG -m "release: v${NEW}"
 git tag "$TAG"
+
+# The tag exists, so the release happened: write what it took into its record.
+for LINE in ${RECORD[@]+"${RECORD[@]}"}; do
+  node "$ROOT/scripts/check-release-qa.mjs" "$NEW" --record "$LINE" \
+    || echo "Warning: couldn't write to the release record: $LINE"
+done
 
 # Reset release notes for next cycle
 cat > "$RELEASE_NOTES" << 'RESET'
