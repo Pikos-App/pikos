@@ -17,7 +17,12 @@ import {
   computeCalendarMetrics,
   fallsShortOf,
 } from "./calendarGeometry";
-import { buildDayBlocks, collapseUnderWidth, remapBlocksForCollapse } from "./calendarLayout";
+import {
+  buildDayBlocks,
+  collapseUnderWidth,
+  remapBlocksForCollapse,
+  timedPagesInRange,
+} from "./calendarLayout";
 import type { CalendarDensity } from "./dayCount";
 
 // ─── collapseUnderWidth ──────────────────────────────────────────────────────
@@ -1300,5 +1305,26 @@ describe("block height floor", () => {
     expect(b!.top + b!.height).toBe(
       geometry.middleEnd + collapsedBandInnerOffset(geometry.bottomBandHeight) - 1
     );
+  });
+});
+
+describe("timedPagesInRange", () => {
+  it("keeps the timed pages touching the range and nothing else", () => {
+    const pages = [
+      makePage({ id: "inside", scheduledStart: "2026-03-16T09:00:00" }),
+      makePage({
+        id: "spans-in",
+        scheduledEnd: "2026-03-15T01:00:00",
+        scheduledStart: "2026-03-14T23:00:00",
+      }),
+      makePage({ id: "before", scheduledStart: "2026-03-14T09:00:00" }),
+      makePage({ id: "after", scheduledStart: "2026-03-22T09:00:00" }),
+      makePage({ id: "all-day", scheduledStart: "2026-03-16" }),
+      makePage({ id: "unscheduled" }),
+    ];
+    const ids = timedPagesInRange(pages, new Date(2026, 2, 15), new Date(2026, 2, 22)).map(
+      (p) => p.id
+    );
+    expect(ids).toEqual(["inside", "spans-in"]);
   });
 });

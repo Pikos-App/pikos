@@ -1,5 +1,6 @@
 import type { CalendarMetrics, CollapseGeometry, PageSummary } from "@pikos/core";
-import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT } from "@pikos/core";
+import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT, timedPagesInRange } from "@pikos/core";
+import { addDays, startOfDay } from "date-fns";
 import { useRef } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -119,6 +120,11 @@ export function WeekGrid({
     setGhostContent,
     showGhost,
   } = useDragGhost({ dayColumnsRef, days, geometry });
+  const weekTimedPages = timedPagesInRange(
+    pages,
+    startOfDay(days[0]!),
+    addDays(startOfDay(days[days.length - 1]!), 1)
+  );
 
   const { handleBlockResizeStart, resizeRenderState } = useTimedResize({
     days,
@@ -294,7 +300,7 @@ export function WeekGrid({
                     onBlockResizeStart={handleBlockResizeStart}
                     onCreatePage={onCreatePage}
                     onPageDoubleClick={onPageDoubleClick}
-                    pages={pages}
+                    pages={weekTimedPages}
                     resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
                   />
                 );

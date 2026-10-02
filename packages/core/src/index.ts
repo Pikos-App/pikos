@@ -75,6 +75,7 @@ export {
 export type { CalendarMetrics, CollapseGeometry } from "./calendar/calendarGeometry";
 export {
   buildDayBlocks,
+  timedPagesInRange,
   collapseUnderWidth,
   remapBlocksForCollapse,
 } from "./calendar/calendarLayout";

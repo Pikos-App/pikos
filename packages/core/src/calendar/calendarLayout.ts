@@ -308,6 +308,32 @@ const CHIP_COLLISION_GAP_PX = 20;
  * - On middle days: renders full grid height (isContinuationBefore + isContinuationAfter)
  * - On the end day: renders from top of grid to event end (isContinuationBefore)
  */
+/**
+ * Pages with a timed schedule that overlaps `[rangeStart, rangeEnd)`. Multi-day timed events are
+ * NOT promoted to the all-day row: they render as one segment per day they touch (continuation
+ * flags on each segment drive the radius and label rules in PageBlock). A week view filters with
+ * this once and hands each day the result, rather than every day walking the whole workspace.
+ */
+export function timedPagesInRange(
+  pages: PageSummary[],
+  rangeStart: Date,
+  rangeEnd: Date
+): PageSummary[] {
+  return pages.filter((page) => {
+    if (!page.scheduledStart) return false;
+    if (isAllDayPage(page.scheduledStart)) return false;
+    try {
+      // Use the same instant resolution as positioning so a synced event shifted
+      // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
+      const start = resolveBlockInstant(page, page.scheduledStart);
+      const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
+      return start < rangeEnd && end > rangeStart;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function buildDayBlocks(
   pages: PageSummary[],
   day: Date,
@@ -316,23 +342,7 @@ export function buildDayBlocks(
   const dayStart = startOfDay(day);
   const dayEnd = addDays(dayStart, 1);
 
-  // Filter: must have a timed scheduledStart that overlaps with this day.
-  // Multi-day timed events are NOT promoted to the all-day row — they render
-  // here as one segment per day they touch (continuation flags on each
-  // segment drive the radius + label rules in PageBlock).
-  const overlapping = pages.filter((page) => {
-    if (!page.scheduledStart) return false;
-    if (isAllDayPage(page.scheduledStart)) return false;
-    try {
-      // Use the same instant resolution as positioning so a synced event shifted
-      // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
-      const start = resolveBlockInstant(page, page.scheduledStart);
-      const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
-      return start < dayEnd && end > dayStart;
-    } catch {
-      return false;
-    }
-  });
+  const overlapping = timedPagesInRange(pages, dayStart, dayEnd);
 
   if (overlapping.length === 0) return [];
 
