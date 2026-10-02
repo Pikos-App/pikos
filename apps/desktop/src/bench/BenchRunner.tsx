@@ -1,48 +1,28 @@
 import { useEffect, useRef } from "react";
 
-import { usePages } from "@/shared/context/PagesContext";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useUI } from "@/shared/context/UIContext";
 
-import { benchFinish, benchSession } from "./session";
+import { benchFinish, benchMemory, benchPlan, launchStages, nextPaint, whenShown } from "./session";
 
-const PAGE_OPENS = 30;
+const LIST_OPENS = 20;
+const DIRECT_OPENS = 20;
 const SEARCHES = 20;
-const VIEW_SWITCHES = 20;
-const TIMEOUT_MS = 30_000;
+const COLD_FOLDERS = 10;
+const WARM_SWITCHES = 20;
+/** Where a click lands after the pointer arrives, by the large-workspace spec's measure. */
+const HOVER_MS = 250;
 /** `pikos stress seed` puts this word in the same fifty pages whatever the workspace size. */
 const SEARCH_WORD = "zephyr";
+/** Each launch starts on Inbox with no page open, whatever the last one left, because sizes
+ *  share the bench build's settings and a page from one corpus isn't in the next. */
+const RESTORED_STATE_KEYS = [
+  STORAGE_KEYS.lastActivePageId,
+  STORAGE_KEYS.lastActiveViewId,
+  STORAGE_KEYS.lastEditorPageId,
+];
 
-/** Resolve the moment `check` holds, re-checking on every change to the page rather than once a
- *  frame, so the waiting adds no frames of its own to what it times. */
-function whenShown(check: () => boolean, what: string): Promise<void> {
-  if (check()) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      if (!check()) return;
-      stop();
-      resolve();
-    });
-    const timer = window.setTimeout(() => {
-      stop();
-      reject(new Error(`timed out waiting for ${what}`));
-    }, TIMEOUT_MS);
-    function stop() {
-      observer.disconnect();
-      window.clearTimeout(timer);
-    }
-    observer.observe(document.body, {
-      attributes: true,
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
-  });
-}
-
-/** The next paint: frame callbacks run just before it, and a task queued from one runs just after. */
-function nextPaint(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => window.setTimeout(resolve, 0)));
-}
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 /** React keeps its own copy of an input's value, so a script has to go through the native setter. */
 function typeInto(input: HTMLInputElement, value: string) {
@@ -50,27 +30,72 @@ function typeInto(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** A fixed seed, so every run opens the same pages in the same order. */
-function seededPicks<T>(items: T[], count: number): T[] {
+/** A fixed seed, so every launch makes the same choices. */
+function seeded() {
   let state = 0x5eed;
-  const picks: T[] = [];
-  for (let i = 0; i < Math.min(count, items.length); i++) {
+  return (n: number) => {
     state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
-    picks.push(items[state % items.length]!);
+    return state % n;
+  };
+}
+
+/** The pointer arriving, as React's enter and over handlers see it. */
+function hover(el: Element) {
+  for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter"]) {
+    el.dispatchEvent(new MouseEvent(type, { bubbles: type.endsWith("over") }));
   }
-  return picks;
+}
+
+/** Hover, wait as a person would, click, and time from the click to the next paint after `done`. */
+async function hoverAndClick(el: HTMLElement, done: () => boolean, what: string) {
+  hover(el);
+  await sleep(HOVER_MS);
+  const start = performance.now();
+  el.click();
+  await whenShown(done, what);
+  await nextPaint();
+  return performance.now() - start;
+}
+
+const editorShows = (id: string) =>
+  document.querySelector<HTMLElement>('[contenteditable="true"][data-page-id]')?.dataset[
+    "pageId"
+  ] === id;
+
+const listShows = (name: string) =>
+  document.querySelector(`[role="group"][aria-label="${CSS.escape(name)}"]`) != null;
+const listRows = (name: string) => [
+  ...document.querySelectorAll<HTMLElement>(
+    `[role="group"][aria-label="${CSS.escape(name)}"] [data-page-list-item]`
+  ),
+];
+
+/** A sidebar entry by its visible name. */
+function sidebarEntry(name: string): HTMLElement {
+  const nav = document.querySelector('nav[aria-label="Workspace navigation"]');
+  const entry = [...(nav?.querySelectorAll<HTMLElement>("button, [role='button']") ?? [])].find(
+    (el) => el.textContent?.trim().startsWith(name)
+  );
+  if (!entry) throw new Error(`no sidebar entry for ${name}`);
+  return entry;
+}
+
+/** Switch views through the sidebar; done once the list names the view and draws its first row. */
+function switchTo(name: string) {
+  return hoverAndClick(
+    sidebarEntry(name),
+    () => listShows(name) && listRows(name).length > 0,
+    `the ${name} list`
+  );
 }
 
 /** Times what a person waits for in the real window, then hands the numbers to the bench build's Rust side. */
 export default function BenchRunner() {
   const ui = useUI();
-  const { pages } = usePages();
   const uiRef = useRef(ui);
-  const pagesRef = useRef(pages);
   const started = useRef(false);
   useEffect(() => {
     uiRef.current = ui;
-    pagesRef.current = pages;
   });
 
   useEffect(() => {
@@ -80,25 +105,47 @@ export default function BenchRunner() {
 
     async function run() {
       const results: Record<string, unknown> = {};
+      const pick = seeded();
       try {
-        await nextPaint();
-        results["launchMs"] = (await benchSession()).uptimeMs;
-        results["openPages"] = pagesRef.current.length;
+        results["launch"] = await launchStages();
+        const plan = await benchPlan(DIRECT_OPENS);
+        results["openPages"] = plan.openPages;
 
-        const editorShows = (id: string) =>
-          document.querySelector<HTMLElement>('[contenteditable="true"][data-page-id]')?.dataset[
-            "pageId"
-          ] === id;
-        const opens: number[] = [];
-        for (const page of seededPicks(pagesRef.current, PAGE_OPENS)) {
-          if (editorShows(page.id)) continue;
-          const start = performance.now();
-          uiRef.current.openPage(page.id);
-          await whenShown(() => editorShows(page.id), `page ${page.id} in the editor`);
-          await nextPaint();
-          opens.push(performance.now() - start);
+        // First visits: each folder once, in a seeded order.
+        const folders = [...plan.folders];
+        const coldFolders: string[] = [];
+        while (folders.length > 0 && coldFolders.length < COLD_FOLDERS) {
+          coldFolders.push(folders.splice(pick(folders.length), 1)[0]!.name);
         }
-        results["openPageMs"] = opens;
+        const switchCold: number[] = [];
+        for (const name of coldFolders) switchCold.push(await switchTo(name));
+        results["switchColdMs"] = switchCold;
+
+        // Opening from the list: a row of the folder on screen, hovered and then clicked.
+        const openHovered: number[] = [];
+        for (let i = 0; i < LIST_OPENS && coldFolders.length > 0; i++) {
+          const folder = coldFolders[i % coldFolders.length]!;
+          if (!listShows(folder)) await switchTo(folder);
+          const rows = listRows(folder).filter((row) => row.dataset["active"] !== "true");
+          const row = rows[pick(Math.min(rows.length, 12))];
+          if (!row) continue;
+          const id = row.dataset["pageId"]!;
+          openHovered.push(await hoverAndClick(row, () => editorShows(id), `page ${id}`));
+        }
+        results["openHoveredMs"] = openHovered;
+
+        // Opening without a hover first, as a search result or a link does: pages anywhere in
+        // the workspace, most of them in no list on screen.
+        const openDirect: number[] = [];
+        for (const id of plan.pages) {
+          if (editorShows(id)) continue;
+          const start = performance.now();
+          uiRef.current.openPage(id);
+          await whenShown(() => editorShows(id), `page ${id} in the editor`);
+          await nextPaint();
+          openDirect.push(performance.now() - start);
+        }
+        results["openDirectMs"] = openDirect;
 
         uiRef.current.setOpenDialog("search");
         const dialog = () => document.querySelector('[aria-label="Search pages"]');
@@ -121,23 +168,21 @@ export default function BenchRunner() {
         uiRef.current.setOpenDialog(null);
         await nextPaint();
 
-        // The list panel is labelled with the view it shows.
-        const listShows = (label: string) =>
-          document.querySelector(`[role="group"][aria-label="${label}"]`) != null;
-        const switches: number[] = [];
-        for (let i = 0; i < VIEW_SWITCHES; i++) {
-          const [view, label] =
-            i % 2 === 0 ? (["today", "Today"] as const) : (["inbox", "Inbox"] as const);
-          const start = performance.now();
-          uiRef.current.setActiveViewId(view);
-          await whenShown(() => listShows(label), `the ${label} list`);
-          await nextPaint();
-          switches.push(performance.now() - start);
+        // Returns: views already visited this launch.
+        const visited = ["Inbox", ...coldFolders];
+        const switchWarm: number[] = [];
+        for (let i = 0; i < WARM_SWITCHES; i++) {
+          const name = visited[i % visited.length]!;
+          if (listShows(name)) continue;
+          switchWarm.push(await switchTo(name));
         }
-        results["switchViewMs"] = switches;
+        results["switchWarmMs"] = switchWarm;
+
+        results["memory"] = await benchMemory();
       } catch (e) {
         results["error"] = e instanceof Error ? e.message : String(e);
       }
+      for (const key of RESTORED_STATE_KEYS) localStorage.removeItem(key);
       await benchFinish(results);
     }
   }, []);

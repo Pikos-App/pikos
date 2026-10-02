@@ -3,7 +3,7 @@
 // check.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,6 +45,40 @@ export function corpus(pikos, dir, pages) {
       "0",
       "--json",
     ]);
+  }
+  return db;
+}
+
+/** The app benchmark's workspace for one size: folders, dates around today, done pages and
+ *  series, so the views it switches between have something in them. Seeded once a day, since its
+ *  dates are spread around the day it was seeded, and copied fresh for every launch. */
+export function appCorpus(pikos, dir, pages) {
+  const today = new Date().toLocaleDateString("en-CA");
+  const db = join(dir, `app-${pages}-${today}.db`);
+  for (const old of readdirSync(dir)) {
+    if (old.startsWith(`app-${pages}-`) && !old.startsWith(`app-${pages}-${today}.db`)) {
+      rmSync(join(dir, old), { force: true });
+    }
+  }
+  if (!existsSync(db)) {
+    console.log(`seeding ${pages} pages`);
+    const building = `${db}.building`;
+    run(pikos, [
+      "--db",
+      building,
+      "stress",
+      "seed",
+      "--pages",
+      String(pages),
+      "--large-pages",
+      "0",
+      "--shape",
+      "mixed",
+      "--today",
+      today,
+      "--json",
+    ]);
+    renameSync(building, db);
   }
   return db;
 }

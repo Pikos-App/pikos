@@ -222,10 +222,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   /** Open the scratch workspace the bench build was launched with, never the user's. */
   // Stryker disable all: the in-app benchmark's own start-up, which no other build runs
   async function initBenchWorkspace(): Promise<void> {
-    const { benchSession } = await import("@/bench/session");
-    const { db } = await benchSession();
+    const bench = await import("@/bench/session");
+    const { db } = await bench.startLaunch();
     await connectDb(db);
+    bench.markStage("connected");
     await dataLoaderRef.current();
+    bench.markStage("loaded");
     setWorkspace({
       createdAt: new Date().toISOString(),
       dbPath: db,
