@@ -136,7 +136,8 @@ async function runFilteredSearch(
   const { filter, unresolvedFolder } = buildSearchFilter(parsed, opts.folders);
   // A folder name nothing matches can't narrow to anything — returning the
   // unfiltered set would quietly answer a different question.
-  if (unresolvedFolder !== null) return { completedCount: 0, results: [] };
+  if (unresolvedFolder !== null)
+    return { completedCount: 0, completedCountCapped: false, results: [] };
 
   const summaries = await opts.storage.listPages(filter);
 
@@ -155,6 +156,7 @@ async function runFilteredSearch(
 
   return {
     completedCount: rows.filter(isDone).length,
+    completedCountCapped: false,
     results: opts.includeCompleted ? rows : rows.filter((r) => !isDone(r)),
   };
 }
@@ -170,6 +172,7 @@ export function SearchPalette() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
+  const [completedCountCapped, setCompletedCountCapped] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [mouseActive, setMouseActive] = useState(false);
   const [mouseMoved, setMouseMoved] = useState(false);
@@ -206,6 +209,7 @@ export function SearchPalette() {
     setCommands(isCommandMode ? Keyboard.listCommands() : []);
     setResults([]);
     setCompletedCount(0);
+    setCompletedCountCapped(false);
   }
 
   const commandItems = isCommandMode
@@ -262,9 +266,10 @@ export function SearchPalette() {
       );
 
       search
-        .then(({ completedCount: count, results: res }) => {
+        .then(({ completedCount: count, completedCountCapped: capped, results: res }) => {
           setResults(res);
           setCompletedCount(count);
+          setCompletedCountCapped(capped);
         })
         .catch((err: unknown) => {
           // FTS5 syntax errors echo the user's query. Log only the error
@@ -548,7 +553,9 @@ export function SearchPalette() {
                     onClick={() => setShowCompleted((v) => !v)}
                     type="button"
                   >
-                    {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
+                    {showCompleted
+                      ? "Hide completed"
+                      : `Show completed (${completedCount}${completedCountCapped ? "+" : ""})`}
                   </button>
                 ))}
 

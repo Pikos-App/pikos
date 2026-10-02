@@ -10,10 +10,10 @@ use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
     get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
-    list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_pages_impl,
+    list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_pages_scan,
     soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput, Folder,
     NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder, PageSummary,
-    PageUpdate, SearchResponse,
+    PageUpdate, SearchResponse, SearchScan,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -426,8 +426,9 @@ pub async fn search(
     query: &str,
     include_completed: bool,
     limit: Option<usize>,
+    scan: SearchScan,
 ) -> Result<SearchResponse, CliError> {
-    let mut resp = search_pages_impl(pool, query.to_string(), Some(include_completed))
+    let mut resp = search_pages_scan(pool, query.to_string(), Some(include_completed), scan)
         .await
         .map_err(classify)?;
     if let Some(n) = limit {

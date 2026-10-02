@@ -596,7 +596,9 @@ export class MockStorageAdapter implements StorageAdapter {
 
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
     const terms = ftsTokens(query);
-    if (terms.length === 0) return Promise.resolve({ completedCount: 0, results: [] });
+    if (terms.length === 0) {
+      return Promise.resolve({ completedCount: 0, completedCountCapped: false, results: [] });
+    }
     const titleResults: SearchResult[] = [];
     const contentResults: SearchResult[] = [];
     let completedCount = 0;
@@ -658,7 +660,7 @@ export class MockStorageAdapter implements StorageAdapter {
     // is not reachable without the index, so order here is an approximation and no
     // test should assert on it beyond title-before-content.
     const results = [...titleResults, ...contentResults].slice(0, 20);
-    return Promise.resolve({ completedCount, results });
+    return Promise.resolve({ completedCount, completedCountCapped: false, results });
   }
 
   // ─── Folders ────────────────────────────────────────────────────────────────

@@ -90,6 +90,8 @@ export interface SearchResponse {
   results: SearchResult[];
   /** Number of completed pages matching the query (always counted, even when excluded from results). */
   completedCount: number;
+  /** The query matched more pages than search scanned, so `completedCount` may be short. */
+  completedCountCapped: boolean;
 }
 
 // ─── FocusSession ─────────────────────────────────────────────────────────────

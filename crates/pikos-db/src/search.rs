@@ -10,7 +10,35 @@ pub struct SearchResponse {
     /// Number of completed pages matching the query (always counted, even when excluded).
     #[ts(type = "number")]
     pub completed_count: i64,
+    /// The query matched more pages than the search scanned, so `completed_count` counts only the
+    /// scanned ones and the real number may be higher.
+    pub completed_count_capped: bool,
 }
+
+/// How many of a query's matches search scores before ranking them.
+///
+/// Ranking has to score every match, and nothing in the full-text index keeps matches in score
+/// order, so an exact top twenty for a word in most pages costs time in proportion to the
+/// workspace. Scanning a fixed number of the newest matches keeps it flat. A query with no more
+/// matches than the scan ranks exactly as before; past it, see [`search_pages_scan`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchScan {
+    /// Score at most this many of the newest matches, and as many of the newest title matches.
+    Newest(usize),
+    /// Score every match. Exact, and linear in the number of matches.
+    All,
+}
+
+/// The scan the app searches with.
+pub const DEFAULT_SEARCH_SCAN: SearchScan = SearchScan::Newest(2_000);
+
+/// bm25() weights, in `pages_fts` column order: title, subtitle, content_text, tags,
+/// mirror_search_text.
+const BM25: &str = "bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0)";
+/// [`SearchRow`]'s columns. The capped query aliases its ranked rows as `pages` to reuse them.
+const SEARCH_COLUMNS: &str = "pages.id, pages.title, pages.subtitle, pages.content_text,
+     pages.status, pages.scheduled_start, pages.priority, pages.tags, pages.mirror_search_text";
+const RESULT_LIMIT: i64 = 20;
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -274,21 +302,33 @@ pub async fn search_pages_impl(
     query: String,
     include_completed: Option<bool>,
 ) -> AppResult<SearchResponse> {
+    search_pages_scan(pool, query, include_completed, DEFAULT_SEARCH_SCAN).await
+}
+
+/// [`search_pages_impl`] with the scan chosen by the caller.
+///
+/// Past the scan, two capped streams are scored: the newest matches, and the newest matches in
+/// the title or subtitle. Their bm25 scores aren't comparable, because each query weighs its terms
+/// by its own match count, so the title stream ranks first and the rest follow, each by its own
+/// score. That is close to exact ranking anyway, since a title hit weighs ten times a body hit.
+/// Rejected: scoring the capped candidates in one query by rowid, which makes FTS5 rebuild the
+/// whole match list per candidate (35 s at 200,000 pages). When completed pages are excluded and
+/// most scanned matches are done, fewer than twenty results come back though older open
+/// matches exist.
+pub async fn search_pages_scan(
+    pool: &sqlx::SqlitePool,
+    query: String,
+    include_completed: Option<bool>,
+    scan: SearchScan,
+) -> AppResult<SearchResponse> {
     let include_completed = include_completed.unwrap_or(false);
     let q = query.trim();
-    if q.is_empty() {
-        return Ok(SearchResponse {
-            results: vec![],
-            completed_count: 0,
-        });
-    }
-
     let tokens = fts_tokens(q);
-
     if tokens.is_empty() {
         return Ok(SearchResponse {
             results: vec![],
             completed_count: 0,
+            completed_count_capped: false,
         });
     }
 
@@ -305,56 +345,58 @@ pub async fn search_pages_impl(
         .collect::<Vec<_>>()
         .join(" ");
 
-    // bm25() weights: title=10, subtitle=5, content_text=1, tags=3,
-    // mirror_search_text=3 (structured and short, like tags)
-    // Fetch raw content_text — excerpt is built in Rust for accurate windowing
+    let cap = match scan {
+        SearchScan::Newest(n) if matches_more_than(pool, &fts_query, n).await? => {
+            i64::try_from(n).ok()
+        }
+        _ => None,
+    };
+
     // deleted_at IS NULL is unconditional — trashed pages never appear in search.
     // When include_completed is false, completed pages are excluded entirely.
     // When true, they sort last and secondary sort is updated_at DESC (works for
     // both notes and tasks).
-    let sql = if include_completed {
-        "SELECT pages.id, pages.title, pages.subtitle, pages.content_text,
-                pages.status, pages.scheduled_start, pages.priority, pages.tags,
-                pages.mirror_search_text
-         FROM pages_fts
-         JOIN pages ON pages.rowid = pages_fts.rowid
-         WHERE pages_fts MATCH ?1
-           AND pages.deleted_at IS NULL
-         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0),
-                  CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,
-                  pages.updated_at DESC
-         LIMIT 20"
+    let status_filter = if include_completed {
+        ""
     } else {
-        "SELECT pages.id, pages.title, pages.subtitle, pages.content_text,
-                pages.status, pages.scheduled_start, pages.priority, pages.tags,
-                pages.mirror_search_text
-         FROM pages_fts
-         JOIN pages ON pages.rowid = pages_fts.rowid
-         WHERE pages_fts MATCH ?1
-           AND pages.deleted_at IS NULL
-           AND pages.status != 'done'
-         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0),
-                  pages.updated_at DESC
-         LIMIT 20"
+        "AND pages.status != 'done'"
+    };
+    let done_last = if include_completed {
+        "CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,"
+    } else {
+        ""
     };
 
-    // Count completed matches (always, regardless of include_completed flag).
-    // Uses the same FTS index — fast single-pass count.
-    let completed_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pages_fts
-         JOIN pages ON pages.rowid = pages_fts.rowid
-         WHERE pages_fts MATCH ?1
-           AND pages.deleted_at IS NULL
-           AND pages.status = 'done'",
-    )
-    .bind(&fts_query)
-    .fetch_one(pool)
-    .await?;
-
-    let rows = sqlx::query_as::<_, SearchRow>(sql)
-        .bind(&fts_query)
-        .fetch_all(pool)
-        .await?;
+    let (rows, completed_count) = match cap {
+        None => {
+            let sql = format!(
+                "SELECT {SEARCH_COLUMNS}
+                 FROM pages_fts
+                 JOIN pages ON pages.rowid = pages_fts.rowid
+                 WHERE pages_fts MATCH ?1
+                   AND pages.deleted_at IS NULL
+                   {status_filter}
+                 ORDER BY {BM25}, {done_last} pages.updated_at DESC
+                 LIMIT {RESULT_LIMIT}"
+            );
+            let rows = sqlx::query_as::<_, SearchRow>(&sql) // sql-ok: fragments are compile-time constants
+                .bind(&fts_query)
+                .fetch_all(pool)
+                .await?;
+            let completed: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM pages_fts
+                 JOIN pages ON pages.rowid = pages_fts.rowid
+                 WHERE pages_fts MATCH ?1
+                   AND pages.deleted_at IS NULL
+                   AND pages.status = 'done'",
+            )
+            .bind(&fts_query)
+            .fetch_one(pool)
+            .await?;
+            (rows, completed)
+        }
+        Some(n) => capped_search(pool, &fts_query, n, include_completed).await?,
+    };
 
     let results = rows
         .into_iter()
@@ -422,7 +464,82 @@ pub async fn search_pages_impl(
     Ok(SearchResponse {
         results,
         completed_count,
+        completed_count_capped: cap.is_some(),
     })
+}
+
+/// Whether `fts_query` matches more than `n` pages, reading at most `n + 1` index entries and
+/// scoring none.
+async fn matches_more_than(pool: &sqlx::SqlitePool, fts_query: &str, n: usize) -> AppResult<bool> {
+    let probe = i64::try_from(n).unwrap_or(i64::MAX - 1) + 1;
+    let found: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM (SELECT 1 FROM pages_fts WHERE pages_fts MATCH ?1 LIMIT ?2)",
+    )
+    .bind(fts_query)
+    .bind(probe)
+    .fetch_one(pool)
+    .await?;
+    Ok(found >= probe)
+}
+
+/// A ranked match, with the completed count the query computes once beside every row.
+#[derive(Debug, sqlx::FromRow)]
+struct RankedRow {
+    #[sqlx(flatten)]
+    row: SearchRow,
+    completed_count: i64,
+}
+
+/// The ranking [`search_pages_scan`] describes past the scan, as one statement so each capped
+/// stream is built once. A prefix term makes FTS5 assemble the term's whole match list before it
+/// can stream it newest-first, and that assembly is most of the cost at size. Completed pages
+/// are excluded by sorting them after every open one and dropping them here, so the count still
+/// arrives when no open page matched.
+async fn capped_search(
+    pool: &sqlx::SqlitePool,
+    fts_query: &str,
+    cap: i64,
+    include_completed: bool,
+) -> AppResult<(Vec<SearchRow>, i64)> {
+    let (done_first, done_last) = if include_completed {
+        ("", "CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,")
+    } else {
+        ("CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,", "")
+    };
+    let sql = format!(
+        "WITH body AS MATERIALIZED (
+             SELECT pages_fts.rowid AS r, {BM25} AS score FROM pages_fts
+             WHERE pages_fts MATCH ?1 ORDER BY pages_fts.rowid DESC LIMIT ?3),
+         titled AS MATERIALIZED (
+             SELECT pages_fts.rowid AS r, {BM25} AS score FROM pages_fts
+             WHERE pages_fts MATCH ?2 ORDER BY pages_fts.rowid DESC LIMIT ?3),
+         candidates AS (
+             SELECT r, 0 AS tier, score FROM titled
+             UNION ALL
+             SELECT r, 1 AS tier, score FROM body WHERE r NOT IN (SELECT r FROM titled)),
+         live AS (
+             SELECT candidates.tier, candidates.score, pages.*
+             FROM candidates JOIN pages ON pages.rowid = candidates.r
+             WHERE pages.deleted_at IS NULL)
+         SELECT {SEARCH_COLUMNS},
+                (SELECT COUNT(*) FROM live WHERE status = 'done') AS completed_count
+         FROM live AS pages
+         ORDER BY {done_first} pages.tier, pages.score, {done_last} pages.updated_at DESC
+         LIMIT {RESULT_LIMIT}"
+    );
+    let ranked = sqlx::query_as::<_, RankedRow>(&sql) // sql-ok: fragments are compile-time constants
+        .bind(fts_query)
+        .bind(format!("{{title subtitle}}: ({fts_query})"))
+        .bind(cap)
+        .fetch_all(pool)
+        .await?;
+    let completed = ranked.first().map_or(0, |r| r.completed_count);
+    let rows = ranked
+        .into_iter()
+        .map(|r| r.row)
+        .filter(|row| include_completed || row.status != "done")
+        .collect();
+    Ok((rows, completed))
 }
 
 #[cfg(test)]

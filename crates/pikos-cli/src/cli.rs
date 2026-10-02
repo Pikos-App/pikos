@@ -1,6 +1,7 @@
 //! The clap surface: globals, subcommands and their flags.
 
 use clap::{Parser, Subcommand};
+use pikos_db::SearchScan;
 
 #[derive(Parser)]
 #[command(
@@ -34,6 +35,13 @@ pub enum CliCommand {
         include_completed: bool,
         #[arg(long)]
         limit: Option<usize>,
+        #[arg(
+            long,
+            default_value = "2000",
+            value_parser = parse_scan,
+            help = "How many of the newest matches to rank, or `all` for exact ranking"
+        )]
+        scan: SearchScan,
     },
     /// Print a page's full content and metadata
     Read { id: String },
@@ -172,4 +180,16 @@ pub enum StressCommand {
     },
     /// Time the operations that decide whether Pikos feels instant
     Bench,
+}
+
+fn parse_scan(value: &str) -> Result<SearchScan, String> {
+    if value == "all" {
+        return Ok(SearchScan::All);
+    }
+    match value.parse::<usize>() {
+        Ok(n) if n > 0 => Ok(SearchScan::Newest(n)),
+        _ => Err(format!(
+            "expected a positive number or `all` (got \"{value}\")"
+        )),
+    }
 }

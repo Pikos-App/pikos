@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use pikos_db::{
     create_page_impl, get_page, list_pages_impl, open_pool, update_page_impl, PageFilter,
-    PageUpdate,
+    PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
 };
 use serde_json::json;
 
@@ -65,6 +65,13 @@ const WORDS: &[&str] = &[
 /// and the FTS index stop being free rather than to represent a real page.
 const SIZE_BUCKETS: &[(&str, usize)] = &[("small", 40), ("large", 20_000), ("huge", 200_000)];
 const SIZE_MARKER: &str = "sizebench";
+
+/// A word outside [`WORDS`], put into the same number of pages whatever the corpus size. Every
+/// word in [`WORDS`] lands in most pages, so searching one ranks most of the workspace and grows
+/// with it; a real search term matches a handful, and this is the line that shows whether search
+/// stays flat when it does.
+const RARE_WORD: &str = "zephyr";
+const RARE_PAGES: usize = 50;
 
 /// A small deterministic generator, so two runs on the same inputs produce the same workspace and
 /// two people comparing numbers are comparing the same shape of data. Not cryptographic and not
@@ -130,9 +137,13 @@ pub async fn seed(
     let mut rng = Rng(0x5EED_1234_ABCD_0001);
     let started = Instant::now();
 
+    let rare_every = (pages / RARE_PAGES).max(1);
     for i in 0..pages {
         let title = format!("{} {}", sentence(&mut rng, 4), i);
-        let body = sentence(&mut rng, 40);
+        let mut body = sentence(&mut rng, 40);
+        if i % rare_every == 0 {
+            body = format!("{body} {RARE_WORD}");
+        }
         let mut page = base_page(None, title);
         page.content = body.clone();
         page.content_text = Some(body);
@@ -333,13 +344,25 @@ pub async fn bench(db: &Option<String>, json: bool) -> Result<(), CliError> {
     );
     timings.push(
         time_it("search one word", || async {
-            search(&pool, "quarterly", false, Some(50)).await
+            search(&pool, "quarterly", false, Some(50), DEFAULT_SEARCH_SCAN).await
+        })
+        .await?,
+    );
+    timings.push(
+        time_it("search one word, exact", || async {
+            search(&pool, "quarterly", false, Some(50), SearchScan::All).await
+        })
+        .await?,
+    );
+    timings.push(
+        time_it("search a rare word", || async {
+            search(&pool, RARE_WORD, false, Some(50), DEFAULT_SEARCH_SCAN).await
         })
         .await?,
     );
     timings.push(
         time_it("search two words", || async {
-            search(&pool, "budget review", false, Some(50)).await
+            search(&pool, "budget review", false, Some(50), DEFAULT_SEARCH_SCAN).await
         })
         .await?,
     );
