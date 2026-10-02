@@ -136,6 +136,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Stryker disable next-line ConditionalExpression: only the bench build takes this branch
+      if (__PIKOS_BENCH__) {
+        await initBenchWorkspace();
+        return;
+      }
+
       try {
         const store = await load("workspaces.json", { autoSave: false, defaults: {} });
         const workspaces = (await store.get<Workspace[]>("workspaces")) ?? [];
@@ -208,6 +214,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       id: "bridge",
       lastOpenedAt: new Date().toISOString(),
       name: "Bridge Workspace",
+    });
+    setIsLoading(false);
+  }
+  // Stryker restore all
+
+  /** Open the scratch workspace the bench build was launched with, never the user's. */
+  // Stryker disable all: the in-app benchmark's own start-up, which no other build runs
+  async function initBenchWorkspace(): Promise<void> {
+    const { benchSession } = await import("@/bench/session");
+    const { db } = await benchSession();
+    await connectDb(db);
+    await dataLoaderRef.current();
+    setWorkspace({
+      createdAt: new Date().toISOString(),
+      dbPath: db,
+      id: "bench",
+      lastOpenedAt: new Date().toISOString(),
+      name: "Bench Workspace",
     });
     setIsLoading(false);
   }

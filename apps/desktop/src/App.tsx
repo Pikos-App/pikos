@@ -1,5 +1,5 @@
 import { toStorageError } from "@pikos/core";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapDialog";
@@ -240,6 +240,8 @@ function useInterfaceTextScale() {
   }, [textScale]);
 }
 
+const BenchRunner = __PIKOS_BENCH__ ? lazy(() => import("@/bench/BenchRunner")) : null;
+
 function AppShell() {
   useKeyboardListener();
   useTrackPageOpened();
@@ -287,6 +289,11 @@ function AppShell() {
         <SearchPalette />
       </ErrorBoundary>
       <Toast duration={UNDO_TOAST_DURATION_MS} items={toastItems} onDismiss={handleToastDismiss} />
+      {BenchRunner && (
+        <Suspense fallback={null}>
+          <BenchRunner />
+        </Suspense>
+      )}
       <UpdateDialog updater={updater} />
     </>
   );

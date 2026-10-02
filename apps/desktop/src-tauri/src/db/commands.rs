@@ -68,6 +68,18 @@ mod prelude {
 /// invoke surface, so a hand-written command reaches the frontend the same way a
 /// declared one does, and dropping it from that block is a compile error at its
 /// own call sites rather than a dead button.
+/// Put the invoke handler on the builder, with the in-app benchmark's commands in front of it in a
+/// `bench` build.
+fn install<F>(builder: tauri::Builder<tauri::Wry>, handler: F) -> tauri::Builder<tauri::Wry>
+where
+    F: Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static,
+{
+    #[cfg(feature = "bench")]
+    return builder.invoke_handler(crate::bench::wrap(handler));
+    #[cfg(not(feature = "bench"))]
+    builder.invoke_handler(handler)
+}
+
 macro_rules! db_commands {
     (
         extras: [ $($extra:path),* $(,)? ];
@@ -111,13 +123,13 @@ macro_rules! db_commands {
         /// with the commands that exist.
         pub fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
             #[cfg(debug_assertions)]
-            return builder.invoke_handler(tauri::generate_handler![
+            return install(builder, tauri::generate_handler![
                 $($extra,)*
                 $($dev_extra,)*
                 $($( $crate::db::$module::$name, )*)*
             ]);
             #[cfg(not(debug_assertions))]
-            return builder.invoke_handler(tauri::generate_handler![
+            return install(builder, tauri::generate_handler![
                 $($extra,)*
                 $($( $crate::db::$module::$name, )*)*
             ]);

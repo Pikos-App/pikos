@@ -1,6 +1,8 @@
 use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 
+#[cfg(feature = "bench")]
+mod bench;
 mod db;
 #[cfg(feature = "e2e-bridge")]
 pub mod e2e_bridge;
@@ -59,6 +61,9 @@ fn single_instance_guard() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(feature = "bench")]
+    bench::mark_start();
+
     // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
     // GPU/driver stacks. Disabling it forces the stable render path.
     // Set before any GTK/webview init. Respect an existing override so

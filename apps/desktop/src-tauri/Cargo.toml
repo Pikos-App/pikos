@@ -24,6 +24,9 @@ path = "src/bin/e2e_bridge.rs"
 required-features = ["e2e-bridge"]
 
 [features]
+# The in-app benchmark: opens a scratch workspace from the environment, times real interactions
+# and quits. No release carries it.
+bench = []
 e2e-bridge = [
   "dep:http-body-util",
   "dep:hyper",
