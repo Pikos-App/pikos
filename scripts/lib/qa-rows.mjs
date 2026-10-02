@@ -37,6 +37,9 @@ export const NO_BEHAVIOUR = [
   "packages/core/src/adapters/{MockStorage,Noop}*",
   "apps/desktop/src/shared/adapters/{inMemoryStorage,mockStorageChunk}*",
   "apps/desktop/src-tauri/src/{e2e_*.rs,bin/e2e_*.rs}",
+  "apps/desktop/src/bench/**",
+  "apps/desktop/src-tauri/src/bench.rs",
+  "apps/desktop/src-tauri/tauri.conf.bench.json",
   "apps/desktop/src-tauri/src/db/dev/seed*.rs",
 ];
 
@@ -148,6 +151,33 @@ export function isNoBehaviour(file) {
   return NO_BEHAVIOUR.some((glob) => matchesGlob(file, glob));
 }
 
+/** A `cfg` attribute for a build no release carries. */
+const NON_SHIPPING_CFG = /^#\[cfg\(feature = "(bench|e2e-bridge)"\)\]$/;
+
+/**
+ * Whether every line a Rust file changed over `range` is a non-shipping `cfg` attribute or the
+ * one line it guards, so the file changed only in builds no release carries.
+ */
+export function changedOnlyInNonShippingBuilds(file, range) {
+  if (!file.endsWith(".rs")) return false;
+  const lines = git("diff", "--unified=0", range, "--", file)
+    .split("\n")
+    .filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l))
+    .map((l) => l.slice(1).trim());
+  if (lines.length === 0) return false;
+  let guarded = false;
+  for (const line of lines) {
+    if (line === "") continue;
+    if (NON_SHIPPING_CFG.test(line)) {
+      guarded = true;
+      continue;
+    }
+    if (!guarded) return false;
+    guarded = false;
+  }
+  return true;
+}
+
 export function sectionsMatching(file, sections) {
   return sections.filter((s) => s.globs.some((glob) => matchesGlob(file, glob)));
 }
@@ -208,7 +238,7 @@ export function touches({ automated, graph, range, sections, waive }) {
   const unmapped = [];
   for (const file of changed) {
     for (const row of testsByFile.get(file) ?? []) touch(row, `\`${file}\` changed`);
-    if (isNoBehaviour(file)) continue;
+    if (isNoBehaviour(file) || changedOnlyInNonShippingBuilds(file, range)) continue;
     const direct = sectionsMatching(file, sections);
     for (const s of direct) touch(s.key, `\`${file}\``);
     let reached = direct.length > 0;
