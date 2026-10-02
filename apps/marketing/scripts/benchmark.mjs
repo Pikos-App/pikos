@@ -9,7 +9,7 @@
 // its own heat.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = join(ROOT, "apps/marketing/src/data/benchmark.json");
 const SIZES = [50, 2_000, 20_000, 200_000, 500_000];
 const REST_SECONDS = 30;
+const FRESH_UP_TO = 20_000;
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -49,6 +50,11 @@ const dirty = run("git", ["-C", ROOT, "status", "--porcelain"]).trim() !== "";
 const corpora = [];
 for (const [i, pages] of SIZES.entries()) {
   const db = join(dir, `stress-${pages}.db`);
+  // Each bench run adds pages of its own, which a big corpus never notices and a small one does,
+  // so the small ones are seeded fresh. Reseeding 500,000 pages takes minutes, so those are reused.
+  if (pages <= FRESH_UP_TO) {
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(`${db}${suffix}`, { force: true });
+  }
   if (!existsSync(db)) {
     console.log(`seeding ${pages} pages`);
     run(pikos, [
@@ -69,8 +75,11 @@ for (const [i, pages] of SIZES.entries()) {
     run(pikos, ["--db", db, "stress", "bench", "--runs", String(runs), "--json"])
   );
   corpora.push({
+    seeded: pages,
     pages: bench.pages,
-    ops: Object.fromEntries(bench.timings.map((t) => [t.op, { ms: t.ms, p95: t.p95_ms }])),
+    ops: Object.fromEntries(
+      bench.timings.map((t) => [t.op, { ms: t.ms, p95: t.p95_ms, max: t.max_ms }])
+    ),
   });
 }
 

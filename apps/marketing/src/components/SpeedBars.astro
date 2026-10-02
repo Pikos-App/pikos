@@ -1,0 +1,43 @@
+---
+import { type Corpus, fmtMs, fmtPages } from "../lib/speed";
+
+interface Props {
+  corpora: Corpus[];
+  /** The action whose time is drawn beside each workspace size. */
+  op: string;
+  /** What the time bars measure, for the column heading. */
+  label: string;
+}
+
+const { corpora, op, label } = Astro.props;
+const mostPages = Math.max(...corpora.map((c) => c.pages));
+// One millisecond fills the time bar, so a time that doesn't grow draws the same bar every row.
+const TIME_SCALE_MS = 1;
+---
+
+<div class="space-y-5">
+  <div class="hidden grid-cols-[6rem_1fr_11rem] gap-x-6 text-xs font-medium text-neutral-400 sm:grid dark:text-neutral-500">
+    <div>Pages</div>
+    <div>How full the workspace is</div>
+    <div>{label}</div>
+  </div>
+
+  {corpora.map((c) => {
+    const pagesWidth = Math.max(0.6, (c.pages / mostPages) * 100);
+    const timeWidth = Math.min(100, (c.ops[op].ms / TIME_SCALE_MS) * 100);
+    return (
+      <div class="grid grid-cols-[1fr_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[6rem_1fr_11rem]">
+        <div class="text-sm font-semibold text-neutral-900 tabular-nums dark:text-neutral-50">{fmtPages(c.seeded)}</div>
+        <div class="order-last col-span-2 h-3 rounded-full bg-neutral-100 sm:order-none sm:col-span-1 dark:bg-neutral-800">
+          <div class="h-3 rounded-full bg-neutral-400 dark:bg-neutral-500" style={`width: ${pagesWidth}%`}></div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="hidden h-3 w-20 shrink-0 rounded-full bg-neutral-100 sm:block dark:bg-neutral-800">
+            <div class="h-3 rounded-full bg-primary-500 dark:bg-primary-400" style={`width: ${timeWidth}%`}></div>
+          </div>
+          <span class="whitespace-nowrap text-sm font-semibold text-primary-600 tabular-nums dark:text-primary-300">{fmtMs(c.ops[op].ms)} ms</span>
+        </div>
+      </div>
+    );
+  })}
+</div>
