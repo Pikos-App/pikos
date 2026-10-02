@@ -56,6 +56,9 @@ for (const [i, pages] of SIZES.entries()) {
   const errors = [];
   let openPages = null;
   for (let n = 0; n < launches; n++) {
+    // Every launch rests first, not only each size: a launch at half a million pages leaves the
+    // laptop hot and short of memory, and the next one would measure that.
+    if (n > 0) rest();
     console.log(`launching against ${pages} pages, ${n + 1} of ${launches}`);
     const out = join(dir, `app-${pages}-${n}.json`);
     rmSync(out, { force: true });
