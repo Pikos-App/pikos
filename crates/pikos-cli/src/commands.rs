@@ -32,7 +32,21 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 pages,
                 large_pages,
                 large_words,
-            } => crate::stress::seed(&cli.db, *pages, *large_pages, *large_words, json).await,
+                shape,
+                today,
+            } => {
+                let today = today.unwrap_or_else(|| chrono::Local::now().date_naive());
+                crate::stress::seed(
+                    &cli.db,
+                    *pages,
+                    *large_pages,
+                    *large_words,
+                    *shape,
+                    today,
+                    json,
+                )
+                .await
+            }
             StressCommand::Bench { runs } => crate::stress::bench(&cli.db, *runs, json).await,
         };
     }

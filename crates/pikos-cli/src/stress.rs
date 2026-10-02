@@ -14,15 +14,16 @@ use std::path::Path;
 use std::time::Instant;
 
 use pikos_db::{
-    create_page_impl, get_page, list_pages_impl, open_pool, open_pool_checkpointing,
-    update_page_impl, Checkpoints, PageFilter, PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
+    create_folder_impl, create_page_impl, create_recurrence_rule_impl, get_page, list_pages_impl,
+    open_pool, open_pool_checkpointing, update_page_impl, Checkpoints, NewFolder, NewPage,
+    NewRecurrenceRule, PageFilter, PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
 };
 use serde_json::json;
 
 use crate::error::{classify, CliError};
 use crate::ops::{list_pages, search, ListQuery};
 use crate::workspace::resolve_db_path;
-use crate::write::base_page;
+use crate::write::{base_page, local_tz, schedule_once};
 
 /// Words the generated bodies are drawn from. Deliberately ordinary English rather than lorem:
 /// FTS5 tokenises real words the way it will in use, and a corpus of one repeated token would
@@ -124,11 +125,97 @@ fn require_scratch_db(db: &Option<String>) -> Result<String, CliError> {
     Ok(path)
 }
 
+/// What the seeded pages look like.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Shape {
+    /// Every page an undated inbox page: the database figures, and comparable across releases.
+    Plain,
+    /// Folders, dates a year either side of `today`, priorities, tags, done pages, weekly series,
+    /// multi-week all-day spans, and titles that test collation and ties, so a large workspace
+    /// exercises every view, sort mode and calendar layout.
+    Mixed,
+}
+
+const FOLDER_COUNT: usize = 20;
+const TAGS: &[&str] = &["work", "home", "errands", "reading", "health"];
+const EMOJI: &[&str] = &["📌 ", "🔥 ", "✅ "];
+/// Titles whose order differs between naive byte order and the app's collation: accents, case,
+/// and numbers that sort by value.
+const TRICKY_TITLES: &[&str] = &[
+    "Élan", "élan", "Elan", "ZEBRA", "zebra", "apple", "Äpfel", "item 2", "Item 10",
+];
+
+/// One page's shape under [`Shape::Mixed`]: it edits `page` and returns the schedule to write
+/// (start, optional end) and whether the page repeats weekly.
+fn shape_page(
+    rng: &mut Rng,
+    i: usize,
+    today: chrono::NaiveDate,
+    page: &mut NewPage,
+    folder_ids: &[String],
+) -> (Option<(String, Option<String>)>, bool) {
+    if rng.below(10) < 7 {
+        page.folder_id = Some(folder_ids[rng.below(folder_ids.len())].clone());
+    }
+    if i % 7 == 0 {
+        page.title = format!("Item {}", rng.below(1_000));
+    }
+    if i % 11 == 0 {
+        page.title = format!("{}{}", EMOJI[rng.below(EMOJI.len())], page.title);
+    }
+    if i % 13 == 0 {
+        page.title = TRICKY_TITLES[rng.below(TRICKY_TITLES.len())].to_string();
+    }
+    if i % 17 == 0 {
+        page.title = "Same title".to_string();
+    }
+    page.priority = if rng.below(2) == 0 {
+        0
+    } else {
+        1 + rng.below(4) as i64
+    };
+    if rng.below(10) < 3 {
+        let count = 1 + rng.below(2);
+        page.tags = (0..count)
+            .map(|_| TAGS[rng.below(TAGS.len())].to_string())
+            .collect();
+        page.tags.dedup();
+    }
+    if rng.below(10) < 2 {
+        let done_on = today - chrono::Duration::days(rng.below(60) as i64);
+        page.status = "done".to_string();
+        page.completed_at = Some(format!("{}T10:00:00.000Z", done_on.format("%Y-%m-%d")));
+    }
+    if rng.below(10) >= 4 {
+        return (None, false);
+    }
+    let day = today + chrono::Duration::days(rng.below(731) as i64 - 365);
+    let date = day.format("%Y-%m-%d").to_string();
+    let at = |hour: usize, minute: usize| format!("{date}T{hour:02}:{minute:02}:00");
+    let (start, end) = match rng.below(20) {
+        0..=4 => (date.clone(), None),
+        5..=16 => {
+            let hour = 8 + rng.below(10);
+            let minute = 30 * rng.below(2);
+            (at(hour, minute), Some(at(hour + 1, minute)))
+        }
+        17 => {
+            let last = day + chrono::Duration::days(7 + rng.below(15) as i64);
+            (date.clone(), Some(last.format("%Y-%m-%d").to_string()))
+        }
+        _ => (at(8 + rng.below(10), 0), None),
+    };
+    let weekly = start.contains('T') && rng.below(40) == 0;
+    (Some((start, end)), weekly)
+}
+
 pub async fn seed(
     db: &Option<String>,
     pages: usize,
     large_pages: usize,
     large_words: usize,
+    shape: Shape,
+    today: chrono::NaiveDate,
     json: bool,
 ) -> Result<(), CliError> {
     let path = require_scratch_db(db)?;
@@ -136,6 +223,24 @@ pub async fn seed(
 
     let mut rng = Rng(0x5EED_1234_ABCD_0001);
     let started = Instant::now();
+
+    let mut folder_ids = Vec::new();
+    if shape == Shape::Mixed {
+        for n in 1..=FOLDER_COUNT {
+            let folder = create_folder_impl(
+                &pool,
+                NewFolder {
+                    name: format!("Folder {n:02}"),
+                    parent_id: None,
+                    color: None,
+                    icon: None,
+                },
+            )
+            .await
+            .map_err(classify)?;
+            folder_ids.push(folder.id);
+        }
+    }
 
     let rare_every = (pages / RARE_PAGES).max(1);
     for i in 0..pages {
@@ -147,7 +252,31 @@ pub async fn seed(
         let mut page = base_page(None, title);
         page.content = body.clone();
         page.content_text = Some(body);
-        create_page_impl(&pool, page).await.map_err(classify)?;
+        let (schedule, weekly) = match shape {
+            Shape::Plain => (None, false),
+            Shape::Mixed => shape_page(&mut rng, i, today, &mut page, &folder_ids),
+        };
+        let created = create_page_impl(&pool, page).await.map_err(classify)?;
+        if let Some((start, end)) = schedule {
+            schedule_once(&pool, &created.id, &start, end.as_deref())
+                .await
+                .map_err(classify)?;
+            if weekly {
+                create_recurrence_rule_impl(
+                    &pool,
+                    NewRecurrenceRule {
+                        page_id: created.id.clone(),
+                        rrule: "FREQ=WEEKLY".to_string(),
+                        rrule_exdates: Vec::new(),
+                        scheduled_start: start,
+                        scheduled_end: end,
+                        timezone: local_tz(),
+                    },
+                )
+                .await
+                .map_err(classify)?;
+            }
+        }
 
         // Seeding a quarter of a million pages is minutes of work, and a silent process that
         // long reads as a hang.

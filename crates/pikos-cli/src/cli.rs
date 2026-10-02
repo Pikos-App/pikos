@@ -177,6 +177,13 @@ pub enum StressCommand {
         large_pages: usize,
         #[arg(long, default_value_t = 50_000, help = "Words in each large page")]
         large_words: usize,
+        #[arg(long, value_enum, default_value_t = crate::stress::Shape::Plain)]
+        shape: crate::stress::Shape,
+        #[arg(
+            long,
+            help = "The day mixed dates spread around, as YYYY-MM-DD (default: today)"
+        )]
+        today: Option<chrono::NaiveDate>,
     },
     /// Time the operations that decide whether Pikos feels instant
     Bench {
