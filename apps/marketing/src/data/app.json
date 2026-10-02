@@ -1,0 +1,165 @@
+{
+  "measured": "2026-10-02",
+  "machine": {
+    "model": "MacBook Air",
+    "chip": "Apple M2",
+    "memory": "16 GB",
+    "os": "macOS 26.6.2"
+  },
+  "build": {
+    "version": "Pikos 0.4.0",
+    "commit": "9eedc832",
+    "dirty": true,
+    "profile": "release"
+  },
+  "launches": 3,
+  "sizes": [
+    {
+      "seeded": 50,
+      "openPages": 53,
+      "launch": {
+        "ms": 748.858958,
+        "p99": 753.5693329999999,
+        "max": 753.5693329999999,
+        "runs": 3
+      },
+      "openPage": {
+        "ms": 103,
+        "p99": 118.99999999999956,
+        "max": 121,
+        "runs": 84
+      },
+      "search": {
+        "ms": 169.9999999999991,
+        "p99": 174,
+        "max": 177,
+        "runs": 60
+      },
+      "switchView": {
+        "ms": 16.99999999999909,
+        "p99": 30.99999999999909,
+        "max": 32,
+        "runs": 60
+      },
+      "errors": []
+    },
+    {
+      "seeded": 2000,
+      "openPages": 2003,
+      "launch": {
+        "ms": 999.378875,
+        "p99": 1155.974958,
+        "max": 1155.974958,
+        "runs": 3
+      },
+      "openPage": {
+        "ms": 115.00000000000044,
+        "p99": 162,
+        "max": 168,
+        "runs": 90
+      },
+      "search": {
+        "ms": 159,
+        "p99": 202,
+        "max": 224,
+        "runs": 60
+      },
+      "switchView": {
+        "ms": 17.00000000000091,
+        "p99": 43,
+        "max": 44.00000000000091,
+        "runs": 60
+      },
+      "errors": []
+    },
+    {
+      "seeded": 20000,
+      "openPages": 20003,
+      "launch": {
+        "ms": 1064.121042,
+        "p99": 1106.084209,
+        "max": 1106.084209,
+        "runs": 3
+      },
+      "openPage": {
+        "ms": 127,
+        "p99": 164.0000000000001,
+        "max": 166,
+        "runs": 90
+      },
+      "search": {
+        "ms": 183,
+        "p99": 6548,
+        "max": 9510,
+        "runs": 60
+      },
+      "switchView": {
+        "ms": 18,
+        "p99": 36,
+        "max": 42,
+        "runs": 60
+      },
+      "errors": []
+    },
+    {
+      "seeded": 200000,
+      "openPages": 200306,
+      "launch": {
+        "ms": 3427.251541,
+        "p99": 3613.098,
+        "max": 3613.098,
+        "runs": 3
+      },
+      "openPage": {
+        "ms": 1172,
+        "p99": 2091,
+        "max": 2094,
+        "runs": 90
+      },
+      "search": {
+        "ms": 175,
+        "p99": 866,
+        "max": 897,
+        "runs": 60
+      },
+      "switchView": {
+        "ms": 107,
+        "p99": 227.99999999999272,
+        "max": 252,
+        "runs": 60
+      },
+      "errors": []
+    },
+    {
+      "seeded": 500000,
+      "openPages": 500294,
+      "launch": {
+        "ms": 56458.114666999994,
+        "p99": 56458.114666999994,
+        "max": 56458.114666999994,
+        "runs": 2
+      },
+      "openPage": {
+        "ms": 4181,
+        "p99": 5263.999999999985,
+        "max": 5776,
+        "runs": 60
+      },
+      "search": {
+        "ms": 169,
+        "p99": 1247,
+        "max": 1247,
+        "runs": 40
+      },
+      "switchView": {
+        "ms": 291,
+        "p99": 671,
+        "max": 671,
+        "runs": 40
+      },
+      "errors": [
+        "exited without a report after 88 s"
+      ]
+    }
+  ]
+}

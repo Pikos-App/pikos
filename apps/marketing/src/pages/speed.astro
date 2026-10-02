@@ -2,48 +2,67 @@
 import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 import SpeedBars from "../components/SpeedBars.astro";
-import { type Corpus, type Row, fmtMs, fmtPages } from "../lib/speed";
+import SpeedTable from "../components/SpeedTable.astro";
+import { type Corpus, type Op, type Series, fmtPages, fmtTime } from "../lib/speed";
+import app from "../data/app.json";
 import bench from "../data/benchmark.json";
-import launch from "../data/app-launch.json";
 
 const title = "Pikos speed: fast with 50 pages, fast with 500,000";
 const description =
-  "Loading, saving, and searching pages take about the same time whether your workspace holds fifty pages or half a million. Measured on a laptop, with the commands to check it yourself.";
+  "Opening a page, searching, and switching views, timed in the app itself, from fifty pages to half a million. Measured on a laptop, with the details and the commands to check it.";
 
-const corpora = bench.corpora as Corpus[];
-const largest = corpora[corpora.length - 1];
-
-// The rows people feel, in the bench's own operation names. Each runs the same code the app does.
-const rows: Row[] = [
-  { op: "read page", label: "Load a page", flat: true },
-  { op: "update page", label: "Save an edit", flat: true },
-  { op: "create page", label: "Create a page", flat: true },
-  { op: "search a rare word", label: "Search for a word", flat: true },
-  { op: "search one word", label: "Search for a very common word", flat: false },
-];
-const charted = rows.filter((r) => r.flat);
-const FRAME_MS = 1000 / 60;
-const worstP99 = Math.max(...charted.flatMap((r) => corpora.map((c) => c.ops[r.op].p99)));
-
-const headline = [
-  { op: "read page", label: "to load a page" },
-  { op: "update page", label: "to save an edit" },
-  { op: "search a rare word", label: "to search for a word" },
-];
-
-const yearsAtTenADay = Math.round(largest.seeded / 10 / 365);
-
-const measuredOn = new Date(`${bench.measured}T12:00:00Z`).toLocaleDateString("en-US", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
+// ── The app, as a person uses it ─────────────────────────────────────────────────────────────
+type AppSize = { seeded: number; [action: string]: unknown };
+const appSizes = app.sizes as AppSize[];
+const appSeries = (key: string, label: string, button: string, heading: string): Series => ({
+  key,
+  label,
+  button,
+  heading,
+  values: appSizes.map((s) => (s[key] as Op | null) ?? null),
 });
+const appActions: Series[] = [
+  appSeries("openPage", "Open a page", "Open", "Click until the page is drawn"),
+  appSeries("search", "Search", "Search", "Typing until results show"),
+  appSeries("switchView", "Switch views", "Switch", "Click until the list is drawn"),
+  appSeries("launch", "Launch", "Launch", "Start until it's ready to use"),
+];
+const largestPages = Math.max(...appSizes.map((s) => s.seeded));
+const atLargest = (key: string) => appActions.find((a) => a.key === key)?.values.at(-1) ?? null;
+const headline = [
+  { key: "openPage", label: "to open a page" },
+  { key: "search", label: "to search" },
+  { key: "switchView", label: "to switch views" },
+];
+const yearsAtTenADay = Math.round(largestPages / 10 / 365);
+
+// ── The database underneath, for engineers ──────────────────────────────────────────────────
+const corpora = bench.corpora as Corpus[];
+const dbSeries = (op: string, label: string, button: string, heading: string): Series => ({
+  key: op,
+  label,
+  button,
+  heading,
+  values: corpora.map((c) => c.ops[op] ?? null),
+});
+const dbActions: Series[] = [
+  dbSeries("search a rare word", "Search for a word", "Search", "Time to search for a word"),
+  dbSeries("read page", "Load a page", "Load", "Time to load a page"),
+  dbSeries("update page", "Save an edit", "Save", "Time to save an edit"),
+  dbSeries("create page", "Create a page", "Create", "Time to create a page"),
+  dbSeries("search one word", "Search for a very common word", "Common word", "Time to search a common word"),
+];
+const commonAtLargest = corpora.at(-1)?.ops["search one word"]?.ms ?? 0;
+
+const measuredOn = (date: string) =>
+  new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
 
 const benchCommands = `brew install pikos-app/tap/pikos-cli
 pikos stress seed --db ~/pikos-bench.db --pages 500000
 pikos stress bench --db ~/pikos-bench.db --runs ${bench.runs}`;
 const code = "rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800";
 const link = "font-medium text-primary-500 hover:underline dark:text-primary-400";
+const bullet = "flex items-start gap-2";
 ---
 
 <Base title={title} description={description}>
@@ -53,135 +72,110 @@ const link = "font-medium text-primary-500 hover:underline dark:text-primary-400
     <!-- Hero -->
     <h1 class="text-5xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
       Fast with 50 pages.<br />
-      <span class="text-brand-500 dark:text-brand-400">Fast with {fmtPages(largest.seeded)}.</span>
+      <span class="text-brand-500 dark:text-brand-400">Fast with {fmtPages(largestPages)}.</span>
     </h1>
     <p class="mt-6 max-w-2xl text-xl leading-relaxed text-neutral-500 dark:text-neutral-400">
-      Loading a page, saving an edit, and searching take about the same time whether you have fifty pages or half a million.
+      Opening a page, searching, and switching views, timed in the app itself, from fifty pages to half a million.
     </p>
 
     <div class="mt-12 grid gap-4 sm:grid-cols-3">
-      {headline.map((h) => (
-        <div class="rounded-xl border border-neutral-200 bg-white px-5 py-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <p class="text-4xl font-bold tracking-tight text-neutral-900 tabular-nums dark:text-neutral-50">
-            {fmtMs(largest.ops[h.op].ms)}<span class="ml-1 text-lg font-semibold text-neutral-400 dark:text-neutral-500">ms</span>
-          </p>
-          <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{h.label}</p>
-          <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">with {fmtPages(largest.seeded)} pages</p>
-        </div>
-      ))}
+      {headline.map((h) => {
+        const v = atLargest(h.key);
+        return (
+          <div class="rounded-xl border border-neutral-200 bg-white px-5 py-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <p class="text-4xl font-bold tracking-tight text-neutral-900 tabular-nums dark:text-neutral-50">{v ? fmtTime(v.ms) : "–"}</p>
+            <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{h.label}</p>
+            <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">with {fmtPages(largestPages)} pages</p>
+          </div>
+        );
+      })}
     </div>
     <p class="mt-4 text-xs text-neutral-400 dark:text-neutral-500">
-      A millisecond is a thousandth of a second. Your screen takes about 16 of them to redraw once, so each of these is done before the next frame. And {fmtPages(largest.seeded)} pages is ten new pages a day for {yearsAtTenADay} years.
+      A millisecond (ms) is a thousandth of a second. Under about a hundred of them, a response feels instant. And {fmtPages(largestPages)} pages is ten new pages a day for {yearsAtTenADay} years.
     </p>
 
-    <!-- The chart -->
+    <!-- The bars -->
     <section class="mt-24">
       <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Ten thousand times the pages. The same time.</h2>
       <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-        The grey bar is how many pages are in the workspace. The green number is how long an everyday action takes. Pick one: searching, loading, saving, or creating. The pages grow ten thousand times over, and the time barely moves.
+        The grey bar is how many pages are in the workspace. The green number is how long you wait. Pick an action to see it at every size.
       </p>
-
       <div class="mt-8 rounded-xl border border-neutral-200 bg-white p-6 sm:p-8 dark:border-neutral-800 dark:bg-neutral-900">
-        <SpeedBars corpora={corpora} />
+        <SpeedBars sizes={appSizes.map((s) => s.seeded)} series={appActions} />
       </div>
     </section>
 
-    <!-- The numbers -->
+    <!-- Every number -->
     <section class="mt-24">
       <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Every number</h2>
-      <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-        Each action ran up to {bench.runs} times. The table shows the median. Switch to the 99th percentile to see the time 99 runs in 100 came in under.{worstP99 < FRAME_MS ? ` At the 99th percentile, loading, saving, creating, and searching for a word all stayed under ${fmtMs(Math.ceil(worstP99 * 10) / 10)} ms, less than one screen refresh.` : ""}
+      <p class="mt-2 mb-6 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+        The table shows the median. Switch to the 99th percentile to see the time 99 tries in 100 came in under.
       </p>
-
-      <div class="group" data-switch="show" data-show="typical">
-      <div class="mt-6 flex justify-end">
-        <div class="inline-flex rounded-lg border border-neutral-200 p-0.5 text-xs font-medium dark:border-neutral-800">
-          {[["typical", "Median"], ["p99", "99th percentile"]].map(([value, text]) => (
-            <button type="button" data-switch-value={value} aria-pressed={value === "typical" ? "true" : "false"} class="rounded-md px-3 py-1.5 text-neutral-500 transition-colors hover:text-neutral-900 aria-pressed:bg-neutral-900 aria-pressed:text-white dark:text-neutral-400 dark:hover:text-neutral-100 dark:aria-pressed:bg-neutral-100 dark:aria-pressed:text-neutral-900">{text}</button>
-          ))}
-        </div>
-      </div>
-      <div class="mt-3 overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
-        <table class="w-full min-w-[640px] text-sm">
-          <thead class="bg-neutral-100/60 text-left text-xs text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">
-            <tr>
-              <th class="px-4 py-3 font-medium">Pages in the workspace</th>
-              {corpora.map((c) => <th class="px-4 py-3 text-right font-medium tabular-nums">{fmtPages(c.seeded)}</th>)}
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
-            {rows.map((r) => (
-              <tr>
-                <td class="px-4 py-3 text-neutral-700 dark:text-neutral-200">{r.label}</td>
-                {corpora.map((c) => (
-                  <td class="px-4 py-3 text-right tabular-nums">
-                    <span class="font-medium text-neutral-900 group-data-[show=p99]:hidden dark:text-neutral-50">{fmtMs(c.ops[r.op].ms)}<span class="ml-0.5 text-xs font-normal text-neutral-400 dark:text-neutral-500">ms</span></span>
-                    <span class="hidden font-medium text-neutral-900 group-data-[show=p99]:inline dark:text-neutral-50">{fmtMs(c.ops[r.op].p99)}<span class="ml-0.5 text-xs font-normal text-neutral-400 dark:text-neutral-500">ms</span></span>
-                  </td>
-                ))}
-              </tr>
-            ))}
-            <tr>
-              <td class="px-4 py-3 text-neutral-700 dark:text-neutral-200">Launch to your first page</td>
-              {launch.figures.length === 0 ? (
-                <td colspan={corpora.length} class="px-4 py-3 text-right text-xs text-neutral-400 dark:text-neutral-500">Measured in the app when 0.4.1 ships</td>
-              ) : (
-                corpora.map((c) => {
-                  const f = (launch.figures as { pages: number; ms: number }[]).find((l) => l.pages === c.seeded);
-                  return <td class="px-4 py-3 text-right tabular-nums font-medium text-neutral-900 dark:text-neutral-50">{f ? `${fmtMs(f.ms)} ms` : "–"}</td>;
-                })
-              )}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      </div>
-
-      <p class="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <strong class="font-medium text-neutral-900 dark:text-neutral-50">A very common word takes longer.</strong> When nearly every page matches, there's more to sort, so Pikos shows the newest matches first, with title matches on top. It's {fmtMs(largest.ops["search one word"].ms)} ms at {fmtPages(largest.seeded)} pages{largest.ops["search one word"].ms < 100 ? ", still under a tenth of a second" : ""}. Add a second word and it narrows right down.
-      </p>
+      <SpeedTable sizes={appSizes.map((s) => s.seeded)} series={appActions} />
     </section>
 
-    <!-- Conditions -->
+    <!-- How the app was measured -->
     <section class="mt-24">
       <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">How these were measured</h2>
       <ul class="mt-6 space-y-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <li class="flex items-start gap-2">
+        <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
-          <span>On {measuredOn}, on a {bench.machine.model} ({bench.machine.chip}, {bench.machine.memory}) running {bench.machine.os}, plugged in. It's an ordinary laptop with no fan, so it rested between sizes to keep heat out of the numbers.</span>
+          <span>On {measuredOn(app.measured)}, on a {app.machine.model} ({app.machine.chip}, {app.machine.memory}) running {app.machine.os}, plugged in. It's an ordinary laptop with no fan, so it rested between sizes to keep heat out of the numbers.</span>
         </li>
-        <li class="flex items-start gap-2">
+        <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
-          <span>{bench.build.version}, built the same way as the version you download, from commit <code class={code}>{bench.build.commit}</code>. Each action ran once to warm up, then {bench.runs} times on the clock.</span>
+          <span>{app.build.version}, built the same way as the version you download, from commit <code class={code}>{app.build.commit}</code>, with a timer built in that the version you download doesn't have.</span>
         </li>
-        <li class="flex items-start gap-2">
+        <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
-          <span>They time what happens under the hood: the same code and the same database the app uses. Drawing the page on screen comes on top, and those numbers join this page once they're measured. Each load and save picks a different page at random, so the computer can't answer from something it just read.</span>
+          <span>The app was launched {app.launches} times at each size. Each launch opened 30 pages picked at random, ran 20 searches, and switched views 20 times. Every action is timed from the moment it starts to the next frame drawn after the screen shows the result.</span>
         </li>
-        <li class="flex items-start gap-2">
+        <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
-          <span>The pages are generated: ordinary English words, forty to a page, from a fixed list and a fixed seed, so your workspace comes out the same as the one measured here.</span>
+          <span>The pages are generated: ordinary English words, forty to a page, from a fixed list and a fixed seed, so the same workspace can be built again anywhere.</span>
         </li>
-        <li class="flex items-start gap-2">
+        <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
           <span>Not here yet: typing in a very long page. The editor is next, and its numbers go on this page when they're good.</span>
         </li>
       </ul>
     </section>
 
-    <!-- Reproduce -->
-    <section class="mt-24">
-      <div class="rounded-xl border border-neutral-200 bg-white px-6 py-8 sm:px-8 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Run it on your own machine</h2>
+    <!-- Under the hood -->
+    <section class="mt-24 border-t border-neutral-200 pt-20 dark:border-neutral-800">
+      <p class="text-sm font-medium text-neutral-400 dark:text-neutral-500">For engineers and the curious</p>
+      <h2 class="mt-2 text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Under the hood</h2>
+      <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+        The database calls underneath the app, timed on their own. Pikos keeps your workspace in one SQLite file, and these are the queries it runs against it. The numbers above include getting the result onto the screen. These don't, which is why they're smaller.
+      </p>
+
+      <div class="mt-8 rounded-xl border border-neutral-200 bg-white p-6 sm:p-8 dark:border-neutral-800 dark:bg-neutral-900">
+        <SpeedBars sizes={corpora.map((c) => c.seeded)} series={dbActions} />
+      </div>
+
+      <p class="mt-10 mb-6 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+        Each action ran up to {bench.runs} times. Each load and save picked a different page at random, so the computer couldn't answer from something it had just read.
+      </p>
+      <SpeedTable sizes={corpora.map((c) => c.seeded)} series={dbActions} />
+
+      <p class="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        <strong class="font-medium text-neutral-900 dark:text-neutral-50">A very common word takes longer.</strong> Ranking has to weigh every match, so when a word is in nearly every page, Pikos ranks the newest few thousand matches with title matches first. It's {fmtTime(commonAtLargest)} at {fmtPages(corpora.at(-1)?.seeded ?? 0)} pages{commonAtLargest < 100 ? ", still under a tenth of a second" : ""}.
+      </p>
+      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Measured on {measuredOn(bench.measured)} on the same laptop, {bench.build.version} from commit <code class={code}>{bench.build.commit}</code>, as a release build, after one warm-up run of each action.
+      </p>
+
+      <div class="mt-10 rounded-xl border border-neutral-200 bg-white px-6 py-8 sm:px-8 dark:border-neutral-800 dark:bg-neutral-900">
+        <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Run it on your own machine</h3>
         <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          Curious how it does on your computer? The <a href="/cli" class={link}>Pikos CLI</a> builds the same workspace and times it.
+          Curious how it does on your computer? The <a href="/cli" class={link}>Pikos CLI</a> builds the same workspace and times the database calls.
         </p>
         <pre class="mt-4 overflow-x-auto rounded-lg bg-neutral-100 p-4 text-sm leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{benchCommands}</pre>
         <p class="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          <code class={code}>seed</code> writes half a million pages into a new file, which took about four minutes on the laptop above. It won't touch the workspace your app uses, so your notes are safe. <code class={code}>bench</code> prints the median and 95th percentile for each action. Add <code class={code}>--json</code> for machine-readable output.
+          <code class={code}>seed</code> writes half a million pages into a new file, which took about four minutes on the laptop above. It won't touch the workspace your app uses, so your notes are safe. <code class={code}>bench</code> prints the median and the 95th percentile for each action, and <code class={code}>--json</code> adds the 99th. When you're done, delete <code class={code}>~/pikos-bench.db</code> and the two files beside it that end in <code class={code}>-wal</code> and <code class={code}>-shm</code>.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          When you're done, delete <code class={code}>~/pikos-bench.db</code> and the two files beside it that end in <code class={code}>-wal</code> and <code class={code}>-shm</code>. The generator and the timings are <a href="https://github.com/Pikos-App/pikos/blob/main/crates/pikos-cli/src/stress.rs" class={link}>one file you can read</a>. Got different numbers? <a href="/feedback" class={link}>Send them</a>, faster or slower.
+          The app numbers come from a build with a timer compiled in. To make them yourself, build Pikos from <a href="https://github.com/Pikos-App/pikos" class={link}>source</a> and run <code class={code}>node apps/marketing/scripts/benchmark-app.mjs</code>. Got different numbers? <a href="/feedback" class={link}>Send them</a>, faster or slower.
         </p>
       </div>
     </section>
