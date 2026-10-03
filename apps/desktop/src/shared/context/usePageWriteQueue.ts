@@ -222,7 +222,8 @@ export function usePageWriteQueue({
         snapshotsRef.current.delete(id);
         if (adoptEcho) {
           const summary = toPageSummary(updated);
-          setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+          if (mirror) mirror.confirmRow(summary);
+          else setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
         }
         emit("page:updated", updated);
       },
@@ -230,12 +231,12 @@ export function usePageWriteQueue({
   }
 
   function updatePage(id: string, patch: PageUpdate): void {
-    snapshotPage(id);
-
-    const edits =
-      mirror?.capture(() =>
-        setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)))
-      ) ?? (setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))), []);
+    // With the view cache the store holds the edit as a pending write, so no snapshot is taken
+    // and no list rebuilt: a rename sends every keystroke through here.
+    if (!mirror) snapshotPage(id);
+    const edits = mirror
+      ? mirror.capture(() => mirror.patch(id, patch))
+      : (setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))), []);
     debouncedWrites.current.set(id, [...(debouncedWrites.current.get(id) ?? []), ...edits]);
 
     const existing = pendingPatches.current.get(id) ?? {};

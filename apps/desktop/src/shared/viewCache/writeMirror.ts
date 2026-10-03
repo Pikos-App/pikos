@@ -74,6 +74,20 @@ export class WriteMirror {
     }
   }
 
+  /** One page's edit, recorded straight into the store: what `changed` would find, without
+   *  diffing the whole list for it. The body goes in too: the editor lays the row over the body it
+   *  loaded, which is how typing not yet saved survives a switch away and back. */
+  patch(id: string, fields: Partial<PageSummary>): void {
+    const writes = this.recording;
+    if (!writes || !this.store.has(id)) return;
+    this.record(writes, id, this.store.write(id, fields));
+  }
+
+  /** A row the database just returned for a write, held as confirmed. */
+  confirmRow(row: PageSummary): void {
+    this.store.confirm([row]);
+  }
+
   /** The writes landed: settle each with its page as the database now has it. */
   async confirm(writes: number[]): Promise<void> {
     if (writes.length === 0) return;

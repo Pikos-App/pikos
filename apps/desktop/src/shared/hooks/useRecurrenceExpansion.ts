@@ -42,6 +42,26 @@ function completedOrSkippedKeys(page: PageSummary): Set<string> {
   );
 }
 
+/** The first page with each id, the one `pages.find` would return. */
+function indexById(pages: PageSummary[]): Map<string, PageSummary> {
+  const byId = new Map<string, PageSummary>();
+  for (const p of pages) {
+    if (!byId.has(p.id)) byId.set(p.id, p);
+  }
+  return byId;
+}
+
+function overridesByRule(overrideSchedules: PageSchedule[]): Map<string, PageSchedule[]> {
+  const byRule = new Map<string, PageSchedule[]>();
+  for (const s of overrideSchedules) {
+    if (!s.ruleId) continue;
+    const list = byRule.get(s.ruleId);
+    if (list) list.push(s);
+    else byRule.set(s.ruleId, [s]);
+  }
+  return byRule;
+}
+
 /** Applies the client-side exclusion union (completed ∪ skip ∪ materialised
  * overrides), the own-date head suppression, and a synced series' render floor
  * to a rule's raw occurrences, shaping each survivor into a VirtualOccurrence.
@@ -53,11 +73,11 @@ function toVirtuals(
   raw: RawOccurrence[],
   page: PageSummary,
   rule: PageRecurrenceRule,
-  overrideSchedules: PageSchedule[]
+  ruleOverrides: PageSchedule[]
 ): VirtualOccurrence[] {
   const excluded = completedOrSkippedKeys(page);
-  for (const s of overrideSchedules) {
-    if (s.ruleId === rule.id && s.originalDate) excluded.add(dateKey(s.originalDate));
+  for (const s of ruleOverrides) {
+    if (s.originalDate) excluded.add(dateKey(s.originalDate));
   }
   // Only the head's own date is suppressed (the head block already renders it).
   // Other pre-head dates need no filter: a head move shifts the rule anchor so
@@ -105,12 +125,12 @@ type OverrideBlock = PageSummary & { originalDate: string };
  * the slot). */
 function toOverrideBlocks(
   rules: PageRecurrenceRule[],
-  pages: PageSummary[],
+  pageById: Map<string, PageSummary>,
   overrideSchedules: PageSchedule[]
 ): OverrideBlock[] {
   const rulePage = new Map<string, PageSummary>();
   for (const rule of rules) {
-    const page = pages.find((p) => p.id === rule.pageId);
+    const page = pageById.get(rule.pageId);
     if (page) rulePage.set(rule.id, page);
   }
 
@@ -230,20 +250,22 @@ export function useRecurrenceExpansion({
   // synchronous expansion).
   if (rawExpansion === null) return visiblePages;
 
+  const pageById = indexById(pages);
+  const ruleOverrides = overridesByRule(overrideSchedules);
   const allVirtual: VirtualOccurrence[] = [];
   for (const rule of recurrenceRules) {
-    const page = pages.find((p) => p.id === rule.pageId);
+    const page = pageById.get(rule.pageId);
     if (!page) continue;
     // The batch omits a rule the engine rejects (out-of-envelope) — such a
     // series renders no virtuals; there is no second engine to fall back to.
     const raw = rawExpansion.get(rule.id);
     if (!raw) continue;
-    allVirtual.push(...toVirtuals(raw, page, rule, overrideSchedules));
+    allVirtual.push(...toVirtuals(raw, page, rule, ruleOverrides.get(rule.id) ?? []));
   }
 
   // A synced override's original slot is already excluded from the virtuals
   // above; render the moved instance at its new slot beside them.
-  const overrideBlocks = toOverrideBlocks(recurrenceRules, pages, overrideSchedules);
+  const overrideBlocks = toOverrideBlocks(recurrenceRules, pageById, overrideSchedules);
 
   if (allVirtual.length === 0 && overrideBlocks.length === 0) return visiblePages;
   return [...visiblePages, ...allVirtual, ...overrideBlocks];

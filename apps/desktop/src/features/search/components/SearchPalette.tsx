@@ -322,14 +322,16 @@ export function SearchPalette() {
       cancelled = true;
     };
   }, [viewCache, storage, isOpen, activePageId, opens]);
-  const recentPool = viewCache
-    ? [...recentRows, ...pages.filter((p) => !recentRows.some((r) => r.id === p.id))]
-    : pages;
+  function recentPool(): PageSummary[] {
+    if (!viewCache) return pages;
+    const recentIds = new Set(recentRows.map((r) => r.id));
+    return [...recentRows, ...pages.filter((p) => !recentIds.has(p.id))];
+  }
   // Only while open: this walks every page, and the palette renders on every page switch.
   const recentItems: SearchResult[] =
     !isOpen || query.trim()
       ? []
-      : recentPool
+      : recentPool()
           .filter((p) => lastOpened(p) !== null && p.id !== activePageId)
           .sort((a, b) => (lastOpened(b) ?? "").localeCompare(lastOpened(a) ?? ""))
           .slice(0, RECENT_LIMIT)

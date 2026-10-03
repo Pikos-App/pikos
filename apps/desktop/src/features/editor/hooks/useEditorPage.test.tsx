@@ -1,5 +1,5 @@
 import { MockStorageAdapter } from "@pikos/core/testing";
-import { act } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { usePages } from "@/shared/context/PagesContext";
@@ -59,5 +59,18 @@ describe("useEditorPage", () => {
     });
 
     expect(load.mock.calls.map(([id]) => id)).toEqual([ids[0], ids[4]]);
+  });
+
+  it("keeps the same page object while another page changes, and follows its own edits", async () => {
+    const { hook, ids } = await setup(["A", "B"]);
+    act(() => hook.result.current.ui.openPage(ids[0]!));
+    await waitFor(() => expect(hook.result.current.editor.page?.id).toBe(ids[0]));
+    const before = hook.result.current.editor.page;
+
+    act(() => hook.result.current.pages.updatePage(ids[1]!, { title: "B2" }));
+    expect(hook.result.current.editor.page).toBe(before);
+
+    act(() => hook.result.current.pages.updatePage(ids[0]!, { title: "A2" }));
+    expect(hook.result.current.editor.page?.title).toBe("A2");
   });
 });

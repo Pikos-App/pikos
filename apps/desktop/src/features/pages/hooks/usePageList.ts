@@ -1,4 +1,10 @@
-import type { PagePriority, PageRecurrenceRule, PageStatus, PageSummary } from "@pikos/core";
+import type {
+  PagePriority,
+  PageRecurrenceRule,
+  PageStatus,
+  PageSummary,
+  SortMode,
+} from "@pikos/core";
 import { getVisiblePages, isDateGroupedView, sortPages, withTodayOccurrences } from "@pikos/core";
 import { useState } from "react";
 
@@ -18,6 +24,23 @@ import { useCompletedPages } from "./useCompletedPages";
 export const UNDO_TOAST_DURATION_MS = 8000;
 
 const NO_RULES: PageRecurrenceRule[] = [];
+
+/** The view's list from every page held in memory, for when the view cache doesn't serve it. */
+function legacyVisiblePages(
+  pages: PageSummary[],
+  expanded: PageSummary[],
+  viewId: string,
+  hiddenIds: Set<string>,
+  sortMode: SortMode
+): PageSummary[] {
+  // Occurrences go in before the view filter, which judges a series by its head,
+  // and a series with an occurrence today is exactly one whose head is elsewhere.
+  const candidates = viewId === "today" ? withTodayOccurrences(pages, expanded) : pages;
+  const withOccurrences = getVisiblePages(candidates, viewId).filter((p) => !hiddenIds.has(p.id));
+  // Today and Upcoming are ordered by their sections, so sortPages would only
+  // churn an order the section builders are about to replace.
+  return isDateGroupedView(viewId) ? withOccurrences : sortPages(withOccurrences, sortMode);
+}
 
 export function usePageList() {
   const {
@@ -55,16 +78,6 @@ export function usePageList() {
     recurrenceRules: isTodayView ? recurrenceRules : NO_RULES,
   });
 
-  // Swap occurrences in before the view filter runs: the filter judges a page by
-  // its head, and a series with an occurrence today is exactly the case where the
-  // head is on some other day.
-  const candidates = isTodayView ? withTodayOccurrences(pages, expanded) : pages;
-  const withOccurrences = getVisiblePages(candidates, activeViewId).filter(
-    (p) => !hiddenIds.has(p.id)
-  );
-  // Today and Upcoming are ordered by their sections (overdue/today, then day
-  // groups), so running sortPages here would only churn an order the section
-  // builders are about to replace.
   const cached =
     cachedViews &&
     buildCachedList({
@@ -77,9 +90,7 @@ export function usePageList() {
     });
   const visiblePages = cached
     ? cached.pages
-    : isDateGroupedView(activeViewId)
-      ? withOccurrences
-      : sortPages(withOccurrences, sortMode);
+    : legacyVisiblePages(pages, expanded, activeViewId, hiddenIds, sortMode);
 
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 

@@ -53,6 +53,7 @@ export class ViewCacheController {
   private wanted = new Map<string, { first: number; last: number }>();
   private version = 0;
   private listeners = new Set<() => void>();
+  private bumpQueued = false;
   private leftListeners = new Set<(ids: ReadonlySet<string>) => void>();
   /** Writes started and not yet settled. */
   private writesInFlight = 0;
@@ -92,6 +93,8 @@ export class ViewCacheController {
   private rangeAsked = new Map<string, number>();
   /** Every recurring series' head, which a range needs for occurrences of heads outside it. */
   private heads: string[] | null = null;
+  /** The newest change among the heads held, for reading only those changed since. */
+  private headsSeq = 0;
   /** Bumped by every write, so a range read that a write overlapped is kept but marked stale. */
   private rangeEpoch = 0;
   private refreshAgain = false;
@@ -179,6 +182,7 @@ export class ViewCacheController {
     this.store.clear();
     this.ranges.clear();
     this.heads = null;
+    this.headsSeq = 0;
     this.counts = null;
     this.bodies.clear();
     this.bodyBytes = 0;
@@ -355,11 +359,17 @@ export class ViewCacheController {
     return this.loadHeads();
   }
 
+  /** After the first load, only heads changed since the newest one held are read. */
   private async loadHeads(): Promise<void> {
     try {
-      const heads = await this.adapter.listSeriesHeads(false);
+      const since = this.heads === null ? null : this.headsSeq;
+      const heads = await this.adapter.listSeriesHeads(false, since);
+      if (since !== null && heads.length === 0) return;
       this.store.confirm(heads);
-      this.heads = heads.map((h) => h.id);
+      const held = new Set(since === null ? [] : (this.heads ?? []));
+      for (const head of heads) held.add(head.id);
+      this.heads = [...held];
+      for (const head of heads) this.headsSeq = Math.max(this.headsSeq, head.rowSeq ?? 0);
     } catch {
       // Occurrences of heads outside the range wait for the next load.
     }
@@ -641,8 +651,15 @@ export class ViewCacheController {
     log.error(message);
   }
 
+  /** Readers hear of changes at most once a microtask: one write lands as several loads, and each
+   *  told separately re-rendered every reader that many times. */
   private bump(): void {
-    this.version += 1;
-    for (const listener of this.listeners) listener();
+    if (this.bumpQueued) return;
+    this.bumpQueued = true;
+    queueMicrotask(() => {
+      this.bumpQueued = false;
+      this.version += 1;
+      for (const listener of this.listeners) listener();
+    });
   }
 }

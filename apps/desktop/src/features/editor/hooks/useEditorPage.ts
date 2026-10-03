@@ -1,15 +1,33 @@
 // Loads the active page at once, but holds off while activePageId keeps changing (holding an arrow
 // key through a list) so only the page the burst stops on is fetched.
 
-import type { Page } from "@pikos/core";
+import type { Page, PageSummary } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { usePageSummary } from "@/shared/hooks/usePageSummary";
 
 /** A change this soon after the last one is part of a burst, and waits for the burst to end. */
 const BURST_MS = 80;
+
+/** The last merge per loaded page. The view cache rebuilds a page with unsaved edits on every read,
+ *  so without this any change to the cache would hand the editor a new page with nothing changed. */
+const merges = new WeakMap<Page, { summary: PageSummary; page: Page }>();
+
+function sameFields(a: PageSummary, b: PageSummary): boolean {
+  const keys = Object.keys(b) as (keyof PageSummary)[];
+  return keys.length === Object.keys(a).length && keys.every((k) => Object.is(a[k], b[k]));
+}
+
+function withSummary(loaded: Page, summary: PageSummary): Page {
+  const last = merges.get(loaded);
+  if (last && sameFields(last.summary, summary)) return last.page;
+  const page = { ...loaded, ...summary };
+  merges.set(loaded, { page, summary });
+  return page;
+}
 
 interface EditorPageState {
   /** Full page with content, or null if no page selected / still loading. */
@@ -20,7 +38,7 @@ interface EditorPageState {
 
 export function useEditorPage(): EditorPageState {
   const { activePageId } = useUI();
-  const { getPage, pages } = usePages();
+  const { getPage } = usePages();
   const { on } = useWorkspace();
   const [loadedPage, setLoadedPage] = useState<Page | null>(null);
 
@@ -68,7 +86,7 @@ export function useEditorPage(): EditorPageState {
   // Merge context summary (optimistic state) into loadedPage so that schedule,
   // status, priority and other metadata changes from scheduleOnce/updatePage
   // are reflected immediately without waiting for page:updated events.
-  const summary = pages.find((p) => p.id === activePageId);
+  const summary = usePageSummary(activePageId);
 
   // Derive: page is only valid when it matches the active selection.
   // When activePageId changes to null or a different ID, page becomes null
@@ -76,7 +94,7 @@ export function useEditorPage(): EditorPageState {
   const page: Page | null = (() => {
     if (activePageId === null || !loadedPage || loadedPage.id !== activePageId) return null;
     if (!summary) return loadedPage;
-    return { ...loadedPage, ...summary };
+    return withSummary(loadedPage, summary);
   })();
   const isLoading = activePageId !== null && page === null;
 
