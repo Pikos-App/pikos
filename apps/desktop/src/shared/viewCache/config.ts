@@ -19,6 +19,8 @@ declare global {
     __PIKOS_VIEW_CACHE__?: Partial<ViewCacheConfig>;
     /** Every shadow check that found a cached view differing from the database. */
     __PIKOS_SHADOW_MISMATCHES__?: string[];
+    /** List windows fetched so far, in a lane with the shadow check. */
+    __PIKOS_LIST_FETCHES__?: number;
   }
 }
 

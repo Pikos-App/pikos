@@ -77,7 +77,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // The controller needs the adapter, and the adapter reports to the controller.
     const ref: { controller: ViewCacheController | null } = { controller: null };
     const watched = watchWrites(raw, {
-      settled: () => ref.controller?.writeSettled(),
+      settled: (method, args) => ref.controller?.writeSettled(method, args),
       started: () => ref.controller?.writeStarted(),
     });
     ref.controller = new ViewCacheController(watched, VIEW_CACHE);

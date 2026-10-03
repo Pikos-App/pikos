@@ -44,9 +44,9 @@ export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof St
 ]);
 
 export interface WriteWatcher {
-  started: () => void;
+  started: (method: string, args: unknown[]) => void;
   /** Called once per write, succeeded or failed. */
-  settled: () => void;
+  settled: (method: string, args: unknown[]) => void;
 }
 
 /** The adapter, reporting each write as it starts and settles. The original promise is returned
@@ -61,16 +61,18 @@ export function watchWrites<A extends StorageAdapter>(adapter: A, watcher: Write
           : value;
       }
       return (...args: unknown[]) => {
-        watcher.started();
+        const method = String(prop);
+        const settle = () => watcher.settled(method, args);
+        watcher.started(method, args);
         let result: unknown;
         try {
           result = value.apply(target, args);
         } catch (error) {
-          watcher.settled();
+          settle();
           throw error;
         }
-        if (result instanceof Promise) result.then(watcher.settled, watcher.settled);
-        else watcher.settled();
+        if (result instanceof Promise) result.then(settle, settle);
+        else settle();
         return result;
       };
     },

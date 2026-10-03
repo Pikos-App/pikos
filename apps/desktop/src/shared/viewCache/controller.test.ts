@@ -16,7 +16,7 @@ async function setup(pages: number, windowSize = 2) {
   for (let i = 0; i < pages; i++) await raw.createPage(newPage(`Page ${i}`));
   const ref: { controller: ViewCacheController | null } = { controller: null };
   const adapter = watchWrites(raw, {
-    settled: () => ref.controller?.writeSettled(),
+    settled: (method, args) => ref.controller?.writeSettled(method, args),
     started: () => ref.controller?.writeStarted(),
   });
   const controller = new ViewCacheController(adapter, {
@@ -196,5 +196,52 @@ describe("ViewCacheController range races", () => {
     older?.();
     await settle();
     expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+  });
+});
+
+describe("ViewCacheController after its own writes", () => {
+  it("refetches only the row when a write touches its body alone, as an autosave does", async () => {
+    const { adapter, controller } = await setup(3);
+    controller.show([inbox], []);
+    await settle();
+    const id = controller.cache.entry(inbox)?.ids[0] ?? "";
+    const before = controller.store.get(id)?.rowSeq;
+    const fetches = controller.listFetches;
+
+    await adapter.updatePage(id, { content: '{"type":"doc"}', contentText: "typed" });
+    await settle();
+    expect(controller.listFetches).toBe(fetches);
+    expect(controller.store.get(id)?.rowSeq).not.toBe(before);
+  });
+
+  it("refreshes nothing after a write that changed nothing", async () => {
+    const { adapter, controller } = await setup(3);
+    controller.show([inbox], []);
+    await settle();
+    await adapter.recomputeRecurringSchedules();
+    await settle();
+    const fetches = controller.listFetches;
+    await adapter.recomputeRecurringSchedules();
+    await settle();
+    expect(controller.listFetches).toBe(fetches);
+  });
+
+  it("refreshes on the doorbell only when another writer moved the counter", async () => {
+    const { controller, raw } = await setup(2);
+    controller.show([inbox], []);
+    await settle();
+    controller.doorbell();
+    await settle();
+    const fetches = controller.listFetches;
+
+    controller.doorbell();
+    await settle();
+    expect(controller.listFetches).toBe(fetches);
+
+    const outside = await raw.createPage(newPage("From the CLI"));
+    controller.doorbell();
+    await settle();
+    expect(controller.cache.entry(inbox)?.total).toBe(3);
+    expect(await controller.allIds(inbox)).toContain(outside.id);
   });
 });

@@ -2,7 +2,14 @@
 // scrolls, refreshes the shown list after every write, evicts what wasn't shown recently, and in
 // test lanes checks every cached list it shows against a fresh query.
 
-import type { PageSummary, Placement, StorageAdapter, ViewCounts, ViewKey } from "@pikos/core";
+import type {
+  ChangeState,
+  PageSummary,
+  Placement,
+  StorageAdapter,
+  ViewCounts,
+  ViewKey,
+} from "@pikos/core";
 import { getLocalTimezone } from "@pikos/core";
 import { evict, PageStore, ViewCache, viewName } from "@pikos/core";
 import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
@@ -12,6 +19,17 @@ import { createLogger } from "@/shared/logger";
 import type { ViewCacheConfig } from "./config";
 
 const log = createLogger("viewCache");
+
+/** Fields no list orders, groups, filters or counts by: a write of only these refetches its row. */
+const ROW_ONLY_FIELDS = new Set(["content", "contentText", "lastOpenedAt"]);
+
+/** The page an `updatePage` of only row-only fields wrote, else null. */
+function rowOnlyWrite(method: string, args: unknown[]): string | null {
+  if (method !== "updatePage") return null;
+  const [id, patch] = args;
+  if (typeof id !== "string" || !patch || typeof patch !== "object") return null;
+  return Object.keys(patch).every((field) => ROW_ONLY_FIELDS.has(field)) ? id : null;
+}
 
 const QUIET_POLL_MS = 10;
 /** Long enough to outlast a burst of writes, short enough that a stream of them still shows. */
@@ -30,6 +48,7 @@ export class ViewCacheController {
   private wanted = new Map<string, { first: number; last: number }>();
   private version = 0;
   private listeners = new Set<() => void>();
+  private leftListeners = new Set<(ids: ReadonlySet<string>) => void>();
   /** Writes started and not yet settled. */
   private writesInFlight = 0;
   /** Bumped by every write's start and settle, so a check can tell whether one overlapped it. */
@@ -40,6 +59,10 @@ export class ViewCacheController {
   /** The day the sidebar shows badges for, once it has asked; a write recounts it. */
   private countsDay: string | null = null;
   private countsAsked = 0;
+  /** The change counter as the last refresh found it; null until first read. */
+  private counter: { epoch: string; seq: number } | null = null;
+  /** List windows fetched, for the test that typing doesn't refetch lists. */
+  listFetches = 0;
   /** Calendar ranges visited while the calendar is mounted, by `start|end`: their pages' ids. */
   private ranges = new Map<string, { ids: string[]; stale: boolean }>();
   private shownRange: { start: string; end: string } | null = null;
@@ -58,6 +81,7 @@ export class ViewCacheController {
     this.cache = new ViewCache({ windowSize: config.windowSize });
     this.store.subscribe(() => this.bump());
     this.waitForMidnight();
+    window.addEventListener("focus", () => this.doorbell());
   }
 
   /** Today's sections and the badges are keyed by the date their readers compute at render, so
@@ -75,15 +99,59 @@ export class ViewCacheController {
     this.writeEpoch += 1;
   }
 
-  /** Every view may now be out of date: mark them all, and refetch the ones on screen. */
-  writeSettled(): void {
+  /**
+   * A write settled. One that touched only fields no list orders, groups or counts by refetches
+   * its row alone; any other refreshes what's on screen, if the change counter moved.
+   */
+  writeSettled(method: string, args: unknown[]): void {
     this.writesInFlight -= 1;
     this.writeEpoch += 1;
+    const rowOnly = rowOnlyWrite(method, args);
+    if (rowOnly) void this.refetchRow(rowOnly);
+    else void this.checkCounter();
+  }
+
+  /** Another process may have written: refresh if the change counter says so. */
+  doorbell(): void {
+    void this.checkCounter();
+  }
+
+  /** Refresh what's on screen unless the counter is where the last refresh left it. A new epoch
+   *  (a restore, an import, a reset) drops everything held. */
+  private async checkCounter(): Promise<void> {
+    let state: ChangeState;
+    try {
+      state = await this.adapter.changeState();
+    } catch {
+      state = { epoch: "", ownChanges: 0, seq: -1 };
+    }
+    if (this.counter && state.epoch === this.counter.epoch && state.seq === this.counter.seq) {
+      return;
+    }
+    if (this.counter && state.epoch !== this.counter.epoch) this.forget();
+    this.counter = { epoch: state.epoch, seq: state.seq };
     this.cache.invalidate();
     this.rangeEpoch += 1;
     for (const range of this.ranges.values()) range.stale = true;
     this.bump();
     void this.refresh();
+  }
+
+  private async refetchRow(id: string): Promise<void> {
+    try {
+      this.store.confirm(await this.adapter.getPages([id]));
+    } catch {
+      // The row stays as held; the next refresh brings it.
+    }
+  }
+
+  /** Everything held, gone: another epoch's rows can't be compared with this one's. */
+  private forget(): void {
+    this.cache.clear();
+    this.store.clear();
+    this.ranges.clear();
+    this.heads = null;
+    this.counts = null;
   }
 
   /** The calendar shows `start` to `end`: load it unless a current copy is held. */
@@ -220,8 +288,8 @@ export class ViewCacheController {
     const token = this.cache.begin(key, entry.next, 0);
     let loaded = false;
     try {
-      const window = await this.adapter.listView(key, entry.next, this.config.windowSize);
-      loaded = this.cache.receive(token, window, this.store);
+      const page = await this.adapter.listView(key, entry.next, this.config.windowSize);
+      loaded = this.cache.receive(token, page, this.store);
     } catch {
       this.cache.fail(token);
     } finally {
@@ -269,6 +337,12 @@ export class ViewCacheController {
     this.bump();
   }
 
+  /** Called with the ids a refresh took out of a list on screen. */
+  onLeft(listener: (ids: ReadonlySet<string>) => void): () => void {
+    this.leftListeners.add(listener);
+    return () => this.leftListeners.delete(listener);
+  }
+
   getVersion = (): number => this.version;
 
   subscribe = (listener: () => void): (() => void) => {
@@ -278,20 +352,39 @@ export class ViewCacheController {
 
   private async loadFirst(key: ViewKey, limit = this.config.windowSize): Promise<void> {
     const name = viewName(key);
+    const before = this.cache.entry(key)?.ids ?? [];
     const token = this.cache.begin(key, null, 0);
     this.loadingFirst.add(name);
     this.bump();
     let loaded = false;
     try {
-      const window = await this.adapter.listView(key, null, limit);
-      loaded = this.cache.receive(token, window, this.store);
+      this.listFetches += 1;
+      if (this.config.shadow) window.__PIKOS_LIST_FETCHES__ = this.listFetches;
+      const page = await this.adapter.listView(key, null, limit);
+      loaded = this.cache.receive(token, page, this.store);
     } catch {
       this.cache.fail(token);
     } finally {
       this.loadingFirst.delete(name);
     }
     this.bump();
-    if (loaded) this.fill(key);
+    if (loaded) {
+      this.reportLeft(key, before);
+      this.fill(key);
+    }
+  }
+
+  /** Ids a refetch dropped from a list on screen. Only where the refetch covers what was loaded,
+   *  so a row pushed past the end isn't taken for one that left. */
+  private reportLeft(key: ViewKey, before: string[]): void {
+    const entry = this.cache.entry(key);
+    const name = viewName(key);
+    if (!entry || before.length === 0 || !this.shown.some((k) => viewName(k) === name)) return;
+    if (entry.next && entry.ids.length < before.length) return;
+    const now = new Set(entry.ids);
+    const left = new Set(before.filter((id) => !now.has(id)));
+    if (left.size === 0) return;
+    for (const listener of this.leftListeners) listener(left);
   }
 
   /** Start whatever loading the rows on screen still need. Far past what's loaded, fetching every
@@ -331,7 +424,7 @@ export class ViewCacheController {
           ),
           this.loadCounts(),
           this.shownRange ? this.loadRange(this.shownRange.start, this.shownRange.end) : undefined,
-          this.heads !== null ? this.loadHeads() : undefined,
+          this.shownRange ? this.loadHeads() : undefined,
         ]);
       } while (this.refreshAgain);
     })();

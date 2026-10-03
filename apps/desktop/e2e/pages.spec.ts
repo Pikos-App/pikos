@@ -316,3 +316,43 @@ appTest(
     expect(state.seq).toBeGreaterThan(0);
   }
 );
+
+appTest.describe("with lists loaded a window at a time", () => {
+  appTest.use({ viewCache: true });
+
+  appTest(
+    "a selected page trashed outside the app leaves the list and the selection when the bell rings",
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+      for (const title of ["keep me", "trash me", "leave me"]) await quickAdd(app, title);
+      const list = app.locator("[data-page-list-item]");
+      const row = (title: string) => list.filter({ hasText: title });
+      await row("keep me").click({
+        modifiers: [process.platform === "darwin" ? "Meta" : "Control"],
+      });
+      await row("trash me").click({
+        modifiers: [process.platform === "darwin" ? "Meta" : "Control"],
+      });
+      await expect(app.locator("[data-selected]")).toHaveCount(2);
+
+      const window = await bridgeCall<{ rows: { id: string; title: string }[] }>(app, "list_view", {
+        after: null,
+        key: { scope: { kind: "inbox" }, sort: "manual", zone: "America/New_York" },
+        limit: 10,
+      });
+      const trashed = window.rows.find((p) => p.title === "trash me");
+      await bridgeCall(app, "soft_delete_page", { id: trashed?.id });
+
+      await expect
+        .poll(async () => {
+          await ringDoorbell(app);
+          return row("trash me").count();
+        })
+        .toBe(0);
+      await expect(row("keep me")).toHaveAttribute("data-selected", "true");
+      // A menu acting on one page offers Rename; the trashed id still selected would make it two.
+      await row("keep me").click({ button: "right" });
+      await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+    }
+  );
+});

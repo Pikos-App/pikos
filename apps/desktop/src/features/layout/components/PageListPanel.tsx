@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
+import { useScrollAnchor } from "@/features/layout/hooks/useScrollAnchor";
 import { PageListItem, useMoveOverdueToToday, usePageListContext } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { cn } from "@/lib/utils";
@@ -213,6 +214,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
     for (const [section, span] of spans) cached.ensure(section, span.first, span.last);
   }, [rows.length, cached?.ids.length, firstVisible, lastVisible]);
+
+  useScrollAnchor(
+    listRef,
+    virtualizer,
+    rows,
+    cached ? `${cached.ids.length}|${cached.sections.map((x) => x.count).join(",")}` : null
+  );
 
   // Scroll active page into view when it changes via keyboard navigation.
   useEffect(() => {

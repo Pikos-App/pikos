@@ -2,7 +2,14 @@
 // shortcuts, and content structure. All run against MockStorageAdapter
 // (VITE_TEST_MODE=true) so no Tauri backend is needed.
 
-import { test as appTest, expect, mod, openEditorForPage, quickAdd } from "./fixtures";
+import {
+  test as appTest,
+  expect,
+  mod,
+  openEditorForPage,
+  quickAdd,
+  WRITE_QUEUE_DEBOUNCE_MS,
+} from "./fixtures";
 
 // ─── Formatting via keyboard shortcuts ──────────────────────────────────────
 
@@ -281,28 +288,24 @@ appTest("table toolbar adds row below", { tag: ["@EDIT-09:3"] }, async ({ app })
   await expect(editor.locator("tr")).toHaveCount(4);
 });
 
-appTest(
-  "table toolbar adds and removes column",
-  { tag: ["@EDIT-09:3"] },
-  async ({ app }) => {
-    await quickAdd(app, "table col test");
-    const editor = await openEditorForPage(app, "table col test");
+appTest("table toolbar adds and removes column", { tag: ["@EDIT-09:3"] }, async ({ app }) => {
+  await quickAdd(app, "table col test");
+  const editor = await openEditorForPage(app, "table col test");
 
-    // Insert a table (3 cols)
-    await app.keyboard.type("/");
-    await expect(app.locator(".slash-menu")).toBeVisible();
-    await app.keyboard.type("table");
-    await app.keyboard.press("Enter");
+  // Insert a table (3 cols)
+  await app.keyboard.type("/");
+  await expect(app.locator(".slash-menu")).toBeVisible();
+  await app.keyboard.type("table");
+  await app.keyboard.press("Enter");
 
-    await expect(editor.locator("th")).toHaveCount(3);
+  await expect(editor.locator("th")).toHaveCount(3);
 
-    await app.locator(".table-toolbar").getByRole("button", { name: "Add column after" }).click();
-    await expect(editor.locator("th")).toHaveCount(4);
+  await app.locator(".table-toolbar").getByRole("button", { name: "Add column after" }).click();
+  await expect(editor.locator("th")).toHaveCount(4);
 
-    await app.locator(".table-toolbar").getByRole("button", { name: "Delete column" }).click();
-    await expect(editor.locator("th")).toHaveCount(3);
-  }
-);
+  await app.locator(".table-toolbar").getByRole("button", { name: "Delete column" }).click();
+  await expect(editor.locator("th")).toHaveCount(3);
+});
 
 appTest("table toolbar deletes table", { tag: ["@EDIT-09:3"] }, async ({ app }) => {
   await quickAdd(app, "table delete test");
@@ -358,21 +361,18 @@ appTest("bubble toolbar inserts a link around the selection", async ({ app }) =>
 // app would otherwise leave the panels gone on the next launch, with nothing on
 // screen to explain why.
 
-appTest(
-  "a focus session hides the left panels and gives them back",
-  async ({ app }) => {
-    await quickAdd(app, "Deep work");
-    await openEditorForPage(app, "Deep work");
+appTest("a focus session hides the left panels and gives them back", async ({ app }) => {
+  await quickAdd(app, "Deep work");
+  await openEditorForPage(app, "Deep work");
 
-    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
 
-    await app.getByRole("button", { name: "Start focus timer" }).click();
-    await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
 
-    await app.getByRole("button", { name: "Stop focus timer" }).click();
-    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
-  }
-);
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});
 
 // Opening the sidebar mid-session is an explicit decision, so the session stops
 // driving it — ending must not yank the panels away again.
@@ -417,20 +417,15 @@ appTest("stopping a focus session toasts how long it ran @mock-only", async ({ p
   await expect(page.getByRole("status", { name: "Focused for 25 minutes" })).toBeVisible();
 });
 
-appTest(
-  "a session under the floor toasts that nothing was recorded",
-  async ({ app }) => {
-    await quickAdd(app, "Quick glance");
-    await openEditorForPage(app, "Quick glance");
+appTest("a session under the floor toasts that nothing was recorded", async ({ app }) => {
+  await quickAdd(app, "Quick glance");
+  await openEditorForPage(app, "Quick glance");
 
-    await app.getByRole("button", { name: "Start focus timer" }).click();
-    await app.getByRole("button", { name: "Stop focus timer" }).click();
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
 
-    await expect(
-      app.getByRole("status", { name: "Under 30 seconds — not recorded" })
-    ).toBeVisible();
-  }
-);
+  await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
+});
 
 // ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
 
@@ -462,3 +457,29 @@ appTest(
     await expect(palette).not.toBeVisible();
   }
 );
+
+// ─── Lists loaded a window at a time ────────────────────────────────────────
+
+appTest.describe("with lists loaded a window at a time", () => {
+  appTest.use({ viewCache: true });
+
+  appTest("typing in a page saves it without fetching the list again", async ({ app }) => {
+    await quickAdd(app, "Meeting notes");
+    await app.locator("[data-page-list-item]").filter({ hasText: "Meeting notes" }).click();
+    const body = app.getByRole("textbox", { name: "Page content" });
+    await body.click();
+    await app.waitForTimeout(WRITE_QUEUE_DEBOUNCE_MS * 2);
+    const fetches = () =>
+      app.evaluate(
+        () => (globalThis as { __PIKOS_LIST_FETCHES__?: number }).__PIKOS_LIST_FETCHES__ ?? 0
+      );
+    const before = await fetches();
+
+    await app.keyboard.type("Agenda: budget, hiring, offsite.");
+    await app.waitForTimeout(WRITE_QUEUE_DEBOUNCE_MS * 3);
+    await app.keyboard.type(" Decisions to follow.");
+    await app.waitForTimeout(WRITE_QUEUE_DEBOUNCE_MS * 3);
+
+    expect(await fetches()).toBe(before);
+  });
+});
