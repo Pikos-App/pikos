@@ -2166,3 +2166,17 @@ describe("createFocusSession", () => {
     expect(adapter.listFocusSessionsForTest()).toEqual([]);
   });
 });
+
+describe("the change counter", () => {
+  it("moves when a page is trashed and when it comes back, as the writer's row update does", async () => {
+    const page = await createTestPage({ title: "Doomed" });
+    const before = (await adapter.changeState()).seq;
+
+    await adapter.softDeletePage(page.id);
+    const trashed = (await adapter.changeState()).seq;
+    expect(trashed).toBeGreaterThan(before);
+
+    await adapter.restorePage(page.id);
+    expect((await adapter.changeState()).seq).toBeGreaterThan(trashed);
+  });
+});

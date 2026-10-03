@@ -529,15 +529,24 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  /** Trash a page or bring it back, touching its row as the writer's `deleted_at` update does, so
+   *  the change counter moves and a cache reading it refreshes. Guarded like the writer: a second
+   *  delete must not overwrite the original stamp and hand the page another 30 days. */
+  private setTrashed(id: string, trashed: boolean): void {
+    if (trashed === this.softDeleted.has(id)) return;
+    if (trashed) this.softDeleted.set(id, now());
+    else this.softDeleted.delete(id);
+    const page = this.pages.get(id);
+    if (page) this.pages.set(id, page);
+  }
+
   softDeletePage(id: string): Promise<void> {
-    // Guarded like the writer: a second delete must not overwrite the original
-    // stamp and hand the page another 30 days.
-    if (!this.softDeleted.has(id)) this.softDeleted.set(id, now());
+    this.setTrashed(id, true);
     return Promise.resolve();
   }
 
   restorePage(id: string): Promise<void> {
-    this.softDeleted.delete(id);
+    this.setTrashed(id, false);
     return Promise.resolve();
   }
 
@@ -937,7 +946,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     // Soft-delete all pages in this folder (mirrors Rust backend behavior)
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.set(page.id, now());
+      if (page.folderId === id) this.setTrashed(page.id, true);
     }
     this.folders.delete(id);
     return Promise.resolve();
@@ -949,7 +958,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     this.softDeletedFolders.add(id);
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.set(page.id, now());
+      if (page.folderId === id) this.setTrashed(page.id, true);
     }
     return Promise.resolve();
   }
@@ -957,7 +966,7 @@ export class MockStorageAdapter implements StorageAdapter {
   restoreFolder(id: string): Promise<void> {
     this.softDeletedFolders.delete(id);
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.delete(page.id);
+      if (page.folderId === id) this.setTrashed(page.id, false);
     }
     return Promise.resolve();
   }
