@@ -4,8 +4,9 @@ import {
   clampDayCount,
   getCalendarDayCount,
   monthGridDays,
+  utcInstant,
 } from "@pikos/core";
-import { addDays, format, isSameDay } from "date-fns";
+import { addDays, format, isSameDay, startOfDay } from "date-fns";
 import { type CSSProperties, useEffect, useState } from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
@@ -20,6 +21,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
+import { useCachedRange } from "@/shared/viewCache/useCachedRange";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
 import { CALENDAR_GUTTER_VAR, CALENDAR_ZOOM_VAR, calendarGutterPx } from "../utils/gutterWidth";
@@ -64,7 +66,6 @@ export function CalendarView() {
     textSize: calendarTextSize,
     viewMode,
   } = useCalendarSettings();
-  const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
   const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
@@ -112,8 +113,17 @@ export function CalendarView() {
     rangeStart && rangeEnd
       ? `${format(rangeStart, "yyyy-MM-dd")}|${format(rangeEnd, "yyyy-MM-dd")}`
       : null;
+  const cachedRange = useCachedRange(
+    rangeStart ? utcInstant(startOfDay(rangeStart)) : null,
+    rangeEnd ? utcInstant(startOfDay(addDays(rangeEnd, 1))) : null
+  );
+  // Until edits are kept beside the cached rows, the in-memory copy carries the unsaved ones.
+  const inMemory = cachedRange ? new Map(pages.map((p) => [p.id, p])) : null;
+  const visiblePages = (
+    cachedRange && inMemory ? cachedRange.map((p) => inMemory.get(p.id) ?? p) : pages
+  ).filter((p) => !hiddenIds.has(p.id));
   useEffect(() => {
-    if (!storage || !rangeStart || !rangeEnd) return;
+    if (cachedRange || !storage || !rangeStart || !rangeEnd) return;
     const scheduledAfter = format(addDays(rangeStart, -COMPLETED_LOOKBACK_DAYS), "yyyy-MM-dd");
     const scheduledBefore = format(rangeEnd, "yyyy-MM-dd");
     let cancelled = false;

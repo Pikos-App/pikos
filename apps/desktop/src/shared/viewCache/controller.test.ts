@@ -105,3 +105,96 @@ describe("ViewCacheController shown twice before its first window lands", () => 
     expect(window.__PIKOS_SHADOW_MISMATCHES__ ?? []).toEqual([]);
   });
 });
+
+describe("ViewCacheController calendar ranges", () => {
+  const start = "2026-06-01T00:00:00Z";
+  const end = "2026-06-08T00:00:00Z";
+
+  it("holds a range's pages, done ones too, and every series head", async () => {
+    const { adapter, controller } = await setup(0);
+    const open = await adapter.createPage({
+      ...newPage("Dentist"),
+      scheduledStart: "2026-06-03T09:00:00",
+    });
+    const done = await adapter.createPage({
+      ...newPage("Filed taxes"),
+      scheduledStart: "2026-06-04T09:00:00",
+      status: "done",
+    });
+    await adapter.createPage({ ...newPage("Next month"), scheduledStart: "2026-07-03T09:00:00" });
+    await settle();
+    controller.showRange(start, end);
+    await settle();
+    const ids = controller.rangePages(start, end).map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining([open.id, done.id]));
+    expect(ids).toHaveLength(2);
+  });
+
+  it("refetches the range on screen after a write, and drops every range when hidden", async () => {
+    const { adapter, controller } = await setup(0);
+    controller.showRange(start, end);
+    await settle();
+    const added = await adapter.createPage({
+      ...newPage("Added"),
+      scheduledStart: "2026-06-05T10:00:00",
+    });
+    await settle();
+    expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+    controller.hideRanges();
+    expect(controller.rangePages(start, end)).toEqual([]);
+  });
+});
+
+describe("ViewCacheController series heads", () => {
+  it("gives a range every series head, even one dated outside it", async () => {
+    const { adapter, controller } = await setup(0);
+    const head = await adapter.createPage({
+      ...newPage("Standup"),
+      scheduledStart: "2026-05-04T09:00:00",
+    });
+    await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-05-04T09:00:00",
+      timezone: "UTC",
+    });
+    await settle();
+    controller.showRange("2026-06-01T00:00:00Z", "2026-06-08T00:00:00Z");
+    await settle();
+    const ids = controller
+      .rangePages("2026-06-01T00:00:00Z", "2026-06-08T00:00:00Z")
+      .map((p) => p.id);
+    expect(ids).toContain(head.id);
+  });
+});
+
+describe("ViewCacheController range races", () => {
+  it("keeps a range's newer load when an older one lands after it", async () => {
+    const { adapter, controller, raw } = await setup(0);
+    const start = "2026-06-01T00:00:00Z";
+    const end = "2026-06-08T00:00:00Z";
+    const real = raw.listRange.bind(raw);
+    const held: Array<() => void> = [];
+    raw.listRange = (...args) =>
+      new Promise((resolve) => {
+        const answer = real(...args);
+        held.push(() => void answer.then(resolve));
+      });
+
+    controller.showRange(start, end);
+    await settle();
+    const added = await adapter.createPage({
+      ...newPage("Added"),
+      scheduledStart: "2026-06-03T09:00:00",
+    });
+    await settle();
+    // The first load read before the write; the refresh's load reads after it.
+    raw.listRange = real;
+    const [older, newer] = held;
+    newer?.();
+    await settle();
+    older?.();
+    await settle();
+    expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+  });
+});

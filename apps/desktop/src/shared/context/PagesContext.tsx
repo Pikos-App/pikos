@@ -47,7 +47,7 @@ import { usePageWriteQueue } from "./usePageWriteQueue";
 import { usePageWrites } from "./usePageWrites";
 import { type GapRunOptions, useRecurringWrites } from "./useRecurringWrites";
 import { useScheduleWrites } from "./useScheduleWrites";
-import { useWorkspaceInternal } from "./WorkspaceContext";
+import { useViewCacheController, useWorkspaceInternal } from "./WorkspaceContext";
 
 export type { GapRunOptions };
 
@@ -191,6 +191,7 @@ const PagesContext = createContext<PagesContextValue | null>(null);
 export function PagesProvider({ children }: { children: ReactNode }) {
   const { adapter, eventBus, registerDataLoader } = useWorkspaceInternal();
   const { emit } = eventBus;
+  const viewCache = useViewCacheController();
   const { defaultFolderId } = useAppSettings();
 
   // Collections, their latest-state mirrors, derived tags, and the loader
@@ -253,7 +254,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // Page CRUD: create, delete (hard + soft), restore, reorder, bulk status.
   const {
     clearPendingDescription,
-    createPage,
+    createPage: createPageOnly,
     deletePage,
     reorderPages,
     restorePage,
@@ -280,6 +281,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setPages,
     setRecurrenceRules,
   });
+
+  async function createPage(opts: { title?: string; folderId?: string | null }): Promise<Page> {
+    const page = await createPageOnly(opts);
+    viewCache?.adoptCreated(page);
+    return page;
+  }
 
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 

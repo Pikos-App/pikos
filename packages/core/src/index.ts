@@ -280,6 +280,7 @@ export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
 export type { ViewerScheduled } from "./utils/syncedTime";
 export { resolveSyncedInstant, viewerEnd, viewerStart, viewerWallClock } from "./utils/syncedTime";
 export {
+  utcInstant,
   expandRecurrenceInZone,
   normalizeUntilToZone,
   utcToWallClock,

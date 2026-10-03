@@ -13,6 +13,10 @@ import type { ViewCacheConfig } from "./config";
 
 const log = createLogger("viewCache");
 
+const QUIET_POLL_MS = 10;
+/** Long enough to outlast a burst of writes, short enough that a stream of them still shows. */
+const QUIET_WAIT_MS = 500;
+
 export class ViewCacheController {
   readonly store = new PageStore();
   readonly cache: ViewCache;
@@ -36,6 +40,15 @@ export class ViewCacheController {
   /** The day the sidebar shows badges for, once it has asked; a write recounts it. */
   private countsDay: string | null = null;
   private countsAsked = 0;
+  /** Calendar ranges visited while the calendar is mounted, by `start|end`: their pages' ids. */
+  private ranges = new Map<string, { ids: string[]; stale: boolean }>();
+  private shownRange: { start: string; end: string } | null = null;
+  /** Loads asked of each range, so only the latest is kept. */
+  private rangeAsked = new Map<string, number>();
+  /** Every recurring series' head, which a range needs for occurrences of heads outside it. */
+  private heads: string[] | null = null;
+  /** Bumped by every write, so a range read that a write overlapped is kept but marked stale. */
+  private rangeEpoch = 0;
   private refreshAgain = false;
 
   constructor(
@@ -67,8 +80,82 @@ export class ViewCacheController {
     this.writesInFlight -= 1;
     this.writeEpoch += 1;
     this.cache.invalidate();
+    this.rangeEpoch += 1;
+    for (const range of this.ranges.values()) range.stale = true;
     this.bump();
     void this.refresh();
+  }
+
+  /** The calendar shows `start` to `end`: load it unless a current copy is held. */
+  showRange(start: string, end: string): void {
+    this.shownRange = { end, start };
+    const held = this.ranges.get(`${start}|${end}`);
+    if (!held || held.stale) void this.loadRange(start, end);
+    if (this.heads === null) void this.loadHeads();
+    this.bump();
+  }
+
+  /** A page this app just created: held, and on the calendar range on screen, ahead of the
+   *  refetch that would bring it, so a block made by a click is there to open its popover. */
+  adoptCreated(page: PageSummary): void {
+    this.store.confirm([page]);
+    const range =
+      this.shownRange && this.ranges.get(`${this.shownRange.start}|${this.shownRange.end}`);
+    if (range && !range.ids.includes(page.id)) range.ids = [...range.ids, page.id];
+    this.bump();
+  }
+
+  /** The calendar unmounted: its ranges go. */
+  hideRanges(): void {
+    this.ranges.clear();
+    this.shownRange = null;
+    this.heads = null;
+    this.bump();
+  }
+
+  /** A range's pages, and every series head not among them. */
+  rangePages(start: string, end: string): PageSummary[] {
+    const ids = this.ranges.get(`${start}|${end}`)?.ids ?? [];
+    const seen = new Set(ids);
+    const pages = ids.flatMap((id) => this.store.get(id) ?? []);
+    for (const id of this.heads ?? []) {
+      const head = seen.has(id) ? undefined : this.store.get(id);
+      if (head) pages.push(head);
+    }
+    return pages;
+  }
+
+  /** Only a range's latest load is kept: an earlier one landing after it would undo it. One a
+   *  write overlapped is kept but stale, and loads again if the range is on screen. */
+  private async loadRange(start: string, end: string): Promise<void> {
+    const name = `${start}|${end}`;
+    const asked = (this.rangeAsked.get(name) ?? 0) + 1;
+    this.rangeAsked.set(name, asked);
+    const epoch = this.rangeEpoch;
+    let rows: PageSummary[];
+    try {
+      rows = await this.adapter.listRange(start, end, getLocalTimezone(), false);
+    } catch {
+      return;
+    }
+    if (this.rangeAsked.get(name) !== asked) return;
+    this.store.confirm(rows);
+    const stale = epoch !== this.rangeEpoch;
+    this.ranges.set(name, { ids: rows.map((r) => r.id), stale });
+    this.bump();
+    const shown = this.shownRange;
+    if (stale && shown?.start === start && shown.end === end) void this.loadRange(start, end);
+  }
+
+  private async loadHeads(): Promise<void> {
+    try {
+      const heads = await this.adapter.listSeriesHeads(false);
+      this.store.confirm(heads);
+      this.heads = heads.map((h) => h.id);
+    } catch {
+      // Occurrences of heads outside the range wait for the next load.
+    }
+    this.bump();
   }
 
   /**
@@ -88,8 +175,9 @@ export class ViewCacheController {
       )
         void this.shadowCheck(key);
     }
+    const calendar = [...this.ranges.values()].flatMap((r) => r.ids);
     evict(this.cache, this.store, this.config.budgetBytes, {
-      pages: new Set(pinnedPages),
+      pages: new Set([...pinnedPages, ...calendar, ...(this.heads ?? [])]),
       views: new Set(keys.map(viewName)),
     });
     this.bump();
@@ -232,6 +320,7 @@ export class ViewCacheController {
     }
     this.refreshing = (async () => {
       do {
+        await this.writesQuiet();
         this.refreshAgain = false;
         await Promise.all([
           ...this.shown.map((key) =>
@@ -241,6 +330,8 @@ export class ViewCacheController {
             )
           ),
           this.loadCounts(),
+          this.shownRange ? this.loadRange(this.shownRange.start, this.shownRange.end) : undefined,
+          this.heads !== null ? this.loadHeads() : undefined,
         ]);
       } while (this.refreshAgain);
     })();
@@ -248,6 +339,18 @@ export class ViewCacheController {
       await this.refreshing;
     } finally {
       this.refreshing = null;
+    }
+  }
+
+  /** Resolves once no write is in flight, or after `QUIET_WAIT_MS` at most, so a burst of writes
+   *  (a seed, an import, a bulk tick) costs one refresh after it rather than one per write. */
+  private async writesQuiet(): Promise<void> {
+    for (
+      let waited = 0;
+      this.writesInFlight > 0 && waited < QUIET_WAIT_MS;
+      waited += QUIET_POLL_MS
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, QUIET_POLL_MS));
     }
   }
 
