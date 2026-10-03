@@ -21,6 +21,7 @@ pub mod recurrence_derive;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
+pub mod sql_functions;
 pub mod sync;
 pub mod sync_commands;
 pub mod sync_delta;

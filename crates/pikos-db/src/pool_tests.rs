@@ -44,6 +44,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "013",
         include_str!("../migrations/013_pages_live_sort_index.sql"),
     ),
+    ("014", include_str!("../migrations/014_order_inputs.sql")),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -79,7 +80,7 @@ async fn single_conn_memory_pool() -> SqlitePool {
     let opts = SqliteConnectOptions::from_str(":memory:")
         .expect("parse :memory: opts")
         .foreign_keys(true);
-    SqlitePoolOptions::new()
+    with_functions(SqlitePoolOptions::new())
         .max_connections(1)
         .connect_with(opts)
         .await
@@ -941,7 +942,7 @@ async fn regenerate_shipped_workspace_fixture() {
         .filename(&path)
         .create_if_missing(true)
         .foreign_keys(true);
-    let pool = SqlitePoolOptions::new()
+    let pool = with_functions(SqlitePoolOptions::new())
         .max_connections(1)
         .connect_with(opts)
         .await
@@ -1178,4 +1179,89 @@ async fn only_a_background_checkpointing_pool_turns_inline_checkpoints_off() {
     .unwrap();
     assert_eq!(setting(background).await, 0);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn upgrading_fills_in_the_sort_inputs_of_events_already_synced() {
+    use crate::sync_delta::{
+        EventCore, EventSchedule, EventUpsert, ExclusiveEnd, SyncDelta, UpsertItem,
+    };
+
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let staged = std::env::temp_dir().join(format!("pkos_mig_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&staged).unwrap();
+    for entry in std::fs::read_dir(&source).unwrap() {
+        let name = entry.unwrap().file_name();
+        if name.to_string_lossy().as_ref() < "014" {
+            std::fs::copy(source.join(&name), staged.join(&name)).unwrap();
+        }
+    }
+    let pool = with_functions(SqlitePoolOptions::new())
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::from_str(":memory:")
+                .unwrap()
+                .foreign_keys(true),
+        )
+        .await
+        .unwrap();
+    Migrator::new(staged.as_path())
+        .await
+        .unwrap()
+        .run(&pool)
+        .await
+        .unwrap();
+
+    crate::insert_test_folder(&pool, "f1", "Cal").await.unwrap();
+    let now = now_iso();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('a1', 'caldav', 'Fastmail', 'basic', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    crate::reconciler::reconcile(
+        &pool,
+        &crate::reconciler::ReconcileContext {
+            account_id: "a1".into(),
+            calendar_id: "cal".into(),
+            provider: "caldav".into(),
+            folder_id: "f1".into(),
+        },
+        &SyncDelta {
+            upserts: vec![UpsertItem::Event(EventUpsert {
+                core: EventCore {
+                    external_id: "/ev.ics".into(),
+                    ical_uid: "uid-1".into(),
+                    etag: Some("v1".into()),
+                    title: "Meeting".into(),
+                    description: None,
+                    location: None,
+                    attendees: vec![],
+                },
+                schedule: EventSchedule {
+                    start: "2026-06-15T09:00:00".into(),
+                    end: ExclusiveEnd::new(None),
+                    timezone: Some("America/New_York".into()),
+                },
+                recurrence: None,
+            })],
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    MIGRATOR.run(&pool).await.unwrap();
+
+    let inputs: (bool, Option<String>) =
+        sqlx::query_as("SELECT is_absolute, abs_start_utc FROM pages WHERE title = 'Meeting'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(inputs, (true, Some("2026-06-15T13:00:00Z".into())));
+    let _ = std::fs::remove_dir_all(&staged);
 }

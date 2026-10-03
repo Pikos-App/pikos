@@ -252,12 +252,18 @@ async fn integrity_failure(path: &str) -> Option<String> {
     }
 }
 
+/// Registers [`crate::sql_functions`] on each connection the pool opens. Any pool that runs the
+/// migrations or writes pages needs it.
+pub fn with_functions(options: sqlx::sqlite::SqlitePoolOptions) -> sqlx::sqlite::SqlitePoolOptions {
+    options.after_connect(|conn, _| Box::pin(crate::sql_functions::register(conn)))
+}
+
 async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let pool = with_functions(sqlx::sqlite::SqlitePoolOptions::new())
         .max_connections(5)
         .connect_with(
             sqlx::sqlite::SqliteConnectOptions::new()
@@ -502,7 +508,7 @@ pub async fn test_pool() -> SqlitePool {
     let opts = sqlx::sqlite::SqliteConnectOptions::from_str(":memory:")
         .expect("parse :memory: opts")
         .foreign_keys(true);
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let pool = with_functions(sqlx::sqlite::SqlitePoolOptions::new())
         .max_connections(1)
         .connect_with(opts)
         .await

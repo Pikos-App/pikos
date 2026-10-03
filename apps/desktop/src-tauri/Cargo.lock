@@ -3462,6 +3462,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "iana-time-zone",
+ "libsqlite3-sys",
  "log",
  "pikos-recurrence",
  "serde",
