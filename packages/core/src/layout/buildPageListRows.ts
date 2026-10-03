@@ -21,7 +21,12 @@ export type VirtualRow =
   | { type: "empty-state"; key: string }
   | { type: "completed-toggle"; key: string }
   | { type: "load-more"; key: string }
-  | { type: "empty-completed"; key: string };
+  | { type: "empty-completed"; key: string }
+  /** A row of the list not loaded yet: its id when known, else just its place. */
+  | { type: "placeholder"; key: string; id: string | null };
+
+/** A slot in a list loaded a window at a time: the page, or a row still to load. */
+export type ListSlot = PageSummary | { placeholder: true; id: string | null; key: string };
 
 /** One day's worth of the Upcoming view — see core `groupUpcomingPages`. */
 export interface PageListDaySection {
@@ -45,6 +50,10 @@ export interface BuildPageListRowsInput {
   completedCollapsed: boolean;
   completedPages: PageSummary[];
   completedHasMore: boolean;
+  /** A list loaded a window at a time, in place of `visiblePages` outside Today and Upcoming. */
+  slots?: ListSlot[];
+  /** The first window hasn't arrived, so an empty list isn't known to be empty yet. */
+  loading?: boolean;
 }
 
 export interface BuildPageListRowsResult {
@@ -60,8 +69,10 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
     completedPages,
     daySections = [],
     isTodayView,
+    loading = false,
     overdue,
     overdueCollapsed,
+    slots,
     today,
     visiblePages,
   } = input;
@@ -69,7 +80,18 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
   const rows: VirtualRow[] = [];
   const pageToRowIndex = new Map<string, number>();
 
-  if (visiblePages.length === 0) {
+  if (slots) {
+    if (slots.length === 0 && !loading) rows.push({ key: "empty-state", type: "empty-state" });
+    for (const slot of slots) {
+      if ("placeholder" in slot) {
+        if (slot.id) pageToRowIndex.set(slot.id, rows.length);
+        rows.push({ id: slot.id, key: slot.key, type: "placeholder" });
+      } else {
+        pageToRowIndex.set(slot.id, rows.length);
+        rows.push({ key: slot.id, page: slot, type: "page" });
+      }
+    }
+  } else if (visiblePages.length === 0) {
     rows.push({ key: "empty-state", type: "empty-state" });
   } else if (daySections.length > 0) {
     for (const section of daySections) {

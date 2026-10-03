@@ -298,3 +298,29 @@ describe("completed section", () => {
     expect(pageToRowIndex.has("done1")).toBe(true);
   });
 });
+
+describe("a list loaded a window at a time", () => {
+  it("shows loaded pages, then a placeholder per row still to load", () => {
+    const { pageToRowIndex, rows } = buildPageListRows(
+      defaults({
+        slots: [
+          makePage({ id: "a" }),
+          { id: "b", key: "b", placeholder: true },
+          { id: null, key: "slot-2", placeholder: true },
+        ],
+      })
+    );
+    expect(rows.map((r) => r.type)).toEqual([
+      "page",
+      "placeholder",
+      "placeholder",
+      "completed-toggle",
+    ]);
+    expect(pageToRowIndex.get("b")).toBe(1);
+  });
+
+  it("waits for the first window before saying the list is empty", () => {
+    expect(rowTypes(defaults({ loading: true, slots: [] }))).toEqual(["completed-toggle"]);
+    expect(rowTypes(defaults({ slots: [] }))).toEqual(["empty-state", "completed-toggle"]);
+  });
+});

@@ -8,6 +8,12 @@
 // chunk import the class from "@pikos/core/testing" instead.
 export type { MockStorageAdapter } from "./adapters/MockStorageAdapter";
 export * from "./adapters/NoopPlatformAdapter";
+export { evict } from "./cache/eviction";
+export type { Evicted, Pinned } from "./cache/eviction";
+export { PageStore, summaryBytes } from "./cache/pageStore";
+export type { WriteOutcome } from "./cache/pageStore";
+export { ViewCache, viewName } from "./cache/viewCache";
+export type { FetchToken, ViewEntry } from "./cache/viewCache";
 // ── Calendar math: row/block layout, hour↔pixel geometry, grid constants ──
 export {
   assignAllDayRows,
@@ -174,6 +180,7 @@ export type {
   BuildPageListRowsInput,
   BuildPageListRowsResult,
   PageListDaySection,
+  ListSlot,
   VirtualRow,
 } from "./layout/buildPageListRows";
 export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
@@ -213,6 +220,8 @@ export {
 // ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";
+export { STORAGE_READS, watchWrites } from "./storageReads";
+export type { WriteWatcher } from "./storageReads";
 export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/accountLabel";
 // ── Calendar sync health, derived from the read model ──
 export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";
