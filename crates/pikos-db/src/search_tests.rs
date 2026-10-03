@@ -366,3 +366,19 @@ async fn past_the_scan_title_matches_lead_and_older_body_matches_drop() {
     let ids: Vec<&str> = with_done.results.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ids, ["p1", "p2", "p4"]);
 }
+
+#[tokio::test]
+async fn the_index_drives_the_join_to_pages_without_statistics() {
+    let pool = test_pool().await;
+    sqlx::query("DELETE FROM sqlite_stat1")
+        .execute(&pool)
+        .await
+        .ok();
+    let sql = format!(
+        "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM {MATCHED_PAGES}
+         WHERE pages_fts MATCH 'word*' AND pages.deleted_at IS NULL AND pages.status = 'done'"
+    );
+    let plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(&sql).fetch_all(&pool).await.unwrap();
+    let first = &plan.first().unwrap().3;
+    assert!(first.starts_with("SCAN pages_fts"), "{plan:?}");
+}

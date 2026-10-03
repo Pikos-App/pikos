@@ -39,6 +39,11 @@ const BM25: &str = "bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0)";
 const SEARCH_COLUMNS: &str = "pages.id, pages.title, pages.subtitle, pages.content_text,
      pages.status, pages.scheduled_start, pages.priority, pages.tags, pages.mirror_search_text";
 const RESULT_LIMIT: i64 = 20;
+/// The matches joined to their pages, with the index driving. `CROSS JOIN` fixes that order:
+/// without table statistics, as before a large workspace's first sampling, SQLite started the
+/// completed count from the status index and probed the index once per done page, 3 s at
+/// 500,000 pages for a word on fifty of them.
+const MATCHED_PAGES: &str = "pages_fts CROSS JOIN pages ON pages.rowid = pages_fts.rowid";
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -371,8 +376,7 @@ pub async fn search_pages_scan(
         None => {
             let sql = format!(
                 "SELECT {SEARCH_COLUMNS}
-                 FROM pages_fts
-                 JOIN pages ON pages.rowid = pages_fts.rowid
+                 FROM {MATCHED_PAGES}
                  WHERE pages_fts MATCH ?1
                    AND pages.deleted_at IS NULL
                    {status_filter}
@@ -383,16 +387,16 @@ pub async fn search_pages_scan(
                 .bind(&fts_query)
                 .fetch_all(pool)
                 .await?;
-            let completed: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM pages_fts
-                 JOIN pages ON pages.rowid = pages_fts.rowid
+            let count_sql = format!(
+                "SELECT COUNT(*) FROM {MATCHED_PAGES}
                  WHERE pages_fts MATCH ?1
                    AND pages.deleted_at IS NULL
-                   AND pages.status = 'done'",
-            )
-            .bind(&fts_query)
-            .fetch_one(pool)
-            .await?;
+                   AND pages.status = 'done'"
+            );
+            let completed: i64 = sqlx::query_scalar(&count_sql) // sql-ok: fragments are compile-time constants
+                .bind(&fts_query)
+                .fetch_one(pool)
+                .await?;
             (rows, completed)
         }
         Some(n) => capped_search(pool, &fts_query, n, include_completed).await?,
@@ -519,7 +523,7 @@ async fn capped_search(
              SELECT r, 1 AS tier, score FROM body WHERE r NOT IN (SELECT r FROM titled)),
          live AS (
              SELECT candidates.tier, candidates.score, pages.*
-             FROM candidates JOIN pages ON pages.rowid = candidates.r
+             FROM candidates CROSS JOIN pages ON pages.rowid = candidates.r
              WHERE pages.deleted_at IS NULL)
          SELECT {SEARCH_COLUMNS},
                 (SELECT COUNT(*) FROM live WHERE status = 'done') AS completed_count
