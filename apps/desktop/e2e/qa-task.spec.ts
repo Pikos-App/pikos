@@ -108,6 +108,8 @@ appTest(
           .click();
         await expect(app.getByRole("button", { name: `Priority: ${level}` })).toBeVisible();
         await app.keyboard.press("Escape");
+        // The popover fades out before it leaves the page, and its own priority button with it.
+        await expect(app.getByRole("dialog")).toHaveCount(0);
         await app.getByRole("button", { name: "Editor view" }).click();
       });
     }
