@@ -8,11 +8,12 @@ import type {
   PageSummary,
   Placement,
   StorageAdapter,
+  TagCount,
   ViewCounts,
   ViewKey,
 } from "@pikos/core";
 import { getLocalTimezone } from "@pikos/core";
-import { evict, PageStore, summaryBytes, ViewCache, viewName } from "@pikos/core";
+import { evict, PageStore, summaryBytes, toPageSummary, ViewCache, viewName } from "@pikos/core";
 import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
 
 import { createLogger } from "@/shared/logger";
@@ -65,6 +66,7 @@ export class ViewCacheController {
   private countsAsked = 0;
   /** The change counter as the last refresh found it; null until first read. */
   private counter: { epoch: string; seq: number } | null = null;
+  private tagList: TagCount[] | null = null;
   /** List windows fetched, for the test that typing doesn't refetch lists. */
   listFetches = 0;
   /**
@@ -255,6 +257,7 @@ export class ViewCacheController {
   }
 
   private holdBody(page: Page, seen: number): void {
+    this.store.confirm([toPageSummary(page)]);
     const old = this.bodies.get(page.id);
     if (old) this.bodyBytes -= old.bytes;
     const bytes = (page.content?.length ?? 0) * 2 + summaryBytes(page);
@@ -305,11 +308,10 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** The calendar unmounted: its ranges go. */
+  /** The calendar unmounted: its ranges go; the series heads stay. */
   hideRanges(): void {
     this.ranges.clear();
     this.shownRange = null;
-    this.heads = null;
     this.bump();
   }
 
@@ -345,6 +347,12 @@ export class ViewCacheController {
     this.bump();
     const shown = this.shownRange;
     if (stale && shown?.start === start && shown.end === end) void this.loadRange(start, end);
+  }
+
+  /** Every recurring series' head, held from launch: Today swaps a synced series' occurrence in
+   *  for its head, and unticking a done clone finds its series, wherever the head is dated. */
+  loadSeriesHeads(): Promise<void> {
+    return this.loadHeads();
   }
 
   private async loadHeads(): Promise<void> {
@@ -469,6 +477,29 @@ export class ViewCacheController {
     this.bump();
   }
 
+  /** Every page held, as shown: what the page list is while the view cache is its only copy. */
+  heldPages(): PageSummary[] {
+    return this.store.ids().flatMap((id) => this.store.get(id) ?? []);
+  }
+
+  /** Tags on open pages, most used first; empty until first asked for, then kept current. */
+  tags(): TagCount[] {
+    if (this.tagList === null) {
+      this.tagList = [];
+      void this.loadTags();
+    }
+    return this.tagList;
+  }
+
+  private async loadTags(): Promise<void> {
+    try {
+      this.tagList = await this.adapter.listTags();
+    } catch {
+      // The next refresh asks again.
+    }
+    this.bump();
+  }
+
   /** Called with the ids a refresh took out of a list on screen. */
   onLeft(listener: (ids: ReadonlySet<string>) => void): () => void {
     this.leftListeners.add(listener);
@@ -555,8 +586,9 @@ export class ViewCacheController {
             )
           ),
           this.loadCounts(),
+          this.tagList !== null ? this.loadTags() : undefined,
           this.shownRange ? this.loadRange(this.shownRange.start, this.shownRange.end) : undefined,
-          this.shownRange ? this.loadHeads() : undefined,
+          this.shownRange || this.heads !== null ? this.loadHeads() : undefined,
         ]);
       } while (this.refreshAgain);
     })();

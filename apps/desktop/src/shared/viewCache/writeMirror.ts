@@ -30,6 +30,22 @@ export class WriteMirror {
     return writes;
   }
 
+  /** The page list went from `prev` to `next` with the store as its only copy: an edit inside a
+   *  write's `capture`, else rows read from the database (a write's echo, a rollback), confirmed. */
+  apply(prev: PageSummary[], next: PageSummary[]): void {
+    if (this.recording) {
+      this.changed(prev, next);
+      return;
+    }
+    const kept = new Set<string>();
+    const before = new Map(prev.map((p) => [p.id, p]));
+    for (const page of next) {
+      kept.add(page.id);
+      if (before.get(page.id) !== page) this.store.confirm([page]);
+    }
+    for (const id of before.keys()) if (!kept.has(id)) this.store.remove(id);
+  }
+
   /** The in-memory list went from `prev` to `next`. Recorded only inside `capture`: a load or a
    *  rollback changes the list too, and isn't an edit. */
   changed(prev: PageSummary[], next: PageSummary[]): void {

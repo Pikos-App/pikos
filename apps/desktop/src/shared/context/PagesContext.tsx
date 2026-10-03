@@ -208,7 +208,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setPages,
     setRecurrenceRules,
     tags,
-  } = usePagesStore({ adapter, mirror: viewCache?.mirror ?? null, registerDataLoader });
+  } = usePagesStore({ adapter, registerDataLoader, viewCache });
 
   // Debounce, per-page write serialisation, rollback snapshots, pageErrors, and
   // the optimistic-write shape every mutation below goes through.

@@ -1,6 +1,14 @@
 import { expect } from "@playwright/test";
 
-import { test as appTest, bridgeCall, createFolder, mod, quickAdd, ringDoorbell } from "./fixtures";
+import {
+  test as appTest,
+  bridgeCall,
+  createFolder,
+  mod,
+  quickAdd,
+  ringDoorbell,
+  WRITE_QUEUE_DEBOUNCE_MS,
+} from "./fixtures";
 
 // ─── Open page and edit content ────────────────────────────────────────────
 
@@ -319,6 +327,41 @@ appTest(
 
 appTest.describe("with lists loaded a window at a time", () => {
   appTest.use({ viewCache: true });
+
+  appTest(
+    "search lists recently opened pages after a reload, from the database",
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "the mock's database doesn't outlive a reload");
+      for (const title of ["first opened", "second opened", "never opened"])
+        await quickAdd(app, title);
+      const rows = app.locator("[data-page-list-item]");
+      await rows.filter({ hasText: "first opened" }).click();
+      await expect(app.getByLabel("Page title")).toHaveText("first opened");
+      await rows.filter({ hasText: "second opened" }).click();
+      await expect(app.getByLabel("Page title")).toHaveText("second opened");
+      await app.waitForTimeout(WRITE_QUEUE_DEBOUNCE_MS);
+      // An empty folder on screen, so after the reload no list holds the pages.
+      await createFolder(app, "Elsewhere");
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+      await app.keyboard.press(mod("Mod+k"));
+      const dialog = app.getByRole("dialog", { name: "Search pages" });
+      await expect(dialog.getByText("first opened")).toBeVisible();
+      await expect(dialog.getByText("never opened")).toHaveCount(0);
+    }
+  );
+
+  appTest("the page open at launch opens again after a reload", async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "the mock's database doesn't outlive a reload");
+    await quickAdd(app, "remember me");
+    await app.locator("[data-page-list-item]").filter({ hasText: "remember me" }).click();
+    const title = app.getByLabel("Page title");
+    await expect(title).toHaveText("remember me");
+    await app.reload();
+    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    await expect(title).toHaveText("remember me");
+  });
 
   appTest(
     "a selected page trashed outside the app leaves the list and the selection when the bell rings",

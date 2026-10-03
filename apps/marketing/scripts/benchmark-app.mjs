@@ -59,7 +59,12 @@ const sizes = arg("--sizes", quick ? "2000,200000" : SIZES.join(","))
 const only = arg("--only", "");
 const samples = arg("--samples", quick ? "5" : "");
 const baselinePath = arg("--baseline", null);
-const LAST_QUICK = join(dir, "last-quick.json");
+/** Lists, counts, the calendar and pages read a window at a time, with no full load at launch. */
+const viewCache = process.argv.includes("--view-cache");
+const flavor = viewCache ? "view-cache" : "full";
+const LAST_QUICK = join(dir, viewCache ? "last-quick-view-cache.json" : "last-quick.json");
+/** Which flavour the app at APP was built as, so switching flavours rebuilds. */
+const BUILT_FLAVOR = join(dir, "built-flavor");
 /** A launch that hasn't reported by then has hung, which is itself the result. */
 const LAUNCH_TIMEOUT_MS = 10 * 60_000;
 const REFERENCE_PAGES = 2_000;
@@ -98,9 +103,10 @@ function newestSource() {
 }
 
 const built = existsSync(APP) ? statSync(APP).mtimeMs : 0;
+const builtFlavor = existsSync(BUILT_FLAVOR) ? readFileSync(BUILT_FLAVOR, "utf8").trim() : "full";
 const build =
   process.argv.includes("--build") ||
-  (!process.argv.includes("--skip-build") && newestSource() > built);
+  (!process.argv.includes("--skip-build") && (newestSource() > built || builtFlavor !== flavor));
 run("cargo", ["build", "--release", "-p", "pikos-cli"], { cwd: ROOT, stdio: "ignore" });
 if (build) {
   console.log("building the bench app");
@@ -115,8 +121,13 @@ if (build) {
       "--config",
       "src-tauri/tauri.conf.bench.json",
     ],
-    { cwd: DESKTOP, env: { ...process.env, VITE_BENCH: "true" }, stdio: "inherit" }
+    {
+      cwd: DESKTOP,
+      env: { ...process.env, VITE_BENCH: "true", VITE_VIEW_CACHE: String(viewCache) },
+      stdio: "inherit",
+    }
   );
+  writeFileSync(BUILT_FLAVOR, flavor);
 }
 
 function quantile(samples, p) {

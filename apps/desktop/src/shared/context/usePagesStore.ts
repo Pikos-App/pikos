@@ -15,9 +15,22 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
-import type { WriteMirror } from "@/shared/viewCache/writeMirror";
+import type { ViewCacheController } from "@/shared/viewCache/controller";
+
+const NO_SUBSCRIPTION = () => () => undefined;
+const NO_VERSION = () => 0;
+
+/** `version` is an argument so the compiler can't memoize the read; see `readView`. */
+function heldPages(viewCache: ViewCacheController, _version: number): PageSummary[] {
+  return viewCache.heldPages();
+}
+
+function cachedTags(viewCache: ViewCacheController, _version: number): Tag[] {
+  return viewCache.tags().map((t) => ({ name: t.name, pageCount: t.pageCount, pageIds: [] }));
+}
 
 export interface PagesStore {
   folders: Folder[];
@@ -37,15 +50,20 @@ export interface PagesStore {
 
 export function usePagesStore({
   adapter,
-  mirror,
   registerDataLoader,
+  viewCache,
 }: {
   adapter: StorageAdapter;
-  /** Where edits go too, when the view cache is on. */
-  mirror: WriteMirror | null;
   registerDataLoader: (loader: (() => Promise<void>) | null) => void;
+  /** With the view cache on, the pages are what it holds rather than every open page. */
+  viewCache: ViewCacheController | null;
 }): PagesStore {
-  const [pages, setPagesState] = useState<PageSummary[]>([]);
+  const version = useSyncExternalStore(
+    viewCache?.subscribe ?? NO_SUBSCRIPTION,
+    viewCache?.getVersion ?? NO_VERSION
+  );
+  const [statePages, setPagesState] = useState<PageSummary[]>([]);
+  const pages = viewCache ? heldPages(viewCache, version) : statePages;
   const [folders, setFolders] = useState<Folder[]>([]);
   const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
 
@@ -64,14 +82,18 @@ export function usePagesStore({
   recurrenceRulesRef.current = recurrenceRules;
   /* eslint-enable react-hooks/refs */
 
-  // The mirror diffs against the latest list it can see; the state update itself still applies
-  // `action` to React's latest, so a queued load is never overwritten.
+  // With the view cache on, a change to the list is a change to the store, made through the
+  // mirror; the list re-renders from the store. The ref takes the result at once, so a second
+  // change in the same tick builds on the first.
   function setPages(action: SetStateAction<PageSummary[]>): void {
-    if (mirror) {
-      const prev = pagesRef.current;
-      mirror.changed(prev, typeof action === "function" ? action(prev) : action);
+    if (!viewCache) {
+      setPagesState(action);
+      return;
     }
-    setPagesState(action);
+    const prev = pagesRef.current;
+    const next = typeof action === "function" ? action(prev) : action;
+    viewCache.mirror.apply(prev, next);
+    pagesRef.current = next;
   }
 
   // Loads only active pages at init; completed pages are fetched lazily —
@@ -83,11 +105,13 @@ export function usePagesStore({
     // state (every in-session write already recomputes) this is a no-op.
     await adapter.recomputeRecurringSchedules();
     const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
-      adapter.listPages({ status: "not_started" }),
+      // The view cache loads what's shown, so it never needs every open page.
+      viewCache ? Promise.resolve(null) : adapter.listPages({ status: "not_started" }),
       adapter.listFolders(),
       adapter.listRecurrenceRules(),
     ]);
-    setPages(loadedPages);
+    if (loadedPages) setPages(loadedPages);
+    else await viewCache?.loadSeriesHeads();
     setFolders(loadedFolders);
     setRecurrenceRules(loadedRules);
   }
@@ -106,6 +130,10 @@ export function usePagesStore({
   }, [registerDataLoader]);
 
   function mergePages(incoming: PageSummary[]) {
+    if (viewCache) {
+      viewCache.store.confirm(incoming);
+      return;
+    }
     setPages((prev) => {
       const existing = new Set(prev.map((p) => p.id));
       const newPages = incoming.filter((p) => !existing.has(p.id));
@@ -124,6 +152,6 @@ export function usePagesStore({
     setFolders,
     setPages,
     setRecurrenceRules,
-    tags: deriveTags(pages),
+    tags: viewCache ? cachedTags(viewCache, version) : deriveTags(pages),
   };
 }

@@ -4,12 +4,12 @@
 // Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
 
 import type { PageSummary, SmartViewId, SortMode } from "@pikos/core";
-import { isSmartViewId } from "@pikos/core";
-import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import { isOpen, isSmartViewId } from "@pikos/core";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { usePages } from "@/shared/context/PagesContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
@@ -104,6 +104,7 @@ const UIContext = createContext<UIContextValue | null>(null);
 export function UIProvider({ children }: { children: ReactNode }) {
   const { consumePendingNavigation, workspace } = useWorkspace();
   const { folders, pages } = usePages();
+  const viewCache = useViewCacheController();
   const [activePageId, setActivePageId] = useLocalStorage<string | null>(
     STORAGE_KEYS.lastActivePageId,
     null
@@ -192,6 +193,24 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setRightPanelRaw(panel);
   }
 
+  // With the view cache the page list holds only what has been shown, so the database answers
+  // whether the remembered pages are still open.
+  useEffect(() => {
+    if (!viewCache || !workspace) return;
+    const ids = [activePageId, lastEditorPageId].filter((id): id is string => id !== null);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void viewCache.rows(ids).then((found) => {
+      if (cancelled) return;
+      const open = new Set(found.filter(isOpen).map((p) => p.id));
+      if (activePageId !== null && !open.has(activePageId)) setActivePage(null);
+      if (lastEditorPageId !== null && !open.has(lastEditorPageId)) setLastEditorPageId(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewCache, workspace?.id]);
+
   function openPage(page: PageSummary | string) {
     const id = typeof page === "string" ? page : page.id;
     setActivePageId(id);
@@ -211,10 +230,10 @@ export function UIProvider({ children }: { children: ReactNode }) {
     if (!isSmartViewId(activeViewId) && !folders.some((f) => f.id === activeViewId)) {
       setActiveViewId("inbox");
     }
-    if (activePageId !== null && !pages.some((p) => p.id === activePageId)) {
+    if (!viewCache && activePageId !== null && !pages.some((p) => p.id === activePageId)) {
       setActivePage(null);
     }
-    if (lastEditorPageId !== null && !pages.some((p) => p.id === lastEditorPageId)) {
+    if (!viewCache && lastEditorPageId !== null && !pages.some((p) => p.id === lastEditorPageId)) {
       setLastEditorPageId(null);
     }
     const nav = consumePendingNavigation();

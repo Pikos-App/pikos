@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { formatCombo } from "@/shared/keyboard/formatCombo";
 import type { Binding } from "@/shared/keyboard/registry";
 import { Keyboard } from "@/shared/keyboard/registry";
@@ -165,6 +165,9 @@ async function runFilteredSearch(
 /** A keystroke this soon after the last is part of a burst: the search waits for the burst to end
  *  rather than run for every key. A keystroke after a pause searches at once. */
 const SEARCH_BURST_MS = 150;
+
+/** Recent pages the palette lists with no query. */
+const RECENT_LIMIT = 10;
 
 export function SearchPalette() {
   const { activePageId, dialogPrefill, openDialog, openPage, setOpenDialog } = useUI();
@@ -304,15 +307,32 @@ export function SearchPalette() {
   // ── Recent pages (shown when input is empty) ────────────────────────────
 
   // Read so an open recorded while the palette is up reorders the list.
-  useSyncExternalStore(subscribeToOpens, opensVersion);
+  const opens = useSyncExternalStore(subscribeToOpens, opensVersion);
+  // With the view cache the page list holds only what's been shown, so the database names the
+  // recent pages; the held ones stay in, for an open whose write hasn't landed yet.
+  const viewCache = useViewCacheController();
+  const [recentRows, setRecentRows] = useState<PageSummary[]>([]);
+  useEffect(() => {
+    if (!viewCache || !storage || !isOpen) return;
+    let cancelled = false;
+    void storage.listRecentPages(activePageId, RECENT_LIMIT).then((rows) => {
+      if (!cancelled) setRecentRows(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewCache, storage, isOpen, activePageId, opens]);
+  const recentPool = viewCache
+    ? [...recentRows, ...pages.filter((p) => !recentRows.some((r) => r.id === p.id))]
+    : pages;
   // Only while open: this walks every page, and the palette renders on every page switch.
   const recentItems: SearchResult[] =
     !isOpen || query.trim()
       ? []
-      : pages
+      : recentPool
           .filter((p) => lastOpened(p) !== null && p.id !== activePageId)
           .sort((a, b) => (lastOpened(b) ?? "").localeCompare(lastOpened(a) ?? ""))
-          .slice(0, 10)
+          .slice(0, RECENT_LIMIT)
           .map(summaryToResult);
 
   const pageItems = query.trim() ? results : recentItems;
