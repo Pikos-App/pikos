@@ -8,7 +8,7 @@ import type {
 } from "@pikos/core";
 import { dateKey, formatDateOnly } from "@pikos/core";
 import { addDays } from "date-fns";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 interface UseRecurrenceExpansionParams {
   pages: PageSummary[];
@@ -29,6 +29,87 @@ interface UseRecurrenceExpansionParams {
   /** Refetch trigger for an override row that moved in place. Such a move leaves
    *  the range and the rule set identical, so nothing else below would refire. */
   overridesVersion?: number;
+  /** Days expanded beyond each side of `days`, so a step to the next or previous range
+   *  shows its occurrences at once instead of fetching them after the first paint. */
+  margin?: number;
+}
+
+/** Raw occurrences by rule for `start` to `end`, expanded for `rulesKey`. */
+interface HeldExpansion {
+  byRule: Map<string, RawOccurrence[]>;
+  end: string;
+  rulesKey: string;
+  start: string;
+}
+
+const holds = (held: HeldExpansion | null, rulesKey: string, start: string, end: string) =>
+  held !== null && held.rulesKey === rulesKey && held.start <= start && held.end >= end;
+
+/** The part of a held expansion from `start` to `end`. The engine places an occurrence in a
+ *  range by its start, and local ISO strings order as their instants do. */
+function slice(held: HeldExpansion, start: string, end: string): Map<string, RawOccurrence[]> {
+  if (held.start === start && held.end === end) return held.byRule;
+  const out = new Map<string, RawOccurrence[]>();
+  for (const [ruleId, occurrences] of held.byRule) {
+    out.set(
+      ruleId,
+      occurrences.filter((o) => o.scheduledStart >= start && o.scheduledStart < end)
+    );
+  }
+  return out;
+}
+
+const sameOccurrences = (a: RawOccurrence[], b: RawOccurrence[]) =>
+  a.length === b.length &&
+  a.every(
+    (o, i) =>
+      o.scheduledStart === b[i]!.scheduledStart &&
+      o.scheduledEnd === b[i]!.scheduledEnd &&
+      o.originalDate === b[i]!.originalDate
+  );
+
+/**
+ * The expansion a surface holds, kept outside React state: a refill of the margin re-renders
+ * nothing unless the occurrences on screen changed, where a state update re-rendered a whole
+ * week to show the same blocks.
+ */
+class ExpansionHold {
+  private held: HeldExpansion | null = null;
+  private last: Map<string, RawOccurrence[]> | null = null;
+  private listeners = new Set<() => void>();
+
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  holds(rulesKey: string, start: string, end: string): boolean {
+    return holds(this.held, rulesKey, start, end);
+  }
+
+  set(held: HeldExpansion): void {
+    this.held = held;
+    for (const listener of this.listeners) listener();
+  }
+
+  /** Occurrences from `start` to `end`, or the last held while that range loads; the same map
+   *  while its contents are. */
+  read(rulesKey: string, start: string, end: string): Map<string, RawOccurrence[]> | null {
+    if (!this.held) return null;
+    const next = this.holds(rulesKey, start, end) ? slice(this.held, start, end) : this.held.byRule;
+    const last = this.last;
+    if (
+      last &&
+      last.size === next.size &&
+      [...next].every(([id, o]) => {
+        const before = last.get(id);
+        return before !== undefined && sameOccurrences(before, o);
+      })
+    )
+      return last;
+    this.last = next;
+    return next;
+  }
 }
 
 /** Day-keyed union of a series' completed and skipped occurrence dates. A synced
@@ -164,6 +245,7 @@ export function useRecurrenceExpansion({
   days,
   expandRecurrenceRange,
   listOverridesForRules,
+  margin = 0,
   overridesVersion = 0,
   pages,
   recurrenceRules,
@@ -171,11 +253,11 @@ export function useRecurrenceExpansion({
   const [overrideSchedules, setOverrideSchedules] = useState<PageSchedule[]>([]);
   const schedulesAbortRef = useRef(0);
 
-  // null until the first IPC batch resolves; a Map (rule id → raw occurrences)
-  // after. Kept across a range change (stale-while-revalidate) so an overlapping
-  // or day-step nav keeps showing virtuals while the next batch is in flight — a
-  // non-overlapping week jump still renders empty for a frame (accepted).
-  const [rawExpansion, setRawExpansion] = useState<Map<string, RawOccurrence[]> | null>(null);
+  // Empty until the first IPC batch resolves. Kept across a range change
+  // (stale-while-revalidate) so an overlapping or day-step nav keeps showing
+  // virtuals while the next batch is in flight; a jump past the margin still
+  // renders without them for a frame (accepted).
+  const [expansion] = useState(() => new ExpansionHold());
   const expandAbortRef = useRef(0);
 
   const rangeStartDate = days[0];
@@ -183,6 +265,8 @@ export function useRecurrenceExpansion({
   const rangeEndDate = lastDay ? addDays(lastDay, 1) : null;
   const startStr = rangeStartDate ? formatDateOnly(rangeStartDate) : null;
   const endStr = rangeEndDate ? formatDateOnly(rangeEndDate) : null;
+  const fetchStart = rangeStartDate ? formatDateOnly(addDays(rangeStartDate, -margin)) : null;
+  const fetchEnd = rangeEndDate ? formatDateOnly(addDays(rangeEndDate, margin)) : null;
   const ruleCount = recurrenceRules.length;
   // Stable key over the fields that change a rule's raw expansion, so the IPC
   // effect refires on a rule edit/add/remove but not on unrelated page changes.
@@ -219,13 +303,23 @@ export function useRecurrenceExpansion({
     });
   }, [startStr, endStr, rulesKey, overridesVersion]);
 
+  const rawExpansion = useSyncExternalStore(expansion.subscribe, () =>
+    startStr && endStr ? expansion.read(rulesKey, startStr, endStr) : null
+  );
+
   useEffect(() => {
-    if (!startStr || !endStr || ruleCount === 0) return;
+    if (!fetchStart || !fetchEnd || ruleCount === 0) return;
+    if (margin > 0 && expansion.holds(rulesKey, fetchStart, fetchEnd)) return;
 
     const token = ++expandAbortRef.current;
-    void expandRecurrenceRange(recurrenceRules, startStr, endStr).then((result) => {
+    void expandRecurrenceRange(recurrenceRules, fetchStart, fetchEnd).then((result) => {
       if (token !== expandAbortRef.current) return;
-      setRawExpansion(new Map(result.map((r) => [r.ruleId, r.occurrences])));
+      expansion.set({
+        byRule: new Map(result.map((r) => [r.ruleId, r.occurrences])),
+        end: fetchEnd,
+        rulesKey,
+        start: fetchStart,
+      });
     });
   }, [startStr, endStr, rulesKey]);
 

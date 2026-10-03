@@ -1,7 +1,3 @@
-// The view cache as the app drives it: loads a list's first window when it's shown and more as it
-// scrolls, refreshes the shown list after every write, evicts what wasn't shown recently, and in
-// test lanes checks every cached list it shows against a fresh query.
-
 import type {
   ChangeState,
   Page,
@@ -12,6 +8,9 @@ import type {
   ViewCounts,
   ViewKey,
 } from "@pikos/core";
+// The view cache as the app drives it: loads a list's first window when it's shown and more as it
+// scrolls, refreshes the shown list after every write, evicts what wasn't shown recently, and in
+// test lanes checks every cached list it shows against a fresh query.
 import { getLocalTimezone } from "@pikos/core";
 import { evict, PageStore, summaryBytes, toPageSummary, ViewCache, viewName } from "@pikos/core";
 import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
@@ -37,6 +36,9 @@ function rowOnlyWrite(method: string, args: unknown[]): string | null {
 const QUIET_POLL_MS = 10;
 /** Long enough to outlast a burst of writes, short enough that a stream of them still shows. */
 const QUIET_WAIT_MS = 500;
+
+/** A calendar range as `[start, end)` instants. */
+export type Range = readonly [start: string, end: string];
 
 export class ViewCacheController {
   readonly store = new PageStore();
@@ -68,6 +70,7 @@ export class ViewCacheController {
   /** The change counter as the last refresh found it; null until first read. */
   private counter: { epoch: string; seq: number } | null = null;
   private tagList: TagCount[] | null = null;
+  private tagListeners = new Set<(tags: TagCount[]) => void>();
   /** List windows fetched, for the test that typing doesn't refetch lists. */
   listFetches = 0;
   /**
@@ -91,6 +94,9 @@ export class ViewCacheController {
   private shownRange: { start: string; end: string } | null = null;
   /** Loads asked of each range, so only the latest is kept. */
   private rangeAsked = new Map<string, number>();
+  /** Each range's pages as last read, kept while nothing in them changes: the calendar
+   *  re-renders for its own week, not for every write or neighbour prefetch. */
+  private rangeRead = new Map<string, PageSummary[]>();
   /** Every recurring series' head, which a range needs for occurrences of heads outside it. */
   private heads: string[] | null = null;
   /** The newest change among the heads held, for reading only those changed since. */
@@ -293,13 +299,23 @@ export class ViewCacheController {
     if (held) this.holdBody({ ...held.page, ...patch }, held.seen);
   }
 
-  /** The calendar shows `start` to `end`: load it unless a current copy is held. */
-  showRange(start: string, end: string): void {
+  /**
+   * The calendar shows `start` to `end`: load it unless a current copy is held, then the
+   * `neighbours` a step away, so the step shows its week without waiting on a fetch.
+   */
+  showRange(start: string, end: string, neighbours: readonly Range[] = []): void {
     this.shownRange = { end, start };
     const held = this.ranges.get(`${start}|${end}`);
-    if (!held || held.stale) void this.loadRange(start, end);
+    const shown = !held || held.stale ? this.loadRange(start, end) : Promise.resolve();
+    void shown.then(() => {
+      for (const [s, e] of neighbours) if (!this.ranges.has(`${s}|${e}`)) void this.loadRange(s, e);
+    });
     if (this.heads === null) void this.loadHeads();
-    this.bump();
+  }
+
+  /** Whether `start` to `end` has loaded at least once. */
+  rangeLoaded(start: string, end: string): boolean {
+    return this.ranges.has(`${start}|${end}`);
   }
 
   /** A page this app just created: held, and on the calendar range on screen, ahead of the
@@ -312,22 +328,27 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** The calendar unmounted: its ranges go; the series heads stay. */
+  /** The calendar unmounted or was hidden: its ranges go; the series heads stay. */
   hideRanges(): void {
     this.ranges.clear();
+    this.rangeRead.clear();
     this.shownRange = null;
     this.bump();
   }
 
-  /** A range's pages, and every series head not among them. */
+  /** A range's pages, and every series head not among them; the same array until one changes. */
   rangePages(start: string, end: string): PageSummary[] {
-    const ids = this.ranges.get(`${start}|${end}`)?.ids ?? [];
+    const name = `${start}|${end}`;
+    const ids = this.ranges.get(name)?.ids ?? [];
     const seen = new Set(ids);
     const pages = ids.flatMap((id) => this.store.get(id) ?? []);
     for (const id of this.heads ?? []) {
       const head = seen.has(id) ? undefined : this.store.get(id);
       if (head) pages.push(head);
     }
+    const last = this.rangeRead.get(name);
+    if (last && last.length === pages.length && last.every((p, i) => p === pages[i])) return last;
+    this.rangeRead.set(name, pages);
     return pages;
   }
 
@@ -504,10 +525,18 @@ export class ViewCacheController {
   private async loadTags(): Promise<void> {
     try {
       this.tagList = await this.adapter.listTags();
+      for (const listener of this.tagListeners) listener(this.tagList);
     } catch {
       // The next refresh asks again.
     }
-    this.bump();
+  }
+
+  /** Called with the tags when they load or change, apart from the store's other changes so a
+   *  reader of tags alone doesn't re-render with every edit. Loads them on first use. */
+  onTags(listener: (tags: TagCount[]) => void): () => void {
+    this.tagListeners.add(listener);
+    listener(this.tags());
+    return () => this.tagListeners.delete(listener);
   }
 
   /** Called with the ids a refresh took out of a list on screen. */

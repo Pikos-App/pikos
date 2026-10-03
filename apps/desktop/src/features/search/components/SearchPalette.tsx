@@ -36,6 +36,7 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { lastOpened, opensVersion, subscribeToOpens } from "@/shared/lib/recentOpens";
 import { createLogger } from "@/shared/logger";
 import { flushPendingWrites } from "@/shared/pendingWrites";
+import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 
 import { highlightText } from "../highlightText";
 
@@ -322,10 +323,11 @@ export function SearchPalette() {
       cancelled = true;
     };
   }, [viewCache, storage, isOpen, activePageId, opens]);
+  const held = useHeldPages(isOpen);
   function recentPool(): PageSummary[] {
-    if (!viewCache) return pages;
+    if (!held) return pages;
     const recentIds = new Set(recentRows.map((r) => r.id));
-    return [...recentRows, ...pages.filter((p) => !recentIds.has(p.id))];
+    return [...recentRows, ...held.filter((p) => !recentIds.has(p.id))];
   }
   // Only while open: this walks every page, and the palette renders on every page switch.
   const recentItems: SearchResult[] =

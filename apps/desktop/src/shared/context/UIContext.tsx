@@ -12,6 +12,8 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
+import { CalendarDateProvider } from "./CalendarDateContext";
+
 /** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
 export type ActiveViewId = SmartViewId | (string & NonNullable<unknown>);
 export type DialogId = "quick-add" | "search" | null;
@@ -36,8 +38,6 @@ export interface UIContextValue {
   lastEditorPageId: string | null;
   setLastEditorPageId: (id: string | null) => void;
   /** Currently viewed week reference date. Persisted so panel toggles don't reset the week. */
-  referenceDate: Date;
-  setReferenceDate: (d: Date) => void;
   /** Page ID to briefly flash after navigation (e.g. "View in calendar" jump). Cleared automatically. */
   highlightedPageId: string | null;
   /** Trigger a one-shot highlight animation on the page's calendar block. */
@@ -121,10 +121,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
     STORAGE_KEYS.lastEditorPageId,
     null
   );
-  const [referenceDateIso, setReferenceDateIso] = useLocalStorage<string>(
-    STORAGE_KEYS.calendarReferenceDate,
-    new Date().toISOString()
-  );
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage(
     STORAGE_KEYS.sidebarCollapsed,
     false
@@ -168,12 +164,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
   function requestCalendarScroll(hour: number) {
     calendarScrollTokenRef.current += 1;
     setCalendarScrollRequest({ hour, token: calendarScrollTokenRef.current });
-  }
-
-  const referenceDate = new Date(referenceDateIso);
-
-  function setReferenceDate(d: Date) {
-    setReferenceDateIso(d.toISOString());
   }
 
   function setActivePage(page: PageSummary | string | null) {
@@ -267,7 +257,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
     openPage,
     openSortMenu,
     pageListDrawerOpen,
-    referenceDate,
     requestCalendarScroll,
     rightPanel,
     setActivePage,
@@ -277,7 +266,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setOpenDialog,
     setOpenSortMenu,
     setPageListDrawerOpen,
-    setReferenceDate,
     setRightPanel,
     setSettingsOpen,
     setSettingsSection,
@@ -288,7 +276,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
     sidebarCollapsed,
   };
 
-  return <UIContext.Provider value={value}>{children}</UIContext.Provider>;
+  return (
+    <UIContext.Provider value={value}>
+      <CalendarDateProvider>{children}</CalendarDateProvider>
+    </UIContext.Provider>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

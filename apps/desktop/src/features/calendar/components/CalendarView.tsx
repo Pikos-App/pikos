@@ -11,6 +11,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import {
   calendarTextScale,
   calendarZoom,
@@ -21,6 +22,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
+import type { Range } from "@/shared/viewCache/controller";
 import { useCachedRange } from "@/shared/viewCache/useCachedRange";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
@@ -57,7 +59,8 @@ export function CalendarView() {
     scheduleOnce,
   } = usePages();
   const { on, storage } = useWorkspace();
-  const { openPage, referenceDate, setReferenceDate } = useUI();
+  const { openPage } = useUI();
+  const { referenceDate, setReferenceDate } = useCalendarDate();
   const { hiddenIds } = useUndoDelete();
   const { weekStart } = useAppSettings();
   const {
@@ -113,11 +116,20 @@ export function CalendarView() {
     rangeStart && rangeEnd
       ? `${format(rangeStart, "yyyy-MM-dd")}|${format(rangeEnd, "yyyy-MM-dd")}`
       : null;
-  const cachedRange = useCachedRange(
-    rangeStart ? utcInstant(startOfDay(rangeStart)) : null,
-    rangeEnd ? utcInstant(startOfDay(addDays(rangeEnd, 1))) : null
-  );
-  const visiblePages = (cachedRange ?? pages).filter((p) => !hiddenIds.has(p.id));
+  // A week or less also holds the range a step either side; a month's neighbours would be large.
+  const stepDays = days.length <= 7 ? days.length : 0;
+  const instants = (shift: number): Range | null =>
+    rangeStart && rangeEnd
+      ? [
+          utcInstant(startOfDay(addDays(rangeStart, shift))),
+          utcInstant(startOfDay(addDays(rangeEnd, shift + 1))),
+        ]
+      : null;
+  const shown = instants(0);
+  const neighbours =
+    stepDays > 0 ? [instants(-stepDays), instants(stepDays)].flatMap((r) => (r ? [r] : [])) : [];
+  const cachedRange = useCachedRange(shown?.[0] ?? null, shown?.[1] ?? null, neighbours);
+  const visiblePages = (cachedRange?.pages ?? pages).filter((p) => !hiddenIds.has(p.id));
   useEffect(() => {
     if (cachedRange || !storage || !rangeStart || !rangeEnd) return;
     const scheduledAfter = format(addDays(rangeStart, -COMPLETED_LOOKBACK_DAYS), "yyyy-MM-dd");
@@ -141,6 +153,7 @@ export function CalendarView() {
     days,
     expandRecurrenceRange,
     listOverridesForRules,
+    margin: stepDays,
     overridesVersion,
     pages: visiblePages,
     recurrenceRules,
@@ -222,6 +235,7 @@ export function CalendarView() {
           autoOpenPageId={autoOpenPageId}
           days={days}
           isCurrentWeek={isCurrentWeek}
+          loading={cachedRange?.loading ?? false}
           onAutoOpenConsumed={handleAutoOpenConsumed}
           onCreateAllDay={createAllDayPage}
           onCreatePage={(_day, start, end) => createTimedPage(start, end)}

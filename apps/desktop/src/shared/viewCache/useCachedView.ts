@@ -70,15 +70,19 @@ export function cachedViewKeys(viewId: string, sort: SortMode, today: string): V
   ];
 }
 
-/**
- * The list as the controller holds it. `version` is unused here but must be an argument: the
- * controller is one object for the app's life, so the compiler would otherwise memoize this read
- * forever.
- */
-function readView(controller: ViewCacheController, key: ViewKey, _version: number): CachedView {
+const sameSlot = (a: ListSlot, b: ListSlot) =>
+  a === b || ("placeholder" in a && "placeholder" in b && a.id === b.id);
+
+/** The last read of each list, by controller, so a read that finds nothing changed returns it. */
+const lastViews = new WeakMap<ViewCacheController, Map<string, CachedView>>();
+
+/** The list as the controller holds it; the same object while its rows and counts are, so a write
+ *  to a page in another list re-renders nothing here. */
+function readView(controller: ViewCacheController, key: ViewKey): CachedView {
   const entry = controller.cache.entry(key);
   const ids = entry?.ids ?? [];
   const total = Math.max(entry?.total ?? 0, ids.length);
+  const loading = !entry || (entry.status === "loading" && ids.length === 0);
   const slots: ListSlot[] = [];
   const pages: PageSummary[] = [];
   for (const id of ids) {
@@ -86,12 +90,24 @@ function readView(controller: ViewCacheController, key: ViewKey, _version: numbe
     if (page) pages.push(page);
     slots.push(page ?? { id, key: `slot-${id}`, placeholder: true });
   }
-  return {
+  const held = lastViews.get(controller) ?? new Map<string, CachedView>();
+  lastViews.set(controller, held);
+  const name = viewName(key);
+  const last = held.get(name);
+  if (
+    last &&
+    last.loading === loading &&
+    last.total === total &&
+    last.slots.length === slots.length &&
+    last.slots.every((slot, i) => sameSlot(slot, slots[i]!))
+  )
+    return last;
+  const view: CachedView = {
     allIds: () => controller.allIds(key),
     ensure: (first, last) => controller.want(key, first, last),
     ids,
     key,
-    loading: !entry || (entry.status === "loading" && ids.length === 0),
+    loading,
     pages,
     place: (moving, place) => controller.place(key, moving, place),
     rows: (wanted) => controller.rows(wanted),
@@ -99,16 +115,41 @@ function readView(controller: ViewCacheController, key: ViewKey, _version: numbe
     tail: total - ids.length,
     total,
   };
+  held.set(name, view);
+  return view;
 }
 
-/** Today's date, read again whenever the controller's version changes, which it does at midnight:
- *  with no argument the compiler would read it once and keep it. */
-export function todayAt(_version: number): string {
-  return localToday();
+/** The lists a view shows as last read, by controller and view, kept like `lastViews`. */
+const lastLists = new WeakMap<ViewCacheController, Map<string, CachedLists>>();
+
+interface CachedLists {
+  today: string;
+  views: CachedView[];
+}
+
+function readLists(controller: ViewCacheController, viewId: string, sort: SortMode) {
+  const today = localToday();
+  const keys = cachedViewKeys(viewId, sort, today);
+  if (!keys) return null;
+  const views = keys.map((k) => readView(controller, k));
+  const held = lastLists.get(controller) ?? new Map<string, CachedLists>();
+  lastLists.set(controller, held);
+  const name = `${viewId}|${sort}`;
+  const last = held.get(name);
+  if (
+    last &&
+    last.today === today &&
+    last.views.length === views.length &&
+    last.views.every((v, i) => v === views[i])
+  )
+    return last;
+  const lists = { today, views };
+  held.set(name, lists);
+  return lists;
 }
 
 const NO_SUBSCRIPTION = () => () => undefined;
-const NO_VERSION = () => 0;
+const NO_LISTS = () => null;
 
 /**
  * The lists `viewId` shows, from the cache; null when the flag is off or the cache doesn't serve
@@ -119,14 +160,13 @@ export function useCachedViews(
   viewId: string,
   sort: SortMode,
   pinnedPages: string[] | null
-): { views: CachedView[]; today: string } | null {
+): CachedLists | null {
   const controller = useViewCacheController();
-  const version = useSyncExternalStore(
+  const lists = useSyncExternalStore(
     controller?.subscribe ?? NO_SUBSCRIPTION,
-    controller?.getVersion ?? NO_VERSION
+    controller ? () => readLists(controller, viewId, sort) : NO_LISTS
   );
-  const today = todayAt(version);
-  const keys = controller ? cachedViewKeys(viewId, sort, today) : null;
+  const keys = lists?.views.map((v) => v.key) ?? null;
   const names = keys?.map(viewName).join("\n") ?? null;
 
   // Shown once per set of lists: key objects rebuilt every render would show them each time.
@@ -134,16 +174,25 @@ export function useCachedViews(
     if (controller && keys && pinnedPages) controller.show(keys, pinnedPages);
   }, [names]);
 
-  if (!controller || !keys) return null;
-  return { today, views: keys.map((k) => readView(controller, k, version)) };
+  return lists;
 }
 
-/** The one list an Inbox or folder view shows, from the cache; null otherwise. */
-export function useCachedView(
+/**
+ * The one list an Inbox or folder view shows, read when an action needs it rather than subscribed
+ * to: a drag needs the order only when it starts and ends, and a subscription re-rendered the
+ * whole layout with every change to the store. Null when the cache doesn't serve the view.
+ */
+export function cachedListNow(
+  controller: ViewCacheController | null,
   viewId: string,
-  sort: SortMode,
-  pinnedPages: string[] | null
-): CachedView | null {
-  const views = useCachedViews(viewId, sort, pinnedPages)?.views;
-  return views?.length === 1 && viewId !== "today" ? (views[0] ?? null) : null;
+  sort: SortMode
+): { pages: PageSummary[]; place: (moving: string[], place: Placement) => void } | null {
+  if (!controller || viewId === "today" || viewId === "upcoming") return null;
+  const [key] = cachedViewKeys(viewId, sort, localToday()) ?? [];
+  if (!key) return null;
+  const ids = controller.cache.entry(key)?.ids ?? [];
+  return {
+    pages: ids.flatMap((id) => controller.store.get(id) ?? []),
+    place: (moving, place) => controller.place(key, moving, place),
+  };
 }

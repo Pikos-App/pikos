@@ -6,6 +6,7 @@ import { setMockStorageFactory } from "@/shared/adapters/mockStorageChunk";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
+import { useCalendarDate } from "./CalendarDateContext";
 import { usePages } from "./PagesContext";
 import { useUI } from "./UIContext";
 import { useWorkspace } from "./WorkspaceContext";
@@ -272,6 +273,8 @@ describe("openDialog", () => {
 // ─── referenceDate ──────────────────────────────────────────────────────────
 
 describe("referenceDate", () => {
+  const setup = () => renderHookWithProviders(() => useCalendarDate());
+
   it("returns a valid Date", () => {
     const { result } = setup();
     expect(result.current.referenceDate).toBeInstanceOf(Date);

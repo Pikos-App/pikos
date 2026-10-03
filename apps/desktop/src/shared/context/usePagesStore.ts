@@ -6,7 +6,14 @@
 // of the store, not of any one write: every mutation needs to read the current
 // list from a closure that outlived the render which created it.
 
-import type { Folder, PageRecurrenceRule, PageSummary, StorageAdapter, Tag } from "@pikos/core";
+import type {
+  Folder,
+  PageRecurrenceRule,
+  PageSummary,
+  StorageAdapter,
+  Tag,
+  TagCount,
+} from "@pikos/core";
 import { deriveTags } from "@pikos/core";
 import {
   type Dispatch,
@@ -15,7 +22,6 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 
 import { createLogger } from "@/shared/logger";
@@ -23,17 +29,8 @@ import type { ViewCacheController } from "@/shared/viewCache/controller";
 
 const log = createLogger("PagesStore");
 
-const NO_SUBSCRIPTION = () => () => undefined;
-const NO_VERSION = () => 0;
-
-/** `version` is an argument so the compiler can't memoize the read; see `readView`. */
-function heldPages(viewCache: ViewCacheController, _version: number): PageSummary[] {
-  return viewCache.heldPages();
-}
-
-function cachedTags(viewCache: ViewCacheController, _version: number): Tag[] {
-  return viewCache.tags().map((t) => ({ name: t.name, pageCount: t.pageCount, pageIds: [] }));
-}
+/** The list the context carries while the view cache is on: always this one empty array. */
+const NO_PAGES: PageSummary[] = [];
 
 export interface PagesStore {
   folders: Folder[];
@@ -61,12 +58,13 @@ export function usePagesStore({
   /** With the view cache on, the pages are what it holds rather than every open page. */
   viewCache: ViewCacheController | null;
 }): PagesStore {
-  const version = useSyncExternalStore(
-    viewCache?.subscribe ?? NO_SUBSCRIPTION,
-    viewCache?.getVersion ?? NO_VERSION
-  );
   const [statePages, setPagesState] = useState<PageSummary[]>([]);
-  const pages = viewCache ? heldPages(viewCache, version) : statePages;
+  // With the view cache on, no list rides the context: every reader of `usePages()` re-rendered on
+  // each store change. Readers that need held pages subscribe with `useHeldPages`, and the write
+  // paths read them through `pagesRef`.
+  const pages = viewCache ? NO_PAGES : statePages;
+  const [cachedTagList, setCachedTagList] = useState<TagCount[]>([]);
+  useEffect(() => viewCache?.onTags(setCachedTagList), [viewCache]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
 
@@ -76,14 +74,24 @@ export function usePagesStore({
   // continuations). The write is deliberately render-phase, not effect-phase — a
   // handler handed out by THIS render must already read this render's data, and
   // an effect-time mirror would leave it one commit behind.
-  const pagesRef = useRef(pages);
+  const [heldRef] = useState<RefObject<PageSummary[]> | null>(() =>
+    viewCache
+      ? {
+          get current() {
+            return viewCache.heldPages();
+          },
+          set current(_ignored: PageSummary[]) {},
+        }
+      : null
+  );
+  const plainRef = useRef(pages);
+  const pagesRef = heldRef ?? plainRef;
   const foldersRef = useRef(folders);
   const recurrenceRulesRef = useRef(recurrenceRules);
-  /* eslint-disable react-hooks/refs -- deliberate latest-state mirror; see above */
-  pagesRef.current = pages;
+
+  if (!heldRef) plainRef.current = pages;
   foldersRef.current = folders;
   recurrenceRulesRef.current = recurrenceRules;
-  /* eslint-enable react-hooks/refs */
 
   // With the view cache on, a change to the list is a change to the store, made through the
   // mirror; the list re-renders from the store. The ref takes the result at once, so a second
@@ -93,10 +101,9 @@ export function usePagesStore({
       setPagesState(action);
       return;
     }
-    const prev = pagesRef.current;
+    const prev = viewCache.heldPages();
     const next = typeof action === "function" ? action(prev) : action;
     viewCache.mirror.apply(prev, next);
-    pagesRef.current = next;
   }
 
   // Loads only active pages at init; completed pages are fetched lazily —
@@ -161,6 +168,8 @@ export function usePagesStore({
     setFolders,
     setPages,
     setRecurrenceRules,
-    tags: viewCache ? cachedTags(viewCache, version) : deriveTags(pages),
+    tags: viewCache
+      ? cachedTagList.map((t) => ({ name: t.name, pageCount: t.pageCount, pageIds: [] }))
+      : deriveTags(pages),
   };
 }

@@ -17,6 +17,7 @@ import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { buildCachedList } from "@/shared/viewCache/cachedList";
 import { useCachedViews } from "@/shared/viewCache/useCachedView";
+import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 
 import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
@@ -68,13 +69,16 @@ export function usePageList() {
   const isTodayView = activeViewId === "today";
 
   // The same expansion the calendar grid renders, so the two can't disagree
-  // about today. No rules outside Today keeps other views off the round-trip.
+  // about today. No rules outside Today keeps other views off the round-trip,
+  // and off the held pages, whose every change would re-render the list.
+  const held = useHeldPages(isTodayView);
+  const source = held ?? pages;
   const expanded = useRecurrenceExpansion({
     days: [new Date()],
     expandRecurrenceRange,
     listOverridesForRules,
     overridesVersion,
-    pages,
+    pages: source,
     recurrenceRules: isTodayView ? recurrenceRules : NO_RULES,
   });
 
@@ -83,7 +87,7 @@ export function usePageList() {
     buildCachedList({
       hiddenIds,
       occurrences: expanded,
-      pages,
+      pages: source,
       today: cachedViews.today,
       viewId: activeViewId,
       views: cachedViews.views,

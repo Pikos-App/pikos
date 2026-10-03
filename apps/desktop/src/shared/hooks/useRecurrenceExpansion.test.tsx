@@ -1004,4 +1004,32 @@ describe("useRecurrenceExpansion — async in-flight", () => {
       await waitFor(() => expect(virtuals()).toHaveLength(1));
     });
   });
+
+  it("with a margin, a step to the next week shows its occurrences without a fetch", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const expand = vi.fn(EXPAND);
+    const { rerender, result } = renderHook(
+      ({ days }: { days: Date[] }) =>
+        useRecurrenceExpansion({
+          days,
+          expandRecurrenceRange: expand,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
+          margin: 7,
+          pages,
+          recurrenceRules: [makeRule()],
+        }),
+      { initialProps: { days: weekDays(new Date(2026, 2, 9)) } }
+    );
+    const starts = () =>
+      result.current
+        .filter((p): p is VirtualOccurrence => "isVirtual" in p)
+        .map((p) => p.scheduledStart);
+    await waitFor(() => expect(starts()).toEqual(["2026-03-09T09:00:00"]));
+    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-02", "2026-03-23");
+
+    rerender({ days: weekDays(new Date(2026, 2, 16)) });
+    expect(starts()).toEqual(["2026-03-16T09:00:00"]);
+    await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
+    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-09", "2026-03-30");
+  });
 });

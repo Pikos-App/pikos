@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { createLogger } from "@/shared/logger";
+import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 
 const log = createLogger("useCompletedPages");
 
@@ -27,6 +28,7 @@ interface PaginationState {
  */
 export function useCompletedPages(activeViewId: string) {
   const { listCompletedPages, mergePages, pages } = usePages();
+  const held = useHeldPages();
 
   // Per-view pagination metadata (no page data — that lives in WorkspaceContext)
   const [paginationMap, setPaginationMap] = useState<Map<string, PaginationState>>(new Map());
@@ -111,7 +113,7 @@ export function useCompletedPages(activeViewId: string) {
   // (explicit "Load more" and "I just marked this done") without surfacing
   // ambient completed pages that got into `pages` via other code paths.
   const loadedIds = pagination?.loadedIds;
-  const completedPages = pages
+  const completedPages = (held ?? pages)
     .filter((p) => {
       if (isOpen(p)) return false;
       if (isDateView) {

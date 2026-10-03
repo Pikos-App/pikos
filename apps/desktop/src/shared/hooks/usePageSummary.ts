@@ -3,32 +3,23 @@ import { useSyncExternalStore } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useViewCacheController } from "@/shared/context/WorkspaceContext";
-import type { ViewCacheController } from "@/shared/viewCache/controller";
 
 const NO_SUBSCRIPTION = () => () => undefined;
-const NO_VERSION = () => 0;
-
-/** `version` is an argument so the compiler can't memoize the read; see `readView`. */
-function readHeld(
-  controller: ViewCacheController,
-  id: string,
-  _version: number
-): PageSummary | undefined {
-  return controller.store.get(id);
-}
+const NOTHING = () => undefined;
 
 /**
- * The summary of page `id` as the app shows it, unsaved edits included. Under the view cache
- * this reads the one row from the cache, so it costs the same however many rows are held.
+ * The summary of page `id` as the app shows it, unsaved edits included. Under the view cache it
+ * reads the one row from the cache and re-renders only when that row changes: the store keeps a
+ * row's object until it changes, so an edit to another page leaves this reader alone.
  */
 export function usePageSummary(id: string | null): PageSummary | null {
   const { pages } = usePages();
   const controller = useViewCacheController();
-  const version = useSyncExternalStore(
+  const held = useSyncExternalStore(
     controller?.subscribe ?? NO_SUBSCRIPTION,
-    controller?.getVersion ?? NO_VERSION
+    controller && id !== null ? () => controller.store.get(id) : NOTHING
   );
   if (id === null) return null;
-  if (controller) return readHeld(controller, id, version) ?? null;
+  if (controller) return held ?? null;
   return pages.find((p) => p.id === id) ?? null;
 }
