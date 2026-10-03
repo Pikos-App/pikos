@@ -235,3 +235,84 @@ appTest(
       .toBe(1);
   }
 );
+
+appTest(
+  "the list reads answer over the real writer with the adapter's argument names",
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "reads the real writer's commands");
+    await quickAdd(app, "first today at 9am #work");
+    await quickAdd(app, "second #work");
+    const zone = "America/New_York";
+    const inbox = { dates: null, scope: { kind: "inbox" }, sort: "manual", zone };
+
+    const window = await bridgeCall<{ rows: { id: string }[]; next: unknown; total: number }>(
+      app,
+      "list_view",
+      { after: null, key: inbox, limit: 1 }
+    );
+    expect(window.rows).toHaveLength(1);
+    expect(window.total).toBe(2);
+    const second = await bridgeCall<{ rows: { id: string }[] }>(app, "list_view", {
+      after: window.next,
+      key: inbox,
+      limit: 1,
+    });
+    const ids = await bridgeCall<string[]>(app, "list_view_ids", {
+      after: null,
+      key: inbox,
+      through: null,
+    });
+    expect(ids).toEqual([window.rows[0]!.id, second.rows[0]!.id]);
+
+    const moved = await bridgeCall<{ renumbered: boolean }>(app, "move_pages", {
+      ids: [ids[1]],
+      place: { after: null, before: ids[0] },
+    });
+    expect(moved.renumbered).toBe(false);
+    expect(
+      await bridgeCall<string[]>(app, "list_view_ids", { after: null, key: inbox, through: null })
+    ).toEqual([ids[1], ids[0]]);
+
+    const today = await app.evaluate(() => {
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    });
+    const counts = await bridgeCall<{ inbox: number; today: number }>(app, "count_views", {
+      today,
+      zone,
+    });
+    expect(counts).toMatchObject({ inbox: 2, today: 1 });
+    const pages = await bridgeCall<{ tags: string[] }[]>(app, "get_pages", { ids });
+    const tagged = pages.filter((p) => p.tags.includes("work")).length;
+    expect(await bridgeCall<{ name: string; pageCount: number }[]>(app, "list_tags")).toEqual([
+      { name: "work", pageCount: tagged },
+    ]);
+    expect(pages).toHaveLength(2);
+    expect(
+      await bridgeCall<{ kind: string }>(app, "get_page_if_newer", { id: ids[0], known: null })
+    ).toMatchObject({ kind: "newer" });
+    expect(await bridgeCall<unknown[]>(app, "list_series_heads", { openOnly: true })).toEqual([]);
+    expect(
+      await bridgeCall<unknown[]>(app, "list_recent_pages", { exclude: null, limit: 10 })
+    ).toBeInstanceOf(Array);
+    expect(
+      await bridgeCall<unknown[]>(app, "list_range", {
+        end: "2100-01-01T00:00:00Z",
+        openOnly: true,
+        start: null,
+        zone,
+      })
+    ).toHaveLength(1);
+    expect(
+      await bridgeCall<{ total: number }>(app, "list_completed_window", {
+        after: null,
+        limit: 10,
+        scope: { kind: "inbox" },
+        since: null,
+      })
+    ).toMatchObject({ total: 0 });
+    const state = await bridgeCall<{ seq: number; ownChanges: number }>(app, "change_state");
+    expect(state.seq).toBeGreaterThan(0);
+  }
+);

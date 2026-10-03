@@ -23,16 +23,30 @@ export interface Workspace {
 // and the shapes cannot drift from the backend.
 export type { BackupEntry } from "./generated/BackupEntry";
 export type { BackupKind } from "./generated/BackupKind";
+export type { ChangeState } from "./generated/ChangeState";
+export type { CompletedCursor } from "./generated/CompletedCursor";
+export type { CompletedWindow } from "./generated/CompletedWindow";
+export type { DateBounds } from "./generated/DateBounds";
 export type { FocusSession } from "./generated/FocusSession";
 export type { Folder } from "./generated/Folder";
+export type { MoveOutcome } from "./generated/MoveOutcome";
 export type { NotificationHistoryEntry } from "./generated/NotificationHistoryEntry";
 export type { Page } from "./generated/Page";
+export type { PageIfNewer } from "./generated/PageIfNewer";
 export type { PageRecurrenceRule } from "./generated/PageRecurrenceRule";
 export type { PageReminder } from "./generated/PageReminder";
 export type { PageSchedule } from "./generated/PageSchedule";
 export type { PageSummary } from "./generated/PageSummary";
+export type { Placement } from "./generated/Placement";
 export type { SearchResult } from "./generated/SearchResult";
+export type { TagCount } from "./generated/TagCount";
 export type { TrashedPage } from "./generated/TrashedPage";
+export type { ViewCounts } from "./generated/ViewCounts";
+export type { ViewCursor } from "./generated/ViewCursor";
+export type { ViewKey } from "./generated/ViewKey";
+export type { ViewScope } from "./generated/ViewScope";
+export type { ViewSort } from "./generated/ViewSort";
+export type { ViewWindow } from "./generated/ViewWindow";
 
 export type PageStatus = "not_started" | "done";
 

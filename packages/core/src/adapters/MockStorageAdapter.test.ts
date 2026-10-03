@@ -725,6 +725,8 @@ describe("completeRecurringPage", () => {
     expect(result.clone.tags).toEqual(["work"]);
     expect(result.clone.completedAt).toBeDefined();
     expect(result.clone.id).not.toBe(head.id);
+    expect(result.clone.seriesId).toBe(head.id);
+    expect(result.head.seriesId ?? null).toBeNull();
 
     // Head recomputes to the next Monday.
     expect(result.head.id).toBe(head.id);

@@ -37,6 +37,12 @@ mod prelude {
         connect_caldav, disconnect_account, reconnect_caldav, refresh_account_auto,
         release_all_credentials, resync_account_auto, CalendarSyncResult, Keychain,
     };
+    pub use pikos_db::changes::ChangeState;
+    pub use pikos_db::moves::{MoveOutcome, Placement};
+    pub use pikos_db::reads::{PageIfNewer, TagCount, ViewCounts};
+    pub use pikos_db::views::{
+        CompletedCursor, CompletedWindow, ViewCursor, ViewKey, ViewScope, ViewWindow,
+    };
     pub use pikos_db::*;
 
     pub use super::NewPageReminder;
@@ -259,6 +265,39 @@ db_commands! {
         skip_occurrence(data: SkipOccurrenceInput) -> () = skip_occurrence_impl(data);
         undo_skip_occurrence(data: SkipOccurrenceInput) -> () = undo_skip_occurrence_impl(data);
         recompute_recurring_schedules() -> Vec<PageSummary> = recompute_recurring_schedules_impl();
+    }
+
+    /// Lists a window at a time and the other reads that replace holding every page, plus
+    /// moves and the change counter.
+    mod windows {
+        list_view(key: ViewKey, after: Option<ViewCursor>, limit: u32) -> ViewWindow
+            = views::list_view(&key, after.as_ref(), limit as usize);
+        list_view_ids(key: ViewKey, after: Option<ViewCursor>, through: Option<ViewCursor>)
+            -> Vec<String>
+            = views::list_view_ids(&key, after.as_ref(), through.as_ref());
+        list_completed_window(
+            scope: Option<ViewScope>,
+            since: Option<String>,
+            after: Option<CompletedCursor>,
+            limit: u32,
+        ) -> CompletedWindow
+            = views::list_completed(scope.as_ref(), since.as_deref(), after.as_ref(), limit as usize);
+        list_range(start: Option<String>, end: String, zone: String, open_only: bool)
+            -> Vec<PageSummary>
+            = reads::list_range(start.as_deref(), &end, &zone, open_only);
+        list_series_heads(open_only: bool) -> Vec<PageSummary>
+            = reads::list_series_heads(open_only);
+        count_views(zone: String, today: chrono::NaiveDate) -> ViewCounts
+            = reads::count_views(&zone, today);
+        get_pages(ids: Vec<String>) -> Vec<PageSummary> = reads::get_pages(&ids);
+        get_page_if_newer(id: String, known: Option<i64>) -> PageIfNewer
+            = reads::get_page_if_newer(&id, known);
+        list_recent_pages(exclude: Option<String>, limit: u32) -> Vec<PageSummary>
+            = reads::list_recent_pages(exclude.as_deref(), limit as usize);
+        list_tags() -> Vec<TagCount> = reads::list_tags();
+        move_pages(ids: Vec<String>, place: Placement) -> MoveOutcome
+            = moves::move_pages(&ids, &place);
+        change_state() -> ChangeState = changes::change_state();
     }
 
     mod folders {

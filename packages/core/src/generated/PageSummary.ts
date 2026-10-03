@@ -61,4 +61,12 @@ export type PageSummary = {
    * See `Page::is_recurring`.
    */
   isRecurring: boolean;
+  /**
+   * See `Page::row_seq`.
+   */
+  rowSeq?: number | null;
+  /**
+   * See `Page::series_id`.
+   */
+  seriesId?: string | null;
 };
