@@ -349,11 +349,13 @@ export default function BenchRunner() {
             labels()
               .filter((label) => !DAY_LABEL.test(label))
               .join("\n");
-          // A week is drawn once the heading moves on and, when a seeded page falls in it, its
-          // blocks have replaced the last week's. On a busy day most fold into a "+N more" pill,
+          // A week is drawn once the heading moves on, its pages have loaded, and, when a seeded
+          // page falls in it, its blocks have replaced the last week's. On a busy day most fold into a "+N more" pill,
           // so the test is that the blocks changed, not that a given page is showing.
           const weekDrawn = (before: { heading: string | null; blocks: string }) => () => {
             if (heading() === before.heading) return false;
+            const week = document.querySelector('[aria-label="Week calendar"]');
+            if (week?.getAttribute("aria-busy") === "true") return false;
             const busy = labels().some((label) => busyDays.has(label));
             return !busy || (blocks() !== "" && blocks() !== before.blocks);
           };
