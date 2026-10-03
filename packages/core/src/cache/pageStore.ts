@@ -25,6 +25,10 @@ interface PendingWrite {
 
 export class PageStore {
   private confirmed = new Map<string, PageSummary>();
+  /** Each confirmed row's measured size, and their sum, so the eviction budget is checked
+   *  without measuring every row again. */
+  private rowBytes = new Map<string, number>();
+  private totalBytes = 0;
   private pending = new Map<string, PendingWrite[]>();
   private pageOf = new Map<number, string>();
   private errored = new Set<string>();
@@ -38,8 +42,10 @@ export class PageStore {
     let changed = false;
     for (const row of rows) {
       const held = this.confirmed.get(row.id);
-      if (held?.rowSeq != null && row.rowSeq != null && row.rowSeq < held.rowSeq) continue;
+      // The same change number is the same row: keeping the held object spares a re-render.
+      if (held?.rowSeq != null && row.rowSeq != null && row.rowSeq <= held.rowSeq) continue;
       this.confirmed.set(row.id, row);
+      this.measure(row);
       changed = true;
     }
     if (changed) this.bump();
@@ -67,7 +73,7 @@ export class PageStore {
       remaining = entries.filter((e) => e.id !== writeId && !(e.kept && e.id < writeId));
       this.errored.delete(pageId);
       this.pageOf.delete(writeId);
-      if (entries.find((e) => e.id === writeId)?.removes) this.confirmed.delete(pageId);
+      if (entries.find((e) => e.id === writeId)?.removes) this.drop(pageId);
       if (outcome.row) this.confirm([outcome.row]);
     } else {
       this.errored.add(pageId);
@@ -115,7 +121,7 @@ export class PageStore {
     const gone: string[] = [];
     for (const id of ids) {
       if (this.pending.has(id) || this.errored.has(id) || !this.confirmed.has(id)) continue;
-      this.confirmed.delete(id);
+      this.drop(id);
       gone.push(id);
     }
     if (gone.length > 0) this.bump();
@@ -124,7 +130,7 @@ export class PageStore {
 
   /** The page is gone from the database: trashed, deleted, or cleared by a new epoch. */
   remove(id: string): void {
-    this.confirmed.delete(id);
+    this.drop(id);
     this.pending.delete(id);
     this.errored.delete(id);
     this.bump();
@@ -132,6 +138,8 @@ export class PageStore {
 
   clear(): void {
     this.confirmed.clear();
+    this.rowBytes.clear();
+    this.totalBytes = 0;
     this.pending.clear();
     this.pageOf.clear();
     this.errored.clear();
@@ -150,9 +158,19 @@ export class PageStore {
 
   /** Roughly what the held summaries take in memory, for the eviction budget. */
   estimateBytes(): number {
-    let bytes = 0;
-    for (const page of this.confirmed.values()) bytes += summaryBytes(page);
-    return bytes;
+    return this.totalBytes;
+  }
+
+  private measure(row: PageSummary): void {
+    const bytes = summaryBytes(row);
+    this.totalBytes += bytes - (this.rowBytes.get(row.id) ?? 0);
+    this.rowBytes.set(row.id, bytes);
+  }
+
+  private drop(id: string): void {
+    this.confirmed.delete(id);
+    this.totalBytes -= this.rowBytes.get(id) ?? 0;
+    this.rowBytes.delete(id);
   }
 
   private bump(): void {

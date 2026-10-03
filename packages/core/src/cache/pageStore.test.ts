@@ -42,7 +42,10 @@ describe("PageStore", () => {
     // A window that started before the rename lands after it.
     s.confirm([makePage({ id: "a", rowSeq: 7, title: "Plan" })]);
     expect(s.get("a")?.title).toBe("Renamed");
-    s.confirm([makePage({ id: "a", rowSeq: 9, title: "Renamed by sync" })]);
+    const held = s.get("a");
+    s.confirm([makePage({ id: "a", rowSeq: 9, title: "Renamed" })]);
+    expect(s.get("a")).toBe(held);
+    s.confirm([makePage({ id: "a", rowSeq: 10, title: "Renamed by sync" })]);
     expect(s.get("a")?.title).toBe("Renamed by sync");
   });
 
