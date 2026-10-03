@@ -3,6 +3,7 @@
 // check.
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +23,9 @@ export function arg(name, fallback) {
 export const run = (cmd, args, options = {}) =>
   execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 1 << 26, ...options });
 
-export const rest = () => execFileSync("sleep", [String(REST_SECONDS)]);
+export const rest = (seconds = REST_SECONDS) => {
+  if (seconds > 0) execFileSync("sleep", [String(seconds)]);
+};
 
 /** The scratch workspace for one size, seeded with `pikos stress seed` if it isn't there. The CLI
  *  bench adds pages each run, which a big corpus never notices and a small one does, so the small
@@ -50,13 +53,19 @@ export function corpus(pikos, dir, pages) {
 }
 
 /** The app benchmark's workspace for one size: folders, dates around today, done pages and
- *  series, so the views it switches between have something in them. Seeded once a day, since its
- *  dates are spread around the day it was seeded, and copied fresh for every launch. */
+ *  series, so the views it switches between have something in them. Seeded again each day, since
+ *  its dates are spread around the day it was seeded, or when the seeder changes, and copied fresh
+ *  for every launch. */
 export function appCorpus(pikos, dir, pages) {
   const today = new Date().toLocaleDateString("en-CA");
-  const db = join(dir, `app-${pages}-${today}.db`);
+  const seeder = createHash("sha256")
+    .update(readFileSync(join(ROOT, "crates/pikos-cli/src/stress.rs")))
+    .digest("hex")
+    .slice(0, 12);
+  const name = `app-${pages}-${today}-${seeder}.db`;
+  const db = join(dir, name);
   for (const old of readdirSync(dir)) {
-    if (old.startsWith(`app-${pages}-`) && !old.startsWith(`app-${pages}-${today}.db`)) {
+    if (old.startsWith(`app-${pages}-`) && !old.startsWith(name)) {
       rmSync(join(dir, old), { force: true });
     }
   }

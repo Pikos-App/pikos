@@ -110,8 +110,12 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             notifications::macos::setup(app.handle());
 
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            // A benchmark launch would deliver the seeded workspace's reminders to whoever is
+            // running it, and the delivery work would land in the timings.
+            if !cfg!(feature = "bench") {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            }
 
             let sync_handle = app.handle().clone();
             tauri::async_runtime::spawn(db::sync_loop::run(sync_handle, sync_trigger_rx));

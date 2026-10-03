@@ -27,6 +27,10 @@ pub fn mark_start() {
 pub struct BenchSession {
     db: String,
     uptime_ms: f64,
+    /// The areas to time, from `PIKOS_BENCH_ONLY`; every area when unset.
+    only: Option<Vec<String>>,
+    /// Samples per action, from `PIKOS_BENCH_SAMPLES`; each action's own count when unset.
+    samples: Option<usize>,
 }
 
 #[tauri::command]
@@ -36,7 +40,19 @@ pub fn bench_session() -> Result<BenchSession, String> {
     let uptime_ms = STARTED
         .get()
         .map_or(0.0, |s| s.elapsed().as_secs_f64() * 1000.0);
-    Ok(BenchSession { db, uptime_ms })
+    let only = std::env::var("PIKOS_BENCH_ONLY")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(|v| v.split(',').map(|s| s.trim().to_string()).collect());
+    let samples = std::env::var("PIKOS_BENCH_SAMPLES")
+        .ok()
+        .and_then(|v| v.parse().ok());
+    Ok(BenchSession {
+        db,
+        uptime_ms,
+        only,
+        samples,
+    })
 }
 
 #[derive(Serialize)]
@@ -56,12 +72,17 @@ pub struct BenchPlan {
     folders: Vec<BenchFolder>,
     /// Open pages spread across the whole workspace, the same ones on every launch of a corpus.
     pages: Vec<String>,
+    /// The days between `from` and `to` with a timed page, so the calendar measure knows which
+    /// weeks have blocks to wait for.
+    busy_days: Vec<String>,
 }
 
 #[tauri::command]
 pub async fn bench_plan(
     state: tauri::State<'_, DbState>,
     pages: usize,
+    from: String,
+    to: String,
 ) -> Result<BenchPlan, String> {
     let pool = state.get_pool().await.map_err(|e| e.to_string())?;
     let open_pages: i64 = sqlx::query_scalar(
@@ -107,10 +128,23 @@ pub async fn bench_plan(
             picked.push(id);
         }
     }
+    let busy_days = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT substr(ps.scheduled_start, 1, 10)
+         FROM page_schedules ps JOIN pages p ON p.id = ps.page_id
+         WHERE ps.scheduled_start >= ? AND ps.scheduled_start < ?
+           AND ps.scheduled_start LIKE '%T%' AND ps.status <> 'done'
+           AND p.deleted_at IS NULL AND p.status <> 'done'",
+    )
+    .bind(&from)
+    .bind(&to)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(BenchPlan {
         open_pages,
         folders,
         pages: picked,
+        busy_days,
     })
 }
 
