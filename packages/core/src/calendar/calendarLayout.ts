@@ -371,6 +371,21 @@ export function timedPagesByDay(pages: PageSummary[], days: Date[]): PageSummary
   return byDay;
 }
 
+/** Resolve the instants of `pages` ahead of a layout that will need them, as idle work before a
+ *  step to a neighbouring week. */
+export function warmBlockInstants(pages: PageSummary[]): void {
+  checkZone();
+  for (const page of pages) {
+    if (!page.scheduledStart || isAllDayPage(page.scheduledStart)) continue;
+    try {
+      resolveBlockInstant(page, page.scheduledStart);
+      if (page.scheduledEnd) resolveBlockInstant(page, page.scheduledEnd);
+    } catch {
+      // Layout skips a page it can't place; so does this.
+    }
+  }
+}
+
 export function buildDayBlocks(
   pages: PageSummary[],
   day: Date,

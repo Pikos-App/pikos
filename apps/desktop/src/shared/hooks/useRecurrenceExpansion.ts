@@ -6,7 +6,7 @@ import type {
   RawRuleExpansion,
   VirtualOccurrence,
 } from "@pikos/core";
-import { dateKey, formatDateOnly } from "@pikos/core";
+import { dateKey, formatDateOnly, warmBlockInstants } from "@pikos/core";
 import { addDays } from "date-fns";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -87,6 +87,9 @@ class ExpansionHold {
     return holds(this.held, rulesKey, start, end);
   }
 
+  /** Everything held, margin included; a new map each time the hold is refilled. */
+  window = (): Map<string, RawOccurrence[]> | null => this.held?.byRule ?? null;
+
   set(held: HeldExpansion): void {
     this.held = held;
     for (const listener of this.listeners) listener();
@@ -110,6 +113,26 @@ class ExpansionHold {
     this.last = next;
     return next;
   }
+}
+
+/** Each series' occurrences as built, by head object: an occurrence keeps its object while its head
+ *  and its times do, so a re-render, or a step to a week prepared while idle, reuses the times
+ *  layout already parsed for it. A changed head is a new object and starts afresh. */
+const builtOccurrences = new WeakMap<PageSummary, Map<string, VirtualOccurrence>>();
+/** Occurrences kept per head before its map starts over, bounding a long scroll through years. */
+const KEPT_PER_HEAD = 400;
+/** How long after a week is shown its neighbours are prepared, where idle callbacks don't exist:
+ *  past the frame being waited on, and well inside the time it takes to reach for the next step. */
+const IDLE_FALLBACK_MS = 100;
+
+/** Run `work` once nothing is waiting on the main thread. */
+function whenIdle(work: () => void): () => void {
+  if (typeof requestIdleCallback === "function") {
+    const id = requestIdleCallback(work, { timeout: 1000 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(work, IDLE_FALLBACK_MS);
+  return () => clearTimeout(id);
 }
 
 /** Day-keyed union of a series' completed and skipped occurrence dates. A synced
@@ -165,19 +188,30 @@ function toVirtuals(
   // vacated dates stop being emitted, and completion/skip lands them in the
   // exclusion union above. A date that's neither is a genuine open gap and stays visible.
   const headDate = page.scheduledStart?.slice(0, 10);
+  let built = builtOccurrences.get(page);
+  if (!built || built.size > KEPT_PER_HEAD) {
+    built = new Map();
+    builtOccurrences.set(page, built);
+  }
   const out: VirtualOccurrence[] = [];
   for (const occ of raw) {
     if (excluded.has(occ.originalDate)) continue;
     if (headDate && occ.originalDate === headDate) continue;
     if (page.syncedSince && occ.originalDate < page.syncedSince) continue;
-    out.push({
-      ...page,
-      isVirtual: true,
-      originalDate: occ.originalDate,
-      ruleId: rule.id,
-      scheduledEnd: occ.scheduledEnd,
-      scheduledStart: occ.scheduledStart,
-    });
+    const key = `${rule.id}|${occ.originalDate}|${occ.scheduledStart}|${occ.scheduledEnd ?? ""}`;
+    let virtual = built.get(key);
+    if (!virtual) {
+      virtual = {
+        ...page,
+        isVirtual: true,
+        originalDate: occ.originalDate,
+        ruleId: rule.id,
+        scheduledEnd: occ.scheduledEnd,
+        scheduledStart: occ.scheduledStart,
+      };
+      built.set(key, virtual);
+    }
+    out.push(virtual);
   }
   return out;
 }
@@ -306,6 +340,23 @@ export function useRecurrenceExpansion({
   const rawExpansion = useSyncExternalStore(expansion.subscribe, () =>
     startStr && endStr ? expansion.read(rulesKey, startStr, endStr) : null
   );
+  const heldWindow = useSyncExternalStore(expansion.subscribe, expansion.window);
+
+  // With a margin, the weeks either side are built and their times parsed while idle, so a step
+  // to one lays out occurrences it has already met.
+  useEffect(() => {
+    if (margin === 0 || !heldWindow) return;
+    return whenIdle(() => {
+      const byId = indexById(pages);
+      const overrides = overridesByRule(overrideSchedules);
+      for (const rule of recurrenceRules) {
+        const page = byId.get(rule.pageId);
+        const raw = heldWindow.get(rule.id);
+        if (page && raw)
+          warmBlockInstants(toVirtuals(raw, page, rule, overrides.get(rule.id) ?? []));
+      }
+    });
+  }, [heldWindow, pages]);
 
   useEffect(() => {
     if (!fetchStart || !fetchEnd || ruleCount === 0) return;

@@ -1032,4 +1032,30 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
     expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-09", "2026-03-30");
   });
+
+  it("keeps an occurrence's object while its series is unchanged, and builds a new one when it changes", async () => {
+    const head = makePage({ scheduledStart: "2026-03-02T09:00:00" });
+    const days = weekDays(new Date(2026, 2, 9));
+    const { rerender, result } = renderHook(
+      ({ pages }: { pages: PageSummary[] }) =>
+        useRecurrenceExpansion({
+          days,
+          expandRecurrenceRange: EXPAND,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
+          pages,
+          recurrenceRules: [makeRule()],
+        }),
+      { initialProps: { pages: [head] } }
+    );
+    const occurrence = () => result.current.find((p): p is VirtualOccurrence => "isVirtual" in p);
+    await waitFor(() => expect(occurrence()).toBeDefined());
+    const first = occurrence();
+
+    rerender({ pages: [head] });
+    expect(occurrence()).toBe(first);
+
+    rerender({ pages: [{ ...head, title: "Standup, renamed" }] });
+    expect(occurrence()).not.toBe(first);
+    expect(occurrence()?.title).toBe("Standup, renamed");
+  });
 });
