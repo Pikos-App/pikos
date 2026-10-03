@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, quickAdd } from "./fixtures";
+import { test as appTest, dayFrom, expect, quickAdd } from "./fixtures";
 
 async function setSort(app: Page, mode: "Date" | "Title" | "Priority" | "Manual") {
   await app.getByRole("button", { name: /^Sort:/ }).click();
@@ -73,10 +73,8 @@ appTest("sort by Date orders the page list by schedule", async ({ app }) => {
   // The chip shows absolute "MMM d" dates by default (relative "Today" is
   // opt-in via the chip toggle), so derive the expected labels from the run
   // date to stay correct on any day.
-  const monthDay = (d: Date) => d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
-  const now = new Date();
-  const today = monthDay(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
-  const tomorrow = monthDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  const { monthDay: today } = await dayFrom(app, 0);
+  const { monthDay: tomorrow } = await dayFrom(app, 1);
   const list = app.locator("[data-page-list-item]");
   await expect(list.filter({ hasText: "alpha" })).toContainText(today);
   await expect(list.filter({ hasText: "bravo" })).toContainText(tomorrow);

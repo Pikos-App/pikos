@@ -206,6 +206,21 @@ export async function seedSynced(page: Page) {
   await expect(page.getByRole("button", { name: "Calendars" })).toBeVisible();
 }
 
+/** A day `offset` from today, spelled the ways the app shows it, read in the
+ *  browser so it's the lane's zone, not the test runner's. */
+export function dayFrom(page: Page, offset: number) {
+  return page.evaluate((days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return {
+      header: d.toLocaleDateString("en-US", { day: "numeric", month: "short", weekday: "short" }),
+      monthDay: d.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
+      picker: d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),
+      weekday: d.toLocaleDateString("en-US", { weekday: "long" }),
+    };
+  }, offset);
+}
+
 /** Create a page via Quick Add and wait for dialog to close. */
 export async function quickAdd(page: Page, input: string) {
   await page.keyboard.press(mod("Mod+n"));

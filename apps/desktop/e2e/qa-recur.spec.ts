@@ -495,8 +495,12 @@ appTest(
   "an all-day series spans each occurrence and keeps the span on its clones",
   { tag: ["@RECUR-15"] },
   async ({ app }) => {
+    // The week starts Monday and a bar clips at the week's edge, so a head on any
+    // later weekday would show its occurrences cut short.
+    const toNextMonday = await app.evaluate(() => (8 - new Date().getDay()) % 7 || 7);
     await quickAdd(app, "conference every week");
     await openInEditor(app, listRows(app, "conference"));
+    await setBylineDate(app, await pickerDay(app, toNextMonday));
     await app.getByRole("button", { name: /^Scheduled: / }).click();
     await app.getByRole("button", { name: "Ends in 3d" }).click();
     await app.keyboard.press("Escape");
@@ -504,8 +508,9 @@ appTest(
     const columnWidth = async () =>
       (await calendarOf(app).getByLabel(/^All-day events,/).first().boundingBox())?.width ?? 0;
 
-    await appTest.step("RECUR-15 next week's occurrence is one bar three days wide", async () => {
+    await appTest.step("RECUR-15 the first occurrence is one bar three days wide", async () => {
       await openCalendarMode(app);
+      await nextWeek(app);
       await nextWeek(app);
       const bar = virtualsOf(app, "conference");
       await expect(bar).toHaveCount(1);

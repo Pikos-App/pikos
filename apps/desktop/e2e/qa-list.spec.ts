@@ -3,27 +3,13 @@ import type { Page } from "@playwright/test";
 import {
   test as appTest,
   createFolder,
+  dayFrom,
   expect,
   mod,
   quickAdd,
   seedSynced,
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
-
-/** A day `offset` from today, spelled the ways the app shows it, read in the
- *  browser so it's the lane's zone, not the test runner's. */
-function dayFrom(app: Page, offset: number) {
-  return app.evaluate((days) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    return {
-      header: d.toLocaleDateString("en-US", { day: "numeric", month: "short", weekday: "short" }),
-      monthDay: d.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
-      picker: d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),
-      weekday: d.toLocaleDateString("en-US", { weekday: "long" }),
-    };
-  }, offset);
-}
 
 /** Schedule a page by clicking a day in its date picker: Quick Add has no past dates. */
 async function scheduleOnPickerDay(app: Page, title: string, offset: number) {

@@ -297,9 +297,20 @@ appTest(
     appTest.skip(storage !== "bridge", "re-discovery needs the bridge's scripted calendar server");
     await seedSynced(app);
     const sidebarColor = calendarFolder(app, "Personal").getByTestId("calendar-color");
+    // Retried: an element detached between resolving and reading computes no colour.
+    const readSidebarColor = async () => {
+      let color = "";
+      await expect
+        .poll(async () => {
+          color = await sidebarColor.evaluate((el) => getComputedStyle(el).color);
+          return color;
+        })
+        .toMatch(/^rgb/);
+      return color;
+    };
     const panelSwatch = () => app.getByRole("button", { name: "Colour for Personal" });
     const same = async () => {
-      const icon = await sidebarColor.evaluate((el) => getComputedStyle(el).color);
+      const icon = await readSidebarColor();
       await openSyncPanel(app);
       await expect(panelSwatch()).toHaveCSS("background-color", icon);
       await app.keyboard.press("Escape");
@@ -313,7 +324,7 @@ appTest(
     });
 
     await appTest.step("SYNC-18 recolouring from the Sync panel shows in the sidebar", async () => {
-      const before = await sidebarColor.evaluate((el) => getComputedStyle(el).color);
+      const before = await readSidebarColor();
       await openSyncPanel(app);
       await panelSwatch().click();
       await app.getByRole("button", { name: "Sage" }).click({ force: true });
@@ -325,7 +336,7 @@ appTest(
     await appTest.step(
       "SYNC-18 the colour survives the calendar being discovered again",
       async () => {
-        const chosen = await sidebarColor.evaluate((el) => getComputedStyle(el).color);
+        const chosen = await readSidebarColor();
         await upstream(app, "upstream_discover", {
           calendars: [
             { calendarId: "mock-personal", color: "#d50000", displayName: "Personal" },
