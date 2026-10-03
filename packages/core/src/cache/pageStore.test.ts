@@ -81,4 +81,16 @@ describe("PageStore", () => {
     s.write("a", { title: "y" });
     expect(calls).toBe(2);
   });
+
+  it("hides a page while a write that removes it is in flight, and brings it back if it fails", () => {
+    const s = store({ id: "a", rowSeq: 1, title: "Plan" });
+    const removal = s.write("a", {}, true);
+    expect(s.get("a")).toBeUndefined();
+    s.settle(removal, { kind: "failed" });
+    expect(s.get("a")?.title).toBe("Plan");
+
+    const again = s.write("a", {}, true);
+    s.settle(again, { kind: "confirmed" });
+    expect(s.has("a")).toBe(false);
+  });
 });

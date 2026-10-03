@@ -208,7 +208,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setPages,
     setRecurrenceRules,
     tags,
-  } = usePagesStore({ adapter, registerDataLoader });
+  } = usePagesStore({ adapter, mirror: viewCache?.mirror ?? null, registerDataLoader });
 
   // Debounce, per-page write serialisation, rollback snapshots, pageErrors, and
   // the optimistic-write shape every mutation below goes through.
@@ -220,7 +220,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     optimistic,
     pageErrors,
     updatePage,
-  } = usePageWriteQueue({ adapter, emit, pagesRef, setPages });
+  } = usePageWriteQueue({ adapter, emit, mirror: viewCache?.mirror ?? null, pagesRef, setPages });
 
   function recordPageOpened(id: string): void {
     const at = recordOpen(id);

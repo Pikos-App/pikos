@@ -1,7 +1,6 @@
-// What the page list draws when the view cache serves it: the view's lists as sections, with each
-// loaded row replaced by the in-memory list's copy, which carries edits not yet saved, and without
-// the rows those edits took out of their section. Until edits are kept beside the cached rows,
-// that copy is what shows an edit before the save and the refresh after it.
+// What the page list draws when the view cache serves it: the view's lists as sections, each row
+// as the store shows it (unsaved edits included), without the rows an edit took out of their
+// section.
 
 import type { ListSection, ListSlot, PageSummary } from "@pikos/core";
 import {
@@ -97,7 +96,7 @@ function todaySwaps(pages: PageSummary[], occurrences: PageSummary[], today: str
 export function buildCachedList(input: {
   viewId: string;
   views: CachedView[];
-  /** The in-memory list, for unsaved edits and synced series heads. */
+  /** The in-memory list, for synced series heads. */
   pages: PageSummary[];
   hiddenIds: Set<string>;
   /** Today's recurring occurrences, for the Today view. */
@@ -105,7 +104,6 @@ export function buildCachedList(input: {
   today: string;
 }): CachedList {
   const { hiddenIds, occurrences, pages, today, viewId, views } = input;
-  const byId = new Map(pages.map((p) => [p.id, p]));
   const swaps =
     viewId === "today" ? todaySwaps(pages, occurrences, today) : new Map<string, never>();
   const defs = sectionsOf(viewId, views, today);
@@ -124,7 +122,7 @@ export function buildCachedList(input: {
         rest.push({ place, slot });
         return;
       }
-      const page = byId.get(slot.id) ?? slot;
+      const page = slot;
       if (swaps.has(page.id) || hiddenIds.has(page.id) || !def.holds(page)) {
         count -= 1;
         return;
@@ -173,9 +171,9 @@ export function buildCachedList(input: {
       const def = defs.find((d) => d.key === section);
       if (!view || !def) return [];
       const fetched = await view.rows(await view.allIds());
-      return fetched
-        .map((page) => byId.get(page.id) ?? page)
-        .filter((page) => !swaps.has(page.id) && !hiddenIds.has(page.id) && def.holds(page));
+      return fetched.filter(
+        (page) => !swaps.has(page.id) && !hiddenIds.has(page.id) && def.holds(page)
+      );
     },
     sections,
     single: viewId === "today" || viewId === "upcoming" ? null : (views[0] ?? null),

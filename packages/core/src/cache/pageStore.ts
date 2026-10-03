@@ -17,6 +17,8 @@ export type WriteOutcome =
 interface PendingWrite {
   id: number;
   fields: Partial<PageSummary>;
+  /** The write takes the page out (a delete, a move to the trash): it shows nowhere meanwhile. */
+  removes: boolean;
   /** A failed write held on screen; see `WriteOutcome`. */
   kept: boolean;
 }
@@ -43,11 +45,12 @@ export class PageStore {
     if (changed) this.bump();
   }
 
-  /** Show `fields` on the page at once. Returns the write's id, for `settle`. */
-  write(pageId: string, fields: Partial<PageSummary>): number {
+  /** Show `fields` on the page at once, or take it out with `removes`. Returns the write's id, for
+   *  `settle`. */
+  write(pageId: string, fields: Partial<PageSummary>, removes = false): number {
     const id = this.nextWrite++;
     const entries = this.pending.get(pageId) ?? [];
-    entries.push({ fields, id, kept: false });
+    entries.push({ fields, id, kept: false, removes });
     this.pending.set(pageId, entries);
     this.pageOf.set(id, pageId);
     this.bump();
@@ -64,6 +67,7 @@ export class PageStore {
       remaining = entries.filter((e) => e.id !== writeId && !(e.kept && e.id < writeId));
       this.errored.delete(pageId);
       this.pageOf.delete(writeId);
+      if (entries.find((e) => e.id === writeId)?.removes) this.confirmed.delete(pageId);
       if (outcome.row) this.confirm([outcome.row]);
     } else {
       this.errored.add(pageId);
@@ -84,6 +88,7 @@ export class PageStore {
     const base = this.confirmed.get(id);
     const entries = this.pending.get(id);
     if (!base || !entries) return base;
+    if (entries.some((e) => e.removes)) return undefined;
     return entries.reduce<PageSummary>((page, e) => ({ ...page, ...e.fields }), base);
   }
 

@@ -18,6 +18,7 @@ import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
 import { createLogger } from "@/shared/logger";
 
 import type { ViewCacheConfig } from "./config";
+import { WriteMirror } from "./writeMirror";
 
 const log = createLogger("viewCache");
 
@@ -39,6 +40,8 @@ const QUIET_WAIT_MS = 500;
 export class ViewCacheController {
   readonly store = new PageStore();
   readonly cache: ViewCache;
+  /** The app's optimistic edits, carried into `store` as pending writes. */
+  readonly mirror: WriteMirror;
   /** The lists on screen: one, or a view's sections. */
   private shown: ViewKey[] = [];
   private loadingMore = new Set<string>();
@@ -96,6 +99,7 @@ export class ViewCacheController {
     readonly config: ViewCacheConfig
   ) {
     this.cache = new ViewCache({ windowSize: config.windowSize });
+    this.mirror = new WriteMirror(this.store, (ids) => this.adapter.getPages(ids));
     this.store.subscribe(() => this.bump());
     this.waitForMidnight();
     window.addEventListener("focus", () => this.doorbell());

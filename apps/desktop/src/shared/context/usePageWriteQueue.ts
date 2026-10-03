@@ -24,6 +24,7 @@ import { postNotice } from "@/shared/events/noticeBus";
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
 import { onDrainPending } from "@/shared/pendingWrites";
+import type { WriteMirror } from "@/shared/viewCache/writeMirror";
 
 const log = createLogger("PageWriteQueue");
 
@@ -62,6 +63,10 @@ export interface OptimisticWrite<T> {
   queueOn?: string;
   /** Re-throw after rolling back — for callers that await and branch on failure. */
   rethrow?: boolean;
+  /** Edits made before this write, by the debounce, that it carries to the database. */
+  carries?: number[];
+  /** Hold the carried edits on screen if the write fails: typing the editor still shows. */
+  keepOnFailure?: boolean;
   /** Puts back exactly what `apply` displaced. */
   rollback: () => void;
   write: () => Promise<T>;
@@ -88,11 +93,13 @@ export interface PageWriteQueue {
 export function usePageWriteQueue({
   adapter,
   emit,
+  mirror,
   pagesRef,
   setPages,
 }: {
   adapter: StorageAdapter;
   emit: WorkspaceEventBus["emit"];
+  mirror: WriteMirror | null;
   pagesRef: RefObject<PageSummary[]>;
   setPages: Dispatch<SetStateAction<PageSummary[]>>;
 }): PageWriteQueue {
@@ -101,6 +108,8 @@ export function usePageWriteQueue({
   const snapshotsRef = useRef<Map<string, PageSummary>>(new Map());
   const mutationQueues = useRef<Map<string, Promise<unknown>>>(new Map());
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
+  /** Each page's debounced edits, as the mirror recorded them, for the write that carries them. */
+  const debouncedWrites = useRef<Map<string, number[]>>(new Map());
 
   function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
     // A patch still in its debounce was made first, so it is written first. Left
@@ -133,7 +142,9 @@ export function usePageWriteQueue({
 
   function optimistic<T>({
     apply,
+    carries = [],
     errorIds,
+    keepOnFailure,
     label,
     notice,
     queueOn,
@@ -141,12 +152,15 @@ export function usePageWriteQueue({
     rollback,
     write,
   }: OptimisticWrite<T>): Promise<T | undefined> {
-    apply();
+    const writes = [...carries, ...(mirror ? mirror.capture(apply) : (apply(), []))];
     async function run(): Promise<T | undefined> {
       try {
-        return await write();
+        const result = await write();
+        void mirror?.confirm(writes);
+        return result;
       } catch (err: unknown) {
         log.error(`${label} failed; rolling back`, err);
+        mirror?.fail(writes, keepOnFailure);
         rollback();
         const storageError = toStorageError(err);
         if (errorIds && errorIds.length > 0) recordPageErrors(errorIds, storageError);
@@ -172,6 +186,9 @@ export function usePageWriteQueue({
 
   function cancelPendingWrite(id: string): void {
     takePendingPatch(id);
+    // Never written, so its edits mustn't stay on screen.
+    mirror?.fail(debouncedWrites.current.get(id) ?? []);
+    debouncedWrites.current.delete(id);
   }
 
   /** The write both the debounce timer and flushPage land in. The optimistic
@@ -185,9 +202,13 @@ export function usePageWriteQueue({
     rethrow: boolean,
     adoptEcho = true
   ): Promise<void> {
+    const carries = debouncedWrites.current.get(id) ?? [];
+    debouncedWrites.current.delete(id);
     return optimistic({
       apply: () => {},
+      carries,
       errorIds: [id],
+      keepOnFailure: "content" in patch,
       label: `page write for ${id}`,
       queueOn: id,
       rethrow,
@@ -211,7 +232,11 @@ export function usePageWriteQueue({
   function updatePage(id: string, patch: PageUpdate): void {
     snapshotPage(id);
 
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    const edits =
+      mirror?.capture(() =>
+        setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+      ) ?? (setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))), []);
+    debouncedWrites.current.set(id, [...(debouncedWrites.current.get(id) ?? []), ...edits]);
 
     const existing = pendingPatches.current.get(id) ?? {};
     pendingPatches.current.set(id, { ...existing, ...patch });

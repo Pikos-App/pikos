@@ -17,6 +17,8 @@ import {
   useState,
 } from "react";
 
+import type { WriteMirror } from "@/shared/viewCache/writeMirror";
+
 export interface PagesStore {
   folders: Folder[];
   foldersRef: RefObject<Folder[]>;
@@ -35,12 +37,15 @@ export interface PagesStore {
 
 export function usePagesStore({
   adapter,
+  mirror,
   registerDataLoader,
 }: {
   adapter: StorageAdapter;
+  /** Where edits go too, when the view cache is on. */
+  mirror: WriteMirror | null;
   registerDataLoader: (loader: (() => Promise<void>) | null) => void;
 }): PagesStore {
-  const [pages, setPages] = useState<PageSummary[]>([]);
+  const [pages, setPagesState] = useState<PageSummary[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
 
@@ -58,6 +63,16 @@ export function usePagesStore({
   foldersRef.current = folders;
   recurrenceRulesRef.current = recurrenceRules;
   /* eslint-enable react-hooks/refs */
+
+  // The mirror diffs against the latest list it can see; the state update itself still applies
+  // `action` to React's latest, so a queued load is never overwritten.
+  function setPages(action: SetStateAction<PageSummary[]>): void {
+    if (mirror) {
+      const prev = pagesRef.current;
+      mirror.changed(prev, typeof action === "function" ? action(prev) : action);
+    }
+    setPagesState(action);
+  }
 
   // Loads only active pages at init; completed pages are fetched lazily —
   // via useCompletedPages for the per-folder Completed section, and via

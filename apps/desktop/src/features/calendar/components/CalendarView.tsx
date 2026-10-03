@@ -117,11 +117,7 @@ export function CalendarView() {
     rangeStart ? utcInstant(startOfDay(rangeStart)) : null,
     rangeEnd ? utcInstant(startOfDay(addDays(rangeEnd, 1))) : null
   );
-  // Until edits are kept beside the cached rows, the in-memory copy carries the unsaved ones.
-  const inMemory = cachedRange ? new Map(pages.map((p) => [p.id, p])) : null;
-  const visiblePages = (
-    cachedRange && inMemory ? cachedRange.map((p) => inMemory.get(p.id) ?? p) : pages
-  ).filter((p) => !hiddenIds.has(p.id));
+  const visiblePages = (cachedRange ?? pages).filter((p) => !hiddenIds.has(p.id));
   useEffect(() => {
     if (cachedRange || !storage || !rangeStart || !rangeEnd) return;
     const scheduledAfter = format(addDays(rangeStart, -COMPLETED_LOOKBACK_DAYS), "yyyy-MM-dd");
