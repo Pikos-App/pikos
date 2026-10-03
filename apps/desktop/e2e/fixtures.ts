@@ -21,10 +21,15 @@ const RUN = Date.now().toString(36);
  *  (see `largeWorkspace.ts`), real writer only. */
 export type StartingWorkspace = "empty" | "large";
 
+/** The view cache as a lane runs it: three rows a window, so every list pages, and a budget that
+ *  holds little more than the list on screen, so switching views evicts and refetches. */
+const VIEW_CACHE_LANE = { budgetBytes: 6_000, windowSize: 3 };
+
 export const test = base.extend<{
   app: Page;
   firstRun: boolean;
   storage: StorageLane;
+  viewCache: boolean;
   workspace: StartingWorkspace;
 }>({
   app: async ({ page, workspace }, use) => {
@@ -38,7 +43,12 @@ export const test = base.extend<{
   },
   // On the context rather than in `app`, so specs that navigate the raw `page`
   // themselves get the token too, and a reload keeps it.
-  context: async ({ context, firstRun, storage, workspace }, use, testInfo) => {
+  context: async ({ context, firstRun, storage, viewCache, workspace }, use, testInfo) => {
+    if (viewCache) {
+      await context.addInitScript({
+        content: `window.__PIKOS_VIEW_CACHE__ = ${JSON.stringify(VIEW_CACHE_LANE)};`,
+      });
+    }
     if (workspace === "large" && storage !== "bridge") {
       throw new Error("A large workspace needs the real writer; tag the test @large");
     }
@@ -63,7 +73,7 @@ export const test = base.extend<{
   // so a faked browser clock or a spec's own zone splits one app across two dates
   // or zones, a state production cannot reach. A pass there proves nothing, so the
   // lane refuses rather than run it.
-  page: async ({ page, storage, timezoneId }, use, testInfo) => {
+  page: async ({ page, storage, timezoneId, viewCache }, use, testInfo) => {
     if (storage === "bridge") {
       if (timezoneId !== testInfo.project.use.timezoneId) {
         throw new Error(
@@ -76,8 +86,19 @@ export const test = base.extend<{
         );
     }
     await use(page);
+    if (viewCache && !page.isClosed()) {
+      const mismatches = await page
+        .evaluate(
+          () =>
+            (globalThis as { __PIKOS_SHADOW_MISMATCHES__?: string[] })
+              .__PIKOS_SHADOW_MISMATCHES__ ?? []
+        )
+        .catch(() => []);
+      expect(mismatches, "a cached list differed from the database").toEqual([]);
+    }
   },
   storage: ["mock", { option: true }],
+  viewCache: [false, { option: true }],
   workspace: ["empty", { option: true }],
 });
 

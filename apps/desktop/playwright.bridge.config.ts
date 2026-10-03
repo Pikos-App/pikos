@@ -12,7 +12,7 @@ const BRIDGE_PORT = 1423;
 // in production. calendar-sync.spec.ts pins this one, so it is the lane's too.
 const ZONE = "America/New_York";
 
-export default defineConfig<{ storage: StorageLane }>({
+export default defineConfig<{ storage: StorageLane; viewCache: boolean }>({
   expect: {
     timeout: 5_000,
   },
@@ -23,6 +23,17 @@ export default defineConfig<{ storage: StorageLane }>({
       grepInvert: new RegExp(`${MOCK_ONLY.source}|${OWN_CONFIG_TAGS.source}`),
       name: "bridge",
       use: { ...devices["Desktop Safari"], storage: "bridge", timezoneId: ZONE },
+    },
+    {
+      // The same specs with lists loaded a window at a time, while that path is behind a flag.
+      grepInvert: new RegExp(`${MOCK_ONLY.source}|${OWN_CONFIG_TAGS.source}`),
+      name: "bridge-view-cache",
+      use: {
+        ...devices["Desktop Safari"],
+        storage: "bridge",
+        timezoneId: ZONE,
+        viewCache: true,
+      },
     },
   ],
   reporter: process.env["CI"]

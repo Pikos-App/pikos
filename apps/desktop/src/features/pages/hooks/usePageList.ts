@@ -3,11 +3,14 @@ import { getVisiblePages, isDateGroupedView, sortPages, withTodayOccurrences } f
 import { useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
+import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
+import { overlayPending } from "@/shared/viewCache/overlayPending";
+import { useCachedView } from "@/shared/viewCache/useCachedView";
 
 import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
@@ -31,7 +34,12 @@ export function usePageList() {
   const sortMode = useActiveSortMode();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
+  const { selectedPageIds } = useSelection();
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const cached = useCachedView(activeViewId, sortMode, [
+    ...(activePage ? [activePage.id] : []),
+    ...selectedPageIds,
+  ]);
 
   const completed = useCompletedPages(activeViewId);
   const isTodayView = activeViewId === "today";
@@ -57,9 +65,12 @@ export function usePageList() {
   // Today and Upcoming are ordered by their sections (overdue/today, then day
   // groups), so running sortPages here would only churn an order the section
   // builders are about to replace.
-  const visiblePages = isDateGroupedView(activeViewId)
-    ? withOccurrences
-    : sortPages(withOccurrences, sortMode);
+  const shown = cached && overlayPending(cached, pages, activeViewId);
+  const visiblePages = shown
+    ? shown.pages.filter((p) => !hiddenIds.has(p.id))
+    : isDateGroupedView(activeViewId)
+      ? withOccurrences
+      : sortPages(withOccurrences, sortMode);
 
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 
@@ -102,6 +113,11 @@ export function usePageList() {
 
   return {
     activePage,
+    /** The list loaded a window at a time, when the view cache serves this view. */
+    cached: shown && {
+      ...shown,
+      slots: shown.slots.filter((s) => !hiddenIds.has(s.id ?? "")),
+    },
     completedHasMore: completed.hasMore,
     completedPages,
     folders,

@@ -5,6 +5,7 @@
 // data load via a registered loader callback.
 
 import type { StorageAdapter, Workspace } from "@pikos/core";
+import { watchWrites } from "@pikos/core";
 import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@seeds/seedLoaders";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
@@ -21,6 +22,8 @@ import {
 } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
+import { VIEW_CACHE } from "@/shared/viewCache/config";
+import { ViewCacheController } from "@/shared/viewCache/controller";
 
 const log = createLogger("WorkspaceContext");
 
@@ -53,6 +56,8 @@ export interface WorkspaceContextValue {
 interface WorkspaceInternalValue extends WorkspaceContextValue {
   /** Always-defined adapter (use storage publicly to gate on workspace readiness). */
   adapter: StorageAdapter;
+  /** Lists loaded a window at a time; null while the full in-memory list is the only path. */
+  viewCache: ViewCacheController | null;
   eventBus: WorkspaceEventBus;
   /** Register a data loader called during init/reload/resetAndSeed. Pass null to unregister. */
   registerDataLoader: (loader: DataLoader | null) => void;
@@ -65,9 +70,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
   // time this runs, and what it throws if it isn't. The bridge lane uses the
   // real adapter with its transport already repointed in main.tsx.
-  const [adapter] = useState<StorageAdapter>(() =>
-    STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter()
-  );
+  const [{ adapter, viewCache }] = useState(() => {
+    const raw: StorageAdapter =
+      STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter();
+    if (!VIEW_CACHE) return { adapter: raw, viewCache: null };
+    // The controller needs the adapter, and the adapter reports to the controller.
+    const ref: { controller: ViewCacheController | null } = { controller: null };
+    const watched = watchWrites(raw, {
+      settled: () => ref.controller?.writeSettled(),
+      started: () => ref.controller?.writeStarted(),
+    });
+    ref.controller = new ViewCacheController(watched, VIEW_CACHE);
+    return { adapter: watched, viewCache: ref.controller };
+  });
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   // Start true so we don't flash the welcome screen before init completes
@@ -344,6 +359,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     resetAndSeed,
     selectWorkspace,
     storage: workspace ? adapter : null,
+    viewCache,
     workspace,
   };
 
@@ -356,6 +372,13 @@ export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
   if (!ctx) throw new Error("useWorkspace must be used within <WorkspaceProvider>");
   return ctx;
+}
+
+/** The view cache when the flag is on; null when it's off or outside a workspace, as in a
+ *  component test. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useViewCacheController(): ViewCacheController | null {
+  return useContext(WorkspaceContext)?.viewCache ?? null;
 }
 
 /**

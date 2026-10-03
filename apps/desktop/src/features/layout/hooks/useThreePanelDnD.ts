@@ -24,6 +24,7 @@ import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useCachedView } from "@/shared/viewCache/useCachedView";
 
 /** Gap between timed pages when multi-dropping on calendar (ms). */
 const MULTI_DROP_GAP_MS = 15 * 60 * 1000; // 15 minutes
@@ -46,9 +47,11 @@ function unlockedIds(ids: string[], pages: PageSummary[]): string[] {
 }
 
 export function useThreePanelDnD() {
-  const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = usePages();
+  const { folders, movePages, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } =
+    usePages();
   const { activeViewId } = useUI();
   const sortMode = useActiveSortMode();
+  const cached = useCachedView(activeViewId, sortMode, null);
   const { clearSelection, selectedPageIds } = useSelection();
   const { callExternalDragUpdater, setIsDraggingOverCalendar } = useCalendarDnD();
 
@@ -137,7 +140,7 @@ export function useThreePanelDnD() {
       // If dragging a selected item, drag all selected pages (in list order).
       // If dragging an unselected item, treat as single-drag and clear selection.
       if (selectedPageIds.has(String(active.id))) {
-        const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
+        const visible = cached?.pages ?? sortPages(getVisiblePages(pages, activeViewId), sortMode);
         const ids = visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id);
         setDraggedPageIds(ids);
       } else {
@@ -148,6 +151,26 @@ export function useThreePanelDnD() {
       setActiveFolderData(folders.find((f) => f.id === active.id) ?? null);
       setDraggedPageIds([]);
     }
+  }
+
+  /** A cached list holds a window, so the move names the pages it lands between rather than
+   *  sending the whole order. Dropped below where it started, it lands after the target. */
+  function moveBetweenNeighbours(
+    visible: PageSummary[],
+    dragged: string[],
+    activeId: string,
+    overId: string
+  ) {
+    const moving = dragged.length > 0 ? dragged : [activeId];
+    const rest = visible.filter((p) => !moving.includes(p.id));
+    const dropIdx = rest.findIndex((p) => p.id === overId);
+    const activeIdx = visible.findIndex((p) => p.id === activeId);
+    const overIdx = visible.findIndex((p) => p.id === overId);
+    if (dropIdx === -1 || activeIdx === -1) return;
+    const insertIdx = activeIdx < overIdx ? dropIdx + 1 : dropIdx;
+    const place = { after: rest[insertIdx - 1]?.id ?? null, before: rest[insertIdx]?.id ?? null };
+    cached?.place(moving, place);
+    void movePages(moving, place);
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
@@ -224,6 +247,10 @@ export function useThreePanelDnD() {
       // Only reorder in manual sort mode — other modes lock DnD.
       if (isDateGroupedView(activeViewId)) return;
       if (sortMode !== "manual") return;
+      if (cached) {
+        moveBetweenNeighbours(cached.pages, idsToMove, String(active.id), String(over.id));
+        return;
+      }
       const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
       const folderId = folderIdForView(activeViewId);
 

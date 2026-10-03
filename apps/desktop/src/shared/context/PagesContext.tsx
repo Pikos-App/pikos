@@ -24,6 +24,7 @@ import type {
   PageRecurrenceRule,
   PageStatus,
   PageSummary,
+  Placement,
   SearchResponse,
   StorageError,
   Tag,
@@ -37,6 +38,7 @@ import type {
 import { createContext, type ReactNode, useContext } from "react";
 
 import { recordOpen } from "@/shared/lib/recentOpens";
+import { createLogger } from "@/shared/logger";
 
 import { useAppSettings } from "./AppSettingsContext";
 import { useFolderWrites } from "./useFolderWrites";
@@ -48,6 +50,8 @@ import { useScheduleWrites } from "./useScheduleWrites";
 import { useWorkspaceInternal } from "./WorkspaceContext";
 
 export type { GapRunOptions };
+
+const log = createLogger("PagesContext");
 
 export interface PagesContextValue {
   /** Lightweight summaries (no content) — use getPage() to load full content. */
@@ -84,6 +88,8 @@ export interface PagesContextValue {
   /** Restore a soft-deleted folder and all its pages. */
   restoreFolder: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
+  /** Move pages, in the order given, between two neighbours in their folder's manual order. */
+  movePages: (ids: string[], place: Placement) => Promise<void>;
   /**
    * Bulk complete/uncomplete in ONE transaction (multi-select Cmd+A → Space).
    * Optimistic; rolls back and surfaces a per-page error on failure. One atomic
@@ -293,6 +299,22 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return adapter.searchTags(query);
   }
 
+  async function movePages(ids: string[], place: Placement): Promise<void> {
+    try {
+      const { orders } = await adapter.movePages(ids, place);
+      const moved = new Map(orders);
+      setPages((prev) =>
+        prev.map((p) => {
+          const sortOrder = moved.get(p.id);
+          return sortOrder === undefined ? p : { ...p, sortOrder };
+        })
+      );
+    } catch (err) {
+      // A neighbour that moved since the list loaded; the refresh after every write redraws it.
+      log.warn("move refused", err);
+    }
+  }
+
   // Named one by one rather than spread: `recurring` also carries
   // patchRecomputedHead, which is internal to the write paths and must not
   // become part of the usePages() surface.
@@ -334,6 +356,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     listOverridesForRules,
     maybeUncompleteRecurringClone,
     mergePages,
+    movePages,
     overridesVersion,
     pageErrors,
     pages,
