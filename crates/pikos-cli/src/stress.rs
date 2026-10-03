@@ -13,6 +13,13 @@
 use std::path::Path;
 use std::time::Instant;
 
+use pikos_db::moves::{move_pages, Placement};
+use pikos_db::reads::{
+    count_views, get_page_if_newer, get_pages, list_range, list_recent_pages, list_series_heads,
+    list_tags,
+};
+use pikos_db::views::DateBounds;
+use pikos_db::views::{list_completed, list_view, list_view_ids, ViewKey, ViewScope, ViewSort};
 use pikos_db::{
     build_tiptap_doc, create_folder_impl, create_page_impl, create_recurrence_rule_impl, get_page,
     list_pages_impl, open_pool, open_pool_checkpointing, update_page_impl, CheckpointHooks,
@@ -352,11 +359,21 @@ impl Timing {
 const RUN_BUDGET: std::time::Duration = std::time::Duration::from_secs(10);
 const MIN_RUNS: usize = 5;
 
+/// The operations `bench --only` asked for; every one when empty.
+static ONLY: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
 async fn time_it<F, Fut, T>(runs: u32, name: &'static str, f: F) -> Result<Timing, CliError>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, CliError>>,
 {
+    let only = ONLY.get().map(Vec::as_slice).unwrap_or_default();
+    if !only.is_empty() && !only.iter().any(|o| name.contains(o.as_str())) {
+        return Ok(Timing {
+            name,
+            samples: vec![],
+        });
+    }
     // Once to warm the page cache, then the measured runs, so the number is steady-state rather
     // than whatever the filesystem happened to be doing.
     let _ = f().await?;
@@ -374,8 +391,14 @@ where
     Ok(Timing { name, samples })
 }
 
-pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), CliError> {
+pub async fn bench(
+    db: &Option<String>,
+    runs: u32,
+    only: &[String],
+    json: bool,
+) -> Result<(), CliError> {
     let path = require_scratch_db(db)?;
+    let _ = ONLY.set(only.to_vec());
 
     let open_start = Instant::now();
     // Checkpointing the way the app does, so the bench times the database the app actually runs.
@@ -500,6 +523,170 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
         );
     }
 
+    let zone = pikos_db::device_zone().name().to_string();
+    let inbox = |sort| ViewKey {
+        scope: ViewScope::Inbox,
+        sort,
+        zone: zone.clone(),
+        dates: None,
+    };
+    for (name, sort) in [
+        ("view 50, manual order", ViewSort::Manual),
+        ("view 50, by date", ViewSort::Date),
+        ("view 50, by title", ViewSort::Title),
+        ("view 50, by priority", ViewSort::Priority),
+    ] {
+        let key = inbox(sort);
+        timings.push(
+            time_it(runs, name, || async {
+                list_view(&pool, &key, None, 50).await.map_err(classify)
+            })
+            .await?,
+        );
+    }
+    let key = inbox(ViewSort::Date);
+    let deep = list_view(&pool, &key, None, 2_000)
+        .await
+        .map_err(classify)?
+        .next;
+    timings.push(
+        time_it(runs, "view 50, 2,000 rows down", || async {
+            list_view(&pool, &key, deep.as_ref(), 50)
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "view 50 done", || async {
+            list_completed(&pool, Some(&ViewScope::Inbox), None, None, 50)
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
+    let top: Vec<String> = list_view(&pool, &inbox(ViewSort::Manual), None, 2)
+        .await
+        .map_err(classify)?
+        .rows
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    if let [first, second] = top.as_slice() {
+        let turn = std::cell::Cell::new(0usize);
+        timings.push(
+            time_it(runs, "view move a page", || {
+                let (moved, onto) = if turn.get().is_multiple_of(2) {
+                    (second.clone(), first.clone())
+                } else {
+                    (first.clone(), second.clone())
+                };
+                turn.set(turn.get() + 1);
+                let pool = &pool;
+                async move {
+                    let place = Placement {
+                        after: None,
+                        before: Some(onto),
+                    };
+                    move_pages(pool, &[moved], &place).await.map_err(classify)
+                }
+            })
+            .await?,
+        );
+    }
+    let today = chrono::Local::now().date_naive();
+    timings.push(
+        time_it(runs, "read sidebar counts", || async {
+            count_views(&pool, &zone, today).await.map_err(classify)
+        })
+        .await?,
+    );
+    let week_start = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let week_end = (chrono::Utc::now() + chrono::Duration::days(7))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    timings.push(
+        time_it(runs, "read a calendar week", || async {
+            list_range(&pool, Some(&week_start), &week_end, &zone, false)
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
+    let tomorrow = (chrono::Utc::now() + chrono::Duration::days(1))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    timings.push(
+        time_it(runs, "read Today's whole range", || async {
+            list_range(&pool, None, &tomorrow, &zone, true)
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
+    for (name, from, until) in [
+        ("read Overdue's first 50", None, today),
+        (
+            "read Today's first 50",
+            Some(today),
+            today + chrono::Days::new(1),
+        ),
+    ] {
+        let key = ViewKey {
+            scope: ViewScope::Everywhere,
+            sort: ViewSort::Date,
+            zone: zone.clone(),
+            dates: Some(DateBounds { from, until }),
+        };
+        timings.push(
+            time_it(runs, name, || async {
+                list_view(&pool, &key, None, 50).await.map_err(classify)
+            })
+            .await?,
+        );
+    }
+    timings.push(
+        time_it(runs, "read series heads", || async {
+            list_series_heads(&pool, true).await.map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "read 10 recents", || async {
+            list_recent_pages(&pool, None, 10).await.map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "read tags", || async {
+            list_tags(&pool).await.map_err(classify)
+        })
+        .await?,
+    );
+    let some: Vec<String> = page_ids.iter().take(50).cloned().collect();
+    timings.push(
+        time_it(runs, "read 50 pages by id", || async {
+            get_pages(&pool, &some).await.map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "read a page if newer", || async {
+            get_page_if_newer(&pool, &some[0], Some(i64::MAX))
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "view ids, all of Inbox", || async {
+            list_view_ids(&pool, &inbox(ViewSort::Manual), None, None)
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
+
     timings.push(
         time_it(runs, "list 50 pages", || async {
             list_pages(
@@ -552,6 +739,7 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
         .await?,
     );
 
+    timings.retain(|t| !t.samples.is_empty());
     if json {
         crate::render::print_json(&json!({
             "pages": total,

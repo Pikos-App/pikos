@@ -47,7 +47,9 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 )
                 .await
             }
-            StressCommand::Bench { runs } => crate::stress::bench(&cli.db, *runs, json).await,
+            StressCommand::Bench { runs, only } => {
+                crate::stress::bench(&cli.db, *runs, only, json).await
+            }
         };
     }
     let pool = open_workspace(&cli.db, cli.migrate).await?;

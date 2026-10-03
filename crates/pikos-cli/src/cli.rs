@@ -194,6 +194,12 @@ pub enum StressCommand {
             help = "Times to measure each operation, reporting the median and the 95th percentile"
         )]
         runs: u32,
+        #[arg(
+            long,
+            value_delimiter = ',',
+            help = "Time only the operations whose names contain one of these, e.g. --only list,save"
+        )]
+        only: Vec<String>,
     },
 }
 

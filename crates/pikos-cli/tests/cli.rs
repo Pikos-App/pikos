@@ -221,6 +221,35 @@ async fn list_rejects_bad_status_exit_2() {
 }
 
 #[tokio::test]
+async fn a_write_from_another_process_counts_as_someone_elses() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Groceries")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    let before = pikos_db::changes::change_state(&pool).await.unwrap();
+
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--title",
+            "Groceries, Saturday",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let after = pikos_db::changes::change_state(&pool).await.unwrap();
+    assert!(after.seq > before.seq);
+    assert_eq!(after.own_changes, before.own_changes);
+}
+
+#[tokio::test]
 async fn stress_seed_writes_bodies_the_editor_can_open() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
