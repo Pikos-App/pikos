@@ -31,7 +31,8 @@ export class WriteMirror {
   }
 
   /** The page list went from `prev` to `next` with the store as its only copy: an edit inside a
-   *  write's `capture`, else rows read from the database (a write's echo, a rollback), confirmed. */
+   *  write's `capture`, else the app's own settled copy (a write's echo or its follow-up, a
+   *  rollback), adopted. */
   apply(prev: PageSummary[], next: PageSummary[]): void {
     if (this.recording) {
       this.changed(prev, next);
@@ -41,7 +42,7 @@ export class WriteMirror {
     const before = new Map(prev.map((p) => [p.id, p]));
     for (const page of next) {
       kept.add(page.id);
-      if (before.get(page.id) !== page) this.store.confirm([page]);
+      if (before.get(page.id) !== page) this.store.adopt([page]);
     }
     for (const id of before.keys()) if (!kept.has(id)) this.store.remove(id);
   }

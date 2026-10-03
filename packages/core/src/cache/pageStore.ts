@@ -55,6 +55,23 @@ export class PageStore {
     if (changed) this.bump();
   }
 
+  /** The app's own copy of rows it holds, made after a write it ran or to undo one: taken unless
+   *  the store holds a newer row. `confirm` skips a row with the change number it already has, as
+   *  the same row read twice, but this copy can differ from the held row without a new number. */
+  adopt(rows: PageSummary[]): void {
+    let changed = false;
+    for (const row of rows) {
+      const held = this.confirmed.get(row.id);
+      if (held === row) continue;
+      if (held?.rowSeq != null && row.rowSeq != null && row.rowSeq < held.rowSeq) continue;
+      this.confirmed.set(row.id, row);
+      this.shown.delete(row.id);
+      this.measure(row);
+      changed = true;
+    }
+    if (changed) this.bump();
+  }
+
   /** Show `fields` on the page at once, or take it out with `removes`. Returns the write's id, for
    *  `settle`. */
   write(pageId: string, fields: Partial<PageSummary>, removes = false): number {
