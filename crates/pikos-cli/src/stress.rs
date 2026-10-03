@@ -651,6 +651,25 @@ pub async fn bench(
         })
         .await?,
     );
+    // What the app reads at launch besides the list on screen.
+    timings.push(
+        time_it(runs, "launch: recompute recurring schedules", || async {
+            pikos_db::recompute_recurring_schedules_impl(&pool).await.map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "launch: read recurrence rules", || async {
+            pikos_db::list_recurrence_rules_impl(&pool).await.map_err(classify)
+        })
+        .await?,
+    );
+    timings.push(
+        time_it(runs, "launch: read folders", || async {
+            pikos_db::list_folders_impl(&pool).await.map_err(classify)
+        })
+        .await?,
+    );
     timings.push(
         time_it(runs, "read 10 recents", || async {
             list_recent_pages(&pool, None, 10).await.map_err(classify)
