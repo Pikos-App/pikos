@@ -28,6 +28,9 @@ export class PageStore {
   /** Each confirmed row's measured size, and their sum, so the eviction budget is checked
    *  without measuring every row again. */
   private rowBytes = new Map<string, number>();
+  /** Each page with pending writes as shown, kept until something changes it, so a reader sees the
+   *  same object until the page changes: React can then skip what didn't. */
+  private shown = new Map<string, PageSummary>();
   private totalBytes = 0;
   private pending = new Map<string, PendingWrite[]>();
   private pageOf = new Map<number, string>();
@@ -45,6 +48,7 @@ export class PageStore {
       // The same change number is the same row: keeping the held object spares a re-render.
       if (held?.rowSeq != null && row.rowSeq != null && row.rowSeq <= held.rowSeq) continue;
       this.confirmed.set(row.id, row);
+      this.shown.delete(row.id);
       this.measure(row);
       changed = true;
     }
@@ -58,6 +62,7 @@ export class PageStore {
     const entries = this.pending.get(pageId) ?? [];
     entries.push({ fields, id, kept: false, removes });
     this.pending.set(pageId, entries);
+    this.shown.delete(pageId);
     this.pageOf.set(id, pageId);
     this.bump();
     return id;
@@ -86,6 +91,7 @@ export class PageStore {
     }
     if (remaining.length > 0) this.pending.set(pageId, remaining);
     else this.pending.delete(pageId);
+    this.shown.delete(pageId);
     this.bump();
   }
 
@@ -95,7 +101,11 @@ export class PageStore {
     const entries = this.pending.get(id);
     if (!base || !entries) return base;
     if (entries.some((e) => e.removes)) return undefined;
-    return entries.reduce<PageSummary>((page, e) => ({ ...page, ...e.fields }), base);
+    const held = this.shown.get(id);
+    if (held) return held;
+    const page = entries.reduce<PageSummary>((acc, e) => ({ ...acc, ...e.fields }), base);
+    this.shown.set(id, page);
+    return page;
   }
 
   has(id: string): boolean {
@@ -138,6 +148,7 @@ export class PageStore {
 
   clear(): void {
     this.confirmed.clear();
+    this.shown.clear();
     this.rowBytes.clear();
     this.totalBytes = 0;
     this.pending.clear();
@@ -169,6 +180,7 @@ export class PageStore {
 
   private drop(id: string): void {
     this.confirmed.delete(id);
+    this.shown.delete(id);
     this.totalBytes -= this.rowBytes.get(id) ?? 0;
     this.rowBytes.delete(id);
   }

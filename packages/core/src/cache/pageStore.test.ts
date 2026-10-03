@@ -96,4 +96,16 @@ describe("PageStore", () => {
     s.settle(again, { kind: "confirmed" });
     expect(s.has("a")).toBe(false);
   });
+
+  it("hands back the same object for a page until something changes it", () => {
+    const s = store({ id: "a", rowSeq: 1, title: "Plan" }, { id: "b", rowSeq: 1, title: "Other" });
+    s.write("a", { title: "Plan v2" });
+    const first = s.get("a");
+    expect(s.get("a")).toBe(first);
+    s.write("b", { title: "Other v2" });
+    expect(s.get("a")).toBe(first);
+    s.write("a", { priority: 2 });
+    expect(s.get("a")).not.toBe(first);
+    expect(s.get("a")).toMatchObject({ priority: 2, title: "Plan v2" });
+  });
 });
