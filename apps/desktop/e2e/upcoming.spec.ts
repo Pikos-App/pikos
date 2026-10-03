@@ -100,7 +100,7 @@ appTest("moving overdue pages to today clears the Overdue section @mock-only", a
 // ─── Lists loaded a window at a time turn over at midnight ─────────────────
 
 appTest.describe("with lists loaded a window at a time", () => {
-  appTest.use({ viewCache: true });
+  appTest.use({ tightCache: true });
 
   appTest(
     "Today and Upcoming move to the new day at midnight, with nothing clicked @mock-only",

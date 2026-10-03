@@ -13,7 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,7 +24,14 @@ import { renderHookWithProviders } from "@/test/renderWithProviders";
  * collisions: lifecycle owns workspace/isLoading/on/storage/etc., data owns
  * pages/folders/CRUD/scheduling/recurrence. */
 async function setup() {
-  const hook = renderHookWithProviders(() => ({ ...useWorkspace(), ...usePages() }));
+  const hook = renderHookWithProviders(() => {
+    const workspace = useWorkspace();
+    const pages = usePagesNow();
+    return Object.defineProperties(
+      { ...workspace, ...pages },
+      { pages: { get: () => pages.pages } }
+    );
+  });
 
   await act(async () => {
     await hook.result.current.selectWorkspace();
@@ -335,7 +344,8 @@ describe("mutation queue", () => {
     let pageId = "";
     const hook = renderHookWithProviders(() => {
       const value = { ...useWorkspace(), ...usePages() };
-      seen.push(value.pages.find((p) => p.id === pageId)?.scheduledStart);
+      const held = useHeldPages() ?? [];
+      seen.push(held.find((p) => p.id === pageId)?.scheduledStart);
       return value;
     });
     await act(async () => {
@@ -1550,7 +1560,8 @@ describe("skipOccurrences", () => {
       await Promise.resolve();
     });
 
-    expect(hook.result.current.pages.find((p) => p.id === page.id)?.skippedOccurrences).toEqual([]);
+    const restored = hook.result.current.pages.find((p) => p.id === page.id);
+    expect(restored?.skippedOccurrences ?? []).toEqual([]);
   });
 
   it("appends to the existing skip-set rather than replacing it", async () => {
@@ -1588,18 +1599,6 @@ describe("skipOccurrences", () => {
 });
 
 describe("initial load", () => {
-  it("filters listPages to status=not_started", async () => {
-    const spy = vi.spyOn(MockStorageAdapter.prototype, "listPages");
-    const hook = renderHookWithProviders(() => useWorkspace());
-
-    await act(async () => {
-      await hook.result.current.selectWorkspace();
-    });
-
-    // listPages should have been called with status filter
-    expect(spy).toHaveBeenCalledWith({ status: "not_started" });
-  });
-
   it("does not pull completed pages into the pages array on reload", async () => {
     // Guards against reintroducing a bulk completed load at init — the
     // Inbox/folder Completed sections rely on lazy pagination, and the

@@ -7,12 +7,8 @@ import type { ViewCacheController } from "@/shared/viewCache/controller";
 
 import { usePageSummary } from "./usePageSummary";
 
-const mocks = vi.hoisted(() => ({
-  controller: null as unknown,
-  pages: [] as PageSummary[],
-}));
+const mocks = vi.hoisted(() => ({ controller: null as unknown }));
 
-vi.mock("@/shared/context/PagesContext", () => ({ usePages: () => ({ pages: mocks.pages }) }));
 vi.mock("@/shared/context/WorkspaceContext", () => ({
   useViewCacheController: () => mocks.controller,
 }));
@@ -46,21 +42,13 @@ function cacheOf(store: PageStore): ViewCacheController {
 
 beforeEach(() => {
   mocks.controller = null;
-  mocks.pages = [];
 });
 
 describe("usePageSummary", () => {
-  it("finds the page in the page list when the view cache is off", () => {
-    mocks.pages = [makeSummary("a", "A"), makeSummary("b", "B")];
-    const { result } = renderHook(() => usePageSummary("b"));
-    expect(result.current?.title).toBe("B");
-  });
-
-  it("reads the row from the view cache, not the page list, when it's on", () => {
+  it("reads the row from the view cache", () => {
     const store = new PageStore();
     store.confirm([makeSummary("a", "Held")]);
     mocks.controller = cacheOf(store);
-    mocks.pages = [makeSummary("a", "Stale list copy")];
 
     const { result } = renderHook(() => usePageSummary("a"));
 

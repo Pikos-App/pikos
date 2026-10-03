@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ImportBatchInput, ImportBatchItem } from "@/features/import/types";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { usePages } from "@/shared/context/PagesContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -24,6 +24,7 @@ async function setup() {
     ...useWorkspace(),
     ...usePages(),
     ...useImportBatch(),
+    viewCache: useViewCacheController()!,
   }));
 
   await act(async () => {
@@ -88,7 +89,7 @@ describe("importBatch", () => {
 
     expect(result.folderIds).toHaveLength(1);
     expect(result.pageIds).toHaveLength(1);
-    const imported = hook.result.current.pages.find((p) => p.id === result.pageIds[0]);
+    const [imported] = await hook.result.current.viewCache.rows(result.pageIds);
     expect(imported?.title).toBe("Task A");
     expect(imported?.tags).toEqual(["errands"]);
   });
@@ -162,7 +163,7 @@ describe("importBatch", () => {
 
     expect(result.folderIds).toHaveLength(1);
     expect(result.folderIds[0]).not.toBe(enabled.folderId);
-    const imported = hook.result.current.pages.filter((p) => result.pageIds.includes(p.id));
+    const imported = await hook.result.current.viewCache.rows(result.pageIds);
     expect(imported.map((p) => p.folderId)).toEqual([result.folderIds[0], result.folderIds[0]]);
   });
 

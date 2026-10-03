@@ -4,11 +4,11 @@ import { act, waitFor } from "@testing-library/react";
 import { format } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { usePageList } from "./usePageList";
 
@@ -26,7 +26,7 @@ function setup() {
     const ui = useUI();
     const undo = useUndoDelete();
     const workspace = useWorkspace();
-    const pages = usePages();
+    const pages = usePagesNow();
     const pageList = usePageList();
     return { pageList, pages, ui, undo, workspace };
   });
@@ -86,8 +86,10 @@ describe("usePageList — visible pages", () => {
 
     act(() => hook.result.current.ui.setActiveViewId(workFolder.id));
 
-    const ids = hook.result.current.pageList.visiblePages.map((p) => p.id);
-    expect(ids).toEqual([w.id]);
+    await waitFor(() => {
+      const ids = hook.result.current.pageList.visiblePages.map((p) => p.id);
+      expect(ids).toEqual([w.id]);
+    });
   });
 
   it("today view: skips the sortPages step (visible filter is applied as-is)", async () => {

@@ -103,7 +103,7 @@ const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
   const { consumePendingNavigation, workspace } = useWorkspace();
-  const { folders, pages } = usePages();
+  const { folders } = usePages();
   const viewCache = useViewCacheController();
   const [activePageId, setActivePageId] = useLocalStorage<string | null>(
     STORAGE_KEYS.lastActivePageId,
@@ -183,8 +183,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setRightPanelRaw(panel);
   }
 
-  // With the view cache the page list holds only what has been shown, so the database answers
-  // whether the remembered pages are still open.
+  // Only what has been shown is held, so the database answers whether the remembered pages are
+  // still open.
   useEffect(() => {
     if (!viewCache || !workspace) return;
     const ids = [activePageId, lastEditorPageId].filter((id): id is string => id !== null);
@@ -211,20 +211,14 @@ export function UIProvider({ children }: { children: ReactNode }) {
   // The remembered view and page are checked against the workspace once it has
   // loaded, and a first launch's tutorial navigation applied. Done here, during
   // render, because this provider owns the state it corrects: from a child it was
-  // an update to another component mid-render, which React rejects. pages[] holds
-  // only open, undeleted pages, so a missing id covers every reason not to restore.
+  // an update to another component mid-render, which React rejects. Whether the
+  // remembered pages still exist is the database's answer, in the effect above.
   const [checkedWorkspaceId, setCheckedWorkspaceId] = useState<string | null>(null);
   if (workspace && workspace.id !== checkedWorkspaceId) {
     // Stryker disable next-line CallExpression: checking again on every render reaches the same state
     setCheckedWorkspaceId(workspace.id);
     if (!isSmartViewId(activeViewId) && !folders.some((f) => f.id === activeViewId)) {
       setActiveViewId("inbox");
-    }
-    if (!viewCache && activePageId !== null && !pages.some((p) => p.id === activePageId)) {
-      setActivePage(null);
-    }
-    if (!viewCache && lastEditorPageId !== null && !pages.some((p) => p.id === lastEditorPageId)) {
-      setLastEditorPageId(null);
     }
     const nav = consumePendingNavigation();
     if (nav) {

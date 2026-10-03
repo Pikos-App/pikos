@@ -1,7 +1,7 @@
 // usePageWriteQueue — the write half of PagesContext: the per-page mutation
-// queue, the 800ms debounce that batches editor typing into one DB write, the
-// snapshots those writes roll back to, and the `pageErrors` map the UI reads
-// when one fails.
+// queue, the 800ms debounce that batches editor typing into one DB write, and
+// the `pageErrors` map the UI reads when one fails. Every edit is a pending
+// write on the view cache's store until its write lands or fails.
 //
 // It also owns the ONE optimistic-write shape every mutation in the context
 // uses — patch state now, write, and on failure put the state back and surface
@@ -9,16 +9,9 @@
 // out by hand at every call site, which is how the same rollback could be
 // subtly wrong in three of them at once.
 
-import type { PageSummary, PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
+import type { PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
 import { storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
-import {
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { postNotice } from "@/shared/events/noticeBus";
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
@@ -94,18 +87,13 @@ export function usePageWriteQueue({
   adapter,
   emit,
   mirror,
-  pagesRef,
-  setPages,
 }: {
   adapter: StorageAdapter;
   emit: WorkspaceEventBus["emit"];
-  mirror: WriteMirror | null;
-  pagesRef: RefObject<PageSummary[]>;
-  setPages: Dispatch<SetStateAction<PageSummary[]>>;
+  mirror: WriteMirror;
 }): PageWriteQueue {
   const pendingPatches = useRef<Map<string, PageUpdate>>(new Map());
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const snapshotsRef = useRef<Map<string, PageSummary>>(new Map());
   const mutationQueues = useRef<Map<string, Promise<unknown>>>(new Map());
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
   /** Each page's debounced edits, as the mirror recorded them, for the write that carries them. */
@@ -152,15 +140,15 @@ export function usePageWriteQueue({
     rollback,
     write,
   }: OptimisticWrite<T>): Promise<T | undefined> {
-    const writes = [...carries, ...(mirror ? mirror.capture(apply) : (apply(), []))];
+    const writes = [...carries, ...mirror.capture(apply)];
     async function run(): Promise<T | undefined> {
       try {
         const result = await write();
-        void mirror?.confirm(writes);
+        void mirror.confirm(writes);
         return result;
       } catch (err: unknown) {
         log.error(`${label} failed; rolling back`, err);
-        mirror?.fail(writes, keepOnFailure);
+        mirror.fail(writes, keepOnFailure);
         rollback();
         const storageError = toStorageError(err);
         if (errorIds && errorIds.length > 0) recordPageErrors(errorIds, storageError);
@@ -174,20 +162,10 @@ export function usePageWriteQueue({
     return queueOn === undefined ? run() : enqueue(queueOn, run);
   }
 
-  /** Capture a page's current state as the rollback target for the patch about
-   *  to be applied to it. Only the FIRST capture in a debounce window sticks —
-   *  a rollback has to reach the last state the DB agreed with, not the last
-   *  optimistic one. */
-  function snapshotPage(id: string): void {
-    if (pendingPatches.current.has(id)) return;
-    const current = pagesRef.current.find((p) => p.id === id);
-    if (current) snapshotsRef.current.set(id, current);
-  }
-
   function cancelPendingWrite(id: string): void {
     takePendingPatch(id);
     // Never written, so its edits mustn't stay on screen.
-    mirror?.fail(debouncedWrites.current.get(id) ?? []);
+    mirror.fail(debouncedWrites.current.get(id) ?? []);
     debouncedWrites.current.delete(id);
   }
 
@@ -212,18 +190,13 @@ export function usePageWriteQueue({
       label: `page write for ${id}`,
       queueOn: id,
       rethrow,
-      rollback: () => {
-        const snapshot = snapshotsRef.current.get(id);
-        snapshotsRef.current.delete(id);
-        if (snapshot) setPages((prev) => prev.map((p) => (p.id === id ? snapshot : p)));
-      },
+      // Failing the carried edits takes them off the store, which is the rollback.
+      rollback: () => {},
       write: async () => {
         const updated = await adapter.updatePage(id, patch);
-        snapshotsRef.current.delete(id);
         if (adoptEcho) {
           const summary = toPageSummary(updated);
-          if (mirror) mirror.confirmRow(summary);
-          else setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+          mirror.confirmRow(summary);
         }
         emit("page:updated", updated);
       },
@@ -231,12 +204,9 @@ export function usePageWriteQueue({
   }
 
   function updatePage(id: string, patch: PageUpdate): void {
-    // With the view cache the store holds the edit as a pending write, so no snapshot is taken
-    // and no list rebuilt: a rename sends every keystroke through here.
-    if (!mirror) snapshotPage(id);
-    const edits = mirror
-      ? mirror.capture(() => mirror.patch(id, patch))
-      : (setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))), []);
+    // The store holds the edit as a pending write, so no list is rebuilt: a rename sends every
+    // keystroke through here.
+    const edits = mirror.capture(() => mirror.patch(id, patch));
     debouncedWrites.current.set(id, [...(debouncedWrites.current.get(id) ?? []), ...edits]);
 
     const existing = pendingPatches.current.get(id) ?? {};

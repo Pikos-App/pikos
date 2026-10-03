@@ -326,7 +326,7 @@ appTest(
 );
 
 appTest.describe("with lists loaded a window at a time", () => {
-  appTest.use({ viewCache: true });
+  appTest.use({ tightCache: true });
 
   appTest(
     "search lists recently opened pages after a reload, from the database",

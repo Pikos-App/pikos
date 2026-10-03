@@ -1,7 +1,6 @@
-// Whether lists load a window at a time from the view cache, and how big a window is. Off unless a
-// build sets VITE_VIEW_CACHE, or an e2e lane sets the global below, which also shrinks the window
-// and budget so every test pages, evicts and refetches. The full in-memory list goes when this
-// becomes the only path.
+// How the view cache loads and keeps lists. An e2e lane can set the global below, which shrinks the
+// window and budget so every test pages, evicts and refetches, and checks each list against the
+// database.
 
 import { IS_TEST_MODE } from "@/shared/constants/testMode";
 
@@ -35,14 +34,12 @@ const DEFAULTS: ViewCacheConfig = {
   windowSize: 100,
 };
 
-function readConfig(): ViewCacheConfig | null {
+function readConfig(): ViewCacheConfig {
   const lane =
     IS_TEST_MODE && typeof window !== "undefined" ? window.__PIKOS_VIEW_CACHE__ : undefined;
   if (lane) return { ...DEFAULTS, shadow: true, ...lane };
-  if (import.meta.env["VITE_VIEW_CACHE"] === "true") return DEFAULTS;
-  return null;
+  return DEFAULTS;
 }
 
-/** Null while lists still come from the full in-memory list. Read once: the flag can't change
- *  under a running app. */
-export const VIEW_CACHE: ViewCacheConfig | null = readConfig();
+/** Read once: a lane's settings can't change under a running app. */
+export const VIEW_CACHE: ViewCacheConfig = readConfig();

@@ -21,7 +21,7 @@ appTest.describe("a 20,000-page workspace", () => {
 });
 
 appTest.describe("a 20,000-page workspace, its lists loaded a window at a time", () => {
-  appTest.use({ viewCache: true, workspace: "large" });
+  appTest.use({ tightCache: true, workspace: "large" });
   appTest.setTimeout(240_000);
 
   appTest(

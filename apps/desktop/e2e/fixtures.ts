@@ -21,21 +21,22 @@ const RUN = Date.now().toString(36);
  *  (see `largeWorkspace.ts`), real writer only. */
 export type StartingWorkspace = "empty" | "large";
 
-/** The view cache as a lane runs it: three rows a window, so every list pages, and a budget that
- *  holds little more than the list on screen, so switching views evicts and refetches. */
-const VIEW_CACHE_LANE = { budgetBytes: 6_000, windowSize: 3 };
+/** `tightCache`: three rows a window, so every list pages, and a budget that holds little more
+ *  than the list on screen, so switching views evicts and refetches. Each list shown is also
+ *  checked against the database, and a test fails on any difference. */
+const TIGHT_CACHE = { budgetBytes: 6_000, windowSize: 3 };
 
 export const test = base.extend<{
   app: Page;
   firstRun: boolean;
   storage: StorageLane;
-  viewCache: boolean;
+  tightCache: boolean;
   workspace: StartingWorkspace;
 }>({
   app: async ({ page, workspace }, use) => {
     await page.goto("/");
-    // Workspace auto-creates on first launch — wait for it to be ready. A large one loads every
-    // open page first until the views-on-demand rebuild lands, which takes seconds over the bridge.
+    // Workspace auto-creates on first launch — wait for it to be ready. A large one takes longer
+    // to open over the bridge.
     await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible(
       workspace === "large" ? { timeout: 120_000 } : {}
     );
@@ -43,10 +44,10 @@ export const test = base.extend<{
   },
   // On the context rather than in `app`, so specs that navigate the raw `page`
   // themselves get the token too, and a reload keeps it.
-  context: async ({ context, firstRun, storage, viewCache, workspace }, use, testInfo) => {
-    if (viewCache) {
+  context: async ({ context, firstRun, storage, tightCache, workspace }, use, testInfo) => {
+    if (tightCache) {
       await context.addInitScript({
-        content: `window.__PIKOS_VIEW_CACHE__ = ${JSON.stringify(VIEW_CACHE_LANE)};`,
+        content: `window.__PIKOS_VIEW_CACHE__ = ${JSON.stringify(TIGHT_CACHE)};`,
       });
     }
     if (workspace === "large" && storage !== "bridge") {
@@ -73,7 +74,7 @@ export const test = base.extend<{
   // so a faked browser clock or a spec's own zone splits one app across two dates
   // or zones, a state production cannot reach. A pass there proves nothing, so the
   // lane refuses rather than run it.
-  page: async ({ page, storage, timezoneId, viewCache }, use, testInfo) => {
+  page: async ({ page, storage, tightCache, timezoneId }, use, testInfo) => {
     if (storage === "bridge") {
       if (timezoneId !== testInfo.project.use.timezoneId) {
         throw new Error(
@@ -86,7 +87,7 @@ export const test = base.extend<{
         );
     }
     await use(page);
-    if (viewCache && !page.isClosed()) {
+    if (tightCache && !page.isClosed()) {
       const mismatches = await page
         .evaluate(
           () =>
@@ -98,7 +99,7 @@ export const test = base.extend<{
     }
   },
   storage: ["mock", { option: true }],
-  viewCache: [false, { option: true }],
+  tightCache: [false, { option: true }],
   workspace: ["empty", { option: true }],
 });
 

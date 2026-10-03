@@ -27,7 +27,7 @@ interface PaginationState {
  * so all optimistic updates (title edits, status toggles) work automatically.
  */
 export function useCompletedPages(activeViewId: string) {
-  const { listCompletedPages, mergePages, pages } = usePages();
+  const { listCompletedPages, mergePages } = usePages();
   const held = useHeldPages();
 
   // Per-view pagination metadata (no page data — that lives in WorkspaceContext)
@@ -113,7 +113,7 @@ export function useCompletedPages(activeViewId: string) {
   // (explicit "Load more" and "I just marked this done") without surfacing
   // ambient completed pages that got into `pages` via other code paths.
   const loadedIds = pagination?.loadedIds;
-  const completedPages = (held ?? pages)
+  const completedPages = (held ?? [])
     .filter((p) => {
       if (isOpen(p)) return false;
       if (isDateView) {

@@ -67,10 +67,16 @@ describe("useEditorPage", () => {
     await waitFor(() => expect(hook.result.current.editor.page?.id).toBe(ids[0]));
     const before = hook.result.current.editor.page;
 
-    act(() => hook.result.current.pages.updatePage(ids[1]!, { title: "B2" }));
+    await act(async () => {
+      hook.result.current.pages.updatePage(ids[1]!, { title: "B2" });
+      await Promise.resolve();
+    });
     expect(hook.result.current.editor.page).toBe(before);
 
-    act(() => hook.result.current.pages.updatePage(ids[0]!, { title: "A2" }));
+    await act(async () => {
+      hook.result.current.pages.updatePage(ids[0]!, { title: "A2" });
+      await Promise.resolve();
+    });
     expect(hook.result.current.editor.page?.title).toBe("A2");
   });
 });

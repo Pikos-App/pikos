@@ -5,12 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { useTrash } from "./useTrash";
 
 function setup() {
   return renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     trash: useTrash(true),
   }));
 }
@@ -111,7 +112,10 @@ describe("useTrash", () => {
       trash: useTrash(true),
       workspace: useWorkspace(),
     }));
-    await waitFor(() => expect(hook.result.current.trash.loading).toBe(false));
+    await waitFor(() => {
+      expect(hook.result.current.workspace.storage).not.toBeNull();
+      expect(hook.result.current.trash.loading).toBe(false);
+    });
     const storage = hook.result.current.workspace.storage!;
     let landOld: (rows: TrashedPage[]) => void = () => undefined;
     const old = new Promise<TrashedPage[]>((resolve) => {

@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { formatCombo } from "@/shared/keyboard/formatCombo";
 import type { Binding } from "@/shared/keyboard/registry";
 import { Keyboard } from "@/shared/keyboard/registry";
@@ -172,7 +172,7 @@ const RECENT_LIMIT = 10;
 
 export function SearchPalette() {
   const { activePageId, dialogPrefill, openDialog, openPage, setOpenDialog } = useUI();
-  const { folders, pages, searchPages } = usePages();
+  const { folders, searchPages } = usePages();
   const { storage } = useWorkspace();
 
   const isOpen = openDialog === "search";
@@ -309,12 +309,11 @@ export function SearchPalette() {
 
   // Read so an open recorded while the palette is up reorders the list.
   const opens = useSyncExternalStore(subscribeToOpens, opensVersion);
-  // With the view cache the page list holds only what's been shown, so the database names the
-  // recent pages; the held ones stay in, for an open whose write hasn't landed yet.
-  const viewCache = useViewCacheController();
+  // Only what's been shown is held, so the database names the recent pages; the held ones stay
+  // in, for an open whose write hasn't landed yet.
   const [recentRows, setRecentRows] = useState<PageSummary[]>([]);
   useEffect(() => {
-    if (!viewCache || !storage || !isOpen) return;
+    if (!storage || !isOpen) return;
     let cancelled = false;
     void storage.listRecentPages(activePageId, RECENT_LIMIT).then((rows) => {
       if (!cancelled) setRecentRows(rows);
@@ -322,10 +321,10 @@ export function SearchPalette() {
     return () => {
       cancelled = true;
     };
-  }, [viewCache, storage, isOpen, activePageId, opens]);
+  }, [storage, isOpen, activePageId, opens]);
   const held = useHeldPages(isOpen);
   function recentPool(): PageSummary[] {
-    if (!held) return pages;
+    if (!held) return recentRows;
     const recentIds = new Set(recentRows.map((r) => r.id));
     return [...recentRows, ...held.filter((p) => !recentIds.has(p.id))];
   }

@@ -411,7 +411,8 @@ describe("SearchPalette — command mode", () => {
 describe("SearchPalette — recent pages", () => {
   it("lists pages opened this session, most recent first", async () => {
     await setup([{ title: "Alpha" }, { title: "Beta" }, { title: "Gamma" }]);
-    const idOf = (title: string) => api().pages.pages.find((p) => p.title === title)!.id;
+    const seeded = await api().workspace.storage!.listPages();
+    const idOf = (title: string) => seeded.find((p) => p.title === title)!.id;
 
     act(() => {
       api().pages.recordPageOpened(idOf("Beta"));

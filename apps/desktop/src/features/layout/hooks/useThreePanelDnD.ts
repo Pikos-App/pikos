@@ -7,15 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import {
-  folderIdForView,
-  getVisiblePages,
-  isDateGroupedView,
-  isDone,
-  isTimedIso,
-  parseLocalISO,
-  sortPages,
-} from "@pikos/core";
+import { isDateGroupedView, isDone, isTimedIso, parseLocalISO } from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -49,8 +41,7 @@ function unlockedIds(ids: string[], lookup: (id: string) => PageSummary | undefi
 }
 
 export function useThreePanelDnD() {
-  const { folders, movePages, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } =
-    usePages();
+  const { folders, movePages, reorderFolders, scheduleOnce, updatePage } = usePages();
   const { activeViewId } = useUI();
   const sortMode = useActiveSortMode();
   const viewCache = useViewCacheController();
@@ -143,11 +134,13 @@ export function useThreePanelDnD() {
       // If dragging a selected item, drag all selected pages (in list order).
       // If dragging an unselected item, treat as single-drag and clear selection.
       if (selectedPageIds.has(String(active.id))) {
-        const visible =
-          cachedListNow(viewCache, activeViewId, sortMode)?.pages ??
-          sortPages(getVisiblePages(pages, activeViewId), sortMode);
-        const ids = visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id);
-        setDraggedPageIds(ids);
+        // Today and Upcoming are several lists, so the selection drags in the order it was made.
+        const visible = cachedListNow(viewCache, activeViewId, sortMode)?.pages;
+        setDraggedPageIds(
+          visible
+            ? visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id)
+            : [...selectedPageIds]
+        );
       } else {
         clearSelection();
         setDraggedPageIds(page ? [page.id] : []);
@@ -253,40 +246,8 @@ export function useThreePanelDnD() {
       if (isDateGroupedView(activeViewId)) return;
       if (sortMode !== "manual") return;
       const cached = cachedListNow(viewCache, activeViewId, sortMode);
-      if (cached) {
+      if (cached)
         moveBetweenNeighbours(cached.pages, idsToMove, String(active.id), String(over.id));
-        return;
-      }
-      const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
-      const folderId = folderIdForView(activeViewId);
-
-      if (idsToMove.length > 1) {
-        // Multi-page reorder: remove all dragged pages, reinsert as group at drop target.
-        const dragSet = new Set(idsToMove);
-        const dragged = visible.filter((p) => dragSet.has(p.id));
-        const rest = visible.filter((p) => !dragSet.has(p.id));
-        const dropIdx = rest.findIndex((p) => p.id === over.id);
-        if (dropIdx === -1) return;
-        // Insert after drop target if dragging downward, before if upward.
-        const activeIdx = visible.findIndex((p) => p.id === active.id);
-        const overIdx = visible.findIndex((p) => p.id === over.id);
-        const insertIdx = activeIdx < overIdx ? dropIdx + 1 : dropIdx;
-
-        rest.splice(insertIdx, 0, ...dragged);
-        void reorderPages(
-          folderId,
-          rest.map((p) => p.id)
-        );
-      } else {
-        const oldIdx = visible.findIndex((p) => p.id === active.id);
-        const newIdx = visible.findIndex((p) => p.id === over.id);
-
-        if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
-        void reorderPages(
-          folderId,
-          arrayMove(visible, oldIdx, newIdx).map((p) => p.id)
-        );
-      }
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;

@@ -57,7 +57,7 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
   /** Always-defined adapter (use storage publicly to gate on workspace readiness). */
   adapter: StorageAdapter;
   /** Lists loaded a window at a time; null while the full in-memory list is the only path. */
-  viewCache: ViewCacheController | null;
+  viewCache: ViewCacheController;
   eventBus: WorkspaceEventBus;
   /** Register a data loader called during init/reload/resetAndSeed. Pass null to unregister. */
   registerDataLoader: (loader: DataLoader | null) => void;
@@ -73,7 +73,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [{ adapter, viewCache }] = useState(() => {
     const raw: StorageAdapter =
       STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter();
-    if (!VIEW_CACHE) return { adapter: raw, viewCache: null };
     // The controller needs the adapter, and the adapter reports to the controller.
     const ref: { controller: ViewCacheController | null } = { controller: null };
     const watched = watchWrites(raw, {
@@ -374,8 +373,7 @@ export function useWorkspace(): WorkspaceContextValue {
   return ctx;
 }
 
-/** The view cache when the flag is on; null when it's off or outside a workspace, as in a
- *  component test. */
+/** The view cache; null outside a workspace, as in a component test rendered on its own. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useViewCacheController(): ViewCacheController | null {
   return useContext(WorkspaceContext)?.viewCache ?? null;

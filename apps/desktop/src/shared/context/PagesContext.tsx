@@ -47,17 +47,15 @@ import { usePageWriteQueue } from "./usePageWriteQueue";
 import { usePageWrites } from "./usePageWrites";
 import { type GapRunOptions, useRecurringWrites } from "./useRecurringWrites";
 import { useScheduleWrites } from "./useScheduleWrites";
-import { useViewCacheController, useWorkspaceInternal } from "./WorkspaceContext";
+import { useWorkspaceInternal } from "./WorkspaceContext";
 
 export type { GapRunOptions };
 
 const log = createLogger("PagesContext");
 
 export interface PagesContextValue {
-  /** Lightweight summaries (no content) — use getPage() to load full content. */
-  pages: PageSummary[];
   folders: Folder[];
-  /** Derived reactively from pages[].tags — never stored separately. */
+  /** Every tag in use and its page count, counted by the database. */
   tags: Tag[];
   /** All recurrence rules (one per recurring page). */
   recurrenceRules: PageRecurrenceRule[];
@@ -189,9 +187,8 @@ export interface PagesContextValue {
 const PagesContext = createContext<PagesContextValue | null>(null);
 
 export function PagesProvider({ children }: { children: ReactNode }) {
-  const { adapter, eventBus, registerDataLoader } = useWorkspaceInternal();
+  const { adapter, eventBus, registerDataLoader, viewCache } = useWorkspaceInternal();
   const { emit } = eventBus;
-  const viewCache = useViewCacheController();
   const { defaultFolderId } = useAppSettings();
 
   // Collections, their latest-state mirrors, derived tags, and the loader
@@ -200,7 +197,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     folders,
     foldersRef,
     mergePages,
-    pages,
     pagesRef,
     recurrenceRules,
     recurrenceRulesRef,
@@ -220,7 +216,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     optimistic,
     pageErrors,
     updatePage,
-  } = usePageWriteQueue({ adapter, emit, mirror: viewCache?.mirror ?? null, pagesRef, setPages });
+  } = usePageWriteQueue({ adapter, emit, mirror: viewCache.mirror });
 
   function recordPageOpened(id: string): void {
     const at = recordOpen(id);
@@ -284,14 +280,14 @@ export function PagesProvider({ children }: { children: ReactNode }) {
 
   async function createPage(opts: { title?: string; folderId?: string | null }): Promise<Page> {
     const page = await createPageOnly(opts);
-    viewCache?.adoptCreated(page);
+    viewCache.adoptCreated(page);
     return page;
   }
 
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 
   function getPage(id: string): Promise<Page | null> {
-    return viewCache ? viewCache.body(id) : adapter.getPage(id);
+    return viewCache.body(id);
   }
 
   function listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
@@ -366,7 +362,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     movePages,
     overridesVersion,
     pageErrors,
-    pages,
     patchFolderColor,
     recordPageOpened,
     recurrenceRules,

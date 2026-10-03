@@ -7,9 +7,9 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -20,7 +20,7 @@ afterEach(() => {
 
 async function setupRecurringPage() {
   const hook = renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {
@@ -445,7 +445,7 @@ async function setupSyncedRecurring(
   scheduledEnd?: string
 ): Promise<{ hook: Hook; pageId: string }> {
   const hook = renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {
@@ -673,7 +673,7 @@ describe("viewerWallClock", () => {
 describe("scheduleOnce head-drag snapping (U6-F1)", () => {
   async function setupWeeklyMWF() {
     const hook = renderHookWithProviders(() => ({
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {
@@ -737,7 +737,7 @@ describe("scheduleOnce head-drag snapping (U6-F1)", () => {
 describe("scheduleOnce head-drag realign fidelity", () => {
   async function setupWeeklyRule(rrule: string) {
     const hook = renderHookWithProviders(() => ({
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {
@@ -778,7 +778,7 @@ describe("scheduleOnce head-drag realign fidelity", () => {
 describe("uncompleteRecurringHead (U6-F2)", () => {
   async function setupFiniteSeries() {
     const hook = renderHookWithProviders(() => ({
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {

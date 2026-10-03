@@ -461,7 +461,7 @@ appTest(
 // ─── Lists loaded a window at a time ────────────────────────────────────────
 
 appTest.describe("with lists loaded a window at a time", () => {
-  appTest.use({ viewCache: true });
+  appTest.use({ tightCache: true });
 
   appTest("typing in a page saves it without fetching the list again", async ({ app }) => {
     await quickAdd(app, "Meeting notes");
@@ -485,7 +485,7 @@ appTest.describe("with lists loaded a window at a time", () => {
 });
 
 appTest.describe("with pages read ahead on hover", () => {
-  appTest.use({ viewCache: true });
+  appTest.use({ tightCache: true });
 
   appTest(
     "a page hovered before it's clicked opens from the read the hover started",

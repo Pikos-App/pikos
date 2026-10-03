@@ -1,7 +1,6 @@
 import type { PageSummary } from "@pikos/core";
 import { useSyncExternalStore } from "react";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useViewCacheController } from "@/shared/context/WorkspaceContext";
 
 import type { ViewCacheController } from "./controller";
@@ -16,7 +15,7 @@ function held(controller: ViewCacheController, _version: number): PageSummary[] 
 
 /**
  * The pages the view cache holds, unsaved edits included, re-rendering with every change to them;
- * null while the flag is off. Only a reader that needs them live subscribes, so a change to the
+ * null outside a workspace. Only a reader that needs them live subscribes, so a change to the
  * store doesn't re-render every reader of `usePages()`. `enabled` false skips the subscription, for
  * a reader that needs them only while open.
  */
@@ -30,10 +29,8 @@ export function useHeldPages(enabled = true): PageSummary[] | null {
   return live ? held(live, version) : null;
 }
 
-/** Finds one page when an action needs it, without subscribing: from the view cache's store with
- *  the flag on, else from the full list. */
+/** Finds one held page when an action needs it, without subscribing. */
 export function usePageLookup(): (id: string) => PageSummary | undefined {
   const controller = useViewCacheController();
-  const { pages } = usePages();
-  return (id) => (controller ? controller.store.get(id) : pages.find((p) => p.id === id));
+  return (id) => controller?.store.get(id);
 }
