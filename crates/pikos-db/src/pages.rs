@@ -51,6 +51,8 @@ struct PageRow {
     pending_description: Option<String>,
     sync_created_at: Option<String>,
     is_recurring: bool,
+    row_seq: i64,
+    series_id: Option<String>,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -135,6 +137,13 @@ pub struct Page {
     pub synced_since: Option<String>,
     /// Whether this page repeats, without having to load its rule.
     pub is_recurring: bool,
+    /// The change counter's value at this row's last change, its own or a child row's. A copy
+    /// held elsewhere is current while its number is at least this. Always set when read.
+    #[ts(type = "number | null", optional)]
+    pub row_seq: Option<i64>,
+    /// For a done clone of a recurring page's occurrence, the series it was done from, so
+    /// unticking it finds the series without searching every one.
+    pub series_id: Option<String>,
 }
 
 impl From<PageRow> for Page {
@@ -178,6 +187,8 @@ impl From<PageRow> for Page {
                 .as_deref()
                 .and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
+            row_seq: Some(row.row_seq),
+            series_id: row.series_id,
         }
     }
 }
@@ -205,7 +216,7 @@ fn parse_skipped_occurrences(raw: Option<String>) -> Option<Vec<String>> {
 // ─── Summary row (no content/content_text — for list views) ──────────────
 
 #[derive(sqlx::FromRow)]
-struct PageSummaryRow {
+pub(crate) struct PageSummaryRow {
     id: String,
     folder_id: Option<String>,
     title: String,
@@ -233,6 +244,8 @@ struct PageSummaryRow {
     pending_description: Option<String>,
     sync_created_at: Option<String>,
     is_recurring: bool,
+    row_seq: i64,
+    series_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -284,6 +297,11 @@ pub struct PageSummary {
     pub synced_since: Option<String>,
     /// See `Page::is_recurring`.
     pub is_recurring: bool,
+    /// See `Page::row_seq`.
+    #[ts(type = "number | null", optional)]
+    pub row_seq: Option<i64>,
+    /// See `Page::series_id`.
+    pub series_id: Option<String>,
 }
 
 impl From<PageSummaryRow> for PageSummary {
@@ -325,19 +343,21 @@ impl From<PageSummaryRow> for PageSummary {
                 .as_deref()
                 .and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
+            row_seq: Some(row.row_seq),
+            series_id: row.series_id,
         }
     }
 }
 
-const SUMMARY_COLUMNS: &str =
+pub(crate) const SUMMARY_COLUMNS: &str =
     "id, folder_id, title, subtitle, status, priority, tags, sort_order, \
      scheduled_start, scheduled_end, completed_at, links, \
-     parent_id, last_opened_at, created_at, updated_at";
+     parent_id, last_opened_at, created_at, updated_at, row_seq";
 
 /// Appended to every page-hydrating SELECT to populate the derived sync columns
 /// (see the `Page` field docs). Correlated on the unqualified `pages.id`, so it
 /// works whether or not the query aliases the table.
-const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
+pub(crate) const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
      AS schedule_locked\
      , (SELECT sync_state FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_state\
@@ -360,7 +380,9 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      , (SELECT pending_description FROM page_sync WHERE page_sync.page_id = pages.id) AS pending_description\
      , (SELECT created_at FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_created_at\
      , EXISTS(SELECT 1 FROM page_recurrence_rules \
-         WHERE page_recurrence_rules.page_id = pages.id) AS is_recurring";
+         WHERE page_recurrence_rules.page_id = pages.id) AS is_recurring\
+     , (SELECT page_id FROM completed_set WHERE completed_set.clone_id = pages.id LIMIT 1) \
+     AS series_id";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
@@ -522,24 +544,13 @@ async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
 }
 
 async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> AppResult<i64> {
-    let value = match folder_id {
-        Some(folder_id) => {
-            sqlx::query_scalar(
-                "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id = ?",
-            )
-            .bind(folder_id)
-            .fetch_one(pool)
-            .await?
-        }
-        None => {
-            sqlx::query_scalar(
-                "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id IS NULL",
-            )
-            .fetch_one(pool)
-            .await?
-        }
-    };
-    Ok(value)
+    Ok(sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sort_order) + ?, 0) FROM pages WHERE folder_id IS ?",
+    )
+    .bind(crate::moves::ORDER_SPACING)
+    .bind(folder_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -2173,12 +2184,21 @@ async fn reschedule_virtual_occurrence_once(
 
 /// Fetch a single page by id (mirrors the app's get_page — no deleted_at filter).
 pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Page>> {
+    let mut conn = pool.acquire().await?;
+    get_page_in(&mut conn, id).await
+}
+
+/// [`get_page`] on a connection the caller holds, such as inside a transaction.
+pub(crate) async fn get_page_in(
+    conn: &mut sqlx::SqliteConnection,
+    id: &str,
+) -> AppResult<Option<Page>> {
     // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let row = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
     ))
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(conn)
     .await?;
     Ok(row.map(Page::from))
 }

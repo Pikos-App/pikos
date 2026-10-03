@@ -804,8 +804,9 @@ async fn create_page_persists_fields_and_assigns_sort_order() {
     assert_ne!(first.id, second.id, "ids must be unique");
     assert_eq!(first.sort_order, 0);
     assert_eq!(
-        second.sort_order, 1,
-        "sort_order auto-increments per folder"
+        second.sort_order,
+        crate::moves::ORDER_SPACING,
+        "each new page lands a full gap after the last, leaving room to move pages between"
     );
     assert_eq!(count_pages(&pool).await, 2);
 }

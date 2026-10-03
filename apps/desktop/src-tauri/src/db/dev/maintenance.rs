@@ -61,6 +61,7 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
         .execute(pool)
         .await?
         .rows_affected();
+    pikos_db::changes::new_epoch(pool).await?;
 
     log::info!(
         "reset_db pages={pages} folders={folders} schedules={schedules} \

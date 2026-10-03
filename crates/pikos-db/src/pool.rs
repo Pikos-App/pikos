@@ -181,6 +181,14 @@ pub async fn open_pool_checkpointing(
     checkpoints: Checkpoints,
 ) -> AppResult<SqlitePool> {
     let pool = open_pool_reporting_integrity(path, checkpoints).await?;
+    {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::title_key::rekey_if_stale(&pool).await {
+                log::warn!("re-keying titles failed: {e}");
+            }
+        });
+    }
     if let Checkpoints::Background(hooks) = checkpoints {
         let pool = pool.clone();
         tokio::spawn(async move {
@@ -297,6 +305,7 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         .map_err(|e| AppError::Db(sqlx::Error::Migrate(Box::new(e))))?;
 
     backfill_content_text(&pool).await?;
+    crate::changes::prune_writers(&pool).await?;
 
     let stored: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&pool)

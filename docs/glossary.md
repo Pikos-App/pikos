@@ -212,7 +212,8 @@ e2e test runs there unless tagged `@mock-only`. Not to be confused with
 
 **Workspace** — one SQLite file = one workspace, self-contained (no `workspace_id`
 column anywhere inside). Registry lives in `@tauri-apps/plugin-store`. A power-user
-concept, hidden from the default UI.
+concept, hidden from the default UI. Any SQLite tool can read it, but only the app, the CLI and
+MCP can write it: its triggers call functions only `pikos_db` registers.
 
 **Smart views** — `Today` and `Inbox`, pinned above folders. Today = schedules at or
 before today that aren't done; Inbox = `folder_id IS NULL`. Neither is a real folder
