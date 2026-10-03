@@ -18,7 +18,10 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { createLogger } from "@/shared/logger";
 import type { ViewCacheController } from "@/shared/viewCache/controller";
+
+const log = createLogger("PagesStore");
 
 const NO_SUBSCRIPTION = () => () => undefined;
 const NO_VERSION = () => 0;
@@ -103,7 +106,13 @@ export function usePagesStore({
     // Heal the recurring display cache before reading it: an out-of-process writer
     // (CLI/mobile) or a prior bug can leave pages.scheduled_start stale. In steady
     // state (every in-session write already recomputes) this is a no-op.
-    await adapter.recomputeRecurringSchedules();
+    // The view cache reads each list itself and refreshes if the recompute changes a head, so
+    // only the full list has to wait for it.
+    if (viewCache) {
+      adapter.recomputeRecurringSchedules().catch((err: unknown) => {
+        log.error("recomputing recurring schedules at launch failed", err);
+      });
+    } else await adapter.recomputeRecurringSchedules();
     const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
       // The view cache loads what's shown, so it never needs every open page.
       viewCache ? Promise.resolve(null) : adapter.listPages({ status: "not_started" }),
