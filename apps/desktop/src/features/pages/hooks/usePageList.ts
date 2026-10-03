@@ -67,6 +67,7 @@ export function usePageList() {
       today: cachedViews.today,
       viewId: activeViewId,
       views: cachedViews.views,
+      waiting: isTodayView && !cachedViews.headsReady,
     });
   const visiblePages = cached?.pages ?? NO_PAGES;
 

@@ -313,9 +313,15 @@ export class ViewCacheController {
     if (this.heads === null) void this.loadHeads();
   }
 
-  /** Whether `start` to `end` has loaded at least once. */
+  /** Whether `start` to `end` has loaded at least once, with the series heads its repeats come
+   *  from. */
   rangeLoaded(start: string, end: string): boolean {
-    return this.ranges.has(`${start}|${end}`);
+    return this.ranges.has(`${start}|${end}`) && this.heads !== null;
+  }
+
+  /** Whether every series head has been read once. */
+  headsLoaded(): boolean {
+    return this.heads !== null;
   }
 
   /** A page this app just created: held, and on the calendar range on screen, ahead of the

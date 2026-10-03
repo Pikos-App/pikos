@@ -125,6 +125,47 @@ describe("usePageList — visible pages", () => {
     }
   });
 
+  it("today view: shows nothing until the series heads are held, then the whole list", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+    try {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked with .call(this) below
+      const real = MockStorageAdapter.prototype.listSeriesHeads;
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(MockStorageAdapter.prototype, "listSeriesHeads").mockImplementation(async function (
+        this: MockStorageAdapter,
+        ...args
+      ) {
+        await held;
+        return real.apply(this, args);
+      });
+      const hook = setup();
+      await init(hook);
+      const a = await makePage(hook, { folderId: null, title: "A" });
+      await act(async () => {
+        await hook.result.current.pages.scheduleOnce(a.id, "2026-06-15");
+      });
+      act(() => hook.result.current.ui.setActiveViewId("today"));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(hook.result.current.pageList.visiblePages).toHaveLength(0);
+
+      await act(async () => {
+        release();
+        await held;
+      });
+      await waitFor(() => {
+        expect(hook.result.current.pageList.visiblePages).toHaveLength(1);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // A synced head only advances when someone ticks it, and nobody ticks a
   // meeting — so without the swap this series shows as weeks overdue and its
   // occurrence for today reaches no list at all.

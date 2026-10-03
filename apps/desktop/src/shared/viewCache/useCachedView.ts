@@ -123,6 +123,8 @@ function readView(controller: ViewCacheController, key: ViewKey): CachedView {
 const lastLists = new WeakMap<ViewCacheController, Map<string, CachedLists>>();
 
 interface CachedLists {
+  /** The series heads are held, which Today needs to put each series' occurrence in its place. */
+  headsReady: boolean;
   today: string;
   views: CachedView[];
 }
@@ -136,14 +138,16 @@ function readLists(controller: ViewCacheController, viewId: string, sort: SortMo
   lastLists.set(controller, held);
   const name = `${viewId}|${sort}`;
   const last = held.get(name);
+  const headsReady = controller.headsLoaded();
   if (
     last &&
     last.today === today &&
+    last.headsReady === headsReady &&
     last.views.length === views.length &&
     last.views.every((v, i) => v === views[i])
   )
     return last;
-  const lists = { today, views };
+  const lists = { headsReady, today, views };
   held.set(name, lists);
   return lists;
 }

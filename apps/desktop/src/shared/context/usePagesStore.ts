@@ -87,11 +87,14 @@ export function usePagesStore({
     adapter.recomputeRecurringSchedules().catch((err: unknown) => {
       log.error("recomputing recurring schedules at launch failed", err);
     });
+    // Not awaited either: the heads are scattered through the file, and a cold read of a large
+    // workspace's thousands of them held up a launch whose first list doesn't need them. Today
+    // and the calendar wait for them themselves.
+    void viewCache.loadSeriesHeads();
     const [loadedFolders, loadedRules] = await Promise.all([
       adapter.listFolders(),
       adapter.listRecurrenceRules(),
     ]);
-    await viewCache.loadSeriesHeads();
     setFolders(loadedFolders);
     setRecurrenceRules(loadedRules);
   }

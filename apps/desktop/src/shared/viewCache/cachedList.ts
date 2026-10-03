@@ -102,7 +102,21 @@ export function buildCachedList(input: {
   /** Today's recurring occurrences, for the Today view. */
   occurrences: PageSummary[];
   today: string;
+  /** Show nothing yet, as loading: Today waits for the series heads rather than draw without its
+   *  occurrences and then gain them. */
+  waiting?: boolean;
 }): CachedList {
+  const list = buildList(input);
+  if (!input.waiting) return list;
+  return {
+    ...list,
+    loading: true,
+    pages: [],
+    sections: list.sections.map((s) => ({ ...s, header: null, slots: [], tail: 0 })),
+  };
+}
+
+function buildList(input: Parameters<typeof buildCachedList>[0]): CachedList {
   const { hiddenIds, occurrences, pages, today, viewId, views } = input;
   const swaps =
     viewId === "today" ? todaySwaps(pages, occurrences, today) : new Map<string, never>();
