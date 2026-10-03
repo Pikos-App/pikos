@@ -20,6 +20,7 @@ async function setup(pages: number, windowSize = 2) {
     started: () => ref.controller?.writeStarted(),
   });
   const controller = new ViewCacheController(adapter, {
+    bodyBudgetBytes: Number.MAX_SAFE_INTEGER,
     budgetBytes: Number.MAX_SAFE_INTEGER,
     shadow: true,
     windowSize,
@@ -243,5 +244,68 @@ describe("ViewCacheController after its own writes", () => {
     await settle();
     expect(controller.cache.entry(inbox)?.total).toBe(3);
     expect(await controller.allIds(inbox)).toContain(outside.id);
+  });
+});
+
+describe("ViewCacheController bodies", () => {
+  async function withPages(count: number) {
+    const made = await setup(0);
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) ids.push((await made.adapter.createPage(newPage(`P${i}`))).id);
+    await settle();
+    made.controller.doorbell();
+    await settle();
+    const reads = { full: 0, newer: 0 };
+    const getPage = made.raw.getPage.bind(made.raw);
+    const getPageIfNewer = made.raw.getPageIfNewer.bind(made.raw);
+    made.raw.getPage = (id) => ((reads.full += 1), getPage(id));
+    made.raw.getPageIfNewer = (id, known) => ((reads.newer += 1), getPageIfNewer(id, known));
+    return { ...made, ids, reads };
+  }
+
+  it("opens a page again from memory, with no database call, while nothing outside changed", async () => {
+    const { controller, ids, reads } = await withPages(1);
+    await controller.body(ids[0]!);
+    await controller.body(ids[0]!);
+    expect(reads).toEqual({ full: 1, newer: 0 });
+  });
+
+  it("asks only for a newer copy once another writer has changed something", async () => {
+    const { controller, ids, raw, reads } = await withPages(1);
+    await controller.body(ids[0]!);
+    await raw.updatePage(ids[0]!, { title: "Renamed elsewhere" });
+    controller.doorbell();
+    await settle();
+    const page = await controller.body(ids[0]!);
+    expect(reads).toEqual({ full: 1, newer: 1 });
+    expect(page?.title).toBe("Renamed elsewhere");
+  });
+
+  it("joins the prefetch its hover started", async () => {
+    const { controller, ids, reads } = await withPages(1);
+    controller.prefetch(ids[0]!);
+    await controller.body(ids[0]!);
+    expect(reads.full).toBe(1);
+  });
+
+  it("keeps one prefetch in flight, the latest hover replacing the one waiting", async () => {
+    const { controller, ids, reads } = await withPages(3);
+    controller.prefetch(ids[0]!);
+    controller.prefetch(ids[1]!);
+    controller.prefetch(ids[2]!);
+    await settle();
+    expect(reads.full).toBe(2);
+    await controller.body(ids[2]!);
+    expect(reads.full).toBe(2);
+  });
+
+  it("keeps a held body current with what the app saved to it", async () => {
+    const { adapter, controller, ids, reads } = await withPages(1);
+    await controller.body(ids[0]!);
+    await adapter.updatePage(ids[0]!, { content: '{"type":"doc","content":[]}', contentText: "x" });
+    await settle();
+    const page = await controller.body(ids[0]!);
+    expect(page?.contentText).toBe("x");
+    expect(reads).toEqual({ full: 1, newer: 0 });
   });
 });

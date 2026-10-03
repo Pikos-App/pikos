@@ -10,6 +10,8 @@ export interface ViewCacheConfig {
   windowSize: number;
   /** Bytes of rows and ids kept for views not on screen. */
   budgetBytes: number;
+  /** Bytes of full pages kept for opening without a database call. */
+  bodyBudgetBytes: number;
   /** Compare every cached view shown against a fresh query, and record a difference. */
   shadow: boolean;
 }
@@ -21,10 +23,13 @@ declare global {
     __PIKOS_SHADOW_MISMATCHES__?: string[];
     /** List windows fetched so far, in a lane with the shadow check. */
     __PIKOS_LIST_FETCHES__?: number;
+    /** Page opens served from memory or a prefetch, and those that waited on the database. */
+    __PIKOS_BODY_READS__?: { hits: number; misses: number };
   }
 }
 
 const DEFAULTS: ViewCacheConfig = {
+  bodyBudgetBytes: 32 * 1024 * 1024,
   budgetBytes: 64 * 1024 * 1024,
   shadow: false,
   windowSize: 100,

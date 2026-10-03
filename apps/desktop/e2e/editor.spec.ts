@@ -483,3 +483,32 @@ appTest.describe("with lists loaded a window at a time", () => {
     expect(await fetches()).toBe(before);
   });
 });
+
+appTest.describe("with pages read ahead on hover", () => {
+  appTest.use({ viewCache: true });
+
+  appTest(
+    "a page hovered before it's clicked opens from the read the hover started",
+    async ({ app }) => {
+      await quickAdd(app, "First page");
+      await quickAdd(app, "Second page");
+      const reads = () =>
+        app.evaluate(
+          () =>
+            (globalThis as { __PIKOS_BODY_READS__?: { hits: number; misses: number } })
+              .__PIKOS_BODY_READS__ ?? { hits: 0, misses: 0 }
+        );
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "Second page" });
+      const before = await reads();
+
+      await row.hover();
+      await app.waitForTimeout(300);
+      await row.click();
+      await expect(app.getByRole("textbox", { name: "Page content" })).toBeVisible();
+
+      const after = await reads();
+      expect(after.hits).toBeGreaterThan(before.hits);
+      expect(after.misses).toBe(before.misses);
+    }
+  );
+});

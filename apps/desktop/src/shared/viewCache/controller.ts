@@ -4,6 +4,7 @@
 
 import type {
   ChangeState,
+  Page,
   PageSummary,
   Placement,
   StorageAdapter,
@@ -11,7 +12,7 @@ import type {
   ViewKey,
 } from "@pikos/core";
 import { getLocalTimezone } from "@pikos/core";
-import { evict, PageStore, ViewCache, viewName } from "@pikos/core";
+import { evict, PageStore, summaryBytes, ViewCache, viewName } from "@pikos/core";
 import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
 
 import { createLogger } from "@/shared/logger";
@@ -63,6 +64,22 @@ export class ViewCacheController {
   private counter: { epoch: string; seq: number } | null = null;
   /** List windows fetched, for the test that typing doesn't refetch lists. */
   listFetches = 0;
+  /**
+   * Full pages opened or prefetched, least recently used first, each with the change counter when
+   * it was read: while the counter hasn't moved, the copy is current. Not other writers' changes
+   * alone: calendar sync writes from inside the app's own process, so it counts as the app's.
+   */
+  private bodies = new Map<string, { page: Page; seen: number; bytes: number }>();
+  private bodyBytes = 0;
+  /** The change counter, as the last read found it. */
+  private seen = 0;
+  /** Body reads in flight, so a click joins the prefetch its hover started. */
+  private bodyReads = new Map<string, Promise<Page | null>>();
+  /** The one prefetch allowed to wait for the one in flight; a later hover replaces it. */
+  private waitingPrefetch: string | null = null;
+  /** Body reads that found a current copy, and that had to ask the database: the hit rate. */
+  bodyHits = 0;
+  bodyMisses = 0;
   /** Calendar ranges visited while the calendar is mounted, by `start|end`: their pages' ids. */
   private ranges = new Map<string, { ids: string[]; stale: boolean }>();
   private shownRange: { start: string; end: string } | null = null;
@@ -106,6 +123,10 @@ export class ViewCacheController {
   writeSettled(method: string, args: unknown[]): void {
     this.writesInFlight -= 1;
     this.writeEpoch += 1;
+    const [id, patch] = args;
+    if (method === "updatePage" && typeof id === "string" && patch && typeof patch === "object") {
+      this.patchBody(id, patch);
+    }
     const rowOnly = rowOnlyWrite(method, args);
     if (rowOnly) void this.refetchRow(rowOnly);
     else void this.checkCounter();
@@ -130,6 +151,7 @@ export class ViewCacheController {
     }
     if (this.counter && state.epoch !== this.counter.epoch) this.forget();
     this.counter = { epoch: state.epoch, seq: state.seq };
+    this.seen = state.seq;
     this.cache.invalidate();
     this.rangeEpoch += 1;
     for (const range of this.ranges.values()) range.stale = true;
@@ -152,6 +174,112 @@ export class ViewCacheController {
     this.ranges.clear();
     this.heads = null;
     this.counts = null;
+    this.bodies.clear();
+    this.bodyBytes = 0;
+  }
+
+  /** The full page: from memory with no database call while nothing has changed since it was
+   *  read, else only a newer copy is fetched. A read already in flight is joined. */
+  body(id: string): Promise<Page | null> {
+    const answer = this.openBody(id);
+    if (this.config.shadow) {
+      window.__PIKOS_BODY_READS__ = { hits: this.bodyHits, misses: this.bodyMisses };
+    }
+    return answer;
+  }
+
+  private openBody(id: string): Promise<Page | null> {
+    const held = this.bodies.get(id);
+    if (held && held.seen === this.seen) {
+      this.bodyHits += 1;
+      this.touchBody(id, held);
+      return Promise.resolve(held.page);
+    }
+    const reading = this.bodyReads.get(id);
+    if (reading) {
+      this.bodyHits += 1;
+      return reading;
+    }
+    this.bodyMisses += 1;
+    return this.readBody(id);
+  }
+
+  /** Read `id`'s body ahead of a click: one read at a time, the latest hover waiting its turn. */
+  prefetch(id: string): void {
+    const held = this.bodies.get(id);
+    if ((held && held.seen === this.seen) || this.bodyReads.has(id)) return;
+    if (this.bodyReads.size > 0) {
+      this.waitingPrefetch = id;
+      return;
+    }
+    void this.readBody(id);
+  }
+
+  /** A hover left before its prefetch started. */
+  cancelPrefetch(id: string): void {
+    if (this.waitingPrefetch === id) this.waitingPrefetch = null;
+  }
+
+  private readBody(id: string): Promise<Page | null> {
+    const held = this.bodies.get(id);
+    const seen = this.seen;
+    const read = (async () => {
+      try {
+        if (held) {
+          const answer = await this.adapter.getPageIfNewer(id, held.page.rowSeq ?? null);
+          if (answer.kind === "missing") return this.dropBody(id);
+          const page = answer.kind === "newer" ? answer.page : held.page;
+          this.holdBody(page, seen);
+          return page;
+        }
+        const page = await this.adapter.getPage(id);
+        if (!page) return this.dropBody(id);
+        this.holdBody(page, seen);
+        return page;
+      } catch {
+        // Errors aren't kept: the next open reads again.
+        return null;
+      } finally {
+        this.bodyReads.delete(id);
+        const next = this.waitingPrefetch;
+        this.waitingPrefetch = null;
+        if (next) this.prefetch(next);
+      }
+    })();
+    this.bodyReads.set(id, read);
+    return read;
+  }
+
+  private holdBody(page: Page, seen: number): void {
+    const old = this.bodies.get(page.id);
+    if (old) this.bodyBytes -= old.bytes;
+    const bytes = (page.content?.length ?? 0) * 2 + summaryBytes(page);
+    this.bodies.delete(page.id);
+    this.bodies.set(page.id, { bytes, page, seen });
+    this.bodyBytes += bytes;
+    for (const [id, entry] of this.bodies) {
+      if (this.bodyBytes <= this.config.bodyBudgetBytes || id === page.id) break;
+      this.bodies.delete(id);
+      this.bodyBytes -= entry.bytes;
+    }
+  }
+
+  private touchBody(id: string, entry: { page: Page; seen: number; bytes: number }): void {
+    this.bodies.delete(id);
+    this.bodies.set(id, entry);
+  }
+
+  private dropBody(id: string): null {
+    const held = this.bodies.get(id);
+    if (held) this.bodyBytes -= held.bytes;
+    this.bodies.delete(id);
+    return null;
+  }
+
+  /** The app wrote `patch` to `id`: the held body takes it, so it stays current. */
+  private patchBody(id: string, patch: object): void {
+    const held = this.bodies.get(id);
+    if (held) this.holdBody({ ...held.page, ...patch }, held.seen);
   }
 
   /** The calendar shows `start` to `end`: load it unless a current copy is held. */

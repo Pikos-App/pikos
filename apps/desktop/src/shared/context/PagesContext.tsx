@@ -291,7 +291,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 
   function getPage(id: string): Promise<Page | null> {
-    return adapter.getPage(id);
+    return viewCache ? viewCache.body(id) : adapter.getPage(id);
   }
 
   function listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
