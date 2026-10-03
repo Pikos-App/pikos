@@ -14,9 +14,10 @@ use std::path::Path;
 use std::time::Instant;
 
 use pikos_db::{
-    create_folder_impl, create_page_impl, create_recurrence_rule_impl, get_page, list_pages_impl,
-    open_pool, open_pool_checkpointing, update_page_impl, CheckpointHooks, Checkpoints, NewFolder,
-    NewPage, NewRecurrenceRule, PageFilter, PageUpdate, SearchScan, DEFAULT_SEARCH_SCAN,
+    build_tiptap_doc, create_folder_impl, create_page_impl, create_recurrence_rule_impl, get_page,
+    list_pages_impl, open_pool, open_pool_checkpointing, update_page_impl, CheckpointHooks,
+    Checkpoints, NewFolder, NewPage, NewRecurrenceRule, PageFilter, PageUpdate, SearchScan,
+    DEFAULT_SEARCH_SCAN,
 };
 use serde_json::json;
 
@@ -93,6 +94,12 @@ impl Rng {
     fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
+}
+
+/// A body as the editor saves one, with its plain text for search beside it.
+fn set_body(page: &mut NewPage, text: String) {
+    page.content = build_tiptap_doc(&text);
+    page.content_text = Some(text);
 }
 
 fn sentence(rng: &mut Rng, words: usize) -> String {
@@ -250,8 +257,7 @@ pub async fn seed(
             body = format!("{body} {RARE_WORD}");
         }
         let mut page = base_page(None, title);
-        page.content = body.clone();
-        page.content_text = Some(body);
+        set_body(&mut page, body);
         let (schedule, weekly) = match shape {
             Shape::Plain => (None, false),
             Shape::Mixed => shape_page(&mut rng, i, today, &mut page, &folder_ids),
@@ -294,8 +300,7 @@ pub async fn seed(
     for (label, words) in SIZE_BUCKETS {
         let mut page = base_page(None, format!("{SIZE_MARKER} {label}"));
         let body = sentence(&mut rng, *words);
-        page.content = body.clone();
-        page.content_text = Some(body);
+        set_body(&mut page, body);
         create_page_impl(&pool, page).await.map_err(classify)?;
     }
 
@@ -303,8 +308,7 @@ pub async fn seed(
         let title = format!("large document {i}");
         let body = sentence(&mut rng, large_words);
         let mut page = base_page(None, title);
-        page.content = body.clone();
-        page.content_text = Some(body);
+        set_body(&mut page, body);
         create_page_impl(&pool, page).await.map_err(classify)?;
     }
 
@@ -420,7 +424,7 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
     timings.push(
         time_it(runs, "create page", || async {
             let mut page = base_page(None, "benchmark page".to_string());
-            page.content = "benchmark body".to_string();
+            set_body(&mut page, "benchmark body".to_string());
             create_page_impl(&pool, page).await.map_err(classify)
         })
         .await?,
@@ -479,11 +483,13 @@ pub async fn bench(db: &Option<String>, runs: u32, json: bool) -> Result<(), Cli
         };
         timings.push(
             time_it(runs, name, || async {
+                let text = sentence(&mut Rng(7), 80);
                 update_page_impl(
                     &pool,
                     id.clone(),
                     PageUpdate {
-                        content: Some(sentence(&mut Rng(7), 80)),
+                        content: Some(build_tiptap_doc(&text)),
+                        content_text: Some(text),
                         ..Default::default()
                     },
                 )

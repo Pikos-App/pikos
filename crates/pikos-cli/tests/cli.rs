@@ -221,6 +221,39 @@ async fn list_rejects_bad_status_exit_2() {
 }
 
 #[tokio::test]
+async fn stress_seed_writes_bodies_the_editor_can_open() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let out = cli(
+        dbs,
+        &[
+            "stress",
+            "seed",
+            "--pages",
+            "30",
+            "--large-pages",
+            "1",
+            "--large-words",
+            "20",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let not_documents: i64 = scalar(
+        dbs,
+        "SELECT COUNT(*) FROM pages \
+         WHERE NOT json_valid(content) OR json_extract(content, '$.type') <> 'doc' \
+         OR content_text LIKE '{%'",
+    )
+    .await;
+    assert_eq!(not_documents, 0);
+}
+
+#[tokio::test]
 async fn search_finds_body_text() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
