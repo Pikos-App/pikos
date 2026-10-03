@@ -1916,9 +1916,10 @@ pub async fn undo_skip_occurrence_impl(
 pub async fn recompute_recurring_schedules_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<PageSummary>> {
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let page_ids: Vec<String> = sqlx::query_scalar(
         "SELECT r.page_id FROM page_recurrence_rules r
-         JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL",
     )
     .fetch_all(pool)

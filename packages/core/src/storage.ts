@@ -260,8 +260,9 @@ export interface StorageAdapter {
     zone: string,
     openOnly: boolean
   ): Promise<PageSummary[]>;
-  /** Every recurring series' head; finished series too unless `openOnly`. */
-  listSeriesHeads(openOnly: boolean): Promise<PageSummary[]>;
+  /** Every recurring series' head; finished series too unless `openOnly`; with `since`, only the
+   *  heads changed after that change number. */
+  listSeriesHeads(openOnly: boolean, since?: number | null): Promise<PageSummary[]>;
   /** The sidebar's counts on `today` (a date) in `zone`. */
   countViews(zone: string, today: string): Promise<ViewCounts>;
   /** Summaries of `ids` that exist and aren't trashed, in the order asked. */

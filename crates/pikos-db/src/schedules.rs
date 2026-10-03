@@ -745,9 +745,10 @@ pub async fn delete_recurrence_rule_impl(pool: &sqlx::SqlitePool, id: &str) -> A
 pub async fn list_recurrence_rules_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<PageRecurrenceRule>> {
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let rows = sqlx::query_as::<_, RecurrenceRuleRow>(
         "SELECT r.* FROM page_recurrence_rules r
-         INNER JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL",
     )
     .fetch_all(pool)

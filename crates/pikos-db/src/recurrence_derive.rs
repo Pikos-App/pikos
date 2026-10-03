@@ -308,11 +308,12 @@ pub(crate) async fn recurring_pages_in_window(
     timed_only: bool,
     created_before: Option<&str>,
 ) -> AppResult<Vec<String>> {
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let series: Vec<WindowSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, r.rrule, r.rrule_exdates,
                 r.scheduled_start AS base_start, r.scheduled_end AS base_end
          FROM page_recurrence_rules r
-         JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL
            AND p.status != 'done'
            AND (?1 = 0 OR r.scheduled_start LIKE '%T%')
@@ -392,13 +393,14 @@ pub async fn occurrences_with_open_reminder_window(
 ) -> AppResult<Vec<DueReminder>> {
     let now_local = window.end_local();
     let now_utc = window.end_utc();
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let series: Vec<ReminderSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, p.title, r.rrule, r.rrule_exdates,
                 r.scheduled_start AS base_start, r.scheduled_end AS base_end, r.timezone,
                 EXISTS(SELECT 1 FROM page_sync sy
                        WHERE sy.page_id = r.page_id AND sy.sync_state = 'active') AS synced
          FROM page_recurrence_rules r
-         JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL
            AND p.status != 'done'
            AND r.scheduled_start LIKE '%T%'",

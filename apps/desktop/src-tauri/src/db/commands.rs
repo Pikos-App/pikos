@@ -285,8 +285,8 @@ db_commands! {
         list_range(start: Option<String>, end: String, zone: String, open_only: bool)
             -> Vec<PageSummary>
             = reads::list_range(start.as_deref(), &end, &zone, open_only);
-        list_series_heads(open_only: bool) -> Vec<PageSummary>
-            = reads::list_series_heads(open_only);
+        list_series_heads(open_only: bool, since: Option<i64>) -> Vec<PageSummary>
+            = reads::list_series_heads(open_only, since);
         count_views(zone: String, today: chrono::NaiveDate) -> ViewCounts
             = reads::count_views(&zone, today);
         get_pages(ids: Vec<String>) -> Vec<PageSummary> = reads::get_pages(&ids);

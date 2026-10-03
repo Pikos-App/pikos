@@ -226,8 +226,13 @@ pub async fn list_range(
 }
 
 /// Every recurring series' head, which a range needs whatever its dates, since its occurrences
-/// are expanded from the rule. With `open_only`, finished series are left out.
-pub async fn list_series_heads(pool: &SqlitePool, open_only: bool) -> AppResult<Vec<PageSummary>> {
+/// are expanded from the rule. With `open_only`, finished series are left out; with `since`, only
+/// heads changed after that change number, so a held set can be brought up to date cheaply.
+pub async fn list_series_heads(
+    pool: &SqlitePool,
+    open_only: bool,
+    since: Option<i64>,
+) -> AppResult<Vec<PageSummary>> {
     // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
     let mut builder = QueryBuilder::<Sqlite>::new(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE deleted_at IS NULL \
@@ -235,6 +240,10 @@ pub async fn list_series_heads(pool: &SqlitePool, open_only: bool) -> AppResult<
     ));
     if open_only {
         builder.push(" AND status <> 'done'");
+    }
+    if let Some(since) = since {
+        builder.push(" AND row_seq > ");
+        builder.push_bind(since);
     }
     builder.push(" ORDER BY sort_order, created_at, id");
     Ok(builder

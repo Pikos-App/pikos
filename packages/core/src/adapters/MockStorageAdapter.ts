@@ -682,11 +682,12 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(listRangeOf(this.livePages(), start, end, zone, openOnly));
   }
 
-  listSeriesHeads(openOnly: boolean): Promise<PageSummary[]> {
+  listSeriesHeads(openOnly: boolean, since: number | null = null): Promise<PageSummary[]> {
     const ruled = new Set([...this.rules.values()].map((r) => r.pageId));
     return Promise.resolve(
       this.livePages()
         .filter((p) => ruled.has(p.id) && (!openOnly || isOpen(p)))
+        .filter((p) => since === null || (p.rowSeq ?? 0) > since)
         .sort(byManualOrder)
     );
   }

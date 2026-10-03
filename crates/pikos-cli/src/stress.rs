@@ -319,6 +319,8 @@ pub async fn seed(
         create_page_impl(&pool, page).await.map_err(classify)?;
     }
 
+    // A workspace has statistics from its first launch on, so the seed ends with them.
+    pikos_db::gather_statistics(&pool).await.map_err(classify)?;
     // Closing the last connection checkpoints the write-ahead log into the file and removes it, so
     // the seeded file is complete on its own and can be copied as a template.
     pool.close().await;
@@ -406,6 +408,7 @@ pub async fn bench(
         .await
         .map_err(classify)?;
     let open_ms = open_start.elapsed().as_secs_f64() * 1000.0;
+    pikos_db::gather_statistics(&pool).await.map_err(classify)?;
 
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
         .fetch_one(&pool)
@@ -647,20 +650,24 @@ pub async fn bench(
     }
     timings.push(
         time_it(runs, "read series heads", || async {
-            list_series_heads(&pool, true).await.map_err(classify)
+            list_series_heads(&pool, true, None).await.map_err(classify)
         })
         .await?,
     );
     // What the app reads at launch besides the list on screen.
     timings.push(
         time_it(runs, "launch: recompute recurring schedules", || async {
-            pikos_db::recompute_recurring_schedules_impl(&pool).await.map_err(classify)
+            pikos_db::recompute_recurring_schedules_impl(&pool)
+                .await
+                .map_err(classify)
         })
         .await?,
     );
     timings.push(
         time_it(runs, "launch: read recurrence rules", || async {
-            pikos_db::list_recurrence_rules_impl(&pool).await.map_err(classify)
+            pikos_db::list_recurrence_rules_impl(&pool)
+                .await
+                .map_err(classify)
         })
         .await?,
     );

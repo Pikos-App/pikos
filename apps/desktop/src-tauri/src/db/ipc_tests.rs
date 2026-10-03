@@ -58,7 +58,7 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
             "list_range",
             json!({ "end": "2026-06-22T04:00:00Z", "openOnly": true, "start": null, "zone": "UTC" }),
         ),
-        ("list_series_heads", json!({ "openOnly": true })),
+        ("list_series_heads", json!({ "openOnly": true, "since": null })),
         ("list_page_schedules", json!({ "pageId": "p1" })),
         ("list_page_schedules_for_rules", json!({ "ruleIds": [] })),
         ("get_recurrence_rule", json!({ "pageId": "p1" })),

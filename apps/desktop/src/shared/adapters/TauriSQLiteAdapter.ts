@@ -334,8 +334,8 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<PageSummary[]>("list_range", { end, openOnly, start, zone });
   }
 
-  listSeriesHeads(openOnly: boolean): Promise<PageSummary[]> {
-    return invoke<PageSummary[]>("list_series_heads", { openOnly });
+  listSeriesHeads(openOnly: boolean, since: number | null = null): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_series_heads", { openOnly, since });
   }
 
   countViews(zone: string, today: string): Promise<ViewCounts> {

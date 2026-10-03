@@ -134,6 +134,9 @@ pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     open_pool_checkpointing(path, Checkpoints::Inline).await
 }
 
+/// How long after opening a workspace its table statistics are brought up to date.
+const STATISTICS_AFTER: Duration = Duration::from_secs(10);
+
 /// How often a long-running process copies the write-ahead log back into the database.
 const CHECKPOINT_EVERY: Duration = Duration::from_secs(30);
 
@@ -183,6 +186,15 @@ pub async fn open_pool_checkpointing(
     let pool = open_pool_reporting_integrity(path, checkpoints).await?;
     {
         let pool = pool.clone();
+        let stats_pool = pool.clone();
+        tokio::spawn(async move {
+            // Nothing waits on statistics: the queries that most need them name their join order.
+            // They start once the app is up, since a large workspace's first sampling takes seconds.
+            tokio::time::sleep(STATISTICS_AFTER).await;
+            if let Err(e) = gather_statistics(&stats_pool).await {
+                log::warn!("gathering table statistics failed: {e}");
+            }
+        });
         tokio::spawn(async move {
             if let Err(e) = crate::title_key::rekey_if_stale(&pool).await {
                 log::warn!("re-keying titles failed: {e}");
@@ -306,7 +318,6 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
 
     backfill_content_text(&pool).await?;
     crate::changes::prune_writers(&pool).await?;
-    gather_statistics(&pool).await?;
 
     let stored: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&pool)
@@ -423,13 +434,16 @@ fn prune_migration_backups(dir: &Path, keep: usize) {
 /// Table statistics for the query planner, gathered when a table has none or has changed a lot
 /// since, from a sample bounded by `ANALYSIS_LIMIT` rows per index. Without them the planner
 /// guesses every table is the same size and joined 3,500 recurrence rules to half a million
-/// pages by walking the pages: 800 ms to read the rules, against 24 ms with statistics.
-async fn gather_statistics(pool: &SqlitePool) -> AppResult<()> {
+/// pages by walking the pages: 800 ms to read the rules, against 24 ms with statistics. Sampling a
+/// fresh workspace of half a million pages took 4.8 s, so a launch runs it in the background.
+pub async fn gather_statistics(pool: &SqlitePool) -> AppResult<()> {
     let mut conn = pool.acquire().await?;
     sqlx::query(&format!("PRAGMA analysis_limit = {ANALYSIS_LIMIT}")) // sql-ok: compile-time constant
         .execute(&mut *conn)
         .await?;
-    sqlx::query("PRAGMA optimize = 0x10002").execute(&mut *conn).await?;
+    sqlx::query("PRAGMA optimize = 0x10002")
+        .execute(&mut *conn)
+        .await?;
     Ok(())
 }
 

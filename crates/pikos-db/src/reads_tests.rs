@@ -328,7 +328,7 @@ async fn series_heads_pages_by_id_and_newer_copies() {
     let heads = |open| {
         let pool = pool.clone();
         async move {
-            list_series_heads(&pool, open)
+            list_series_heads(&pool, open, None)
                 .await
                 .unwrap()
                 .into_iter()
@@ -338,6 +338,30 @@ async fn series_heads_pages_by_id_and_newer_copies() {
     };
     assert_eq!(heads(true).await, ["series"]);
     assert_eq!(heads(false).await.len(), 2);
+
+    let newest: i64 = sqlx::query_scalar("SELECT MAX(row_seq) FROM pages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(
+        list_series_heads(&pool, false, Some(newest))
+            .await
+            .unwrap()
+            .is_empty(),
+        "nothing changed since the newest change"
+    );
+    exec(
+        &pool,
+        "UPDATE pages SET title = 'Renamed series' WHERE id = 'series'",
+    )
+    .await;
+    let changed: Vec<String> = list_series_heads(&pool, false, Some(newest))
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(changed, ["series"], "only the head changed since");
 
     exec(
         &pool,
