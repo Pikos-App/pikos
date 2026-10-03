@@ -53,6 +53,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../migrations/018_counts_and_ranges.sql"),
     ),
     ("019", include_str!("../migrations/019_startup_indexes.sql")),
+    ("020", include_str!("../migrations/020_statistics_table.sql")),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -1272,4 +1273,27 @@ async fn upgrading_fills_in_the_sort_inputs_of_events_already_synced() {
             .unwrap();
     assert_eq!(inputs, (true, Some("2026-06-15T13:00:00Z".into())));
     let _ = std::fs::remove_dir_all(&staged);
+}
+
+#[tokio::test]
+async fn gathering_statistics_never_changes_the_schema_of_an_open_workspace() {
+    // A schema change under writes on other connections fails them with "no such table": the
+    // statistics table has to exist before the background pass first fills it.
+    let path = std::env::temp_dir().join(format!("pkos_stats_{}.db", uuid::Uuid::new_v4()));
+    let path_str = path.to_str().unwrap().to_string();
+    let pool = open_pool(&path_str).await.unwrap();
+    let version = || async {
+        sqlx::query_scalar::<_, i64>("PRAGMA schema_version")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    let before = version().await;
+    gather_statistics(&pool).await.unwrap();
+    let after = version().await;
+    pool.close().await;
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{path_str}{suffix}"));
+    }
+    assert_eq!(before, after);
 }
