@@ -58,8 +58,11 @@ export function corpus(pikos, dir, pages) {
  *  for every launch. */
 export function appCorpus(pikos, dir, pages) {
   const today = new Date().toLocaleDateString("en-CA");
+  // The schema too: a corpus seeded before a migration would migrate on every launch it's copied for.
+  const migrations = join(ROOT, "crates/pikos-db/migrations");
   const seeder = createHash("sha256")
     .update(readFileSync(join(ROOT, "crates/pikos-cli/src/stress.rs")))
+    .update(readdirSync(migrations).sort().join("\n"))
     .digest("hex")
     .slice(0, 12);
   const name = `app-${pages}-${today}-${seeder}.db`;
