@@ -299,14 +299,21 @@ describe("completed section", () => {
   });
 });
 
-describe("a list loaded a window at a time", () => {
-  it("shows loaded pages, then a placeholder per row still to load", () => {
+describe("lists loaded a window at a time", () => {
+  it("shows loaded pages, then a placeholder per row still to load, each knowing its place", () => {
     const { pageToRowIndex, rows } = buildPageListRows(
       defaults({
-        slots: [
-          makePage({ id: "a" }),
-          { id: "b", key: "b", placeholder: true },
-          { id: null, key: "slot-2", placeholder: true },
+        sections: [
+          {
+            count: 3,
+            header: null,
+            key: "inbox",
+            slots: [
+              makePage({ id: "a" }),
+              { id: "b", key: "b", placeholder: true },
+              { id: null, key: "slot-2", placeholder: true },
+            ],
+          },
         ],
       })
     );
@@ -317,10 +324,41 @@ describe("a list loaded a window at a time", () => {
       "completed-toggle",
     ]);
     expect(pageToRowIndex.get("b")).toBe(1);
+    expect(rows[2]).toMatchObject({ slot: { index: 2, section: "inbox" } });
+  });
+
+  it("heads each section, hides a collapsed one's rows, and leaves out an empty one", () => {
+    const { rows } = buildPageListRows(
+      defaults({
+        sections: [
+          {
+            count: 40,
+            header: { collapsed: true, collapsible: true, label: "Overdue" },
+            key: "overdue",
+            slots: [makePage({ id: "o" })],
+          },
+          { count: 0, header: { collapsible: false, label: "Today" }, key: "empty", slots: [] },
+          {
+            count: 1,
+            header: { collapsible: false, label: "Tomorrow" },
+            key: "tomorrow",
+            slots: [makePage({ id: "t" })],
+          },
+        ],
+      })
+    );
+    expect(rows.map((r) => [r.type, r.key])).toEqual([
+      ["section-header", "overdue-header"],
+      ["section-header", "tomorrow-header"],
+      ["page", "t"],
+      ["completed-toggle", "completed-toggle"],
+    ]);
+    expect(rows[0]).toMatchObject({ collapsed: true, count: 40 });
   });
 
   it("waits for the first window before saying the list is empty", () => {
-    expect(rowTypes(defaults({ loading: true, slots: [] }))).toEqual(["completed-toggle"]);
-    expect(rowTypes(defaults({ slots: [] }))).toEqual(["empty-state", "completed-toggle"]);
+    const empty = [{ count: 0, header: null, key: "inbox", slots: [] }];
+    expect(rowTypes(defaults({ loading: true, sections: empty }))).toEqual(["completed-toggle"]);
+    expect(rowTypes(defaults({ sections: empty }))).toEqual(["empty-state", "completed-toggle"]);
   });
 });

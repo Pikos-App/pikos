@@ -40,7 +40,7 @@ afterEach(() => {
 describe("ViewCacheController", () => {
   it("keeps loading until the rows on screen are held, a window at a time", async () => {
     const { controller } = await setup(7);
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     controller.want(inbox, 0, 6);
     await settle();
     const entry = controller.cache.entry(inbox);
@@ -50,7 +50,7 @@ describe("ViewCacheController", () => {
 
   it("jumps far past what's loaded by fetching the ids, then only the rows on screen", async () => {
     const { controller } = await setup(20);
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
     controller.want(inbox, 17, 19);
     await settle();
@@ -62,7 +62,7 @@ describe("ViewCacheController", () => {
 
   it("refreshes the list on screen after a write", async () => {
     const { adapter, controller } = await setup(1);
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
     const created = await adapter.createPage(newPage("Added"));
     await settle();
@@ -71,26 +71,26 @@ describe("ViewCacheController", () => {
 
   it("records a cached list that differs from the database, and nothing when it matches", async () => {
     const { controller, raw } = await setup(2);
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
     expect(window.__PIKOS_SHADOW_MISMATCHES__ ?? []).toEqual([]);
 
     // A write the controller doesn't hear about, as from another process before the doorbell.
     await raw.createPage(newPage("Behind its back"));
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
     expect(window.__PIKOS_SHADOW_MISMATCHES__).toHaveLength(1);
   });
 
   it("skips the check while a write is in flight", async () => {
     const { controller, raw } = await setup(2);
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
     await raw.createPage(newPage("Committed, not yet settled"));
     controller.writeStarted();
-    controller.show(inbox, []);
+    controller.show([inbox], []);
     await settle();
     expect(window.__PIKOS_SHADOW_MISMATCHES__ ?? []).toEqual([]);
   });
@@ -99,8 +99,8 @@ describe("ViewCacheController", () => {
 describe("ViewCacheController shown twice before its first window lands", () => {
   it("doesn't check a list that is still loading", async () => {
     const { controller } = await setup(2);
-    controller.show(inbox, []);
-    controller.show(inbox, []);
+    controller.show([inbox], []);
+    controller.show([inbox], []);
     await settle();
     expect(window.__PIKOS_SHADOW_MISMATCHES__ ?? []).toEqual([]);
   });

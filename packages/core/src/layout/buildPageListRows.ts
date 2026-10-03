@@ -9,10 +9,14 @@ type SectionHeaderRow = {
   collapsed?: boolean;
 };
 
+/** Where a row of a cached list sits: its section's key and its place in that section. */
+export type SlotRef = { section: string; index: number };
+
 type PageRow = {
   type: "page";
   key: string;
   page: PageSummary;
+  slot?: SlotRef;
 };
 
 export type VirtualRow =
@@ -23,10 +27,21 @@ export type VirtualRow =
   | { type: "load-more"; key: string }
   | { type: "empty-completed"; key: string }
   /** A row of the list not loaded yet: its id when known, else just its place. */
-  | { type: "placeholder"; key: string; id: string | null };
+  | { type: "placeholder"; key: string; id: string | null; slot: SlotRef };
 
 /** A slot in a list loaded a window at a time: the page, or a row still to load. */
 export type ListSlot = PageSummary | { placeholder: true; id: string | null; key: string };
+
+/** One list of a view loaded a window at a time: Inbox whole, or one of Today's or Upcoming's
+ *  sections. A section with no rows is left out, header and all. */
+export interface ListSection {
+  key: string;
+  /** Null for a list with no header: Inbox, a folder, or Today with nothing overdue. */
+  header: { label: string; collapsible: boolean; collapsed?: boolean } | null;
+  /** Every row in the section, loaded or not. */
+  count: number;
+  slots: ListSlot[];
+}
 
 /** One day's worth of the Upcoming view — see core `groupUpcomingPages`. */
 export interface PageListDaySection {
@@ -50,8 +65,9 @@ export interface BuildPageListRowsInput {
   completedCollapsed: boolean;
   completedPages: PageSummary[];
   completedHasMore: boolean;
-  /** A list loaded a window at a time, in place of `visiblePages` outside Today and Upcoming. */
-  slots?: ListSlot[];
+  /** Lists loaded a window at a time, in place of `visiblePages` and the Today and Upcoming
+   *  groupings. */
+  sections?: ListSection[];
   /** The first window hasn't arrived, so an empty list isn't known to be empty yet. */
   loading?: boolean;
 }
@@ -72,7 +88,7 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
     loading = false,
     overdue,
     overdueCollapsed,
-    slots,
+    sections,
     today,
     visiblePages,
   } = input;
@@ -80,16 +96,31 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
   const rows: VirtualRow[] = [];
   const pageToRowIndex = new Map<string, number>();
 
-  if (slots) {
-    if (slots.length === 0 && !loading) rows.push({ key: "empty-state", type: "empty-state" });
-    for (const slot of slots) {
-      if ("placeholder" in slot) {
-        if (slot.id) pageToRowIndex.set(slot.id, rows.length);
-        rows.push({ id: slot.id, key: slot.key, type: "placeholder" });
-      } else {
-        pageToRowIndex.set(slot.id, rows.length);
-        rows.push({ key: slot.id, page: slot, type: "page" });
+  if (sections) {
+    const shown = sections.filter((s) => s.count > 0 || s.slots.length > 0);
+    if (shown.length === 0 && !loading) rows.push({ key: "empty-state", type: "empty-state" });
+    for (const section of shown) {
+      if (section.header) {
+        rows.push({
+          collapsible: section.header.collapsible,
+          count: section.count,
+          key: `${section.key}-header`,
+          label: section.header.label,
+          type: "section-header",
+          ...(section.header.collapsible ? { collapsed: section.header.collapsed ?? false } : {}),
+        });
+        if (section.header.collapsed) continue;
       }
+      section.slots.forEach((slot, index) => {
+        const ref = { index, section: section.key };
+        if ("placeholder" in slot) {
+          if (slot.id) pageToRowIndex.set(slot.id, rows.length);
+          rows.push({ id: slot.id, key: slot.key, slot: ref, type: "placeholder" });
+        } else {
+          pageToRowIndex.set(slot.id, rows.length);
+          rows.push({ key: slot.id, page: slot, slot: ref, type: "page" });
+        }
+      });
     }
   } else if (visiblePages.length === 0) {
     rows.push({ key: "empty-state", type: "empty-state" });

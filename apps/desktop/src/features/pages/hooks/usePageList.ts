@@ -9,8 +9,8 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
-import { overlayPending } from "@/shared/viewCache/overlayPending";
-import { useCachedView } from "@/shared/viewCache/useCachedView";
+import { buildCachedList } from "@/shared/viewCache/cachedList";
+import { useCachedViews } from "@/shared/viewCache/useCachedView";
 
 import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
@@ -36,7 +36,7 @@ export function usePageList() {
   const activePage = useActivePage();
   const { selectedPageIds } = useSelection();
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const cached = useCachedView(activeViewId, sortMode, [
+  const cachedViews = useCachedViews(activeViewId, sortMode, [
     ...(activePage ? [activePage.id] : []),
     ...selectedPageIds,
   ]);
@@ -65,9 +65,18 @@ export function usePageList() {
   // Today and Upcoming are ordered by their sections (overdue/today, then day
   // groups), so running sortPages here would only churn an order the section
   // builders are about to replace.
-  const shown = cached && overlayPending(cached, pages, activeViewId);
-  const visiblePages = shown
-    ? shown.pages.filter((p) => !hiddenIds.has(p.id))
+  const cached =
+    cachedViews &&
+    buildCachedList({
+      hiddenIds,
+      occurrences: expanded,
+      pages,
+      today: cachedViews.today,
+      viewId: activeViewId,
+      views: cachedViews.views,
+    });
+  const visiblePages = cached
+    ? cached.pages
     : isDateGroupedView(activeViewId)
       ? withOccurrences
       : sortPages(withOccurrences, sortMode);
@@ -113,11 +122,8 @@ export function usePageList() {
 
   return {
     activePage,
-    /** The list loaded a window at a time, when the view cache serves this view. */
-    cached: shown && {
-      ...shown,
-      slots: shown.slots.filter((s) => !hiddenIds.has(s.id ?? "")),
-    },
+    /** The view's lists loaded a window at a time, when the view cache serves it. */
+    cached,
     completedHasMore: completed.hasMore,
     completedPages,
     folders,

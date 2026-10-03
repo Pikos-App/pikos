@@ -156,7 +156,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     overdueCollapsed,
     today,
     visiblePages,
-    ...(cached ? { loading: cached.loading, slots: cached.slots } : {}),
+    ...(cached
+      ? {
+          loading: cached.loading,
+          sections: cached.sections.map((section) =>
+            section.key === "overdue" && section.header
+              ? { ...section, header: { ...section.header, collapsed: overdueCollapsed } }
+              : section
+          ),
+        }
+      : {}),
   });
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
@@ -189,16 +198,21 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     overscan: 15,
   });
 
-  // A cached list loads what scrolls into view. Its rows come first, so a row's index is its slot's.
+  // A cached list loads what scrolls into view, and a little past it, section by section.
   const visibleItems = virtualizer.getVirtualItems();
   const firstVisible = visibleItems[0]?.index ?? 0;
   const lastVisible = visibleItems[visibleItems.length - 1]?.index ?? 0;
   useEffect(() => {
     if (!cached) return;
-    const slotCount = cached.slots.length;
-    if (slotCount === 0) return;
-    cached.ensure(firstVisible, Math.min(lastVisible + PRELOAD_ROWS, slotCount - 1));
-  }, [cached?.slots.length, cached?.ids.length, firstVisible, lastVisible]);
+    const spans = new Map<string, { first: number; last: number }>();
+    for (const row of rows.slice(firstVisible, lastVisible + PRELOAD_ROWS + 1)) {
+      if ((row.type !== "page" && row.type !== "placeholder") || !row.slot) continue;
+      const span = spans.get(row.slot.section);
+      if (span) span.last = row.slot.index;
+      else spans.set(row.slot.section, { first: row.slot.index, last: row.slot.index });
+    }
+    for (const [section, span] of spans) cached.ensure(section, span.first, span.last);
+  }, [rows.length, cached?.ids.length, firstVisible, lastVisible]);
 
   // Scroll active page into view when it changes via keyboard navigation.
   useEffect(() => {
@@ -478,7 +492,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {isOverdueHeader && (
               <button
                 className="type-ui-sm shrink-0 rounded px-1.5 py-0.5 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
-                onClick={() => moveOverdueToToday(overdue)}
+                onClick={() =>
+                  cached
+                    ? void cached.sectionPages("overdue").then(moveOverdueToToday)
+                    : moveOverdueToToday(overdue)
+                }
               >
                 Move to today
               </button>

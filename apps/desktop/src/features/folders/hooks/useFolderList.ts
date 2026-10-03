@@ -5,6 +5,7 @@ import { useState } from "react";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { useCachedCounts } from "@/shared/viewCache/useCachedCounts";
 
 export type FolderSortOrder = "manual" | "alphabetical" | "page-count";
 
@@ -34,6 +35,7 @@ export function useFolderList(): FolderListState {
   const { activeViewId, setActiveViewId } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<FolderSortOrder>("manual");
+  const counted = useCachedCounts();
 
   const visibleFolders = folders.filter((f) => !hiddenFolderIds.has(f.id));
 
@@ -44,16 +46,21 @@ export function useFolderList(): FolderListState {
   }
 
   const today = localToday();
-  const openPages = pages.filter(isOpen);
+  const openPages = counted ? [] : pages.filter(isOpen);
 
   const pageCountByFolder: Record<string, number> = {};
   for (const folder of visibleFolders) {
-    pageCountByFolder[folder.id] = openPages.filter((p) => p.folderId === folder.id).length;
+    pageCountByFolder[folder.id] = counted
+      ? (counted.folders[folder.id] ?? 0)
+      : openPages.filter((p) => p.folderId === folder.id).length;
   }
 
-  const todayCount = openPages.filter((p) => belongsToView(p, "today", today)).length;
-  const upcomingCount = openPages.filter((p) => belongsToView(p, "upcoming", today)).length;
-  const inboxCount = openPages.filter((p) => belongsToView(p, "inbox", today)).length;
+  const todayCount =
+    counted?.today ?? openPages.filter((p) => belongsToView(p, "today", today)).length;
+  const upcomingCount =
+    counted?.upcoming ?? openPages.filter((p) => belongsToView(p, "upcoming", today)).length;
+  const inboxCount =
+    counted?.inbox ?? openPages.filter((p) => belongsToView(p, "inbox", today)).length;
 
   // "manual" — use workspace array order as-is; reorderFolders keeps it correct via optimistic
   // update. Sorting by folder.sortOrder would revert the order since optimistic update doesn't
@@ -83,7 +90,9 @@ export function useFolderList(): FolderListState {
   }
 
   function handleDeleteRequest(folder: Folder) {
-    const pageCount = pages.filter((p) => p.folderId === folder.id).length;
+    const pageCount = counted
+      ? (counted.folders[folder.id] ?? 0)
+      : pages.filter((p) => p.folderId === folder.id).length;
     if (activeViewId === folder.id) setActiveViewId("inbox");
     requestDeleteFolder(folder, pageCount);
   }

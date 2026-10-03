@@ -111,3 +111,40 @@ appTest("drag a folder to reorder its position in the sidebar", async ({ app }) 
   expect([...reordered].sort()).toEqual([...initial].sort());
   expect(reordered).not.toEqual(initial);
 });
+
+// ─── Badges ────────────────────────────────────────────────────────────────
+
+appTest(
+  "the sidebar badges follow a page as it's created, moved, completed and deleted",
+  async ({ app }) => {
+    const sidebar = app.getByRole("group", { name: "Views and folders" });
+    // A folder row's name is the folder's alone, so the count is read from its text.
+    const badge = (name: string, count: number) =>
+      expect(sidebar.getByRole("button", { name: new RegExp(`^${name}`) }).first()).toHaveText(
+        new RegExp(`^${name}${count ? `\\s*${count}` : ""}$`)
+      );
+    const row = (title: string) => app.locator("[data-page-list-item]").filter({ hasText: title });
+
+    await createFolder(app, "Errands");
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    await quickAdd(app, "Post the letter");
+    await quickAdd(app, "Call the bank today");
+    await badge("Inbox", 2);
+    await badge("Today", 1);
+
+    await row("Post the letter").click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Move to folder" }).click();
+    await app.getByRole("menuitem", { name: /Errands/ }).click();
+    await badge("Inbox", 1);
+    await badge("Errands", 1);
+
+    await row("Call the bank").getByRole("checkbox", { name: "Mark done" }).click();
+    await badge("Inbox", 0);
+    await badge("Today", 0);
+
+    await sidebar.getByRole("button", { name: /^Errands/ }).click();
+    await row("Post the letter").click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Delete" }).click();
+    await badge("Errands", 0);
+  }
+);

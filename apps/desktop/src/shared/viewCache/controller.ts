@@ -2,8 +2,10 @@
 // scrolls, refreshes the shown list after every write, evicts what wasn't shown recently, and in
 // test lanes checks every cached list it shows against a fresh query.
 
-import type { PageSummary, Placement, StorageAdapter, ViewKey } from "@pikos/core";
+import type { PageSummary, Placement, StorageAdapter, ViewCounts, ViewKey } from "@pikos/core";
+import { getLocalTimezone } from "@pikos/core";
 import { evict, PageStore, ViewCache, viewName } from "@pikos/core";
+import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
 
 import { createLogger } from "@/shared/logger";
 
@@ -14,7 +16,8 @@ const log = createLogger("viewCache");
 export class ViewCacheController {
   readonly store = new PageStore();
   readonly cache: ViewCache;
-  private shown: ViewKey | null = null;
+  /** The lists on screen: one, or a view's sections. */
+  private shown: ViewKey[] = [];
   private loadingMore = new Set<string>();
   private fetchingRows = new Set<string>();
   /** Views whose first window is being fetched; what's held may be about to be replaced. */
@@ -28,6 +31,11 @@ export class ViewCacheController {
   /** Bumped by every write's start and settle, so a check can tell whether one overlapped it. */
   private writeEpoch = 0;
   private refreshing: Promise<void> | null = null;
+  /** The sidebar's badges, for the day they were counted on; null until first asked for. */
+  counts: { today: string; counts: ViewCounts } | null = null;
+  /** The day the sidebar shows badges for, once it has asked; a write recounts it. */
+  private countsDay: string | null = null;
+  private countsAsked = 0;
   private refreshAgain = false;
 
   constructor(
@@ -36,6 +44,17 @@ export class ViewCacheController {
   ) {
     this.cache = new ViewCache({ windowSize: config.windowSize });
     this.store.subscribe(() => this.bump());
+    this.waitForMidnight();
+  }
+
+  /** Today's sections and the badges are keyed by the date their readers compute at render, so
+   *  turning the day only needs a render. A second past midnight, so the date has turned. */
+  private waitForMidnight(): void {
+    const wait = differenceInMilliseconds(startOfTomorrow(), new Date()) + 1000;
+    setTimeout(() => {
+      this.bump();
+      this.waitForMidnight();
+    }, wait);
   }
 
   writeStarted(): void {
@@ -43,7 +62,7 @@ export class ViewCacheController {
     this.writeEpoch += 1;
   }
 
-  /** Every view may now be out of date: mark them all, and refetch the one on screen. */
+  /** Every view may now be out of date: mark them all, and refetch the ones on screen. */
   writeSettled(): void {
     this.writesInFlight -= 1;
     this.writeEpoch += 1;
@@ -53,23 +72,25 @@ export class ViewCacheController {
   }
 
   /**
-   * The list on screen is `key`. Loads its first window unless a current one is held, in which
-   * case the shadow check runs; then evicts down to the budget, keeping `pinnedPages`.
+   * The lists on screen are `keys`. Loads each one's first window unless a current one is held,
+   * in which case the shadow check runs; then evicts down to the budget, keeping `pinnedPages`.
    */
-  show(key: ViewKey, pinnedPages: Iterable<string>): void {
-    this.shown = key;
-    this.cache.touch(key);
-    const entry = this.cache.entry(key);
-    if (!entry || entry.stale || entry.status === "error") void this.loadFirst(key);
-    else if (
-      this.config.shadow &&
-      entry.status === "ready" &&
-      !this.loadingFirst.has(viewName(key))
-    )
-      void this.shadowCheck(key);
+  show(keys: ViewKey[], pinnedPages: Iterable<string>): void {
+    this.shown = keys;
+    for (const key of keys) {
+      this.cache.touch(key);
+      const entry = this.cache.entry(key);
+      if (!entry || entry.stale || entry.status === "error") void this.loadFirst(key);
+      else if (
+        this.config.shadow &&
+        entry.status === "ready" &&
+        !this.loadingFirst.has(viewName(key))
+      )
+        void this.shadowCheck(key);
+    }
     evict(this.cache, this.store, this.config.budgetBytes, {
       pages: new Set(pinnedPages),
-      views: new Set([viewName(key)]),
+      views: new Set(keys.map(viewName)),
     });
     this.bump();
   }
@@ -79,6 +100,26 @@ export class ViewCacheController {
   want(key: ViewKey, first: number, last: number): void {
     this.wanted.set(viewName(key), { first, last });
     this.fill(key);
+  }
+
+  /** The sidebar shows badges for `today`: count them unless they're held for that day. */
+  watchCounts(today: string): void {
+    this.countsDay = today;
+    if (this.counts?.today !== today) void this.loadCounts();
+  }
+
+  private async loadCounts(): Promise<void> {
+    const today = this.countsDay;
+    if (!today) return;
+    const asked = ++this.countsAsked;
+    try {
+      const counts = await this.adapter.countViews(getLocalTimezone(), today);
+      // An older count landing after a newer one would undo it.
+      if (asked === this.countsAsked) this.counts = { counts, today };
+    } catch {
+      // Badges keep their last counts; the next write recounts.
+    }
+    this.bump();
   }
 
   /** Load the next window of `key`, unless one is loading or the list is complete. */
@@ -192,10 +233,15 @@ export class ViewCacheController {
     this.refreshing = (async () => {
       do {
         this.refreshAgain = false;
-        const key = this.shown;
-        if (!key) break;
-        const loaded = this.cache.entry(key)?.ids.length ?? 0;
-        await this.loadFirst(key, Math.max(this.config.windowSize, loaded));
+        await Promise.all([
+          ...this.shown.map((key) =>
+            this.loadFirst(
+              key,
+              Math.max(this.config.windowSize, this.cache.entry(key)?.ids.length ?? 0)
+            )
+          ),
+          this.loadCounts(),
+        ]);
       } while (this.refreshAgain);
     })();
     try {
@@ -212,13 +258,13 @@ export class ViewCacheController {
     if (!entry || this.writesInFlight > 0) return;
     const epoch = this.writeEpoch;
     const ids = [...entry.ids];
+    const complete = !entry.next;
     const [fresh, rows] = await Promise.all([
       this.adapter.listViewIds(key, null, null),
       this.adapter.getPages(ids),
     ]);
     if (this.writeEpoch !== epoch || this.writesInFlight > 0) return;
     const problems: string[] = [];
-    const complete = !entry.next;
     const expected = complete ? fresh : fresh.slice(0, ids.length);
     if (expected.join() !== ids.join()) {
       problems.push(`order: cached [${ids.join(", ")}], database [${expected.join(", ")}]`);

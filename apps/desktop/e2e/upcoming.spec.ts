@@ -96,3 +96,33 @@ appTest("moving overdue pages to today clears the Overdue section @mock-only", a
   await expect(items.filter({ hasText: "expense report" })).toBeVisible();
   await expect(items.filter({ hasText: "vendor call" })).toBeVisible();
 });
+
+// ─── Lists loaded a window at a time turn over at midnight ─────────────────
+
+appTest.describe("with lists loaded a window at a time", () => {
+  appTest.use({ viewCache: true });
+
+  appTest(
+    "Today and Upcoming move to the new day at midnight, with nothing clicked @mock-only",
+    async ({ page }) => {
+      await bootAt(page, "2026-06-15T23:58:00");
+      await add(page, "dentist @tomorrow at 9am");
+      await add(page, "late call @today at 11:59pm");
+      const items = page.locator("[data-page-list-item]");
+
+      await page.getByRole("button", { name: /^Today/ }).click();
+      await expect(items.filter({ hasText: "late call" })).toBeVisible();
+      await expect(items.filter({ hasText: "dentist" })).toHaveCount(0);
+
+      await page.clock.runFor(3 * 60_000);
+      await expect(items.filter({ hasText: "dentist" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Overdue/ })).toBeVisible();
+
+      await page.getByRole("button", { name: /^Upcoming/ }).click();
+      const list = page.getByRole("group", { name: "Upcoming" });
+      await expect(list.getByText(/^Today/)).toBeVisible();
+      await expect(items.filter({ hasText: "dentist" })).toBeVisible();
+      await expect(items.filter({ hasText: "late call" })).toHaveCount(0);
+    }
+  );
+});
