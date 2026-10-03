@@ -115,7 +115,7 @@ export function buildCachedList(input: {
   const places = new Map<string, number[]>();
   const sections: ListSection[] = defs.map((def, i) => {
     const view = views[i];
-    if (!view) return { count: 0, header: def.header, key: def.key, slots: [] };
+    if (!view) return { count: 0, header: def.header, key: def.key, slots: [], tail: 0 };
     let count = view.total;
     const loaded: { page: PageSummary; place: number }[] = [];
     const rest: { slot: ListSlot; place: number }[] = [];
@@ -142,6 +142,7 @@ export function buildCachedList(input: {
       header: def.header,
       key: def.key,
       slots: [...loaded.map((l) => l.page), ...rest.map((r) => r.slot)],
+      tail: view.tail,
     };
   });
 
@@ -155,10 +156,13 @@ export function buildCachedList(input: {
   return {
     allIds: async () => (await Promise.all(views.map((v) => v.allIds()))).flat(),
     ensure: (section, first, last) => {
+      const view = viewOf.get(section);
+      if (!view) return;
       const placed = places.get(section) ?? [];
-      const from = Math.min(...placed.slice(first, last + 1), placed[first] ?? first);
-      const to = Math.max(...placed.slice(first, last + 1), placed[last] ?? last);
-      viewOf.get(section)?.ensure(from, to);
+      // Past the shown slots is the tail, which follows the list's known ids in order.
+      const placeOf = (at: number) => placed[at] ?? view.ids.length + (at - placed.length);
+      const known = placed.slice(first, last + 1);
+      view.ensure(Math.min(placeOf(first), ...known), Math.max(placeOf(last), ...known));
     },
     ids: views.flatMap((v) => v.ids),
     loading: views.some((v) => v.loading),

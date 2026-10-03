@@ -25,6 +25,8 @@ export interface CachedView {
   ids: string[];
   /** Every row in the list, loaded or not. */
   total: number;
+  /** Rows after `slots` whose ids aren't known yet. */
+  tail: number;
   loading: boolean;
   /** Load what the rows from `first` through `last` need: more of the list, or rows for ids. */
   ensure: (first: number, last: number) => void;
@@ -84,9 +86,6 @@ function readView(controller: ViewCacheController, key: ViewKey, _version: numbe
     if (page) pages.push(page);
     slots.push(page ?? { id, key: `slot-${id}`, placeholder: true });
   }
-  for (let i = ids.length; i < total; i++) {
-    slots.push({ id: null, key: `slot-${viewName(key)}-${i}`, placeholder: true });
-  }
   return {
     allIds: () => controller.allIds(key),
     ensure: (first, last) => controller.want(key, first, last),
@@ -97,6 +96,7 @@ function readView(controller: ViewCacheController, key: ViewKey, _version: numbe
     place: (moving, place) => controller.place(key, moving, place),
     rows: (wanted) => controller.rows(wanted),
     slots,
+    tail: total - ids.length,
     total,
   };
 }

@@ -356,6 +356,28 @@ describe("lists loaded a window at a time", () => {
     expect(rows[0]).toMatchObject({ collapsed: true, count: 40 });
   });
 
+  it("draws the rows not known yet as one block, however many there are", () => {
+    const { rows } = buildPageListRows(
+      defaults({
+        sections: [
+          {
+            count: 100_002,
+            header: null,
+            key: "inbox",
+            slots: [makePage({ id: "a" }), makePage({ id: "b" })],
+            tail: 100_000,
+          },
+        ],
+      })
+    );
+    expect(rows).toHaveLength(4);
+    expect(rows[2]).toMatchObject({
+      count: 100_000,
+      slot: { index: 2, section: "inbox" },
+      type: "tail",
+    });
+  });
+
   it("waits for the first window before saying the list is empty", () => {
     const empty = [{ count: 0, header: null, key: "inbox", slots: [] }];
     expect(rowTypes(defaults({ loading: true, sections: empty }))).toEqual(["completed-toggle"]);

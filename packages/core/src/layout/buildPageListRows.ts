@@ -27,7 +27,9 @@ export type VirtualRow =
   | { type: "load-more"; key: string }
   | { type: "empty-completed"; key: string }
   /** A row of the list not loaded yet: its id when known, else just its place. */
-  | { type: "placeholder"; key: string; id: string | null; slot: SlotRef };
+  | { type: "placeholder"; key: string; id: string | null; slot: SlotRef }
+  /** A section's rows not known yet, drawn as one block `count` rows tall; `slot` is the first. */
+  | { type: "tail"; key: string; count: number; slot: SlotRef };
 
 /** A slot in a list loaded a window at a time: the page, or a row still to load. */
 export type ListSlot = PageSummary | { placeholder: true; id: string | null; key: string };
@@ -41,6 +43,8 @@ export interface ListSection {
   /** Every row in the section, loaded or not. */
   count: number;
   slots: ListSlot[];
+  /** Rows after `slots` not known yet: one block, not a row each, so a long list costs nothing. */
+  tail?: number;
 }
 
 /** One day's worth of the Upcoming view — see core `groupUpcomingPages`. */
@@ -97,7 +101,7 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
   const pageToRowIndex = new Map<string, number>();
 
   if (sections) {
-    const shown = sections.filter((s) => s.count > 0 || s.slots.length > 0);
+    const shown = sections.filter((s) => s.count > 0 || s.slots.length > 0 || (s.tail ?? 0) > 0);
     if (shown.length === 0 && !loading) rows.push({ key: "empty-state", type: "empty-state" });
     for (const section of shown) {
       if (section.header) {
@@ -121,6 +125,14 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
           rows.push({ key: slot.id, page: slot, slot: ref, type: "page" });
         }
       });
+      if (section.tail) {
+        rows.push({
+          count: section.tail,
+          key: `${section.key}-tail`,
+          slot: { index: section.slots.length, section: section.key },
+          type: "tail",
+        });
+      }
     }
   } else if (visiblePages.length === 0) {
     rows.push({ key: "empty-state", type: "empty-state" });

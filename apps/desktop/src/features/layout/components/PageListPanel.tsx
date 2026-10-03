@@ -186,6 +186,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           return 40;
         case "placeholder":
           return placeholderHeight(density);
+        case "tail":
+          return row.count * placeholderHeight(density);
         case "page": {
           // Compact hides subtitle; cozy matches current; spacious adds ~8px.
           if (density === "compact") return 44;
@@ -203,17 +205,39 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const visibleItems = virtualizer.getVirtualItems();
   const firstVisible = visibleItems[0]?.index ?? 0;
   const lastVisible = visibleItems[visibleItems.length - 1]?.index ?? 0;
+  const scrollTop = virtualizer.scrollOffset ?? 0;
+  // Coarse, so scrolling inside one tail block re-checks every few rows rather than every pixel.
+  const scrolledRows = Math.floor(scrollTop / placeholderHeight(density));
   useEffect(() => {
     if (!cached) return;
     const spans = new Map<string, { first: number; last: number }>();
-    for (const row of rows.slice(firstVisible, lastVisible + PRELOAD_ROWS + 1)) {
-      if ((row.type !== "page" && row.type !== "placeholder") || !row.slot) continue;
-      const span = spans.get(row.slot.section);
-      if (span) span.last = row.slot.index;
-      else spans.set(row.slot.section, { first: row.slot.index, last: row.slot.index });
+    const reach = (section: string, first: number, last: number) => {
+      const span = spans.get(section);
+      if (span) span.last = Math.max(span.last, last);
+      else spans.set(section, { first, last });
+    };
+    const rowHeight = placeholderHeight(density);
+    const viewport = listRef.current?.clientHeight ?? 0;
+    for (const item of virtualizer.getVirtualItems()) {
+      const row = rows[item.index];
+      if (!row || (row.type !== "page" && row.type !== "placeholder" && row.type !== "tail")) {
+        continue;
+      }
+      if (!row.slot) continue;
+      if (row.type !== "tail") {
+        reach(row.slot.section, row.slot.index, row.slot.index + PRELOAD_ROWS);
+        continue;
+      }
+      // Only the part of a tail block on screen, and a little past it.
+      const from = Math.max(0, Math.floor((scrollTop - item.start) / rowHeight));
+      const to = Math.min(
+        row.count - 1,
+        Math.floor((scrollTop + viewport - item.start) / rowHeight) + PRELOAD_ROWS
+      );
+      if (to >= from) reach(row.slot.section, row.slot.index + from, row.slot.index + to);
     }
     for (const [section, span] of spans) cached.ensure(section, span.first, span.last);
-  }, [rows.length, cached?.ids.length, firstVisible, lastVisible]);
+  }, [rows.length, cached?.ids.length, firstVisible, lastVisible, scrolledRows]);
 
   useScrollAnchor(
     listRef,
@@ -575,6 +599,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
       case "placeholder":
         return <div aria-hidden style={{ height: placeholderHeight(density) }} />;
+
+      case "tail":
+        return <div aria-hidden style={{ height: row.count * placeholderHeight(density) }} />;
     }
   }
 
