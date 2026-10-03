@@ -1,7 +1,9 @@
+import type { TrashedPage } from "@pikos/core";
 import { act, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { usePages } from "@/shared/context/PagesContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 import { useTrash } from "./useTrash";
@@ -99,6 +101,31 @@ describe("useTrash", () => {
       const page = await hook.result.current.pages.createPage({ title: "Doomed" });
       id = page.id;
       await hook.result.current.pages.softDeletePage(id);
+    });
+
+    expect(hook.result.current.trash.entries).toEqual([]);
+  });
+
+  it("keeps the latest read when an earlier one lands after it", async () => {
+    const hook = renderHookWithProviders(() => ({
+      trash: useTrash(true),
+      workspace: useWorkspace(),
+    }));
+    await waitFor(() => expect(hook.result.current.trash.loading).toBe(false));
+    const storage = hook.result.current.workspace.storage!;
+    let landOld: (rows: TrashedPage[]) => void = () => undefined;
+    const old = new Promise<TrashedPage[]>((resolve) => {
+      landOld = resolve;
+    });
+    vi.spyOn(storage, "listTrashedPages").mockReturnValueOnce(old).mockResolvedValueOnce([]);
+
+    await act(async () => {
+      void hook.result.current.trash.refresh();
+      await hook.result.current.trash.refresh();
+    });
+    await act(async () => {
+      landOld([{ title: "destroyed" } as TrashedPage]);
+      await old;
     });
 
     expect(hook.result.current.trash.entries).toEqual([]);

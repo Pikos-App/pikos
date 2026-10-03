@@ -9,7 +9,7 @@
 // until the next reload.
 
 import type { TrashedPage } from "@pikos/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -42,18 +42,25 @@ export function useTrash(active: boolean): TrashState {
   const [entries, setEntries] = useState<TrashedPage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reads overlap (a delete event's and a write's own re-read), and only the latest is kept: an
+  // earlier read landing after it would put back pages the write had just destroyed.
+  const askedRef = useRef(0);
 
   async function refresh(): Promise<void> {
     if (!storage) return;
+    const asked = ++askedRef.current;
     setLoading(true);
     try {
-      setEntries(await storage.listTrashedPages());
+      const rows = await storage.listTrashedPages();
+      if (asked !== askedRef.current) return;
+      setEntries(rows);
       setError(null);
     } catch (e) {
+      if (asked !== askedRef.current) return;
       log.error("listTrashedPages failed", e);
       setError("Couldn't read the trash.");
     } finally {
-      setLoading(false);
+      if (asked === askedRef.current) setLoading(false);
     }
   }
 
