@@ -41,7 +41,9 @@ export function useTrash(active: boolean): TrashState {
   const { deletePage, restorePage } = usePages();
   const [entries, setEntries] = useState<TrashedPage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A successful read clears only a read's error. Every write re-reads after it, so clearing a
+  // write's error there would hide the failure: an empty that destroyed nothing would look done.
+  const [error, setError] = useState<{ from: "read" | "write"; message: string } | null>(null);
   // Reads overlap (a delete event's and a write's own re-read), and only the latest is kept: an
   // earlier read landing after it would put back pages the write had just destroyed.
   const askedRef = useRef(0);
@@ -54,11 +56,11 @@ export function useTrash(active: boolean): TrashState {
       const rows = await storage.listTrashedPages();
       if (asked !== askedRef.current) return;
       setEntries(rows);
-      setError(null);
+      setError((prev) => (prev?.from === "read" ? null : prev));
     } catch (e) {
       if (asked !== askedRef.current) return;
       log.error("listTrashedPages failed", e);
-      setError("Couldn't read the trash.");
+      setError({ from: "read", message: "Couldn't read the trash." });
     } finally {
       if (asked === askedRef.current) setLoading(false);
     }
@@ -100,7 +102,7 @@ export function useTrash(active: boolean): TrashState {
       setError(null);
     } catch (e) {
       log.error(`${label} failed`, e);
-      setError("That didn't work. Try again.");
+      setError({ from: "write", message: "That didn't work. Try again." });
     }
     await refresh();
   }
@@ -125,5 +127,13 @@ export function useTrash(active: boolean): TrashState {
     return purged;
   }
 
-  return { deleteForever, emptyTrash, entries, error, loading, refresh, restore };
+  return {
+    deleteForever,
+    emptyTrash,
+    entries,
+    error: error?.message ?? null,
+    loading,
+    refresh,
+    restore,
+  };
 }

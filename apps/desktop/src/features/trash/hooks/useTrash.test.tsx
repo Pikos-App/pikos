@@ -134,4 +134,25 @@ describe("useTrash", () => {
 
     expect(hook.result.current.trash.entries).toEqual([]);
   });
+
+  it("still says so when an empty fails, after the re-read that follows it succeeds", async () => {
+    const hook = renderHookWithProviders(() => ({
+      trash: useTrash(true),
+      workspace: useWorkspace(),
+    }));
+    await waitFor(() => {
+      expect(hook.result.current.workspace.storage).not.toBeNull();
+      expect(hook.result.current.trash.loading).toBe(false);
+    });
+    const storage = hook.result.current.workspace.storage!;
+    vi.spyOn(storage, "purgeTrashedPages").mockRejectedValueOnce(new Error("disk I/O error"));
+    const read = vi.spyOn(storage, "listTrashedPages");
+
+    await act(async () => {
+      await hook.result.current.trash.emptyTrash();
+    });
+
+    expect(read).toHaveBeenCalled();
+    expect(hook.result.current.trash.error).toBe("That didn't work. Try again.");
+  });
 });
