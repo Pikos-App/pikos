@@ -2,9 +2,9 @@
 // conditions written beside every figure, because a number without them is not one anybody can
 // check.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,25 +53,36 @@ export function corpus(pikos, dir, pages) {
 }
 
 /** The app benchmark's workspace for one size: folders, dates around today, done pages and
- *  series, so the views it switches between have something in them. Seeded again each day, since
- *  its dates are spread around the day it was seeded, or when the seeder changes, and copied fresh
- *  for every launch. */
-export function appCorpus(pikos, dir, pages) {
+ *  series, so the views it switches between have something in them. Copied fresh for every launch.
+ *
+ *  A record run seeds it for today, as its dates are spread around the day it was seeded. A quick
+ *  run (`reuse`) takes one up to `REUSE_DAYS` old and migrates it in place when only the schema
+ *  moved on, since seeding half a million pages takes minutes: its Today and Upcoming drift a
+ *  little, which a quick run, never published, can afford. A changed seeder always reseeds. */
+export function appCorpus(pikos, dir, pages, { reuse = false } = {}) {
   const today = new Date().toLocaleDateString("en-CA");
-  // The schema too: a corpus seeded before a migration would migrate on every launch it's copied for.
-  const migrations = join(ROOT, "crates/pikos-db/migrations");
   const seeder = createHash("sha256")
     .update(readFileSync(join(ROOT, "crates/pikos-cli/src/stress.rs")))
-    .update(readdirSync(migrations).sort().join("\n"))
     .digest("hex")
     .slice(0, 12);
-  const name = `app-${pages}-${today}-${seeder}.db`;
-  const db = join(dir, name);
+  // A corpus seeded before a migration would migrate on every launch it's copied for.
+  const schema = readdirSync(join(ROOT, "crates/pikos-db/migrations")).sort().join("\n");
+  const prefix = `app-${pages}-`;
+  const pattern = new RegExp(`^${prefix}(\\d{4}-\\d{2}-\\d{2})-${seeder}\\.db$`);
+  const oldest = new Date(Date.now() - REUSE_DAYS * 86_400_000).toLocaleDateString("en-CA");
+  const usable = readdirSync(dir)
+    .map((file) => pattern.exec(file))
+    .filter((m) => m && (reuse ? m[1] >= oldest : m[1] === today))
+    .map((m) => m[0])
+    .sort()
+    .reverse();
+  const db = join(dir, usable[0] ?? `${prefix}${today}-${seeder}.db`);
   for (const old of readdirSync(dir)) {
-    if (old.startsWith(`app-${pages}-`) && !old.startsWith(name)) {
+    if (old.startsWith(prefix) && !old.startsWith(db.slice(dir.length + 1))) {
       rmSync(join(dir, old), { force: true });
     }
   }
+  const schemaFile = `${db}.schema`;
   if (!existsSync(db)) {
     console.log(`seeding ${pages} pages`);
     const building = `${db}.building`;
@@ -91,9 +102,17 @@ export function appCorpus(pikos, dir, pages) {
       "--json",
     ]);
     renameSync(building, db);
+  } else if (!existsSync(schemaFile) || readFileSync(schemaFile, "utf8") !== schema) {
+    console.log(`migrating the ${pages}-page workspace`);
+    // Any command that opens the workspace migrates it; this one reads nothing and exits non-zero.
+    spawnSync(pikos, ["--db", db, "--migrate", "read", "00000000-0000-0000-0000-000000000000"]);
   }
+  writeFileSync(schemaFile, schema);
   return db;
 }
+
+/** How old a workspace a quick run may reuse. */
+const REUSE_DAYS = 7;
 
 export function conditions() {
   const hardware = JSON.parse(run("system_profiler", ["-json", "SPHardwareDataType"]))

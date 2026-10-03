@@ -224,7 +224,9 @@ function launch(pages, template, label) {
   }
 }
 
-const templates = new Map(sizes.map((pages) => [pages, appCorpus(pikos, dir, pages)]));
+const templates = new Map(
+  sizes.map((pages) => [pages, appCorpus(pikos, dir, pages, { reuse: quick })])
+);
 const reports = new Map(sizes.map((pages) => [pages, []]));
 let first = true;
 for (let round = 1 - warmUps; round <= launches; round++) {
