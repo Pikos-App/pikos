@@ -17,10 +17,12 @@ name = "pikos_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 # The real writer behind localhost HTTP, for the Playwright lane that has no
-# Tauri IPC. Only that lane turns the feature on, so no release carries it.
+# Tauri IPC. Only that lane turns the feature on, so no release carries it. Kept
+# out of src/bin: Tauri's bundler adds every file there to the app, ignoring
+# required-features, and fails on the binary the release never built.
 [[bin]]
 name = "pikos-e2e-bridge"
-path = "src/bin/e2e_bridge.rs"
+path = "bins/e2e_bridge.rs"
 required-features = ["e2e-bridge"]
 
 [features]
