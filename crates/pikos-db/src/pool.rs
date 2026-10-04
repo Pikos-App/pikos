@@ -605,6 +605,21 @@ pub async fn wal_test_pool() -> TempWalDb {
     let pool = open_pool(path.to_str().expect("temp path is utf-8"))
         .await
         .expect("open wal test pool");
+    // A new file always re-keys its titles in the background at open, ending in a commit that
+    // fails a test's first read-then-write transaction with SQLITE_BUSY_SNAPSHOT if it lands
+    // between the two. Hand the pool over once that pass has finished.
+    let want = crate::title_key::key_version();
+    loop {
+        let stored: Option<String> =
+            sqlx::query_scalar("SELECT version FROM title_key_version WHERE id = 1")
+                .fetch_one(&pool)
+                .await
+                .expect("read title key version");
+        if stored.as_deref() == Some(want.as_str()) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
     TempWalDb { pool, path }
 }
 
