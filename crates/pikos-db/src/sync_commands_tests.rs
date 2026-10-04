@@ -251,6 +251,81 @@ async fn detached_pages_counts_only_this_calendars_survivors() {
     assert_eq!(by_id(&sibling.id), 0, "scoped to its own calendar");
 }
 
+/// An event deleted upstream leaves its owned page with nothing to re-link to, so turning the
+/// calendar off and on again can't take it back, and the re-enable confirm mustn't count it.
+#[tokio::test]
+async fn detached_pages_leaves_out_pages_whose_event_was_deleted_upstream() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (cal, folder_id) = enabled_calendar(&pool, &acc, "Work", None).await;
+    for (page, link, href) in [
+        ("p-kept", "ps-kept", "/kept.ics"),
+        ("p-gone", "ps-gone", "/gone.ics"),
+    ] {
+        insert_test_page(
+            &pool,
+            TestPage {
+                folder_id: Some(&folder_id),
+                ..TestPage::new(page, page)
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO page_sync
+               (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+                user_modified, created_at)
+             VALUES (?, ?, ?, 'caldav', 'cal-a', ?, ?, 1, ?)",
+        )
+        .bind(link)
+        .bind(page)
+        .bind(&acc)
+        .bind(href)
+        .bind(format!("uid-{page}"))
+        .bind(now_iso())
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    crate::reconciler::reconcile(
+        &pool,
+        &crate::reconciler::ReconcileContext {
+            account_id: acc.clone(),
+            calendar_id: "cal-a".into(),
+            provider: "caldav".into(),
+            folder_id: folder_id.clone(),
+        },
+        &crate::sync_delta::SyncDelta {
+            removals: vec![crate::sync_delta::Removal {
+                external_id: "/gone.ics".into(),
+            }],
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, false, None)
+        .await
+        .unwrap();
+
+    let all = list_sync_calendars_impl(&pool, &acc).await.unwrap();
+    let counted = all.iter().find(|c| c.id == cal.id).unwrap().detached_pages;
+    assert_eq!(counted, 1, "only the page the turn-off kept");
+    let reasons: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT id, detached_by FROM page_sync ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        reasons,
+        vec![
+            ("ps-gone".into(), Some("upstream".into())),
+            ("ps-kept".into(), Some("turn_off".into())),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn upsert_calendar_is_idempotent_on_keys() {
     let pool = test_pool().await;

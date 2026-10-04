@@ -57,6 +57,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "020",
         include_str!("../migrations/020_statistics_table.sql"),
     ),
+    ("021", include_str!("../migrations/021_detached_by.sql")),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while

@@ -166,8 +166,8 @@ async fn apply_event(
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
         sqlx::query(
-            "UPDATE page_sync SET etag = ?, sync_state = 'active', mirror_location = ?,
-             mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
+            "UPDATE page_sync SET etag = ?, sync_state = 'active', detached_by = NULL,
+             mirror_location = ?, mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
         )
         .bind(&ev.core.etag)
         .bind(&mirror_location)
@@ -181,7 +181,8 @@ async fn apply_event(
         // Same UID, new/absent href → re-link this calendar's dormant page, no dup.
         sqlx::query(
             "UPDATE page_sync SET external_id = ?, etag = ?, sync_state = 'active',
-             mirror_location = ?, mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
+             detached_by = NULL, mirror_location = ?, mirror_attendees = ?, last_synced_at = ?
+             WHERE id = ?",
         )
         .bind(&ev.core.external_id)
         .bind(&ev.core.etag)
@@ -569,8 +570,25 @@ async fn apply_removal(
     if state != "active" {
         return Ok(false);
     }
-    detach_or_delete(tx, &page_sync_id, &page_id).await?;
+    detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
     Ok(true)
+}
+
+/// Why a link was severed, recorded on the row as `detached_by`: only a turn-off's
+/// pages come back when the calendar is turned on again.
+#[derive(Clone, Copy)]
+enum Severed {
+    TurnOff,
+    Upstream,
+}
+
+impl Severed {
+    fn as_str(self) -> &'static str {
+        match self {
+            Severed::TurnOff => "turn_off",
+            Severed::Upstream => "upstream",
+        }
+    }
 }
 
 /// The own-vs-delete decision, shared by an explicit removal, teardown, and the
@@ -580,9 +598,10 @@ async fn detach_or_delete(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
     page_id: &str,
+    by: Severed,
 ) -> AppResult<()> {
     if is_owned(tx, page_id).await? {
-        detach_sync(tx, page_sync_id, page_id).await?;
+        detach_sync(tx, page_sync_id, page_id, by).await?;
     } else {
         hard_delete_page(tx, page_id).await?;
     }
@@ -646,7 +665,7 @@ pub async fn sweep_absent(
         ) {
             continue;
         }
-        detach_or_delete(&mut tx, &page_sync_id, &page_id).await?;
+        detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
         removed += 1;
     }
 
@@ -786,7 +805,7 @@ async fn teardown_page_batch(
             }
             // Already severed by a prior upstream removal — keep its dormant identity.
             "detached" => {}
-            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id).await?,
+            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff).await?,
         }
     }
 
@@ -849,8 +868,10 @@ async fn detach_sync(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
     page_id: &str,
+    by: Severed,
 ) -> AppResult<()> {
-    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE id = ?")
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached', detached_by = ? WHERE id = ?")
+        .bind(by.as_str())
         .bind(page_sync_id)
         .execute(&mut **tx)
         .await?;
