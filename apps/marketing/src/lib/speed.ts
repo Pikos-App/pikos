@@ -15,8 +15,8 @@ export type Series = {
   values: (Op | null)[];
 };
 
-export const fmtMs = (ms: number) =>
-  ms < 1 ? ms.toFixed(2) : ms < 10 ? ms.toFixed(1) : Math.round(ms).toString();
+/** Whole milliseconds from 1 up; two places below it, where the database's fastest calls sit. */
+export const fmtMs = (ms: number) => (ms < 1 ? ms.toFixed(2) : Math.round(ms).toString());
 
 /** Milliseconds below a second, seconds from there, so a launch reads "1.4 s" rather than "1425 ms". */
 export const fmtTime = (ms: number) =>

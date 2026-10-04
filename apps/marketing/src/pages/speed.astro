@@ -25,8 +25,8 @@ const appActions: Series[] = [
   appSeries("openDirect", "Open a page", "Open", "Click until the page is drawn"),
   appSeries("search", "Search", "Search", "Typing until results show"),
   appSeries("switchView", "Switch views", "Switch", "Click until the list is drawn"),
-  appSeries("complete", "Complete a task", "Complete", "Click until the list shows it done"),
-  appSeries("rename", "Rename a page", "Rename", "Typing until the list shows the new name"),
+  appSeries("complete", "Complete a task", "Complete", "Click until it shows done"),
+  appSeries("rename", "Rename a page", "Rename", "Typing until it's renamed"),
   appSeries("weekCold", "Next week", "Calendar", "Click until the week is drawn"),
   appSeries("launch", "Launch", "Launch", "Start until it's ready to use"),
 ];
@@ -94,7 +94,7 @@ const bullet = "flex items-start gap-2";
       })}
     </div>
     <p class="mt-4 text-xs text-neutral-400 dark:text-neutral-500">
-      A millisecond (ms) is a thousandth of a second. Under about a hundred of them, a response feels instant. And {fmtPages(largestPages)} pages is ten new pages a day for {yearsAtTenADay} years.
+      A millisecond (ms) is a thousandth of a second. And {fmtPages(largestPages)} pages is ten new pages a day for {yearsAtTenADay} years.
     </p>
 
     <!-- The bars -->
