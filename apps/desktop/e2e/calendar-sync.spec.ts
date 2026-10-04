@@ -1090,3 +1090,86 @@ appTest(
     await expect(page.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
   }
 );
+
+// ─── tier2: a calendar's folder is never a destination ───────────────────────
+
+// With the ordinary "Personal" deleted, the calendar's is the only folder of that name, so every
+// place that picks a folder, from a list or by name, has to pass it by. The two that pick by name
+// can leave an ordinary "Personal" behind, so they come last.
+appTest("no folder picker offers a synced calendar's folder", async ({ app }) => {
+  await seedSynced(app);
+  const sidebar = app.getByRole("group", { name: "Views and folders" });
+  const ordinary = sidebar.locator('[aria-label="Personal"][aria-roledescription="sortable"]');
+  await ordinary.click({ button: "right" });
+  await app.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(ordinary).toHaveCount(0);
+  await app.getByRole("button", { name: /Inbox/ }).click();
+  const calendarPages = async (title: string) => {
+    await openPersonalFolder(app);
+    return app.locator("[data-page-list-item]").filter({ hasText: title });
+  };
+
+  await appTest.step("Quick Add's folder chip", async () => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await dialog.getByRole("button", { name: "Folder: Inbox" }).click();
+    const search = app.getByPlaceholder(/search or create/i);
+    // Short of the name: an exact one offers to create a folder by that name, a row that reads
+    // the same as the folder it must not list.
+    await search.fill("Persona");
+    const popover = app.getByRole("dialog").filter({ has: search });
+    await expect(popover.getByRole("button", { exact: true, name: "Personal" })).toHaveCount(0);
+    await expect(async () => {
+      await app.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0, { timeout: 300 });
+    }).toPass();
+  });
+
+  await appTest.step("a page's Move to folder menu", async () => {
+    await quickAdd(app, "loose page");
+    const item = app.locator("[data-page-list-item]").filter({ hasText: "loose page" });
+    await item.click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Move to folder" }).click();
+    await expect(app.getByRole("menuitem", { name: "Work" }).first()).toBeVisible();
+    await expect(app.getByRole("menuitem", { name: /Personal/ })).toHaveCount(0);
+    await app.keyboard.press("Escape");
+    await app.keyboard.press("Escape");
+  });
+
+  await appTest.step("Settings' default folder", async () => {
+    await app.getByRole("button", { name: "Open settings" }).click();
+    const settings = app.getByRole("region", { name: "Settings" });
+    await settings.getByRole("button", { exact: true, name: "General" }).click();
+    await settings.getByRole("button", { name: /^Default folder for new pages:/ }).click();
+    const search = app.getByPlaceholder("Search folders…");
+    await search.fill("Persona");
+    const popover = app.getByRole("dialog").filter({ has: search });
+    await expect(popover.getByRole("button", { exact: true, name: "Personal" })).toHaveCount(0);
+    await app.keyboard.press("Escape");
+    await app.keyboard.press("Escape");
+  });
+
+  await appTest.step("Quick Add's ~folder", async () => {
+    await quickAdd(app, "pack the bags ~Personal");
+    await expect(await calendarPages("pack the bags")).toHaveCount(0);
+  });
+
+  await appTest.step("an import's folder of the same name", async () => {
+    await app.evaluate(() => {
+      (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
+        files: [{ content: "Passports, chargers.", path: "Personal/Packing list.md" }],
+        path: "/tmp/pikos-e2e-vault",
+      };
+    });
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
+    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Import 1 page/ }).click();
+    await expect(app.getByRole("heading", { name: "Import Preview" })).toHaveCount(0);
+    await app.keyboard.press("Escape");
+    await expect(await calendarPages("Packing list")).toHaveCount(0);
+    await expect(
+      sidebar.locator('[aria-label="Personal"][aria-roledescription="sortable"]')
+    ).toHaveCount(1);
+  });
+});
