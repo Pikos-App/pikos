@@ -133,18 +133,18 @@ const bullet = "flex items-start gap-2";
       </p>
 
       <div class="mt-8 rounded-xl border border-neutral-200 bg-white px-6 py-8 sm:px-8 dark:border-neutral-800 dark:bg-neutral-900">
-        <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the database</h3>
+        <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the app</h3>
+        <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          The numbers above come from a build of Pikos with a timer compiled in. On a Mac, build it from <a href="https://github.com/Pikos-App/pikos" class={link}>source</a> and run <code class={code}>node apps/marketing/scripts/benchmark-app.mjs</code>. It builds the workspaces, launches the app {app.launches} times at each size, and takes about fifty minutes. <code class={code}>--quick</code> runs a shorter pass.
+        </p>
+
+        <h3 class="mt-10 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the database</h3>
         <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
           The <a href="/cli" class={link}>Pikos CLI</a> builds the same half-million-page workspace and times the calls the app makes to it.
         </p>
         <pre class="mt-4 overflow-x-auto rounded-lg bg-neutral-100 p-4 text-sm leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{benchCommands}</pre>
         <p class="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
           <code class={code}>seed</code> writes half a million pages into a new file, which took about four minutes on the laptop above. It won't touch the workspace your app uses, so your notes are safe. <code class={code}>bench</code> prints the median and the 95th percentile for each action, and <code class={code}>--json</code> adds the 99th. When you're done, delete <code class={code}>~/pikos-bench.db</code> and the two files beside it that end in <code class={code}>-wal</code> and <code class={code}>-shm</code>.
-        </p>
-
-        <h3 class="mt-10 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the app</h3>
-        <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          The numbers above come from a build of Pikos with a timer compiled in. On a Mac, build it from <a href="https://github.com/Pikos-App/pikos" class={link}>source</a> and run <code class={code}>node apps/marketing/scripts/benchmark-app.mjs</code>. It builds the workspaces, launches the app {app.launches} times at each size, and takes about fifty minutes. <code class={code}>--quick</code> runs a shorter pass.
         </p>
 
         <p class="mt-8 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
