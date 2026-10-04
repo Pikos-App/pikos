@@ -118,6 +118,15 @@ else
   bash "$ROOT/scripts/check-marketing-build.sh" || exit 1
 fi
 
+# The formal benchmark /speed publishes has to pass PKOS-0133 and have measured this code.
+# SKIP_SPEED="<why>" lets a release that changes no product code through and records why.
+if [ -n "${SKIP_SPEED:-}" ]; then
+  RECORD+=("Bypass: SKIP_SPEED, the published benchmark wasn't checked: ${SKIP_SPEED}")
+else
+  SPEED_LINE=$(node "$ROOT/scripts/check-speed-gate.mjs") || exit 1
+  RECORD+=("$SPEED_LINE")
+fi
+
 # ── Release-notes sign-off ───────────────────────────────────────────────────
 # Tagging triggers the publish pipeline and is irreversible, so require an
 # explicit human review of BOTH notes surfaces before proceeding.
