@@ -24,7 +24,8 @@
 // pnpm adopts the folder into the workspace and rewrites the lockfile.
 //
 // Runs at the release candidate, where the release is cut, with its source committed: it
-// edits source files in place during the e2e stage and puts each one back.
+// edits source files in place, in the desktop crate's cargo-mutants stage and the e2e stage,
+// and puts each one back.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -75,10 +76,15 @@ const STRYKER_IGNORE = [
   "coverage",
 ];
 
-/** Rust roots: the crates workspace, and the desktop crate, which it excludes. */
+/** Rust roots: the crates workspace, and the desktop crate, which it excludes.
+ *
+ *  The desktop crate is mutated in place, one mutant at a time. cargo-mutants 27 tests a copy
+ *  of the crate and makes its `[dependencies]` paths absolute but not its `[dev-dependencies]`,
+ *  so `pikos-db`, declared in both (the dev one adds `test-support`), points two ways in the
+ *  copy and the unmutated build fails. Declaring it once would ship the test fixtures. */
 const RUST_ROOTS = [
-  { dir: ".", prefix: "crates/" },
-  { dir: "apps/desktop/src-tauri", prefix: "apps/desktop/src-tauri/" },
+  { dir: ".", inPlace: false, prefix: "crates/" },
+  { dir: "apps/desktop/src-tauri", inPlace: true, prefix: "apps/desktop/src-tauri/" },
 ];
 
 const WORK = mkdtempSync(join(tmpdir(), "qa-mutants-"));
@@ -168,8 +174,8 @@ function ensureStryker() {
 }
 
 /** One Stryker run per package over its changed lines, its report kept in `reports` so a
- *  later run can `--reuse-unit` it. Returns every mutant, each with the text it replaces,
- *  so the e2e stage can apply it. */
+ *  later run can `--reuse-unit` it; a package with no report runs anyway. Returns every
+ *  mutant, each with the text it replaces, so the e2e stage can apply it. */
 function strykerStage(ranges, reports, reuse) {
   const mutants = [];
   for (const pkg of TS_PACKAGES) {
@@ -179,9 +185,7 @@ function strykerStage(ranges, reports, reuse) {
     if (mutate.length === 0) continue;
     const report = join(reports, `${pkg.replace("/", "-")}.json`);
     const config = join(WORK, `${pkg.replace("/", "-")}.stryker.json`);
-    if (reuse) {
-      if (!existsSync(report)) throw new Error(`no unit-stage report to reuse at ${report}`);
-    } else {
+    if (!reuse || !existsSync(report)) {
       writeFileSync(
         config,
         JSON.stringify({
@@ -222,7 +226,9 @@ function strykerStage(ranges, reports, reuse) {
 }
 
 /** cargo-mutants over the diff, per Rust root. A missed mutant keeps its patch for the
- *  e2e stage. */
+ *  e2e stage. `--reuse-unit` reruns a root whose report is missing or whose unmutated
+ *  build failed, and a run whose unmutated build fails stops: its report holds no mutants,
+ *  so carrying on would read as a crate with nothing to test. */
 function cargoStage(range, reports, reuse) {
   const mutants = [];
   for (const root of RUST_ROOTS) {
@@ -236,14 +242,24 @@ function cargoStage(range, reports, reuse) {
     const diffFile = join(WORK, `${root.dir.replaceAll("/", "-")}.diff`);
     const out = join(reports, `${root.dir === "." ? "crates" : "src-tauri"}-mutants`);
     const outcomes = join(out, "mutants.out/outcomes.json");
-    if (!reuse) {
+    const baselineFailed = () =>
+      JSON.parse(readFileSync(outcomes, "utf8")).outcomes.some(
+        (o) => o.scenario === "Baseline" && o.summary !== "Success"
+      );
+    if (!reuse || !existsSync(outcomes) || baselineFailed()) {
       writeFileSync(diffFile, `${rel}\n`);
       console.log(`\ncargo-mutants: ${root.prefix}`);
-      const args = ["mutants", "--in-diff", diffFile, "--output", out, "--jobs", "2"];
+      const args = ["mutants", "--in-diff", diffFile, "--output", out];
+      args.push(...(root.inPlace ? ["--in-place"] : ["--jobs", "2"]));
       if (root.dir === ".") args.push("--workspace");
       const run = spawnSync("cargo", args, { cwd: join(ROOT, root.dir), stdio: "inherit" });
       if (!existsSync(outcomes) && run.status !== 0) {
         throw new Error(`cargo-mutants failed in ${root.dir}`);
+      }
+      if (existsSync(outcomes) && baselineFailed()) {
+        throw new Error(
+          `cargo-mutants couldn't build ${root.dir} unmutated: ${join(out, "mutants.out/log/baseline.log")}`
+        );
       }
     }
     if (!existsSync(outcomes)) continue;
