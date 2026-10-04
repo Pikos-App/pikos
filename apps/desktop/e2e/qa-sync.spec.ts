@@ -728,9 +728,12 @@ appTest(
 /** Page forward until a block of this name shows, from the current week. */
 async function findBlock(app: Page, name: RegExp) {
   const block = app.getByRole("button", { name });
-  for (let i = 0; i < 6 && (await block.count()) === 0; i++) {
+  const week = app.getByRole("region", { name: "Week calendar" });
+  for (let i = 0; i < 6; i++) {
+    // A week counted before its pages land reads as empty and pages past the block.
+    await expect(week).toHaveAttribute("aria-busy", "false");
+    if ((await block.count()) > 0) break;
     await app.getByRole("button", { name: "Next week" }).click();
-    await app.waitForTimeout(400);
   }
   await expect(block).toHaveCount(1);
   return block;
