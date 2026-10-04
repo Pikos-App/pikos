@@ -125,6 +125,27 @@ function now(): string {
 
 /** Best-effort plain-text extraction from a Tiptap JSON string. Mirrors the
  *  Rust adapter's contentText denorm so the mock's FTS surface matches prod. */
+const SEED_WORDS = ["meeting", "draft", "review", "garden", "budget", "travel", "notes", "design"];
+
+/** An editor document of about `words` words in paragraphs of sixty, varied enough that text
+ *  shaping can't serve one repeated run from cache, and its plain text for search. */
+function seededDocument(words: number, page: number): { content: string; text: string } {
+  const paragraphs: string[] = [];
+  for (let at = 0; at < words; at += 60) {
+    const count = Math.min(60, words - at);
+    paragraphs.push(
+      Array.from({ length: count }, (_, k) => SEED_WORDS[(at + k + page) % SEED_WORDS.length]).join(
+        " "
+      )
+    );
+  }
+  const doc = {
+    content: paragraphs.map((text) => ({ content: [{ text, type: "text" }], type: "paragraph" })),
+    type: "doc",
+  };
+  return { content: JSON.stringify(doc), text: paragraphs.join("\n") };
+}
+
 function deriveContentText(content: string): string {
   try {
     return extractText(JSON.parse(content));
@@ -358,12 +379,15 @@ export class MockStorageAdapter implements StorageAdapter {
     for (let i = 0; i < count; i += 1) {
       const done = completedEvery > 0 && i % completedEvery === 0;
       const body = opts.bodyWords
-        ? `${"seeded body text ".repeat(Math.ceil(opts.bodyWords / 3))}${i}`
-        : `Seeded body ${i} with a little text so the row has something to measure.`;
+        ? seededDocument(opts.bodyWords, i)
+        : {
+            content: `Seeded body ${i} with a little text so the row has something to measure.`,
+            text: "",
+          };
       const page: Page = {
         completedAt: done ? stamp : null,
-        content: body,
-        contentText: body,
+        content: body.content,
+        contentText: body.text || body.content,
         createdAt: stamp,
         detachIsReversible: false,
         folderId: null,

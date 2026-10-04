@@ -11,16 +11,8 @@ import { expect, test } from "@playwright/test";
  * The specific worry is that the editor renders the whole ProseMirror document with no windowing,
  * so a long page degrades typing rather than only loading. These numbers are how we find out.
  *
- * UNFINISHED as of 2026-09-18 — it hung and produced no output. Fifteen minutes across four sizes
- * with nothing printed, which is one of two things and nobody has separated them yet:
- *
- *   - the page-row selector below never matches, so each test sits on its 120 s timeout; or
- *   - opening a 200,000-word document in ProseMirror genuinely takes that long, which would be
- *     the finding this spec exists to produce.
- *
- * Diagnose before trusting anything it prints: run it with only BODY_SIZES = [50] and `--headed`.
- * If fifty words is instant, the selector is fine and the large sizes are a real result. If fifty
- * words also hangs, the selector is wrong and no size number here means anything.
+ * Each size checks the editor holds its words before trusting the time: a body the editor can't
+ * parse opens as an empty page, and the first numbers this spec printed timed exactly that.
  *
  * Reports rather than asserts. Set budgets from what it prints.
  *
@@ -29,7 +21,7 @@ import { expect, test } from "@playwright/test";
 
 // Words per page. A note, a long article, a book chapter, and something past what anyone types by
 // hand — the last is there to find the ceiling, not to represent a real document.
-const BODY_SIZES = [50] as const;
+const BODY_SIZES = [50, 2_000, 20_000, 200_000] as const;
 
 interface Row {
   words: number;
@@ -45,10 +37,15 @@ for (const words of BODY_SIZES) {
     await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible({ timeout: 120_000 });
 
     const openStart = Date.now();
-    await page.getByRole("button", { name: /Seeded page 1\b/ }).first().click();
-    const editor = page.getByRole("textbox", { name: "Page content" });
+    await page.getByLabel("Seeded page 1", { exact: true }).click();
+    // Drawn once the editor holds this page, which it marks; a box with nothing in it isn't open.
+    const editor = page.locator('[aria-label="Page content"][data-page-id="seed-1"]');
     await editor.waitFor({ state: "visible", timeout: 120_000 });
     const openMs = Date.now() - openStart;
+    const held = await editor.evaluate((el) =>
+      [...el.querySelectorAll("p")].reduce((n, p) => n + (p.textContent?.split(" ").length ?? 0), 0)
+    );
+    expect(held).toBeGreaterThanOrEqual(words);
 
     await editor.click();
 
@@ -63,7 +60,9 @@ for (const words of BODY_SIZES) {
     const keystrokeMs = samples[Math.floor(samples.length / 2)] ?? -1;
 
     results.push({ keystrokeMs, openMs, words });
-    console.log(`  ${String(words).padStart(7)} words | open ${openMs} ms | keystroke ${keystrokeMs} ms`);
+    console.log(
+      `  ${String(words).padStart(7)} words | open ${openMs} ms | keystroke ${keystrokeMs} ms`
+    );
   });
 }
 
