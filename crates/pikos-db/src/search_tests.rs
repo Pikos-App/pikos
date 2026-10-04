@@ -382,3 +382,29 @@ async fn the_index_drives_the_join_to_pages_without_statistics() {
     let first = &plan.first().unwrap().3;
     assert!(first.starts_with("SCAN pages_fts"), "{plan:?}");
 }
+
+/// The index updates only when an indexed column is written, so the trigger names them. A column
+/// added to the index and not to the trigger would stop updating search for edits to it alone.
+#[tokio::test]
+async fn the_index_update_trigger_names_every_indexed_column() {
+    let pool = test_pool().await;
+    let mut indexed: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('pages_fts')")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let sql: String =
+        sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE name = 'pages_fts_update'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let list = sql
+        .split("UPDATE OF")
+        .nth(1)
+        .and_then(|rest| rest.split(" ON pages").next())
+        .expect("the trigger is narrowed to UPDATE OF its columns");
+    let mut named: Vec<String> = list.split(',').map(|c| c.trim().to_string()).collect();
+    indexed.sort();
+    named.sort();
+    assert_eq!(named, indexed);
+}
