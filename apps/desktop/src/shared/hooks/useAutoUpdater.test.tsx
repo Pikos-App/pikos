@@ -34,6 +34,7 @@ beforeEach(() => {
   vi.stubEnv("VITE_TEST_MODE", "false");
   vi.stubEnv("DEV", false);
   vi.stubGlobal("__PIKOS_BENCH__", false);
+  vi.stubGlobal("__PIKOS_STAGING__", false);
   localStorage.clear();
   // Disable auto-check-on-mount so each test controls which mocked check()
   // call its explicit checkForUpdates() consumes.
@@ -51,6 +52,24 @@ afterEach(() => {
 describe("bench build", () => {
   it("never asks GitHub for the update manifest", async () => {
     vi.stubGlobal("__PIKOS_BENCH__", true);
+    check.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useAutoUpdater(), { wrapper });
+
+    await act(async () => {
+      result.current.checkForUpdates();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(check).not.toHaveBeenCalled();
+    expect(result.current.status.state).toBe("idle");
+  });
+});
+
+describe("staging build", () => {
+  it("never checks for an update", async () => {
+    vi.stubGlobal("__PIKOS_STAGING__", true);
     check.mockResolvedValue(null);
 
     const { result } = renderHook(() => useAutoUpdater(), { wrapper });

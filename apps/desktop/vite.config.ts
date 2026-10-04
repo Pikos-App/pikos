@@ -14,6 +14,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
     // A literal, unlike `import.meta.env`, so a normal build drops the benchmark's code entirely.
     __PIKOS_BENCH__: JSON.stringify(process.env["VITE_BENCH"] === "true"),
+    __PIKOS_STAGING__: JSON.stringify(process.env["VITE_STAGING"] === "true"),
   },
   // The compiler is a separate plugin, not an option on react(). plugin-react v6
   // dropped its `babel` key, and an unknown key there is ignored rather than

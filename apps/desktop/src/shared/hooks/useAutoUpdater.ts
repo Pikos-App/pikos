@@ -42,6 +42,8 @@ export function useAutoUpdater(): AutoUpdater {
     if (import.meta.env.DEV) return;
     // The bench relaunches hundreds of times, and GitHub counts each check as a download of the manifest.
     if (__PIKOS_BENCH__) return;
+    // An update is the production app, and installing it would replace staging with it.
+    if (__PIKOS_STAGING__) return;
 
     log.info("Checking for updates");
     setStatus({ state: "checking" });
