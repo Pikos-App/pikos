@@ -20,7 +20,6 @@ export type SeedScenario =
   | "calendar-edges"
   | "notifications"
   | "realistic"
-  | "stress"
   | "synced"
   | "tutorial";
 
@@ -39,12 +38,11 @@ export interface SeedContext {
 export type SeedLoader = (ctx: SeedContext) => Promise<void>;
 
 // The dev-only loaders live behind a static `import.meta.env.DEV` so Rollup
-// drops their `import()` calls — and therefore their chunks (stress alone
-// carries faker at ~400 KB) — from a user build. They are unreachable there
-// anyway: launchSeedLoader refuses dev-only names in a non-dev build, and the
-// only other caller is the developer menu, which is itself DEV-gated
-// (SettingsNav/SettingsPage). The stubs below keep every key present so
-// `isSeedName`'s `in` check stays truthful in both builds.
+// drops their `import()` calls, and therefore their chunks, from a user build.
+// They are unreachable there anyway: launchSeedLoader refuses dev-only names in
+// a non-dev build, and the only other caller is the developer menu, which is
+// itself DEV-gated (SettingsNav/SettingsPage). The stubs below keep every key
+// present so `isSeedName`'s `in` check stays truthful in both builds.
 const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.meta.env.DEV
   ? {
       calendar: async ({ adapter }) => {
@@ -75,10 +73,6 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedRealistic } = await import("./realistic");
         await seedRealistic(adapter);
       },
-      stress: async ({ adapter }) => {
-        const { seedStress } = await import("./stress");
-        await seedStress(adapter);
-      },
     }
   : undefined;
 
@@ -94,7 +88,6 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   marketing: DEV_LOADERS?.marketing ?? unavailable,
   notifications: DEV_LOADERS?.notifications ?? unavailable,
   realistic: DEV_LOADERS?.realistic ?? unavailable,
-  stress: DEV_LOADERS?.stress ?? unavailable,
   synced: async ({ adapter, phase }) => {
     // Believable native data + a mock external-calendar sync on top, so the
     // synced treatment can be spot-checked alongside normal pages. Only the
@@ -148,7 +141,6 @@ const LAUNCH_SEEDS: Partial<Record<SeedName, "any-build" | "dev-only">> = {
   demo: "dev-only",
   marketing: "dev-only",
   realistic: "dev-only",
-  stress: "dev-only",
   synced: "any-build",
   tutorial: "any-build",
 };
