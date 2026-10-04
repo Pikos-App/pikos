@@ -669,20 +669,41 @@ async fn update_due_rejects_freeform_without_touching_the_row() {
     }
 }
 
+/// Each flag that moves a schedule, with a value that would move it.
+const SCHEDULE_FLAGS: [[&str; 2]; 3] = [
+    ["--due", "2026-09-02T10:00:00"],
+    ["--all-day", "2026-09-02"],
+    ["--end", "2026-09-01T18:00:00"],
+];
+
 #[tokio::test]
-async fn update_due_refuses_on_a_synced_page() {
+async fn schedule_flags_refuse_on_a_synced_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let ids = seed(dbs, vec![base_page("Standup")]).await;
+    // A schedule to hold still: --end on an unscheduled page fails validation, not the lock.
+    assert!(cli(
+        dbs,
+        &["update", &ids[0], "--due", "2026-09-01T14:00:00", "--json"]
+    )
+    .status
+    .success());
     mark_synced(dbs, &ids[0], "active").await;
 
-    let out = cli(dbs, &["update", &ids[0], "--due", "2026-09-01", "--json"]);
-    assert_eq!(code(&out), 4);
-    assert_eq!(scheduled_start(dbs, &ids[0]).await, None);
+    for [flag, value] in SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &ids[0], flag, value, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &ids[0]).await.as_deref(),
+            Some("2026-09-01T14:00:00"),
+            "{flag} moved the start"
+        );
+        assert_eq!(scheduled_end(dbs, &ids[0]).await, None, "{flag} set an end");
+    }
 }
 
 #[tokio::test]
-async fn update_due_refuses_on_a_recurring_page() {
+async fn schedule_flags_refuse_on_a_recurring_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
@@ -699,18 +720,33 @@ async fn update_due_refuses_on_a_recurring_page() {
     )
     .await;
 
-    let out = cli(dbs, &["update", &id, "--due", "2026-09-01", "--json"]);
-    assert_eq!(code(&out), 4);
-    assert_eq!(scheduled_start(dbs, &id).await, head, "head unmoved");
-    assert_eq!(
-        scalar::<String>(
-            dbs,
-            &format!("SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'")
-        )
-        .await,
-        rule_base,
-        "rule base unmoved"
-    );
+    let end = scheduled_end(dbs, &id).await;
+
+    for [flag, value] in SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &id, flag, value, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &id).await,
+            head,
+            "{flag} moved the head"
+        );
+        assert_eq!(
+            scheduled_end(dbs, &id).await,
+            end,
+            "{flag} moved the head's end"
+        );
+        assert_eq!(
+            scalar::<String>(
+                dbs,
+                &format!(
+                    "SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'"
+                )
+            )
+            .await,
+            rule_base,
+            "{flag} moved the rule's base"
+        );
+    }
 }
 
 // ─── workspace targeting + migration consent ─────────────────────────────────
