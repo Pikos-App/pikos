@@ -106,6 +106,9 @@ export function appCorpus(pikos, dir, pages, { reuse = false } = {}) {
     console.log(`migrating the ${pages}-page workspace`);
     // Any command that opens the workspace migrates it; this one reads nothing and exits non-zero.
     spawnSync(pikos, ["--db", db, "--migrate", "read", "00000000-0000-0000-0000-000000000000"]);
+    // A launch copies the file alone, so the migration can't stay in the write-ahead log beside it:
+    // a copy without it migrates and snapshots the whole workspace on every launch.
+    run("sqlite3", [db, "PRAGMA wal_checkpoint(TRUNCATE);"]);
   }
   writeFileSync(schemaFile, schema);
   return db;
