@@ -68,7 +68,11 @@ const GATE_RATIO = 1.5;
 const GATE_FRAMES_MS = 2 * (1000 / 60);
 /** What each launch reports, keyed as the speed page reads them. */
 const METRICS = {
+  captureCommit: (r) => r.captureCommitMs,
+  captureOpen: (r) => r.captureOpenMs,
   complete: (r) => r.completeMs,
+  ipcHop: (r) => r.ipcHopMs,
+  ipcWindow: (r) => r.ipcWindowMs,
   openDirect: (r) => r.openDirectMs,
   openPage: (r) => r.openHoveredMs,
   rename: (r) => r.renameMs,

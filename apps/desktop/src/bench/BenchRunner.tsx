@@ -1,8 +1,10 @@
+import { getLocalTimezone, type ViewKey } from "@pikos/core";
 import { addDays, format, parseISO, subDays } from "date-fns";
 import { useEffect, useRef } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import {
   benchFinish,
@@ -16,9 +18,11 @@ import {
 
 /** Samples per launch for each action, unless the script asks for a fixed number. */
 const COUNTS = {
+  captures: 10,
   coldFolders: 10,
   completes: 10,
   directOpens: 20,
+  ipcCalls: 30,
   listOpens: 20,
   renames: 10,
   scrollSteps: 20,
@@ -138,9 +142,12 @@ function rowInView(list: HTMLElement) {
 export default function BenchRunner() {
   const ui = useUI();
   const uiRef = useRef(ui);
+  const { storage } = useWorkspace();
+  const storageRef = useRef(storage);
   const started = useRef(false);
   useEffect(() => {
     uiRef.current = ui;
+    storageRef.current = storage;
   });
 
   useEffect(() => {
@@ -382,6 +389,70 @@ export default function BenchRunner() {
           results["weekWarmMs"] = back;
           uiRef.current.setRightPanel("editor");
           await nextPaint();
+        }
+
+        if (wants("capture")) {
+          // A thought into a page, as the menu's New Page does it: the shortcut until the title
+          // takes typing, then Shift+Enter until the new page is open in the editor.
+          const opened: number[] = [];
+          const committed: number[] = [];
+          let cursor: string | null = null;
+          for (let i = 0; i < n("captures"); i++) {
+            await sleep(PAUSE_MS);
+            let start = performance.now();
+            uiRef.current.setOpenDialog("quick-add");
+            const field = () =>
+              document.querySelector<HTMLInputElement>('input[aria-label="Quick add input"]');
+            await whenShown(
+              () => field() != null && document.activeElement === field(),
+              "quick add"
+            );
+            await nextPaint();
+            opened.push(performance.now() - start);
+            const title = `captured thought ${i}`;
+            typeInto(field()!, title);
+            start = performance.now();
+            field()!.dispatchEvent(
+              new KeyboardEvent("keydown", { bubbles: true, key: "Enter", shiftKey: true })
+            );
+            await whenShown(
+              () =>
+                document.querySelector('[role="button"][aria-label="Page title"]')?.textContent ===
+                title,
+              `the new page ${title}`
+            );
+            await nextPaint();
+            committed.push(performance.now() - start);
+            cursor = document.activeElement?.getAttribute("aria-label") ?? null;
+          }
+          results["captureOpenMs"] = opened;
+          results["captureCommitMs"] = committed;
+          results["captureCursor"] = cursor;
+        }
+
+        if (wants("ipc") && storageRef.current) {
+          // The trip to the database and back as the app makes it: the call, the crossing, and
+          // the parse of what comes back. The change counter is the smallest reply there is; a
+          // window of the Inbox is the largest the app asks for while you work.
+          const adapter = storageRef.current;
+          const inbox: ViewKey = {
+            dates: null,
+            scope: { kind: "inbox" },
+            sort: "manual",
+            zone: getLocalTimezone(),
+          };
+          const hop: number[] = [];
+          const windowed: number[] = [];
+          for (let i = 0; i < n("ipcCalls"); i++) {
+            let start = performance.now();
+            await adapter.changeState();
+            hop.push(performance.now() - start);
+            start = performance.now();
+            await adapter.listView(inbox, null, 100);
+            windowed.push(performance.now() - start);
+          }
+          results["ipcHopMs"] = hop;
+          results["ipcWindowMs"] = windowed;
         }
 
         results["memory"] = await benchMemory();
