@@ -1,7 +1,5 @@
 /** Milliseconds: the median run, the time 99 in 100 runs beat, and the slowest; then how many runs. */
 export type Op = { ms: number; p99: number; max: number; runs: number };
-/** `seeded` is the size the workspace was built at; `pages` is what it held when timed. */
-export type Corpus = { seeded: number; pages: number; ops: Record<string, Op> };
 
 /** One measured action across every workspace size, `null` where a size produced no number. */
 export type Series = {

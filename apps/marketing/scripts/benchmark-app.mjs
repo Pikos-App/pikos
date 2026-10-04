@@ -12,7 +12,7 @@
 // Builds the desktop app with the in-app benchmark compiled in (a separate identity, so it never
 // reads or writes your own app's settings), then launches it against each scratch workspace. Each
 // launch times start-up, opening pages, searching and switching views in the real window, writes
-// what it saw, and quits. benchmark.mjs times the database alone.
+// what it saw, and quits. The CLI's `pikos stress bench` times the database alone.
 //
 // Every launch starts from an untouched copy of its workspace, sizes take turns so a slow hour
 // lands on all of them, and the first round is a discarded warm-up. Each size is then compared

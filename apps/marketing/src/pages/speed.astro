@@ -3,9 +3,8 @@ import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 import SpeedBars from "../components/SpeedBars.astro";
 import SpeedTable from "../components/SpeedTable.astro";
-import { type Corpus, type Op, type Series, fmtPages, fmtTime } from "../lib/speed";
+import { type Op, type Series, fmtPages, fmtTime } from "../lib/speed";
 import app from "../data/app.json";
-import bench from "../data/benchmark.json";
 
 const title = "Pikos speed: fast with 50 pages, fast with 500,000";
 const description =
@@ -39,30 +38,12 @@ const headline = [
 ];
 const yearsAtTenADay = Math.round(largestPages / 10 / 365);
 
-// ── The database underneath, for engineers ──────────────────────────────────────────────────
-const corpora = bench.corpora as Corpus[];
-const dbSeries = (op: string, label: string, button: string, heading: string): Series => ({
-  key: op,
-  label,
-  button,
-  heading,
-  values: corpora.map((c) => c.ops[op] ?? null),
-});
-const dbActions: Series[] = [
-  dbSeries("search a rare word", "Search for a word", "Search", "Time to search for a word"),
-  dbSeries("read page", "Load a page", "Load", "Time to load a page"),
-  dbSeries("update page", "Save an edit", "Save", "Time to save an edit"),
-  dbSeries("create page", "Create a page", "Create", "Time to create a page"),
-  dbSeries("search one word", "Search for a very common word", "Common word", "Time to find a common word"),
-];
-const commonAtLargest = corpora.at(-1)?.ops["search one word"]?.ms ?? 0;
-
 const measuredOn = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
 
 const benchCommands = `brew install pikos-app/tap/pikos-cli
 pikos stress seed --db ~/pikos-bench.db --pages 500000
-pikos stress bench --db ~/pikos-bench.db --runs ${bench.runs}`;
+pikos stress bench --db ~/pikos-bench.db --runs 20`;
 const code = "rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800";
 const link = "font-medium text-primary-500 hover:underline dark:text-primary-400";
 const bullet = "flex items-start gap-2";
@@ -144,41 +125,30 @@ const bullet = "flex items-start gap-2";
       </ul>
     </section>
 
-    <!-- Under the hood -->
+    <!-- Run it yourself -->
     <section class="mt-24 border-t border-neutral-200 pt-20 dark:border-neutral-800">
-      <p class="text-sm font-medium text-neutral-400 dark:text-neutral-500">For engineers and the curious</p>
-      <h2 class="mt-2 text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Under the hood</h2>
+      <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Curious? Run it yourself</h2>
       <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-        The database calls underneath the app, timed on their own. Pikos keeps your workspace in one SQLite file, and these are the queries it runs against it. The numbers above include getting the result onto the screen. These don't, which is why they're smaller.
+        Your numbers will depend on your machine. What should hold anywhere is the shape: about as fast with half a million pages as with two thousand.
       </p>
 
-      <div class="mt-8 rounded-xl border border-neutral-200 bg-white p-6 sm:p-8 dark:border-neutral-800 dark:bg-neutral-900">
-        <SpeedBars sizes={corpora.map((c) => c.seeded)} series={dbActions} />
-      </div>
-
-      <p class="mt-10 mb-6 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
-        Each action ran up to {bench.runs} times. Each load and save picked a different page at random, so the computer couldn't answer from something it had just read.
-      </p>
-      <SpeedTable sizes={corpora.map((c) => c.seeded)} series={dbActions} />
-
-      <p class="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <strong class="font-medium text-neutral-900 dark:text-neutral-50">A very common word takes longer.</strong> Ranking has to weigh every match, so when a word is in nearly every page, Pikos ranks the newest few thousand matches with title matches first. It's {fmtTime(commonAtLargest)} at {fmtPages(corpora.at(-1)?.seeded ?? 0)} pages{commonAtLargest < 100 ? ", still under a tenth of a second" : ""}.
-      </p>
-      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        Measured on {measuredOn(bench.measured)} on the same laptop, {bench.build.version} from commit <code class={code}>{bench.build.commit}</code>, as a release build, after one warm-up run of each action.
-      </p>
-
-      <div class="mt-10 rounded-xl border border-neutral-200 bg-white px-6 py-8 sm:px-8 dark:border-neutral-800 dark:bg-neutral-900">
-        <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Run it on your own machine</h3>
+      <div class="mt-8 rounded-xl border border-neutral-200 bg-white px-6 py-8 sm:px-8 dark:border-neutral-800 dark:bg-neutral-900">
+        <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the database</h3>
         <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          Curious how it does on your computer? The <a href="/cli" class={link}>Pikos CLI</a> builds the same workspace and times the database calls.
+          The <a href="/cli" class={link}>Pikos CLI</a> builds the same half-million-page workspace and times the calls the app makes to it.
         </p>
         <pre class="mt-4 overflow-x-auto rounded-lg bg-neutral-100 p-4 text-sm leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{benchCommands}</pre>
         <p class="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
           <code class={code}>seed</code> writes half a million pages into a new file, which took about four minutes on the laptop above. It won't touch the workspace your app uses, so your notes are safe. <code class={code}>bench</code> prints the median and the 95th percentile for each action, and <code class={code}>--json</code> adds the 99th. When you're done, delete <code class={code}>~/pikos-bench.db</code> and the two files beside it that end in <code class={code}>-wal</code> and <code class={code}>-shm</code>.
         </p>
+
+        <h3 class="mt-10 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the app</h3>
         <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          The app numbers come from a build with a timer compiled in. To make them yourself, build Pikos from <a href="https://github.com/Pikos-App/pikos" class={link}>source</a> and run <code class={code}>node apps/marketing/scripts/benchmark-app.mjs</code>. Your numbers will depend on your machine. What should hold anywhere is the shape: about as fast with half a million pages as with two thousand. If it isn't on yours, <a href="/feedback" class={link}>reach out</a>.
+          The numbers above come from a build of Pikos with a timer compiled in. On a Mac, build it from <a href="https://github.com/Pikos-App/pikos" class={link}>source</a> and run <code class={code}>node apps/marketing/scripts/benchmark-app.mjs</code>. It builds the workspaces, launches the app {app.launches} times at each size, and takes about fifty minutes. <code class={code}>--quick</code> runs a shorter pass.
+        </p>
+
+        <p class="mt-8 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          Then <a href="/feedback" class={link}>let me know how it goes</a>.
         </p>
       </div>
     </section>
