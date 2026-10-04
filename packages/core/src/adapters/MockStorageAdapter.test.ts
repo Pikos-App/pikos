@@ -725,6 +725,8 @@ describe("completeRecurringPage", () => {
     expect(result.clone.tags).toEqual(["work"]);
     expect(result.clone.completedAt).toBeDefined();
     expect(result.clone.id).not.toBe(head.id);
+    expect(result.clone.seriesId).toBe(head.id);
+    expect(result.head.seriesId ?? null).toBeNull();
 
     // Head recomputes to the next Monday.
     expect(result.head.id).toBe(head.id);
@@ -2162,5 +2164,19 @@ describe("createFocusSession", () => {
     });
     adapter.clear();
     expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+});
+
+describe("the change counter", () => {
+  it("moves when a page is trashed and when it comes back, as the writer's row update does", async () => {
+    const page = await createTestPage({ title: "Doomed" });
+    const before = (await adapter.changeState()).seq;
+
+    await adapter.softDeletePage(page.id);
+    const trashed = (await adapter.changeState()).seq;
+    expect(trashed).toBeGreaterThan(before);
+
+    await adapter.restorePage(page.id);
+    expect((await adapter.changeState()).seq).toBeGreaterThan(trashed);
   });
 });

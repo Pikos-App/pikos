@@ -27,8 +27,10 @@ export interface UseCalendarBlockPopoverResult {
   /** Cancel a pending single-click timer. Call from checkbox + edge-resize
    * presses so the block's click doesn't also open the popover. */
   suppressPendingClick: () => void;
-  /** Mark a drag gesture as in progress. The next click event will be
-   * swallowed (no popover open, no double-click check). */
+  /** Mark a drag gesture as in progress. A click that ends it on the block is
+   * swallowed (no popover open, no double-click check). The mark clears when the
+   * pointer is released, not on that click: a gesture released off the block
+   * sends the block no click, and the mark then ate the user's next real one. */
   markDragging: () => void;
 }
 
@@ -88,12 +90,7 @@ export function useCalendarBlockPopover(
     // suppresses it so the popover opens only via the CLICK_DELAY timer below,
     // not synchronously on the first click of a double-click.
     e.preventDefault();
-    if (draggingRef.current) {
-      setTimeout(() => {
-        draggingRef.current = false;
-      }, 0);
-      return;
-    }
+    if (draggingRef.current) return;
     if (clickTimerRef.current !== null) {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
@@ -116,6 +113,19 @@ export function useCalendarBlockPopover(
 
   function markDragging() {
     draggingRef.current = true;
+    const gesture = new AbortController();
+    // A timeout, so the click the release dispatches still finds the mark.
+    const release = () => {
+      // Stryker disable next-line CallExpression: left attached, the listener only clears an already-clear mark
+      gesture.abort();
+      setTimeout(() => {
+        draggingRef.current = false;
+      }, 0);
+    };
+    // Stryker disable next-line ObjectLiteral,BooleanLiteral: nothing stops a pointerup before the window today
+    const options = { capture: true, signal: gesture.signal };
+    window.addEventListener("pointerup", release, options);
+    window.addEventListener("pointercancel", release, options);
   }
 
   return {

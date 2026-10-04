@@ -39,6 +39,8 @@ export function useKeyboardShortcut(
   const stopPropagation = opts?.stopPropagation;
   const label = opts?.label;
   const group = opts?.group;
+  // Stryker disable next-line OptionalChaining: the label and group reads above already need the options
+  const inPalette = opts?.inPalette;
 
   useEffect(() => {
     const id = `shortcut-${crypto.randomUUID()}`;
@@ -57,6 +59,8 @@ export function useKeyboardShortcut(
       // the second half is an implementation detail, not a command.
       ...(label !== undefined && { label }),
       ...(group !== undefined && { group }),
+      // Stryker disable next-line ConditionalExpression: spreading an undefined inPalette equals leaving it out
+      ...(inPalette !== undefined && { inPalette }),
     };
 
     if (second !== undefined) {
@@ -108,7 +112,18 @@ export function useKeyboardShortcut(
     // ── Single binding ─────────────────────────────────────────────────────
     Keyboard.register({ combo: first, handler: stableHandler, id, ...baseOpts });
     return () => Keyboard.unregister(id);
-  }, [first, second, scope, preventDefault, allowInInputs, repeat, stopPropagation, label, group]);
+  }, [
+    first,
+    second,
+    scope,
+    preventDefault,
+    allowInInputs,
+    repeat,
+    stopPropagation,
+    label,
+    group,
+    inPalette,
+  ]);
 }
 
 /**

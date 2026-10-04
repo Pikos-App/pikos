@@ -8,6 +8,7 @@
 import { addDays, parseISO, startOfDay } from "date-fns";
 
 import type { PageSummary } from "../types";
+import { formatDateOnly, getLocalTimezone } from "../utils/dates";
 import { resolveSyncedInstant } from "../utils/syncedTime";
 import { isAllDayPage } from "./allDayLayout";
 import {
@@ -308,6 +309,83 @@ const CHIP_COLLISION_GAP_PX = 20;
  * - On middle days: renders full grid height (isContinuationBefore + isContinuationAfter)
  * - On the end day: renders from top of grid to event end (isContinuationBefore)
  */
+/**
+ * Pages with a timed schedule that overlaps `[rangeStart, rangeEnd)`. Multi-day timed events are
+ * NOT promoted to the all-day row: they render as one segment per day they touch (continuation
+ * flags on each segment drive the radius and label rules in PageBlock). A week view filters with
+ * this once and hands each day the result, rather than every day walking the whole workspace.
+ */
+export function timedPagesInRange(
+  pages: PageSummary[],
+  rangeStart: Date,
+  rangeEnd: Date
+): PageSummary[] {
+  checkZone();
+  return pages.filter((page) => {
+    if (!page.scheduledStart) return false;
+    if (isAllDayPage(page.scheduledStart)) return false;
+    try {
+      // Use the same instant resolution as positioning so a synced event shifted
+      // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
+      const start = resolveBlockInstant(page, page.scheduledStart);
+      const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
+      return start < rangeEnd && end > rangeStart;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** `timedPagesInRange` for each of `days` in one pass: each page's instants resolve once, not
+ *  once per day. */
+export function timedPagesByDay(pages: PageSummary[], days: Date[]): PageSummary[][] {
+  checkZone();
+  const bounds = days.map((day) => {
+    const start = startOfDay(day);
+    return { end: addDays(start, 1), start };
+  });
+  const byDay: PageSummary[][] = days.map(() => []);
+  const first = bounds[0];
+  const last = bounds[bounds.length - 1];
+  if (!first || !last) return byDay;
+  // Dates compare as strings, so a page dated well clear of the days skips the parse. A day of
+  // slack each side covers a synced event whose zone moves it across midnight.
+  const before = formatDateOnly(addDays(first.start, -1));
+  const after = formatDateOnly(addDays(last.end, 1));
+  for (const page of pages) {
+    if (!page.scheduledStart || isAllDayPage(page.scheduledStart)) continue;
+    if (page.scheduledStart.slice(0, 10) >= after) continue;
+    if ((page.scheduledEnd ?? page.scheduledStart).slice(0, 10) < before) continue;
+    let start: Date;
+    let end: Date;
+    try {
+      start = resolveBlockInstant(page, page.scheduledStart);
+      end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
+    } catch {
+      continue;
+    }
+    bounds.forEach((day, i) => {
+      if (start < day.end && end > day.start) byDay[i]!.push(page);
+    });
+  }
+  return byDay;
+}
+
+/** Resolve the instants of `pages` ahead of a layout that will need them, as idle work before a
+ *  step to a neighbouring week. */
+export function warmBlockInstants(pages: PageSummary[]): void {
+  checkZone();
+  for (const page of pages) {
+    if (!page.scheduledStart || isAllDayPage(page.scheduledStart)) continue;
+    try {
+      resolveBlockInstant(page, page.scheduledStart);
+      if (page.scheduledEnd) resolveBlockInstant(page, page.scheduledEnd);
+    } catch {
+      // Layout skips a page it can't place; so does this.
+    }
+  }
+}
+
 export function buildDayBlocks(
   pages: PageSummary[],
   day: Date,
@@ -316,23 +394,7 @@ export function buildDayBlocks(
   const dayStart = startOfDay(day);
   const dayEnd = addDays(dayStart, 1);
 
-  // Filter: must have a timed scheduledStart that overlaps with this day.
-  // Multi-day timed events are NOT promoted to the all-day row — they render
-  // here as one segment per day they touch (continuation flags on each
-  // segment drive the radius + label rules in PageBlock).
-  const overlapping = pages.filter((page) => {
-    if (!page.scheduledStart) return false;
-    if (isAllDayPage(page.scheduledStart)) return false;
-    try {
-      // Use the same instant resolution as positioning so a synced event shifted
-      // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
-      const start = resolveBlockInstant(page, page.scheduledStart);
-      const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
-      return start < dayEnd && end > dayStart;
-    } catch {
-      return false;
-    }
-  });
+  const overlapping = timedPagesInRange(pages, dayStart, dayEnd);
 
   if (overlapping.length === 0) return [];
 
@@ -588,9 +650,34 @@ function compareRawOrder(a: RawBlock, b: RawBlock): number {
  * a 3pm PT event positions at 6pm for an ET viewer. Detached pages unlock and
  * float again, so the gate is `scheduleLocked`, not mere sync provenance.
  */
+/**
+ * Instants by page object. A page's row is replaced when it changes, never edited, so what it
+ * parses to holds for the object's life and a week step parses only pages it hasn't drawn. The
+ * mapping from wall-clock to instant depends on the local zone, so a zone change drops them all.
+ */
+let instants = new WeakMap<PageSummary, Map<string, Date>>();
+let instantsZone: string | null = null;
+
+/** Called once per layout pass: reading the zone builds a formatter, too slow to do per block. */
+function checkZone(): void {
+  const zone = getLocalTimezone();
+  if (zone === instantsZone) return;
+  instants = new WeakMap();
+  instantsZone = zone;
+}
+
 function resolveBlockInstant(page: PageSummary, iso: string): Date {
-  if (page.scheduleLocked && page.timezone) return resolveSyncedInstant(iso, page.timezone);
-  return parseISO(iso);
+  let held = instants.get(page);
+  const hit = held?.get(iso);
+  if (hit) return hit;
+  const at =
+    page.scheduleLocked && page.timezone ? resolveSyncedInstant(iso, page.timezone) : parseISO(iso);
+  if (!held) {
+    held = new Map();
+    instants.set(page, held);
+  }
+  held.set(iso, at);
+  return at;
 }
 
 function buildRawBlock(

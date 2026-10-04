@@ -497,6 +497,115 @@ async fn two_ticks_seconds_apart_do_not_share_a_window() {
     );
 }
 
+// ─── tick ────────────────────────────────────────────────────────────
+
+/// Every banner a tick shows: (title, body, log row id).
+type Shown = Vec<(String, String, String)>;
+
+async fn run_tick(
+    pool: &SqlitePool,
+    settings: &NotificationSettings,
+    runtime: &mut SchedulerRuntime,
+    now: chrono::DateTime<chrono::Local>,
+) -> Shown {
+    let mut shown = Shown::new();
+    tick(pool, settings, runtime, now, &mut |title, body, id| {
+        shown.push((title.into(), body.into(), id.into()))
+    })
+    .await
+    .unwrap();
+    shown
+}
+
+async fn logged(pool: &SqlitePool, kind: &str) -> Vec<String> {
+    sqlx::query_scalar("SELECT fired_at FROM notification_log WHERE type = ? ORDER BY fired_at")
+        .bind(kind)
+        .fetch_all(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_tick_shows_each_due_reminder_and_the_summary_and_logs_them_at_its_time() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+    let mut runtime = SchedulerRuntime::default();
+
+    let shown = run_tick(&pool, &settings, &mut runtime, now).await;
+
+    let mut titles: Vec<&str> = shown.iter().map(|(t, _, _)| t.as_str()).collect();
+    titles.sort_unstable();
+    assert_eq!(
+        titles,
+        vec![
+            "Today — Mon, May 25",
+            "default",
+            "explicit",
+            "moved",
+            "rec",
+            "synced"
+        ]
+    );
+    let stamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    assert_eq!(logged(&pool, "reminder").await, vec![stamp.clone(); 5]);
+    assert_eq!(logged(&pool, "overdue").await, vec![stamp]);
+    assert_eq!(runtime.last_summary_date, Some(now.date_naive()));
+    assert_eq!(runtime.last_window_end, Some(now));
+}
+
+#[tokio::test]
+async fn the_next_tick_shows_nothing_already_shown() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+    let mut runtime = SchedulerRuntime::default();
+    run_tick(&pool, &settings, &mut runtime, now).await;
+
+    let next = run_tick(&pool, &settings, &mut runtime, local_at(2026, 5, 25, 9, 1)).await;
+
+    assert!(next.is_empty(), "shown twice: {next:?}");
+}
+
+#[tokio::test]
+async fn a_quiet_tick_shows_nothing_and_records_each_silenced_reminder() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut runtime = SchedulerRuntime::default();
+
+    let shown = run_tick(
+        &pool,
+        &settings_with_quiet("08:00", "10:00"),
+        &mut runtime,
+        now,
+    )
+    .await;
+
+    assert!(shown.is_empty());
+    assert_eq!(logged(&pool, "suppressed").await.len(), 5);
+    assert_eq!(
+        runtime.last_summary_date, None,
+        "the summary waits for quiet hours to end"
+    );
+    assert_eq!(runtime.last_window_end, Some(now));
+}
+
+#[test]
+fn the_loop_wakes_at_the_start_of_the_next_minute() {
+    let at = |s: u32, ms: u32| {
+        local_at(2026, 5, 25, 9, 0).with_second(s).unwrap()
+            + chrono::Duration::milliseconds(ms.into())
+    };
+    assert_eq!(until_next_minute(at(0, 0)), Duration::from_secs(60));
+    assert_eq!(until_next_minute(at(30, 0)), Duration::from_secs(30));
+    assert_eq!(until_next_minute(at(59, 500)), Duration::from_millis(500));
+}
+
 #[tokio::test]
 async fn an_all_day_page_reminds_the_day_before_at_nine() {
     let pool = test_pool().await;

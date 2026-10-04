@@ -240,6 +240,7 @@ mod tests {
 
     const NY: &str = "America/New_York";
     const LA: &str = "America/Los_Angeles";
+    const BERLIN: &str = "Europe/Berlin";
 
     fn dt(iso: &str) -> NaiveDateTime {
         parse_naive(iso).unwrap()
@@ -266,6 +267,16 @@ mod tests {
         let utc = wall_clock_to_utc(NY, dt("2026-03-08T02:30:00")).unwrap();
         assert_eq!(utc, dt("2026-03-08T07:30:00"));
         assert_eq!(utc_to_wall_clock(NY, utc), Some(dt("2026-03-08T03:30:00")));
+    }
+
+    #[test]
+    fn shifts_spring_forward_gap_forward_east_of_utc() {
+        let utc = wall_clock_to_utc(BERLIN, dt("2026-03-29T02:30:00")).unwrap();
+        assert_eq!(utc, dt("2026-03-29T01:30:00"));
+        assert_eq!(
+            utc_to_wall_clock(BERLIN, utc),
+            Some(dt("2026-03-29T03:30:00"))
+        );
     }
 
     #[test]
@@ -322,6 +333,16 @@ mod tests {
             normalize_until_to_zone("FREQ=DAILY;COUNT=3", NY),
             "FREQ=DAILY;COUNT=3"
         );
+    }
+
+    #[test]
+    fn leaves_a_malformed_until_unchanged() {
+        for rule in [
+            "FREQ=DAILY;UNTIL=2026071T035959Z",
+            "FREQ=DAILY;UNTIL=20260701T0359Z",
+        ] {
+            assert_eq!(normalize_until_to_zone(rule, NY), rule);
+        }
     }
 
     #[test]

@@ -131,7 +131,97 @@ pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.
 pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
-    match open_pool_inner(path).await {
+    open_pool_checkpointing(path, Checkpoints::Inline).await
+}
+
+/// How long after opening a workspace its table statistics are brought up to date.
+const STATISTICS_AFTER: Duration = Duration::from_secs(10);
+
+/// How often a long-running process copies the write-ahead log back into the database.
+const CHECKPOINT_EVERY: Duration = Duration::from_secs(30);
+
+/// Who copies the write-ahead log back into the database file.
+#[derive(Debug, Clone, Copy)]
+pub enum Checkpoints {
+    /// SQLite's default: whichever write takes the log past 1,000 pages does it, inline. Right for
+    /// a short-lived process, which also checkpoints when it closes.
+    Inline,
+    /// A background task, every [`CHECKPOINT_EVERY`]. Inline checkpoints made one save in a
+    /// hundred take 4 to 9 ms instead of 0.25 at 200,000 pages, and a long-running app can do the
+    /// same copy where nobody is waiting on it. `PASSIVE` never blocks a writer.
+    Background(CheckpointHooks),
+}
+
+/// Run around each background checkpoint. A checkpoint writes the database file, so a process
+/// that watches that file for other writers sees one as an outside change unless it brackets them.
+#[derive(Debug, Clone, Copy)]
+pub struct CheckpointHooks {
+    pub before: fn(),
+    pub after: fn(),
+}
+
+impl CheckpointHooks {
+    pub const NONE: Self = Self {
+        before: || {},
+        after: || {},
+    };
+}
+
+/// One background checkpoint, inside its hooks.
+pub async fn checkpoint_once(pool: &SqlitePool, hooks: CheckpointHooks) -> AppResult<()> {
+    (hooks.before)();
+    let result = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
+        .execute(pool)
+        .await;
+    (hooks.after)();
+    result?;
+    Ok(())
+}
+
+/// [`open_pool`], choosing who checkpoints the write-ahead log.
+pub async fn open_pool_checkpointing(
+    path: &str,
+    checkpoints: Checkpoints,
+) -> AppResult<SqlitePool> {
+    let pool = open_pool_reporting_integrity(path, checkpoints).await?;
+    {
+        let pool = pool.clone();
+        let stats_pool = pool.clone();
+        tokio::spawn(async move {
+            // Nothing waits on statistics: the queries that most need them name their join order.
+            // They start once the app is up, since a large workspace's first sampling takes seconds.
+            tokio::time::sleep(STATISTICS_AFTER).await;
+            if let Err(e) = gather_statistics(&stats_pool).await {
+                log::warn!("gathering table statistics failed: {e}");
+            }
+        });
+        tokio::spawn(async move {
+            if let Err(e) = crate::title_key::rekey_if_stale(&pool).await {
+                log::warn!("re-keying titles failed: {e}");
+            }
+        });
+    }
+    if let Checkpoints::Background(hooks) = checkpoints {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            let mut every = tokio::time::interval(CHECKPOINT_EVERY);
+            every.tick().await;
+            while !pool.is_closed() {
+                every.tick().await;
+                if let Err(e) = checkpoint_once(&pool, hooks).await {
+                    log::warn!("background checkpoint failed: {e}");
+                }
+            }
+        });
+    }
+    Ok(pool)
+}
+
+async fn open_pool_reporting_integrity(
+    path: &str,
+    checkpoints: Checkpoints,
+) -> AppResult<SqlitePool> {
+    match open_pool_inner(path, checkpoints).await {
         Ok(pool) => Ok(pool),
         Err(err) => Err(match integrity_failure(path).await {
             Some(detail) => AppError::Corrupt(detail),
@@ -182,12 +272,18 @@ async fn integrity_failure(path: &str) -> Option<String> {
     }
 }
 
-async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
+/// Registers [`crate::sql_functions`] on each connection the pool opens. Any pool that runs the
+/// migrations or writes pages needs it.
+pub fn with_functions(options: sqlx::sqlite::SqlitePoolOptions) -> sqlx::sqlite::SqlitePoolOptions {
+    options.after_connect(|conn, _| Box::pin(crate::sql_functions::register(conn)))
+}
+
+async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let pool = with_functions(sqlx::sqlite::SqlitePoolOptions::new())
         .max_connections(5)
         .connect_with(
             sqlx::sqlite::SqliteConnectOptions::new()
@@ -198,6 +294,14 @@ async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
                 .busy_timeout(Duration::from_secs(5))
                 .pragma("temp_store", "MEMORY")
                 .pragma("mmap_size", "268435456")
+                .pragma(
+                    "wal_autocheckpoint",
+                    if matches!(checkpoints, Checkpoints::Background(_)) {
+                        "0"
+                    } else {
+                        "1000"
+                    },
+                )
                 .foreign_keys(true),
         )
         .await?;
@@ -213,6 +317,7 @@ async fn open_pool_inner(path: &str) -> AppResult<SqlitePool> {
         .map_err(|e| AppError::Db(sqlx::Error::Migrate(Box::new(e))))?;
 
     backfill_content_text(&pool).await?;
+    crate::changes::prune_writers(&pool).await?;
 
     let stored: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&pool)
@@ -326,9 +431,31 @@ fn prune_migration_backups(dir: &Path, keep: usize) {
 }
 
 /// Re-extract plain text from Tiptap JSON for any rows missing content_text.
+/// Table statistics for the query planner, gathered when a table has none or has changed a lot
+/// since, from a sample bounded by `ANALYSIS_LIMIT` rows per index. Without them the planner
+/// guesses every table is the same size and joined 3,500 recurrence rules to half a million
+/// pages by walking the pages: 800 ms to read the rules, against 24 ms with statistics. Sampling a
+/// fresh workspace of half a million pages took 4.8 s, so a launch runs it in the background.
+pub async fn gather_statistics(pool: &SqlitePool) -> AppResult<()> {
+    let mut conn = pool.acquire().await?;
+    sqlx::query(&format!("PRAGMA analysis_limit = {ANALYSIS_LIMIT}")) // sql-ok: compile-time constant
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query("PRAGMA optimize = 0x10002")
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Rows sampled per index by `gather_statistics`: SQLite's suggested bound, enough for the planner
+/// to tell a table of thousands from one of hundreds of thousands. Gathering took 0.3 s once at
+/// half a million pages.
+const ANALYSIS_LIMIT: u32 = 400;
+
 async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
     let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, content FROM pages WHERE (content_text IS NULL OR content_text = '') AND content != '' AND content != '{}'",
+        // The terms of `idx_pages_untexted`, exactly, so the planner reads that index.
+        "SELECT id, content FROM pages WHERE content_text = '' AND content != '' AND content != '{}'",
     )
     .fetch_all(pool)
     .await?;
@@ -424,7 +551,7 @@ pub async fn test_pool() -> SqlitePool {
     let opts = sqlx::sqlite::SqliteConnectOptions::from_str(":memory:")
         .expect("parse :memory: opts")
         .foreign_keys(true);
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let pool = with_functions(sqlx::sqlite::SqlitePoolOptions::new())
         .max_connections(1)
         .connect_with(opts)
         .await
@@ -478,6 +605,21 @@ pub async fn wal_test_pool() -> TempWalDb {
     let pool = open_pool(path.to_str().expect("temp path is utf-8"))
         .await
         .expect("open wal test pool");
+    // A new file always re-keys its titles in the background at open, ending in a commit that
+    // fails a test's first read-then-write transaction with SQLITE_BUSY_SNAPSHOT if it lands
+    // between the two. Hand the pool over once that pass has finished.
+    let want = crate::title_key::key_version();
+    loop {
+        let stored: Option<String> =
+            sqlx::query_scalar("SELECT version FROM title_key_version WHERE id = 1")
+                .fetch_one(&pool)
+                .await
+                .expect("read title key version");
+        if stored.as_deref() == Some(want.as_str()) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
     TempWalDb { pool, path }
 }
 

@@ -32,7 +32,6 @@ interface ImportBatchFolder {
 export interface ImportBatchInput {
   pages: ImportBatchItem[];
   folders: ImportBatchFolder[];
-  batchTag: string;
   source: string;
 }
 

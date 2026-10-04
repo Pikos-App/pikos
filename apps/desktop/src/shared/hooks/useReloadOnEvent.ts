@@ -1,11 +1,11 @@
-// Reloads the workspace when a Tauri event fires — the shared listener behind both
+// Reloads the workspace when an app event fires — the shared listener behind both
 // the external-change watcher and the background-sync applied signal. Parameterized
 // by event name, log scope/message, and an optional suppression predicate.
 
-import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
+import { listenAppEvent } from "@/shared/lib/appEvents";
 import { createLogger } from "@/shared/logger";
 
 interface ReloadOnEventOptions {
@@ -23,6 +23,7 @@ export function useReloadOnEvent({
   suppressed,
 }: ReloadOnEventOptions): void {
   const { reload } = useWorkspace();
+  const viewCache = useViewCacheController();
 
   // Keep the listener subscribed for the app's lifetime; read the latest reload
   // through a ref so we don't resubscribe on every render.
@@ -36,7 +37,9 @@ export function useReloadOnEvent({
     let cancelled = false;
     const log = createLogger(logScope);
 
-    listen(event, () => {
+    listenAppEvent(event, () => {
+      // The cache asks the change counter whose change it was, so it needs no echo window.
+      viewCache?.doorbell();
       if (suppressed?.()) return;
       log.info(logMessage);
       void reloadRef.current();

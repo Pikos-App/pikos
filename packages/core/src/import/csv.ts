@@ -181,12 +181,21 @@ export function parseDurationToMinutes(duration: string): number | null {
   return days * 1440 + hours * 60 + minutes + Math.round(seconds / 60);
 }
 
+/** Columns `preprocessTodoistRows` adds, named so the generic header heuristics
+ *  map them to the source ID and the parent the import nests under. */
+const TODOIST_ID_HEADERS = ["taskId", "parentId"];
+
 /**
  * Pre-process Todoist-style rows: merge TYPE="note" into previous task,
- * skip TYPE="meta"/"section"/empty rows.
+ * skip TYPE="meta"/"section"/empty rows, and give each task an ID and the ID of
+ * the task it is indented under. A Todoist export carries nesting only as INDENT,
+ * so without this every subtask imported flat.
  */
 function preprocessTodoistRows(rows: Record<string, string>[]): Record<string, string>[] {
   const result: Record<string, string>[] = [];
+  // The last task seen at each indent level, so a deeper row finds its parent.
+  // Stryker disable next-line ArrayDeclaration: the first row truncates the list before reading it
+  const openAtLevel: string[] = [];
 
   for (const row of rows) {
     const type = (row["TYPE"] ?? "").toLowerCase();
@@ -204,7 +213,14 @@ function preprocessTodoistRows(rows: Record<string, string>[]): Record<string, s
       continue;
     }
 
-    result.push({ ...row });
+    const level = Math.max(1, Number(row["INDENT"]) || 1);
+    // Stryker disable next-line ArithmeticOperator: the ids only need to be distinct
+    const taskId = `todoist-${result.length + 1}`;
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: a top-level row looks up index -1 and finds no parent either way
+    const parentId = level > 1 ? (openAtLevel[level - 2] ?? "") : "";
+    openAtLevel.length = level - 1;
+    openAtLevel.push(taskId);
+    result.push({ ...row, parentId, taskId });
   }
 
   return result;
@@ -230,7 +246,7 @@ export function prepareCSVRows(text: string): PreparedCSV {
 
   const normalized = new Set(headers.map((h) => h.toLowerCase().trim()));
   if (normalized.has("type") && normalized.has("content")) {
-    return { headers, rows: preprocessTodoistRows(rows) };
+    return { headers: [...headers, ...TODOIST_ID_HEADERS], rows: preprocessTodoistRows(rows) };
   }
 
   return { headers, rows };

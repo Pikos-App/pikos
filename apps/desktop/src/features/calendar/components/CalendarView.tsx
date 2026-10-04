@@ -1,15 +1,18 @@
+import type { PageSummary } from "@pikos/core";
 import {
   buildCalendarDays,
   buildMonthGrid,
   clampDayCount,
   getCalendarDayCount,
   monthGridDays,
+  utcInstant,
 } from "@pikos/core";
-import { addDays, format, isSameDay } from "date-fns";
+import { addDays, isSameDay, startOfDay } from "date-fns";
 import { type CSSProperties, useEffect, useState } from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import {
   calendarTextScale,
   calendarZoom,
@@ -20,25 +23,20 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
+import type { Range } from "@/shared/viewCache/controller";
+import { useCachedRange } from "@/shared/viewCache/useCachedRange";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
 import { CALENDAR_GUTTER_VAR, CALENDAR_ZOOM_VAR, calendarGutterPx } from "../utils/gutterWidth";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
-/**
- * Buffer (days) subtracted from the visible window's first day when fetching
- * completed scheduled pages. `listPages` filters by scheduledStart, so a
- * multi-day event that started before the window but extends into it would
- * otherwise be missed. 31 days covers every realistic multi-day span
- * (vacations, sprints) without ballooning the query.
- */
-const COMPLETED_LOOKBACK_DAYS = 31;
+const NO_PAGES: PageSummary[] = [];
 
 /**
- * Reads pages from context (scheduledStart denorm) and expands rrule rules
+ * Reads the visible range's pages from the view cache and expands rrule rules
  * into virtual occurrences. Navigation (prev/next/today) is owned by
- * EditorPanel via UIContext.referenceDate.
+ * EditorPanel through the calendar date.
  */
 export function CalendarView() {
   const {
@@ -47,15 +45,14 @@ export function CalendarView() {
     flushPage,
     getPage,
     listOverridesForRules,
-    mergePages,
     overridesVersion,
-    pages,
     recurrenceRules,
     rescheduleVirtualOccurrence,
     scheduleOnce,
   } = usePages();
-  const { on, storage } = useWorkspace();
-  const { openPage, referenceDate, setReferenceDate } = useUI();
+  const { on } = useWorkspace();
+  const { openPage } = useUI();
+  const { referenceDate, setReferenceDate } = useCalendarDate();
   const { hiddenIds } = useUndoDelete();
   const { weekStart } = useAppSettings();
   const {
@@ -64,7 +61,6 @@ export function CalendarView() {
     textSize: calendarTextSize,
     viewMode,
   } = useCalendarSettings();
-  const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
   const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
@@ -101,40 +97,28 @@ export function CalendarView() {
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
 
-  // Load completed scheduled pages that overlap the visible range. Active
-  // pages are all loaded at init so multi-day spans and navigation Just Work;
-  // completed pages are fetched lazily here (and only here) so a user with
-  // years of completed history doesn't pay that cost on workspace load.
-  // mergePages dedupes across navigations.
   const rangeStart = days[0];
   const rangeEnd = days[days.length - 1];
-  const rangeKey =
+  // A week or less also holds the range a step either side; a month's neighbours would be large.
+  const stepDays = days.length <= 7 ? days.length : 0;
+  const instants = (shift: number): Range | null =>
     rangeStart && rangeEnd
-      ? `${format(rangeStart, "yyyy-MM-dd")}|${format(rangeEnd, "yyyy-MM-dd")}`
+      ? [
+          utcInstant(startOfDay(addDays(rangeStart, shift))),
+          utcInstant(startOfDay(addDays(rangeEnd, shift + 1))),
+        ]
       : null;
-  useEffect(() => {
-    if (!storage || !rangeStart || !rangeEnd) return;
-    const scheduledAfter = format(addDays(rangeStart, -COMPLETED_LOOKBACK_DAYS), "yyyy-MM-dd");
-    const scheduledBefore = format(rangeEnd, "yyyy-MM-dd");
-    let cancelled = false;
-    void (async () => {
-      const completed = await storage.listPages({
-        hasSchedule: true,
-        scheduledAfter,
-        scheduledBefore,
-        status: "done",
-      });
-      if (!cancelled) mergePages(completed);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [storage, rangeKey, mergePages, rangeStart, rangeEnd]);
+  const shown = instants(0);
+  const neighbours =
+    stepDays > 0 ? [instants(-stepDays), instants(stepDays)].flatMap((r) => (r ? [r] : [])) : [];
+  const cachedRange = useCachedRange(shown?.[0] ?? null, shown?.[1] ?? null, neighbours);
+  const visiblePages = (cachedRange?.pages ?? NO_PAGES).filter((p) => !hiddenIds.has(p.id));
 
   const expandedPages = useRecurrenceExpansion({
     days,
     expandRecurrenceRange,
     listOverridesForRules,
+    margin: stepDays,
     overridesVersion,
     pages: visiblePages,
     recurrenceRules,
@@ -216,6 +200,7 @@ export function CalendarView() {
           autoOpenPageId={autoOpenPageId}
           days={days}
           isCurrentWeek={isCurrentWeek}
+          loading={cachedRange?.loading ?? false}
           onAutoOpenConsumed={handleAutoOpenConsumed}
           onCreateAllDay={createAllDayPage}
           onCreatePage={(_day, start, end) => createTimedPage(start, end)}

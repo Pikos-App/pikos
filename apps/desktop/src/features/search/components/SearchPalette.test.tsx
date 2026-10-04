@@ -1,10 +1,10 @@
+import { MockStorageAdapter } from "@pikos/core/testing";
 // The palette has two query paths that must stay distinguishable: a plain query
 // is one FTS5 search, an operator query is a structured listPages filter. These
 // specs pin which path answers which query, and what the completed toggle says.
-
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PagesContextValue } from "@/shared/context/PagesContext";
 import { usePages } from "@/shared/context/PagesContext";
@@ -405,5 +405,60 @@ describe("SearchPalette — command mode", () => {
 
     expect(await screen.findByRole("button", { name: /Do the thing/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Gated away/ })).toBeNull();
+  });
+});
+
+describe("SearchPalette — recent pages", () => {
+  it("lists pages opened this session, most recent first", async () => {
+    await setup([{ title: "Alpha" }, { title: "Beta" }, { title: "Gamma" }]);
+    const seeded = await api().workspace.storage!.listPages();
+    const idOf = (title: string) => seeded.find((p) => p.title === title)!.id;
+
+    act(() => {
+      api().pages.recordPageOpened(idOf("Beta"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    act(() => {
+      api().pages.recordPageOpened(idOf("Alpha"));
+    });
+
+    await waitFor(() => {
+      const titles = screen
+        .getAllByRole("button")
+        .map((b) => b.textContent ?? "")
+        .filter((text) => /Alpha|Beta|Gamma/.test(text));
+      expect(titles.map((t) => t.match(/Alpha|Beta|Gamma/)![0])).toEqual(["Alpha", "Beta"]);
+    });
+  });
+});
+
+describe("SearchPalette — when a search runs", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("searches at once after a pause, and waits out a quick second keystroke", async () => {
+    await setup([{ title: "Zephyr notes" }]);
+    const search = vi.spyOn(MockStorageAdapter.prototype, "searchPages");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+
+    act(() => type("ze"));
+    expect(search).toHaveBeenCalledTimes(0);
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+    expect(search.mock.calls.map(([q]) => q)).toEqual(["ze"]);
+
+    act(() => type("zep"));
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+    expect(search).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      vi.advanceTimersByTime(150);
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+    expect(search.mock.calls.map(([q]) => q)).toEqual(["ze", "zep"]);
   });
 });

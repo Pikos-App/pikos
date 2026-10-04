@@ -22,20 +22,26 @@ import type {
   AccountWithCalendars,
   BackupEntry,
   CalendarSyncResult,
+  ChangeState,
+  CompletedCursor,
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompletedWindow,
   CompleteRecurringInput,
   CompleteRecurringResult,
   FocusSession,
   Folder,
+  MoveOutcome,
   NotificationHistoryEntry,
   Page,
   PageFilter,
+  PageIfNewer,
   PageRecurrenceRule,
   PageReminder,
   PageSchedule,
   PageStatus,
   PageSummary,
+  Placement,
   RawRuleExpansion,
   RescheduleVirtualInput,
   RescheduleVirtualResult,
@@ -44,14 +50,30 @@ import type {
   SkipOccurrenceInput,
   SyncAccount,
   SyncCalendar,
+  TagCount,
   TrashedPage,
   UncompleteRecurringInput,
+  ViewCounts,
+  ViewCursor,
+  ViewKey,
+  ViewScope,
+  ViewWindow,
 } from "../types";
 import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { oldestOpenOccurrence, rawExpandRule } from "../utils/recurrence";
 import { ftsTokens, mirrorSearchText } from "../utils/search";
+import {
+  countStarting,
+  dayAfter,
+  listCompletedOf,
+  listRangeOf,
+  listViewIdsOf,
+  listViewOf,
+  ORDER_SPACING,
+  UPCOMING_DAYS,
+} from "./mockViews";
 
 /**
  * Command-layer guard messages, mirrored verbatim from the Rust writers so a
@@ -103,6 +125,27 @@ function now(): string {
 
 /** Best-effort plain-text extraction from a Tiptap JSON string. Mirrors the
  *  Rust adapter's contentText denorm so the mock's FTS surface matches prod. */
+const SEED_WORDS = ["meeting", "draft", "review", "garden", "budget", "travel", "notes", "design"];
+
+/** An editor document of about `words` words in paragraphs of sixty, varied enough that text
+ *  shaping can't serve one repeated run from cache, and its plain text for search. */
+function seededDocument(words: number, page: number): { content: string; text: string } {
+  const paragraphs: string[] = [];
+  for (let at = 0; at < words; at += 60) {
+    const count = Math.min(60, words - at);
+    paragraphs.push(
+      Array.from({ length: count }, (_, k) => SEED_WORDS[(at + k + page) % SEED_WORDS.length]).join(
+        " "
+      )
+    );
+  }
+  const doc = {
+    content: paragraphs.map((text) => ({ content: [{ text, type: "text" }], type: "paragraph" })),
+    type: "doc",
+  };
+  return { content: JSON.stringify(doc), text: paragraphs.join("\n") };
+}
+
 function deriveContentText(content: string): string {
   try {
     return extractText(JSON.parse(content));
@@ -122,6 +165,15 @@ function originalDateInRuleBasis(occurrenceDate: string, ruleStart: string): str
 // Reduced rather than spread: `Math.max(...array)` passes one argument per element and overflows
 // the stack somewhere around a hundred thousand, so creating a page in a large workspace threw
 // RangeError. Found by the scale benchmark at two million pages.
+function byText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Manual order with the database's tie-break: order value, then creation, then id. */
+function byManualOrder(a: PageSummary, b: PageSummary): number {
+  return a.sortOrder - b.sortOrder || byText(a.createdAt, b.createdAt) || byText(a.id, b.id);
+}
+
 function nextSortOrder(items: { sortOrder: number }[]): number {
   if (items.length === 0) return 0;
   let max = -Infinity;
@@ -179,8 +231,38 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
   return true;
 }
 
+/** `pages`, counting every write as the database's change counter does, so `getPageIfNewer`
+ *  and `changeState` have something to compare. */
+class CountedPages extends Map<string, Page> {
+  seq = 0;
+  readonly rowSeq = new Map<string, number>();
+
+  override set(id: string, page: Page): this {
+    this.seq += 1;
+    // Absent while Map's constructor runs, before the fields above are set.
+    this.rowSeq?.set(id, this.seq);
+    return super.set(id, page);
+  }
+
+  override delete(id: string): boolean {
+    this.seq += 1;
+    return super.delete(id);
+  }
+}
+
+/** The next manual order value in a folder: a full gap after its last page, as pikos-db does. */
+function nextPageOrder(pages: Iterable<Page>, folderId: string | null): number {
+  let max: number | null = null;
+  for (const page of pages) {
+    if ((page.folderId ?? null) === folderId && (max === null || page.sortOrder > max)) {
+      max = page.sortOrder;
+    }
+  }
+  return max === null ? 0 : max + ORDER_SPACING;
+}
+
 export class MockStorageAdapter implements StorageAdapter {
-  private pages = new Map<string, Page>();
+  private pages = new CountedPages();
   private folders = new Map<string, Folder>();
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
@@ -254,7 +336,8 @@ export class MockStorageAdapter implements StorageAdapter {
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
   getPage(id: string): Promise<Page | null> {
-    return Promise.resolve(this.pages.get(id) ?? null);
+    const page = this.pages.get(id);
+    return Promise.resolve(page ? { ...page, rowSeq: this.pages.rowSeq.get(id) ?? 0 } : null);
   }
 
   createPage(data: NewPage): Promise<Page> {
@@ -282,10 +365,10 @@ export class MockStorageAdapter implements StorageAdapter {
    * Test/seed-only (NOT on `StorageAdapter`): fill the adapter with generated pages so a render
    * can be timed against a realistic row count.
    *
-   * Does not go through `insertPage`, deliberately. That calls `nextSortOrder` over every existing
+   * Does not go through `insertPage`, deliberately. That calls `nextPageOrder` over every existing
    * page, which is O(n) per insert and O(n^2) for a seed — seeding 50,000 pages through it takes
    * minutes and measures the seeder rather than the app. Sort order here is just the index, which
-   * is what `nextSortOrder` would have produced anyway for an empty start.
+   * is what `nextPageOrder` would have produced anyway for an empty start.
    *
    * Bodies are short and varied rather than identical: a list of one repeated string lets the
    * renderer and the browser's text shaping cache in ways a real workspace never would.
@@ -296,12 +379,15 @@ export class MockStorageAdapter implements StorageAdapter {
     for (let i = 0; i < count; i += 1) {
       const done = completedEvery > 0 && i % completedEvery === 0;
       const body = opts.bodyWords
-        ? `${"seeded body text ".repeat(Math.ceil(opts.bodyWords / 3))}${i}`
-        : `Seeded body ${i} with a little text so the row has something to measure.`;
+        ? seededDocument(opts.bodyWords, i)
+        : {
+            content: `Seeded body ${i} with a little text so the row has something to measure.`,
+            text: "",
+          };
       const page: Page = {
         completedAt: done ? stamp : null,
-        content: body,
-        contentText: body,
+        content: body.content,
+        contentText: body.text || body.content,
         createdAt: stamp,
         detachIsReversible: false,
         folderId: null,
@@ -328,13 +414,14 @@ export class MockStorageAdapter implements StorageAdapter {
       // Mirror the Rust adapter, which extracts plain text from Tiptap JSON on
       // every save so FTS indexes the visible body, not the structural tokens.
       contentText: data.contentText ?? deriveContentText(data.content),
-      createdAt: now(),
+      // Supplied by an import, and kept, as the Rust writer keeps them.
+      createdAt: data.createdAt ?? now(),
       detachIsReversible: false,
       id: uuid(),
       isRecurring: false,
       scheduleLocked: false,
-      sortOrder: nextSortOrder([...this.pages.values()]),
-      updatedAt: now(),
+      sortOrder: nextPageOrder(this.pages.values(), data.folderId ?? null),
+      updatedAt: data.updatedAt ?? now(),
     };
     this.pages.set(page.id, page);
     return page;
@@ -466,15 +553,24 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  /** Trash a page or bring it back, touching its row as the writer's `deleted_at` update does, so
+   *  the change counter moves and a cache reading it refreshes. Guarded like the writer: a second
+   *  delete must not overwrite the original stamp and hand the page another 30 days. */
+  private setTrashed(id: string, trashed: boolean): void {
+    if (trashed === this.softDeleted.has(id)) return;
+    if (trashed) this.softDeleted.set(id, now());
+    else this.softDeleted.delete(id);
+    const page = this.pages.get(id);
+    if (page) this.pages.set(id, page);
+  }
+
   softDeletePage(id: string): Promise<void> {
-    // Guarded like the writer: a second delete must not overwrite the original
-    // stamp and hand the page another 30 days.
-    if (!this.softDeleted.has(id)) this.softDeleted.set(id, now());
+    this.setTrashed(id, true);
     return Promise.resolve();
   }
 
   restorePage(id: string): Promise<void> {
-    this.softDeleted.delete(id);
+    this.setTrashed(id, false);
     return Promise.resolve();
   }
 
@@ -582,6 +678,170 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve({ pages, total });
   }
 
+  /** Open and done pages that aren't trashed, as the database's list reads see them. */
+  private livePages(): PageSummary[] {
+    return [...this.pages.values()]
+      .filter((p) => !this.softDeleted.has(p.id))
+      .map((p) => ({ ...toSummary(p), rowSeq: this.pages.rowSeq.get(p.id) ?? 0 }));
+  }
+
+  listView(key: ViewKey, after: ViewCursor | null, limit: number): Promise<ViewWindow> {
+    return Promise.resolve(listViewOf(this.livePages(), key, after, limit));
+  }
+
+  listViewIds(
+    key: ViewKey,
+    after: ViewCursor | null,
+    through: ViewCursor | null
+  ): Promise<string[]> {
+    return Promise.resolve(listViewIdsOf(this.livePages(), key, after, through));
+  }
+
+  listCompletedWindow(
+    scope: ViewScope | null,
+    since: string | null,
+    after: CompletedCursor | null,
+    limit: number
+  ): Promise<CompletedWindow> {
+    return Promise.resolve(listCompletedOf(this.livePages(), scope, since, after, limit));
+  }
+
+  listRange(
+    start: string | null,
+    end: string,
+    zone: string,
+    openOnly: boolean
+  ): Promise<PageSummary[]> {
+    return Promise.resolve(listRangeOf(this.livePages(), start, end, zone, openOnly));
+  }
+
+  listSeriesHeads(openOnly: boolean, since: number | null = null): Promise<PageSummary[]> {
+    const ruled = new Set([...this.rules.values()].map((r) => r.pageId));
+    return Promise.resolve(
+      this.livePages()
+        .filter((p) => ruled.has(p.id) && (!openOnly || isOpen(p)))
+        .filter((p) => since === null || (p.rowSeq ?? 0) > since)
+        .sort(byManualOrder)
+    );
+  }
+
+  countViews(zone: string, today: string): Promise<ViewCounts> {
+    const pages = this.livePages();
+    const folders: Record<string, number> = {};
+    let inbox = 0;
+    for (const page of pages.filter(isOpen)) {
+      if (page.folderId == null) inbox += 1;
+      else folders[page.folderId] = (folders[page.folderId] ?? 0) + 1;
+    }
+    return Promise.resolve({
+      folders,
+      inbox,
+      today: countStarting(pages, zone, null, dayAfter(today)),
+      upcoming: countStarting(pages, zone, today, dayAfter(today, UPCOMING_DAYS)),
+    });
+  }
+
+  getPages(ids: string[]): Promise<PageSummary[]> {
+    const live = new Map(this.livePages().map((p) => [p.id, p]));
+    return Promise.resolve(ids.flatMap((id) => live.get(id) ?? []));
+  }
+
+  getPageIfNewer(id: string, known: number | null): Promise<PageIfNewer> {
+    const page = this.pages.get(id);
+    if (!page || this.softDeleted.has(id)) return Promise.resolve({ kind: "missing" });
+    const rowSeq = this.pages.rowSeq.get(id) ?? 0;
+    if (known != null && known >= rowSeq) return Promise.resolve({ kind: "current" });
+    return Promise.resolve({ kind: "newer", page: { ...page, rowSeq }, rowSeq });
+  }
+
+  listRecentPages(exclude: string | null, limit: number): Promise<PageSummary[]> {
+    return Promise.resolve(
+      this.livePages()
+        .filter((p) => isOpen(p) && p.lastOpenedAt != null && p.id !== exclude)
+        .sort((a, b) => byText(b.lastOpenedAt!, a.lastOpenedAt!))
+        .slice(0, limit)
+    );
+  }
+
+  listTags(): Promise<TagCount[]> {
+    const counts = new Map<string, number>();
+    for (const page of this.livePages().filter(isOpen)) {
+      for (const tag of new Set(page.tags)) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+    return Promise.resolve(
+      [...counts]
+        .map(([name, pageCount]) => ({ name, pageCount }))
+        .sort((a, b) => b.pageCount - a.pageCount || byText(a.name, b.name))
+    );
+  }
+
+  /** `move_pages` in pikos-db: values strictly between the neighbours, a renumber of the folder,
+   *  done pages included, when they run out of room, and a conflict when they moved. */
+  movePages(ids: string[], place: Placement): Promise<MoveOutcome> {
+    const conflict = (why: string) =>
+      Promise.reject(new StorageError("Conflict", `the list changed: ${why}`));
+    const invalid = (why: string) => Promise.reject(new StorageError("Invalid", why));
+    const open = (id: string) => {
+      const page = this.pages.get(id);
+      return page && !this.softDeleted.has(id) && isOpen(page) ? page : null;
+    };
+    if (ids.length === 0) return invalid("nothing to move");
+    const moved = ids.map(open);
+    if (moved.some((p) => p == null)) return conflict("a moved page isn't open");
+    const folderId = moved[0]!.folderId ?? null;
+    if (moved.some((p) => (p!.folderId ?? null) !== folderId)) {
+      return invalid("moved pages must share a folder");
+    }
+    const below = place.after == null ? null : open(place.after);
+    const above = place.before == null ? null : open(place.before);
+    if ((place.after != null && !below) || (place.before != null && !above)) {
+      return conflict("a neighbour isn't an open page");
+    }
+    if ([below, above].some((n) => n && (n.folderId ?? null) !== folderId)) {
+      return conflict("a neighbour is in another folder");
+    }
+    const between = [...this.pages.values()].filter(
+      (p) =>
+        !this.softDeleted.has(p.id) &&
+        isOpen(p) &&
+        (p.folderId ?? null) === folderId &&
+        !ids.includes(p.id) &&
+        (!below || byManualOrder(p, below) > 0) &&
+        (!above || byManualOrder(p, above) < 0)
+    );
+    if (between.length > 0) return conflict("its neighbours aren't next to each other");
+
+    const k = ids.length;
+    const bounds = (): [number, number] => {
+      const low = below ? this.pages.get(below.id)!.sortOrder : null;
+      const high = above ? this.pages.get(above.id)!.sortOrder : null;
+      if (low != null && high != null) return [low, high];
+      if (low != null) return [low, low + (k + 1) * ORDER_SPACING];
+      if (high != null) return [high - (k + 1) * ORDER_SPACING, high];
+      return [0, (k + 1) * ORDER_SPACING];
+    };
+    let [low, high] = bounds();
+    const renumbered = high - low - 1 < k;
+    if (renumbered) {
+      [...this.pages.values()]
+        .filter((p) => !this.softDeleted.has(p.id) && (p.folderId ?? null) === folderId)
+        .sort(byManualOrder)
+        .forEach((p, i) => this.pages.set(p.id, { ...p, sortOrder: (i + 1) * ORDER_SPACING }));
+      [low, high] = bounds();
+    }
+    const stamp = now();
+    const orders = ids.map((id, i): [string, number] => {
+      const value = low + Math.floor(((high - low) * (i + 1)) / (k + 1));
+      this.pages.set(id, { ...this.pages.get(id)!, sortOrder: value, updatedAt: stamp });
+      return [id, value];
+    });
+    return Promise.resolve({ orders, renumbered });
+  }
+
+  changeState(): Promise<ChangeState> {
+    return Promise.resolve({ epoch: "mock", ownChanges: this.pages.seq, seq: this.pages.seq });
+  }
+
   searchTags(query: string): Promise<string[]> {
     const q = query.toLowerCase();
     const names = new Set<string>();
@@ -595,7 +855,9 @@ export class MockStorageAdapter implements StorageAdapter {
 
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
     const terms = ftsTokens(query);
-    if (terms.length === 0) return Promise.resolve({ completedCount: 0, results: [] });
+    if (terms.length === 0) {
+      return Promise.resolve({ completedCount: 0, completedCountCapped: false, results: [] });
+    }
     const titleResults: SearchResult[] = [];
     const contentResults: SearchResult[] = [];
     let completedCount = 0;
@@ -657,7 +919,7 @@ export class MockStorageAdapter implements StorageAdapter {
     // is not reachable without the index, so order here is an approximation and no
     // test should assert on it beyond title-before-content.
     const results = [...titleResults, ...contentResults].slice(0, 20);
-    return Promise.resolve({ completedCount, results });
+    return Promise.resolve({ completedCount, completedCountCapped: false, results });
   }
 
   // ─── Folders ────────────────────────────────────────────────────────────────
@@ -708,7 +970,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     // Soft-delete all pages in this folder (mirrors Rust backend behavior)
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.set(page.id, now());
+      if (page.folderId === id) this.setTrashed(page.id, true);
     }
     this.folders.delete(id);
     return Promise.resolve();
@@ -720,7 +982,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     this.softDeletedFolders.add(id);
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.set(page.id, now());
+      if (page.folderId === id) this.setTrashed(page.id, true);
     }
     return Promise.resolve();
   }
@@ -728,7 +990,7 @@ export class MockStorageAdapter implements StorageAdapter {
   restoreFolder(id: string): Promise<void> {
     this.softDeletedFolders.delete(id);
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.delete(page.id);
+      if (page.folderId === id) this.setTrashed(page.id, false);
     }
     return Promise.resolve();
   }
@@ -1055,8 +1317,9 @@ export class MockStorageAdapter implements StorageAdapter {
       scheduledEnd: cloneEnd,
       scheduledStart: cloneStart,
       scheduleLocked: false,
+      seriesId: head.id,
       skippedOccurrences: null,
-      sortOrder: nextSortOrder([...this.pages.values()]),
+      sortOrder: nextPageOrder(this.pages.values(), head.folderId ?? null),
       status: "done",
       syncState: null,
       updatedAt: timestamp,
@@ -1175,7 +1438,7 @@ export class MockStorageAdapter implements StorageAdapter {
       id: uuid(),
       scheduledEnd: data.scheduledEnd ?? null,
       scheduledStart: data.scheduledStart,
-      sortOrder: nextSortOrder([...this.pages.values()]),
+      sortOrder: nextPageOrder(this.pages.values(), head.folderId ?? null),
       status: "not_started",
       updatedAt: timestamp,
     };
@@ -1279,6 +1542,16 @@ export class MockStorageAdapter implements StorageAdapter {
   /** Stand in for the Rust scheduler, the log's only writer, so tests and the
    *  test-mode app can exercise the history surface. Not part of StorageAdapter:
    *  nothing in the product writes this table from TypeScript. */
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): put folders and pages in place exactly as given,
+   * ids, order values and timestamps included, which the create paths assign themselves. For
+   * replaying a workspace the real database wrote, in the differential suites.
+   */
+  seedExact(folders: Folder[], pages: Page[]): void {
+    for (const folder of folders) this.folders.set(folder.id, folder);
+    for (const page of pages) this.pages.set(page.id, page);
+  }
+
   seedNotificationHistory(entries: NotificationHistoryEntry[]): void {
     this.notificationHistory = [...entries];
   }
@@ -1635,8 +1908,13 @@ export class MockStorageAdapter implements StorageAdapter {
       total_focus_sessions: this.focusSessions.length,
       total_folders: this.folders.size,
       total_pages: pages.length,
-      total_schedules: this.schedules.size,
-      total_words: 0,
+      // Pages with a date, as `get_usage_stats` counts them, not schedule rows.
+      total_schedules: pages.filter((p) => p.scheduledStart != null).length,
+      // Same count as `get_usage_stats`: spaces plus one, per non-empty body.
+      total_words: pages
+        .map((p) => p.contentText ?? "")
+        .filter((text) => text !== "")
+        .reduce((sum, text) => sum + text.split(" ").length, 0),
       weekly_activity: [],
     });
   }

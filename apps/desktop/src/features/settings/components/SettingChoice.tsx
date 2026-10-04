@@ -21,9 +21,14 @@ export function SettingChoice<T extends string | number>({
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
-      <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+      <div
+        aria-label={label}
+        className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5"
+        role="group"
+      >
         {options.map((opt) => (
           <button
+            aria-pressed={value === opt.id}
             className={cn(
               "rounded-sm px-ui-md py-ui-xs text-xs font-medium transition-colors",
               value === opt.id

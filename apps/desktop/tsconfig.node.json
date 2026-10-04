@@ -8,6 +8,7 @@
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
+    "playwright.bridge.config.ts",
     "playwright.perf.config.ts",
     "playwright.csp.config.ts"
   ]

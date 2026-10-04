@@ -17,7 +17,7 @@ use pikos_db::test_pool;
 
 use super::*;
 use crate::keychain::{CredentialStore, Keychain};
-use crate::test_support::{memory_keychain, page_count, MemoryStore};
+use crate::test_support::{memory_keychain, page_count, refusing_keychain, MemoryStore};
 
 // ─── scripted provider (sync returns a trivial backfill) ────────────────────────
 
@@ -102,6 +102,76 @@ async fn a_failed_credential_store_leaves_an_existing_account_alone() {
         !is_dormant(&pool, &id).await,
         "the working account stayed connected"
     );
+}
+
+fn one_calendar() -> Vec<pikos_db::sync_delta::RemoteCalendar> {
+    vec![pikos_db::sync_delta::RemoteCalendar {
+        calendar_id: "cal-home".into(),
+        color: None,
+        display_name: "Home".into(),
+    }]
+}
+
+/// The one account a refused connect left, which has to be dormant and hold no calendars.
+async fn assert_left_dormant_and_empty(pool: &sqlx::SqlitePool) {
+    let id: String = sqlx::query_scalar("SELECT id FROM sync_account")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert!(
+        is_dormant(pool, &id).await,
+        "the refused connect left a live account"
+    );
+    let calendars: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_calendar")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(calendars, 0, "the refused connect saved its calendars");
+}
+
+#[tokio::test]
+async fn a_caldav_connect_whose_password_cannot_be_stored_leaves_no_live_account() {
+    let pool = test_pool().await;
+    let creds = CaldavCredentials {
+        base_url: "https://caldav.example.com/".into(),
+        password: "app-password".into(),
+        username: "you".into(),
+    };
+
+    let result = save_caldav(
+        &pool,
+        &refusing_keychain(),
+        &creds,
+        "you@caldav.example.com/",
+        &one_calendar(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert_left_dormant_and_empty(&pool).await;
+}
+
+#[tokio::test]
+async fn a_google_connect_whose_tokens_cannot_be_stored_leaves_no_live_account() {
+    let pool = test_pool().await;
+    let credentials = crate::google::GoogleCredentials {
+        access_token: "access".into(),
+        expires_at: None,
+        granted_scopes: Vec::new(),
+        refresh_token: "refresh".into(),
+    };
+
+    let result = save_google(
+        &pool,
+        &refusing_keychain(),
+        &credentials,
+        "you@gmail.com",
+        &one_calendar(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert_left_dormant_and_empty(&pool).await;
 }
 
 async fn is_dormant(pool: &sqlx::SqlitePool, id: &str) -> bool {

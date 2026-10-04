@@ -1,6 +1,7 @@
 //! The clap surface: globals, subcommands and their flags.
 
 use clap::{Parser, Subcommand};
+use pikos_db::SearchScan;
 
 #[derive(Parser)]
 #[command(
@@ -34,6 +35,13 @@ pub enum CliCommand {
         include_completed: bool,
         #[arg(long)]
         limit: Option<usize>,
+        #[arg(
+            long,
+            default_value = "2000",
+            value_parser = parse_scan,
+            help = "How many of the newest matches to rank, or `all` for exact ranking"
+        )]
+        scan: SearchScan,
     },
     /// Print a page's full content and metadata
     Read { id: String },
@@ -169,7 +177,40 @@ pub enum StressCommand {
         large_pages: usize,
         #[arg(long, default_value_t = 50_000, help = "Words in each large page")]
         large_words: usize,
+        #[arg(long, value_enum, default_value_t = crate::stress::Shape::Plain)]
+        shape: crate::stress::Shape,
+        #[arg(
+            long,
+            help = "The day mixed dates spread around, as YYYY-MM-DD (default: today)"
+        )]
+        today: Option<chrono::NaiveDate>,
     },
     /// Time the operations that decide whether Pikos feels instant
-    Bench,
+    Bench {
+        #[arg(
+            long,
+            default_value_t = 1,
+            value_parser = clap::value_parser!(u32).range(1..),
+            help = "Times to measure each operation, reporting the median and the 95th percentile"
+        )]
+        runs: u32,
+        #[arg(
+            long,
+            value_delimiter = ',',
+            help = "Time only the operations whose names contain one of these, e.g. --only list,save"
+        )]
+        only: Vec<String>,
+    },
+}
+
+fn parse_scan(value: &str) -> Result<SearchScan, String> {
+    if value == "all" {
+        return Ok(SearchScan::All);
+    }
+    match value.parse::<usize>() {
+        Ok(n) if n > 0 => Ok(SearchScan::Newest(n)),
+        _ => Err(format!(
+            "expected a positive number or `all` (got \"{value}\")"
+        )),
+    }
 }

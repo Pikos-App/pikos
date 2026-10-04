@@ -57,7 +57,8 @@ if command -v cargo &>/dev/null; then
   fi
 fi
 
-# Tier 1 E2E smoke — skip when SKIP_E2E is set. Tier 2 + perf run in CI.
+# The @smoke e2e tests, on the mock so no Rust build stands in the way — skip when
+# SKIP_E2E is set. The full suite and perf run in CI.
 if [ -z "$SKIP_E2E" ]; then
-  pnpm --filter @pikos/desktop test:e2e --project tier1 -x
+  pnpm --filter @pikos/desktop test:e2e --project e2e --grep @smoke -x
 fi

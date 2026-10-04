@@ -72,7 +72,20 @@ export function buildAllDayItems(pages: PageSummary[], day: Date): AllDayItem[] 
  * get pushed to row 1 with a phantom empty row 0 above them.
  */
 export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayItem | null)[][] {
-  const itemsByDay = days.map((d) => buildAllDayItems(pages, d));
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last) return [];
+  // The all-day pages touching these days, found once: each day then scans only them, where it
+  // scanned every page held, most of them timed or dated elsewhere.
+  const from = format(first, "yyyy-MM-dd");
+  const to = format(last, "yyyy-MM-dd");
+  const touching = pages.filter((page) => {
+    const start = page.scheduledStart;
+    if (start == null || !isAllDayPage(start)) return false;
+    const end = page.scheduledEnd && isAllDayPage(page.scheduledEnd) ? page.scheduledEnd : start;
+    return start <= to && end >= from;
+  });
+  const itemsByDay = days.map((d) => buildAllDayItems(touching, d));
 
   interface Span {
     pageId: string;

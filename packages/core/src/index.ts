@@ -8,6 +8,12 @@
 // chunk import the class from "@pikos/core/testing" instead.
 export type { MockStorageAdapter } from "./adapters/MockStorageAdapter";
 export * from "./adapters/NoopPlatformAdapter";
+export { evict } from "./cache/eviction";
+export type { Evicted, Pinned } from "./cache/eviction";
+export { PageStore, summaryBytes } from "./cache/pageStore";
+export type { WriteOutcome } from "./cache/pageStore";
+export { ViewCache, viewName } from "./cache/viewCache";
+export type { FetchToken, ViewEntry } from "./cache/viewCache";
 // ── Calendar math: row/block layout, hour↔pixel geometry, grid constants ──
 export {
   assignAllDayRows,
@@ -75,6 +81,9 @@ export {
 export type { CalendarMetrics, CollapseGeometry } from "./calendar/calendarGeometry";
 export {
   buildDayBlocks,
+  timedPagesByDay,
+  warmBlockInstants,
+  timedPagesInRange,
   collapseUnderWidth,
   remapBlocksForCollapse,
 } from "./calendar/calendarLayout";
@@ -173,6 +182,9 @@ export type {
   BuildPageListRowsInput,
   BuildPageListRowsResult,
   PageListDaySection,
+  ListSection,
+  ListSlot,
+  SlotRef,
   VirtualRow,
 } from "./layout/buildPageListRows";
 export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
@@ -202,7 +214,7 @@ export { computeScheduleTransition, normalizeEndInput } from "./pages/schedule";
 export { withTodayOccurrences } from "./pages/todayOccurrences";
 export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";
-export { groupUpcomingPages } from "./pages/upcoming";
+export { groupUpcomingPages, upcomingDayLabel } from "./pages/upcoming";
 export type { UpcomingDaySection } from "./pages/upcoming";
 export {
   folderIdForNewPage,
@@ -212,6 +224,8 @@ export {
 // ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";
+export { STORAGE_READS, watchWrites } from "./storageReads";
+export type { WriteWatcher } from "./storageReads";
 export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/accountLabel";
 // ── Calendar sync health, derived from the read model ──
 export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";
@@ -268,6 +282,7 @@ export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
 export type { ViewerScheduled } from "./utils/syncedTime";
 export { resolveSyncedInstant, viewerEnd, viewerStart, viewerWallClock } from "./utils/syncedTime";
 export {
+  utcInstant,
   expandRecurrenceInZone,
   normalizeUntilToZone,
   utcToWallClock,

@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
 import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
+import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -60,7 +61,8 @@ export function MetadataHeader({
   } = usePages();
   const togglePageStatus = useRecurringStatusToggle();
   const { lineWidth } = useEditorSettings();
-  const { flashPageBlock, requestCalendarScroll, setReferenceDate, setRightPanel } = useUI();
+  const { flashPageBlock, requestCalendarScroll, setRightPanel } = useUI();
+  const { setReferenceDate } = useCalendarDate();
   const allTagNames = tags.map((t) => t.name);
 
   const metadataError = pageErrors.get(page.id) ?? null;

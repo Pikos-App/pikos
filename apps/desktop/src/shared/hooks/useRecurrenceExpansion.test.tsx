@@ -689,6 +689,54 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
+  it("pairs each rule with its own overrides and the first row carrying its head's id", async () => {
+    const pageA = makePage({
+      id: "page-A",
+      scheduledStart: "2026-03-02T09:00:00",
+      title: "Monday Standup",
+    });
+    const pageB = makePage({ id: "page-B", scheduledStart: "2026-03-04T15:00:00" });
+    const ruleA = makeRule({ id: "rule-A", pageId: "page-A" });
+    const ruleB = makeRule({
+      id: "rule-B",
+      pageId: "page-B",
+      rrule: "FREQ=WEEKLY;BYDAY=WE",
+      scheduledEnd: "2026-03-04T16:00:00",
+      scheduledStart: "2026-03-04T15:00:00",
+    });
+    const movedB = {
+      ...makeOverride("2026-03-11", "2026-03-12T15:00:00"),
+      pageId: "page-B",
+      ruleId: "rule-B",
+    };
+    const pages = [
+      makePage({ id: "other-1", title: "Unrelated" }),
+      pageA,
+      pageB,
+      makePage({ id: "page-A", title: "A later row with the head's id" }),
+    ];
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules: () => Promise.resolve([movedB]),
+        pages,
+        recurrenceRules: [ruleB, ruleA],
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual).toHaveLength(1);
+      expect(virtual[0]).toMatchObject({
+        ruleId: "rule-A",
+        scheduledStart: "2026-03-09T09:00:00",
+        title: "Monday Standup",
+      });
+    });
+  });
+
   it("renders no virtuals for a rule the engine omitted (out-of-envelope)", async () => {
     // The batch omits any rule the engine rejects. There is no second engine to
     // fall back to (the mock adapter and the backend run the same crate), so the
@@ -955,5 +1003,59 @@ describe("useRecurrenceExpansion — async in-flight", () => {
       const virtuals = await virtualsFor({});
       await waitFor(() => expect(virtuals()).toHaveLength(1));
     });
+  });
+
+  it("with a margin, a step to the next week shows its occurrences without a fetch", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const expand = vi.fn(EXPAND);
+    const { rerender, result } = renderHook(
+      ({ days }: { days: Date[] }) =>
+        useRecurrenceExpansion({
+          days,
+          expandRecurrenceRange: expand,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
+          margin: 7,
+          pages,
+          recurrenceRules: [makeRule()],
+        }),
+      { initialProps: { days: weekDays(new Date(2026, 2, 9)) } }
+    );
+    const starts = () =>
+      result.current
+        .filter((p): p is VirtualOccurrence => "isVirtual" in p)
+        .map((p) => p.scheduledStart);
+    await waitFor(() => expect(starts()).toEqual(["2026-03-09T09:00:00"]));
+    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-02", "2026-03-23");
+
+    rerender({ days: weekDays(new Date(2026, 2, 16)) });
+    expect(starts()).toEqual(["2026-03-16T09:00:00"]);
+    await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
+    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-09", "2026-03-30");
+  });
+
+  it("keeps an occurrence's object while its series is unchanged, and builds a new one when it changes", async () => {
+    const head = makePage({ scheduledStart: "2026-03-02T09:00:00" });
+    const days = weekDays(new Date(2026, 2, 9));
+    const { rerender, result } = renderHook(
+      ({ pages }: { pages: PageSummary[] }) =>
+        useRecurrenceExpansion({
+          days,
+          expandRecurrenceRange: EXPAND,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
+          pages,
+          recurrenceRules: [makeRule()],
+        }),
+      { initialProps: { pages: [head] } }
+    );
+    const occurrence = () => result.current.find((p): p is VirtualOccurrence => "isVirtual" in p);
+    await waitFor(() => expect(occurrence()).toBeDefined());
+    const first = occurrence();
+
+    rerender({ pages: [head] });
+    expect(occurrence()).toBe(first);
+
+    rerender({ pages: [{ ...head, title: "Standup, renamed" }] });
+    expect(occurrence()).not.toBe(first);
+    expect(occurrence()?.title).toBe("Standup, renamed");
   });
 });

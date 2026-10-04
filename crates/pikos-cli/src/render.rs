@@ -103,12 +103,18 @@ pub fn render_page(page: &Page) -> String {
     lines.join("\n")
 }
 
+/// The completed count, with a `+` when search scanned fewer matches than there were.
+fn completed_label(resp: &SearchResponse) -> String {
+    let plus = if resp.completed_count_capped { "+" } else { "" };
+    format!("{}{plus}", resp.completed_count)
+}
+
 pub fn render_search(resp: &SearchResponse) -> String {
     if resp.results.is_empty() {
         let note = if resp.completed_count > 0 {
             format!(
                 " ({} completed hidden — use --include-completed)",
-                resp.completed_count
+                completed_label(resp)
             )
         } else {
             String::new()
@@ -145,7 +151,7 @@ pub fn render_search(resp: &SearchResponse) -> String {
     if resp.completed_count > 0 {
         lines.push(format!(
             "\n{} completed hidden — use --include-completed to show.",
-            resp.completed_count
+            completed_label(resp)
         ));
     }
     lines.join("\n")

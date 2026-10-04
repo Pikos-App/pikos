@@ -1,10 +1,11 @@
 // Independent from activePageId so cmd/shift-click selection coexists with
 // the currently open page. Clears automatically on view switch.
 
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
 import { computeRangeSelection } from "./selectionUtils";
 import { useUI } from "./UIContext";
+import { useViewCacheController } from "./WorkspaceContext";
 
 export interface SelectionContextValue {
   selectedPageIds: ReadonlySet<string>;
@@ -20,12 +21,28 @@ export interface SelectionContextValue {
   setSelectionAnchorId: (id: string | null) => void;
 }
 
+/** Drop `ids` from a selection, and its anchor if that's among them. */
+function without(selection: ReadonlySet<string>, ids: ReadonlySet<string>): ReadonlySet<string> {
+  return [...selection].some((id) => ids.has(id))
+    ? new Set([...selection].filter((id) => !ids.has(id)))
+    : selection;
+}
+
 const SelectionContext = createContext<SelectionContextValue | null>(null);
 
 export function SelectionProvider({ children }: { children: ReactNode }) {
   const { activePageId, activeViewId } = useUI();
   const [selectedPageIds, setSelectedPageIds] = useState<ReadonlySet<string>>(new Set());
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+  const viewCache = useViewCacheController();
+
+  // A refresh that takes rows out of the list on screen takes them out of the selection too.
+  useEffect(() => {
+    return viewCache?.onLeft((left) => {
+      setSelectedPageIds((prev) => without(prev, left));
+      setSelectionAnchorId((prev) => (prev && left.has(prev) ? null : prev));
+    });
+  }, [viewCache]);
 
   // Reset selection when the active view changes. setState-during-render is
   // the React-recommended pattern for "adjust state when a prop changes" —

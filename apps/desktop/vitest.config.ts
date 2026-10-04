@@ -15,6 +15,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@bridge": fileURLToPath(new URL("./bridge", import.meta.url)),
       // Mirrors vite.config.ts — the seed fixtures live in apps/desktop/seeds,
       // outside the app source.
       "@seeds": fileURLToPath(new URL("./seeds", import.meta.url)),

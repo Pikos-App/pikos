@@ -847,12 +847,12 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
     assert_eq!(page_count(&pool).await, N as i64 + 2);
 }
 
-/// A large backfill commits in batches, so a user edit mid-ingest slips between
-/// batches instead of waiting for the whole run. On a real WAL pool, race the
-/// backfill against one edit and assert it lands well inside the backfill's
-/// window — a single-transaction backfill would block it until the end. The
-/// property is temporal, so this asserts a ratio with a wide margin (at most one
-/// ~200-row batch out of ~20).
+/// A large backfill commits in batches, so a user edit mid-ingest slips between batches
+/// instead of waiting for the whole run. The backfill pauses after its first batch and the
+/// edit lands there; a backfill in one transaction never pauses, and fails here.
+///
+/// An ordering, not a race: an earlier version compared the edit's duration with the
+/// backfill's, and a loaded CI runner failed it with nothing blocked.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn backfill_does_not_block_interactive_writes() {
     let db = wal_db().await;
@@ -880,17 +880,18 @@ async fn backfill_does_not_block_interactive_writes() {
     let cal = calendar(pool).await;
     let acct = account();
 
-    let mut edit_elapsed = std::time::Duration::ZERO;
-    let started = std::time::Instant::now();
-    let backfill = async {
+    let (gate, mut paused) = tokio::sync::mpsc::unbounded_channel();
+    let backfill = super::BATCH_GATE.scope(gate, async {
         sync_calendar(pool, &provider, &acct, &cal, FOLDER)
             .await
             .unwrap()
-    };
+    });
     let edit = async {
-        // Let the backfill grab the write lock first, then time one edit.
-        tokio::task::yield_now().await;
-        let t = std::time::Instant::now();
+        let resume = paused
+            .recv()
+            .await
+            .expect("the backfill never paused between batches");
+        let mirrored_before_edit = page_count(pool).await - 1;
         pikos_db::update_page_impl(
             pool,
             "p-edit".into(),
@@ -901,10 +902,13 @@ async fn backfill_does_not_block_interactive_writes() {
         )
         .await
         .unwrap();
-        edit_elapsed = t.elapsed();
+        resume.send(()).unwrap();
+        while let Some(resume) = paused.recv().await {
+            let _ = resume.send(());
+        }
+        mirrored_before_edit
     };
-    let (outcome, ()) = tokio::join!(backfill, edit);
-    let backfill_elapsed = started.elapsed();
+    let (outcome, mirrored_before_edit) = tokio::join!(backfill, edit);
 
     assert_eq!(
         outcome,
@@ -913,11 +917,11 @@ async fn backfill_does_not_block_interactive_writes() {
             changed: true
         }
     );
-    assert_eq!(page_count(pool).await, N as i64 + 1);
     assert!(
-        edit_elapsed * 2 < backfill_elapsed,
-        "edit {edit_elapsed:?} should land well inside backfill {backfill_elapsed:?}"
+        mirrored_before_edit > 0 && mirrored_before_edit < N as i64,
+        "the edit should land mid-backfill, after {mirrored_before_edit} of {N} events"
     );
+    assert_eq!(page_count(pool).await, N as i64 + 1);
 }
 
 // ─── removals ───────────────────────────────────────────────────────────────────

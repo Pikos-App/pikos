@@ -9,10 +9,14 @@ type SectionHeaderRow = {
   collapsed?: boolean;
 };
 
+/** Where a row of a cached list sits: its section's key and its place in that section. */
+export type SlotRef = { section: string; index: number };
+
 type PageRow = {
   type: "page";
   key: string;
   page: PageSummary;
+  slot?: SlotRef;
 };
 
 export type VirtualRow =
@@ -21,7 +25,27 @@ export type VirtualRow =
   | { type: "empty-state"; key: string }
   | { type: "completed-toggle"; key: string }
   | { type: "load-more"; key: string }
-  | { type: "empty-completed"; key: string };
+  | { type: "empty-completed"; key: string }
+  /** A row of the list not loaded yet: its id when known, else just its place. */
+  | { type: "placeholder"; key: string; id: string | null; slot: SlotRef }
+  /** A section's rows not known yet, drawn as one block `count` rows tall; `slot` is the first. */
+  | { type: "tail"; key: string; count: number; slot: SlotRef };
+
+/** A slot in a list loaded a window at a time: the page, or a row still to load. */
+export type ListSlot = PageSummary | { placeholder: true; id: string | null; key: string };
+
+/** One list of a view loaded a window at a time: Inbox whole, or one of Today's or Upcoming's
+ *  sections. A section with no rows is left out, header and all. */
+export interface ListSection {
+  key: string;
+  /** Null for a list with no header: Inbox, a folder, or Today with nothing overdue. */
+  header: { label: string; collapsible: boolean; collapsed?: boolean } | null;
+  /** Every row in the section, loaded or not. */
+  count: number;
+  slots: ListSlot[];
+  /** Rows after `slots` not known yet: one block, not a row each, so a long list costs nothing. */
+  tail?: number;
+}
 
 /** One day's worth of the Upcoming view — see core `groupUpcomingPages`. */
 export interface PageListDaySection {
@@ -45,6 +69,11 @@ export interface BuildPageListRowsInput {
   completedCollapsed: boolean;
   completedPages: PageSummary[];
   completedHasMore: boolean;
+  /** Lists loaded a window at a time, in place of `visiblePages` and the Today and Upcoming
+   *  groupings. */
+  sections?: ListSection[];
+  /** The first window hasn't arrived, so an empty list isn't known to be empty yet. */
+  loading?: boolean;
 }
 
 export interface BuildPageListRowsResult {
@@ -60,8 +89,10 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
     completedPages,
     daySections = [],
     isTodayView,
+    loading = false,
     overdue,
     overdueCollapsed,
+    sections,
     today,
     visiblePages,
   } = input;
@@ -69,7 +100,41 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
   const rows: VirtualRow[] = [];
   const pageToRowIndex = new Map<string, number>();
 
-  if (visiblePages.length === 0) {
+  if (sections) {
+    const shown = sections.filter((s) => s.count > 0 || s.slots.length > 0 || (s.tail ?? 0) > 0);
+    if (shown.length === 0 && !loading) rows.push({ key: "empty-state", type: "empty-state" });
+    for (const section of shown) {
+      if (section.header) {
+        rows.push({
+          collapsible: section.header.collapsible,
+          count: section.count,
+          key: `${section.key}-header`,
+          label: section.header.label,
+          type: "section-header",
+          ...(section.header.collapsible ? { collapsed: section.header.collapsed ?? false } : {}),
+        });
+        if (section.header.collapsed) continue;
+      }
+      section.slots.forEach((slot, index) => {
+        const ref = { index, section: section.key };
+        if ("placeholder" in slot) {
+          if (slot.id) pageToRowIndex.set(slot.id, rows.length);
+          rows.push({ id: slot.id, key: slot.key, slot: ref, type: "placeholder" });
+        } else {
+          pageToRowIndex.set(slot.id, rows.length);
+          rows.push({ key: slot.id, page: slot, slot: ref, type: "page" });
+        }
+      });
+      if (section.tail) {
+        rows.push({
+          count: section.tail,
+          key: `${section.key}-tail`,
+          slot: { index: section.slots.length, section: section.key },
+          type: "tail",
+        });
+      }
+    }
+  } else if (visiblePages.length === 0) {
     rows.push({ key: "empty-state", type: "empty-state" });
   } else if (daySections.length > 0) {
     for (const section of daySections) {

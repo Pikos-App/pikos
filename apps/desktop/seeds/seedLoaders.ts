@@ -11,6 +11,8 @@
 
 import type { StorageAdapter } from "@pikos/core";
 
+import { STORAGE_BACKEND } from "@/shared/constants/testMode";
+
 /** Scenarios the developer menu offers (see DeveloperSettings). */
 export type SeedScenario =
   | "calendar"
@@ -18,7 +20,6 @@ export type SeedScenario =
   | "calendar-edges"
   | "notifications"
   | "realistic"
-  | "stress"
   | "synced"
   | "tutorial";
 
@@ -37,12 +38,11 @@ export interface SeedContext {
 export type SeedLoader = (ctx: SeedContext) => Promise<void>;
 
 // The dev-only loaders live behind a static `import.meta.env.DEV` so Rollup
-// drops their `import()` calls — and therefore their chunks (stress alone
-// carries faker at ~400 KB) — from a user build. They are unreachable there
-// anyway: launchSeedLoader refuses dev-only names in a non-dev build, and the
-// only other caller is the developer menu, which is itself DEV-gated
-// (SettingsNav/SettingsPage). The stubs below keep every key present so
-// `isSeedName`'s `in` check stays truthful in both builds.
+// drops their `import()` calls, and therefore their chunks, from a user build.
+// They are unreachable there anyway: launchSeedLoader refuses dev-only names in
+// a non-dev build, and the only other caller is the developer menu, which is
+// itself DEV-gated (SettingsNav/SettingsPage). The stubs below keep every key
+// present so `isSeedName`'s `in` check stays truthful in both builds.
 const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.meta.env.DEV
   ? {
       calendar: async ({ adapter }) => {
@@ -73,10 +73,6 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedRealistic } = await import("./realistic");
         await seedRealistic(adapter);
       },
-      stress: async ({ adapter }) => {
-        const { seedStress } = await import("./stress");
-        await seedStress(adapter);
-      },
     }
   : undefined;
 
@@ -92,7 +88,6 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   marketing: DEV_LOADERS?.marketing ?? unavailable,
   notifications: DEV_LOADERS?.notifications ?? unavailable,
   realistic: DEV_LOADERS?.realistic ?? unavailable,
-  stress: DEV_LOADERS?.stress ?? unavailable,
   synced: async ({ adapter, phase }) => {
     // Believable native data + a mock external-calendar sync on top, so the
     // synced treatment can be spot-checked alongside normal pages. Only the
@@ -102,12 +97,15 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
       const { seedRealistic } = await import("./realistic");
       await seedRealistic(adapter);
     }
-    // The mock adapter seeds synced rows directly; the real app routes through
-    // the dev Tauri command (no network/keychain). The launch path only ever
-    // runs under VITE_TEST_MODE, so it always takes the mock branch.
-    if (import.meta.env["VITE_TEST_MODE"] === "true") {
+    // Only the mock needs its own copy of the synced rows. Both other backends
+    // reach the real writer's dev command, which is the point of the bridge
+    // lane: the same seed a person QAs against, planted by the same code.
+    if (STORAGE_BACKEND === "mock") {
       const { seedSyncedCalendar } = await import("./syncedCalendar");
       await seedSyncedCalendar(adapter);
+    } else if (STORAGE_BACKEND === "bridge") {
+      const { bridgeInvoke } = await import("@bridge/transport");
+      await bridgeInvoke("dev_seed_synced_calendar");
     } else {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("dev_seed_synced_calendar");
@@ -143,7 +141,6 @@ const LAUNCH_SEEDS: Partial<Record<SeedName, "any-build" | "dev-only">> = {
   demo: "dev-only",
   marketing: "dev-only",
   realistic: "dev-only",
-  stress: "dev-only",
   synced: "any-build",
   tutorial: "any-build",
 };

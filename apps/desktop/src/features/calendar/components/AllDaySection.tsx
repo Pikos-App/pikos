@@ -6,6 +6,7 @@ import {
   firstFreeRowInSpan,
 } from "@pikos/core";
 import { format } from "date-fns";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
@@ -14,6 +15,11 @@ import { usePages } from "@/shared/context/PagesContext";
 import { chipFolderStyle } from "../utils/calendarColors";
 import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
 import { AllDayBar } from "./AllDayBar";
+
+/** Rows drawn past each edge of the strip's scrolled view, so a scroll shows bars already drawn. A
+ *  busy week holds hundreds of bars in a strip a few rows tall, and drawing them all was most of
+ *  the cost of showing the week. */
+const OVERSCAN_ROWS = 4;
 
 interface AllDaySectionProps {
   allDayDragHoverIndex: number | null;
@@ -90,6 +96,17 @@ export function AllDaySection({
     ? (bars.find((b) => b.page.id === autoOpenPageId && !b.continuesLeft)?.key ?? null)
     : null;
 
+  const [scrollTop, setScrollTop] = useState(0);
+  const firstRow =
+    Math.floor((scrollTop - metrics.allDayTopPadding) / metrics.allDayRowHeight) - OVERSCAN_ROWS;
+  const lastRow = Math.ceil((scrollTop + height) / metrics.allDayRowHeight) + OVERSCAN_ROWS;
+  const drawnBars = bars.filter(
+    (bar) =>
+      (bar.row >= firstRow && bar.row <= lastRow) ||
+      bar.key === autoOpenBarKey ||
+      bar.page.id === draggingPageId
+  );
+
   // Normalise create-preview bounds (the drag could go in either direction).
   const previewBounds = createPreview
     ? {
@@ -118,7 +135,12 @@ export function AllDaySection({
           section height, scroll instead of clipping. `min-h-full` keeps the
           columns tall when bars are short so weekend bg + dividers reach the
           bottom edge. */}
-      <div className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden">
+      <div
+        aria-label="All-day events"
+        className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden"
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        role="group"
+      >
         <div className="flex min-h-full">
           <div className={cn(CALENDAR_GUTTER_WIDTH, "shrink-0")} />
 
@@ -156,7 +178,7 @@ export function AllDaySection({
                 bar re-enables pointer-events-auto on itself. No aria-hidden:
                 that would take every bar out of the accessibility tree. */}
             <div className="pointer-events-none absolute inset-0">
-              {bars.map((bar) => {
+              {drawnBars.map((bar) => {
                 const folderColor = bar.page.folderId
                   ? folderColorMap.get(bar.page.folderId)
                   : undefined;

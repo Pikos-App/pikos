@@ -804,8 +804,9 @@ async fn create_page_persists_fields_and_assigns_sort_order() {
     assert_ne!(first.id, second.id, "ids must be unique");
     assert_eq!(first.sort_order, 0);
     assert_eq!(
-        second.sort_order, 1,
-        "sort_order auto-increments per folder"
+        second.sort_order,
+        crate::moves::ORDER_SPACING,
+        "each new page lands a full gap after the last, leaving room to move pages between"
     );
     assert_eq!(count_pages(&pool).await, 2);
 }
@@ -1031,6 +1032,64 @@ async fn list_pages_filters_by_status_and_folder() {
     .await
     .unwrap();
     assert_eq!(inbox.len(), 2);
+}
+
+#[tokio::test]
+async fn a_bounded_list_returns_the_first_rows_in_the_order_asked_for() {
+    let pool = test_pool().await;
+    // (id, sort_order, updated_at, tags): manual order runs c, a, b, d; edit order runs b, d, c, a.
+    let pages = [
+        ("a", 1, "2026-01-01T00:00:00Z", r#"["work"]"#),
+        ("b", 2, "2026-01-04T00:00:00Z", "[]"),
+        ("c", 0, "2026-01-02T00:00:00Z", "[]"),
+        ("d", 3, "2026-01-03T00:00:00Z", r#"["work"]"#),
+    ];
+    for (id, sort_order, updated_at, tags) in pages {
+        insert_test_page(
+            &pool,
+            TestPage {
+                tags_json: tags,
+                ..TestPage::new(id, id)
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ?")
+            .bind(sort_order)
+            .bind(updated_at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
+
+    let manual = list_pages_window(&pool, None, PageOrder::SortOrder, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(ids(manual), ["c", "a"]);
+
+    let recent = list_pages_window(&pool, None, PageOrder::RecentlyUpdated, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(ids(recent), ["b", "d"]);
+
+    let tagged = list_pages_window(
+        &pool,
+        Some(PageFilter {
+            tags: Some(vec!["work".into()]),
+            ..Default::default()
+        }),
+        PageOrder::RecentlyUpdated,
+        Some(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ids(tagged),
+        ["d"],
+        "the limit counts only pages that carry the tag"
+    );
 }
 
 #[tokio::test]

@@ -21,7 +21,7 @@ import {
   viewerStart,
 } from "@pikos/core";
 import { Command, FileText, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,12 @@ import { formatCombo } from "@/shared/keyboard/formatCombo";
 import type { Binding } from "@/shared/keyboard/registry";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { lastOpened, opensVersion, subscribeToOpens } from "@/shared/lib/recentOpens";
 import { createLogger } from "@/shared/logger";
+import { flushPendingWrites } from "@/shared/pendingWrites";
+import { useHeldPages } from "@/shared/viewCache/useHeldPages";
+
+import { highlightText } from "../highlightText";
 
 const log = createLogger("SearchPalette");
 
@@ -59,28 +64,6 @@ function commandMatches(label: string, filter: string): boolean {
     if (i === filter.length) return true;
   }
   return false;
-}
-
-function highlightText(text: string, queryWords: string[]): React.ReactNode {
-  if (!text || queryWords.length === 0) return text;
-
-  const escaped = queryWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
-  const parts = text.split(pattern);
-
-  return parts.map((part, i) => {
-    const isMatch = pattern.test(part);
-    // Reset lastIndex since we're reusing the regex with `g` flag
-    pattern.lastIndex = 0;
-    if (isMatch) {
-      return (
-        <span className="font-medium text-primary" key={i}>
-          {part}
-        </span>
-      );
-    }
-    return part;
-  });
 }
 
 /** "2026-03-23" or "2026-03-23T10:00:00" → "Mar 23, 2026". */
@@ -155,7 +138,8 @@ async function runFilteredSearch(
   const { filter, unresolvedFolder } = buildSearchFilter(parsed, opts.folders);
   // A folder name nothing matches can't narrow to anything — returning the
   // unfiltered set would quietly answer a different question.
-  if (unresolvedFolder !== null) return { completedCount: 0, results: [] };
+  if (unresolvedFolder !== null)
+    return { completedCount: 0, completedCountCapped: false, results: [] };
 
   const summaries = await opts.storage.listPages(filter);
 
@@ -174,13 +158,21 @@ async function runFilteredSearch(
 
   return {
     completedCount: rows.filter(isDone).length,
+    completedCountCapped: false,
     results: opts.includeCompleted ? rows : rows.filter((r) => !isDone(r)),
   };
 }
 
+/** A keystroke this soon after the last is part of a burst: the search waits for the burst to end
+ *  rather than run for every key. A keystroke after a pause searches at once. */
+const SEARCH_BURST_MS = 150;
+
+/** Recent pages the palette lists with no query. */
+const RECENT_LIMIT = 10;
+
 export function SearchPalette() {
   const { activePageId, dialogPrefill, openDialog, openPage, setOpenDialog } = useUI();
-  const { folders, pages, searchPages } = usePages();
+  const { folders, searchPages } = usePages();
   const { storage } = useWorkspace();
 
   const isOpen = openDialog === "search";
@@ -189,6 +181,7 @@ export function SearchPalette() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
+  const [completedCountCapped, setCompletedCountCapped] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [mouseActive, setMouseActive] = useState(false);
   const [mouseMoved, setMouseMoved] = useState(false);
@@ -225,6 +218,7 @@ export function SearchPalette() {
     setCommands(isCommandMode ? Keyboard.listCommands() : []);
     setResults([]);
     setCompletedCount(0);
+    setCompletedCountCapped(false);
   }
 
   const commandItems = isCommandMode
@@ -241,7 +235,7 @@ export function SearchPalette() {
     () => {
       if (!isOpen) setOpenDialog("search");
     },
-    { allowInInputs: true, group: "Navigation", label: "Search pages" }
+    { allowInInputs: true, group: "Navigation", inPalette: false, label: "Search pages" }
   );
 
   useKeyboardShortcut(
@@ -249,10 +243,13 @@ export function SearchPalette() {
     () => {
       if (!isOpen) setOpenDialog("search", COMMAND_PREFILL);
     },
-    { allowInInputs: true, group: "Navigation", label: "Run a command" }
+    { allowInInputs: true, group: "Navigation", inPalette: false, label: "Run a command" }
   );
 
-  // ── Search with debounce ──────────────────────────────────────────────────
+  // ── Search as you type ────────────────────────────────────────────────────
+
+  const lastInputAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const searchRequestRef = useRef(0);
 
   useEffect(() => {
     const q = query.trim();
@@ -264,8 +261,16 @@ export function SearchPalette() {
     if (!parsedQuery.hasOperators && q.length < MIN_QUERY_LENGTH) return;
     if (parsedQuery.hasOperators && !storage) return;
 
-    const timer = setTimeout(() => {
-      const search =
+    const now = performance.now();
+    const inBurst = now - lastInputAtRef.current < SEARCH_BURST_MS;
+    lastInputAtRef.current = now;
+    // Searches run as keys land, so an older one can finish after a newer one.
+    const request = ++searchRequestRef.current;
+
+    function run() {
+      // Words typed a moment ago are still in the editor's and the queue's
+      // debounces, out of the index; write them first so they are found.
+      const search = flushPendingWrites().then(() =>
         parsedQuery.hasOperators && storage
           ? runFilteredSearch(parsedQuery, {
               folders,
@@ -275,31 +280,63 @@ export function SearchPalette() {
               searchPages,
               storage,
             })
-          : searchPages(q, showCompleted || undefined);
+          : searchPages(q, showCompleted || undefined)
+      );
 
       search
-        .then(({ completedCount: count, results: res }) => {
+        .then(({ completedCount: count, completedCountCapped: capped, results: res }) => {
+          if (request !== searchRequestRef.current) return;
           setResults(res);
           setCompletedCount(count);
+          setCompletedCountCapped(capped);
         })
         .catch((err: unknown) => {
           // FTS5 syntax errors echo the user's query. Log only the error
           // class — never pass `err` directly, never log the query text.
           log.error("search failed", err instanceof Error ? err.name : "unknown");
         });
-    }, 150);
+    }
+
+    if (!inBurst) {
+      run();
+      return;
+    }
+    const timer = setTimeout(run, SEARCH_BURST_MS);
     return () => clearTimeout(timer);
   }, [query, showCompleted, searchPages, folders, storage]);
 
   // ── Recent pages (shown when input is empty) ────────────────────────────
 
-  const recentItems: SearchResult[] = query.trim()
-    ? []
-    : [...pages]
-        .filter((p) => p.lastOpenedAt && p.id !== activePageId)
-        .sort((a, b) => (b.lastOpenedAt ?? "").localeCompare(a.lastOpenedAt ?? ""))
-        .slice(0, 10)
-        .map(summaryToResult);
+  // Read so an open recorded while the palette is up reorders the list.
+  const opens = useSyncExternalStore(subscribeToOpens, opensVersion);
+  // Only what's been shown is held, so the database names the recent pages; the held ones stay
+  // in, for an open whose write hasn't landed yet.
+  const [recentRows, setRecentRows] = useState<PageSummary[]>([]);
+  useEffect(() => {
+    if (!storage || !isOpen) return;
+    let cancelled = false;
+    void storage.listRecentPages(activePageId, RECENT_LIMIT).then((rows) => {
+      if (!cancelled) setRecentRows(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [storage, isOpen, activePageId, opens]);
+  const held = useHeldPages(isOpen);
+  function recentPool(): PageSummary[] {
+    if (!held) return recentRows;
+    const recentIds = new Set(recentRows.map((r) => r.id));
+    return [...recentRows, ...held.filter((p) => !recentIds.has(p.id))];
+  }
+  // Only while open: this walks every page, and the palette renders on every page switch.
+  const recentItems: SearchResult[] =
+    !isOpen || query.trim()
+      ? []
+      : recentPool()
+          .filter((p) => lastOpened(p) !== null && p.id !== activePageId)
+          .sort((a, b) => (lastOpened(b) ?? "").localeCompare(lastOpened(a) ?? ""))
+          .slice(0, RECENT_LIMIT)
+          .map(summaryToResult);
 
   const pageItems = query.trim() ? results : recentItems;
   const displayCount = isCommandMode ? commandItems.length : pageItems.length;
@@ -307,10 +344,10 @@ export function SearchPalette() {
 
   const trimmedQuery = query.trim();
   const parsed = parseSearchQuery(trimmedQuery);
-  // Highlight what the index matched, not what the user typed — "multi-color" is two
-  // tokens to FTS, so a page holding "multi color" is a hit with nothing to mark.
-  // On the operator path only the residual text reached the index.
-  const queryWords = ftsTokens(parsed.hasOperators ? parsed.text : trimmedQuery);
+  // On the operator path only the residual text reached the index, so only it is
+  // highlighted; `highlightText` says how the text and its tokens are marked.
+  const searchedText = parsed.hasOperators ? parsed.text : trimmedQuery;
+  const queryWords = ftsTokens(searchedText);
 
   function handleSelect(id: string) {
     openPage(id);
@@ -390,9 +427,9 @@ export function SearchPalette() {
     // metadata summary for title-only
     let secondLine: React.ReactNode = null;
     if (item.matchSource === "subtitle" && item.subtitle) {
-      secondLine = queryWords.length > 0 ? highlightText(item.subtitle, queryWords) : item.subtitle;
+      secondLine = highlightText(item.subtitle, queryWords, searchedText);
     } else if (hasContentExcerpt) {
-      secondLine = queryWords.length > 0 ? highlightText(item.excerpt, queryWords) : item.excerpt;
+      secondLine = highlightText(item.excerpt, queryWords, searchedText);
     } else if (trimmedQuery) {
       const summary = buildMetadataSummary(item);
       if (summary) secondLine = summary;
@@ -421,8 +458,9 @@ export function SearchPalette() {
         <div className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 truncate">
             <span className="truncate">
-              {highlightTitle && queryWords.length > 0
-                ? highlightText(item.title || "Untitled", queryWords)
+              {highlightTitle
+                ? // Stryker disable next-line StringLiteral: an untitled page never matches on its title
+                  highlightText(item.title || "Untitled", queryWords, searchedText)
                 : item.title || "Untitled"}
             </span>
             {isDone(item) && (
@@ -563,7 +601,9 @@ export function SearchPalette() {
                     onClick={() => setShowCompleted((v) => !v)}
                     type="button"
                   >
-                    {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
+                    {showCompleted
+                      ? "Hide completed"
+                      : `Show completed (${completedCount}${completedCountCapped ? "+" : ""})`}
                   </button>
                 ))}
 

@@ -5,18 +5,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, quickAdd } from "./fixtures";
-
-async function openCalendarMode(app: Page) {
-  // Click the header button rather than the shortcut — a keypress can be
-  // dropped before the keyboard registry mounts (see calendar.spec.ts).
-  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
-  await calendarBtn.waitFor({ state: "visible" });
-  if ((await calendarBtn.getAttribute("aria-pressed")) !== "true") {
-    await calendarBtn.click();
-  }
-  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-}
+import { test as appTest, expect, openCalendarMode, quickAdd } from "./fixtures";
 
 async function switchToMonth(app: Page) {
   await app.getByRole("button", { name: "Month view" }).click();
@@ -38,7 +27,7 @@ async function seedTodayEvent(app: Page, title: string) {
   await expect(titleInput).not.toBeVisible();
 }
 
-appTest("month view shows a seeded event and opens its popover @tier2", async ({ app }) => {
+appTest("month view shows a seeded event and opens its popover", async ({ app }) => {
   await openCalendarMode(app);
   await seedTodayEvent(app, "Board review");
 
@@ -53,7 +42,7 @@ appTest("month view shows a seeded event and opens its popover @tier2", async ({
   await expect(app.getByPlaceholder("Untitled")).toHaveValue("Board review");
 });
 
-appTest("month view never widens the window @tier2", async ({ app }) => {
+appTest("month view never widens the window", async ({ app }) => {
   for (const [title, when] of [
     ["Quarterly planning review with the whole platform team", "today 9am"],
     ["Follow-up on the migration rollback decision and its owners", "tomorrow 10am"],
@@ -75,21 +64,24 @@ appTest("month view never widens the window @tier2", async ({ app }) => {
   expect(scroll).toBe(client);
 });
 
-appTest("month view header navigates by month and back to today @tier2", async ({ app }) => {
-  await openCalendarMode(app);
-  await switchToMonth(app);
+appTest(
+  "month view header navigates by month and back to today",
+  async ({ app }) => {
+    await openCalendarMode(app);
+    await switchToMonth(app);
 
-  const label = app.getByRole("heading", { name: "Visible month" });
-  const current = await label.textContent();
+    const label = app.getByRole("heading", { name: "Visible month" });
+    const current = await label.textContent();
 
-  await app.getByRole("button", { name: "Next month" }).click();
-  await expect(label).not.toHaveText(current ?? "");
+    await app.getByRole("button", { name: "Next month" }).click();
+    await expect(label).not.toHaveText(current ?? "");
 
-  await app.getByRole("button", { name: "Jump to current month" }).click();
-  await expect(label).toHaveText(current ?? "");
-});
+    await app.getByRole("button", { name: "Jump to current month" }).click();
+    await expect(label).toHaveText(current ?? "");
+  }
+);
 
-appTest("clicking a month day cell returns to the time grid @tier2", async ({ app }) => {
+appTest("clicking a month day cell returns to the time grid", async ({ app }) => {
   await openCalendarMode(app);
   await switchToMonth(app);
 

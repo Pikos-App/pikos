@@ -13,20 +13,23 @@ import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 // hint surface (a regression that drops the empty state would leave the
 // panel blank).
 
-appTest("Today view with no scheduled pages shows the empty state @tier1", async ({ app }) => {
-  // Create an unscheduled page from Inbox (the default active view) — when
-  // active view is Today, QuickAdd auto-anchors the schedule to today, so
-  // the page would land in Today and defeat the test premise. Stay on Inbox.
-  await quickAdd(app, "fresh capture");
+appTest(
+  "Today view with no scheduled pages shows the empty state @smoke",
+  async ({ app }) => {
+    // Create an unscheduled page from Inbox (the default active view) — when
+    // active view is Today, QuickAdd auto-anchors the schedule to today, so
+    // the page would land in Today and defeat the test premise. Stay on Inbox.
+    await quickAdd(app, "fresh capture");
 
-  await app.getByRole("button", { name: /^Today/ }).click();
-  await expect(app.getByText("Nothing scheduled for today")).toBeVisible();
-  await expect(
-    app.locator("[data-page-list-item]").filter({ hasText: "fresh capture" })
-  ).not.toBeVisible();
+    await app.getByRole("button", { name: /^Today/ }).click();
+    await expect(app.getByText("Nothing scheduled for today")).toBeVisible();
+    await expect(
+      app.locator("[data-page-list-item]").filter({ hasText: "fresh capture" })
+    ).not.toBeVisible();
 
-  await expect(app.locator("[data-page-list-item]")).toHaveCount(0);
-});
+    await expect(app.locator("[data-page-list-item]")).toHaveCount(0);
+  }
+);
 
 // ─── Search palette empty + "Show completed" toggle ────────────────────────
 //
@@ -36,16 +39,14 @@ appTest("Today view with no scheduled pages shows the empty state @tier1", async
 // hidden completed-page matches without changing query.
 
 appTest(
-  "search palette: 'No pages found' empty + 'Show completed' toggles in completed matches @tier2",
+  "search palette: 'No pages found' empty + 'Show completed' toggles in completed matches",
   async ({ app }) => {
     await quickAdd(app, "active draft");
     await quickAdd(app, "archive item");
 
     // Mark "archive item" done — it leaves the active list and only surfaces
     // in palette searches via the Show-completed toggle.
-    const archive = app
-      .locator("[data-page-list-item]")
-      .filter({ hasText: "archive item" });
+    const archive = app.locator("[data-page-list-item]").filter({ hasText: "archive item" });
     await archive.getByRole("checkbox", { name: "Mark done" }).click();
     await expect(archive).not.toBeVisible();
 
@@ -81,37 +82,34 @@ appTest(
 // chips on the calendar would turn the calendar into a graveyard of
 // deleted titles.
 
-appTest(
-  "deleting a scheduled page removes its calendar chip @tier2",
-  async ({ app }) => {
-    // Seed a page scheduled for today via NLP. "lunch today" parses cleanly
-    // (no recurrence / multi-day issues) and bare "today" anchors the date.
-    await quickAdd(app, "lunch today");
+appTest("deleting a scheduled page removes its calendar chip", async ({ app }) => {
+  // Seed a page scheduled for today via NLP. "lunch today" parses cleanly
+  // (no recurrence / multi-day issues) and bare "today" anchors the date.
+  await quickAdd(app, "lunch today");
 
-    const calendarBtn = app.getByRole("button", { name: "Calendar view" });
-    await calendarBtn.click();
-    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
+  await calendarBtn.click();
+  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
 
-    const calendar = app.getByRole("region", { name: "Week calendar" });
-    const chip = calendar.getByRole("button", { name: "lunch" });
-    await expect(chip).toHaveCount(1);
+  const calendar = app.getByRole("region", { name: "Week calendar" });
+  const chip = calendar.getByRole("button", { name: "lunch" });
+  await expect(chip).toHaveCount(1);
 
-    // Switch back to editor (so the page-list is the only delete target;
-    // the calendar's chip context-menu uses a different code path covered
-    // elsewhere) and right-click the page in the list.
-    const editorBtn = app.getByRole("button", { name: "Editor view" });
-    await editorBtn.click();
-    const item = app.locator("[data-page-list-item]").filter({ hasText: "lunch" });
-    await item.click({ button: "right" });
-    await app.getByRole("menuitem", { name: "Delete" }).click();
+  // Switch back to editor (so the page-list is the only delete target;
+  // the calendar's chip context-menu uses a different code path covered
+  // elsewhere) and right-click the page in the list.
+  const editorBtn = app.getByRole("button", { name: "Editor view" });
+  await editorBtn.click();
+  const item = app.locator("[data-page-list-item]").filter({ hasText: "lunch" });
+  await item.click({ button: "right" });
+  await app.getByRole("menuitem", { name: "Delete" }).click();
 
-    await expect(item).not.toBeVisible();
+  await expect(item).not.toBeVisible();
 
-    // Re-open calendar and verify the chip is gone — the deletion cleared
-    // the schedule too. (The calendar uses the live pages list, so a
-    // soft-deleted page's chip must not linger.)
-    await calendarBtn.click();
-    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-    await expect(calendar.getByRole("button", { name: "lunch" })).toHaveCount(0);
-  }
-);
+  // Re-open calendar and verify the chip is gone — the deletion cleared
+  // the schedule too. (The calendar uses the live pages list, so a
+  // soft-deleted page's chip must not linger.)
+  await calendarBtn.click();
+  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+  await expect(calendar.getByRole("button", { name: "lunch" })).toHaveCount(0);
+});

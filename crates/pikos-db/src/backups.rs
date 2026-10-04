@@ -206,6 +206,29 @@ async fn snapshot_workspace(workspace_path: &str, dest: &Path) -> AppResult<()> 
     Ok(())
 }
 
+/// The restored file's counter is the backup's, behind the one anything watching has seen, so it
+/// gets a new epoch. A backup from before the counter existed gets one when it migrates.
+async fn renew_epoch(workspace_path: &str) -> AppResult<()> {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(workspace_path)
+                .create_if_missing(false),
+        )
+        .await?;
+    let counted: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'change_counter')",
+    )
+    .fetch_one(&pool)
+    .await?;
+    if counted {
+        crate::changes::new_epoch(&pool).await?;
+    }
+    pool.close().await;
+    Ok(())
+}
+
 /// Put `file_name` back as the workspace, after snapshotting what is there now.
 ///
 /// The caller must have closed its pool: SQLite's WAL and shared-memory files
@@ -234,6 +257,7 @@ pub async fn restore_backup(workspace_path: &str, file_name: &str) -> AppResult<
             std::fs::remove_file(&stale)?;
         }
     }
+    renew_epoch(workspace_path).await?;
 
     Ok(displaced.to_string_lossy().to_string())
 }

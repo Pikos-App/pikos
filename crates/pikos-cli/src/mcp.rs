@@ -18,6 +18,7 @@
 
 use std::io::{BufRead, Write};
 
+use pikos_db::DEFAULT_SEARCH_SCAN;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
@@ -318,6 +319,7 @@ async fn call_tool(
                 &require_str(args, "query")?,
                 flag(args, "includeCompleted"),
                 count(args, "limit"),
+                DEFAULT_SEARCH_SCAN,
             )
             .await?;
             to_value(&resp)

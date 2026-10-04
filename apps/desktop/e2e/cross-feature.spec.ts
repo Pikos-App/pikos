@@ -8,19 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, mod, quickAdd } from "./fixtures";
-
-/** Click the right-panel header's calendar toggle. Mirrors the helper used in
- *  calendar.spec.ts / recurring.spec.ts so we exercise the same shell-ready
- *  signal (the button only mounts after the layout settles). */
-async function openCalendarMode(app: Page) {
-  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
-  await calendarBtn.waitFor({ state: "visible" });
-  if ((await calendarBtn.getAttribute("aria-pressed")) !== "true") {
-    await calendarBtn.click();
-  }
-  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-}
+import { test as appTest, createFolder, expect, mod, openCalendarMode, quickAdd } from "./fixtures";
 
 async function openEditorMode(app: Page) {
   const editorBtn = app.getByRole("button", { name: "Editor view" });
@@ -37,7 +25,7 @@ async function openEditorMode(app: Page) {
 // of these surfaces would silently break this everyday flow.
 
 appTest(
-  "quick-add @today lands in Today, complete moves it to Completed @tier1",
+  "quick-add @today lands in Today, complete moves it to Completed @smoke",
   async ({ app }) => {
     // Two pages so we can tell the filter is doing real work.
     await quickAdd(app, "ship release notes @today");
@@ -74,7 +62,7 @@ appTest(
 // nudge past the threshold before moving onto the target column.
 
 appTest(
-  "drag unscheduled page onto calendar all-day → schedule shows everywhere @tier2",
+  "drag unscheduled page onto calendar all-day → schedule shows everywhere",
   async ({ app }) => {
     await quickAdd(app, "draggable task");
 
@@ -150,7 +138,7 @@ appTest(
 // results stale even after a rename).
 
 appTest(
-  "rename via editor reflects in subsequent Cmd+K search results @tier2",
+  "rename via editor reflects in subsequent Cmd+K search results",
   async ({ app }) => {
     await quickAdd(app, "alpha proposal");
     await quickAdd(app, "beta proposal");
@@ -173,9 +161,7 @@ appTest(
     await expect(app.getByRole("textbox", { name: "Page title" })).toBeFocused();
     await app.keyboard.press(mod("Mod+a"));
     await app.keyboard.type("zenith proposal");
-    await expect(app.getByRole("textbox", { name: "Page title" })).toHaveValue(
-      "zenith proposal"
-    );
+    await expect(app.getByRole("textbox", { name: "Page title" })).toHaveValue("zenith proposal");
 
     // Click out of the title to commit, then re-open the palette and search
     // by the new title. The result must surface immediately — the search
@@ -205,16 +191,10 @@ appTest(
 // confuse the user.
 
 appTest(
-  "rename a folder → its pages stay reachable; Today still finds scheduled ones @tier2",
+  "rename a folder → its pages stay reachable; Today still finds scheduled ones",
   async ({ app }) => {
     // Seed a folder named "Work" and put one scheduled, one unscheduled page in it.
-    await app
-      .getByRole("toolbar", { name: "Folder actions" })
-      .getByRole("button", { name: "New Folder" })
-      .click();
-    await app.keyboard.press(mod("Mod+a"));
-    await app.keyboard.type("Work");
-    await app.keyboard.press("Enter");
+    await createFolder(app, "Work");
 
     // Active folder is now "Work" — quickAdd lands here. Avoid words like
     // "weekly"/"daily"/"monthly" in the title since the QuickAdd parser
@@ -241,12 +221,8 @@ appTest(
     await app.keyboard.type("Workstreams");
     await app.keyboard.press("Enter");
 
-    await expect(
-      sidebar.getByRole("button", { exact: true, name: "Workstreams" })
-    ).toBeVisible();
-    await expect(
-      sidebar.getByRole("button", { exact: true, name: "Work" })
-    ).not.toBeVisible();
+    await expect(sidebar.getByRole("button", { exact: true, name: "Workstreams" })).toBeVisible();
+    await expect(sidebar.getByRole("button", { exact: true, name: "Work" })).not.toBeVisible();
 
     // Pages survive the rename — both still listed in the renamed folder.
     await sidebar.getByRole("button", { exact: true, name: "Workstreams" }).click();
@@ -270,7 +246,7 @@ appTest(
 // dropped onto the same day end up with three chips on that day.
 
 appTest(
-  "multi-select drag of 3 pages onto an all-day column schedules all 3 @tier2",
+  "multi-select drag of 3 pages onto an all-day column schedules all 3",
   async ({ app }) => {
     await quickAdd(app, "alpha task");
     await quickAdd(app, "beta task");
@@ -336,7 +312,7 @@ appTest(
 // wiring or the scheduleOnce call would leave the page in Inbox.
 
 appTest(
-  "drag an unscheduled page onto the Today nav row schedules it for today @tier2",
+  "drag an unscheduled page onto the Today nav row schedules it for today",
   async ({ app }) => {
     await quickAdd(app, "drop subject");
 
@@ -344,9 +320,7 @@ appTest(
     // is visible regardless of the active view's default.
     await app.getByRole("button", { name: /^Inbox/ }).click();
 
-    const item = app
-      .locator("[data-page-list-item]")
-      .filter({ hasText: "drop subject" });
+    const item = app.locator("[data-page-list-item]").filter({ hasText: "drop subject" });
     await expect(item).toBeVisible();
     const itemBox = await item.boundingBox();
     if (!itemBox) throw new Error("page item missing");
@@ -397,55 +371,46 @@ appTest(
 // test covers the DnD path. A regression in the folder droppable wiring
 // would silently leave the page in its current folder.
 
-appTest(
-  "drag a page from list onto a sidebar folder moves it @tier2",
-  async ({ app }) => {
-    await app
-      .getByRole("toolbar", { name: "Folder actions" })
-      .getByRole("button", { name: "New Folder" })
-      .click();
-    await app.keyboard.press(mod("Mod+a"));
-    await app.keyboard.type("Archive");
-    await app.keyboard.press("Enter");
+appTest("drag a page from list onto a sidebar folder moves it", async ({ app }) => {
+  await createFolder(app, "Archive");
 
-    await app.getByRole("button", { name: /^Inbox/ }).click();
-    await quickAdd(app, "movable doc");
+  await app.getByRole("button", { name: /^Inbox/ }).click();
+  await quickAdd(app, "movable doc");
 
-    const item = app.locator("[data-page-list-item]").filter({ hasText: "movable doc" });
-    await expect(item).toBeVisible();
-    const itemBox = await item.boundingBox();
-    if (!itemBox) throw new Error("page item missing");
+  const item = app.locator("[data-page-list-item]").filter({ hasText: "movable doc" });
+  await expect(item).toBeVisible();
+  const itemBox = await item.boundingBox();
+  if (!itemBox) throw new Error("page item missing");
 
-    // Sidebar folder buttons receive page drops via useThreePanelDnD.
-    const sidebar = app.getByRole("group", { name: "Views and folders" });
-    const folder = sidebar.getByRole("button", { exact: true, name: "Archive" });
-    const folderBox = await folder.boundingBox();
-    if (!folderBox) throw new Error("folder missing");
+  // Sidebar folder buttons receive page drops via useThreePanelDnD.
+  const sidebar = app.getByRole("group", { name: "Views and folders" });
+  const folder = sidebar.getByRole("button", { exact: true, name: "Archive" });
+  const folderBox = await folder.boundingBox();
+  if (!folderBox) throw new Error("folder missing");
 
-    // dnd-kit activation: nudge ≥8 px before moving onto the target.
-    const startX = itemBox.x + itemBox.width / 2;
-    const startY = itemBox.y + itemBox.height / 2;
-    const folderX = folderBox.x + folderBox.width / 2;
-    const folderY = folderBox.y + folderBox.height / 2;
+  // dnd-kit activation: nudge ≥8 px before moving onto the target.
+  const startX = itemBox.x + itemBox.width / 2;
+  const startY = itemBox.y + itemBox.height / 2;
+  const folderX = folderBox.x + folderBox.width / 2;
+  const folderY = folderBox.y + folderBox.height / 2;
 
-    await app.mouse.move(startX, startY);
-    await app.mouse.down();
-    await app.mouse.move(startX + 16, startY, { steps: 4 });
-    await app.mouse.move(folderX, folderY, { steps: 10 });
-    await app.mouse.up();
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  await app.mouse.move(startX + 16, startY, { steps: 4 });
+  await app.mouse.move(folderX, folderY, { steps: 10 });
+  await app.mouse.up();
 
-    await expect(item).not.toBeVisible();
+  await expect(item).not.toBeVisible();
 
-    // Move the cursor off the folder before clicking. The folder button is
-    // both a click target and a dnd-kit droppable; clicking it immediately
-    // after `mouse.up` while the cursor still hovers can race with the
-    // drag-end cleanup and swallow the navigation. Moving away first
-    // guarantees a clean fresh pointer sequence.
-    await app.mouse.move(0, 0);
+  // Move the cursor off the folder before clicking. The folder button is
+  // both a click target and a dnd-kit droppable; clicking it immediately
+  // after `mouse.up` while the cursor still hovers can race with the
+  // drag-end cleanup and swallow the navigation. Moving away first
+  // guarantees a clean fresh pointer sequence.
+  await app.mouse.move(0, 0);
 
-    await folder.click();
-    await expect(
-      app.locator("[data-page-list-item]").filter({ hasText: "movable doc" })
-    ).toBeVisible();
-  }
-);
+  await folder.click();
+  await expect(
+    app.locator("[data-page-list-item]").filter({ hasText: "movable doc" })
+  ).toBeVisible();
+});

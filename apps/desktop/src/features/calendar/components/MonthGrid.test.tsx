@@ -154,7 +154,7 @@ describe("MonthGrid — event chips", () => {
       fireEvent.click(screen.getByRole("button", { name: "Standup 9 AM" }));
       // The chip discriminates click from double-click on a timer.
       act(() => {
-        vi.runAllTimers();
+        vi.runOnlyPendingTimers();
       });
       expect(screen.getByPlaceholderText("Untitled")).toBeInTheDocument();
     } finally {

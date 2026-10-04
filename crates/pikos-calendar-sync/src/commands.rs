@@ -77,18 +77,29 @@ pub async fn connect_caldav(
         password,
     };
     let remote = CaldavProvider::discover_with(&creds).await?;
+    save_caldav(pool, &keychain, &creds, &display_name, &remote).await
+}
+
+/// The half of [`connect_caldav`] after discovery, so a test can reach it without a server.
+async fn save_caldav(
+    pool: &SqlitePool,
+    keychain: &Keychain,
+    creds: &CaldavCredentials,
+    display_name: &str,
+    remote: &[pikos_db::sync_delta::RemoteCalendar],
+) -> AppResult<AccountWithCalendars> {
     let blob = creds
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let identity = caldav_stored_identity(pool, &display_name).await?;
+    let identity = caldav_stored_identity(pool, display_name).await?;
     let claimed = claim_account(pool, PROVIDER_CALDAV, &identity, "basic").await?;
     let stored = keychain
         .store(&claimed.account.id, &blob)
         .map_err(|e| AppError::Internal(e.user_message()));
     let account = keep_or_release(pool, claimed, stored).await?;
 
-    let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    let calendars = upsert_calendars(pool, &account.id, remote).await?;
     Ok(AccountWithCalendars { account, calendars })
 }
 
@@ -155,12 +166,23 @@ where
     // Proves the grant actually reads calendars before anything is persisted —
     // the same validate-first order connect_caldav uses.
     let (remote, display_name) = crate::google::GoogleProvider::list_with(&credentials).await?;
+    save_google(pool, &keychain, &credentials, &display_name, &remote).await
+}
 
-    let claimed = claim_account(pool, PROVIDER_GOOGLE, &display_name, "oauth").await?;
-    let stored = crate::google::store(&keychain, &claimed.account.id, &credentials);
+/// The half of [`connect_google`] after the grant and the calendar list, so a test can reach
+/// it without Google.
+async fn save_google(
+    pool: &SqlitePool,
+    keychain: &Keychain,
+    credentials: &crate::google::GoogleCredentials,
+    display_name: &str,
+    remote: &[pikos_db::sync_delta::RemoteCalendar],
+) -> AppResult<AccountWithCalendars> {
+    let claimed = claim_account(pool, PROVIDER_GOOGLE, display_name, "oauth").await?;
+    let stored = crate::google::store(keychain, &claimed.account.id, credentials);
     let account = keep_or_release(pool, claimed, stored.map_err(AppError::from)).await?;
 
-    let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    let calendars = upsert_calendars(pool, &account.id, remote).await?;
     Ok(AccountWithCalendars { account, calendars })
 }
 
@@ -254,7 +276,7 @@ async fn keep_or_release(
     }
 }
 
-async fn upsert_calendars(
+pub async fn upsert_calendars(
     pool: &SqlitePool,
     account_id: &str,
     remote: &[pikos_db::sync_delta::RemoteCalendar],

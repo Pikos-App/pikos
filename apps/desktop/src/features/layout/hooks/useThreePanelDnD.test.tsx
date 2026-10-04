@@ -4,12 +4,14 @@ import { act, waitFor } from "@testing-library/react";
 import { format } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
-import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useCachedViews } from "@/shared/viewCache/useCachedView";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { useThreePanelDnD } from "./useThreePanelDnD";
 
@@ -22,21 +24,34 @@ afterEach(() => {
   localStorage.clear();
 });
 
+/** Stands in for the page list on screen, which is what loads the active view's list. */
+function useShownList(viewId: string): string[] {
+  const lists = useCachedViews(viewId, useActiveSortMode(), []);
+  return lists?.views[0]?.pages.map((p) => p.id) ?? [];
+}
+
 function setup() {
   return renderHookWithProviders(() => {
     const ui = useUI();
     const selection = useSelection();
     const workspace = useWorkspace();
-    const pages = usePages();
+    const pages = usePagesNow();
     const calendarDnD = useCalendarDnD();
     const dnd = useThreePanelDnD();
-    return { calendarDnD, dnd, pages, selection, ui, workspace };
+    const shownIds = useShownList(ui.activeViewId);
+    return { calendarDnD, dnd, pages, selection, shownIds, ui, workspace };
   });
 }
 
 async function init(hook: ReturnType<typeof setup>) {
   await act(async () => {
     await hook.result.current.workspace.selectWorkspace();
+  });
+}
+
+async function waitForShown(hook: ReturnType<typeof setup>, ids: string[]) {
+  await waitFor(() => {
+    expect(hook.result.current.shownIds).toEqual(ids);
   });
 }
 
@@ -56,6 +71,9 @@ async function markSynced(hook: ReturnType<typeof setup>, pageId: string): Promi
     const storage = hook.result.current.workspace.storage as MockStorageAdapter;
     storage.markPageSynced(pageId, { state: "active" });
     await hook.result.current.workspace.reload();
+  });
+  await waitFor(() => {
+    expect(hook.result.current.pages.pages.find((p) => p.id === pageId)?.scheduleLocked).toBe(true);
   });
 }
 
@@ -165,6 +183,7 @@ describe("useThreePanelDnD — handleDragStart", () => {
       hook.result.current.selection.togglePageSelection(b.id);
       hook.result.current.selection.togglePageSelection(c.id);
     });
+    await waitForShown(hook, [a.id, b.id, c.id]);
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(b.id, "page")));
 
@@ -200,14 +219,16 @@ describe("useThreePanelDnD — handleDragEnd: list reorder", () => {
     const c = await makePage(hook, { folderId: null, title: "C" });
 
     act(() => hook.result.current.ui.setActiveViewId("inbox"));
-    const reorderSpy = vi.spyOn(MockStorageAdapter.prototype, "reorderPages");
+    await waitForShown(hook, [a.id, b.id, c.id]);
+    const moveSpy = vi.spyOn(MockStorageAdapter.prototype, "movePages");
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(a.id, "page")));
     act(() => hook.result.current.dnd.handleDragEnd(endEventOnPage(a.id, c.id)));
 
     await waitFor(() => {
-      expect(reorderSpy).toHaveBeenCalledWith(null, [b.id, c.id, a.id]);
+      expect(moveSpy).toHaveBeenCalledWith([a.id], { after: c.id, before: null });
     });
+    await waitForShown(hook, [b.id, c.id, a.id]);
   });
 
   it("page→page is a no-op when the active view is 'today'", async () => {
@@ -218,11 +239,13 @@ describe("useThreePanelDnD — handleDragEnd: list reorder", () => {
 
     act(() => hook.result.current.ui.setActiveViewId("today"));
     const reorderSpy = vi.spyOn(MockStorageAdapter.prototype, "reorderPages");
+    const moveSpy = vi.spyOn(MockStorageAdapter.prototype, "movePages");
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(a.id, "page")));
     act(() => hook.result.current.dnd.handleDragEnd(endEventOnPage(a.id, b.id)));
 
     expect(reorderSpy).not.toHaveBeenCalled();
+    expect(moveSpy).not.toHaveBeenCalled();
   });
 
   it("page→page is a no-op when the active view's sort mode is not manual", async () => {
@@ -236,11 +259,13 @@ describe("useThreePanelDnD — handleDragEnd: list reorder", () => {
       hook.result.current.ui.setSortMode("inbox", "title");
     });
     const reorderSpy = vi.spyOn(MockStorageAdapter.prototype, "reorderPages");
+    const moveSpy = vi.spyOn(MockStorageAdapter.prototype, "movePages");
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(a.id, "page")));
     act(() => hook.result.current.dnd.handleDragEnd(endEventOnPage(a.id, b.id)));
 
     expect(reorderSpy).not.toHaveBeenCalled();
+    expect(moveSpy).not.toHaveBeenCalled();
   });
 
   it("active.id === over.id is a no-op", async () => {
@@ -250,11 +275,13 @@ describe("useThreePanelDnD — handleDragEnd: list reorder", () => {
 
     act(() => hook.result.current.ui.setActiveViewId("inbox"));
     const reorderSpy = vi.spyOn(MockStorageAdapter.prototype, "reorderPages");
+    const moveSpy = vi.spyOn(MockStorageAdapter.prototype, "movePages");
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(a.id, "page")));
     act(() => hook.result.current.dnd.handleDragEnd(endEventOnPage(a.id, a.id)));
 
     expect(reorderSpy).not.toHaveBeenCalled();
+    expect(moveSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -326,6 +353,7 @@ describe("useThreePanelDnD — handleDragEnd: page → Today view", () => {
       hook.result.current.selection.togglePageSelection(a.id);
       hook.result.current.selection.togglePageSelection(b.id);
     });
+    await waitForShown(hook, [a.id, b.id]);
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(a.id, "page")));
     act(() => hook.result.current.dnd.handleDragEnd(endEventOnTodayView(a.id)));
@@ -478,6 +506,7 @@ describe("useThreePanelDnD — handleDragCancel", () => {
     await init(hook);
     const page = await makePage(hook, { folderId: null, title: "P" });
     const reorderSpy = vi.spyOn(MockStorageAdapter.prototype, "reorderPages");
+    const moveSpy = vi.spyOn(MockStorageAdapter.prototype, "movePages");
 
     act(() => hook.result.current.dnd.handleDragStart(startEvent(page.id, "page")));
     expect(hook.result.current.dnd.activePageData?.id).toBe(page.id);
@@ -486,5 +515,6 @@ describe("useThreePanelDnD — handleDragCancel", () => {
     expect(hook.result.current.dnd.activePageData).toBeNull();
     expect(hook.result.current.dnd.draggedPageCount).toBe(0);
     expect(reorderSpy).not.toHaveBeenCalled();
+    expect(moveSpy).not.toHaveBeenCalled();
   });
 });

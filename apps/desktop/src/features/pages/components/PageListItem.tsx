@@ -33,6 +33,7 @@ import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext"
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
 interface PageListItemProps {
   page: PageSummary;
   isActive: boolean;
@@ -77,6 +78,7 @@ export function PageListItem({
   page,
   showRelative = false,
 }: PageListItemProps) {
+  const prefetch = usePrefetchOnHover(page.id);
   const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
     data: { type: "page" },
     disabled: isRenaming,
@@ -107,6 +109,7 @@ export function PageListItem({
           }}
           {...attributes}
           {...listeners}
+          {...prefetch}
           className={cn(
             "flex cursor-pointer items-start border-b border-l-2 border-border px-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
             density === "compact"
