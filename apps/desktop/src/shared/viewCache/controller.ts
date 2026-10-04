@@ -101,6 +101,7 @@ export class ViewCacheController {
   private heads: string[] | null = null;
   /** The newest change among the heads held, for reading only those changed since. */
   private headsSeq = 0;
+  private headsRead: PageSummary[] | null = null;
   /** Bumped by every write, so a range read that a write overlapped is kept but marked stale. */
   private rangeEpoch = 0;
   private refreshAgain = false;
@@ -319,6 +320,15 @@ export class ViewCacheController {
     return this.ranges.has(`${start}|${end}`) && this.heads !== null;
   }
 
+  /** Every series head held, unsaved edits included; the same array until one changes. */
+  headPages(): PageSummary[] {
+    const pages = (this.heads ?? []).flatMap((id) => this.store.get(id) ?? []);
+    const last = this.headsRead;
+    if (last && last.length === pages.length && last.every((p, i) => p === pages[i])) return last;
+    this.headsRead = pages;
+    return pages;
+  }
+
   /** Whether every series head has been read once. */
   headsLoaded(): boolean {
     return this.heads !== null;
@@ -421,11 +431,13 @@ export class ViewCacheController {
         void this.shadowCheck(key);
     }
     const calendar = [...this.ranges.values()].flatMap((r) => r.ids);
-    evict(this.cache, this.store, this.config.budgetBytes, {
+    const evicted = evict(this.cache, this.store, this.config.budgetBytes, {
       pages: new Set([...pinnedPages, ...calendar, ...(this.heads ?? [])]),
       views: new Set(keys.map(viewName)),
     });
-    this.bump();
+    // A load tells readers itself when it lands; showing what's held changes nothing they read,
+    // and telling them anyway drew a returning list twice.
+    if (evicted.views.length > 0) this.bump();
   }
 
   /** Rows `first` through `last` of `key` are on screen: load them, and keep loading as fetches

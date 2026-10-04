@@ -113,13 +113,14 @@ export function useCompletedPages(activeViewId: string) {
   // (explicit "Load more" and "I just marked this done") without surfacing
   // ambient completed pages that got into `pages` via other code paths.
   const loadedIds = pagination?.loadedIds;
+  const today = localToday();
   const completedPages = (held ?? [])
     .filter((p) => {
       if (isOpen(p)) return false;
       if (isDateView) {
         // A date view's completed section shows every page completed today —
         // the date check is already the session gate.
-        return p.completedAt?.slice(0, 10) === localToday();
+        return p.completedAt?.slice(0, 10) === today;
       }
       if (activeViewId === "inbox") {
         if (p.folderId !== null) return false;

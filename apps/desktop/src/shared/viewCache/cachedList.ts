@@ -107,7 +107,9 @@ export function buildCachedList(input: {
   waiting?: boolean;
 }): CachedList {
   const list = buildList(input);
-  if (!input.waiting) return list;
+  // A view of several lists, as Upcoming is one a day, also waits for every list's first rows:
+  // drawn as each landed, it redrew once a list, each redraw holding up the next list's arrival.
+  if (!input.waiting && !list.loading) return list;
   return {
     ...list,
     loading: true,

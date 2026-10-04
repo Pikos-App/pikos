@@ -34,3 +34,16 @@ export function usePageLookup(): (id: string) => PageSummary | undefined {
   const controller = useViewCacheController();
   return (id) => controller?.store.get(id);
 }
+
+const NO_HEADS = () => null;
+
+/** Every recurring series' head, re-rendering only when one changes; null outside a workspace or
+ *  when `enabled` is false. Today needs the heads to place its occurrences, not every held page. */
+export function useSeriesHeads(enabled = true): PageSummary[] | null {
+  const controller = useViewCacheController();
+  const live = controller && enabled ? controller : null;
+  return useSyncExternalStore(
+    live?.subscribe ?? NO_SUBSCRIPTION,
+    live ? () => live.headPages() : NO_HEADS
+  );
+}
