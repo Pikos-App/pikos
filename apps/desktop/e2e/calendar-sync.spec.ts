@@ -7,7 +7,15 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { test as appTest, expect, mod, openCalendarMode, quickAdd, seedSynced } from "./fixtures";
+import {
+  test as appTest,
+  bridgeCall,
+  expect,
+  mod,
+  openCalendarMode,
+  quickAdd,
+  seedSynced,
+} from "./fixtures";
 
 // Synced events render in the viewer's zone, so pin one and the seed's block
 // positions are the same everywhere.
@@ -108,7 +116,7 @@ appTest(
 // the only toggle that overwrites the user's own arrangement — hence the confirm.
 // The whole round trip was manual QA until the mock learned to re-link.
 
-appTest("turning a calendar back on reclaims the pages it kept @mock-only", async ({ app }) => {
+appTest("turning a calendar back on reclaims the pages it kept", async ({ app, storage }) => {
   await seedSynced(app);
   await openCalendarMode(app);
 
@@ -133,14 +141,30 @@ appTest("turning a calendar back on reclaims the pages it kept @mock-only", asyn
   await openSyncPanel(app);
   await disableCalendar(app, "Personal");
 
-  // Back on: the confirm names what is waiting to be reclaimed.
-  await app.getByRole("switch", { name: "Sync Personal" }).click();
+  // Back on: the confirm names what is waiting to be reclaimed, and Cancel leaves it off.
+  const toggle = app.getByRole("switch", { name: "Sync Personal" });
   const confirm = app.getByRole("alertdialog", { name: "Turn Personal back on?" });
+  await toggle.click();
   await expect(confirm).toBeVisible();
   await expect(confirm.getByText(/You kept 2 pages/)).toBeVisible();
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).not.toBeVisible();
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
   await confirm.getByRole("button", { name: "Turn on" }).click();
   await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeChecked();
   await app.keyboard.press("Escape");
+  if (storage === "bridge") {
+    // The server still holds the event, so the pass that follows a turn-on delivers it again
+    // and the writer re-links the kept page by its identity. The mock re-links on the toggle.
+    await bridgeCall(app, "upstream_sync", {
+      calendar: "Personal",
+      events: [{ title: "Company offsite" }],
+    });
+    await app.reload();
+    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    await openCalendarMode(app);
+  }
 
   await expect(personalFolders).toHaveCount(foldersBefore);
 
@@ -217,48 +241,42 @@ appTest(
 // detaches in place and its folder stays behind as an ordinary one. The empty
 // case (folder disappears) is the tier1 toggle test above.
 
-appTest(
-  "disabling a calendar keeps an edited mirror and its folder",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openPersonalFolder(app);
+appTest("disabling a calendar keeps an edited mirror and its folder", async ({ app }) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
 
-    // Deliberately not "Team standup": the seed plants that one already owned (its
-    // parked description implies an edit), so an edit there would prove nothing —
-    // it would detach whether or not this test typed a character. This mirror is
-    // bare until the keystrokes below, which is what the survivors arm is about.
-    const edited = app
-      .locator("[data-page-list-item]")
-      .getByText("Design review (LA team)")
-      .first();
-    await edited.click();
-    // A locked title renders as static text; unlocking turns it into a button.
-    const editableTitle = app.getByRole("button", { name: "Page title" });
-    await expect(editableTitle).toHaveCount(0);
-    await app.getByRole("textbox", { name: "Page content" }).click();
-    await app.keyboard.type(" — my own notes");
-    // Two debounces sit between a keystroke and the write that claims ownership:
-    // the editor's (flushed by unmounting, i.e. moving off the page) and the pages
-    // context's own 800ms. Only the write marks the page the user's, so wait it out.
-    await app.locator("[data-page-list-item]").getByText("Company offsite").first().click();
-    await app.waitForTimeout(1000);
+  // Deliberately not "Team standup": the seed plants that one already owned (its
+  // parked description implies an edit), so an edit there would prove nothing —
+  // it would detach whether or not this test typed a character. This mirror is
+  // bare until the keystrokes below, which is what the survivors arm is about.
+  const edited = app.locator("[data-page-list-item]").getByText("Design review (LA team)").first();
+  await edited.click();
+  // A locked title renders as static text; unlocking turns it into a button.
+  const editableTitle = app.getByRole("button", { name: "Page title" });
+  await expect(editableTitle).toHaveCount(0);
+  await app.getByRole("textbox", { name: "Page content" }).click();
+  await app.keyboard.type(" — my own notes");
+  // Two debounces sit between a keystroke and the write that claims ownership:
+  // the editor's (flushed by unmounting, i.e. moving off the page) and the pages
+  // context's own 800ms. Only the write marks the page the user's, so wait it out.
+  await app.locator("[data-page-list-item]").getByText("Company offsite").first().click();
+  await app.waitForTimeout(1000);
 
-    // Two all along: the realistic seed's own folder and the calendar's.
-    const personalFolders = app.getByRole("button", { name: "Personal" });
-    await expect(personalFolders).toHaveCount(2);
+  // Two all along: the realistic seed's own folder and the calendar's.
+  const personalFolders = app.getByRole("button", { name: "Personal" });
+  await expect(personalFolders).toHaveCount(2);
 
-    await openSyncPanel(app);
-    await disableCalendar(app, "Personal");
-    await app.keyboard.press("Escape");
+  await openSyncPanel(app);
+  await disableCalendar(app, "Personal");
+  await app.keyboard.press("Escape");
 
-    // Still two, so the calendar's folder stayed behind rather than being deleted
-    // with the sync. That it is now an ordinary folder is unit-pinned on the writer.
-    await expect(personalFolders).toHaveCount(2);
+  // Still two, so the calendar's folder stayed behind rather than being deleted
+  // with the sync. That it is now an ordinary folder is unit-pinned on the writer.
+  await expect(personalFolders).toHaveCount(2);
 
-    await edited.click();
-    await expect(editableTitle).toBeVisible();
-  }
-);
+  await edited.click();
+  await expect(editableTitle).toBeVisible();
+});
 
 // ─── tier2: two accounts, colliding calendar names ───────────────────────────
 
@@ -331,35 +349,30 @@ appTest(
 
 // ─── tier2: synced-block treatment ───────────────────────────────────────────
 
-appTest(
-  "synced events render source + detached treatment, schedule read-only",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openCalendarMode(app);
+appTest("synced events render source + detached treatment, schedule read-only", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
 
-    // Active synced events carry the source icon; the detached one carries the
-    // broken-sync icon.
-    await expect(
-      app.getByRole("img", { name: "Synced from external calendar" }).first()
-    ).toBeVisible();
-    await expect(
-      app.getByRole("img", { name: "Not synced with a calendar" }).first()
-    ).toBeVisible();
+  // Active synced events carry the source icon; the detached one carries the
+  // broken-sync icon.
+  await expect(
+    app.getByRole("img", { name: "Synced from external calendar" }).first()
+  ).toBeVisible();
+  await expect(app.getByRole("img", { name: "Not synced with a calendar" }).first()).toBeVisible();
 
-    // Open a synced block's popover. The block's accessible name is
-    // "<title>, <time>"; the comma distinguishes it from the like-named page-list item.
-    await app.getByRole("button", { name: /Design review \(LA team\),/ }).click();
-    const popover = app.getByRole("dialog");
+  // Open a synced block's popover. The block's accessible name is
+  // "<title>, <time>"; the comma distinguishes it from the like-named page-list item.
+  await app.getByRole("button", { name: /Design review \(LA team\),/ }).click();
+  const popover = app.getByRole("dialog");
 
-    // The title is text on a calendar-owned page, not a field: an input that takes the
-    // popover's focus and selects itself reads as a title about to be typed over.
-    await expect(popover.getByText("Design review (LA team)")).toBeVisible();
-    await expect(popover.getByRole("textbox")).toHaveCount(0);
+  // The title is text on a calendar-owned page, not a field: an input that takes the
+  // popover's focus and selects itself reads as a title about to be typed over.
+  await expect(popover.getByText("Design review (LA team)")).toBeVisible();
+  await expect(popover.getByRole("textbox")).toHaveCount(0);
 
-    // The chip that used to offer a pointer is the virtual occurrence's Repeats, which
-    // no block here reaches reliably — `RecurrencePopover.test.tsx` owns that assertion.
-  }
-);
+  // The chip that used to offer a pointer is the virtual occurrence's Repeats, which
+  // no block here reaches reliably — `RecurrencePopover.test.tsx` owns that assertion.
+});
 
 // ─── tier2: a synced block can't be dragged ──────────────────────────────────
 
@@ -448,34 +461,31 @@ appTest(
   }
 );
 
-appTest(
-  "unchecking a synced recurring done clone restores the occurrence",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openPersonalFolder(app);
+appTest("unchecking a synced recurring done clone restores the occurrence", async ({ app }) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
 
-    await seriesRows(app)
-      .filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
-      .getByRole("checkbox", { name: /Mark done/i })
-      .click();
+  await seriesRows(app)
+    .filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+    .getByRole("checkbox", { name: /Mark done/i })
+    .click();
 
-    await app.getByRole("button", { exact: true, name: "Completed" }).click();
-    const doneClone = seriesRows(app).filter({
-      has: app.getByRole("checkbox", { name: /Mark not done/i }),
-    });
-    await expect(doneClone).toHaveCount(1);
+  await app.getByRole("button", { exact: true, name: "Completed" }).click();
+  const doneClone = seriesRows(app).filter({
+    has: app.getByRole("checkbox", { name: /Mark not done/i }),
+  });
+  await expect(doneClone).toHaveCount(1);
 
-    // uncompleteRecurringOccurrence drops the clone and rewinds the head onto the
-    // restored occurrence.
-    await doneClone.getByRole("checkbox", { name: /Mark not done/i }).click();
-    await expect(
-      seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })
-    ).toHaveCount(0);
-    await expect(
-      seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
-    ).toHaveCount(1);
-  }
-);
+  // uncompleteRecurringOccurrence drops the clone and rewinds the head onto the
+  // restored occurrence.
+  await doneClone.getByRole("checkbox", { name: /Mark not done/i }).click();
+  await expect(
+    seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })
+  ).toHaveCount(0);
+  await expect(
+    seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+  ).toHaveCount(1);
+});
 
 // ─── tier2: a moved synced occurrence renders at its new slot + completes ──────
 //
@@ -529,58 +539,55 @@ appTest(
 // is untouched. A native virtual keeps the repeat glyph and no checkbox — its
 // completions funnel to the head, which is always the next thing due.
 
-appTest(
-  "a synced virtual completes itself; a native virtual has no checkbox",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openCalendarMode(app);
+appTest("a synced virtual completes itself; a native virtual has no checkbox", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
 
-    // Page forward to a week made entirely of virtuals of the weekly London series.
-    const virtualLabel = /Weekly 1:1 \(London\)/;
-    for (let i = 0; i < 3; i++) {
-      await app.getByRole("button", { name: "Next week" }).click();
-      await app.waitForTimeout(400);
-    }
-    const virtual = app.getByRole("button", { name: virtualLabel }).first();
-    await expect(virtual).toBeVisible();
-
-    // No repeat glyph on a synced-origin occurrence — it carries a checkbox, and its
-    // popover offers the same status toggle a real block does.
-    await expect(virtual.getByLabel("Recurring")).toHaveCount(0);
-    await virtual.click();
-    await app.getByRole("button", { name: "Mark done" }).click();
-    await expect(app.getByText(/read-only/i)).toHaveCount(0);
-
-    // That occurrence alone is resolved: its slot shows a done page, and the series
-    // still has exactly one open head row in the list.
-    await expect(app.getByRole("button", { name: virtualLabel }).first()).toBeVisible();
-    await openPersonalFolder(app);
-    await expect(
-      seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
-    ).toHaveCount(1);
-
-    // A native series' virtual is the other arm of the split: glyph, no checkbox.
-    await app.keyboard.press(mod("Mod+n"));
-    const dialog = app.getByRole("dialog", { name: "Quick add" });
-    await expect(dialog).toBeVisible();
-    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
-    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
-      timeout: 2000,
-    });
-    await app.keyboard.press("Enter");
-    await expect(dialog).not.toBeVisible();
-
-    await openCalendarMode(app);
+  // Page forward to a week made entirely of virtuals of the weekly London series.
+  const virtualLabel = /Weekly 1:1 \(London\)/;
+  for (let i = 0; i < 3; i++) {
     await app.getByRole("button", { name: "Next week" }).click();
-    const nativeVirtual = app
-      .getByRole("button", { name: /^standup/i })
-      .filter({ has: app.getByLabel("Recurring") })
-      .first();
-    await expect(nativeVirtual).toBeVisible({ timeout: 5_000 });
-    await nativeVirtual.click();
-    await expect(app.getByRole("button", { name: "Mark done" })).toHaveCount(0);
+    await app.waitForTimeout(400);
   }
-);
+  const virtual = app.getByRole("button", { name: virtualLabel }).first();
+  await expect(virtual).toBeVisible();
+
+  // No repeat glyph on a synced-origin occurrence — it carries a checkbox, and its
+  // popover offers the same status toggle a real block does.
+  await expect(virtual.getByLabel("Recurring")).toHaveCount(0);
+  await virtual.click();
+  await app.getByRole("button", { name: "Mark done" }).click();
+  await expect(app.getByText(/read-only/i)).toHaveCount(0);
+
+  // That occurrence alone is resolved: its slot shows a done page, and the series
+  // still has exactly one open head row in the list.
+  await expect(app.getByRole("button", { name: virtualLabel }).first()).toBeVisible();
+  await openPersonalFolder(app);
+  await expect(
+    seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+  ).toHaveCount(1);
+
+  // A native series' virtual is the other arm of the split: glyph, no checkbox.
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+    timeout: 2000,
+  });
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  await openCalendarMode(app);
+  await app.getByRole("button", { name: "Next week" }).click();
+  const nativeVirtual = app
+    .getByRole("button", { name: /^standup/i })
+    .filter({ has: app.getByLabel("Recurring") })
+    .first();
+  await expect(nativeVirtual).toBeVisible({ timeout: 5_000 });
+  await nativeVirtual.click();
+  await expect(app.getByRole("button", { name: "Mark done" })).toHaveCount(0);
+});
 
 // ─── tier2: a detached series keeps its occurrences in-series ────────────────
 //
@@ -640,40 +647,37 @@ appTest(
   }
 );
 
-appTest(
-  "dragging a detached series' virtual leaves one block and no clone",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openCalendarFolder(app, "Work");
-    await expect(sprintRows(app)).toHaveCount(1);
-    await openCalendarMode(app);
+appTest("dragging a detached series' virtual leaves one block and no clone", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarFolder(app, "Work");
+  await expect(sprintRows(app)).toHaveCount(1);
+  await openCalendarMode(app);
 
-    // One week on, the visible window is wholly after the head, so the 7:15 block
-    // is a virtual rather than the head page itself.
-    await app.getByRole("button", { name: "Next week" }).click();
-    const virtual = sprintBlocks(app, /Detached sprint, 7:15/);
-    await expect(virtual).toBeVisible();
-    await virtual.scrollIntoViewIfNeeded();
-    const box = await virtual.boundingBox();
-    if (!box) throw new Error("virtual block has no bounding box");
+  // One week on, the visible window is wholly after the head, so the 7:15 block
+  // is a virtual rather than the head page itself.
+  await app.getByRole("button", { name: "Next week" }).click();
+  const virtual = sprintBlocks(app, /Detached sprint, 7:15/);
+  await expect(virtual).toBeVisible();
+  await virtual.scrollIntoViewIfNeeded();
+  const box = await virtual.boundingBox();
+  if (!box) throw new Error("virtual block has no bounding box");
 
-    const startX = box.x + box.width / 2;
-    const startY = box.y + box.height / 2;
-    await app.mouse.move(startX, startY);
-    await app.mouse.down();
-    await app.mouse.move(startX, startY + 12, { steps: 5 }); // past the drag threshold
-    await app.mouse.move(startX, startY + 60, { steps: 5 }); // one hour later
-    await app.mouse.up();
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  await app.mouse.move(startX, startY + 12, { steps: 5 }); // past the drag threshold
+  await app.mouse.move(startX, startY + 60, { steps: 5 }); // one hour later
+  await app.mouse.up();
 
-    // The occurrence moved rather than duplicating: nothing left at the old slot.
-    await expect(sprintBlocks(app, /Detached sprint, 8:15/)).toHaveCount(1);
-    await expect(sprintBlocks(app, /Detached sprint, 7:15/)).toHaveCount(0);
+  // The occurrence moved rather than duplicating: nothing left at the old slot.
+  await expect(sprintBlocks(app, /Detached sprint, 8:15/)).toHaveCount(1);
+  await expect(sprintBlocks(app, /Detached sprint, 7:15/)).toHaveCount(0);
 
-    // A clone-and-exdate would render one block here too — the Work list's row count
-    // is what separates them. No page materialised: the occurrence stayed in-series.
-    await expect(sprintRows(app)).toHaveCount(1);
-  }
-);
+  // A clone-and-exdate would render one block here too — the Work list's row count
+  // is what separates them. No page materialised: the occurrence stayed in-series.
+  await expect(sprintRows(app)).toHaveCount(1);
+});
 
 // ─── tier2: a synced virtual occurrence's date is read-only ──────────────────
 //
@@ -682,34 +686,31 @@ appTest(
 // review" head is this week, day+7 is an EXDATE, day+14 is moved to an override
 // — the first plain virtual is day+21.
 
-appTest(
-  "a synced recurring occurrence's popover offers no editable date",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openCalendarMode(app);
+appTest("a synced recurring occurrence's popover offers no editable date", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
 
-    const occurrence = app.getByRole("button", { name: /Recurring review, 10/ });
+  const occurrence = app.getByRole("button", { name: /Recurring review, 10/ });
+  await app.getByRole("button", { name: "Next week" }).click();
+  await app.waitForTimeout(400);
+  for (let i = 0; i < 6 && (await occurrence.count()) === 0; i++) {
     await app.getByRole("button", { name: "Next week" }).click();
     await app.waitForTimeout(400);
-    for (let i = 0; i < 6 && (await occurrence.count()) === 0; i++) {
-      await app.getByRole("button", { name: "Next week" }).click();
-      await app.waitForTimeout(400);
-    }
-    await expect(occurrence).toBeVisible();
-
-    await occurrence.click();
-    // The virtual popover, not the page one: its delete names the local copy, and it
-    // has no title input.
-    await expect(
-      app.getByRole("button", { name: "Remove this occurrence from Pikos" })
-    ).toBeVisible();
-    await expect(app.getByPlaceholder("Untitled")).toHaveCount(0);
-
-    // Date renders as the read-only synced label — neither picker trigger is present.
-    await expect(app.getByRole("button", { name: /^Scheduled:/ })).toHaveCount(0);
-    await expect(app.getByRole("button", { name: "Set schedule" })).toHaveCount(0);
   }
-);
+  await expect(occurrence).toBeVisible();
+
+  await occurrence.click();
+  // The virtual popover, not the page one: its delete names the local copy, and it
+  // has no title input.
+  await expect(
+    app.getByRole("button", { name: "Remove this occurrence from Pikos" })
+  ).toBeVisible();
+  await expect(app.getByPlaceholder("Untitled")).toHaveCount(0);
+
+  // Date renders as the read-only synced label — neither picker trigger is present.
+  await expect(app.getByRole("button", { name: /^Scheduled:/ })).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "Set schedule" })).toHaveCount(0);
+});
 
 // ─── tier2: description-changed notice + read-only mirror metadata ───────────
 //
@@ -741,34 +742,37 @@ appTest(
 // and it gets the same scope question. Uses the raw `page` fixture because
 // clock.install must run before the first app script reads Date.
 
-appTest("an overdue synced series completes through the gap dialog @mock-only", async ({ page }) => {
-  await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
-  await page.clock.resume();
-  await page.goto("/");
-  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+appTest(
+  "an overdue synced series completes through the gap dialog @mock-only",
+  async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
+    await page.clock.resume();
+    await page.goto("/");
+    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
 
-  await seedSynced(page);
+    await seedSynced(page);
 
-  await openPersonalFolder(page);
-  const head = seriesRows(page).first();
-  await expect(head).toBeVisible();
+    await openPersonalFolder(page);
+    const head = seriesRows(page).first();
+    await expect(head).toBeVisible();
 
-  // Two weeks on, last week's occurrence is missed. The mock never recomputes a
-  // locked head, so it stays on the seeded date — the state a real mirror reaches
-  // by being left closed.
-  await page.clock.setFixedTime(new Date("2026-06-22T09:00:00"));
+    // Two weeks on, last week's occurrence is missed. The mock never recomputes a
+    // locked head, so it stays on the seeded date — the state a real mirror reaches
+    // by being left closed.
+    await page.clock.setFixedTime(new Date("2026-06-22T09:00:00"));
 
-  await head.getByRole("checkbox", { name: /Mark done/i }).click();
+    await head.getByRole("checkbox", { name: /Mark done/i }).click();
 
-  await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
-  await page.getByRole("button", { name: /This and everything before today/ }).click();
-  await expect(
-    page.getByRole("button", { name: /This and everything before today/ })
-  ).not.toBeVisible();
-  // The locked mirror accepted the completion — a mis-routed write would surface
-  // the read-only rejection instead.
-  await expect(page.getByText(/read-only/i)).toHaveCount(0);
-});
+    await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
+    await page.getByRole("button", { name: /This and everything before today/ }).click();
+    await expect(
+      page.getByRole("button", { name: /This and everything before today/ })
+    ).not.toBeVisible();
+    // The locked mirror accepted the completion — a mis-routed write would surface
+    // the read-only rejection instead.
+    await expect(page.getByText(/read-only/i)).toHaveCount(0);
+  }
+);
 
 // ─── tier2: a past synced one-off stays in Today until ticked ────────────────
 //
@@ -776,27 +780,24 @@ appTest("an overdue synced series completes through the gap dialog @mock-only", 
 // Today's Overdue group, and the tick lands on the locked mirror instead of
 // being rejected read-only.
 
-appTest(
-  "a past synced one-off shows in Today and clears when ticked",
-  async ({ app }) => {
-    await seedSynced(app);
+appTest("a past synced one-off shows in Today and clears when ticked", async ({ app }) => {
+  await seedSynced(app);
 
-    await app.getByRole("button", { name: /^Today/ }).click();
-    await app.getByRole("button", { name: /^Overdue/ }).click();
+  await app.getByRole("button", { name: /^Today/ }).click();
+  await app.getByRole("button", { name: /^Overdue/ }).click();
 
-    const list = app.locator("[data-page-list-item]");
-    const signoff = list.filter({ hasText: "Budget sign-off" });
-    await expect(signoff).toBeVisible();
+  const list = app.locator("[data-page-list-item]");
+  const signoff = list.filter({ hasText: "Budget sign-off" });
+  await expect(signoff).toBeVisible();
 
-    await signoff.getByRole("checkbox", { name: "Mark done" }).click();
+  await signoff.getByRole("checkbox", { name: "Mark done" }).click();
 
-    await expect(signoff).not.toBeVisible();
+  await expect(signoff).not.toBeVisible();
 
-    // In Completed, not merely filtered out — the tick reached the locked mirror.
-    await app.getByRole("button", { name: /^Completed/ }).click();
-    await expect(signoff).toBeVisible();
-  }
-);
+  // In Completed, not merely filtered out — the tick reached the locked mirror.
+  await app.getByRole("button", { name: /^Completed/ }).click();
+  await expect(signoff).toBeVisible();
+});
 
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
@@ -833,33 +834,30 @@ appTest("search by room quotes the room on the result row", async ({ app }) => {
 // page against the seed's detached one — same list, same shape, differing only in
 // lock state, which is the axis the fix keys on.
 
-appTest(
-  "a synced page's context menu offers no move, rename or date edit",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openPersonalFolder(app);
+appTest("a synced page's context menu offers no move, rename or date edit", async ({ app }) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
 
-    await app.locator("[data-page-list-item]").filter({ hasText: "Team standup" }).click({
-      button: "right",
-    });
-    // Delete stays — trashing a synced page is supported (it tombstones the link).
-    await expect(app.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    await expect(app.getByRole("menuitem", { name: "Move to folder" })).toHaveCount(0);
-    await expect(app.getByRole("menuitem", { name: "No date" })).toHaveCount(0);
-    await expect(app.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
+  await app.locator("[data-page-list-item]").filter({ hasText: "Team standup" }).click({
+    button: "right",
+  });
+  // Delete stays — trashing a synced page is supported (it tombstones the link).
+  await expect(app.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "Move to folder" })).toHaveCount(0);
+  await expect(app.getByRole("menuitem", { name: "No date" })).toHaveCount(0);
+  await expect(app.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
 
-    await app.keyboard.press("Escape");
+  await app.keyboard.press("Escape");
 
-    // The detached page is the control: unlocked, so every item comes back.
-    await openCalendarFolder(app, "Work");
-    await app.locator("[data-page-list-item]").filter({ hasText: "Old planning" }).click({
-      button: "right",
-    });
-    await expect(app.getByRole("menuitem", { name: "Move to folder" })).toBeVisible();
-    await expect(app.getByRole("menuitem", { name: "No date" })).toBeVisible();
-    await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
-  }
-);
+  // The detached page is the control: unlocked, so every item comes back.
+  await openCalendarFolder(app, "Work");
+  await app.locator("[data-page-list-item]").filter({ hasText: "Old planning" }).click({
+    button: "right",
+  });
+  await expect(app.getByRole("menuitem", { name: "Move to folder" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "No date" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+});
 
 async function dragRowToPoint(app: Page, row: Locator, x: number, y: number): Promise<boolean> {
   const rowBox = await row.boundingBox();
@@ -944,25 +942,22 @@ async function dragRowOntoCalendar(app: Page, rowText: string) {
   return { after: await dateButton.getAttribute("aria-label"), before, ghosted };
 }
 
-appTest(
-  "a synced page can't be dragged from the list onto the calendar",
-  async ({ app }) => {
-    await seedSynced(app);
-    await openPersonalFolder(app);
-    await openCalendarMode(app);
+appTest("a synced page can't be dragged from the list onto the calendar", async ({ app }) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+  await openCalendarMode(app);
 
-    const locked = await dragRowOntoCalendar(app, "Team standup");
-    expect(locked.ghosted).toBe(false);
-    expect(locked.after).toBe(locked.before);
+  const locked = await dragRowOntoCalendar(app, "Team standup");
+  expect(locked.ghosted).toBe(false);
+  expect(locked.after).toBe(locked.before);
 
-    // The detached page is the control: the same drag previews and lands, so the
-    // assertions above are the lock and not a broken drag harness.
-    await openCalendarFolder(app, "Work");
-    const detached = await dragRowOntoCalendar(app, "Old planning");
-    expect(detached.ghosted).toBe(true);
-    expect(detached.after).not.toBe(detached.before);
-  }
-);
+  // The detached page is the control: the same drag previews and lands, so the
+  // assertions above are the lock and not a broken drag harness.
+  await openCalendarFolder(app, "Work");
+  const detached = await dragRowOntoCalendar(app, "Old planning");
+  expect(detached.ghosted).toBe(true);
+  expect(detached.after).not.toBe(detached.before);
+});
 
 // A calendar folder is system-managed: nothing files into it, and the backend
 // refuses a move that tries. Today the UI never gets that far — `ExternalCalendarItem`
