@@ -121,11 +121,19 @@ appTest(
     await appTest.step("SET-02 theme: Dark, Light and System each apply", async () => {
       await chooseIn(app, "Theme", "Dark");
       await expect(html).toHaveClass(/\bdark\b/);
-      await app.emulateMedia({ colorScheme: "light" });
-      await chooseIn(app, "Theme", "System");
-      await expect(html).not.toHaveClass(/\bdark\b/);
-      await app.emulateMedia({ colorScheme: "dark" });
-      await expect(html).toHaveClass(/\bdark\b/);
+      if (await app.evaluate(() => /Linux/.test(navigator.platform))) {
+        await expect(
+          settingsOf(app)
+            .getByRole("group", { name: "Theme" })
+            .getByRole("button", { exact: true, name: "System" })
+        ).toHaveCount(0);
+      } else {
+        await app.emulateMedia({ colorScheme: "light" });
+        await chooseIn(app, "Theme", "System");
+        await expect(html).not.toHaveClass(/\bdark\b/);
+        await app.emulateMedia({ colorScheme: "dark" });
+        await expect(html).toHaveClass(/\bdark\b/);
+      }
       await chooseIn(app, "Theme", "Light");
       await expect(html).not.toHaveClass(/\bdark\b/);
     });
