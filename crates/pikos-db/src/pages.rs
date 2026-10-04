@@ -823,11 +823,14 @@ pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()
 /// diverts synced ones. Callers reaching it directly own the sync question — see
 /// [`crate::sync::hard_delete_would_resurrect`].
 pub async fn hard_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    sqlx::query("DELETE FROM pages WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query("DELETE FROM pages WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    })
+    .await
 }
 
 pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
