@@ -116,64 +116,68 @@ appTest(
 // the only toggle that overwrites the user's own arrangement — hence the confirm.
 // The whole round trip was manual QA until the mock learned to re-link.
 
-appTest("turning a calendar back on reclaims the pages it kept", async ({ app, storage }) => {
-  await seedSynced(app);
-  await openCalendarMode(app);
-
-  // The seed stacks on the realistic one, which has its own Personal and Work
-  // folders — so the sidebar name is ambiguous and everything here goes through
-  // the calendar instead. What matters is that the count does not grow: a second
-  // folder is what a re-enable leaves behind when it mints one rather than
-  // reclaiming the de-flagged original, stranding the kept pages in the first.
-  const personalFolders = app.getByRole("button", { exact: true, name: "Personal" });
-  const foldersBefore = await personalFolders.count();
-
-  // Own one more Personal mirror so teardown keeps it. A status change is the edit
-  // that lands immediately; a body edit waits on two debounces and would still be
-  // unowned by the time the teardown below runs. The seed already ships one owned
-  // mirror in this calendar — "Team standup", whose parked description implies the
-  // user edited it — so the kept count below is two, not one.
-  const offsite = app.getByRole("button", { exact: true, name: "Company offsite" });
-  await offsite.click();
-  await app.getByRole("button", { name: "Mark done" }).click();
-  await app.keyboard.press("Escape");
-
-  await openSyncPanel(app);
-  await disableCalendar(app, "Personal");
-
-  // Back on: the confirm names what is waiting to be reclaimed, and Cancel leaves it off.
-  const toggle = app.getByRole("switch", { name: "Sync Personal" });
-  const confirm = app.getByRole("alertdialog", { name: "Turn Personal back on?" });
-  await toggle.click();
-  await expect(confirm).toBeVisible();
-  await expect(confirm.getByText(/You kept 2 pages/)).toBeVisible();
-  await confirm.getByRole("button", { name: "Cancel" }).click();
-  await expect(confirm).not.toBeVisible();
-  await expect(toggle).not.toBeChecked();
-  await toggle.click();
-  await confirm.getByRole("button", { name: "Turn on" }).click();
-  await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeChecked();
-  await app.keyboard.press("Escape");
-  if (storage === "bridge") {
-    // The server still holds the event, so the pass that follows a turn-on delivers it again
-    // and the writer re-links the kept page by its identity. The mock re-links on the toggle.
-    await bridgeCall(app, "upstream_sync", {
-      calendar: "Personal",
-      events: [{ title: "Company offsite" }],
-    });
-    await app.reload();
-    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+appTest(
+  "turning a calendar back on reclaims the pages it kept",
+  { tag: ["@SYNC-23:2"] },
+  async ({ app, storage }) => {
+    await seedSynced(app);
     await openCalendarMode(app);
+
+    // The seed stacks on the realistic one, which has its own Personal and Work
+    // folders — so the sidebar name is ambiguous and everything here goes through
+    // the calendar instead. What matters is that the count does not grow: a second
+    // folder is what a re-enable leaves behind when it mints one rather than
+    // reclaiming the de-flagged original, stranding the kept pages in the first.
+    const personalFolders = app.getByRole("button", { exact: true, name: "Personal" });
+    const foldersBefore = await personalFolders.count();
+
+    // Own one more Personal mirror so teardown keeps it. A status change is the edit
+    // that lands immediately; a body edit waits on two debounces and would still be
+    // unowned by the time the teardown below runs. The seed already ships one owned
+    // mirror in this calendar — "Team standup", whose parked description implies the
+    // user edited it — so the kept count below is two, not one.
+    const offsite = app.getByRole("button", { exact: true, name: "Company offsite" });
+    await offsite.click();
+    await app.getByRole("button", { name: "Mark done" }).click();
+    await app.keyboard.press("Escape");
+
+    await openSyncPanel(app);
+    await disableCalendar(app, "Personal");
+
+    // Back on: the confirm names what is waiting to be reclaimed, and Cancel leaves it off.
+    const toggle = app.getByRole("switch", { name: "Sync Personal" });
+    const confirm = app.getByRole("alertdialog", { name: "Turn Personal back on?" });
+    await toggle.click();
+    await expect(confirm).toBeVisible();
+    await expect(confirm.getByText(/You kept 2 pages/)).toBeVisible();
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).not.toBeVisible();
+    await expect(toggle).not.toBeChecked();
+    await toggle.click();
+    await confirm.getByRole("button", { name: "Turn on" }).click();
+    await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeChecked();
+    await app.keyboard.press("Escape");
+    if (storage === "bridge") {
+      // The server still holds the event, so the pass that follows a turn-on delivers it again
+      // and the writer re-links the kept page by its identity. The mock re-links on the toggle.
+      await bridgeCall(app, "upstream_sync", {
+        calendar: "Personal",
+        events: [{ title: "Company offsite" }],
+      });
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+      await openCalendarMode(app);
+    }
+
+    await expect(personalFolders).toHaveCount(foldersBefore);
+
+    // The kept page is a live mirror again: its title is calendar-owned once more.
+    await offsite.click();
+    // A calendar-owned title is text, not a field — see the read-only treatment test.
+    await expect(app.getByRole("dialog").getByText("Company offsite")).toBeVisible();
+    await expect(app.getByRole("dialog").getByRole("textbox")).toHaveCount(0);
   }
-
-  await expect(personalFolders).toHaveCount(foldersBefore);
-
-  // The kept page is a live mirror again: its title is calendar-owned once more.
-  await offsite.click();
-  // A calendar-owned title is text, not a field — see the read-only treatment test.
-  await expect(app.getByRole("dialog").getByText("Company offsite")).toBeVisible();
-  await expect(app.getByRole("dialog").getByRole("textbox")).toHaveCount(0);
-});
+);
 
 // ─── tier2: recolor ──────────────────────────────────────────────────────────
 

@@ -619,7 +619,7 @@ appTest(
 
 appTest(
   "enabling a calendar adds its folder and backfills; disabling asks, drops bare mirrors, keeps owned pages",
-  { tag: ["@SYNC-06"] },
+  { tag: ["@SYNC-06", "@SYNC-23:2"] },
   async ({ app, storage }) => {
     appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
     await seedSynced(app);
@@ -652,6 +652,7 @@ appTest(
           await expect(toggle).not.toBeChecked();
           await toggle.click();
           await expect(toggle).toBeChecked();
+          await expect(app.getByRole("alertdialog")).toHaveCount(0);
         }
         await app.keyboard.press("Escape");
         await expect(family).toBeVisible();
@@ -720,6 +721,18 @@ appTest(
       async () => {
         await turnOff("Holidays");
         await expect(app.getByRole("button", { exact: true, name: "Holidays" })).toHaveCount(0);
+      }
+    );
+
+    await appTest.step(
+      "SYNC-23 a calendar that kept nothing turns back on with no dialog",
+      async () => {
+        await openSyncPanel(app);
+        const toggle = app.getByRole("switch", { name: "Sync Holidays" });
+        await toggle.click();
+        await expect(toggle).toBeChecked();
+        await expect(app.getByRole("alertdialog")).toHaveCount(0);
+        await app.keyboard.press("Escape");
       }
     );
   }
