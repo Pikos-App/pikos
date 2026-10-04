@@ -9,7 +9,7 @@ import bench from "../data/benchmark.json";
 
 const title = "Pikos speed: fast with 50 pages, fast with 500,000";
 const description =
-  "Opening a page, searching, and switching views, timed in the app itself, from fifty pages to half a million. Measured on a laptop, with the details and the commands to check it.";
+  "Opening a page, searching, switching views, completing a task, and paging through the calendar, timed in the app itself, from fifty pages to half a million. Measured on a laptop, with the details and the commands to check it.";
 
 // ── The app, as a person uses it ─────────────────────────────────────────────────────────────
 type AppSize = { seeded: number; [action: string]: unknown };
@@ -22,15 +22,18 @@ const appSeries = (key: string, label: string, button: string, heading: string):
   values: appSizes.map((s) => (s[key] as Op | null) ?? null),
 });
 const appActions: Series[] = [
-  appSeries("openPage", "Open a page", "Open", "Click until the page is drawn"),
+  appSeries("openDirect", "Open a page", "Open", "Click until the page is drawn"),
   appSeries("search", "Search", "Search", "Typing until results show"),
   appSeries("switchView", "Switch views", "Switch", "Click until the list is drawn"),
+  appSeries("complete", "Complete a task", "Complete", "Click until the list shows it done"),
+  appSeries("rename", "Rename a page", "Rename", "Typing until the list shows the new name"),
+  appSeries("weekCold", "Next week", "Calendar", "Click until the week is drawn"),
   appSeries("launch", "Launch", "Launch", "Start until it's ready to use"),
 ];
 const largestPages = Math.max(...appSizes.map((s) => s.seeded));
 const atLargest = (key: string) => appActions.find((a) => a.key === key)?.values.at(-1) ?? null;
 const headline = [
-  { key: "openPage", label: "to open a page" },
+  { key: "openDirect", label: "to open a page" },
   { key: "search", label: "to search" },
   { key: "switchView", label: "to switch views" },
 ];
@@ -75,7 +78,7 @@ const bullet = "flex items-start gap-2";
       <span class="text-brand-500 dark:text-brand-400">Fast with {fmtPages(largestPages)}.</span>
     </h1>
     <p class="mt-6 max-w-2xl text-xl leading-relaxed text-neutral-500 dark:text-neutral-400">
-      Opening a page, searching, and switching views, timed in the app itself, from fifty pages to half a million.
+      Opening a page, searching, switching views, completing a task, and paging through the calendar, timed in the app itself, from fifty pages to half a million.
     </p>
 
     <div class="mt-12 grid gap-4 sm:grid-cols-3">
@@ -128,7 +131,7 @@ const bullet = "flex items-start gap-2";
         </li>
         <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
-          <span>The app was launched {app.launches} times at each size. Each launch opened 30 pages picked at random, ran 20 searches, and switched views 20 times. Every action is timed from the moment it starts to the next frame drawn after the screen shows the result.</span>
+          <span>The app was launched {app.launches} times at each size. Each launch opened 40 pages picked at random, ran 20 searches, switched between views, completed 10 tasks, renamed 10 pages, and stepped the calendar 10 weeks forward and 10 back. Every action is timed from the moment it starts to the next frame drawn after the screen shows the result, and a list or a week counts only once everything in it has loaded.</span>
         </li>
         <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
