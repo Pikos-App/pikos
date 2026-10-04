@@ -34,6 +34,13 @@ async function nextWeek(app: Page) {
   await app.getByLabel("Next week", { exact: true }).click();
 }
 
+/** Two weeks on: a week of the series' repeats with none of its real pages. A daily series added
+ *  after its time starts tomorrow, which is next week whenever today ends the week. */
+async function weekPastTheHead(app: Page) {
+  await nextWeek(app);
+  await nextWeek(app);
+}
+
 async function thisWeek(app: Page) {
   const jump = app.getByRole("button", { name: "Jump to current week" });
   if (await jump.isEnabled()) await jump.click();
@@ -60,7 +67,11 @@ function pickerDay(app: Page, offset: number) {
 
 /** Set the open page's date from its byline picker, keeping any time. A past day
  *  pages the picker back, a future one forward. */
-async function setBylineDate(app: Page, dayLabel: string, direction: "back" | "forward" = "forward") {
+async function setBylineDate(
+  app: Page,
+  dayLabel: string,
+  direction: "back" | "forward" = "forward"
+) {
   await app.getByRole("button", { name: /^Scheduled: / }).click();
   const picker = app.getByRole("dialog", { name: "Schedule picker" });
   const cell = picker.getByRole("button", { exact: true, name: dayLabel });
@@ -150,7 +161,7 @@ appTest(
   async ({ app }) => {
     await quickAdd(app, "standup every day at 9am");
     await openCalendarMode(app);
-    await nextWeek(app);
+    await weekPastTheHead(app);
     const virtuals = virtualsOf(app, "standup");
     await expect(virtuals.first()).toBeVisible();
     const before = await virtuals.count();
@@ -168,19 +179,22 @@ appTest(
       await expect(realBlocksOf(app, "standup")).toHaveAccessibleName(/^standup, 11/);
     });
 
-    await appTest.step("RECUR-05 resizing a virtual makes a real page of the new length", async () => {
-      await app.keyboard.press("Escape");
-      const target = virtuals.first();
-      await target.scrollIntoViewIfNeeded();
-      const box = await target.boundingBox();
-      if (!box) throw new Error("no virtual to resize");
-      await app.mouse.move(box.x + box.width / 2, box.y + box.height - 2);
-      await app.mouse.down();
-      await app.mouse.move(box.x + box.width / 2, box.y + box.height + 60, { steps: 10 });
-      await app.mouse.up();
-      await expect(virtuals).toHaveCount(before - 2);
-      await expect(realBlocksOf(app, "standup")).toHaveCount(2);
-    });
+    await appTest.step(
+      "RECUR-05 resizing a virtual makes a real page of the new length",
+      async () => {
+        await app.keyboard.press("Escape");
+        const target = virtuals.first();
+        await target.scrollIntoViewIfNeeded();
+        const box = await target.boundingBox();
+        if (!box) throw new Error("no virtual to resize");
+        await app.mouse.move(box.x + box.width / 2, box.y + box.height - 2);
+        await app.mouse.down();
+        await app.mouse.move(box.x + box.width / 2, box.y + box.height + 60, { steps: 10 });
+        await app.mouse.up();
+        await expect(virtuals).toHaveCount(before - 2);
+        await expect(realBlocksOf(app, "standup")).toHaveCount(2);
+      }
+    );
 
     await appTest.step("RECUR-05 both are pages in the list, the originals excluded", async () => {
       await app.getByRole("button", { name: "Editor view" }).click();
@@ -199,7 +213,7 @@ appTest(
     const headSchedule = await bylineSchedule(app);
 
     await openCalendarMode(app);
-    await nextWeek(app);
+    await weekPastTheHead(app);
     const virtuals = virtualsOf(app, "standup");
     await expect(virtuals.first()).toBeVisible();
     const virtualCount = (await virtuals.count()) - 1;
@@ -222,7 +236,7 @@ appTest(
       await openHead.click();
       expect(await bylineSchedule(app)).toBe(headSchedule);
       await openCalendarMode(app);
-      await nextWeek(app);
+      await weekPastTheHead(app);
       await expect(virtuals).toHaveCount(virtualCount);
     }
 
@@ -353,9 +367,10 @@ appTest(
     const dates = await app.evaluate(() => {
       const now = new Date();
       const describe = (d: Date) => {
-        const ordinal = d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
-          ? "last"
-          : ["1st", "2nd", "3rd", "4th", "5th"][Math.ceil(d.getDate() / 7) - 1]!;
+        const ordinal =
+          d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+            ? "last"
+            : ["1st", "2nd", "3rd", "4th", "5th"][Math.ceil(d.getDate() / 7) - 1]!;
         const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
         // The same position two months on, where the series must land.
         const later = new Date(d.getFullYear(), d.getMonth() + 2, 1);
@@ -365,7 +380,8 @@ appTest(
           const c = new Date(later.getFullYear(), later.getMonth(), i);
           if (c.getDay() === d.getDay()) days.push(c);
         }
-        const landing = ordinal === "last" ? days[days.length - 1]! : days[Math.ceil(d.getDate() / 7) - 1]!;
+        const landing =
+          ordinal === "last" ? days[days.length - 1]! : days[Math.ceil(d.getDate() / 7) - 1]!;
         return {
           cell: `Go to ${landing.toLocaleDateString("en-US", { weekday: "long" })} ${landing.toLocaleDateString("en-US", { month: "long" })} ${landing.getDate()}, ${landing.getFullYear()}`,
           detail: `${ordinal} ${weekday}`,
@@ -401,7 +417,11 @@ appTest(
         await openCalendarMode(app);
         await app.getByRole("button", { name: "Month view" }).click();
         const month = app.getByRole("region", { name: "Month calendar" });
-        for (let m = 0; m < 3 && !(await month.getByRole("button", { name: date.cell }).isVisible()); m++) {
+        for (
+          let m = 0;
+          m < 3 && !(await month.getByRole("button", { name: date.cell }).isVisible());
+          m++
+        ) {
           await app.getByLabel("Next month", { exact: true }).click();
         }
         const cell = month.getByLabel(date.cell.replace(/^Go to /, "Events on "));
@@ -466,7 +486,9 @@ appTest(
       await setBylineDate(app, await pickerDay(app, 1));
       await expect(app.getByRole("button", { name: "Scheduled: Tomorrow" })).toBeVisible();
       await expect(
-        app.getByRole("button", { name: new RegExp(`^Recurrence: every week on ${await weekdayIn(1)}`, "i") })
+        app.getByRole("button", {
+          name: new RegExp(`^Recurrence: every week on ${await weekdayIn(1)}`, "i"),
+        })
       ).toBeVisible();
     });
 
@@ -506,7 +528,12 @@ appTest(
     await app.keyboard.press("Escape");
     await expect(app.getByRole("button", { name: /^Scheduled: .* – / })).toBeVisible();
     const columnWidth = async () =>
-      (await calendarOf(app).getByLabel(/^All-day events,/).first().boundingBox())?.width ?? 0;
+      (
+        await calendarOf(app)
+          .getByLabel(/^All-day events,/)
+          .first()
+          .boundingBox()
+      )?.width ?? 0;
 
     await appTest.step("RECUR-15 the first occurrence is one bar three days wide", async () => {
       await openCalendarMode(app);
@@ -550,23 +577,30 @@ appTest(
     const doneRows = (title: string) =>
       listRows(app, title).filter({ has: app.getByRole("checkbox", { name: "Mark not done" }) });
 
-    await appTest.step("RECUR-03 Just this one completes one day and leaves the rest open", async () => {
-      await overdueSeries(app, "stretch every day", "stretch");
-      await app.getByRole("button", { name: "Mark done" }).click();
-      await expect(scopeDialog(app)).toBeVisible();
-      await scopeDialog(app).getByRole("button", { name: /Just this one/ }).click();
-      await expect(scopeDialog(app)).toHaveCount(0);
-      await app.getByRole("button", { exact: true, name: "Completed" }).click();
-      await expect(doneRows("stretch")).toHaveCount(1);
-      await expect(app.getByRole("button", { name: /^Scheduled: / })).not.toHaveAccessibleName(
-        /Today/
-      );
-    });
+    await appTest.step(
+      "RECUR-03 Just this one completes one day and leaves the rest open",
+      async () => {
+        await overdueSeries(app, "stretch every day", "stretch");
+        await app.getByRole("button", { name: "Mark done" }).click();
+        await expect(scopeDialog(app)).toBeVisible();
+        await scopeDialog(app)
+          .getByRole("button", { name: /Just this one/ })
+          .click();
+        await expect(scopeDialog(app)).toHaveCount(0);
+        await app.getByRole("button", { exact: true, name: "Completed" }).click();
+        await expect(doneRows("stretch")).toHaveCount(1);
+        await expect(app.getByRole("button", { name: /^Scheduled: / })).not.toHaveAccessibleName(
+          /Today/
+        );
+      }
+    );
 
     await appTest.step("RECUR-03 everything before today marks one done page per day", async () => {
       await overdueSeries(app, "pushups every day", "pushups");
       await app.getByRole("button", { name: "Mark done" }).click();
-      await scopeDialog(app).getByRole("button", { name: /This and everything before today/ }).click();
+      await scopeDialog(app)
+        .getByRole("button", { name: /This and everything before today/ })
+        .click();
       await expect(scopeDialog(app)).toHaveCount(0);
       await expect(doneRows("pushups")).toHaveCount(3);
       await expect(app.getByRole("button", { name: "Scheduled: Today" })).toBeVisible();
@@ -585,15 +619,18 @@ appTest(
     await expect(virtuals.first()).toBeVisible();
     const before = await virtuals.count();
 
-    await appTest.step("RECUR-04 the popover's delete removes it, and the toast's Undo restores it", async () => {
-      await virtuals.first().scrollIntoViewIfNeeded();
-      await virtuals.first().click();
-      await app.getByRole("button", { name: "Delete this occurrence" }).click();
-      await expect(virtuals).toHaveCount(before - 1);
-      const toast = app.getByRole("alert", { name: /Deleted one day of/ });
-      await toast.getByRole("button", { name: /Undo/ }).click();
-      await expect(virtuals).toHaveCount(before);
-    });
+    await appTest.step(
+      "RECUR-04 the popover's delete removes it, and the toast's Undo restores it",
+      async () => {
+        await virtuals.first().scrollIntoViewIfNeeded();
+        await virtuals.first().click();
+        await app.getByRole("button", { name: "Delete this occurrence" }).click();
+        await expect(virtuals).toHaveCount(before - 1);
+        const toast = app.getByRole("alert", { name: /Deleted one day of/ });
+        await toast.getByRole("button", { name: /Undo/ }).click();
+        await expect(virtuals).toHaveCount(before);
+      }
+    );
 
     await appTest.step("RECUR-04 Cmd+Backspace in its popover deletes it too", async () => {
       await virtuals.first().click();
@@ -629,7 +666,9 @@ appTest(
       await target.click();
       await app.getByRole("button", { name: "Delete this occurrence" }).click();
       await expect(scopeDialog(app)).toBeVisible();
-      await scopeDialog(app).getByRole("button", { name: /Just this one/ }).click();
+      await scopeDialog(app)
+        .getByRole("button", { name: /Just this one/ })
+        .click();
       await expect(target).toHaveCount(0);
     });
   }
@@ -665,7 +704,11 @@ appTest(
     async function expectNineOn(goTo: string) {
       await app.getByRole("button", { name: "Month view" }).click();
       const month = app.getByRole("region", { name: "Month calendar" });
-      for (let m = 0; m < 13 && !(await month.getByRole("button", { name: goTo }).isVisible()); m++) {
+      for (
+        let m = 0;
+        m < 13 && !(await month.getByRole("button", { name: goTo }).isVisible());
+        m++
+      ) {
         await app.getByLabel("Next month", { exact: true }).click();
       }
       await month.getByRole("button", { name: goTo }).click();
@@ -692,7 +735,10 @@ appTest(
   "an imported rule outside the editor renders nowhere, logs why, and is read-only",
   { tag: ["@RECUR-17"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "RECUR-17 reads the writer's log, which the mock has none of");
+    appTest.skip(
+      storage !== "bridge",
+      "RECUR-17 reads the writer's log, which the mock has none of"
+    );
     const logged = await bridgeCall<string[]>(app, "bridge_log");
     const errors: string[] = [];
     app.on("pageerror", (e) => errors.push(e.message));
@@ -729,8 +775,14 @@ appTest(
     await appTest.step("RECUR-17 none of the rule's occurrences render", async () => {
       await openCalendarMode(app);
       await nextWeek(app);
-      await expect(calendarOf(app).getByLabel(/^All-day events,/).first()).toBeVisible();
-      await expect(calendarOf(app).getByRole("button", { name: /^Next week review/ })).toHaveCount(0);
+      await expect(
+        calendarOf(app)
+          .getByLabel(/^All-day events,/)
+          .first()
+      ).toBeVisible();
+      await expect(calendarOf(app).getByRole("button", { name: /^Next week review/ })).toHaveCount(
+        0
+      );
     });
 
     await appTest.step("RECUR-17 its recurrence chip opens no editor", async () => {
@@ -762,15 +814,18 @@ appTest(
     await openInEditor(app, open);
     const headId = (await open.getAttribute("data-page-id")) ?? "";
 
-    await appTest.step("RECUR-10 unticking a clone deletes it and the day returns to the head", async () => {
-      await app.getByRole("button", { name: "Mark done" }).click();
-      await expect(app.getByRole("button", { name: "Scheduled: Tomorrow" })).toBeVisible();
-      await completed.click();
-      await done.getByRole("checkbox", { name: "Mark not done" }).click();
-      await expect(done).toHaveCount(0);
-      await open.click();
-      await expect(app.getByRole("button", { name: "Scheduled: Today" })).toBeVisible();
-    });
+    await appTest.step(
+      "RECUR-10 unticking a clone deletes it and the day returns to the head",
+      async () => {
+        await app.getByRole("button", { name: "Mark done" }).click();
+        await expect(app.getByRole("button", { name: "Scheduled: Tomorrow" })).toBeVisible();
+        await completed.click();
+        await done.getByRole("checkbox", { name: "Mark not done" }).click();
+        await expect(done).toHaveCount(0);
+        await open.click();
+        await expect(app.getByRole("button", { name: "Scheduled: Today" })).toBeVisible();
+      }
+    );
 
     await appTest.step("RECUR-10 a pre-0.4.0 completion unticks as a plain page", async () => {
       // The pre-0.4.0 shape: the day excluded from the rule and a done copy, with no
