@@ -27,7 +27,15 @@
 // edits source files in place during the e2e stage and puts each one back.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -312,7 +320,7 @@ function playwright(grep) {
       stdio: ["ignore", "pipe", "pipe"],
     }
   );
-  return run.status === 0;
+  return { ok: run.status === 0, output: `${run.stdout}${run.stderr}` };
 }
 
 function sleep(ms) {
@@ -328,8 +336,11 @@ function waitForPort(port) {
 }
 
 /** The e2e stage's two servers, started once rather than per mutant. A Rust mutant is
- *  in the bridge itself, so `rebuildBridge` builds and restarts it around one. */
-function startServers() {
+ *  in the bridge itself, so `rebuildBridge` builds and restarts it around one. Their output
+ *  goes to `logDir`, the only record of why a run's tests started failing. */
+function startServers(logDir) {
+  const bridgeLog = openSync(join(logDir, "e2e-bridge.log"), "w");
+  const viteLog = openSync(join(logDir, "e2e-vite.log"), "w");
   const build = () =>
     execFileSync(
       "cargo",
@@ -347,7 +358,12 @@ function startServers() {
   const env = { ...process.env, TZ: ZONE };
   let bridge = null;
   const startBridge = () => {
-    bridge = spawn(BRIDGE_BIN, [], { cwd: DESKTOP, detached: true, env, stdio: "ignore" });
+    bridge = spawn(BRIDGE_BIN, [], {
+      cwd: DESKTOP,
+      detached: true,
+      env,
+      stdio: ["ignore", bridgeLog, bridgeLog],
+    });
     waitForPort(BRIDGE_PORT);
   };
   build();
@@ -356,7 +372,7 @@ function startServers() {
     cwd: DESKTOP,
     detached: true,
     env: { ...env, VITE_E2E_STORAGE: "bridge", VITE_TEST_MODE: "true" },
-    stdio: "ignore",
+    stdio: ["ignore", viteLog, viteLog],
   });
   // Each server leads its own process group, so stopping it stops what `pnpm` started.
   const stop = (child) => child && process.kill(-child.pid);
@@ -376,10 +392,22 @@ function startServers() {
 
 /** Run each unit survivor against the e2e tests of the rows its file reaches. The tests
  *  are first run on the unmutated tree, once per row set, so a failure is the mutant's
- *  and not a flaky test's. */
-function e2eStage(survivors, rowsFor) {
+ *  and not a flaky test's.
+ *
+ *  A baseline that fails after others passed reruns the first one that passed. If that
+ *  fails too, the servers broke rather than one row set's tests, and every kill since is
+ *  suspect, so the stage stops. Without the check, broken servers read as every later
+ *  mutant killed in the same few seconds and every later row set red. */
+function e2eStage(survivors, rowsFor, logDir) {
   const baselines = new Map();
-  const servers = startServers();
+  let canary = null;
+  let reds = 0;
+  const saveRed = (grep, output) => {
+    const path = join(logDir, `e2e-red-${++reds}.log`);
+    writeFileSync(path, `${grep}\n\n${output}`);
+    return path;
+  };
+  const servers = startServers(logDir);
   let restore = null;
   const putBack = () => restore?.();
   process.on("SIGINT", () => {
@@ -393,10 +421,20 @@ function e2eStage(survivors, rowsFor) {
       if (rows.length === 0) continue;
       const grep = tagPattern(rows);
       if (!baselines.has(grep)) {
-        const green = playwright(grep);
-        baselines.set(grep, green);
-        if (!green)
-          console.log(`  baseline red for ${mutant.file}'s rows; its survivors stay survivors`);
+        const { ok, output } = playwright(grep);
+        baselines.set(grep, ok);
+        if (ok) canary ??= grep;
+        else {
+          console.log(
+            `  baseline red for ${mutant.file}'s rows; its survivors stay survivors (${saveRed(grep, output)})`
+          );
+          const recheck = canary && playwright(canary);
+          if (recheck && !recheck.ok) {
+            throw new Error(
+              `an e2e baseline that passed now fails (${saveRed(canary, recheck.output)}): the servers broke, so this run's e2e kills can't be trusted`
+            );
+          }
+        }
       }
       if (!baselines.get(grep)) continue;
       restore = apply(mutant);
@@ -405,7 +443,7 @@ function e2eStage(survivors, rowsFor) {
         sleep(500);
         if (mutant.diff) servers.rebuildBridge();
         const started = Date.now();
-        mutant.status = playwright(grep) ? "Survived" : "KilledByE2e";
+        mutant.status = playwright(grep).ok ? "Survived" : "KilledByE2e";
         mutant.seconds = Math.round((Date.now() - started) / 1000);
       } finally {
         putBack();
@@ -504,7 +542,7 @@ function main() {
     : pending;
   if (!opts.unitOnly) {
     console.log(`\ne2e stage: ${tried.length} of ${missed.length} mutant(s) the unit tests missed`);
-    e2eStage(tried, rowsFor);
+    e2eStage(tried, rowsFor, reports);
   }
 
   const survivors = mutants
