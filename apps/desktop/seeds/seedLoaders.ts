@@ -11,6 +11,8 @@
 
 import type { StorageAdapter } from "@pikos/core";
 
+import { STORAGE_BACKEND } from "@/shared/constants/testMode";
+
 /** Scenarios the developer menu offers (see DeveloperSettings). */
 export type SeedScenario =
   | "calendar"
@@ -102,12 +104,15 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
       const { seedRealistic } = await import("./realistic");
       await seedRealistic(adapter);
     }
-    // The mock adapter seeds synced rows directly; the real app routes through
-    // the dev Tauri command (no network/keychain). The launch path only ever
-    // runs under VITE_TEST_MODE, so it always takes the mock branch.
-    if (import.meta.env["VITE_TEST_MODE"] === "true") {
+    // Only the mock needs its own copy of the synced rows. Both other backends
+    // reach the real writer's dev command, which is the point of the bridge
+    // lane: the same seed a person QAs against, planted by the same code.
+    if (STORAGE_BACKEND === "mock") {
       const { seedSyncedCalendar } = await import("./syncedCalendar");
       await seedSyncedCalendar(adapter);
+    } else if (STORAGE_BACKEND === "bridge") {
+      const { bridgeInvoke } = await import("@bridge/transport");
+      await bridgeInvoke("dev_seed_synced_calendar");
     } else {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("dev_seed_synced_calendar");

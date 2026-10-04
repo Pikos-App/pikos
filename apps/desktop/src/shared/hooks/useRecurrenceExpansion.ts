@@ -6,9 +6,9 @@ import type {
   RawRuleExpansion,
   VirtualOccurrence,
 } from "@pikos/core";
-import { dateKey, formatDateOnly } from "@pikos/core";
+import { dateKey, formatDateOnly, warmBlockInstants } from "@pikos/core";
 import { addDays } from "date-fns";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 interface UseRecurrenceExpansionParams {
   pages: PageSummary[];
@@ -29,6 +29,110 @@ interface UseRecurrenceExpansionParams {
   /** Refetch trigger for an override row that moved in place. Such a move leaves
    *  the range and the rule set identical, so nothing else below would refire. */
   overridesVersion?: number;
+  /** Days expanded beyond each side of `days`, so a step to the next or previous range
+   *  shows its occurrences at once instead of fetching them after the first paint. */
+  margin?: number;
+}
+
+/** Raw occurrences by rule for `start` to `end`, expanded for `rulesKey`. */
+interface HeldExpansion {
+  byRule: Map<string, RawOccurrence[]>;
+  end: string;
+  rulesKey: string;
+  start: string;
+}
+
+const holds = (held: HeldExpansion | null, rulesKey: string, start: string, end: string) =>
+  held !== null && held.rulesKey === rulesKey && held.start <= start && held.end >= end;
+
+/** The part of a held expansion from `start` to `end`. The engine places an occurrence in a
+ *  range by its start, and local ISO strings order as their instants do. */
+function slice(held: HeldExpansion, start: string, end: string): Map<string, RawOccurrence[]> {
+  if (held.start === start && held.end === end) return held.byRule;
+  const out = new Map<string, RawOccurrence[]>();
+  for (const [ruleId, occurrences] of held.byRule) {
+    out.set(
+      ruleId,
+      occurrences.filter((o) => o.scheduledStart >= start && o.scheduledStart < end)
+    );
+  }
+  return out;
+}
+
+const sameOccurrences = (a: RawOccurrence[], b: RawOccurrence[]) =>
+  a.length === b.length &&
+  a.every(
+    (o, i) =>
+      o.scheduledStart === b[i]!.scheduledStart &&
+      o.scheduledEnd === b[i]!.scheduledEnd &&
+      o.originalDate === b[i]!.originalDate
+  );
+
+/**
+ * The expansion a surface holds, kept outside React state: a refill of the margin re-renders
+ * nothing unless the occurrences on screen changed, where a state update re-rendered a whole
+ * week to show the same blocks.
+ */
+class ExpansionHold {
+  private held: HeldExpansion | null = null;
+  private last: Map<string, RawOccurrence[]> | null = null;
+  private listeners = new Set<() => void>();
+
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  holds(rulesKey: string, start: string, end: string): boolean {
+    return holds(this.held, rulesKey, start, end);
+  }
+
+  /** Everything held, margin included; a new map each time the hold is refilled. */
+  window = (): Map<string, RawOccurrence[]> | null => this.held?.byRule ?? null;
+
+  set(held: HeldExpansion): void {
+    this.held = held;
+    for (const listener of this.listeners) listener();
+  }
+
+  /** Occurrences from `start` to `end`, or the last held while that range loads; the same map
+   *  while its contents are. */
+  read(rulesKey: string, start: string, end: string): Map<string, RawOccurrence[]> | null {
+    if (!this.held) return null;
+    const next = this.holds(rulesKey, start, end) ? slice(this.held, start, end) : this.held.byRule;
+    const last = this.last;
+    if (
+      last &&
+      last.size === next.size &&
+      [...next].every(([id, o]) => {
+        const before = last.get(id);
+        return before !== undefined && sameOccurrences(before, o);
+      })
+    )
+      return last;
+    this.last = next;
+    return next;
+  }
+}
+
+/** Each series' occurrences as built, by head object: an occurrence keeps its object while its head
+ *  and its times do, so a re-render, or a step to a week prepared while idle, reuses the times
+ *  layout already parsed for it. A changed head is a new object and starts afresh. */
+const builtOccurrences = new WeakMap<PageSummary, Map<string, VirtualOccurrence>>();
+/** Occurrences kept per head before its map starts over, bounding a long scroll through years. */
+const KEPT_PER_HEAD = 400;
+/** How long after a week is shown its neighbours are prepared, where idle callbacks don't exist:
+ *  past the frame being waited on, and well inside the time it takes to reach for the next step. */
+const IDLE_FALLBACK_MS = 100;
+
+/** Run `work` once nothing is waiting on the main thread. */
+function whenIdle(work: () => void): () => void {
+  if (typeof requestIdleCallback === "function") {
+    const id = requestIdleCallback(work, { timeout: 1000 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(work, IDLE_FALLBACK_MS);
+  return () => clearTimeout(id);
 }
 
 /** Day-keyed union of a series' completed and skipped occurrence dates. A synced
@@ -42,6 +146,26 @@ function completedOrSkippedKeys(page: PageSummary): Set<string> {
   );
 }
 
+/** The first page with each id, the one `pages.find` would return. */
+function indexById(pages: PageSummary[]): Map<string, PageSummary> {
+  const byId = new Map<string, PageSummary>();
+  for (const p of pages) {
+    if (!byId.has(p.id)) byId.set(p.id, p);
+  }
+  return byId;
+}
+
+function overridesByRule(overrideSchedules: PageSchedule[]): Map<string, PageSchedule[]> {
+  const byRule = new Map<string, PageSchedule[]>();
+  for (const s of overrideSchedules) {
+    if (!s.ruleId) continue;
+    const list = byRule.get(s.ruleId);
+    if (list) list.push(s);
+    else byRule.set(s.ruleId, [s]);
+  }
+  return byRule;
+}
+
 /** Applies the client-side exclusion union (completed ∪ skip ∪ materialised
  * overrides), the own-date head suppression, and a synced series' render floor
  * to a rule's raw occurrences, shaping each survivor into a VirtualOccurrence.
@@ -53,30 +177,41 @@ function toVirtuals(
   raw: RawOccurrence[],
   page: PageSummary,
   rule: PageRecurrenceRule,
-  overrideSchedules: PageSchedule[]
+  ruleOverrides: PageSchedule[]
 ): VirtualOccurrence[] {
   const excluded = completedOrSkippedKeys(page);
-  for (const s of overrideSchedules) {
-    if (s.ruleId === rule.id && s.originalDate) excluded.add(dateKey(s.originalDate));
+  for (const s of ruleOverrides) {
+    if (s.originalDate) excluded.add(dateKey(s.originalDate));
   }
   // Only the head's own date is suppressed (the head block already renders it).
   // Other pre-head dates need no filter: a head move shifts the rule anchor so
   // vacated dates stop being emitted, and completion/skip lands them in the
   // exclusion union above. A date that's neither is a genuine open gap and stays visible.
   const headDate = page.scheduledStart?.slice(0, 10);
+  let built = builtOccurrences.get(page);
+  if (!built || built.size > KEPT_PER_HEAD) {
+    built = new Map();
+    builtOccurrences.set(page, built);
+  }
   const out: VirtualOccurrence[] = [];
   for (const occ of raw) {
     if (excluded.has(occ.originalDate)) continue;
     if (headDate && occ.originalDate === headDate) continue;
     if (page.syncedSince && occ.originalDate < page.syncedSince) continue;
-    out.push({
-      ...page,
-      isVirtual: true,
-      originalDate: occ.originalDate,
-      ruleId: rule.id,
-      scheduledEnd: occ.scheduledEnd,
-      scheduledStart: occ.scheduledStart,
-    });
+    const key = `${rule.id}|${occ.originalDate}|${occ.scheduledStart}|${occ.scheduledEnd ?? ""}`;
+    let virtual = built.get(key);
+    if (!virtual) {
+      virtual = {
+        ...page,
+        isVirtual: true,
+        originalDate: occ.originalDate,
+        ruleId: rule.id,
+        scheduledEnd: occ.scheduledEnd,
+        scheduledStart: occ.scheduledStart,
+      };
+      built.set(key, virtual);
+    }
+    out.push(virtual);
   }
   return out;
 }
@@ -105,12 +240,12 @@ type OverrideBlock = PageSummary & { originalDate: string };
  * the slot). */
 function toOverrideBlocks(
   rules: PageRecurrenceRule[],
-  pages: PageSummary[],
+  pageById: Map<string, PageSummary>,
   overrideSchedules: PageSchedule[]
 ): OverrideBlock[] {
   const rulePage = new Map<string, PageSummary>();
   for (const rule of rules) {
-    const page = pages.find((p) => p.id === rule.pageId);
+    const page = pageById.get(rule.pageId);
     if (page) rulePage.set(rule.id, page);
   }
 
@@ -144,6 +279,7 @@ export function useRecurrenceExpansion({
   days,
   expandRecurrenceRange,
   listOverridesForRules,
+  margin = 0,
   overridesVersion = 0,
   pages,
   recurrenceRules,
@@ -151,11 +287,11 @@ export function useRecurrenceExpansion({
   const [overrideSchedules, setOverrideSchedules] = useState<PageSchedule[]>([]);
   const schedulesAbortRef = useRef(0);
 
-  // null until the first IPC batch resolves; a Map (rule id → raw occurrences)
-  // after. Kept across a range change (stale-while-revalidate) so an overlapping
-  // or day-step nav keeps showing virtuals while the next batch is in flight — a
-  // non-overlapping week jump still renders empty for a frame (accepted).
-  const [rawExpansion, setRawExpansion] = useState<Map<string, RawOccurrence[]> | null>(null);
+  // Empty until the first IPC batch resolves. Kept across a range change
+  // (stale-while-revalidate) so an overlapping or day-step nav keeps showing
+  // virtuals while the next batch is in flight; a jump past the margin still
+  // renders without them for a frame (accepted).
+  const [expansion] = useState(() => new ExpansionHold());
   const expandAbortRef = useRef(0);
 
   const rangeStartDate = days[0];
@@ -163,6 +299,8 @@ export function useRecurrenceExpansion({
   const rangeEndDate = lastDay ? addDays(lastDay, 1) : null;
   const startStr = rangeStartDate ? formatDateOnly(rangeStartDate) : null;
   const endStr = rangeEndDate ? formatDateOnly(rangeEndDate) : null;
+  const fetchStart = rangeStartDate ? formatDateOnly(addDays(rangeStartDate, -margin)) : null;
+  const fetchEnd = rangeEndDate ? formatDateOnly(addDays(rangeEndDate, margin)) : null;
   const ruleCount = recurrenceRules.length;
   // Stable key over the fields that change a rule's raw expansion, so the IPC
   // effect refires on a rule edit/add/remove but not on unrelated page changes.
@@ -199,13 +337,40 @@ export function useRecurrenceExpansion({
     });
   }, [startStr, endStr, rulesKey, overridesVersion]);
 
+  const rawExpansion = useSyncExternalStore(expansion.subscribe, () =>
+    startStr && endStr ? expansion.read(rulesKey, startStr, endStr) : null
+  );
+  const heldWindow = useSyncExternalStore(expansion.subscribe, expansion.window);
+
+  // With a margin, the weeks either side are built and their times parsed while idle, so a step
+  // to one lays out occurrences it has already met.
   useEffect(() => {
-    if (!startStr || !endStr || ruleCount === 0) return;
+    if (margin === 0 || !heldWindow) return;
+    return whenIdle(() => {
+      const byId = indexById(pages);
+      const overrides = overridesByRule(overrideSchedules);
+      for (const rule of recurrenceRules) {
+        const page = byId.get(rule.pageId);
+        const raw = heldWindow.get(rule.id);
+        if (page && raw)
+          warmBlockInstants(toVirtuals(raw, page, rule, overrides.get(rule.id) ?? []));
+      }
+    });
+  }, [heldWindow, pages]);
+
+  useEffect(() => {
+    if (!fetchStart || !fetchEnd || ruleCount === 0) return;
+    if (margin > 0 && expansion.holds(rulesKey, fetchStart, fetchEnd)) return;
 
     const token = ++expandAbortRef.current;
-    void expandRecurrenceRange(recurrenceRules, startStr, endStr).then((result) => {
+    void expandRecurrenceRange(recurrenceRules, fetchStart, fetchEnd).then((result) => {
       if (token !== expandAbortRef.current) return;
-      setRawExpansion(new Map(result.map((r) => [r.ruleId, r.occurrences])));
+      expansion.set({
+        byRule: new Map(result.map((r) => [r.ruleId, r.occurrences])),
+        end: fetchEnd,
+        rulesKey,
+        start: fetchStart,
+      });
     });
   }, [startStr, endStr, rulesKey]);
 
@@ -230,20 +395,22 @@ export function useRecurrenceExpansion({
   // synchronous expansion).
   if (rawExpansion === null) return visiblePages;
 
+  const pageById = indexById(pages);
+  const ruleOverrides = overridesByRule(overrideSchedules);
   const allVirtual: VirtualOccurrence[] = [];
   for (const rule of recurrenceRules) {
-    const page = pages.find((p) => p.id === rule.pageId);
+    const page = pageById.get(rule.pageId);
     if (!page) continue;
     // The batch omits a rule the engine rejects (out-of-envelope) — such a
     // series renders no virtuals; there is no second engine to fall back to.
     const raw = rawExpansion.get(rule.id);
     if (!raw) continue;
-    allVirtual.push(...toVirtuals(raw, page, rule, overrideSchedules));
+    allVirtual.push(...toVirtuals(raw, page, rule, ruleOverrides.get(rule.id) ?? []));
   }
 
   // A synced override's original slot is already excluded from the virtuals
   // above; render the moved instance at its new slot beside them.
-  const overrideBlocks = toOverrideBlocks(recurrenceRules, pages, overrideSchedules);
+  const overrideBlocks = toOverrideBlocks(recurrenceRules, pageById, overrideSchedules);
 
   if (allVirtual.length === 0 && overrideBlocks.length === 0) return visiblePages;
   return [...visiblePages, ...allVirtual, ...overrideBlocks];

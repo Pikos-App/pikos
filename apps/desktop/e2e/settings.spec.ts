@@ -4,7 +4,7 @@ import { test as appTest, mod, quickAdd } from "./fixtures";
 
 // ─── Opens settings and navigates every tab ─────────────────────────────────
 
-appTest("settings opens and each tab renders @tier1", async ({ app }) => {
+appTest("settings opens and each tab renders @smoke", async ({ app }) => {
   const errors: string[] = [];
   app.on("pageerror", (e) => errors.push(e.message));
 
@@ -36,7 +36,7 @@ appTest("settings opens and each tab renders @tier1", async ({ app }) => {
 
 // ─── Cmd+, opens settings ───────────────────────────────────────────────────
 
-appTest("settings opens via Cmd+, shortcut @tier1", async ({ app }) => {
+appTest("settings opens via Cmd+, shortcut @smoke", async ({ app }) => {
   const errors: string[] = [];
   app.on("pageerror", (e) => errors.push(e.message));
 
@@ -56,44 +56,47 @@ appTest("settings opens via Cmd+, shortcut @tier1", async ({ app }) => {
 // stops at the typed-match → confirm-enabled boundary; clicking the final
 // Confirm would actually wipe the e2e workspace, so we Cancel out instead.
 
-appTest("Delete All Data dialog requires typing 'delete' to enable confirm @tier2", async ({
-  app,
-}) => {
-  await app.getByRole("button", { name: "Open settings" }).click();
-  await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
+appTest(
+  "Delete All Data dialog requires typing 'delete' to enable confirm",
+  async ({ app }) => {
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
 
-  // Delete All Data lives on the Data settings page now — navigate there first.
-  await app.getByRole("button", { exact: true, name: "Data" }).click();
+    // Delete All Data lives on the Data settings page now — navigate there first.
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
 
-  // Danger Zone is at the bottom of Data; scroll the trigger into view.
-  const trigger = app.getByRole("button", { exact: true, name: "Delete" });
-  await trigger.scrollIntoViewIfNeeded();
-  await trigger.click();
+    // Danger Zone is at the bottom of Data; scroll the trigger into view.
+    const trigger = app.getByRole("button", { exact: true, name: "Delete" });
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.click();
 
-  await expect(app.getByRole("alertdialog", { name: "Delete all Pikos data?" })).toBeVisible();
-  const confirm = app.getByRole("button", { name: "Delete Everything" });
-  await expect(confirm).toBeDisabled();
+    await expect(app.getByRole("alertdialog", { name: "Delete all Pikos data?" })).toBeVisible();
+    const confirm = app.getByRole("button", { name: "Delete Everything" });
+    await expect(confirm).toBeDisabled();
 
-  const input = app.getByRole("textbox");
-  await input.fill("nope");
-  await expect(confirm).toBeDisabled();
+    const input = app.getByRole("textbox");
+    await input.fill("nope");
+    await expect(confirm).toBeDisabled();
 
-  // Typing the phrase enables it. Use mixed case + whitespace to verify the
-  // case-insensitive trim — same contract as the unit test.
-  await input.fill("  DELETE  ");
-  await expect(confirm).toBeEnabled();
+    // Typing the phrase enables it. Use mixed case + whitespace to verify the
+    // case-insensitive trim — same contract as the unit test.
+    await input.fill("  DELETE  ");
+    await expect(confirm).toBeEnabled();
 
-  // Cancel out — clicking confirm would wipe the workspace and break later tests.
-  await app.getByRole("button", { name: "Cancel" }).click();
-  await expect(app.getByRole("alertdialog", { name: "Delete all Pikos data?" })).not.toBeVisible();
-});
+    // Cancel out — clicking confirm would wipe the workspace and break later tests.
+    await app.getByRole("button", { name: "Cancel" }).click();
+    await expect(
+      app.getByRole("alertdialog", { name: "Delete all Pikos data?" })
+    ).not.toBeVisible();
+  }
+);
 
 // ─── The Data tab reflects the workspace as it is now ───────────────────────
 
 // The panel stays mounted while closed, so a fetch keyed on anything that
 // doesn't change per-open pins every figure to app launch. Creating the page
 // first and opening settings after is what separates the two.
-appTest("Data tab reads the workspace as it is on open @tier2", async ({ app }) => {
+appTest("Data tab reads the workspace as it is on open", async ({ app }) => {
   await quickAdd(app, "Stand-up every monday at 9am");
 
   await app.getByRole("button", { name: "Open settings" }).click();

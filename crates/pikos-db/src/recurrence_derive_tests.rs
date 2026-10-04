@@ -716,16 +716,21 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
     .await
     .unwrap();
 
+    // Inside the retry, as the sync engine runs a reconcile: a deferred batch that loses the
+    // write lock to the completion fails its upgrade at once, and a bare one failed the test.
     let batch = tokio::spawn({
         let pool = pool.clone();
         async move {
-            let mut tx = pool.begin().await.unwrap();
-            for i in 0..200 {
-                recompute_recurring_schedule(&mut tx, &format!("r{i}"))
-                    .await
-                    .unwrap();
-            }
-            tx.commit().await.unwrap();
+            crate::tx::retry_on_busy(|| async {
+                let mut tx = pool.begin().await?;
+                for i in 0..200 {
+                    recompute_recurring_schedule(&mut tx, &format!("r{i}")).await?;
+                }
+                tx.commit().await?;
+                Ok(())
+            })
+            .await
+            .unwrap();
         }
     });
     let completion = tokio::spawn({

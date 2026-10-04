@@ -190,6 +190,8 @@ export function EditorPane() {
     // setContent without emitting an update (avoids triggering autosave for loaded content)
     if (!editor.isDestroyed) {
       editor.commands.setContent(doc ?? EMPTY_TIPTAP_DOC, { emitUpdate: false });
+      // Which page the editor holds, for tests and the in-app benchmark to wait on.
+      editor.view.dom.setAttribute("data-page-id", page.id);
     }
     contentJsonRef.current = doc ? page.content : "";
 

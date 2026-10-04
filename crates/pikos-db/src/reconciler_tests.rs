@@ -4236,3 +4236,211 @@ async fn a_re_enumerate_does_not_drag_an_advanced_head_backwards() {
         "re-enumerate leaves the advanced head where completion put it"
     );
 }
+
+/// Every page's stored sort inputs agree with what `page_order_inputs` computes now.
+async fn assert_order_inputs_current(pool: &sqlx::SqlitePool) {
+    let stale: Vec<String> = sqlx::query_scalar(
+        "SELECT p.id FROM pages p JOIN page_order_inputs v ON v.id = p.id
+         WHERE p.is_absolute IS NOT v.is_absolute OR p.abs_start_utc IS NOT v.abs_start_utc",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    assert!(stale.is_empty(), "stale sort inputs on {stale:?}");
+}
+
+async fn order_inputs(pool: &sqlx::SqlitePool, page_id: &str) -> (bool, Option<String>) {
+    sqlx::query_as("SELECT is_absolute, abs_start_utc FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn sync_one(pool: &sqlx::SqlitePool, etag: &str, schedule: EventSchedule) -> String {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/ev.ics", "uid-1", etag, "Meeting"),
+            schedule,
+        )]),
+    )
+    .await
+    .unwrap();
+    sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-1'")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A synced timed event, checked absolute, for the tests of what makes one float again.
+async fn absolute_page(pool: &sqlx::SqlitePool) -> String {
+    let page = sync_one(
+        pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    assert!(
+        order_inputs(pool, &page).await.0,
+        "the page starts absolute"
+    );
+    page
+}
+
+#[tokio::test]
+async fn a_synced_timed_event_sorts_by_its_instant() {
+    let pool = setup().await;
+    let page = sync_one(
+        &pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-06-15T13:00:00Z".into()))
+    );
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_synced_all_day_event_floats() {
+    let pool = setup().await;
+    let page = sync_one(&pool, "v1", all_day("2026-06-15", None)).await;
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn moving_a_synced_event_moves_its_instant() {
+    let pool = setup().await;
+    sync_one(
+        &pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    let page = sync_one(
+        &pool,
+        "v2",
+        timed("2026-06-16T10:30:00", None, "America/New_York"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-06-16T14:30:00Z".into()))
+    );
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn changing_a_synced_events_zone_moves_its_instant() {
+    let pool = setup().await;
+    sync_one(
+        &pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    let page = sync_one(
+        &pool,
+        "v2",
+        timed("2026-06-15T09:00:00", None, "Europe/Paris"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-06-15T07:00:00Z".into()))
+    );
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_synced_event_in_the_spring_forward_gap_takes_the_zoned_policy() {
+    let pool = setup().await;
+    let page = sync_one(
+        &pool,
+        "v1",
+        timed("2026-03-08T02:30:00", None, "America/New_York"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-03-08T07:30:00Z".into()))
+    );
+}
+
+#[tokio::test]
+async fn a_detached_event_floats_again() {
+    let pool = setup().await;
+    let page = absolute_page(&pool).await;
+    mark_completed(&pool, &page).await;
+
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    assert_eq!(sync_state(&pool, &page).await, "detached");
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_relinked_event_sorts_by_its_instant_again() {
+    let pool = setup().await;
+    let page = absolute_page(&pool).await;
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
+        .bind(&page)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+
+    sqlx::query("UPDATE page_sync SET sync_state = 'active' WHERE page_id = ?")
+        .bind(&page)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(order_inputs(&pool, &page).await.0);
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn removing_the_sync_row_by_raw_sql_still_floats_the_page() {
+    let pool = setup().await;
+    let page = absolute_page(&pool).await;
+    sqlx::query("DELETE FROM page_sync WHERE page_id = ?")
+        .bind(&page)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_synced_series_sorts_by_its_rules_zone() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![UpsertItem::Event(EventUpsert {
+            core: core("/series.ics", "uid-s", "v1", "Standup"),
+            schedule: timed("2026-06-15T09:00:00", None, "Europe/Paris"),
+            recurrence: Some(Recurrence {
+                fidelity: OccurrenceFidelity::Complete,
+                rrule: "FREQ=WEEKLY".into(),
+                exdates: vec![],
+                overrides: vec![],
+            }),
+        })]),
+    )
+    .await
+    .unwrap();
+    let page: String = sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-s'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(order_inputs(&pool, &page).await.0);
+    assert_order_inputs_current(&pool).await;
+}

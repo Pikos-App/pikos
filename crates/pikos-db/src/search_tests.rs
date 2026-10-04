@@ -328,3 +328,57 @@ fn strip_prefix_ci_handles_multibyte() {
     let stripped = strip_prefix_ci("Café au lait\nbody", "café");
     assert_eq!(stripped, Some(" au lait\nbody"));
 }
+
+#[tokio::test]
+async fn a_query_within_the_scan_ranks_exactly() {
+    let pool = test_pool().await;
+    seed_pages(&pool).await;
+    let ids = |resp: SearchResponse| resp.results.into_iter().map(|r| r.id).collect::<Vec<_>>();
+
+    let scanned = search_pages_scan(&pool, "morning".into(), None, SearchScan::Newest(10))
+        .await
+        .unwrap();
+    assert!(!scanned.completed_count_capped);
+    let exact = search_pages_scan(&pool, "morning".into(), None, SearchScan::All)
+        .await
+        .unwrap();
+    assert_eq!(ids(scanned), ids(exact));
+}
+
+#[tokio::test]
+async fn past_the_scan_title_matches_lead_and_older_body_matches_drop() {
+    let pool = test_pool().await;
+    seed_pages(&pool).await;
+    // "morning" matches p1 (title), p2 (subtitle), p3, p4 (done) and p5 (deleted) in the body,
+    // inserted in that order. A scan of two reads p5 and p4 as the newest matches, and p2 and p1
+    // as the newest title matches; p3 is older than the scan and has no title hit.
+    let resp = search_pages_scan(&pool, "morning".into(), None, SearchScan::Newest(2))
+        .await
+        .unwrap();
+    let ids: Vec<&str> = resp.results.iter().map(|r| r.id.as_str()).collect();
+    assert_eq!(ids, ["p1", "p2"]);
+    assert_eq!(resp.completed_count, 1);
+    assert!(resp.completed_count_capped);
+
+    let with_done = search_pages_scan(&pool, "morning".into(), Some(true), SearchScan::Newest(2))
+        .await
+        .unwrap();
+    let ids: Vec<&str> = with_done.results.iter().map(|r| r.id.as_str()).collect();
+    assert_eq!(ids, ["p1", "p2", "p4"]);
+}
+
+#[tokio::test]
+async fn the_index_drives_the_join_to_pages_without_statistics() {
+    let pool = test_pool().await;
+    sqlx::query("DELETE FROM sqlite_stat1")
+        .execute(&pool)
+        .await
+        .ok();
+    let sql = format!(
+        "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM {MATCHED_PAGES}
+         WHERE pages_fts MATCH 'word*' AND pages.deleted_at IS NULL AND pages.status = 'done'"
+    );
+    let plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(&sql).fetch_all(&pool).await.unwrap();
+    let first = &plan.first().unwrap().3;
+    assert!(first.starts_with("SCAN pages_fts"), "{plan:?}");
+}

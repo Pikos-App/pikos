@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
+import { useScrollAnchor } from "@/features/layout/hooks/useScrollAnchor";
 import { PageListItem, useMoveOverdueToToday, usePageListContext } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,16 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { PageListEmptyState } from "./PageListEmptyState";
 import { PageListHeader, viewName } from "./PageListHeader";
 
+/** Rows past the last one on screen that a cached list loads ahead of scrolling. */
+const PRELOAD_ROWS = 30;
+
+/** A row not loaded yet takes a subtitle row's height, the taller kind, so loading it shrinks the
+ *  list below the screen rather than pushing what's on screen down. */
+function placeholderHeight(density: string): number {
+  if (density === "compact") return 44;
+  return density === "spacious" ? 76 : 68;
+}
+
 interface PageListPanelProps {
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
@@ -42,6 +53,7 @@ interface PageListPanelProps {
 export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const {
     activePage,
+    cached,
     completedHasMore,
     completedPages,
     folders,
@@ -95,16 +107,17 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     true
   );
   // Completed accordion resets to collapsed on every view navigation (no persistence).
-  // Storing { viewId, collapsed } means the value auto-resets whenever activeViewId changes.
-  const [completedCollapseState, setCompletedCollapseState] = useState<{
-    viewId: string;
-    collapsed: boolean;
-  }>({ collapsed: true, viewId: activeViewId });
-  const completedCollapsed =
-    completedCollapseState.viewId !== activeViewId ? true : completedCollapseState.collapsed;
+  // Reset on the change itself: remembering which view it was opened on reopened it
+  // on a return to that view.
+  const [completedCollapsed, setCompletedCollapsed] = useState(true);
+  const [completedViewId, setCompletedViewId] = useState(activeViewId);
+  if (completedViewId !== activeViewId) {
+    setCompletedViewId(activeViewId);
+    setCompletedCollapsed(true);
+  }
   function toggleCompletedCollapsed() {
     const willExpand = completedCollapsed;
-    setCompletedCollapseState({ collapsed: !completedCollapsed, viewId: activeViewId });
+    setCompletedCollapsed(!completedCollapsed);
     if (willExpand) void onExpandCompleted();
   }
 
@@ -144,6 +157,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     overdueCollapsed,
     today,
     visiblePages,
+    ...(cached
+      ? {
+          loading: cached.loading,
+          sections: cached.sections.map((section) =>
+            section.key === "overdue" && section.header
+              ? { ...section, header: { ...section.header, collapsed: overdueCollapsed } }
+              : section
+          ),
+        }
+      : {}),
   });
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
@@ -161,6 +184,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           return 200;
         case "empty-completed":
           return 40;
+        case "placeholder":
+          return placeholderHeight(density);
+        case "tail":
+          return row.count * placeholderHeight(density);
         case "page": {
           // Compact hides subtitle; cozy matches current; spacious adds ~8px.
           if (density === "compact") return 44;
@@ -173,6 +200,51 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     getScrollElement: () => listRef.current,
     overscan: 15,
   });
+
+  // A cached list loads what scrolls into view, and a little past it, section by section.
+  const visibleItems = virtualizer.getVirtualItems();
+  const firstVisible = visibleItems[0]?.index ?? 0;
+  const lastVisible = visibleItems[visibleItems.length - 1]?.index ?? 0;
+  const scrollTop = virtualizer.scrollOffset ?? 0;
+  // Coarse, so scrolling inside one tail block re-checks every few rows rather than every pixel.
+  const scrolledRows = Math.floor(scrollTop / placeholderHeight(density));
+  useEffect(() => {
+    if (!cached) return;
+    const spans = new Map<string, { first: number; last: number }>();
+    const reach = (section: string, first: number, last: number) => {
+      const span = spans.get(section);
+      if (span) span.last = Math.max(span.last, last);
+      else spans.set(section, { first, last });
+    };
+    const rowHeight = placeholderHeight(density);
+    const viewport = listRef.current?.clientHeight ?? 0;
+    for (const item of virtualizer.getVirtualItems()) {
+      const row = rows[item.index];
+      if (!row || (row.type !== "page" && row.type !== "placeholder" && row.type !== "tail")) {
+        continue;
+      }
+      if (!row.slot) continue;
+      if (row.type !== "tail") {
+        reach(row.slot.section, row.slot.index, row.slot.index + PRELOAD_ROWS);
+        continue;
+      }
+      // Only the part of a tail block on screen, and a little past it.
+      const from = Math.max(0, Math.floor((scrollTop - item.start) / rowHeight));
+      const to = Math.min(
+        row.count - 1,
+        Math.floor((scrollTop + viewport - item.start) / rowHeight) + PRELOAD_ROWS
+      );
+      if (to >= from) reach(row.slot.section, row.slot.index + from, row.slot.index + to);
+    }
+    for (const [section, span] of spans) cached.ensure(section, span.first, span.last);
+  }, [rows.length, cached?.ids.length, firstVisible, lastVisible, scrolledRows]);
+
+  useScrollAnchor(
+    listRef,
+    virtualizer,
+    rows,
+    cached ? `${cached.ids.length}|${cached.sections.map((x) => x.count).join(",")}` : null
+  );
 
   // Scroll active page into view when it changes via keyboard navigation.
   useEffect(() => {
@@ -204,6 +276,12 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       return;
     }
     const newIdx = Math.max(0, Math.min(navigable.length - 1, currentIdx + direction));
+    if (cached && direction === 1 && newIdx === currentIdx) {
+      // The last loaded row: the next one is in the list but not loaded yet.
+      const next = cached.ids[cached.ids.indexOf(navigable[currentIdx]?.id ?? "") + 1];
+      if (next) void cached.rows([next]).then(() => handleSelectPage(next));
+      return;
+    }
     const page = navigable[newIdx];
     if (page) handleSelectPage(page);
   }
@@ -217,7 +295,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   useKeyboardShortcut(
     "Mod+a",
     () => {
-      selectAll(visiblePages.map((p) => p.id));
+      if (cached) void cached.allIds().then(selectAll);
+      else selectAll(visiblePages.map((p) => p.id));
       // Pull focus onto the list (role="group", non-interactive) so the next
       // Space/arrow acts on the selection. Without this, focus stays on whatever
       // was clicked — e.g. a folder row, which is role="button" and would
@@ -233,8 +312,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   // button, etc.). The `when` gate keeps Space inert outside the page-list
   // context — no accidental toggles when the user is e.g. on the calendar.
   async function toggleSelected() {
-    const allPages = [...visiblePages, ...completedPages];
-    const selected = allPages.filter((p) => selectedPageIds.has(p.id));
+    const selected = cached ? await selectedPages() : loadedSelection();
     const { recurring, toComplete, toUncomplete } = partitionToggleSelection(selected, (id) =>
       recurrenceRules.some((r) => r.pageId === id)
     );
@@ -342,22 +420,41 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     handleSelectPage(page);
   }
 
-  function getSelectedPages(triggerId: string) {
-    if (!selectedPageIds.has(triggerId) || selectedPageIds.size <= 1) return null;
-    const allPages = [...visiblePages, ...completedPages];
-    const batch = allPages.filter((p) => selectedPageIds.has(p.id));
-    return batch.length > 1 ? batch : null;
+  function loadedSelection(): PageSummary[] {
+    return [...visiblePages, ...completedPages].filter((p) => selectedPageIds.has(p.id));
+  }
+
+  /** The selected pages, fetching any a cached list hasn't loaded. */
+  async function selectedPages(): Promise<PageSummary[]> {
+    const loaded = loadedSelection();
+    if (!cached) return loaded;
+    const held = new Set(loaded.map((p) => p.id));
+    const missing = [...selectedPageIds].filter((id) => !held.has(id));
+    return missing.length > 0 ? [...loaded, ...(await cached.rows(missing))] : loaded;
+  }
+
+  /** How many pages a row's menu acts on: the selection when the row is in it, else one. */
+  function menuActsOn(triggerId: string): number {
+    if (!selectedPageIds.has(triggerId) || selectedPageIds.size <= 1) return 1;
+    if (cached) return selectedPageIds.size;
+    return Math.max(loadedSelection().length, 1);
   }
 
   /** Run an action on all selected pages (if page is selected), or just the given page. */
   function batchAction(page: PageSummary, action: (p: PageSummary) => void) {
-    const batch = getSelectedPages(page.id);
-    if (batch) {
+    if (menuActsOn(page.id) === 1) {
+      action(page);
+      return;
+    }
+    if (!cached) {
+      for (const p of loadedSelection()) action(p);
+      clearSelection();
+      return;
+    }
+    void selectedPages().then((batch) => {
       for (const p of batch) action(p);
       clearSelection();
-    } else {
-      action(page);
-    }
+    });
   }
 
   function renderPageItem(page: (typeof visiblePages)[0]) {
@@ -368,7 +465,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         isRenaming={renamingId === page.id}
         isSelected={selectedPageIds.has(page.id)}
         key={page.id}
-        menuActsOn={getSelectedPages(page.id)?.length ?? 1}
+        menuActsOn={menuActsOn(page.id)}
         onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
         onDelete={() => batchAction(page, (p) => handleDeleteRequest(p))}
         onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}
@@ -384,7 +481,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           // routes through toggleSelected, which serializes its writes. The old
           // batchAction loop fired N concurrent writes and hit the same WAL race
           // as Cmd+A → Space (QA §4). Single rows flip directly.
-          if (getSelectedPages(page.id)) void toggleSelected();
+          if (menuActsOn(page.id) > 1) void toggleSelected();
           else handleToggleStatus(page.id, page.status);
         }}
         page={page}
@@ -413,6 +510,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         return row.collapsible ? (
           <div className="flex w-full items-center border-b border-border pr-2 text-muted-foreground">
             <button
+              aria-expanded={!row.collapsed}
               className="type-ui-sm flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left hover:text-foreground"
               onClick={isOverdueHeader ? toggleOverdue : undefined}
             >
@@ -426,7 +524,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {isOverdueHeader && (
               <button
                 className="type-ui-sm shrink-0 rounded px-1.5 py-0.5 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
-                onClick={() => moveOverdueToToday(overdue)}
+                onClick={() =>
+                  cached
+                    ? void cached.sectionPages("overdue").then(moveOverdueToToday)
+                    : moveOverdueToToday(overdue)
+                }
               >
                 Move to today
               </button>
@@ -469,6 +571,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               </div>
             )}
             <button
+              aria-expanded={!completedCollapsed}
               className="type-ui-sm flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
               onClick={toggleCompletedCollapsed}
             >
@@ -493,6 +596,12 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
       case "empty-completed":
         return <div className="type-ui-sm px-3 py-3 text-muted-foreground">No completed pages</div>;
+
+      case "placeholder":
+        return <div aria-hidden style={{ height: placeholderHeight(density) }} />;
+
+      case "tail":
+        return <div aria-hidden style={{ height: row.count * placeholderHeight(density) }} />;
     }
   }
 
@@ -515,6 +624,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       {/* Page list */}
       {}
       <div
+        aria-busy={cached?.loading ?? false}
         aria-label={viewName(activeViewId, folders)}
         className="flex flex-col overflow-y-auto focus-visible:outline-none"
         onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}

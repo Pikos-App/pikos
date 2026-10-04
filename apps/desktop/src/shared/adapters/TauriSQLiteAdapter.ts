@@ -2,27 +2,39 @@ import type {
   AccountWithCalendars,
   BackupEntry,
   CalendarSyncResult,
+  ChangeState,
+  CompletedCursor,
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompletedWindow,
   CompleteRecurringInput,
   CompleteRecurringResult,
   FocusSession,
   Folder,
+  MoveOutcome,
   NotificationHistoryEntry,
   Page,
   PageFilter,
+  PageIfNewer,
   PageRecurrenceRule,
   PageReminder,
   PageSchedule,
   PageStatus,
   PageSummary,
+  Placement,
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
   SkipOccurrenceInput,
   SyncCalendar,
+  TagCount,
   TrashedPage,
   UncompleteRecurringInput,
+  ViewCounts,
+  ViewCursor,
+  ViewKey,
+  ViewScope,
+  ViewWindow,
 } from "@pikos/core";
 import type {
   FolderUpdate,
@@ -103,6 +115,7 @@ export const WRITE_COMMANDS = new Set([
   // never sees the echo because the process is gone, but it belongs here rather
   // than among the reads: nothing in this app rewrites more.
   "restore_backup",
+  "move_pages",
   "create_page",
   "update_page",
   "clear_pending_description",
@@ -155,6 +168,17 @@ export const WRITE_COMMANDS = new Set([
  *  classified deliberately — the test below rejects any invoke in neither set.
  *  `connect_db` belongs here: it opens the pool and writes no workspace data. */
 export const READ_COMMANDS = new Set([
+  "change_state",
+  "count_views",
+  "get_page_if_newer",
+  "get_pages",
+  "list_completed_window",
+  "list_range",
+  "list_recent_pages",
+  "list_series_heads",
+  "list_tags",
+  "list_view",
+  "list_view_ids",
   "connect_db",
   "get_page",
   "list_pages",
@@ -186,6 +210,17 @@ export const READ_COMMANDS = new Set([
   "list_backups",
 ]);
 
+export type CommandTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+
+let transport: CommandTransport = rawInvoke;
+
+/** Point the commands somewhere other than Tauri IPC. The e2e bridge lane uses
+ *  this to reach the real Rust writer from a browser, which has no IPC. A lane
+ *  that swaps the channel cannot see a defect in the channel itself. */
+export function setCommandTransport(next: CommandTransport): void {
+  transport = next;
+}
+
 // Rust commands serialize errors as { kind, message } (see
 // apps/desktop/src-tauri/src/error.rs::AppError). Convert at the boundary
 // into a typed StorageError so UI code can branch on `kind` and never
@@ -193,7 +228,7 @@ export const READ_COMMANDS = new Set([
 function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (import.meta.env.DEV) watchdog(command);
   if (WRITE_COMMANDS.has(command)) markLocalWrite();
-  return rawInvoke<T>(command, args).catch((err: unknown) => {
+  return transport<T>(command, args).catch((err: unknown) => {
     throw toStorageError(err);
   });
 }
@@ -267,6 +302,68 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
     return invoke<CompletedPagesResponse>("list_completed_pages", { filter });
+  }
+
+  listView(key: ViewKey, after: ViewCursor | null, limit: number): Promise<ViewWindow> {
+    return invoke<ViewWindow>("list_view", { after, key, limit });
+  }
+
+  listViewIds(
+    key: ViewKey,
+    after: ViewCursor | null,
+    through: ViewCursor | null
+  ): Promise<string[]> {
+    return invoke<string[]>("list_view_ids", { after, key, through });
+  }
+
+  listCompletedWindow(
+    scope: ViewScope | null,
+    since: string | null,
+    after: CompletedCursor | null,
+    limit: number
+  ): Promise<CompletedWindow> {
+    return invoke<CompletedWindow>("list_completed_window", { after, limit, scope, since });
+  }
+
+  listRange(
+    start: string | null,
+    end: string,
+    zone: string,
+    openOnly: boolean
+  ): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_range", { end, openOnly, start, zone });
+  }
+
+  listSeriesHeads(openOnly: boolean, since: number | null = null): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_series_heads", { openOnly, since });
+  }
+
+  countViews(zone: string, today: string): Promise<ViewCounts> {
+    return invoke<ViewCounts>("count_views", { today, zone });
+  }
+
+  getPages(ids: string[]): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("get_pages", { ids });
+  }
+
+  getPageIfNewer(id: string, known: number | null): Promise<PageIfNewer> {
+    return invoke<PageIfNewer>("get_page_if_newer", { id, known });
+  }
+
+  listRecentPages(exclude: string | null, limit: number): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_recent_pages", { exclude, limit });
+  }
+
+  listTags(): Promise<TagCount[]> {
+    return invoke<TagCount[]>("list_tags");
+  }
+
+  movePages(ids: string[], place: Placement): Promise<MoveOutcome> {
+    return invoke<MoveOutcome>("move_pages", { ids, place });
+  }
+
+  changeState(): Promise<ChangeState> {
+    return invoke<ChangeState>("change_state");
   }
 
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {

@@ -462,7 +462,7 @@ Owned pages re-link by `ical_uid`, bare mirrors are recreated under new page ids
 directions confirm: turning **off** always asks, since it always deletes something; turning
 **on** asks only when detached pages are waiting to be reclaimed. Ruled 2026-08-16.
 Per-calendar *hide* stays unbuilt, and the off-confirm is what stops the switch reading as
-one (`matrix-intent-review.md` §fourth round).
+one.
 ⁵⁰ An external folder's page list defaults to date order (`useActiveSortMode`). A calendar
 mirror is chronology, not a hand-arranged list. A stored per-view sort choice always wins, and
 native folders keep manual.
@@ -660,8 +660,8 @@ edited one gets a "calendar description changed" notice, the new text parked in
 `pending_description`. Never overwritten. The notice resolves two ways, both clearing the
 column via `clear_pending_description`: **Append** adds the parked text to the end of the body
 through the editor's own insert path, **Dismiss** drops it. There is deliberately no replace
-action, and dismiss is final. The next upstream change raises a fresh notice (ruled 2026-08-16,
-`matrix-intent-review.md` §fourth round). Neither re-seeds `seeded_description_hash`: resolving
+action, and dismiss is final. The next upstream change raises a fresh notice (ruled 2026-08-16).
+Neither re-seeds `seeded_description_hash`: resolving
 a notice is not a re-seed, and re-stamping it would make the *following* change overwrite the
 body silently.
 

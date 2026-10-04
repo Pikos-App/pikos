@@ -1,5 +1,5 @@
-import { isSmartViewId, toStorageError } from "@pikos/core";
-import { useEffect, useRef } from "react";
+import { toStorageError } from "@pikos/core";
+import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapDialog";
@@ -47,13 +47,13 @@ import { getPlatform } from "@/shared/platform";
 
 function useTrackPageOpened() {
   const { activePageId } = useUI();
-  const { updatePage } = usePages();
+  const { recordPageOpened } = usePages();
   const prevIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (activePageId && activePageId !== prevIdRef.current) {
       prevIdRef.current = activePageId;
-      updatePage(activePageId, { lastOpenedAt: new Date().toISOString() });
+      recordPageOpened(activePageId);
     }
     if (!activePageId) prevIdRef.current = null;
   }, [activePageId]);
@@ -240,6 +240,8 @@ function useInterfaceTextScale() {
   }, [textScale]);
 }
 
+const BenchRunner = __PIKOS_BENCH__ ? lazy(() => import("@/bench/BenchRunner")) : null;
+
 function AppShell() {
   useKeyboardListener();
   useTrackPageOpened();
@@ -256,35 +258,8 @@ function AppShell() {
   }, []);
   useInterfaceTextScale();
   const updater = useUpdate();
-  const { consumePendingNavigation } = useWorkspace();
-  const ui = useUI();
-  const { folders, pages } = usePages();
   const { handleToastDismiss, toastItems } = useUndoDelete();
 
-  // One-shot: validate persisted view/page, then consume one-shot tutorial nav.
-  // pages[] only contains active (not_started, not soft-deleted) summaries, so a
-  // missing ID covers all the "shouldn't restore" cases — completed, soft-deleted,
-  // or genuinely gone.
-  const didInitRef = useRef<boolean | null>(null);
-  if (didInitRef.current == null) {
-    didInitRef.current = true;
-
-    if (!isSmartViewId(ui.activeViewId) && !folders.some((f) => f.id === ui.activeViewId)) {
-      ui.setActiveViewId("inbox");
-    }
-    if (ui.activePageId !== null && !pages.some((p) => p.id === ui.activePageId)) {
-      ui.setActivePage(null);
-    }
-    if (ui.lastEditorPageId !== null && !pages.some((p) => p.id === ui.lastEditorPageId)) {
-      ui.setLastEditorPageId(null);
-    }
-
-    const nav = consumePendingNavigation();
-    if (nav) {
-      ui.setActiveViewId(nav.folderId);
-      ui.openPage(nav.pageId);
-    }
-  }
   // Per-surface ErrorBoundary so a render error in one dialog/page can't
   // black-screen the rest of the shell. Each boundary uses a compact inline
   // fallback (PaneErrorFallback) — the app-level full-screen boundary in
@@ -314,6 +289,11 @@ function AppShell() {
         <SearchPalette />
       </ErrorBoundary>
       <Toast duration={UNDO_TOAST_DURATION_MS} items={toastItems} onDismiss={handleToastDismiss} />
+      {BenchRunner && (
+        <Suspense fallback={null}>
+          <BenchRunner />
+        </Suspense>
+      )}
       <UpdateDialog updater={updater} />
     </>
   );

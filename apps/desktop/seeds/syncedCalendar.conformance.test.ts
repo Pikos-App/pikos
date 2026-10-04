@@ -131,12 +131,10 @@ function expectedRrule(series: SeriesExpect): string {
   return `${series.rrule};UNTIL=${until}T${series.untilTime}`;
 }
 
-/** The calendar folder whose name *contains* the fixture's name — the mock's canned
- *  discovery answers "Personal", the dev command names its folder "Personal (synced)". */
 async function calendarFolder(adapter: MockStorageAdapter, name: string): Promise<string> {
   const folders = await adapter.listFolders();
-  const folder = folders.find((f) => f.isExternalCalendar && f.name.includes(name));
-  expect(folder, `no calendar folder named like ${name}`).toBeDefined();
+  const folder = folders.find((f) => f.isExternalCalendar && f.name === name);
+  expect(folder, `no calendar folder named ${name}`).toBeDefined();
   return folder!.id;
 }
 
@@ -167,14 +165,14 @@ const CHECKS: Record<keyof Expect, (want: Expect, adapter: MockStorageAdapter) =
     const rows = await adapter.listSyncCalendars(accounts[0]!.id);
     const folders = await adapter.listFolders();
     for (const cal of want.calendars) {
-      const row = rows.find((c) => c.displayName.includes(cal.name));
-      expect(row, `no calendar named like ${cal.name}`).toBeDefined();
+      const row = rows.find((c) => c.displayName === cal.name);
+      expect(row, `no calendar named ${cal.name}`).toBeDefined();
       expect(row!.color, `${cal.name} colour`).toBe(cal.color);
       expect(row!.enabled, `${cal.name} enabled`).toBe(cal.enabled);
       const folder = folders.find((f) => f.id === row!.folderId);
       expect(folder, `${cal.name} folder`).toBeDefined();
       expect(folder!.color, `${cal.name} folder colour`).toBe(cal.color);
-      expect(folder!.name.includes(cal.name), `${cal.name} folder name`).toBe(true);
+      expect(folder!.name, `${cal.name} folder name`).toBe(cal.name);
       expect(folder!.isExternalCalendar, `${cal.name} is a calendar folder`).toBe(
         cal.externalFolder
       );

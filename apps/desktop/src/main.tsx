@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { loadMockStorage } from "./shared/adapters/mockStorageChunk";
+import { STORAGE_BACKEND } from "./shared/constants/testMode";
 import { installGlobalErrorHandlers } from "./shared/logger";
 
 installGlobalErrorHandlers();
@@ -26,12 +27,13 @@ document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", (e) => e.preventDefault());
 
 async function mount() {
-  // Test-mode builds run against the in-memory adapter, which lives in its own
-  // chunk so production never downloads it. Fetch it before the first render —
-  // WorkspaceProvider picks its adapter synchronously.
-  if (import.meta.env["VITE_TEST_MODE"] === "true") {
-    await loadMockStorage();
-  }
+  // The in-memory adapter lives in its own chunk so production never downloads
+  // it. Fetch it before the first render, because WorkspaceProvider picks its
+  // adapter synchronously.
+  // Stryker disable next-line ConditionalExpression,EqualityOperator,StringLiteral: the e2e lane always runs the bridge backend; only another build takes this branch
+  if (STORAGE_BACKEND === "mock") await loadMockStorage();
+  // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch
+  if (STORAGE_BACKEND === "bridge") (await import("@bridge/transport")).installBridgeTransport();
 
   const root = document.getElementById("root");
   if (!root) throw new Error("#root element not found");

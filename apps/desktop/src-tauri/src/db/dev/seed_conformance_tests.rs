@@ -86,7 +86,6 @@ struct AccountExpect {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CalendarExpect {
-    /// Matched as a substring of the display name — see the fixture's `excludes`.
     name: String,
     color: String,
     enabled: bool,
@@ -237,8 +236,6 @@ fn expected_zone(zone: &str) -> String {
     }
 }
 
-/// The calendar folder whose name *contains* the fixture's name — the dev command
-/// suffixes "(synced)" onto it, the mock's canned discovery does not.
 async fn calendar_folder(pool: &SqlitePool, name: &str) -> String {
     let folders: Vec<(String, String)> =
         sqlx::query_as("SELECT id, name FROM folders WHERE is_external_calendar = 1")
@@ -247,8 +244,8 @@ async fn calendar_folder(pool: &SqlitePool, name: &str) -> String {
             .unwrap();
     folders
         .into_iter()
-        .find(|(_, folder)| folder.contains(name))
-        .unwrap_or_else(|| panic!("no calendar folder named like {name}"))
+        .find(|(_, folder)| folder == name)
+        .unwrap_or_else(|| panic!("no calendar folder named {name}"))
         .0
 }
 
@@ -315,8 +312,8 @@ async fn check_calendars(pool: &SqlitePool, want: &[CalendarExpect], scenario: &
         .await
         .unwrap()
         .into_iter()
-        .find(|row| row.get::<String, _>("display_name").contains(&cal.name))
-        .unwrap_or_else(|| panic!("{scenario}: no calendar named like {}", cal.name));
+        .find(|row| row.get::<String, _>("display_name") == cal.name)
+        .unwrap_or_else(|| panic!("{scenario}: no calendar named {}", cal.name));
 
         assert_eq!(
             row.get::<Option<String>, _>("color"),
@@ -336,8 +333,9 @@ async fn check_calendars(pool: &SqlitePool, want: &[CalendarExpect], scenario: &
             "{scenario}: {} enabled",
             cal.name
         );
-        assert!(
-            row.get::<String, _>("folder_name").contains(&cal.name),
+        assert_eq!(
+            row.get::<String, _>("folder_name"),
+            cal.name,
             "{scenario}: {} folder name",
             cal.name
         );

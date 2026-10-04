@@ -1,0 +1,49 @@
+---
+import { type Series, fmtPages, fmtTime } from "../lib/speed";
+
+interface Props {
+  sizes: number[];
+  series: Series[];
+}
+
+const { series, sizes } = Astro.props;
+---
+
+<div class="group" data-switch="show" data-show="median">
+  <div class="flex justify-end">
+    <div class="inline-flex rounded-lg border border-neutral-200 p-0.5 text-xs font-medium dark:border-neutral-800">
+      {[["median", "Median"], ["p99", "99th percentile"]].map(([value, text]) => (
+        <button type="button" data-switch-value={value} aria-pressed={value === "median" ? "true" : "false"} class="rounded-md px-3 py-1.5 text-neutral-500 transition-colors hover:text-neutral-900 aria-pressed:bg-neutral-900 aria-pressed:text-white dark:text-neutral-400 dark:hover:text-neutral-100 dark:aria-pressed:bg-neutral-100 dark:aria-pressed:text-neutral-900">{text}</button>
+      ))}
+    </div>
+  </div>
+  <div class="mt-3 overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
+    <table class="w-full min-w-[640px] text-sm">
+      <thead class="bg-neutral-100/60 text-left text-xs text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">
+        <tr>
+          <th class="px-4 py-3 font-medium">Pages in the workspace</th>
+          {sizes.map((pages) => <th class="px-4 py-3 text-right font-medium tabular-nums">{fmtPages(pages)}</th>)}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
+        {series.map((s) => (
+          <tr>
+            <td class="px-4 py-3 text-neutral-700 dark:text-neutral-200">{s.label}</td>
+            {s.values.map((v) => (
+              <td class="px-4 py-3 text-right font-medium text-neutral-900 tabular-nums dark:text-neutral-50">
+                {v ? (
+                  <>
+                    <span class="group-data-[show=p99]:hidden">{fmtTime(v.ms)}</span>
+                    <span class="hidden group-data-[show=p99]:inline">{fmtTime(v.p99)}</span>
+                  </>
+                ) : (
+                  <span class="text-neutral-400 dark:text-neutral-500">–</span>
+                )}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -4,7 +4,7 @@ import { test as appTest, mod, quickAdd } from "./fixtures";
 
 // ─── Search pages (Cmd+K) ──────────────────────────────────────────────────
 
-appTest("search pages via Cmd+K @tier1", async ({ app }) => {
+appTest("search pages via Cmd+K @smoke", async ({ app }) => {
   await quickAdd(app, "alpha project");
   await quickAdd(app, "beta report");
   await quickAdd(app, "gamma notes");
@@ -33,13 +33,16 @@ appTest("search pages via Cmd+K @tier1", async ({ app }) => {
 // pages" empty state. A regression that crashed the recent-list branch
 // would leave the palette blank instead of guiding the user.
 
-appTest("Cmd+K on fresh boot shows 'No recent pages' empty state @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+k"));
-  const dialog = app.getByRole("dialog", { name: "Search pages" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "Cmd+K on fresh boot shows 'No recent pages' empty state",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+k"));
+    const dialog = app.getByRole("dialog", { name: "Search pages" });
+    await expect(dialog).toBeVisible();
 
-  await expect(dialog.getByText("No recent pages")).toBeVisible();
-});
+    await expect(dialog.getByText("No recent pages")).toBeVisible();
+  }
+);
 
 // ─── Arrow-key navigation ──────────────────────────────────────────────────
 //
@@ -50,7 +53,7 @@ appTest("Cmd+K on fresh boot shows 'No recent pages' empty state @tier2", async 
 // shifted the highlight away from the default position.
 
 appTest(
-  "Cmd+K arrow keys move highlight; Enter opens the highlighted result @tier2",
+  "Cmd+K arrow keys move highlight; Enter opens the highlighted result",
   async ({ app }) => {
     await quickAdd(app, "alpha first");
     await quickAdd(app, "alpha second");
@@ -99,7 +102,7 @@ appTest(
 // multi-token searches into substring or OR matches.
 
 appTest(
-  "Cmd+K multi-token query narrows to pages containing all tokens @tier2",
+  "Cmd+K multi-token query narrows to pages containing all tokens",
   async ({ app }) => {
     await quickAdd(app, "wallet report");
     await quickAdd(app, "wallet drift");
@@ -109,18 +112,21 @@ appTest(
     const dialog = app.getByRole("dialog", { name: "Search pages" });
     await expect(dialog).toBeVisible();
 
+    // By row name: highlighting splits a title into pieces, so its text isn't one node.
+    const result = (title: string) => dialog.getByRole("button", { exact: true, name: title });
+
     await app.keyboard.type("wallet");
-    await expect(dialog.getByText("wallet report", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("wallet drift", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("wallet drift compass", { exact: true })).toBeVisible();
+    await expect(result("wallet report")).toBeVisible();
+    await expect(result("wallet drift")).toBeVisible();
+    await expect(result("wallet drift compass")).toBeVisible();
 
     // Adding "drift" drops the "wallet report" match. The remaining two pages
     // both contain "wallet" and "drift" — FTS5's default whitespace-delimited
     // tokenizer treats the space as an implicit AND.
     await app.keyboard.type(" drift");
-    await expect(dialog.getByText("wallet drift", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("wallet drift compass", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("wallet report", { exact: true })).not.toBeVisible();
+    await expect(result("wallet drift")).toBeVisible();
+    await expect(result("wallet drift compass")).toBeVisible();
+    await expect(result("wallet report")).not.toBeVisible();
   }
 );
 
@@ -131,7 +137,7 @@ appTest(
 // switch: an operator query narrows by metadata the index alone can't express,
 // and an operator mixed with free text narrows by both.
 
-appTest("Cmd+K tag: operator narrows to tagged pages @tier2", async ({ app }) => {
+appTest("Cmd+K tag: operator narrows to tagged pages", async ({ app }) => {
   await quickAdd(app, "alpha report #ledger");
   await quickAdd(app, "beta report");
 
@@ -145,7 +151,7 @@ appTest("Cmd+K tag: operator narrows to tagged pages @tier2", async ({ app }) =>
   await expect(dialog.getByText("beta report", { exact: true })).not.toBeVisible();
 });
 
-appTest("Cmd+K mixes an operator with free text @tier2", async ({ app }) => {
+appTest("Cmd+K mixes an operator with free text", async ({ app }) => {
   await quickAdd(app, "alpha compass #ledger");
   await quickAdd(app, "beta compass #ledger");
 
@@ -164,24 +170,27 @@ appTest("Cmd+K mixes an operator with free text @tier2", async ({ app }) => {
 // "Show completed" toggle being pressed — and the toggle says so instead of
 // offering to hide what the operator asked for.
 
-appTest("Cmd+K is:done surfaces completed pages without the toggle @tier2", async ({ app }) => {
-  await quickAdd(app, "wallet archived");
-  await quickAdd(app, "wallet active");
+appTest(
+  "Cmd+K is:done surfaces completed pages without the toggle",
+  async ({ app }) => {
+    await quickAdd(app, "wallet archived");
+    await quickAdd(app, "wallet active");
 
-  const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "wallet archived" });
-  await pageItem.getByRole("checkbox", { name: "Mark done" }).click();
-  await expect(pageItem).not.toBeVisible();
+    const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "wallet archived" });
+    await pageItem.getByRole("checkbox", { name: "Mark done" }).click();
+    await expect(pageItem).not.toBeVisible();
 
-  await app.keyboard.press(mod("Mod+k"));
-  const dialog = app.getByRole("dialog", { name: "Search pages" });
-  await expect(dialog).toBeVisible();
+    await app.keyboard.press(mod("Mod+k"));
+    const dialog = app.getByRole("dialog", { name: "Search pages" });
+    await expect(dialog).toBeVisible();
 
-  await app.keyboard.type("is:done wallet");
+    await app.keyboard.type("is:done wallet");
 
-  await expect(dialog.getByText("wallet archived", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("wallet active", { exact: true })).not.toBeVisible();
-  await expect(dialog.getByText("Showing completed — is:done")).toBeVisible();
-});
+    await expect(dialog.getByText("wallet archived", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("wallet active", { exact: true })).not.toBeVisible();
+    await expect(dialog.getByText("Showing completed — is:done")).toBeVisible();
+  }
+);
 
 // ─── Command mode ──────────────────────────────────────────────────────────
 //
@@ -189,53 +198,62 @@ appTest("Cmd+K is:done surfaces completed pages without the toggle @tier2", asyn
 // keyboard registry. It works on the first character — the two-character floor
 // is a property of the search index, not of the palette.
 
-appTest("Cmd+K > lists commands and Enter runs the highlighted one @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+k"));
-  const dialog = app.getByRole("dialog", { name: "Search pages" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "Cmd+K > lists commands and Enter runs the highlighted one",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+k"));
+    const dialog = app.getByRole("dialog", { name: "Search pages" });
+    await expect(dialog).toBeVisible();
 
-  await app.keyboard.type(">");
-  await expect(dialog.getByRole("button", { name: /New page/ })).toBeVisible();
+    await app.keyboard.type(">");
+    await expect(dialog.getByRole("button", { name: /New page/ })).toBeVisible();
 
-  // Filtering runs on the text after the ">".
-  await app.keyboard.type("keyboard");
-  const command = dialog.getByRole("button", { name: /Keyboard shortcuts/ });
-  await expect(command).toBeVisible();
-  await expect(dialog.getByRole("button", { name: /New page/ })).not.toBeVisible();
+    // Filtering runs on the text after the ">".
+    await app.keyboard.type("keyboard");
+    const command = dialog.getByRole("button", { name: /Keyboard shortcuts/ });
+    await expect(command).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /New page/ })).not.toBeVisible();
 
-  await app.keyboard.press("Enter");
+    await app.keyboard.press("Enter");
 
-  await expect(dialog).not.toBeVisible();
-  await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
-});
+    await expect(dialog).not.toBeVisible();
+    await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
+  }
+);
 
 // Cmd+Shift+K opens straight into command mode. Radix's focus scope selects an
 // input's contents when it autofocuses, so the prefix survived being rendered
 // but not the first keystroke — typing replaced it and the palette fell back to
 // searching pages.
 
-appTest("Cmd+Shift+K opens in command mode and typing keeps the prefix @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+Shift+k"));
-  const dialog = app.getByRole("dialog", { name: "Search pages" });
-  await expect(dialog).toBeVisible();
+appTest(
+  "Cmd+Shift+K opens in command mode and typing keeps the prefix",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+Shift+k"));
+    const dialog = app.getByRole("dialog", { name: "Search pages" });
+    await expect(dialog).toBeVisible();
 
-  const input = dialog.getByRole("textbox");
-  await expect(input).toHaveValue("> ");
-  await expect(dialog.getByRole("button", { name: /New page/ })).toBeVisible();
+    const input = dialog.getByRole("textbox");
+    await expect(input).toHaveValue("> ");
+    await expect(dialog.getByRole("button", { name: /New page/ })).toBeVisible();
 
-  await app.keyboard.type("keyboard");
-  await expect(input).toHaveValue("> keyboard");
-  await expect(dialog.getByRole("button", { name: /Keyboard shortcuts/ })).toBeVisible();
-});
+    await app.keyboard.type("keyboard");
+    await expect(input).toHaveValue("> keyboard");
+    await expect(dialog.getByRole("button", { name: /Keyboard shortcuts/ })).toBeVisible();
+  }
+);
 
 // The shortcuts settings page is rendered from the same registry the command
 // list reads, so a labelled binding shows up in both.
 
-appTest("shortcuts settings lists registry-registered shortcuts @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+/"));
+appTest(
+  "shortcuts settings lists registry-registered shortcuts",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+/"));
 
-  await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
-  await expect(app.getByText("New page", { exact: true })).toBeVisible();
-  await expect(app.getByText("Toggle sidebar", { exact: true })).toBeVisible();
-  await expect(app.getByText("Bold", { exact: true })).toBeVisible();
-});
+    await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(app.getByText("New page", { exact: true })).toBeVisible();
+    await expect(app.getByText("Toggle sidebar", { exact: true })).toBeVisible();
+    await expect(app.getByText("Bold", { exact: true })).toBeVisible();
+  }
+);

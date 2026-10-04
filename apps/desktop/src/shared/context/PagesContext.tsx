@@ -24,6 +24,7 @@ import type {
   PageRecurrenceRule,
   PageStatus,
   PageSummary,
+  Placement,
   SearchResponse,
   StorageError,
   Tag,
@@ -36,6 +37,9 @@ import type {
 } from "@pikos/core";
 import { createContext, type ReactNode, useContext } from "react";
 
+import { recordOpen } from "@/shared/lib/recentOpens";
+import { createLogger } from "@/shared/logger";
+
 import { useAppSettings } from "./AppSettingsContext";
 import { useFolderWrites } from "./useFolderWrites";
 import { usePagesStore } from "./usePagesStore";
@@ -47,11 +51,11 @@ import { useWorkspaceInternal } from "./WorkspaceContext";
 
 export type { GapRunOptions };
 
+const log = createLogger("PagesContext");
+
 export interface PagesContextValue {
-  /** Lightweight summaries (no content) — use getPage() to load full content. */
-  pages: PageSummary[];
   folders: Folder[];
-  /** Derived reactively from pages[].tags — never stored separately. */
+  /** Every tag in use and its page count, counted by the database. */
   tags: Tag[];
   /** All recurrence rules (one per recurring page). */
   recurrenceRules: PageRecurrenceRule[];
@@ -60,6 +64,8 @@ export interface PagesContextValue {
   createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
+  /** Save that a page was just opened, leaving the page list alone; see `recentOpens`. */
+  recordPageOpened: (id: string) => void;
   flushPage: (id: string) => Promise<void>;
   deletePage: (id: string) => Promise<void>;
   /** Resolve the "calendar description changed" notice — see the adapter method. */
@@ -80,6 +86,8 @@ export interface PagesContextValue {
   /** Restore a soft-deleted folder and all its pages. */
   restoreFolder: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
+  /** Move pages, in the order given, between two neighbours in their folder's manual order. */
+  movePages: (ids: string[], place: Placement) => Promise<void>;
   /**
    * Bulk complete/uncomplete in ONE transaction (multi-select Cmd+A → Space).
    * Optimistic; rolls back and surfaces a per-page error on failure. One atomic
@@ -179,7 +187,7 @@ export interface PagesContextValue {
 const PagesContext = createContext<PagesContextValue | null>(null);
 
 export function PagesProvider({ children }: { children: ReactNode }) {
-  const { adapter, eventBus, registerDataLoader } = useWorkspaceInternal();
+  const { adapter, eventBus, registerDataLoader, viewCache } = useWorkspaceInternal();
   const { emit } = eventBus;
   const { defaultFolderId } = useAppSettings();
 
@@ -189,7 +197,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     folders,
     foldersRef,
     mergePages,
-    pages,
     pagesRef,
     recurrenceRules,
     recurrenceRulesRef,
@@ -197,7 +204,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setPages,
     setRecurrenceRules,
     tags,
-  } = usePagesStore({ adapter, registerDataLoader });
+  } = usePagesStore({ adapter, registerDataLoader, viewCache });
 
   // Debounce, per-page write serialisation, rollback snapshots, pageErrors, and
   // the optimistic-write shape every mutation below goes through.
@@ -209,14 +216,19 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     optimistic,
     pageErrors,
     updatePage,
-  } = usePageWriteQueue({ adapter, emit, pagesRef, setPages });
+  } = usePageWriteQueue({ adapter, emit, mirror: viewCache.mirror });
+
+  function recordPageOpened(id: string): void {
+    const at = recordOpen(id);
+    // A lost open time costs a recent-pages entry, never data, so it isn't worth a notice.
+    enqueue(id, () => adapter.updatePage(id, { lastOpenedAt: at })).catch(() => undefined);
+  }
 
   // Rules, completion, uncomplete, skips, and virtual-occurrence materialisation
   // — every write that defers the head to the backend recompute.
   const recurring = useRecurringWrites({
     adapter,
     enqueue,
-    flushPage,
     pagesRef,
     recurrenceRulesRef,
     setPages,
@@ -238,7 +250,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // Page CRUD: create, delete (hard + soft), restore, reorder, bulk status.
   const {
     clearPendingDescription,
-    createPage,
+    createPage: createPageOnly,
     deletePage,
     reorderPages,
     restorePage,
@@ -266,10 +278,16 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setRecurrenceRules,
   });
 
+  async function createPage(opts: { title?: string; folderId?: string | null }): Promise<Page> {
+    const page = await createPageOnly(opts);
+    viewCache.adoptCreated(page);
+    return page;
+  }
+
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 
   function getPage(id: string): Promise<Page | null> {
-    return adapter.getPage(id);
+    return viewCache.body(id);
   }
 
   function listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
@@ -282,6 +300,22 @@ export function PagesProvider({ children }: { children: ReactNode }) {
 
   function searchTags(query: string): Promise<string[]> {
     return adapter.searchTags(query);
+  }
+
+  async function movePages(ids: string[], place: Placement): Promise<void> {
+    try {
+      const { orders } = await adapter.movePages(ids, place);
+      const moved = new Map(orders);
+      setPages((prev) =>
+        prev.map((p) => {
+          const sortOrder = moved.get(p.id);
+          return sortOrder === undefined ? p : { ...p, sortOrder };
+        })
+      );
+    } catch (err) {
+      // A neighbour that moved since the list loaded; the refresh after every write redraws it.
+      log.warn("move refused", err);
+    }
   }
 
   // Named one by one rather than spread: `recurring` also carries
@@ -325,10 +359,11 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     listOverridesForRules,
     maybeUncompleteRecurringClone,
     mergePages,
+    movePages,
     overridesVersion,
     pageErrors,
-    pages,
     patchFolderColor,
+    recordPageOpened,
     recurrenceRules,
     reorderFolders,
     reorderPages,

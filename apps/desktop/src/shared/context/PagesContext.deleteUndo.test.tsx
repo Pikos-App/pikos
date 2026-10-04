@@ -10,13 +10,13 @@
 import { act } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 async function setup() {
   const hook = renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {

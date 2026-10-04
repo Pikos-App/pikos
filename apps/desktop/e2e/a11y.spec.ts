@@ -62,13 +62,13 @@ async function scan(app: Page, label: string) {
 
 // ─── Boot / empty workspace ─────────────────────────────────────────────────
 
-appTest("a11y: empty workspace @tier2", async ({ app }) => {
+appTest("a11y: empty workspace", async ({ app }) => {
   await scan(app, "empty workspace");
 });
 
 // ─── Page editor open ───────────────────────────────────────────────────────
 
-appTest("a11y: page editor @tier2", async ({ app }) => {
+appTest("a11y: page editor", async ({ app }) => {
   await quickAdd(app, "axe scan target");
   await app.locator("[data-page-list-item]").getByText("axe scan target").click();
   await expect(app.getByRole("textbox", { name: "Page content" })).toBeVisible();
@@ -77,7 +77,7 @@ appTest("a11y: page editor @tier2", async ({ app }) => {
 
 // ─── Calendar view ──────────────────────────────────────────────────────────
 
-appTest("a11y: calendar view @tier2", async ({ app }) => {
+appTest("a11y: calendar view", async ({ app }) => {
   await quickAdd(app, "calendar scan @today");
   await app.keyboard.press(mod("Mod+Shift+c"));
   await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
@@ -86,7 +86,7 @@ appTest("a11y: calendar view @tier2", async ({ app }) => {
 
 // ─── Quick Add dialog ───────────────────────────────────────────────────────
 
-appTest("a11y: quick add dialog @tier2", async ({ app }) => {
+appTest("a11y: quick add dialog", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   await expect(app.getByRole("dialog", { name: "Quick add" })).toBeVisible();
   await scan(app, "quick add dialog");
@@ -94,7 +94,7 @@ appTest("a11y: quick add dialog @tier2", async ({ app }) => {
 
 // ─── Search palette ─────────────────────────────────────────────────────────
 
-appTest("a11y: search palette @tier2", async ({ app }) => {
+appTest("a11y: search palette", async ({ app }) => {
   await quickAdd(app, "palette scan");
   await app.keyboard.press(mod("Mod+k"));
   await expect(app.getByRole("dialog", { name: "Search pages" })).toBeVisible();
@@ -106,7 +106,7 @@ appTest("a11y: search palette @tier2", async ({ app }) => {
 
 // ─── Settings dialog ────────────────────────────────────────────────────────
 
-appTest("a11y: settings dialog @tier2", async ({ app }) => {
+appTest("a11y: settings dialog", async ({ app }) => {
   await app.keyboard.press(mod("Mod+,"));
   await expect(app.getByRole("region", { name: "Settings" })).toBeVisible();
   await scan(app, "settings dialog");
@@ -114,7 +114,7 @@ appTest("a11y: settings dialog @tier2", async ({ app }) => {
 
 // ─── Slash menu (editor command palette) ────────────────────────────────────
 
-appTest("a11y: slash menu @tier2", async ({ app }) => {
+appTest("a11y: slash menu", async ({ app }) => {
   await quickAdd(app, "slash menu scan");
   await app.locator("[data-page-list-item]").getByText("slash menu scan").click();
   const editor = app.getByRole("textbox", { name: "Page content" });

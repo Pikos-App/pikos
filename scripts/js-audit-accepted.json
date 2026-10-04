@@ -1,0 +1,184 @@
+[
+  {
+    "id": "GHSA-j95f-988m-3j2f",
+    "package": "@tiptap/core",
+    "severity": "high",
+    "why": "Quadratic parsing, or a prototype key, in markdown a person pastes or imports into their own workspace; the worst case is the editor stalling on hostile text. Fixed upstream; upgrading the editor is its own change.",
+    "until": "2026-11-15"
+  },
+  {
+    "id": "GHSA-26w7-cxv4-gfx2",
+    "package": "astro",
+    "severity": "critical",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-2pvr-wf23-7pc7",
+    "package": "astro",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-8hv8-536x-4wqp",
+    "package": "astro",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-737v-mqg7-c878",
+    "package": "defu",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-77vg-94rm-hx3p",
+    "package": "devalue",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-j22f-vq7h-c4qm",
+    "package": "devalue",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-mcm9-63f2-9j32",
+    "package": "devalue",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-5wm8-gmm8-39j9",
+    "package": "fast-xml-builder",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-2883-xcg3-v3hh",
+    "package": "js-yaml",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-52cp-r559-cp3m",
+    "package": "js-yaml",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-5p4m-2wfm-xmqj",
+    "package": "js-yaml",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-22p9-wv53-3rq4",
+    "package": "linkify-it",
+    "severity": "high",
+    "why": "Quadratic parsing, or a prototype key, in markdown a person pastes or imports into their own workspace; the worst case is the editor stalling on hostile text. Fixed upstream; upgrading the editor is its own change.",
+    "until": "2026-11-15"
+  },
+  {
+    "id": "GHSA-v245-v573-v5vm",
+    "package": "linkify-it",
+    "severity": "high",
+    "why": "Quadratic parsing, or a prototype key, in markdown a person pastes or imports into their own workspace; the worst case is the editor stalling on hostile text. Fixed upstream; upgrading the editor is its own change.",
+    "until": "2026-11-15"
+  },
+  {
+    "id": "GHSA-28wg-ghj8-5hjv",
+    "package": "nanoid",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-2v37-7h3g-55p8",
+    "package": "nanoid",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-xwg4-73v4-xw9w",
+    "package": "nanoid",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-c2c7-rcm5-vvqj",
+    "package": "picomatch",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-6g55-p6wh-862q",
+    "package": "postcss",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-r28c-9q8g-f849",
+    "package": "postcss",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-f88m-g3jw-g9cj",
+    "package": "sharp",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-rgj7-g3m4-5g8c",
+    "package": "sharp",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-7w5x-hrqm-74c2",
+    "package": "smol-toml",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-2p49-hgcm-8545",
+    "package": "svgo",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-w27v-7q3p-w38r",
+    "package": "svgo",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
+    "id": "GHSA-fx2h-pf6j-xcff",
+    "package": "vite",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  }
+]

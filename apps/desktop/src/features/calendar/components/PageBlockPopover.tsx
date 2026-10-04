@@ -22,6 +22,7 @@ import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggl
 import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
 
 import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
+import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface PageBlockPopoverProps {
   page: PageSummary;
   onClose?: () => void;
@@ -156,6 +157,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const detached = page.syncState === "detached";
   const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
   const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "Calendar";
+  // A moved occurrence is shaped from its series page, but deleting it dismisses one date.
+  const isOccurrence = "originalDate" in page;
 
   function handleOpenPage(e: React.MouseEvent) {
     e.stopPropagation();
@@ -338,8 +341,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           {onDelete && (
             <TooltipIconButton
               className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
-              icon={<Trash2 size={11} />}
-              label="Delete page"
+              icon={isOccurrence ? <CalendarX size={11} /> : <Trash2 size={11} />}
+              label={isOccurrence ? occurrenceDeleteLabel(locked) : "Delete page"}
               onClick={onDelete}
               shortcut="mod+backspace"
             />

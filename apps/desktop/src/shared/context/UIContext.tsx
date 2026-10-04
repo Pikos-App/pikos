@@ -4,10 +4,15 @@
 // Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
 
 import type { PageSummary, SmartViewId, SortMode } from "@pikos/core";
-import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import { isOpen, isSmartViewId } from "@pikos/core";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { usePages } from "@/shared/context/PagesContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+
+import { CalendarDateProvider } from "./CalendarDateContext";
 
 /** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
 export type ActiveViewId = SmartViewId | (string & NonNullable<unknown>);
@@ -33,8 +38,6 @@ export interface UIContextValue {
   lastEditorPageId: string | null;
   setLastEditorPageId: (id: string | null) => void;
   /** Currently viewed week reference date. Persisted so panel toggles don't reset the week. */
-  referenceDate: Date;
-  setReferenceDate: (d: Date) => void;
   /** Page ID to briefly flash after navigation (e.g. "View in calendar" jump). Cleared automatically. */
   highlightedPageId: string | null;
   /** Trigger a one-shot highlight animation on the page's calendar block. */
@@ -99,6 +102,9 @@ export interface UIContextValue {
 const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
+  const { consumePendingNavigation, workspace } = useWorkspace();
+  const { folders } = usePages();
+  const viewCache = useViewCacheController();
   const [activePageId, setActivePageId] = useLocalStorage<string | null>(
     STORAGE_KEYS.lastActivePageId,
     null
@@ -114,10 +120,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [lastEditorPageId, setLastEditorPageId] = useLocalStorage<string | null>(
     STORAGE_KEYS.lastEditorPageId,
     null
-  );
-  const [referenceDateIso, setReferenceDateIso] = useLocalStorage<string>(
-    STORAGE_KEYS.calendarReferenceDate,
-    new Date().toISOString()
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage(
     STORAGE_KEYS.sidebarCollapsed,
@@ -164,12 +166,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setCalendarScrollRequest({ hour, token: calendarScrollTokenRef.current });
   }
 
-  const referenceDate = new Date(referenceDateIso);
-
-  function setReferenceDate(d: Date) {
-    setReferenceDateIso(d.toISOString());
-  }
-
   function setActivePage(page: PageSummary | string | null) {
     if (page === null) setActivePageId(null);
     else if (typeof page === "string") setActivePageId(page);
@@ -187,11 +183,48 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setRightPanelRaw(panel);
   }
 
+  // Only what has been shown is held, so the database answers whether the remembered pages are
+  // still open.
+  useEffect(() => {
+    if (!viewCache || !workspace) return;
+    const ids = [activePageId, lastEditorPageId].filter((id): id is string => id !== null);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void viewCache.rows(ids).then((found) => {
+      if (cancelled) return;
+      const open = new Set(found.filter(isOpen).map((p) => p.id));
+      if (activePageId !== null && !open.has(activePageId)) setActivePage(null);
+      if (lastEditorPageId !== null && !open.has(lastEditorPageId)) setLastEditorPageId(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewCache, workspace?.id]);
+
   function openPage(page: PageSummary | string) {
     const id = typeof page === "string" ? page : page.id;
     setActivePageId(id);
     setRightPanelRaw("editor");
     setPageListDrawerOpen(false);
+  }
+
+  // The remembered view and page are checked against the workspace once it has
+  // loaded, and a first launch's tutorial navigation applied. Done here, during
+  // render, because this provider owns the state it corrects: from a child it was
+  // an update to another component mid-render, which React rejects. Whether the
+  // remembered pages still exist is the database's answer, in the effect above.
+  const [checkedWorkspaceId, setCheckedWorkspaceId] = useState<string | null>(null);
+  if (workspace && workspace.id !== checkedWorkspaceId) {
+    // Stryker disable next-line CallExpression: checking again on every render reaches the same state
+    setCheckedWorkspaceId(workspace.id);
+    if (!isSmartViewId(activeViewId) && !folders.some((f) => f.id === activeViewId)) {
+      setActiveViewId("inbox");
+    }
+    const nav = consumePendingNavigation();
+    if (nav) {
+      setActiveViewId(nav.folderId);
+      openPage(nav.pageId);
+    }
   }
 
   /** `fallback` lets a caller that knows what kind of view this is pick the
@@ -218,7 +251,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
     openPage,
     openSortMenu,
     pageListDrawerOpen,
-    referenceDate,
     requestCalendarScroll,
     rightPanel,
     setActivePage,
@@ -228,7 +260,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setOpenDialog,
     setOpenSortMenu,
     setPageListDrawerOpen,
-    setReferenceDate,
     setRightPanel,
     setSettingsOpen,
     setSettingsSection,
@@ -239,7 +270,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
     sidebarCollapsed,
   };
 
-  return <UIContext.Provider value={value}>{children}</UIContext.Provider>;
+  return (
+    <UIContext.Provider value={value}>
+      <CalendarDateProvider>{children}</CalendarDateProvider>
+    </UIContext.Provider>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

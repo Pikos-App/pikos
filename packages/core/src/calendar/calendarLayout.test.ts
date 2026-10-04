@@ -17,7 +17,13 @@ import {
   computeCalendarMetrics,
   fallsShortOf,
 } from "./calendarGeometry";
-import { buildDayBlocks, collapseUnderWidth, remapBlocksForCollapse } from "./calendarLayout";
+import {
+  buildDayBlocks,
+  collapseUnderWidth,
+  remapBlocksForCollapse,
+  timedPagesByDay,
+  timedPagesInRange,
+} from "./calendarLayout";
 import type { CalendarDensity } from "./dayCount";
 
 // ─── collapseUnderWidth ──────────────────────────────────────────────────────
@@ -1300,5 +1306,48 @@ describe("block height floor", () => {
     expect(b!.top + b!.height).toBe(
       geometry.middleEnd + collapsedBandInnerOffset(geometry.bottomBandHeight) - 1
     );
+  });
+});
+
+describe("timedPagesInRange", () => {
+  it("keeps the timed pages touching the range and nothing else", () => {
+    const pages = [
+      makePage({ id: "inside", scheduledStart: "2026-03-16T09:00:00" }),
+      makePage({
+        id: "spans-in",
+        scheduledEnd: "2026-03-15T01:00:00",
+        scheduledStart: "2026-03-14T23:00:00",
+      }),
+      makePage({ id: "before", scheduledStart: "2026-03-14T09:00:00" }),
+      makePage({ id: "after", scheduledStart: "2026-03-22T09:00:00" }),
+      makePage({ id: "all-day", scheduledStart: "2026-03-16" }),
+      makePage({ id: "unscheduled" }),
+    ];
+    const ids = timedPagesInRange(pages, new Date(2026, 2, 15), new Date(2026, 2, 22)).map(
+      (p) => p.id
+    );
+    expect(ids).toEqual(["inside", "spans-in"]);
+  });
+});
+
+describe("timedPagesByDay", () => {
+  it("puts each page on every day timedPagesInRange would", () => {
+    const pages = [
+      makePage({ scheduledEnd: "2026-03-02T10:00:00", scheduledStart: "2026-03-02T09:00:00" }),
+      makePage({ scheduledEnd: "2026-03-04T01:00:00", scheduledStart: "2026-03-03T23:00:00" }),
+      makePage({ scheduledStart: "2026-03-05T12:00:00" }),
+      makePage({ scheduledStart: "2026-03-06" }),
+      makePage({ scheduledStart: null }),
+      makePage({ scheduledStart: "2026-05-01T09:00:00" }),
+      makePage({ scheduledEnd: "2026-03-01T23:30:00", scheduledStart: "2026-03-01T22:00:00" }),
+      makePage({ scheduledEnd: "2026-03-02T00:30:00", scheduledStart: "2026-03-01T23:00:00" }),
+    ];
+    const days = [2, 3, 4, 5, 6].map((d) => new Date(2026, 2, d));
+    const byDay = timedPagesByDay(pages, days);
+    days.forEach((day, i) => {
+      const end = new Date(2026, 2, day.getDate() + 1);
+      expect(byDay[i]).toEqual(timedPagesInRange(pages, day, end));
+    });
+    expect(byDay.map((d) => d.length)).toEqual([2, 1, 1, 1, 0]);
   });
 });

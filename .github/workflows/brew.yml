@@ -6,9 +6,8 @@
 # checksums against the digests GitHub publishes.
 name: Homebrew tap
 
-# Also on publish, which is the moment the tap goes stale: it turns "found a week later by the
-# Monday run" into "found now", and it stays red until the tap names the release that just shipped.
-# That red is the reminder, and bumping the tap is the last step of shipping rather than a chore.
+# On publish it moves the tap to the release first, then checks it: bumping the tap is part of
+# shipping, not a chore found a week later by the Monday run. The weekly run only checks.
 on:
   release:
     types: [published]
@@ -21,6 +20,20 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
+
+      # A fine-grained token with contents write on Pikos-App/homebrew-tap, and nothing else.
+      - name: Move the tap to this release
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error::No TAP_TOKEN secret, so the tap can't be moved to ${{ github.event.release.tag_name }}."
+            echo "Add one, or run scripts/brew-bump.sh ${{ github.event.release.tag_name }} --push locally."
+            exit 1
+          fi
+          bash scripts/brew-bump.sh "${{ github.event.release.tag_name }}" --push
 
       - name: Check the tap
         env:

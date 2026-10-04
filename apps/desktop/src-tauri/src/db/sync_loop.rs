@@ -20,10 +20,6 @@ use super::DbState;
 /// back to the window is what makes a change feel immediate (`min_focus_gap`).
 const POLL_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
-/// Covers the watcher's debounce tail after a pass's last write (the bracket around
-/// the pass itself is what suppresses the pass; see `watch::suppress_begin`).
-const TRAILING_COVER: Duration = Duration::from_secs(2);
-
 /// Emitted after a background pass that changed page data; the frontend
 /// listens and reloads (see `useSyncAppliedReload`).
 const SYNC_APPLIED_EVENT: &str = "calendar-sync:applied";
@@ -109,7 +105,7 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
         SchedulerConfig::default(),
         super::watch::suppress_begin,
         move |report: &PassReport| {
-            super::watch::suppress_end(TRAILING_COVER);
+            super::watch::suppress_end(super::watch::TRAILING_COVER);
             for (account_id, e) in &report.errors {
                 // Variant only — AppError's Display can echo SQL fragments or
                 // user-derived values into the log.

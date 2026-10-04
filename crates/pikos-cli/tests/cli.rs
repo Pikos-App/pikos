@@ -221,6 +221,68 @@ async fn list_rejects_bad_status_exit_2() {
 }
 
 #[tokio::test]
+async fn a_write_from_another_process_counts_as_someone_elses() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Groceries")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    let before = pikos_db::changes::change_state(&pool).await.unwrap();
+
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--title",
+            "Groceries, Saturday",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let after = pikos_db::changes::change_state(&pool).await.unwrap();
+    assert!(after.seq > before.seq);
+    assert_eq!(after.own_changes, before.own_changes);
+}
+
+#[tokio::test]
+async fn stress_seed_writes_bodies_the_editor_can_open() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let out = cli(
+        dbs,
+        &[
+            "stress",
+            "seed",
+            "--pages",
+            "30",
+            "--large-pages",
+            "1",
+            "--large-words",
+            "20",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let not_documents: i64 = scalar(
+        dbs,
+        "SELECT COUNT(*) FROM pages \
+         WHERE NOT json_valid(content) OR json_extract(content, '$.type') <> 'doc' \
+         OR content_text LIKE '{%'",
+    )
+    .await;
+    assert_eq!(not_documents, 0);
+}
+
+#[tokio::test]
 async fn search_finds_body_text() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();

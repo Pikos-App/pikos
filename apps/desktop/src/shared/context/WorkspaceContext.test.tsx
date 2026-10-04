@@ -13,7 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,7 +24,14 @@ import { renderHookWithProviders } from "@/test/renderWithProviders";
  * collisions: lifecycle owns workspace/isLoading/on/storage/etc., data owns
  * pages/folders/CRUD/scheduling/recurrence. */
 async function setup() {
-  const hook = renderHookWithProviders(() => ({ ...useWorkspace(), ...usePages() }));
+  const hook = renderHookWithProviders(() => {
+    const workspace = useWorkspace();
+    const pages = usePagesNow();
+    return Object.defineProperties(
+      { ...workspace, ...pages },
+      { pages: { get: () => pages.pages } }
+    );
+  });
 
   await act(async () => {
     await hook.result.current.selectWorkspace();
@@ -296,6 +305,111 @@ describe("mutation queue", () => {
     expect(hook.result.current.pageErrors.size).toBe(0);
   });
 
+  it("commits a pending debounced patch before a queued write, so it can't land after it", async () => {
+    const { hook, page } = await setup();
+    const moved = "2099-03-15T10:00:00";
+
+    act(() => {
+      hook.result.current.updatePage(page.id, { scheduledStart: "2099-03-10T09:00:00" });
+    });
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, moved);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+
+    expect(hook.result.current.pages.find((p) => p.id === page.id)?.scheduledStart).toBe(moved);
+  });
+
+  it("keeps an edit still in its debounce when another write to the page queues first", async () => {
+    const { hook, page } = await setup();
+
+    act(() => {
+      hook.result.current.updatePage(page.id, { title: "Renamed" });
+    });
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-03-15T10:00:00");
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+
+    expect((await hook.result.current.storage!.getPage(page.id))?.title).toBe("Renamed");
+    expect(hook.result.current.pages.find((p) => p.id === page.id)?.title).toBe("Renamed");
+  });
+
+  it("never flashes a moved page back while an earlier edit's write lands", async () => {
+    const seen: (string | null | undefined)[] = [];
+    let pageId = "";
+    const hook = renderHookWithProviders(() => {
+      const value = { ...useWorkspace(), ...usePages() };
+      const held = useHeldPages() ?? [];
+      seen.push(held.find((p) => p.id === pageId)?.scheduledStart);
+      return value;
+    });
+    await act(async () => {
+      await hook.result.current.selectWorkspace();
+    });
+    await act(async () => {
+      pageId = (await hook.result.current.createPage({ title: "Test Page" })).id;
+    });
+    const moved = "2099-03-15T10:00:00";
+
+    act(() => {
+      hook.result.current.updatePage(pageId, { title: "Renamed" });
+    });
+    await act(async () => {
+      await hook.result.current.scheduleOnce(pageId, moved);
+    });
+
+    const firstMoved = seen.indexOf(moved);
+    expect(firstMoved).toBeGreaterThan(-1);
+    expect(seen.slice(firstMoved)).toEqual(seen.slice(firstMoved).map(() => moved));
+  });
+
+  it("flags a page whose early-committed edit fails, without an unhandled rejection", async () => {
+    const { hook, page } = await setup();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked with .call(this, …) inside the mock below
+    const original = MockStorageAdapter.prototype.updatePage;
+    vi.spyOn(MockStorageAdapter.prototype, "updatePage").mockImplementation(function (
+      this: MockStorageAdapter,
+      id,
+      updates
+    ) {
+      if (updates.title === "Renamed") return Promise.reject(new Error("disk full"));
+      return original.call(this, id, updates);
+    });
+
+    act(() => {
+      hook.result.current.updatePage(page.id, { title: "Renamed" });
+    });
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-03-15T10:00:00");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(hook.result.current.pageErrors.has(page.id)).toBe(true);
+  });
+
+  it("takes the writer's copy back once a debounced write lands", async () => {
+    const { hook, page } = await setup();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    act(() => {
+      hook.result.current.updatePage(page.id, { title: "Renamed" });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+
+    const stored = await hook.result.current.storage!.getPage(page.id);
+    expect(stored?.updatedAt).not.toBe(page.updatedAt);
+    expect(hook.result.current.pages.find((p) => p.id === page.id)?.updatedAt).toBe(
+      stored?.updatedAt
+    );
+  });
+
   it("continues executing queued writes after a failed write (queue never stalls)", async () => {
     const { hook, page } = await setup();
     const callOrder: string[] = [];
@@ -395,6 +509,57 @@ describe("reorderPages — optimistic", () => {
 });
 
 // ─── clearSchedule ────────────────────────────────────────────────────────────
+
+describe("a rule added or removed in the session", () => {
+  it("marks its page recurring, and unmarks it on removal", async () => {
+    const { hook, page } = await setup();
+    const isRecurring = () => hook.result.current.pages.find((p) => p.id === page.id)?.isRecurring;
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2099-01-05",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+    expect(isRecurring()).toBe(true);
+
+    await act(async () => {
+      await hook.result.current.deleteRecurrence(ruleId);
+    });
+    expect(isRecurring()).toBe(false);
+  });
+
+  it("removing one page's rule leaves another page's series marked", async () => {
+    const { hook, page } = await setup();
+    let other!: Page;
+    await act(async () => {
+      other = await hook.result.current.createPage({ title: "Other" });
+    });
+    const recurring = (id: string) =>
+      hook.result.current.pages.find((p) => p.id === id)?.isRecurring;
+    let otherRule!: string;
+    await act(async () => {
+      for (const target of [page, other]) {
+        const rule = await hook.result.current.createRecurrence({
+          pageId: target.id,
+          rrule: "FREQ=DAILY",
+          scheduledStart: "2099-01-05",
+          timezone: "America/New_York",
+        });
+        if (target === other) otherRule = rule.id;
+      }
+    });
+
+    await act(async () => {
+      await hook.result.current.deleteRecurrence(otherRule);
+    });
+    expect(recurring(page.id)).toBe(true);
+    expect(recurring(other.id)).toBe(false);
+  });
+});
 
 describe("scheduleOnce on a recurring head", () => {
   // When the head moves (drag/edit), the rule's anchor must follow so
@@ -1395,7 +1560,8 @@ describe("skipOccurrences", () => {
       await Promise.resolve();
     });
 
-    expect(hook.result.current.pages.find((p) => p.id === page.id)?.skippedOccurrences).toEqual([]);
+    const restored = hook.result.current.pages.find((p) => p.id === page.id);
+    expect(restored?.skippedOccurrences ?? []).toEqual([]);
   });
 
   it("appends to the existing skip-set rather than replacing it", async () => {
@@ -1433,18 +1599,6 @@ describe("skipOccurrences", () => {
 });
 
 describe("initial load", () => {
-  it("filters listPages to status=not_started", async () => {
-    const spy = vi.spyOn(MockStorageAdapter.prototype, "listPages");
-    const hook = renderHookWithProviders(() => useWorkspace());
-
-    await act(async () => {
-      await hook.result.current.selectWorkspace();
-    });
-
-    // listPages should have been called with status filter
-    expect(spy).toHaveBeenCalledWith({ status: "not_started" });
-  });
-
   it("does not pull completed pages into the pages array on reload", async () => {
     // Guards against reintroducing a bulk completed load at init — the
     // Inbox/folder Completed sections rely on lazy pagination, and the

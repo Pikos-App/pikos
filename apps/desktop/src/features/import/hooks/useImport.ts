@@ -289,7 +289,6 @@ export type ImportState =
       step: "done";
       pageCount: number;
       folderCount: number;
-      batchTag: string;
       pageIds: string[];
       folderIds: string[];
     }
@@ -380,7 +379,6 @@ export function useImport() {
   }
 
   async function executeImport(plan: ImportPlan): Promise<boolean> {
-    const batchTag = `_import_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "_")}`;
     setState({ step: "importing" });
 
     try {
@@ -436,14 +434,12 @@ export function useImport() {
       }
 
       const result = await importBatch({
-        batchTag,
         folders: plan.folders,
         pages: batchPages,
         source: plan.source,
       });
 
       setState({
-        batchTag,
         folderCount: result.folderIds.length,
         folderIds: result.folderIds,
         pageCount: plan.pages.length,

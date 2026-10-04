@@ -69,6 +69,7 @@ export function RecurrenceEndsEditor({
           const isActive = endType === t;
           return (
             <button
+              aria-pressed={isActive}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors",
                 isActive

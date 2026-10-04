@@ -1,7 +1,11 @@
 use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 
+#[cfg(feature = "bench")]
+mod bench;
 mod db;
+#[cfg(feature = "e2e-bridge")]
+pub mod e2e_bridge;
 #[path = "error/error.rs"]
 mod error;
 #[path = "logging/logging.rs"]
@@ -57,6 +61,9 @@ fn single_instance_guard() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(feature = "bench")]
+    bench::mark_start();
+
     // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
     // GPU/driver stacks. Disabling it forces the stable render path.
     // Set before any GTK/webview init. Respect an existing override so
@@ -103,8 +110,12 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             notifications::macos::setup(app.handle());
 
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            // A benchmark launch would deliver the seeded workspace's reminders to whoever is
+            // running it, and the delivery work would land in the timings.
+            if !cfg!(feature = "bench") {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            }
 
             let sync_handle = app.handle().clone();
             tauri::async_runtime::spawn(db::sync_loop::run(sync_handle, sync_trigger_rx));

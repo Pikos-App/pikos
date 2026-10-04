@@ -279,12 +279,16 @@ export function FolderList() {
             </button>
             {!calendarsCollapsed &&
               calendarGroups.map((group) => {
-                const accountName = calendarGroups.length > 1 ? group.accountName : null;
+                const grouped = calendarGroups.length > 1;
+                const accountName = grouped ? group.accountName : null;
+                // A lone group keeps one key, so its rows survive the account read
+                // moving every folder out of the unlinked group.
+                const groupKey = grouped ? (group.accountId ?? "unlinked") : "calendars";
                 return (
                   <div
                     aria-label={accountName ?? undefined}
                     className="flex flex-col gap-0.5"
-                    key={group.accountId ?? "unlinked"}
+                    key={groupKey}
                     role={accountName ? "group" : undefined}
                   >
                     {accountName && (

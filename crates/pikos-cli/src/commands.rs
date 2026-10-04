@@ -32,8 +32,24 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 pages,
                 large_pages,
                 large_words,
-            } => crate::stress::seed(&cli.db, *pages, *large_pages, *large_words, json).await,
-            StressCommand::Bench => crate::stress::bench(&cli.db, json).await,
+                shape,
+                today,
+            } => {
+                let today = today.unwrap_or_else(|| chrono::Local::now().date_naive());
+                crate::stress::seed(
+                    &cli.db,
+                    *pages,
+                    *large_pages,
+                    *large_words,
+                    *shape,
+                    today,
+                    json,
+                )
+                .await
+            }
+            StressCommand::Bench { runs, only } => {
+                crate::stress::bench(&cli.db, *runs, only, json).await
+            }
         };
     }
     let pool = open_workspace(&cli.db, cli.migrate).await?;
@@ -43,8 +59,9 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             query,
             include_completed,
             limit,
+            scan,
         } => {
-            let resp = search(&pool, &query.join(" "), include_completed, limit).await?;
+            let resp = search(&pool, &query.join(" "), include_completed, limit, scan).await?;
             if json {
                 print_json(&resp);
             } else {

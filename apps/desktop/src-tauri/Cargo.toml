@@ -5,6 +5,7 @@ description = "Pikos — notes, tasks, and calendar"
 authors = ["Alex King"]
 license = "BUSL-1.1"
 edition = "2021"
+default-run = "pikos"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,6 +15,25 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "pikos_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# The real writer behind localhost HTTP, for the Playwright lane that has no
+# Tauri IPC. Only that lane turns the feature on, so no release carries it.
+[[bin]]
+name = "pikos-e2e-bridge"
+path = "src/bin/e2e_bridge.rs"
+required-features = ["e2e-bridge"]
+
+[features]
+# The in-app benchmark: opens a scratch workspace from the environment, times real interactions
+# and quits. No release carries it.
+bench = []
+e2e-bridge = [
+  "dep:http-body-util",
+  "dep:hyper",
+  "dep:hyper-util",
+  "tokio/net",
+  "tokio/rt-multi-thread",
+]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -42,6 +62,9 @@ tokio = { version = "1", features = ["sync"] }
 tauri-plugin-log = "2"
 log = "0.4"
 thiserror = "2"
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1", features = ["http1", "server"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
 
 # macOS foreground notifications. tauri-plugin-notification delivers via the
 # deprecated NSUserNotification API, which macOS suppresses while the app is

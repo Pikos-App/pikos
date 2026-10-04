@@ -1,5 +1,5 @@
 import type { CalendarMetrics, CollapseGeometry, PageSummary } from "@pikos/core";
-import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT } from "@pikos/core";
+import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT, timedPagesByDay } from "@pikos/core";
 import { useRef } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -39,6 +39,8 @@ interface WeekGridProps {
    * — caller should materialise an override instead of mutating the head schedule. */
   onReschedule: (pageId: string, start: string, end?: string, originalDate?: string) => void;
   pages: PageSummary[];
+  /** The week's pages are still loading for the first time. */
+  loading: boolean;
 }
 
 function disableSelect(cursorClass: "dragging-grab" | "dragging-resize") {
@@ -54,6 +56,7 @@ export function WeekGrid({
   autoOpenPageId,
   days,
   isCurrentWeek,
+  loading,
   onAutoOpenConsumed,
   onCreateAllDay,
   onCreatePage,
@@ -119,6 +122,7 @@ export function WeekGrid({
     setGhostContent,
     showGhost,
   } = useDragGhost({ dayColumnsRef, days, geometry });
+  const pagesByDay = timedPagesByDay(pages, days);
 
   const { handleBlockResizeStart, resizeRenderState } = useTimedResize({
     days,
@@ -216,6 +220,7 @@ export function WeekGrid({
   return (
     <CalendarSettingsContext.Provider value={settingsValue}>
       <div
+        aria-busy={loading}
         aria-label="Week calendar"
         className="flex min-h-0 flex-1 flex-col"
         ref={weekGridRef}
@@ -287,14 +292,17 @@ export function WeekGrid({
                     draggingPageId={timedDraggingPageId}
                     isCurrentWeek={isCurrentWeek}
                     isDropTarget={isDropTarget}
-                    key={day.toISOString()}
+                    // Keyed by slot, not date: a column keeps its measured width across a week
+                    // change. A fresh column renders unmeasured, which lays out every block of a
+                    // busy day before collapsing them into a pill.
+                    key={i}
                     now={today}
                     onAutoOpenConsumed={onAutoOpenConsumed}
                     onBlockDragStart={handleBlockDragStart}
                     onBlockResizeStart={handleBlockResizeStart}
                     onCreatePage={onCreatePage}
                     onPageDoubleClick={onPageDoubleClick}
-                    pages={pages}
+                    pages={pagesByDay[i]!}
                     resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
                   />
                 );

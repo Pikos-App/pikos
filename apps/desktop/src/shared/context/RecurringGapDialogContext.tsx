@@ -22,6 +22,7 @@ import { createContext, type ReactNode, useContext, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 /** Which gesture opened the dialog — it decides the copy and the write, never
  *  the scope question itself. */
@@ -112,11 +113,11 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     completeRecurringToToday,
     completeSyncedOccurrence,
     listOverridesForRules,
-    pages,
     recurrenceRules,
     skipOccurrences,
   } = usePages();
   const { requestUndoableAction } = useUndoDelete();
+  const lookup = usePageLookup();
   const [pending, setPending] = useState<PendingGap | null>(null);
 
   /** A moved occurrence is an override row, not a gap: its original date is
@@ -131,7 +132,7 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
   }
 
   async function open(kind: GapKind, page: PageSummary): Promise<void> {
-    const head = pages.find((p) => p.id === page.id);
+    const head = lookup(page.id);
     const rule = recurrenceRules.find((r) => r.pageId === page.id);
     // Not a recurring series — the caller is wrong to route here. A tick still
     // reaches the writer (which rejects it loudly); a dismissal has no series to
