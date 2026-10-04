@@ -1,3 +1,4 @@
+// Stryker disable StringLiteral: the classification test reads command names from this file's text, which an instrumented literal hides
 import type {
   AccountWithCalendars,
   BackupEntry,
