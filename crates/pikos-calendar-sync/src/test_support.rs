@@ -49,6 +49,23 @@ pub(crate) fn memory_keychain() -> Keychain {
     Keychain::with_store(Box::new(MemoryStore::default()))
 }
 
+/// A keychain that refuses every write, as a Linux session with no Secret Service does.
+pub(crate) fn refusing_keychain() -> Keychain {
+    struct Refusing;
+    impl CredentialStore for Refusing {
+        fn set(&self, _: &str, _: &str) -> Result<(), KeychainError> {
+            Err(KeychainError::Backend("no keyring".into()))
+        }
+        fn get(&self, _: &str) -> Result<String, KeychainError> {
+            Err(KeychainError::NotFound)
+        }
+        fn delete(&self, _: &str) -> Result<(), KeychainError> {
+            Ok(())
+        }
+    }
+    Keychain::with_store(Box::new(Refusing))
+}
+
 pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> UpsertItem {
     UpsertItem::Event(EventUpsert {
         core: EventCore {
