@@ -112,8 +112,16 @@ function sidebarEntry(name: string): HTMLElement {
  * can open on a collapsed section or the empty state, so for them any drawn row counts.
  */
 function switchTo(name: string) {
+  // A smart list is drawn once it has stopped loading and shows a row, its pages or its empty
+  // state: a row alone was met by the Completed toggle while Today still waited for its lists.
   const drawn = SMART_VIEWS.includes(name)
-    ? () => listGroup(name)?.querySelector("[data-index]") != null
+    ? () => {
+        const group = listGroup(name);
+        return (
+          group?.getAttribute("aria-busy") === "false" &&
+          group.querySelector("[data-index]") != null
+        );
+      }
     : () => listRows(name).length > 0;
   return hoverAndClick(sidebarEntry(name), drawn, `the ${name} list`);
 }

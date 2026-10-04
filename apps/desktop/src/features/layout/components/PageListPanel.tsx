@@ -624,6 +624,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       {/* Page list */}
       {}
       <div
+        aria-busy={cached?.loading ?? false}
         aria-label={viewName(activeViewId, folders)}
         className="flex flex-col overflow-y-auto focus-visible:outline-none"
         onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}
