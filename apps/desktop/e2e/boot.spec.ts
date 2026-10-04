@@ -2,15 +2,35 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
 import { BRIDGE_ORIGIN } from "../bridge/origin";
-import { test as appTest, bridgeCall } from "./fixtures";
+import { test as appTest, bridgeCall, mod, quickAdd } from "./fixtures";
 
 /**
- * What opening a large folder may cost, the speed check that runs on every PR. Counts, not
- * timings, so a shared runner's noise can't fail it. Measured 2026-10-04 on Folder 01, 750 pages:
- * 3 or 4 database calls and 33 to 37 rows mounted. Each limit is about twice that or more, far
- * under a list drawn whole.
+ * What a large workspace may cost, the speed checks that run on every PR, with the app's own cache
+ * settings. Counts, not timings, so a shared runner's noise can't fail them. Measured 2026-10-04 on
+ * the 20,000-page template: a launch and then opening Folder 01 (750 pages) make 17 or 18 calls,
+ * read 400 rows and mount 33 to 37; a write after selecting the folder whole reads 100 rows,
+ * where refetching every row it had ids for read 595.
+ * Each limit is about twice what was measured, far under a list read or drawn whole.
  */
-const WINDOW = { calls: 10, mountedRows: 80 };
+const LIMITS = { launchCalls: 36, launchRows: 800, mountedRows: 80, writeRows: 200 };
+
+/** The bridge calls the page makes from here on, and the page rows they read: list windows and
+ *  pages by id. */
+function countReads(app: Page) {
+  const seen = { calls: 0, commands: [] as string[], rows: 0 };
+  app.on("requestfinished", async (request) => {
+    if (!request.url().startsWith(BRIDGE_ORIGIN)) return;
+    seen.calls++;
+    const command = (request.postDataJSON() as { command?: string } | null)?.command;
+    seen.commands.push(command ?? "");
+    if (command !== "list_view" && command !== "get_pages") return;
+    const reply = (await (await request.response())?.json()) as {
+      value?: { rows?: unknown[] } | unknown[];
+    };
+    seen.rows += Array.isArray(reply.value) ? reply.value.length : (reply.value?.rows?.length ?? 0);
+  });
+  return seen;
+}
 
 test("app boots directly to workspace @smoke @mock-only", async ({ page }) => {
   await page.goto("/");
@@ -27,17 +47,18 @@ appTest.describe("a 20,000-page workspace", () => {
     await expect(app.getByText("Folder 01", { exact: true }).first()).toBeVisible();
     await expect(app.locator("[data-page-list-item]").first()).toBeVisible();
   });
+});
+
+appTest.describe("a 20,000-page workspace, with the app's own cache settings", () => {
+  appTest.use({ tightCache: false, workspace: "large" });
+  appTest.setTimeout(240_000);
 
   appTest(
-    "opening a large folder stays within its call and mounted-row counts @large",
+    "a launch and opening a large folder stay within their counts @large",
     async ({ app }) => {
+      const reads = countReads(app);
+      await app.reload();
       await expect(app.locator("[data-page-list-item]").first()).toBeVisible();
-      await app.waitForTimeout(1500);
-      let calls = 0;
-      app.on("requestfinished", (request) => {
-        if (request.url().startsWith(BRIDGE_ORIGIN)) calls++;
-      });
-
       await app.getByText("Folder 01", { exact: true }).first().click();
       await expect(app.getByRole("group", { name: "Folder 01" })).toHaveAttribute(
         "aria-busy",
@@ -46,9 +67,33 @@ appTest.describe("a 20,000-page workspace", () => {
       await app.waitForTimeout(1500);
 
       expect(await app.locator("[data-page-list-item]").count()).toBeLessThanOrEqual(
-        WINDOW.mountedRows
+        LIMITS.mountedRows
       );
-      expect(calls).toBeLessThanOrEqual(WINDOW.calls);
+      expect(reads.calls).toBeLessThanOrEqual(LIMITS.launchCalls);
+      expect(reads.rows).toBeLessThanOrEqual(LIMITS.launchRows);
+    }
+  );
+
+  appTest(
+    "a write after selecting a large folder whole reads the screen, not the folder @large",
+    async ({ app }) => {
+      await app.getByText("Folder 01", { exact: true }).first().click();
+      await expect(app.getByRole("group", { name: "Folder 01" })).toHaveAttribute(
+        "aria-busy",
+        "false"
+      );
+      // Selecting every page loads every id in the list, as a jump far down it does.
+      const selecting = countReads(app);
+      await app.keyboard.press(mod("Mod+a"));
+      await expect.poll(() => selecting.commands).toContain("list_view_ids");
+      await app.keyboard.press("Escape");
+      await app.waitForTimeout(1000);
+
+      const reads = countReads(app);
+      await quickAdd(app, "written after a select all");
+      await app.waitForTimeout(2000);
+
+      expect(reads.rows).toBeLessThanOrEqual(LIMITS.writeRows);
     }
   );
 });

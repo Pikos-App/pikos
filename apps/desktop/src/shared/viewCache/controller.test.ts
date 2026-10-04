@@ -61,6 +61,54 @@ describe("ViewCacheController", () => {
     expect(controller.store.has(ids[10]!)).toBe(false);
   });
 
+  it("refreshes a list jumped far down by its first window and the rows on screen, not every row", async () => {
+    const { adapter, controller, raw } = await setup(20);
+    controller.show([inbox], []);
+    await settle();
+    controller.want(inbox, 17, 19);
+    await settle();
+    const limits: number[] = [];
+    const listView = raw.listView.bind(raw);
+    raw.listView = (key, after, limit) => {
+      limits.push(limit);
+      return listView(key, after, limit);
+    };
+    const asked: string[] = [];
+    const getPages = raw.getPages.bind(raw);
+    raw.getPages = (ids) => {
+      asked.push(...ids);
+      return getPages(ids);
+    };
+    const onScreen = (controller.cache.entry(inbox)?.ids ?? []).slice(17, 20);
+
+    await adapter.createPage(newPage("Added"));
+    await settle();
+
+    expect(Math.max(...limits)).toBe(2);
+    expect(asked).toEqual(expect.arrayContaining(onScreen));
+    expect(onScreen.every((id) => controller.store.has(id))).toBe(true);
+  });
+
+  it("brings a row a refresh didn't reach back current when it's next on screen", async () => {
+    const { controller, raw } = await setup(20);
+    controller.show([inbox], []);
+    await settle();
+    controller.want(inbox, 17, 19);
+    await settle();
+    const target = controller.cache.entry(inbox)!.ids[18]!;
+    controller.want(inbox, 0, 1);
+    await settle();
+
+    await raw.updatePage(target, { title: "Changed elsewhere" });
+    controller.doorbell();
+    await settle();
+    expect(controller.store.get(target)?.title).not.toBe("Changed elsewhere");
+
+    controller.want(inbox, 17, 19);
+    await settle();
+    expect(controller.store.get(target)?.title).toBe("Changed elsewhere");
+  });
+
   it("refreshes the list on screen after a write", async () => {
     const { adapter, controller } = await setup(1);
     controller.show([inbox], []);

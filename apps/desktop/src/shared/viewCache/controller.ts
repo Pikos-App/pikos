@@ -53,6 +53,11 @@ export class ViewCacheController {
   private loadingFirst = new Set<string>();
   /** The rows each view has on screen, kept so loading carries on after every fetch lands. */
   private wanted = new Map<string, { first: number; last: number }>();
+  /** A fetch of a view's remaining ids in flight, for a second caller to join. */
+  private idsLoading = new Map<string, Promise<string[]>>();
+  /** Rows a refresh held but didn't refetch. They show as held to every reader, and a list
+   *  refetches each when it next comes on screen there. */
+  private stale = new Set<string>();
   private version = 0;
   private listeners = new Set<() => void>();
   private bumpQueued = false;
@@ -177,7 +182,7 @@ export class ViewCacheController {
 
   private async refetchRow(id: string): Promise<void> {
     try {
-      this.store.confirm(await this.adapter.getPages([id]));
+      this.confirm(await this.adapter.getPages([id]));
     } catch {
       // The row stays as held; the next refresh brings it.
     }
@@ -478,6 +483,7 @@ export class ViewCacheController {
     let loaded = false;
     try {
       const page = await this.adapter.listView(key, entry.next, this.config.windowSize);
+      for (const row of page.rows) this.stale.delete(row.id);
       loaded = this.cache.receive(token, page, this.store);
     } catch {
       this.cache.fail(token);
@@ -495,25 +501,36 @@ export class ViewCacheController {
     if (!entry) return [];
     if (!entry.next) return entry.ids;
     const name = viewName(key);
-    this.loadingMore.add(name);
-    const token = this.cache.begin(key, entry.next, 0);
+    const joined = this.idsLoading.get(name);
+    if (joined) return joined;
+    const next = entry.next;
+    const loading = (async () => {
+      this.loadingMore.add(name);
+      const token = this.cache.begin(key, next, 0);
+      try {
+        const rest = await this.adapter.listViewIds(key, next, null);
+        if (this.cache.extendIds(token, rest)) this.fill(key);
+      } finally {
+        this.loadingMore.delete(name);
+        this.bump();
+      }
+      return this.cache.entry(key)?.ids ?? [];
+    })();
+    this.idsLoading.set(name, loading);
     try {
-      const rest = await this.adapter.listViewIds(key, entry.next, null);
-      if (this.cache.extendIds(token, rest)) this.fill(key);
+      return await loading;
     } finally {
-      this.loadingMore.delete(name);
-      this.bump();
+      this.idsLoading.delete(name);
     }
-    return this.cache.entry(key)?.ids ?? [];
   }
 
-  /** Summaries for `ids`, fetching the ones not held. */
+  /** Summaries for `ids`, fetching the ones not held or held stale. */
   async rows(ids: string[]): Promise<PageSummary[]> {
-    const missing = ids.filter((id) => !this.store.has(id) && !this.fetchingRows.has(id));
+    const missing = ids.filter((id) => this.needsRow(id) && !this.fetchingRows.has(id));
     if (missing.length > 0) {
       for (const id of missing) this.fetchingRows.add(id);
       try {
-        this.store.confirm(await this.adapter.getPages(missing));
+        this.confirm(await this.adapter.getPages(missing));
       } finally {
         for (const id of missing) this.fetchingRows.delete(id);
       }
@@ -581,6 +598,7 @@ export class ViewCacheController {
       this.listFetches += 1;
       if (this.config.shadow) window.__PIKOS_LIST_FETCHES__ = this.listFetches;
       const page = await this.adapter.listView(key, null, limit);
+      for (const row of page.rows) this.stale.delete(row.id);
       loaded = this.cache.receive(token, page, this.store);
     } catch {
       this.cache.fail(token);
@@ -615,17 +633,22 @@ export class ViewCacheController {
     const entry = this.cache.entry(key);
     if (!want || !entry || entry.status !== "ready" || this.loadingFirst.has(name)) return;
     if (want.last >= entry.ids.length && entry.next && !this.loadingMore.has(name)) {
-      if (want.last - entry.ids.length > this.config.windowSize * 2) void this.allIds(key);
+      if (this.farPast(want.last, entry.ids.length)) void this.allIds(key);
       else void this.loadMore(key);
     }
     const unheld = entry.ids
       .slice(want.first, want.last + 1)
-      .filter((id) => !this.store.has(id) && !this.fetchingRows.has(id));
+      .filter((id) => this.needsRow(id) && !this.fetchingRows.has(id));
     if (unheld.length > 0) void this.rows(unheld);
   }
 
-  /** Refetch the shown list over the span already loaded. One at a time; writes that land during
-   *  one run it again after. */
+  /** Row `last` is far enough past the `loaded` rows that fetching every id beats paging there a
+   *  window at a time. */
+  private farPast(last: number, loaded: number): boolean {
+    return last - loaded > this.config.windowSize * 2;
+  }
+
+  /** Refetch what's on screen. One at a time; writes that land during one run it again after. */
   private async refresh(): Promise<void> {
     if (this.refreshing) {
       this.refreshAgain = true;
@@ -635,18 +658,14 @@ export class ViewCacheController {
       do {
         await this.writesQuiet();
         this.refreshAgain = false;
-        await Promise.all([
-          ...this.shown.map((key) =>
-            this.loadFirst(
-              key,
-              Math.max(this.config.windowSize, this.cache.entry(key)?.ids.length ?? 0)
-            )
-          ),
+        const [views] = await Promise.all([
+          Promise.all(this.shown.map((key) => this.refreshView(key))),
           this.loadCounts(),
           this.tagList !== null ? this.loadTags() : undefined,
           this.shownRange ? this.loadRange(this.shownRange.start, this.shownRange.end) : undefined,
           this.shownRange || this.heads !== null ? this.loadHeads() : undefined,
         ]);
+        this.markStale(views);
       } while (this.refreshAgain);
     })();
     try {
@@ -654,6 +673,49 @@ export class ViewCacheController {
     } finally {
       this.refreshing = null;
     }
+  }
+
+  /**
+   * Refetch one shown list: its first window, then what's on screen past it. Within paging reach of
+   * the window, the windows `fill` loads bring their rows; far down, the ids give the order and
+   * the rows on screen come by id. Refetching every row loaded since read the whole list on each
+   * write once the screen had jumped down it, because a jump loads every id.
+   */
+  private async refreshView(key: ViewKey): Promise<{ before: string[]; keep: string[] }> {
+    const before = this.cache.entry(key)?.ids ?? [];
+    const size = this.config.windowSize;
+    await this.loadFirst(key);
+    // The ids past the first window may already be in: `fill` starts on them as the window lands.
+    const first = (this.cache.entry(key)?.ids ?? []).slice(0, size);
+    const want = this.wanted.get(viewName(key));
+    if (!want || want.last < size) return { before, keep: first };
+    if (!this.farPast(want.last, size)) {
+      return { before, keep: [...first, ...before.slice(0, want.last + 1)] };
+    }
+    const onScreen = (await this.allIds(key)).slice(want.first, want.last + 1);
+    try {
+      this.confirm(await this.adapter.getPages(onScreen));
+    } catch {
+      // The rows stay as held; the next refresh brings them.
+    }
+    return { before, keep: [...first, ...onScreen] };
+  }
+
+  /** Mark the rows a refresh held but didn't refetch, so a list refetches each when it's next on
+   *  screen. Not let go: other readers, the completed section among them, show held rows too. */
+  private markStale(views: { before: string[]; keep: string[] }[]): void {
+    const kept = new Set(views.flatMap((v) => v.keep));
+    for (const id of views.flatMap((v) => v.before)) if (!kept.has(id)) this.stale.add(id);
+  }
+
+  private needsRow(id: string): boolean {
+    return !this.store.has(id) || this.stale.has(id);
+  }
+
+  /** Rows read from the database, current whichever stale mark they carried. */
+  private confirm(rows: PageSummary[]): void {
+    for (const row of rows) this.stale.delete(row.id);
+    this.store.confirm(rows);
   }
 
   /** Resolves once no write is in flight, or after `QUIET_WAIT_MS` at most, so a burst of writes
