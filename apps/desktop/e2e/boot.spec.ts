@@ -1,7 +1,16 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
+import { BRIDGE_ORIGIN } from "../bridge/origin";
 import { test as appTest, bridgeCall } from "./fixtures";
+
+/**
+ * What opening a large folder may cost, the speed check that runs on every PR. Counts, not
+ * timings, so a shared runner's noise can't fail it. Measured 2026-10-04 on Folder 01, 750 pages:
+ * 3 or 4 database calls and 33 to 37 rows mounted. Each limit is about twice that or more, far
+ * under a list drawn whole.
+ */
+const WINDOW = { calls: 10, mountedRows: 80 };
 
 test("app boots directly to workspace @smoke @mock-only", async ({ page }) => {
   await page.goto("/");
@@ -18,6 +27,30 @@ appTest.describe("a 20,000-page workspace", () => {
     await expect(app.getByText("Folder 01", { exact: true }).first()).toBeVisible();
     await expect(app.locator("[data-page-list-item]").first()).toBeVisible();
   });
+
+  appTest(
+    "opening a large folder stays within its call and mounted-row counts @large",
+    async ({ app }) => {
+      await expect(app.locator("[data-page-list-item]").first()).toBeVisible();
+      await app.waitForTimeout(1500);
+      let calls = 0;
+      app.on("requestfinished", (request) => {
+        if (request.url().startsWith(BRIDGE_ORIGIN)) calls++;
+      });
+
+      await app.getByText("Folder 01", { exact: true }).first().click();
+      await expect(app.getByRole("group", { name: "Folder 01" })).toHaveAttribute(
+        "aria-busy",
+        "false"
+      );
+      await app.waitForTimeout(1500);
+
+      expect(await app.locator("[data-page-list-item]").count()).toBeLessThanOrEqual(
+        WINDOW.mountedRows
+      );
+      expect(calls).toBeLessThanOrEqual(WINDOW.calls);
+    }
+  );
 });
 
 appTest.describe("a 20,000-page workspace, its lists loaded a window at a time", () => {
