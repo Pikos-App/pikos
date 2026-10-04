@@ -292,14 +292,25 @@ appTest(
 // can't reach. This covers the Settings half, untagged because it can't claim the row.
 appTest(
   "Copy email copies the address, and Report opens the bug page with version info",
-  async ({ app, context }) => {
-    await context.grantPermissions(["clipboard-read"]);
+  async ({ app }) => {
     const settings = await openSettings(app);
 
     await appTest.step("Copy email puts the address on the clipboard and says Copied", async () => {
+      // Linux WebKit refuses a page reading the clipboard back, whatever the permission, so
+      // the test records what the app writes to it instead.
+      await app.evaluate(() => {
+        const clipboard = globalThis.navigator.clipboard;
+        const write = clipboard.writeText.bind(clipboard);
+        clipboard.writeText = (text: string) => {
+          (globalThis as { copied?: string }).copied = text;
+          return write(text);
+        };
+      });
       await settings.getByRole("button", { name: "Copy email" }).click();
       await expect(settings.getByRole("button", { name: "Copied" })).toBeVisible();
-      expect(await app.evaluate(() => navigator.clipboard.readText())).toBe("hello@pikos.app");
+      expect(await app.evaluate(() => (globalThis as { copied?: string }).copied)).toBe(
+        "hello@pikos.app"
+      );
     });
 
     await appTest.step("Report opens pikos.app/bugs with os and version", async () => {
