@@ -1,6 +1,6 @@
 import type { CalendarDayCount, CalendarViewMode } from "@pikos/core";
 import { buildCalendarDays } from "@pikos/core";
-import { addDays, format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
+import { format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
 import { CalendarRange, ChevronLeft, ChevronRight, Grid3x3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,7 @@ export function CalendarHeader({
   // week — otherwise it stays live all month long while today is already on screen.
   const isCurrentPeriod = isMonth
     ? isSameMonth(today, referenceDate)
-    : isWithinInterval(today, { end: addDays(last, 1), start: first });
+    : isWithinInterval(today, { end: last, start: first });
   const unit = isMonth ? "month" : "week";
 
   // Time grid shows its visible range ("Mar 16 – 22, 2026" / "Mar 30 – Apr 5,
