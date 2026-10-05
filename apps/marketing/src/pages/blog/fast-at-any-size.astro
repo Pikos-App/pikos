@@ -1,0 +1,61 @@
+---
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost slug="fast-at-any-size">
+
+  <p>
+    Pikos 0.4.1 opens a page in about 67 milliseconds with half a million pages in your workspace. With fifty pages it takes 48. Searching, switching views, and ticking off a task all stay under a tenth of a second at either size.
+  </p>
+
+  <p>
+    Half a million pages is ten new pages a day for 137 years. Nobody will get there. Measuring that far is how to know that the size of your workspace is never the reason Pikos feels slow.
+  </p>
+
+  <h2>Why it matters</h2>
+
+  <p>
+    A lot of notes apps get slower the more you put in them. Search drags, opening the app drags, and eventually you keep a second, lighter app just for quick notes. That's the exact problem an app for notes, tasks, and calendar in one place is meant to solve, and the more you use Pikos, the more there is to lose if it went that way.
+  </p>
+
+  <h2>What changed</h2>
+
+  <p>
+    <strong>It only loads what you can see.</strong> Pikos used to read every page into memory when it started. Now it reads the part of a list that's on screen, and the next part as you scroll. That's why a folder with thousands of pages opens as fast as one with ten, and why Pikos uses about the same memory either way.
+  </p>
+
+  <p>
+    <strong>Saves don't stall.</strong> Every so often the database tidies up after itself. That used to happen in the middle of a save, so one save in a while took ten to twenty times longer than the rest. It now happens in the background.
+  </p>
+
+  <p>
+    <strong>Clicks don't wait.</strong> Pikos used to pause for a moment after you clicked a page or typed in search, in case you were about to do it again. Now a click opens the page straight away, and a search runs as soon as you stop typing.
+  </p>
+
+  <h2>Keeping it fast</h2>
+
+  <p>
+    Speed has a way of slipping back. A change that makes one thing easier can make another slower, and nobody notices for months.
+  </p>
+
+  <p>
+    So it's checked on every change. If opening a large folder starts doing more work than it should, the change fails before it's merged. And a release can't go out until the full benchmark has run on a real laptop with every action coming in under a tenth of a second.
+  </p>
+
+  <h2>Check it yourself</h2>
+
+  <p>
+    The <a href="/speed">speed page</a> has every number, the laptop they were measured on, and how they were measured. It also has the commands to build the same half-million-page workspace and time it on your own machine. Your numbers will depend on your hardware, but half a million pages should feel about the same as two thousand.
+  </p>
+
+  <h2>What's next</h2>
+
+  <p>
+    Two things aren't as fast as the rest yet. Opening the app takes about half a second, and about two thirds of a second at half a million pages. And typing in a very long page is the next thing to measure properly. Its numbers go on the speed page when they're good.
+  </p>
+
+  <p>
+    0.4.1 is a free update. If you already have Pikos, it offers the update the next time you open it. If you don't, <a href="/download">download it here</a>.
+  </p>
+
+</BlogPost>

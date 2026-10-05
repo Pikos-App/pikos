@@ -20,6 +20,14 @@ export interface Post {
 
 export const posts: Post[] = [
   {
+    slug: "fast-at-any-size",
+    title: "Fast at any size",
+    description:
+      "Pikos 0.4.1 opens a page in under a tenth of a second with fifty pages or half a million. What changed, how it stays that way, and how to check it yourself.",
+    date: "2026-10-04",
+    tag: "Releases",
+  },
+  {
     slug: "your-calendar-inside-pikos",
     title: "Your calendar, inside Pikos",
     description:
