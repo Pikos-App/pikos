@@ -11,7 +11,7 @@ export async function onRequest(context: {
   next: () => Promise<Response>;
 }): Promise<Response> {
   const response = await context.next();
-  const referrer = referrerToCount(context.request, response);
+  const referrer = referrerToCount(context.request, response, new Date());
   if (referrer) context.env.REFERRERS?.writeDataPoint({ blobs: [referrer], indexes: [referrer] });
   return response;
 }
