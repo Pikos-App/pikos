@@ -9,7 +9,7 @@
 //! What a green run here cannot vouch for: IPC serialization, `asset://`, the
 //! production CSP, native windows, the notification scheduler and the updater.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Infallible;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
@@ -54,11 +54,28 @@ struct Call {
     db: String,
 }
 
+/// Pools the bridge keeps open at once. Each holds a thread per connection and a checkpoint task
+/// until it is closed, and a lane runs thousands of tests with a database each: kept forever, they
+/// ran the process out of threads about 500 mutants into a mutation run, and every test after
+/// failed to reach its database. Past this the least recently used is closed, and its token
+/// reopens from disk on its next call.
+const OPEN_POOLS: usize = 24;
+
 struct Bridge {
     dir: PathBuf,
+    pools: Mutex<Pools>,
+}
+
+#[derive(Default)]
+struct Pools {
     /// A cell per token, so two tabs connecting one database at once (React's
     /// dev double-mount) open it once rather than racing its migrations.
-    pools: Mutex<HashMap<String, Arc<OnceCell<SqlitePool>>>>,
+    cells: HashMap<String, Arc<OnceCell<SqlitePool>>>,
+    /// Tokens with a cell, least recently used first.
+    recent: VecDeque<String>,
+    /// Every token `connect_db` opened, so a closed one reopens rather than reads as never
+    /// connected.
+    connected: HashSet<String>,
 }
 
 /// What the writer logged, for `bridge_log`. The app sends the same `log` calls to
@@ -299,7 +316,21 @@ impl Bridge {
             })?;
             std::fs::copy(&template, &path)?;
         }
-        cell.get_or_try_init(|| db::open_pool(&path)).await.cloned()
+        let pool = cell
+            .get_or_try_init(|| db::open_pool(&path))
+            .await
+            .cloned()?;
+        let mut pools = self.pools.lock().await;
+        pools.connected.insert(token.to_owned());
+        while pools.recent.len() > OPEN_POOLS {
+            let Some(oldest) = pools.recent.pop_front() else {
+                break;
+            };
+            if let Some(open) = pools.cells.remove(&oldest).and_then(|c| c.get().cloned()) {
+                tokio::spawn(async move { open.close().await });
+            }
+        }
+        Ok(pool)
     }
 
     /// A folder per token, as a workspace has its own directory: snapshots are found
@@ -315,9 +346,15 @@ impl Bridge {
     /// The token's database, refusing one that `connect_db` never opened, the
     /// way the app refuses a command before its workspace is connected.
     async fn connected(&self, token: &str) -> AppResult<SqlitePool> {
-        self.cell(token).await?.get().cloned().ok_or_else(|| {
-            AppError::Internal("No database connected. Call connect_db first.".into())
-        })
+        if let Some(pool) = self.cell(token).await?.get().cloned() {
+            return Ok(pool);
+        }
+        if self.pools.lock().await.connected.contains(token) {
+            return self.pool(token).await;
+        }
+        Err(AppError::Internal(
+            "No database connected. Call connect_db first.".into(),
+        ))
     }
 
     async fn cell(&self, token: &str) -> AppResult<Arc<OnceCell<SqlitePool>>> {
@@ -330,13 +367,12 @@ impl Bridge {
                 "not a bridge database token: {token:?}"
             )));
         }
-        Ok(self
-            .pools
-            .lock()
-            .await
-            .entry(token.to_owned())
-            .or_default()
-            .clone())
+        let mut pools = self.pools.lock().await;
+        if let Some(at) = pools.recent.iter().position(|t| t == token) {
+            pools.recent.remove(at);
+        }
+        pools.recent.push_back(token.to_owned());
+        Ok(pools.cells.entry(token.to_owned()).or_default().clone())
     }
 }
 
@@ -448,5 +484,43 @@ mod tests {
         for token in ["../escape", "a/b", "", &"x".repeat(129)] {
             assert!(bridge.cell(token).await.is_err(), "{token:?} was accepted");
         }
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn closes_the_least_recently_used_pool_and_reopens_it_on_use() {
+        let dir = std::env::temp_dir().join(format!("pikos-bridge-pools-{}", std::process::id()));
+        let bridge = Bridge {
+            dir: dir.clone(),
+            pools: Mutex::default(),
+        };
+        let first = bridge.pool("first").await.unwrap();
+        sqlx::query("CREATE TABLE kept (v TEXT)")
+            .execute(&first)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO kept VALUES ('still here')")
+            .execute(&first)
+            .await
+            .unwrap();
+        for i in 0..OPEN_POOLS {
+            bridge.pool(&format!("other-{i}")).await.unwrap();
+        }
+
+        assert!(bridge.pools.lock().await.cells.len() <= OPEN_POOLS);
+        for _ in 0..50 {
+            if first.is_closed() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(first.is_closed(), "the oldest pool was left open");
+
+        let reopened = bridge.connected("first").await.expect("reopened from disk");
+        let v: String = sqlx::query_scalar("SELECT v FROM kept")
+            .fetch_one(&reopened)
+            .await
+            .unwrap();
+        assert_eq!(v, "still here");
+        assert!(bridge.connected("never-connected").await.is_err());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
