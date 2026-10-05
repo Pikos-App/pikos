@@ -339,9 +339,14 @@ async fn a_query_within_the_scan_ranks_exactly() {
         .await
         .unwrap();
     assert!(!scanned.completed_count_capped);
-    let exact = search_pages_scan(&pool, "morning".into(), None, SearchScan::All)
-        .await
-        .unwrap();
+    let exact = search_pages_scan(
+        &pool,
+        "morning".into(),
+        None,
+        SearchScan::Newest(usize::MAX),
+    )
+    .await
+    .unwrap();
     assert_eq!(ids(scanned), ids(exact));
 }
 
@@ -407,4 +412,87 @@ async fn the_index_update_trigger_names_every_indexed_column() {
     indexed.sort();
     named.sort();
     assert_eq!(named, indexed);
+}
+
+// ─── search_page ────────────────────────────────────────────────────
+
+async fn seed_matches(pool: &sqlx::SqlitePool, open: usize, done: usize) {
+    for i in 0..open + done {
+        let id = format!("m{i}");
+        let title = if i == 1 {
+            "Morning plan".to_string()
+        } else {
+            format!("Page {i}")
+        };
+        let mut page = TestPage::new(&id, &title);
+        page.content_text = "an early morning";
+        if i >= open {
+            page.status = "done";
+        }
+        insert_test_page(pool, page).await.unwrap();
+    }
+}
+
+async fn every_page(pool: &sqlx::SqlitePool, limit: usize, window: i64) -> Vec<Vec<String>> {
+    let mut pages = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = search_window(pool, "morning", false, limit, cursor, window)
+            .await
+            .unwrap();
+        pages.push(page.results.into_iter().map(|r| r.id).collect());
+        match page.next {
+            Some(next) => cursor = SearchCursor::parse(&next),
+            None => return pages,
+        }
+    }
+}
+
+#[tokio::test]
+async fn search_pages_through_every_open_match_once_a_window_at_a_time() {
+    let pool = test_pool().await;
+    seed_matches(&pool, 7, 0).await;
+
+    let pages = every_page(&pool, 2, 3).await;
+
+    let mut seen: Vec<String> = pages.iter().flatten().cloned().collect();
+    assert_eq!(seen.len(), 7, "pages: {pages:?}");
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), 7, "a match came twice: {pages:?}");
+}
+
+#[tokio::test]
+async fn a_search_page_ranks_a_title_hit_first_in_its_window() {
+    let pool = test_pool().await;
+    seed_matches(&pool, 3, 0).await;
+
+    let pages = every_page(&pool, 3, 3).await;
+
+    assert_eq!(pages[0].first().map(String::as_str), Some("m1"));
+}
+
+#[tokio::test]
+async fn a_search_page_leaves_done_matches_out_and_counts_them() {
+    let pool = test_pool().await;
+    seed_matches(&pool, 2, 2).await;
+
+    let page = search_window(&pool, "morning", false, 20, None, 10)
+        .await
+        .unwrap();
+
+    assert_eq!(page.results.len(), 2);
+    assert_eq!(page.completed_count, 2);
+    assert_eq!(page.next, None);
+}
+
+#[test]
+fn a_search_cursor_reads_back_what_it_wrote_and_nothing_else() {
+    let cursor = SearchCursor {
+        before: 41,
+        skip: 6,
+    };
+    assert_eq!(SearchCursor::parse(&cursor.to_string()), Some(cursor));
+    assert_eq!(SearchCursor::parse("41"), None);
+    assert_eq!(SearchCursor::parse("x.6"), None);
 }

@@ -295,6 +295,50 @@ async fn search_finds_body_text() {
 }
 
 #[tokio::test]
+async fn search_pages_through_every_match_with_its_cursor() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let pages = (0..5)
+        .map(|i| {
+            let mut p = base_page(&format!("Note {i}"));
+            p.content_text = Some("remember the avocado".into());
+            p
+        })
+        .collect();
+    let ids = seed(dbs, pages).await;
+
+    let mut seen = Vec::new();
+    let mut after: Option<String> = None;
+    for _ in 0..ids.len() {
+        let mut args = vec!["search", "avocado", "--limit", "2", "--json"];
+        if let Some(cursor) = &after {
+            args.extend(["--after", cursor]);
+        }
+        let page = json(&cli(dbs, &args));
+        for r in page["results"].as_array().unwrap() {
+            seen.push(r["id"].as_str().unwrap().to_string());
+        }
+        match page["next"].as_str() {
+            Some(next) => after = Some(next.to_string()),
+            None => break,
+        }
+    }
+    seen.sort();
+    let mut expected = ids.clone();
+    expected.sort();
+    assert_eq!(seen, expected);
+}
+
+#[tokio::test]
+async fn search_refuses_a_cursor_it_never_printed() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Groceries")]).await;
+    let out = cli(dbs, &["search", "avocado", "--after", "soon", "--json"]);
+    assert_eq!(code(&out), 2);
+}
+
+#[tokio::test]
 async fn status_and_delete_roundtrip() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();

@@ -25,8 +25,6 @@ pub struct SearchResponse {
 pub enum SearchScan {
     /// Score at most this many of the newest matches, and as many of the newest title matches.
     Newest(usize),
-    /// Score every match. Exact, and linear in the number of matches.
-    All,
 }
 
 /// The scan the app searches with.
@@ -337,18 +335,7 @@ pub async fn search_pages_scan(
         });
     }
 
-    let fts_query: String = tokens
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            if i == tokens.len() - 1 {
-                format!("{t}*")
-            } else {
-                t.clone()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
+    let fts_query = fts_match(&tokens);
 
     let cap = match scan {
         SearchScan::Newest(n) if matches_more_than(pool, &fts_query, n).await? => {
@@ -404,65 +391,7 @@ pub async fn search_pages_scan(
 
     let results = rows
         .into_iter()
-        .map(|row| {
-            let body_excerpt = build_excerpt(
-                row.content_text.as_deref(),
-                &row.title,
-                row.subtitle.as_deref(),
-                &tokens,
-            );
-            let excerpt = if body_excerpt.is_empty() {
-                build_mirror_excerpt(row.mirror_search_text.as_deref(), &tokens)
-            } else {
-                body_excerpt
-            };
-
-            let title_lower = row.title.to_lowercase();
-            let title_hit = tokens
-                .iter()
-                .any(|t| title_lower.contains(&t.to_lowercase()));
-            let subtitle_hit = row
-                .subtitle
-                .as_deref()
-                .map(|s| {
-                    let s_lower = s.to_lowercase();
-                    tokens.iter().any(|t| s_lower.contains(&t.to_lowercase()))
-                })
-                .unwrap_or(false);
-            let content_hit = !excerpt.is_empty();
-            let match_source = match (title_hit, subtitle_hit, content_hit) {
-                (true, _, true) => "both",
-                (true, _, false) => "title",
-                (_, true, _) => "subtitle",
-                _ => "content",
-            }
-            .to_string();
-
-            let tags: Vec<String> = row
-                .tags
-                .as_deref()
-                .and_then(|t| serde_json::from_str(t).ok())
-                .unwrap_or_default();
-
-            let content_preview = build_content_preview(
-                row.content_text.as_deref(),
-                &row.title,
-                row.subtitle.as_deref(),
-            );
-
-            SearchResult {
-                id: row.id,
-                title: row.title,
-                excerpt,
-                match_source,
-                status: row.status,
-                subtitle: row.subtitle,
-                scheduled_date: row.scheduled_start,
-                priority: row.priority,
-                tags,
-                content_preview,
-            }
-        })
+        .map(|row| to_result(row, &tokens))
         .collect();
 
     Ok(SearchResponse {
@@ -470,6 +399,253 @@ pub async fn search_pages_scan(
         completed_count,
         completed_count_capped: cap.is_some(),
     })
+}
+
+/// Matches a page of [`search_page`] scores at most: the newest this many below its cursor.
+pub const SEARCH_PAGE_WINDOW: i64 = 2_000;
+
+/// Where a page of [`search_page`] starts: the window of matches older than `before`, past the
+/// first `skip` results of it, with `before` 0 for the newest. Written as `before.skip`, which is
+/// what a caller hands back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SearchCursor {
+    pub before: i64,
+    pub skip: usize,
+}
+
+impl SearchCursor {
+    pub fn parse(text: &str) -> Option<Self> {
+        let (before, skip) = text.split_once('.')?;
+        Some(Self {
+            before: before.parse().ok()?,
+            skip: skip.parse().ok()?,
+        })
+    }
+}
+
+impl std::fmt::Display for SearchCursor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.before, self.skip)
+    }
+}
+
+/// One page of [`search_page`]'s results, and where the next one starts.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchPage {
+    pub results: Vec<SearchResult>,
+    /// Completed pages among the matches this page scored.
+    pub completed_count: i64,
+    /// Older matches exist past the ones this page scored.
+    pub completed_count_capped: bool,
+    /// Hand this back for the next page; absent once every match has been shown.
+    pub next: Option<String>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct WindowFacts {
+    scored: i64,
+    shown: i64,
+    completed: i64,
+    floor: Option<i64>,
+}
+
+/// Search a page at a time, for a caller that wants more than the app's first twenty: each page
+/// ranks a window of the newest [`SEARCH_PAGE_WINDOW`] matches the way the app does, title hits
+/// first, and shows `limit` of them; the cursor walks through that window, then the next older
+/// one. Scoring every match instead took 141 s for a common word at 200,000 pages.
+pub async fn search_page(
+    pool: &sqlx::SqlitePool,
+    query: &str,
+    include_completed: bool,
+    limit: usize,
+    cursor: Option<SearchCursor>,
+) -> AppResult<SearchPage> {
+    search_window(
+        pool,
+        query,
+        include_completed,
+        limit,
+        cursor,
+        SEARCH_PAGE_WINDOW,
+    )
+    .await
+}
+
+/// [`search_page`] over windows of `window` matches.
+async fn search_window(
+    pool: &sqlx::SqlitePool,
+    query: &str,
+    include_completed: bool,
+    limit: usize,
+    cursor: Option<SearchCursor>,
+    window: i64,
+) -> AppResult<SearchPage> {
+    let tokens = fts_tokens(query.trim());
+    if tokens.is_empty() {
+        return Ok(SearchPage {
+            results: vec![],
+            completed_count: 0,
+            completed_count_capped: false,
+            next: None,
+        });
+    }
+    let fts_query = fts_match(&tokens);
+    let titled_query = format!("{{title subtitle}}: ({fts_query})");
+    let at = cursor.unwrap_or(SearchCursor { before: 0, skip: 0 });
+    let below = if at.before == 0 { i64::MAX } else { at.before };
+    let (status_filter, done_last) = if include_completed {
+        ("", "CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,")
+    } else {
+        ("AND pages.status != 'done'", "")
+    };
+    let window_sql = format!(
+        "WITH win AS MATERIALIZED (
+             SELECT pages_fts.rowid AS r, {BM25} AS score FROM pages_fts
+             WHERE pages_fts MATCH ?1 AND pages_fts.rowid < ?3
+             ORDER BY pages_fts.rowid DESC LIMIT ?6),
+         titled AS MATERIALIZED (
+             SELECT pages_fts.rowid AS r FROM pages_fts
+             WHERE pages_fts MATCH ?2 AND pages_fts.rowid < ?3
+               AND pages_fts.rowid >= (SELECT MIN(r) FROM win)),
+         matched AS (
+             SELECT CASE WHEN win.r IN (SELECT r FROM titled) THEN 0 ELSE 1 END AS tier,
+                    win.score, win.r, pages.*
+             FROM win CROSS JOIN pages ON pages.rowid = win.r
+             WHERE pages.deleted_at IS NULL)"
+    );
+    let rows_sql = format!(
+        "{window_sql}
+         SELECT {SEARCH_COLUMNS} FROM matched AS pages
+         WHERE 1 {status_filter}
+         ORDER BY pages.tier, pages.score, {done_last} pages.updated_at DESC
+         LIMIT ?4 OFFSET ?5"
+    );
+    let rows = sqlx::query_as::<_, SearchRow>(&rows_sql) // sql-ok: fragments are compile-time constants
+        .bind(&fts_query)
+        .bind(&titled_query)
+        .bind(below)
+        .bind(i64::try_from(limit).unwrap_or(i64::MAX))
+        .bind(i64::try_from(at.skip).unwrap_or(i64::MAX))
+        .bind(window)
+        .fetch_all(pool)
+        .await?;
+    let facts_sql = format!(
+        "{window_sql}
+         SELECT (SELECT COUNT(*) FROM win) AS scored,
+                (SELECT COUNT(*) FROM matched AS pages WHERE 1 {status_filter}) AS shown,
+                (SELECT COUNT(*) FROM matched WHERE status = 'done') AS completed,
+                (SELECT MIN(r) FROM win) AS floor"
+    );
+    let facts = sqlx::query_as::<_, WindowFacts>(&facts_sql) // sql-ok: fragments are compile-time constants
+        .bind(&fts_query)
+        .bind(&titled_query)
+        .bind(below)
+        .bind(0_i64)
+        .bind(0_i64)
+        .bind(window)
+        .fetch_one(pool)
+        .await?;
+
+    let shown_through = at.skip + rows.len();
+    let full = facts.scored >= window;
+    let next = if i64::try_from(shown_through).unwrap_or(i64::MAX) < facts.shown {
+        Some(SearchCursor {
+            before: at.before,
+            skip: shown_through,
+        })
+    } else {
+        facts.floor.filter(|_| full).map(|floor| SearchCursor {
+            before: floor,
+            skip: 0,
+        })
+    };
+    Ok(SearchPage {
+        results: rows
+            .into_iter()
+            .map(|row| to_result(row, &tokens))
+            .collect(),
+        completed_count: facts.completed,
+        completed_count_capped: full,
+        next: next.map(|c| c.to_string()),
+    })
+}
+
+/// The FTS5 query for `tokens`: each a term, the last a prefix, so a word still being typed matches.
+fn fts_match(tokens: &[String]) -> String {
+    tokens
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            if i == tokens.len() - 1 {
+                format!("{t}*")
+            } else {
+                t.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A matched page as search shows it: an excerpt around the match and where the match was.
+fn to_result(row: SearchRow, tokens: &[String]) -> SearchResult {
+    let body_excerpt = build_excerpt(
+        row.content_text.as_deref(),
+        &row.title,
+        row.subtitle.as_deref(),
+        tokens,
+    );
+    let excerpt = if body_excerpt.is_empty() {
+        build_mirror_excerpt(row.mirror_search_text.as_deref(), tokens)
+    } else {
+        body_excerpt
+    };
+
+    let title_lower = row.title.to_lowercase();
+    let title_hit = tokens
+        .iter()
+        .any(|t| title_lower.contains(&t.to_lowercase()));
+    let subtitle_hit = row
+        .subtitle
+        .as_deref()
+        .map(|s| {
+            let s_lower = s.to_lowercase();
+            tokens.iter().any(|t| s_lower.contains(&t.to_lowercase()))
+        })
+        .unwrap_or(false);
+    let content_hit = !excerpt.is_empty();
+    let match_source = match (title_hit, subtitle_hit, content_hit) {
+        (true, _, true) => "both",
+        (true, _, false) => "title",
+        (_, true, _) => "subtitle",
+        _ => "content",
+    }
+    .to_string();
+
+    let tags: Vec<String> = row
+        .tags
+        .as_deref()
+        .and_then(|t| serde_json::from_str(t).ok())
+        .unwrap_or_default();
+
+    let content_preview = build_content_preview(
+        row.content_text.as_deref(),
+        &row.title,
+        row.subtitle.as_deref(),
+    );
+
+    SearchResult {
+        id: row.id,
+        title: row.title,
+        excerpt,
+        match_source,
+        status: row.status,
+        subtitle: row.subtitle,
+        scheduled_date: row.scheduled_start,
+        priority: row.priority,
+        tags,
+        content_preview,
+    }
 }
 
 /// Whether `fts_query` matches more than `n` pages, reading at most `n + 1` index entries and

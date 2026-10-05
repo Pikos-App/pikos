@@ -23,8 +23,7 @@ use pikos_db::views::{list_completed, list_view, list_view_ids, ViewKey, ViewSco
 use pikos_db::{
     build_tiptap_doc, create_folder_impl, create_page_impl, create_recurrence_rule_impl, get_page,
     list_pages_impl, open_pool, open_pool_checkpointing, update_page_impl, CheckpointHooks,
-    Checkpoints, NewFolder, NewPage, NewRecurrenceRule, PageFilter, PageUpdate, SearchScan,
-    DEFAULT_SEARCH_SCAN,
+    Checkpoints, NewFolder, NewPage, NewRecurrenceRule, PageFilter, PageUpdate, SearchCursor,
 };
 use serde_json::json;
 
@@ -742,25 +741,27 @@ pub async fn bench(
     );
     timings.push(
         time_it(runs, "search one word", || async {
-            search(&pool, "quarterly", false, Some(50), DEFAULT_SEARCH_SCAN).await
+            search(&pool, "quarterly", false, Some(50), None).await
         })
         .await?,
     );
     timings.push(
-        time_it(runs, "search one word, exact", || async {
-            search(&pool, "quarterly", false, Some(50), SearchScan::All).await
+        time_it(runs, "search one word, two pages", || async {
+            let first = search(&pool, "quarterly", false, Some(50), None).await?;
+            let after = first.next.as_deref().and_then(SearchCursor::parse);
+            search(&pool, "quarterly", false, Some(50), after).await
         })
         .await?,
     );
     timings.push(
         time_it(runs, "search a rare word", || async {
-            search(&pool, RARE_WORD, false, Some(50), DEFAULT_SEARCH_SCAN).await
+            search(&pool, RARE_WORD, false, Some(50), None).await
         })
         .await?,
     );
     timings.push(
         time_it(runs, "search two words", || async {
-            search(&pool, "budget review", false, Some(50), DEFAULT_SEARCH_SCAN).await
+            search(&pool, "budget review", false, Some(50), None).await
         })
         .await?,
     );

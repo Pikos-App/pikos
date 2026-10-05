@@ -48,6 +48,11 @@ only.
 `restore`, `folders`, `reminders`, `mcp`. Run `pikos <command> --help` for each
 surface. Global flags: `--json`, `--db <path>`, `--yes`, `--migrate`.
 
+`search` ranks matches the way the app does and shows `--limit` of them (default 20). When
+there are more it prints a cursor, and `--after <cursor>` shows the next page. Each page ranks
+the newest 2,000 matches past the cursor, so a word in most of a large workspace still answers in
+milliseconds.
+
 `list` takes the whole page filter: `--status`, `--priority 0..4`, `--tag`
 (repeatable, all must match), `--due <day>` or `--due <from>..<to>`,
 `--folder <name-or-id>` (fuzzy, like `add ~folder`; `inbox` means unfiled when no

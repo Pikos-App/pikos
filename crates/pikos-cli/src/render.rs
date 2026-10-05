@@ -1,7 +1,7 @@
 //! Human-readable rendering. `--json` bypasses all of this and prints the
 //! pikos-db types verbatim, so these are the plain-text surface only.
 
-use pikos_db::{Page, PageReminder, PageSummary, SearchResponse};
+use pikos_db::{Page, PageReminder, PageSummary, SearchPage};
 
 use crate::ops::FolderEntry;
 
@@ -104,12 +104,12 @@ pub fn render_page(page: &Page) -> String {
 }
 
 /// The completed count, with a `+` when search scanned fewer matches than there were.
-fn completed_label(resp: &SearchResponse) -> String {
+fn completed_label(resp: &SearchPage) -> String {
     let plus = if resp.completed_count_capped { "+" } else { "" };
     format!("{}{plus}", resp.completed_count)
 }
 
-pub fn render_search(resp: &SearchResponse) -> String {
+pub fn render_search(resp: &SearchPage) -> String {
     if resp.results.is_empty() {
         let note = if resp.completed_count > 0 {
             format!(
@@ -153,6 +153,9 @@ pub fn render_search(resp: &SearchResponse) -> String {
             "\n{} completed hidden — use --include-completed to show.",
             completed_label(resp)
         ));
+    }
+    if let Some(next) = &resp.next {
+        lines.push(format!("\nMore: add --after {next} for the next page."));
     }
     lines.join("\n")
 }

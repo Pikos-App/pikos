@@ -59,9 +59,9 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             query,
             include_completed,
             limit,
-            scan,
+            after,
         } => {
-            let resp = search(&pool, &query.join(" "), include_completed, limit, scan).await?;
+            let resp = search(&pool, &query.join(" "), include_completed, limit, after).await?;
             if json {
                 print_json(&resp);
             } else {

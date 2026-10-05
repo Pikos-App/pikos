@@ -18,7 +18,7 @@
 
 use std::io::{BufRead, Write};
 
-use pikos_db::DEFAULT_SEARCH_SCAN;
+use pikos_db::SearchCursor;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
@@ -180,7 +180,8 @@ fn tool_definitions() -> Vec<Value> {
             json!({
                 "query": string_prop("Words to search for."),
                 "includeCompleted": { "type": "boolean", "description": "Include done pages (default false)." },
-                "limit": { "type": "integer", "description": "Keep at most this many results." },
+                "limit": { "type": "integer", "description": "Results per page (default 20)." },
+                "cursor": string_prop("The `next` of a previous result, for the page after it."),
             }),
             &["query"],
         ),
@@ -319,7 +320,12 @@ async fn call_tool(
                 &require_str(args, "query")?,
                 flag(args, "includeCompleted"),
                 count(args, "limit"),
-                DEFAULT_SEARCH_SCAN,
+                match text(args, "cursor") {
+                    Some(cursor) => Some(SearchCursor::parse(&cursor).ok_or_else(|| {
+                        CliError::usage(format!("\"{cursor}\" isn't a cursor search returned"))
+                    })?),
+                    None => None,
+                },
             )
             .await?;
             to_value(&resp)

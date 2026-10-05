@@ -1,7 +1,7 @@
 //! The clap surface: globals, subcommands and their flags.
 
 use clap::{Parser, Subcommand};
-use pikos_db::SearchScan;
+use pikos_db::SearchCursor;
 
 #[derive(Parser)]
 #[command(
@@ -33,15 +33,14 @@ pub enum CliCommand {
         query: Vec<String>,
         #[arg(long)]
         include_completed: bool,
-        #[arg(long)]
+        #[arg(long, help = "Results per page (default 20)")]
         limit: Option<usize>,
         #[arg(
             long,
-            default_value = "2000",
-            value_parser = parse_scan,
-            help = "How many of the newest matches to rank, or `all` for exact ranking"
+            value_parser = parse_cursor,
+            help = "Continue from the cursor a previous page printed"
         )]
-        scan: SearchScan,
+        after: Option<SearchCursor>,
     },
     /// Print a page's full content and metadata
     Read { id: String },
@@ -203,14 +202,8 @@ pub enum StressCommand {
     },
 }
 
-fn parse_scan(value: &str) -> Result<SearchScan, String> {
-    if value == "all" {
-        return Ok(SearchScan::All);
-    }
-    match value.parse::<usize>() {
-        Ok(n) if n > 0 => Ok(SearchScan::Newest(n)),
-        _ => Err(format!(
-            "expected a positive number or `all` (got \"{value}\")"
-        )),
-    }
+fn parse_cursor(value: &str) -> Result<SearchCursor, String> {
+    SearchCursor::parse(value).ok_or_else(|| {
+        format!("expected a cursor a previous search printed, like 4120.20 (got \"{value}\")")
+    })
 }

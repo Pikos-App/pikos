@@ -10,10 +10,10 @@ use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
     get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
-    list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_pages_scan,
+    list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_page,
     soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput, Folder,
     NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder, PageSummary,
-    PageUpdate, SearchResponse, SearchScan,
+    PageUpdate, SearchCursor, SearchPage,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -421,20 +421,20 @@ pub async fn trash(pool: &SqlitePool, id: &str) -> Result<(), CliError> {
     soft_delete_page_impl(pool, id).await.map_err(classify)
 }
 
+/// Results per search page when the caller doesn't say.
+const SEARCH_PAGE_SIZE: usize = 20;
+
 pub async fn search(
     pool: &SqlitePool,
     query: &str,
     include_completed: bool,
     limit: Option<usize>,
-    scan: SearchScan,
-) -> Result<SearchResponse, CliError> {
-    let mut resp = search_pages_scan(pool, query.to_string(), Some(include_completed), scan)
+    after: Option<SearchCursor>,
+) -> Result<SearchPage, CliError> {
+    let limit = limit.unwrap_or(SEARCH_PAGE_SIZE);
+    search_page(pool, query, include_completed, limit, after)
         .await
-        .map_err(classify)?;
-    if let Some(n) = limit {
-        resp.results.truncate(n);
-    }
-    Ok(resp)
+        .map_err(classify)
 }
 
 // ─── Updating ───────────────────────────────────────────────────────────────
