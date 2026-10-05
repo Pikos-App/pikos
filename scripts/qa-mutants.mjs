@@ -60,8 +60,12 @@ const STRYKER_PACKAGES = [
 /** The source a run mutates, which must match the commit it reports on. */
 const MUTATED = ["packages/core/src", "apps/desktop/src", "crates", "apps/desktop/src-tauri/src"];
 
-/** Where each TypeScript package's unit tests run from. */
-const TS_PACKAGES = ["packages/core", "apps/desktop"];
+/** Where each TypeScript package's unit tests run from, and the source its results depend on:
+ *  its own, and what its tests import. */
+const TS_PACKAGES = [
+  { dir: "packages/core", source: ["packages/core/src"] },
+  { dir: "apps/desktop", source: ["packages/core/src", "apps/desktop/src"] },
+];
 
 /** The sandbox Stryker copies a package into skips these: the Rust build alone is tens
  *  of gigabytes, and none of them holds a unit test. */
@@ -83,8 +87,13 @@ const STRYKER_IGNORE = [
  *  so `pikos-db`, declared in both (the dev one adds `test-support`), points two ways in the
  *  copy and the unmutated build fails. Declaring it once would ship the test fixtures. */
 const RUST_ROOTS = [
-  { dir: ".", inPlace: false, prefix: "crates/" },
-  { dir: "apps/desktop/src-tauri", inPlace: true, prefix: "apps/desktop/src-tauri/" },
+  { dir: ".", inPlace: false, prefix: "crates/", source: ["crates"] },
+  {
+    dir: "apps/desktop/src-tauri",
+    inPlace: true,
+    prefix: "apps/desktop/src-tauri/",
+    source: ["crates", "apps/desktop/src-tauri/src"],
+  },
 ];
 
 const WORK = mkdtempSync(join(tmpdir(), "qa-mutants-"));
@@ -175,10 +184,13 @@ function ensureStryker() {
 
 /** The committed source a unit report measured, stamped beside it. `--reuse-unit` takes a
  *  report only while this still matches: a report from older source names lines that have
- *  since moved, and its mutants would land on rewritten code in the e2e stage. Null for a
- *  run of uncommitted work, so that run's reports are never reused. */
-function sourceStamp(uncommitted) {
-  return uncommitted ? null : MUTATED.map((dir) => git("rev-parse", `HEAD:${dir}`)).join(" ");
+ *  since moved, and its mutants would land on rewritten code in the e2e stage. Per stage, so a
+ *  fix in one package reruns that package alone. Null for a run of uncommitted work, so that
+ *  run's reports are never reused. */
+function sourceStamp(dirs, uncommitted) {
+  return uncommitted
+    ? null
+    : dirs.map((dir) => `${dir} ${git("rev-parse", `HEAD:${dir}`)}`).join("\n");
 }
 
 function stampMatches(file, stamp) {
@@ -192,15 +204,16 @@ function stampMatches(file, stamp) {
 /** One Stryker run per package over its changed lines, its report kept in `reports` so a
  *  later run can `--reuse-unit` it; a package with no current report runs anyway. Returns every
  *  mutant, each with the text it replaces, so the e2e stage can apply it. */
-function strykerStage(ranges, reports, reuse, stamp) {
+function strykerStage(ranges, reports, reuse, uncommitted) {
   const mutants = [];
-  for (const pkg of TS_PACKAGES) {
+  for (const { dir: pkg, source } of TS_PACKAGES) {
     const mutate = [...ranges]
       .filter(([file]) => file.startsWith(`${pkg}/`) && /\.tsx?$/.test(file))
       .flatMap(([file, spans]) => spans.map(([a, b]) => `${file.slice(pkg.length + 1)}:${a}-${b}`));
     if (mutate.length === 0) continue;
     const report = join(reports, `${pkg.replace("/", "-")}.json`);
     const config = join(WORK, `${pkg.replace("/", "-")}.stryker.json`);
+    const stamp = sourceStamp(source, uncommitted);
     if (!reuse || !existsSync(report) || !stampMatches(`${report}.source`, stamp)) {
       rmSync(`${report}.source`, { force: true });
       writeFileSync(
@@ -247,7 +260,7 @@ function strykerStage(ranges, reports, reuse, stamp) {
  *  e2e stage. `--reuse-unit` reruns a root whose report is missing or stale, or whose unmutated
  *  build failed, and a run whose unmutated build fails stops: its report holds no mutants,
  *  so carrying on would read as a crate with nothing to test. */
-function cargoStage(range, reports, reuse, stamp) {
+function cargoStage(range, reports, reuse, uncommitted) {
   const mutants = [];
   for (const root of RUST_ROOTS) {
     const files = git("diff", "--name-only", range, "--", `${root.prefix}**/*.rs`)
@@ -265,6 +278,7 @@ function cargoStage(range, reports, reuse, stamp) {
         (o) => o.scenario === "Baseline" && o.summary !== "Success"
       );
     const stampFile = join(out, "source");
+    const stamp = sourceStamp(root.source, uncommitted);
     if (!reuse || !existsSync(outcomes) || !stampMatches(stampFile, stamp) || baselineFailed()) {
       rmSync(stampFile, { force: true });
       writeFileSync(diffFile, `${rel}\n`);
@@ -447,11 +461,13 @@ function e2eStage(survivors, rowsFor, logDir) {
   const servers = startServers(logDir);
   let restore = null;
   const putBack = () => restore?.();
-  process.on("SIGINT", () => {
-    putBack();
-    servers.stop();
-    process.exit(130);
-  });
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.on(signal, () => {
+      putBack();
+      servers.stop();
+      process.exit(130);
+    });
+  }
   try {
     for (const [i, mutant] of survivors.entries()) {
       const rows = rowsFor(mutant.file);
@@ -557,10 +573,9 @@ function main() {
   const reports = join(ROOT, ".agent/releases", opts.version, "mutants");
   mkdirSync(reports, { recursive: true });
   const ranges = changedRanges(diffBase, ["packages/core/src", "apps/desktop/src"]);
-  const stamp = sourceStamp(opts.uncommitted);
   const mutants = [
-    ...strykerStage(ranges, reports, opts.reuseUnit, stamp),
-    ...cargoStage(diffBase, reports, opts.reuseUnit, stamp),
+    ...strykerStage(ranges, reports, opts.reuseUnit, opts.uncommitted),
+    ...cargoStage(diffBase, reports, opts.reuseUnit, opts.uncommitted),
   ];
   for (const m of mutants) if (SKIPPED.has(mutantKey(m))) m.status = "Ignored";
   const missed = mutants.filter((m) => m.status === "Survived" || m.status === "NoCoverage");
