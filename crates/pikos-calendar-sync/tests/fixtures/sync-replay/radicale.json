@@ -1,0 +1,76 @@
+{
+  "recorded": "2026-10-04",
+  "origins": [
+    "http://127.0.0.1:5232"
+  ],
+  "exchanges": [
+    {
+      "method": "PROPFIND",
+      "path": "/.well-known/caldav",
+      "status": 301,
+      "headers": {
+        "location": "/",
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Redirected to /"
+    },
+    {
+      "method": "PROPFIND",
+      "path": "/",
+      "status": 207,
+      "headers": {
+        "dav": "1, 2, 3, calendar-access, addressbook, extended-mkcol",
+        "content-type": "text/xml; charset=utf-8"
+      },
+      "body": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\"><response><href>/</href><propstat><prop><current-user-principal><href>/pikos/</href></current-user-principal></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"
+    },
+    {
+      "method": "PROPFIND",
+      "path": "/pikos/",
+      "status": 207,
+      "headers": {
+        "dav": "1, 2, 3, calendar-access, addressbook, extended-mkcol",
+        "content-type": "text/xml; charset=utf-8"
+      },
+      "body": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\"><response><href>/pikos/</href><propstat><prop><C:calendar-home-set><href>/pikos/</href></C:calendar-home-set></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"
+    },
+    {
+      "method": "PROPFIND",
+      "path": "/pikos/",
+      "status": 207,
+      "headers": {
+        "dav": "1, 2, 3, calendar-access, addressbook, extended-mkcol",
+        "content-type": "text/xml; charset=utf-8"
+      },
+      "body": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\" xmlns:ICAL=\"http://apple.com/ns/ical/\"><response><href>/pikos/</href><propstat><prop><resourcetype><principal /><collection /></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat><propstat><prop><displayname /><ICAL:calendar-color /><C:supported-calendar-component-set /></prop><status>HTTP/1.1 404 Not Found</status></propstat></response><response><href>/pikos/home/</href><propstat><prop><resourcetype><C:calendar /><collection /></resourcetype><displayname>Home</displayname><C:supported-calendar-component-set><C:comp name=\"VTODO\" /><C:comp name=\"VEVENT\" /><C:comp name=\"VJOURNAL\" /></C:supported-calendar-component-set></prop><status>HTTP/1.1 200 OK</status></propstat><propstat><prop><ICAL:calendar-color /></prop><status>HTTP/1.1 404 Not Found</status></propstat></response></multistatus>"
+    },
+    {
+      "method": "PROPFIND",
+      "path": "/pikos/home/",
+      "status": 207,
+      "headers": {
+        "dav": "1, 2, 3, calendar-access, addressbook, extended-mkcol",
+        "content-type": "text/xml; charset=utf-8"
+      },
+      "body": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\" xmlns:CS=\"http://calendarserver.org/ns/\"><response><href>/pikos/home/</href><propstat><prop><CS:getctag>\"ec55f3c1d1f89911db1743616a24cd01152a1df2f8bd2ce2e899405311037397\"</CS:getctag></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"
+    },
+    {
+      "method": "REPORT",
+      "path": "/pikos/home/",
+      "status": 207,
+      "headers": {
+        "content-type": "text/xml; charset=utf-8"
+      },
+      "body": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\"><response><href>/pikos/home/design-review.ics</href><propstat><prop><getetag>\"10417614a70f11b0b43b38224f9ff529f675e1587bf6545932006a5aa135d567\"</getetag><C:calendar-data>BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//pikos replay corpus//EN\r\nBEGIN:VTIMEZONE\r\nTZID:America/Los_Angeles\r\nBEGIN:STANDARD\r\nDTSTART:20001029T020000\r\nRRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10;UNTIL=20061029T090000Z\r\nTZNAME:PST\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nEND:STANDARD\r\nBEGIN:STANDARD\r\nDTSTART:20071104T020000\r\nRRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11\r\nTZNAME:PST\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nEND:STANDARD\r\nBEGIN:DAYLIGHT\r\nDTSTART:20000402T020000\r\nRRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=4;UNTIL=20060402T100000Z\r\nTZNAME:PDT\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nEND:DAYLIGHT\r\nBEGIN:DAYLIGHT\r\nDTSTART:20070311T020000\r\nRRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3\r\nTZNAME:PDT\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nEND:DAYLIGHT\r\nEND:VTIMEZONE\r\nBEGIN:VEVENT\r\nUID:design-review@replay\r\nDTSTART;TZID=America/Los_Angeles:20261007T100000\r\nDTEND;TZID=America/Los_Angeles:20261007T110000\r\nDTSTAMP:20261004T120000Z\r\nSUMMARY:Design review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/pikos/home/team-standup.ics</href><propstat><prop><getetag>\"9f8d20aa6dfc7528b68c86726279b9db832a2d8e6352e780f160c4a0024df86b\"</getetag><C:calendar-data>BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//pikos replay corpus//EN\r\nBEGIN:VTIMEZONE\r\nTZID:America/New_York\r\nBEGIN:STANDARD\r\nDTSTART:20001029T020000\r\nRRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10;UNTIL=20061029T060000Z\r\nTZNAME:EST\r\nTZOFFSETFROM:-0400\r\nTZOFFSETTO:-0500\r\nEND:STANDARD\r\nBEGIN:STANDARD\r\nDTSTART:20071104T020000\r\nRRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11\r\nTZNAME:EST\r\nTZOFFSETFROM:-0400\r\nTZOFFSETTO:-0500\r\nEND:STANDARD\r\nBEGIN:DAYLIGHT\r\nDTSTART:20000402T020000\r\nRRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=4;UNTIL=20060402T070000Z\r\nTZNAME:EDT\r\nTZOFFSETFROM:-0500\r\nTZOFFSETTO:-0400\r\nEND:DAYLIGHT\r\nBEGIN:DAYLIGHT\r\nDTSTART:20070311T020000\r\nRRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3\r\nTZNAME:EDT\r\nTZOFFSETFROM:-0500\r\nTZOFFSETTO:-0400\r\nEND:DAYLIGHT\r\nEND:VTIMEZONE\r\nBEGIN:VEVENT\r\nUID:team-standup@replay\r\nDTSTART;TZID=America/New_York:20261005T090000\r\nDTEND;TZID=America/New_York:20261005T093000\r\nDTSTAMP:20261004T120000Z\r\nEXDATE;TZID=America/New_York:20261012T090000\r\nRRULE:FREQ=WEEKLY;BYDAY=MO\r\nSUMMARY:Team standup\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:team-standup@replay\r\nRECURRENCE-ID;TZID=America/New_York:20261019T090000\r\nDTSTART;TZID=America/New_York:20261019T110000\r\nDTEND;TZID=America/New_York:20261019T113000\r\nDTSTAMP:20261004T120000Z\r\nSUMMARY:Team standup\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/pikos/home/company-offsite.ics</href><propstat><prop><getetag>\"285c1b9ae89eb49d888d563cecefbfc8ec696ee72cb214b56258d8a90f899667\"</getetag><C:calendar-data>BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//pikos replay corpus//EN\r\nBEGIN:VEVENT\r\nUID:company-offsite@replay\r\nDTSTART;VALUE=DATE:20261009\r\nDTEND;VALUE=DATE:20261010\r\nDTSTAMP:20261004T120000Z\r\nSUMMARY:Company offsite\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"
+    },
+    {
+      "method": "REPORT",
+      "path": "/pikos/home/",
+      "status": 207,
+      "headers": {
+        "content-type": "text/xml; charset=utf-8"
+      },
+      "body": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\"><sync-token>http://radicale.org/ns/sync/dd98218f093954ab6f79733f66367c7b3d3fdac205c0298fa1efc2abc3c770da</sync-token><response><href>/pikos/home/design-review.ics</href><propstat><prop><getetag>\"10417614a70f11b0b43b38224f9ff529f675e1587bf6545932006a5aa135d567\"</getetag></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/pikos/home/team-standup.ics</href><propstat><prop><getetag>\"9f8d20aa6dfc7528b68c86726279b9db832a2d8e6352e780f160c4a0024df86b\"</getetag></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/pikos/home/company-offsite.ics</href><propstat><prop><getetag>\"285c1b9ae89eb49d888d563cecefbfc8ec696ee72cb214b56258d8a90f899667\"</getetag></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"
+    }
+  ]
+}
