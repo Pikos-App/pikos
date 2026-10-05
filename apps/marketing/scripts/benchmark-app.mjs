@@ -2,12 +2,15 @@
 //
 //   node apps/marketing/scripts/benchmark-app.mjs [--launches N] [--sizes 2000,20000]
 //     [--out <file>] [--baseline <file>] [--dir <scratch dir>] [--build | --skip-build]
+//     [--app-proxy <url>]
 //
 //   node apps/marketing/scripts/benchmark-app.mjs --quick [--only open,switch] [--sizes 200000]
 //
 // --quick is for iterating: one launch per size with no warm-up or rests, five samples an action,
 // printed beside the last quick run's. --only times just those areas: switch, open, search,
-// scroll, edit and calendar. The app is rebuilt when its source is newer than the last build.
+// scroll, edit, calendar, capture and ipc. The app is rebuilt when its source is newer than the
+// last build. --app-proxy points the launched app, and nothing else this script runs, at a proxy:
+// `scripts/check-egress.mjs` uses it to see every host the app reaches.
 //
 // Builds the desktop app with the in-app benchmark compiled in (a separate identity, so it never
 // reads or writes your own app's settings), then launches it against each scratch workspace. Each
@@ -58,6 +61,7 @@ const sizes = arg("--sizes", quick ? "2000,200000" : SIZES.join(","))
   .map(Number);
 const only = arg("--only", "");
 const samples = arg("--samples", quick ? "5" : "");
+const appProxy = arg("--app-proxy", null);
 const baselinePath = arg("--baseline", null);
 const LAST_QUICK = join(dir, "last-quick.json");
 /** A launch that hasn't reported by then has hung, which is itself the result. */
@@ -204,6 +208,9 @@ function launch(pages, template, label) {
       PIKOS_BENCH_ONLY: only,
       PIKOS_BENCH_OUT: report,
       PIKOS_BENCH_SAMPLES: samples,
+      ...(appProxy
+        ? { ALL_PROXY: appProxy, HTTP_PROXY: appProxy, HTTPS_PROXY: appProxy, NO_PROXY: "" }
+        : {}),
     },
     killSignal: "SIGKILL",
     stdio: "ignore",
