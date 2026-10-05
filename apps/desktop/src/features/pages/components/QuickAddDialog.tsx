@@ -6,7 +6,7 @@
 // remounts the body, which resets all its state via useState initializers —
 // no reset effect, no eslint-disable, no flicker.
 
-import type { PagePriority, PageUpdate, ParsedInput, ParseResult } from "@pikos/core";
+import type { PagePriority, ParsedInput, ParseResult } from "@pikos/core";
 import {
   DAY_BEFORE_MINUTES,
   folderIdForNewPage,
@@ -31,6 +31,7 @@ import { MOD_KEY_SPOKEN } from "@/shared/constants/platform";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import type { NewPageFields } from "@/shared/context/usePageWrites";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
@@ -353,7 +354,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     // Fresh NLP tags from re-parse + manual additions.
     const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];
 
-    const patch: PageUpdate = {};
+    const patch: NewPageFields = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
     // Body from the "//" separator, written as the page's document so opening
@@ -383,8 +384,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
     if (resolvedRrule) {
       // Infinite recurrence: 1 template page + recurrence rule.
-      const page = await createPage({ folderId: resolvedFolderId, title });
-      if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+      const page = await createPage({ folderId: resolvedFolderId, title, ...patch });
 
       const tz = getLocalTimezone();
       // Snap onto the first date the rule permits — a chip-set M/W/F rule on a
@@ -417,9 +417,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       // Finite recurrence: N independent pages, each with its own schedule.
       let firstId: string | null = null;
       for (const inp of result.inputs) {
-        const pg = await createPage({ folderId: resolvedFolderId, title: inp.title || title });
-        if (firstId === null) firstId = pg.id;
-        const finPatch: PageUpdate = {};
+        const finPatch: NewPageFields = {};
         if (resolvedPriority !== 0) finPatch.priority = resolvedPriority;
         const finTags = [...new Set([...inp.tags, ...manualTags])];
         if (finTags.length > 0) finPatch.tags = finTags;
@@ -427,7 +425,12 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
           finPatch.content = bodyToTiptap(inp.content);
           finPatch.contentText = inp.content;
         }
-        if (Object.keys(finPatch).length > 0) updatePage(pg.id, finPatch);
+        const pg = await createPage({
+          folderId: resolvedFolderId,
+          title: inp.title || title,
+          ...finPatch,
+        });
+        if (firstId === null) firstId = pg.id;
         if (inp.scheduledStart) {
           await scheduleOnce(pg.id, inp.scheduledStart, inp.scheduledEnd);
         }
@@ -437,8 +440,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     }
 
     // Single page
-    const page = await createPage({ folderId: resolvedFolderId, title });
-    if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+    const page = await createPage({ folderId: resolvedFolderId, title, ...patch });
 
     if (resolvedDate) {
       const resolvedEnd = parsed?.scheduledEnd ?? endDateValue ?? undefined;

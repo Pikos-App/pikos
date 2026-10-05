@@ -44,7 +44,7 @@ import { useAppSettings } from "./AppSettingsContext";
 import { useFolderWrites } from "./useFolderWrites";
 import { usePagesStore } from "./usePagesStore";
 import { usePageWriteQueue } from "./usePageWriteQueue";
-import { usePageWrites } from "./usePageWrites";
+import { type NewPageFields, usePageWrites } from "./usePageWrites";
 import { type GapRunOptions, useRecurringWrites } from "./useRecurringWrites";
 import { useScheduleWrites } from "./useScheduleWrites";
 import { useWorkspaceInternal } from "./WorkspaceContext";
@@ -61,7 +61,7 @@ export interface PagesContextValue {
   recurrenceRules: PageRecurrenceRule[];
   /** Load full page with content — use when opening the editor. */
   getPage: (id: string) => Promise<Page | null>;
-  createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
+  createPage: (opts: NewPageFields) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
   /** Save that a page was just opened, leaving the page list alone; see `recentOpens`. */
@@ -278,7 +278,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setRecurrenceRules,
   });
 
-  async function createPage(opts: { title?: string; folderId?: string | null }): Promise<Page> {
+  async function createPage(opts: NewPageFields): Promise<Page> {
     const page = await createPageOnly(opts);
     viewCache.adoptCreated(page);
     return page;

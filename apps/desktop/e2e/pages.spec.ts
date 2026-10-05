@@ -292,9 +292,9 @@ appTest(
     });
     expect(counts).toMatchObject({ inbox: 2, today: 1 });
     const pages = await bridgeCall<{ tags: string[] }[]>(app, "get_pages", { ids });
-    const tagged = pages.filter((p) => p.tags.includes("work")).length;
+    expect(pages.map((p) => p.tags)).toEqual([["work"], ["work"]]);
     expect(await bridgeCall<{ name: string; pageCount: number }[]>(app, "list_tags")).toEqual([
-      { name: "work", pageCount: tagged },
+      { name: "work", pageCount: 2 },
     ]);
     expect(pages).toHaveLength(2);
     expect(

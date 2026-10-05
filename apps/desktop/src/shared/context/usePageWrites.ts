@@ -4,7 +4,14 @@
 // and anything recurring (useRecurringWrites) — those defer to a queue or to a
 // backend recompute in ways plain page CRUD does not.
 
-import type { Folder, Page, PageStatus, PageSummary, StorageAdapter } from "@pikos/core";
+import type {
+  Folder,
+  Page,
+  PagePriority,
+  PageStatus,
+  PageSummary,
+  StorageAdapter,
+} from "@pikos/core";
 import { folderIdForRestoredPage, toPageSummary } from "@pikos/core";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
@@ -12,10 +19,21 @@ import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 
 import type { OptimisticWrite } from "./usePageWriteQueue";
 
+/** What a page can be created with, so a caller that knows its tags, priority or body writes them
+ *  with the page rather than in a second write that lands after it is already on screen. */
+export interface NewPageFields {
+  title?: string;
+  folderId?: string | null;
+  tags?: string[];
+  priority?: PagePriority;
+  content?: string;
+  contentText?: string;
+}
+
 export interface PageWrites {
   /** Resolve the "calendar description changed" notice — see the adapter method. */
   clearPendingDescription: (id: string) => Promise<void>;
-  createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
+  createPage: (opts: NewPageFields) => Promise<Page>;
   /** Hard delete. Soft-delete (recoverable) is softDeletePage. */
   deletePage: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
@@ -43,14 +61,21 @@ export function usePageWrites({
   pagesRef: RefObject<PageSummary[]>;
   setPages: Dispatch<SetStateAction<PageSummary[]>>;
 }): PageWrites {
-  async function createPage({ folderId, title }: { title?: string; folderId?: string | null }) {
+  async function createPage({
+    content,
+    contentText,
+    folderId,
+    priority,
+    tags,
+    title,
+  }: NewPageFields) {
     const page = await adapter.createPage({
-      content: "",
-      contentText: "",
+      content: content ?? "",
+      contentText: contentText ?? "",
       folderId: folderId ?? null,
-      priority: 0,
+      priority: priority ?? 0,
       status: "not_started",
-      tags: [],
+      tags: tags ?? [],
       title: title ?? "",
     });
     setPages((prev) => [...prev, toPageSummary(page)]);
