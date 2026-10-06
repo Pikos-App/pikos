@@ -105,6 +105,9 @@ const SKIPPED = new Map(
   ])
 );
 
+/** The golden flow, which passes whenever the servers work. */
+const SMOKE_GREP = tagPattern(["GOLD-01"]);
+
 /** Must match the ports and zone in `playwright.bridge.config.ts`. */
 const BRIDGE_PORT = 1423;
 const VITE_PORT = 1428;
@@ -487,10 +490,12 @@ function e2eStage(survivors, rowsFor, logDir, progress) {
           console.log(
             `  baseline red for ${mutant.file}'s rows; its survivors stay survivors (${saveRed(grep, output)})`
           );
-          const recheck = canary && playwright(canary);
-          if (recheck && !recheck.ok) {
+          // Before any row set has passed, the smoke flow stands in for one.
+          const check = canary ?? SMOKE_GREP;
+          const recheck = playwright(check);
+          if (!recheck.ok) {
             throw new Error(
-              `an e2e baseline that passed now fails (${saveRed(canary, recheck.output)}): the servers broke, so this run's e2e kills can't be trusted`
+              `the servers broke: ${check} fails too (${saveRed(check, recheck.output)}), so this run's e2e verdicts can't be trusted`
             );
           }
         }
