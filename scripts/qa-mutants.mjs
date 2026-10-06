@@ -29,6 +29,7 @@
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -114,6 +115,7 @@ const BRIDGE_BIN = join(DESKTOP, "src-tauri/target/debug/pikos-e2e-bridge");
 function parseArgs(argv) {
   const opts = {
     limit: null,
+    resume: false,
     retry: false,
     uncommitted: false,
     reuseUnit: false,
@@ -128,13 +130,14 @@ function parseArgs(argv) {
     else if (arg === "--reuse-unit") opts.reuseUnit = true;
     else if (arg === "--limit") opts.limit = Number(argv[++i]);
     else if (arg === "--retry") opts.retry = true;
+    else if (arg === "--resume") opts.resume = true;
     else if (arg === "--uncommitted") opts.uncommitted = true;
     else if (!arg.startsWith("--") && !opts.version) opts.version = arg;
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!opts.version)
     throw new Error(
-      "usage: qa-mutants.mjs <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--limit <n>] [--uncommitted]"
+      "usage: qa-mutants.mjs <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--resume] [--limit <n>] [--uncommitted]"
     );
   opts.since ??= git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*");
   return opts;
@@ -330,7 +333,10 @@ function apply(mutant) {
   const before = readFileSync(path, "utf8");
   if (mutant.diff) {
     const where = mutant.dir === "." ? [] : [`--directory=${mutant.dir}`];
-    execFileSync("git", ["apply", ...where, "-"], { cwd: ROOT, input: mutant.diff });
+    // cargo-mutants writes the mutation's description where the new file's name goes.
+    const target = mutant.diff.match(/^--- (.*)$/m)[1];
+    const patch = mutant.diff.replace(/^\+\+\+ .*$/m, `+++ ${target}`);
+    execFileSync("git", ["apply", "-p0", ...where, "-"], { cwd: ROOT, input: patch });
   } else {
     const lines = before.split("\n");
     const { end, start } = mutant;
@@ -449,7 +455,7 @@ function startServers(logDir) {
  *  fails too, the servers broke rather than one row set's tests, and every kill since is
  *  suspect, so the stage stops. Without the check, broken servers read as every later
  *  mutant killed in the same few seconds and every later row set red. */
-function e2eStage(survivors, rowsFor, logDir) {
+function e2eStage(survivors, rowsFor, logDir, progress) {
   const baselines = new Map();
   let canary = null;
   let reds = 0;
@@ -471,7 +477,7 @@ function e2eStage(survivors, rowsFor, logDir) {
   try {
     for (const [i, mutant] of survivors.entries()) {
       const rows = rowsFor(mutant.file);
-      if (rows.length === 0) continue;
+      if (rows.length === 0 || progress.done.has(i)) continue;
       const grep = tagPattern(rows);
       if (!baselines.has(grep)) {
         const { ok, output } = playwright(grep);
@@ -504,6 +510,7 @@ function e2eStage(survivors, rowsFor, logDir) {
         sleep(500);
         if (mutant.diff) servers.rebuildBridge();
       }
+      progress.record(i, mutant);
       console.log(
         `  ${i + 1}/${survivors.length} ${mutant.status} in ${mutant.seconds}s, ${rows.length} rows: ${mutant.file}:${mutant.line} ${mutant.mutator}`
       );
@@ -511,6 +518,42 @@ function e2eStage(survivors, rowsFor, logDir) {
   } finally {
     servers.stop();
   }
+}
+
+/** The e2e stage's verdicts, appended one per mutant as they land, so a run stopped partway
+ *  resumes with `--resume` instead of starting the day over. A verdict counts only while the
+ *  source and the specs match the run that wrote it, and a resumed entry must name the mutant
+ *  now at its position, or the run refuses rather than pin a verdict on the wrong mutant. */
+function e2eProgress(path, tried, resume) {
+  const header = JSON.stringify({
+    count: tried.length,
+    source: sourceStamp([...MUTATED, "apps/desktop/e2e"], false),
+  });
+  const done = new Set();
+  if (resume) {
+    const [first, ...entries] = readFileSync(path, "utf8").split("\n").filter(Boolean);
+    if (first !== header) throw new Error(`${path} is from other source or another run`);
+    for (const line of entries) {
+      const e = JSON.parse(line);
+      const m = tried[e.i];
+      if (!m || m.file !== e.file || m.line !== e.line || m.mutator !== e.mutator) {
+        throw new Error(`${path}: entry ${e.i + 1} names a different mutant than this run's`);
+      }
+      m.status = e.status;
+      m.seconds = e.seconds;
+      done.add(e.i);
+    }
+  } else {
+    writeFileSync(path, `${header}\n`);
+  }
+  return {
+    done,
+    record: (i, m) =>
+      appendFileSync(
+        path,
+        `${JSON.stringify({ file: m.file, i, line: m.line, mutator: m.mutator, seconds: m.seconds, status: m.status })}\n`
+      ),
+  };
 }
 
 /** Names a mutant by what it changes rather than where, so a line moved by an edit above
@@ -595,7 +638,8 @@ function main() {
     : pending;
   if (!opts.unitOnly) {
     console.log(`\ne2e stage: ${tried.length} of ${missed.length} mutant(s) the unit tests missed`);
-    e2eStage(tried, rowsFor, reports);
+    const progress = e2eProgress(join(reports, "e2e-progress.jsonl"), tried, opts.resume);
+    e2eStage(tried, rowsFor, reports, progress);
   }
 
   const survivors = mutants
