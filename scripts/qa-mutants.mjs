@@ -28,12 +28,14 @@
 // and puts each one back.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -529,7 +531,7 @@ function e2eStage(survivors, rowsFor, logDir, progress) {
  *  resumes with `--resume` instead of starting the day over. A verdict counts only while the
  *  source and the specs match the run that wrote it, and a resumed entry must name the mutant
  *  now at its position, or the run refuses rather than pin a verdict on the wrong mutant. */
-function e2eProgress(path, tried, resume) {
+function e2eProgress(path, tried, resume, verdicts) {
   const header = JSON.stringify({
     count: tried.length,
     source: sourceStamp([...MUTATED, "apps/desktop/e2e"], false),
@@ -547,17 +549,87 @@ function e2eProgress(path, tried, resume) {
       m.status = e.status;
       m.seconds = e.seconds;
       done.add(e.i);
+      verdicts.record(e.i, m);
     }
   } else {
     writeFileSync(path, `${header}\n`);
   }
+  let kept = 0;
+  for (const [i, m] of tried.entries()) {
+    const v = done.has(i) ? null : verdicts.kept(i);
+    if (!v) continue;
+    m.status = v.status;
+    m.seconds = v.seconds;
+    done.add(i);
+    kept++;
+  }
+  if (kept > 0) console.log(`  kept ${kept} verdict(s) whose code and tests are unchanged`);
   return {
     done,
-    record: (i, m) =>
+    record: (i, m) => {
       appendFileSync(
         path,
         `${JSON.stringify({ file: m.file, i, line: m.line, mutator: m.mutator, seconds: m.seconds, status: m.status })}\n`
+      );
+      verdicts.record(i, m);
+    },
+  };
+}
+
+/** Every e2e verdict, kept across runs and reused while what it rests on is unchanged: the mutated
+ *  file, the specs tagged with the rows the file reaches, and the e2e helpers every spec uses. Any
+ *  of those changing re-proves it, since a proof lasts only until its code or its test changes. A
+ *  line can hold two identical mutants, so each is keyed by what it changes plus its occurrence. */
+function e2eVerdicts(path, tried, rowsFor) {
+  const e2e = "apps/desktop/e2e";
+  const hash = (file) =>
+    createHash("sha1")
+      .update(readFileSync(join(ROOT, file)))
+      .digest("hex");
+  const files = readdirSync(join(ROOT, e2e), { recursive: true })
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => `${e2e}/${f}`);
+  const specs = files
+    .filter((f) => f.endsWith(".spec.ts"))
+    .map((f) => ({
+      hash: hash(f),
+      rows: new Set(
+        [...readFileSync(join(ROOT, f), "utf8").matchAll(/@([A-Z]+-\d+)/g)].map((t) => t[1])
       ),
+    }));
+  const helpers = files.filter((f) => !f.endsWith(".spec.ts")).map(hash);
+  const seen = new Map();
+  const keys = tried.map((m) => {
+    const base = mutantKey(m);
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return `${base}#${n}`;
+  });
+  const deps = (m) => {
+    const rows = rowsFor(m.file);
+    const tied = specs.filter((s) => rows.some((r) => s.rows.has(r))).map((s) => s.hash);
+    return createHash("sha1")
+      .update([hash(m.file), ...helpers, ...tied].join("|"))
+      .digest("hex");
+  };
+  const stored = new Map();
+  if (existsSync(path)) {
+    for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean)) {
+      const v = JSON.parse(line);
+      stored.set(v.key, v);
+    }
+  }
+  return {
+    kept(i) {
+      const v = stored.get(keys[i]);
+      return v && v.deps === deps(tried[i]) ? v : null;
+    },
+    record(i, m) {
+      appendFileSync(
+        path,
+        `${JSON.stringify({ deps: deps(m), key: keys[i], seconds: m.seconds, status: m.status })}\n`
+      );
+    },
   };
 }
 
@@ -643,7 +715,8 @@ function main() {
     : pending;
   if (!opts.unitOnly) {
     console.log(`\ne2e stage: ${tried.length} of ${missed.length} mutant(s) the unit tests missed`);
-    const progress = e2eProgress(join(reports, "e2e-progress.jsonl"), tried, opts.resume);
+    const verdicts = e2eVerdicts(join(reports, "e2e-verdicts.jsonl"), tried, rowsFor);
+    const progress = e2eProgress(join(reports, "e2e-progress.jsonl"), tried, opts.resume, verdicts);
     e2eStage(tried, rowsFor, reports, progress);
   }
 
