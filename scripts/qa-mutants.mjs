@@ -351,10 +351,24 @@ function cargoStage(range, reports, reuse, uncommitted) {
   return mutants;
 }
 
+/** The file a mutant is applied to and its text before, written before the edit. The e2e loop
+ *  waits on each test run synchronously, so no signal handler can run while it does: a stopped run
+ *  is killed outright, and the next run puts the file back from here before anything else. */
+const APPLIED = join(tmpdir(), "pikos-qa-mutant-applied.json");
+
+function putBackLeftover() {
+  if (!existsSync(APPLIED)) return;
+  const { before, path } = JSON.parse(readFileSync(APPLIED, "utf8"));
+  writeFileSync(path, before);
+  rmSync(APPLIED);
+  console.log(`put back ${path}, left mutated by a run that was stopped`);
+}
+
 /** Apply a mutant to its file and return a function that puts the file back. */
 function apply(mutant) {
   const path = join(ROOT, mutant.file);
   const before = readFileSync(path, "utf8");
+  writeFileSync(APPLIED, JSON.stringify({ before, path }));
   if (mutant.diff) {
     const where = mutant.dir === "." ? [] : [`--directory=${mutant.dir}`];
     // cargo-mutants writes the mutation's description where the new file's name goes.
@@ -370,13 +384,16 @@ function apply(mutant) {
     const tail = lines.slice(end.line);
     writeFileSync(path, [...head, first + mutant.replacement + last, ...tail].join("\n"));
   }
-  return () => writeFileSync(path, before);
+  return () => {
+    writeFileSync(path, before);
+    rmSync(APPLIED, { force: true });
+  };
 }
 
-/** Browsers the e2e stage runs at once. Playwright's default, half the cores, held a fanless
- *  laptop at three cores for a day until macOS throttled it, and a throttled run's five-second
- *  waits time out under unbroken code, which reads as a kill. */
-const E2E_WORKERS = 2;
+/** Browsers the e2e stage runs at once. Playwright's default, four on this laptop, held it at three
+ *  cores until macOS throttled it, and a throttled run's five-second waits time out under unbroken
+ *  code, which reads as a kill. Two halved the heat and doubled the time per mutant. */
+const E2E_WORKERS = 3;
 
 /** The e2e tests a mutant's rows claim, as one Playwright grep. */
 function tagPattern(rows) {
@@ -426,6 +443,11 @@ function waitForPort(port) {
  *  in the bridge itself, so `rebuildBridge` builds and restarts it around one. Their output
  *  goes to `logDir`, the only record of why a run's tests started failing. */
 function startServers(logDir) {
+  for (const port of [BRIDGE_PORT, VITE_PORT]) {
+    if (spawnSync("nc", ["-z", "localhost", String(port)]).status === 0) {
+      throw new Error(`port ${port} is in use, likely a stopped run's server: stop it first`);
+    }
+  }
   const bridgeLog = openSync(join(logDir, "e2e-bridge.log"), "w");
   const viteLog = openSync(join(logDir, "e2e-vite.log"), "w");
   const build = () =>
@@ -497,13 +519,6 @@ function e2eStage(survivors, rowsFor, logDir, progress) {
   const servers = startServers(logDir);
   let restore = null;
   const putBack = () => restore?.();
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-    process.on(signal, () => {
-      putBack();
-      servers.stop();
-      process.exit(130);
-    });
-  }
   try {
     for (const [i, mutant] of survivors.entries()) {
       const rows = rowsFor(mutant.file);
@@ -688,6 +703,7 @@ function sample(mutants, n) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
+  putBackLeftover();
   const until = git("rev-parse", "HEAD");
   const dirty = git("status", "--porcelain", "--", ...MUTATED);
   if (dirty && !opts.uncommitted) {
