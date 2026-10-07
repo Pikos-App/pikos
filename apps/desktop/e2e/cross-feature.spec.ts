@@ -247,7 +247,7 @@ appTest(
 
 appTest(
   "multi-select drag of 3 pages onto an all-day column schedules all 3",
-  async ({ app }) => {
+  { tag: ["@CAL-05:2"] }, async ({ app }) => {
     await quickAdd(app, "alpha task");
     await quickAdd(app, "beta task");
     await quickAdd(app, "gamma task");

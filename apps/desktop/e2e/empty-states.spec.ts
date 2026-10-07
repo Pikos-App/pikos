@@ -15,7 +15,7 @@ import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 appTest(
   "Today view with no scheduled pages shows the empty state @smoke",
-  async ({ app }) => {
+  { tag: ["@LIST-02:3"] }, async ({ app }) => {
     // Create an unscheduled page from Inbox (the default active view) — when
     // active view is Today, QuickAdd auto-anchors the schedule to today, so
     // the page would land in Today and defeat the test premise. Stay on Inbox.
@@ -82,7 +82,7 @@ appTest(
 // chips on the calendar would turn the calendar into a graveyard of
 // deleted titles.
 
-appTest("deleting a scheduled page removes its calendar chip", async ({ app }) => {
+appTest("deleting a scheduled page removes its calendar chip", { tag: ["@TRASH-01:5"] }, async ({ app }) => {
   // Seed a page scheduled for today via NLP. "lunch today" parses cleanly
   // (no recurrence / multi-day issues) and bare "today" anchors the date.
   await quickAdd(app, "lunch today");

@@ -6,7 +6,7 @@ import { test as appTest, mod, quickAdd } from "./fixtures";
 
 appTest(
   "today view shows scheduled pages @smoke",
-  { tag: ["@LIST-02:2"] },
+  { tag: ["@LIST-02:3"] },
   async ({ app }) => {
     await quickAdd(app, "my scheduled task @today");
     await quickAdd(app, "unscheduled task");

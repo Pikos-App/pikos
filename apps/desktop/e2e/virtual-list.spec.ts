@@ -1,4 +1,4 @@
-import { test as appTest, createFolder, expect, mod, quickAdd } from "./fixtures";
+import { test as appTest, bridgeCall, createFolder, expect, mod, quickAdd } from "./fixtures";
 
 /**
  * Virtualized list tests — validates that keyboard navigation,
@@ -18,7 +18,7 @@ async function seedPages(app: import("@playwright/test").Page, count: number, pr
 
 appTest(
   "arrow keys navigate through entire virtualized page list",
-  async ({ app }) => {
+  { tag: ["@LIST-01:2"] }, async ({ app }) => {
     await seedPages(app, PAGE_COUNT);
 
     const list = app.locator("[data-page-list-item]");
@@ -48,7 +48,7 @@ appTest(
 
 appTest(
   "completed accordion expands and collapses inside virtual list",
-  async ({ app }) => {
+  { tag: ["@LIST-11:2"] }, async ({ app }) => {
     await seedPages(app, 5);
 
     const firstItem = app.locator("[data-page-list-item]").filter({ hasText: "virt 000" });
@@ -75,7 +75,7 @@ appTest(
 
 appTest(
   "switching between folders re-renders virtualized list",
-  { tag: ["@LIST-02:2"] },
+  { tag: ["@LIST-02:3"] },
   async ({ app }) => {
     await seedPages(app, 15, "inbox-page");
 
@@ -107,7 +107,7 @@ appTest(
 
 // ─── Cmd+A selects all in a virtualized list ───────────────────────────────
 
-appTest("Cmd+A selects all pages including those off-screen", async ({ app }) => {
+appTest("Cmd+A selects every page, off-screen too, and deleting them leaves none", { tag: ["@LIST-09:10"] }, async ({ app, storage }) => {
   await seedPages(app, PAGE_COUNT);
 
   // Focus the page list area (not an input)
@@ -119,4 +119,13 @@ appTest("Cmd+A selects all pages including those off-screen", async ({ app }) =>
   // in the DOM. Instead verify that ALL rendered items are selected.
   const renderedCount = await app.locator("[data-page-list-item]").count();
   await expect(selected).toHaveCount(renderedCount);
+
+  // Most of the 25 were never loaded, so this deletes pages the list only knows by id.
+  await app.keyboard.press(mod("Mod+Backspace"));
+  await expect(app.locator("[data-page-list-item]")).toHaveCount(0);
+  if (storage !== "bridge") return;
+  const inbox = { scope: { kind: "inbox" }, sort: "manual", zone: "America/New_York" };
+  await expect
+    .poll(() => bridgeCall<string[]>(app, "list_view_ids", { after: null, key: inbox, through: null }))
+    .toEqual([]);
 });

@@ -35,7 +35,7 @@ appTest("search pages via Cmd+K @smoke", async ({ app }) => {
 
 appTest(
   "Cmd+K on fresh boot shows 'No recent pages' empty state",
-  async ({ app }) => {
+  { tag: ["@SRCH-02:3"] }, async ({ app }) => {
     await app.keyboard.press(mod("Mod+k"));
     const dialog = app.getByRole("dialog", { name: "Search pages" });
     await expect(dialog).toBeVisible();

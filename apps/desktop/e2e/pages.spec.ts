@@ -330,7 +330,7 @@ appTest.describe("with lists loaded a window at a time", () => {
 
   appTest(
     "search lists recently opened pages after a reload, from the database",
-    async ({ app, storage }) => {
+    { tag: ["@SRCH-02:3"] }, async ({ app, storage }) => {
       appTest.skip(storage !== "bridge", "the mock's database doesn't outlive a reload");
       for (const title of ["first opened", "second opened", "never opened"])
         await quickAdd(app, title);
@@ -364,8 +364,47 @@ appTest.describe("with lists loaded a window at a time", () => {
   });
 
   appTest(
-    "a selected page trashed outside the app leaves the list and the selection when the bell rings",
+    "the page open in the editor closes when it's trashed outside the app",
+    { tag: ["@TRASH-01:5"] },
     async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+      await quickAdd(app, "trashed elsewhere");
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "trashed elsewhere" });
+      await row.click();
+      const title = app.getByLabel("Page title");
+      await expect(title).toHaveText("trashed elsewhere");
+
+      await bridgeCall(app, "soft_delete_page", { id: await row.getAttribute("data-page-id") });
+      await expect
+        .poll(async () => {
+          await ringDoorbell(app);
+          return title.count();
+        })
+        .toBe(0);
+    }
+  );
+
+  appTest(
+    "a page trashed outside the app isn't reopened at launch",
+    { tag: ["@TRASH-01:5"] },
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+      await quickAdd(app, "open elsewhere");
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "open elsewhere" });
+      await row.click();
+      const title = app.getByLabel("Page title");
+      await expect(title).toHaveText("open elsewhere");
+
+      await bridgeCall(app, "soft_delete_page", { id: await row.getAttribute("data-page-id") });
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+      await expect(title).toHaveCount(0);
+    }
+  );
+
+  appTest(
+    "a selected page trashed outside the app leaves the list and the selection when the bell rings",
+    { tag: ["@LIST-09:10"] }, async ({ app, storage }) => {
       appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
       for (const title of ["keep me", "trash me", "leave me"]) await quickAdd(app, title);
       const list = app.locator("[data-page-list-item]");

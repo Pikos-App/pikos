@@ -73,7 +73,7 @@ function weekLater(day: string, weeks: number) {
 
 appTest(
   "the week view shows the all-day strip over a 24-hour grid",
-  { tag: ["@CAL-01"] },
+  { tag: ["@CAL-01:2"] },
   async ({ app }) => {
     await openCalendarMode(app);
 
@@ -139,7 +139,7 @@ appTest(
 
 appTest(
   "a page dragged from the list onto a time slot is scheduled there",
-  { tag: ["@CAL-05"] },
+  { tag: ["@CAL-05:2"] },
   async ({ app }) => {
     await quickAdd(app, "Draft the brief");
     await openCalendarMode(app);
@@ -463,7 +463,7 @@ appTest(
 
 appTest(
   "an event spanning weeks continues with its title and checkbox, handles only on real edges",
-  { tag: ["@CAL-13"] },
+  { tag: ["@CAL-13:2"] },
   async ({ app }) => {
     await openCalendarMode(app);
     const chip = calendarOf(app).getByRole("button", { name: "Conference" });
@@ -650,5 +650,56 @@ appTest(
       await openCalendarMode(app);
       await expect.poll(async () => Math.abs((await scrollTop()) - parked)).toBeLessThan(2);
     });
+  }
+);
+
+appTest(
+  "an all-day page from next week stays out of this week",
+  { tag: ["@CAL-13:2"] },
+  async ({ app }) => {
+    await openCalendarMode(app);
+    const chip = calendarOf(app).getByRole("button", { name: "Offsite" });
+    await app.getByLabel("Next week", { exact: true }).click();
+    await allDayCells(app).first().click();
+    await nameTitle(app, "Offsite");
+    await expect(chip).toHaveCount(1);
+
+    await app.getByLabel("Previous week", { exact: true }).click();
+    await expect(allDayCells(app).first()).toBeVisible();
+    await expect(chip).toHaveCount(0);
+  }
+);
+
+appTest(
+  "a page starting at midnight sits on its own day only",
+  { tag: ["@CAL-01:2"] },
+  async ({ app }) => {
+    await quickAdd(app, "Shift change tomorrow at 12am");
+    await openCalendarMode(app);
+    // Both ends of the day fold into bands by default, and a folded block is a pill with no title.
+    for (const band of [/^Expand 12 AM to/, /^Expand .* to 12 AM$/]) {
+      await app.getByRole("button", { name: band }).first().click();
+    }
+    const tomorrow = await app.evaluate(() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+      const month = d.toLocaleDateString("en-US", { month: "long" });
+      return `All-day events, ${weekday} ${month} ${d.getDate()}`;
+    });
+    const shown = await allDayCells(app).evaluateAll(
+      (cells, label) => cells.some((c) => c.getAttribute("aria-label") === label),
+      tomorrow
+    );
+    // Today's column ends where tomorrow starts; the page belongs to tomorrow alone. With no end
+    // it has no length, so its label is a time, not a range.
+    await expect(calendarOf(app).getByRole("button", { name: /^Shift change,/ })).toHaveCount(
+      shown ? 1 : 0
+    );
+    if (shown) {
+      await expect(
+        calendarOf(app).getByRole("button", { exact: true, name: "Shift change, 12 AM" })
+      ).toBeVisible();
+    }
   }
 );

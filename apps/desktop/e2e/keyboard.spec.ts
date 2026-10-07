@@ -228,7 +228,7 @@ appTest(
 
 appTest(
   "Cmd+Shift+Backspace deletes the active page from the title input",
-  async ({ app }) => {
+  { tag: ["@TRASH-01:5"] }, async ({ app }) => {
     await quickAdd(app, "delete me from title");
     const item = app.locator("[data-page-list-item]").filter({ hasText: "delete me from title" });
     await expect(item).toBeVisible();

@@ -119,7 +119,7 @@ appTest(
 
 appTest(
   "arrows move the selection and open the page, and Enter opens a focused row",
-  { tag: ["@LIST-01"] },
+  { tag: ["@LIST-01:2"] },
   async ({ app }) => {
     for (const title of ["north page", "middle page", "south page"]) await quickAdd(app, title);
     const list = app.locator("[data-page-list-item]");
@@ -373,7 +373,7 @@ appTest(
 
 appTest(
   "Completed collapses on every view change, and loads more on request",
-  { tag: ["@LIST-11"] },
+  { tag: ["@LIST-11:2"] },
   async ({ app, storage }) => {
     appTest.skip(storage !== "bridge", "LIST-11 reloads, and the mock keeps nothing across a reload");
     // One more than a batch, completed before the relaunch, so the batch can't hold them all.

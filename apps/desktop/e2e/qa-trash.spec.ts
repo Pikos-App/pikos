@@ -4,7 +4,7 @@ import { test as appTest, createFolder, expect, mod, quickAdd } from "./fixtures
 
 appTest(
   "a deleted page leaves every list and search, and comes back from the trash",
-  { tag: ["@TRASH-01"] },
+  { tag: ["@TRASH-01:5"] },
   async ({ app }) => {
     const title = "Offsite logistics";
     await quickAdd(app, `${title} today`);

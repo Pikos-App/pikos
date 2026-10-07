@@ -76,7 +76,7 @@ appTest(
   }
 );
 
-appTest("an empty palette lists recent pages", { tag: ["@SRCH-02"] }, async ({ app }) => {
+appTest("an empty palette lists recent pages", { tag: ["@SRCH-02:3"] }, async ({ app }) => {
   await quickAdd(app, "harbour plan");
   await quickAdd(app, "garden plan");
   await openEditorForPage(app, "harbour plan");
