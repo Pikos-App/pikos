@@ -315,6 +315,13 @@ const CHIP_COLLISION_GAP_PX = 20;
  * flags on each segment drive the radius and label rules in PageBlock). A week view filters with
  * this once and hands each day the result, rather than every day walking the whole workspace.
  */
+/** Whether a block from `start` to `end` falls in `[from, to)`. A page with no end has no length
+ *  and belongs where its start falls: as an overlap test it would land on no day at exactly
+ *  midnight, starting no earlier than the day before ends and ending no later than its day starts. */
+function inSpan(start: Date, end: Date, from: Date, to: Date): boolean {
+  return end > start ? start < to && end > from : start >= from && start < to;
+}
+
 export function timedPagesInRange(
   pages: PageSummary[],
   rangeStart: Date,
@@ -329,7 +336,7 @@ export function timedPagesInRange(
       // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
       const start = resolveBlockInstant(page, page.scheduledStart);
       const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
-      return start < rangeEnd && end > rangeStart;
+      return inSpan(start, end, rangeStart, rangeEnd);
     } catch {
       return false;
     }
@@ -365,7 +372,7 @@ export function timedPagesByDay(pages: PageSummary[], days: Date[]): PageSummary
       continue;
     }
     bounds.forEach((day, i) => {
-      if (start < day.end && end > day.start) byDay[i]!.push(page);
+      if (inSpan(start, end, day.start, day.end)) byDay[i]!.push(page);
     });
   }
   return byDay;

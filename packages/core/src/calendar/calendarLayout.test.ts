@@ -1350,4 +1350,11 @@ describe("timedPagesByDay", () => {
     });
     expect(byDay.map((d) => d.length)).toEqual([2, 1, 1, 1, 0]);
   });
+  it("puts a page starting at midnight with no end on its own day, and only there", () => {
+    const midnight = makePage({ scheduledStart: "2026-03-04T00:00:00" });
+    const days = [3, 4, 5].map((d) => new Date(2026, 2, d));
+    expect(timedPagesByDay([midnight], days)).toEqual([[], [midnight], []]);
+    expect(timedPagesInRange([midnight], days[1]!, days[2]!)).toEqual([midnight]);
+    expect(timedPagesInRange([midnight], days[0]!, days[1]!)).toEqual([]);
+  });
 });
