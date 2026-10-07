@@ -295,6 +295,38 @@ describe("ViewCacheController after its own writes", () => {
   });
 });
 
+describe("ViewCacheController when another process trashes a page", () => {
+  it("tells its listeners the workspace changed, and answers the page as gone", async () => {
+    const { controller, raw } = await setup(2);
+    controller.show([inbox], []);
+    await settle();
+    controller.doorbell();
+    await settle();
+    const [id] = await controller.allIds(inbox);
+    expect(await controller.rows([id!])).toHaveLength(1);
+
+    let changes = 0;
+    controller.onOutsideChange(() => changes++);
+    await raw.softDeletePage(id!);
+    controller.doorbell();
+    await settle();
+    expect(changes).toBe(1);
+    expect(await controller.currentRows([id!])).toEqual([]);
+  });
+
+  it("reads a held page fresh when asked for its current state, before any refresh marks it", async () => {
+    const { controller, raw } = await setup(2);
+    controller.show([inbox], []);
+    await settle();
+    const [id] = await controller.allIds(inbox);
+    expect(await controller.rows([id!])).toHaveLength(1);
+
+    await raw.softDeletePage(id!);
+    expect(await controller.rows([id!])).toHaveLength(1);
+    expect(await controller.currentRows([id!])).toEqual([]);
+  });
+});
+
 describe("ViewCacheController bodies", () => {
   async function withPages(count: number) {
     const made = await setup(0);

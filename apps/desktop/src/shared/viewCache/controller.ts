@@ -62,6 +62,7 @@ export class ViewCacheController {
   private listeners = new Set<() => void>();
   private bumpQueued = false;
   private leftListeners = new Set<(ids: ReadonlySet<string>) => void>();
+  private changedListeners = new Set<() => void>();
   /** Writes started and not yet settled. */
   private writesInFlight = 0;
   /** Bumped by every write's start and settle, so a check can tell whether one overlapped it. */
@@ -155,12 +156,12 @@ export class ViewCacheController {
 
   /** Another process may have written: refresh if the change counter says so. */
   doorbell(): void {
-    void this.checkCounter();
+    void this.checkCounter(true);
   }
 
   /** Refresh what's on screen unless the counter is where the last refresh left it. A new epoch
    *  (a restore, an import, a reset) drops everything held. */
-  private async checkCounter(): Promise<void> {
+  private async checkCounter(rung = false): Promise<void> {
     let state: ChangeState;
     try {
       state = await this.adapter.changeState();
@@ -178,6 +179,7 @@ export class ViewCacheController {
     for (const range of this.ranges.values()) range.stale = true;
     this.bump();
     void this.refresh();
+    if (rung) for (const listener of this.changedListeners) listener();
   }
 
   private async refetchRow(id: string): Promise<void> {
@@ -524,18 +526,30 @@ export class ViewCacheController {
     }
   }
 
-  /** Summaries for `ids`, fetching the ones not held or held stale. */
+  /** Summaries for `ids`, fetching the ones not held or held stale. One fetched and not found is
+   *  trashed or gone, and is left out rather than answered with the copy held from before. */
   async rows(ids: string[]): Promise<PageSummary[]> {
     const missing = ids.filter((id) => this.needsRow(id) && !this.fetchingRows.has(id));
+    const gone = new Set<string>();
     if (missing.length > 0) {
       for (const id of missing) this.fetchingRows.add(id);
       try {
-        this.confirm(await this.adapter.getPages(missing));
+        const fetched = await this.adapter.getPages(missing);
+        this.confirm(fetched);
+        const found = new Set(fetched.map((p) => p.id));
+        for (const id of missing) if (!found.has(id)) gone.add(id);
       } finally {
         for (const id of missing) this.fetchingRows.delete(id);
       }
     }
-    return ids.flatMap((id) => this.store.get(id) ?? []);
+    return ids.flatMap((id) => (gone.has(id) ? [] : (this.store.get(id) ?? [])));
+  }
+
+  /** `rows`, read from the database even when held: whether a page is still open after a change
+   *  another process may have made, which no list on screen has to have shown. */
+  async currentRows(ids: string[]): Promise<PageSummary[]> {
+    for (const id of ids) if (this.store.has(id)) this.stale.add(id);
+    return this.rows(ids);
   }
 
   place(key: ViewKey, moving: string[], place: Placement): void {
@@ -572,6 +586,13 @@ export class ViewCacheController {
     this.tagListeners.add(listener);
     listener(this.tags());
     return () => this.tagListeners.delete(listener);
+  }
+
+  /** Called when the doorbell finds the workspace changed: another process, a sync, or anything
+   *  that happened while the window was away. The app's own writes don't call it. */
+  onOutsideChange(listener: () => void): () => void {
+    this.changedListeners.add(listener);
+    return () => this.changedListeners.delete(listener);
   }
 
   /** Called with the ids a refresh took out of a list on screen. */

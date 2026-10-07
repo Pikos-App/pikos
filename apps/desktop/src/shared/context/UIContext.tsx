@@ -183,21 +183,31 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setRightPanelRaw(panel);
   }
 
-  // Only what has been shown is held, so the database answers whether the remembered pages are
-  // still open.
+  // The database answers whether the pages the editor remembers are still open: at launch, and
+  // after a change from outside, since another process can trash the page that's open here.
+  const openIdsRef = useRef<(string | null)[]>([]);
+  useEffect(() => {
+    openIdsRef.current = [activePageId, lastEditorPageId];
+  });
   useEffect(() => {
     if (!viewCache || !workspace) return;
-    const ids = [activePageId, lastEditorPageId].filter((id): id is string => id !== null);
-    if (ids.length === 0) return;
     let cancelled = false;
-    void viewCache.rows(ids).then((found) => {
-      if (cancelled) return;
-      const open = new Set(found.filter(isOpen).map((p) => p.id));
-      if (activePageId !== null && !open.has(activePageId)) setActivePage(null);
-      if (lastEditorPageId !== null && !open.has(lastEditorPageId)) setLastEditorPageId(null);
-    });
+    function closeIfGone(cache: NonNullable<typeof viewCache>) {
+      const [active, last] = openIdsRef.current;
+      const ids = [active, last].filter((id): id is string => id != null);
+      if (ids.length === 0) return;
+      void cache.currentRows(ids).then((found) => {
+        if (cancelled) return;
+        const open = new Set(found.filter(isOpen).map((p) => p.id));
+        if (active != null && !open.has(active)) setActivePage(null);
+        if (last != null && !open.has(last)) setLastEditorPageId(null);
+      });
+    }
+    closeIfGone(viewCache);
+    const unsubscribe = viewCache.onOutsideChange(() => closeIfGone(viewCache));
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [viewCache, workspace?.id]);
 
