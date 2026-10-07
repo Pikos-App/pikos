@@ -138,6 +138,22 @@ async fn running_out_of_room_renumbers_the_folder_and_keeps_every_place() {
     );
 }
 
+#[tokio::test]
+async fn pages_from_two_folders_are_refused_together() {
+    let pool = folder_of_six().await;
+    sqlx::query("UPDATE pages SET folder_id = NULL WHERE id = 'e'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let before = order(&pool).await;
+
+    let err = move_pages(&pool, &ids(&["a", "e"]), &at(Some("b"), Some("d")))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AppError::Invalid(_)), "{err:?}");
+    assert_eq!(order(&pool).await, before);
+}
+
 /// A simple xorshift, so the run is the same every time.
 fn rng(seed: &mut u64) -> usize {
     *seed ^= *seed << 13;
