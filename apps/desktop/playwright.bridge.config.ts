@@ -11,6 +11,9 @@ const BRIDGE_PORT = 1423;
 // The browser and the writer must agree on the zone, as the webview and the app do
 // in production. calendar-sync.spec.ts pins this one, so it is the lane's too.
 const ZONE = "America/New_York";
+// And so must the runner: a spec that reads today in Node otherwise disagrees with the app for
+// the hours this machine's date differs from the lane's. Set here, before any worker starts.
+process.env["TZ"] = ZONE;
 
 export default defineConfig<{ storage: StorageLane; tightCache: boolean }>({
   expect: {
