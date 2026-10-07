@@ -130,7 +130,7 @@ appTest(
 
     await appTest.step("CAL-03 the page is at the clicked time", async () => {
       await nameTitle(app, "Call the bank");
-      await expect(calendarOf(app).getByRole("button", { name: /^Call the bank, 2–/ })).toHaveCount(
+      await expect(calendarOf(app).getByRole("button", { name: /^Call the bank, 2(–| PM$)/ })).toHaveCount(
         1
       );
     });
@@ -156,7 +156,7 @@ appTest(
         { x: await centerX(column), y: (await hourLineY(app, 9)) + INTO_THE_HOUR }
       );
 
-      const block = calendarOf(app).getByRole("button", { name: /^Draft the brief, 9–/ });
+      const block = calendarOf(app).getByRole("button", { name: /^Draft the brief, 9(–| AM$)/ });
       await expect(block).toHaveCount(1);
       const blockX = await centerX(block);
       const columnBox = await column.boundingBox();

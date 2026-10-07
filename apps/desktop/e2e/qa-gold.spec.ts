@@ -49,7 +49,8 @@ appTest(
       await app.getByRole("button", { name: "Calendar view" }).click();
       const calendar = app.getByRole("region", { name: "Week calendar" });
       const block = calendar.getByRole("button", {
-        name: new RegExp(`^${TITLE}, 2–\\d{1,2}(:\\d{2})? PM$`),
+        // A page with no end reads as its start alone; one with an end, as a range.
+        name: new RegExp(`^${TITLE}, 2(–\\d{1,2}(:\\d{2})?)? PM$`),
       });
       await block.scrollIntoViewIfNeeded();
       await expect(block).toBeVisible();
