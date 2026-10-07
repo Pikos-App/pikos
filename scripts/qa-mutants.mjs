@@ -373,6 +373,11 @@ function apply(mutant) {
   return () => writeFileSync(path, before);
 }
 
+/** Browsers the e2e stage runs at once. Playwright's default, half the cores, held a fanless
+ *  laptop at three cores for a day until macOS throttled it, and a throttled run's five-second
+ *  waits time out under unbroken code, which reads as a kill. */
+const E2E_WORKERS = 2;
+
 /** The e2e tests a mutant's rows claim, as one Playwright grep. */
 function tagPattern(rows) {
   return `@(${rows.join("|")})(:\\d+)?(\\s|$)`;
@@ -392,6 +397,7 @@ function playwright(grep) {
       "--grep",
       grep,
       "--max-failures=1",
+      `--workers=${E2E_WORKERS}`,
       "--reporter=dot",
     ],
     {
