@@ -19,6 +19,7 @@ import { MOD_KEY_LABEL } from "@/shared/constants/platform";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
+import { useUI } from "@/shared/context/UIContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { onFlushPending } from "@/shared/pendingWrites";
@@ -105,6 +106,7 @@ export function EditorPane() {
   const { updatePage } = usePages();
   const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
+  const { takeBodyFocus } = useUI();
 
   const currentPageIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -195,9 +197,11 @@ export function EditorPane() {
     }
     contentJsonRef.current = doc ? page.content : "";
 
+    const focusBody = takeBodyFocus(page.id);
     // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
     requestAnimationFrame(() => {
       scrollContainerRef.current?.scrollTo({ top: 0 });
+      if (focusBody && !editor.isDestroyed) editor.commands.focus("end");
     });
   }, [editor, page, isLoading]);
 

@@ -246,11 +246,15 @@ appTest(
       await app.keyboard.press("Escape");
     });
 
-    await appTest.step("QADD-06 Shift+Enter adds and opens the page", async () => {
+    await appTest.step("QADD-06 Shift+Enter adds and opens the page, ready to type its body", async () => {
       await typeQuickAdd(app, "third thing");
       await app.keyboard.press("Shift+Enter");
       await expect(dialog).not.toBeVisible();
       await expect(app.getByLabel("Page title")).toHaveText("third thing");
+      const body = app.getByRole("textbox", { name: "Page content" });
+      await expect(body).toBeFocused();
+      await app.keyboard.type("first words");
+      await expect(body).toContainText("first words");
     });
 
     await appTest.step("QADD-06 Cmd+T schedules for today", async () => {

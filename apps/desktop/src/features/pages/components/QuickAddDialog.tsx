@@ -461,7 +461,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   async function handleSubmitAndOpen() {
     const result = await submitPage();
     if (result === null) return;
-    openPage(result.id);
+    openPage(result.id, { focusBody: true });
     onClose();
   }
 

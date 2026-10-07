@@ -95,8 +95,11 @@ export interface UIContextValue {
   /**
    * Open a page in the editor. Switches to editor panel and sets activePageId
    * atomically — bypasses setRightPanel's restore logic so order never matters.
+   * `focusBody` puts the cursor at the end of the body once the page loads.
    */
-  openPage: (page: PageSummary | string) => void;
+  openPage: (page: PageSummary | string, options?: { focusBody?: boolean }) => void;
+  /** Whether `pageId` was opened asking for the cursor in its body; true once, for the editor. */
+  takeBodyFocus: (pageId: string) => boolean;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -211,11 +214,26 @@ export function UIProvider({ children }: { children: ReactNode }) {
     };
   }, [viewCache, workspace?.id]);
 
-  function openPage(page: PageSummary | string) {
-    const id = typeof page === "string" ? page : page.id;
+  // A ref, not state: the editor reads it once, as the page's content lands, and nothing renders it.
+  const bodyFocusRef = useRef<string | null>(null);
+
+  /** `openPage` without the focus request, so render can call it: render may not write a ref. */
+  function showPage(id: string) {
     setActivePageId(id);
     setRightPanelRaw("editor");
     setPageListDrawerOpen(false);
+  }
+
+  function openPage(page: PageSummary | string, options?: { focusBody?: boolean }) {
+    const id = typeof page === "string" ? page : page.id;
+    bodyFocusRef.current = options?.focusBody ? id : null;
+    showPage(id);
+  }
+
+  function takeBodyFocus(pageId: string): boolean {
+    if (bodyFocusRef.current !== pageId) return false;
+    bodyFocusRef.current = null;
+    return true;
   }
 
   // The remembered view and page are checked against the workspace once it has
@@ -233,7 +251,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const nav = consumePendingNavigation();
     if (nav) {
       setActiveViewId(nav.folderId);
-      openPage(nav.pageId);
+      showPage(nav.pageId);
     }
   }
 
@@ -278,6 +296,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     settingsOpen,
     settingsSection,
     sidebarCollapsed,
+    takeBodyFocus,
   };
 
   return (
