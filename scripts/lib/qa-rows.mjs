@@ -34,13 +34,14 @@ export const NO_BEHAVIOUR = [
   "apps/desktop/{e2e,seeds,bridge}/**",
   "apps/desktop/playwright.*",
   "apps/desktop/src/test/**",
-  "packages/core/src/adapters/{MockStorage,Noop}*",
+  "packages/core/src/adapters/{MockStorage,Noop,mockViews}*",
   "apps/desktop/src/shared/adapters/{inMemoryStorage,mockStorageChunk}*",
-  "apps/desktop/src-tauri/src/{e2e_*.rs,bin/e2e_*.rs}",
+  "apps/desktop/src-tauri/{src/e2e_*.rs,bins/**}",
   "apps/desktop/src/bench/**",
   "apps/desktop/src-tauri/src/bench.rs",
   "apps/desktop/src-tauri/tauri.conf.bench.json",
   "apps/desktop/src-tauri/src/db/dev/seed*.rs",
+  "crates/pikos-cli/src/stress.rs",
 ];
 
 export function git(...args) {

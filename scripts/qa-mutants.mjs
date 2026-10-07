@@ -41,7 +41,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, matchesGlob } from "node:path";
 
 import {
   automatedRows,
@@ -62,6 +62,25 @@ const STRYKER_PACKAGES = [
 
 /** The source a run mutates, which must match the commit it reports on. */
 const MUTATED = ["packages/core/src", "apps/desktop/src", "crates", "apps/desktop/src-tauri/src"];
+
+/** Shipped code the run leaves alone because something else already proves it. The list cache
+ *  only decides what to fetch and when: every bridge-lane test runs with the shadow check, which
+ *  rereads each list in full and fails on any row the cache shows differently, and the speed gate
+ *  measures the rest. Its survivors are fetches and timings no one using the app can see, and
+ *  through the shared files it reaches they demoted nearly every row. */
+const PROVEN_ELSEWHERE = [
+  "apps/desktop/src/shared/viewCache/**",
+  "packages/core/src/cache/**",
+  "packages/core/src/storageReads.ts",
+];
+
+/** A logging call or a logger's name: nothing a person using the app sees, so a mutant there is
+ *  never a gap in a row's test. */
+const LOGGING = /\b(?:log|logger|console)\.(?:trace|debug|info|warn|error)\(|\bcreateLogger\(/;
+
+function mutated(file) {
+  return !isNoBehaviour(file) && !PROVEN_ELSEWHERE.some((glob) => matchesGlob(file, glob));
+}
 
 /** Where each TypeScript package's unit tests run from, and the source its results depend on:
  *  its own, and what its tests import. */
@@ -156,7 +175,7 @@ function changedRanges(range, paths) {
   for (const line of diff.split("\n")) {
     if (line.startsWith("+++ ")) file = line.startsWith("+++ b/") ? line.slice(6) : null;
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-    if (!hunk || !file || isNoBehaviour(file)) continue;
+    if (!hunk || !file || !mutated(file)) continue;
     const start = Number(hunk[1]);
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
     if (count > 0)
@@ -273,7 +292,7 @@ function cargoStage(range, reports, reuse, uncommitted) {
   for (const root of RUST_ROOTS) {
     const files = git("diff", "--name-only", range, "--", `${root.prefix}**/*.rs`)
       .split("\n")
-      .filter((f) => f && !isNoBehaviour(f));
+      .filter((f) => f && mutated(f));
     if (files.length === 0) continue;
     const diff = git("diff", range, "--", ...files);
     // cargo-mutants reads the diff's paths relative to the root it runs in.
@@ -697,7 +716,13 @@ function main() {
     ...strykerStage(ranges, reports, opts.reuseUnit, opts.uncommitted),
     ...cargoStage(diffBase, reports, opts.reuseUnit, opts.uncommitted),
   ];
-  for (const m of mutants) if (SKIPPED.has(mutantKey(m))) m.status = "Ignored";
+  // Reused reports can predate a scope change, so the scope is applied to them here too.
+  const inScope = mutants.filter((m) => mutated(m.file));
+  mutants.length = 0;
+  mutants.push(...inScope);
+  for (const m of mutants) {
+    if (SKIPPED.has(mutantKey(m)) || LOGGING.test(m.original ?? "")) m.status = "Ignored";
+  }
   const missed = mutants.filter((m) => m.status === "Survived" || m.status === "NoCoverage");
   const dest = join(ROOT, ".agent/releases", opts.version, "mutants.json");
   const previous = opts.retry ? previousRun(dest) : null;

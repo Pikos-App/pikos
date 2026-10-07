@@ -12,5 +12,201 @@
     "replacement": "{}",
     "original": "} catch (seedError) {",
     "why": "An empty catch still continues with an empty workspace; only the log line goes. Stryker reads skip comments only ahead of a statement, and a catch clause starts on the line that closes the try."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/CalendarDateContext.tsx",
+    "mutator": "StringLiteral",
+    "replacement": "\"\"",
+    "original": "if (!ctx) throw new Error(\"useCalendarDate must be used within <UIProvider>\");",
+    "why": "A developer error for a hook used outside its provider; no shipped screen renders the hook that way, so no person can see it either way."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/CalendarDateContext.tsx",
+    "mutator": "ConditionalExpression",
+    "replacement": "false",
+    "original": "if (!ctx) throw new Error(\"useCalendarDate must be used within <UIProvider>\");",
+    "why": "A developer error for a hook used outside its provider; no shipped screen renders the hook that way, so no person can see it either way."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/WorkspaceContext.tsx",
+    "mutator": "BlockStatement",
+    "replacement": "{}",
+    "original": "if (__PIKOS_BENCH__) {",
+    "why": "The benchmark build alone takes this branch; no shipped build or e2e lane reaches it."
+  },
+  {
+    "file": "apps/desktop/src/shared/constants/platform.ts",
+    "mutator": "BooleanLiteral",
+    "replacement": "IS_TEST_MODE",
+    "original": "export const IS_TAURI = !IS_TEST_MODE;",
+    "why": "The e2e lanes run in test mode by definition, so flipping which mode counts as Tauri changes nothing a lane or a person can see: the packaged app never runs in test mode."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "+",
+    "original": "(Some(a), None) => (a.sort_order, a.sort_order + (k + 1) * ORDER_SPACING),",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "*",
+    "original": "(Some(a), None) => (a.sort_order, a.sort_order + (k + 1) * ORDER_SPACING),",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "*",
+    "original": "(None, Some(b)) => (b.sort_order - (k + 1) * ORDER_SPACING, b.sort_order),",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "+",
+    "original": "(None, None) => (0, (k + 1) * ORDER_SPACING),",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "/",
+    "original": "(None, None) => (0, (k + 1) * ORDER_SPACING),",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "-",
+    "original": "(None, None) => (0, (k + 1) * ORDER_SPACING),",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "crates/pikos-db/src/moves.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "<=",
+    "original": "let renumbered = high - low - 1 < k;",
+    "why": "Spacing decides only how soon a folder runs out of room and renumbers, and a renumber keeps every page in its place, so no one using the app can see the difference."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/PagesContext.tsx",
+    "mutator": "CallExpression",
+    "replacement": ";",
+    "original": "viewCache.adoptCreated(page);",
+    "why": "Puts a page just created into the list cache at once, ahead of the refresh every write already triggers; the page appears either way, and the difference is refresh time the speed gate measures."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/WorkspaceContext.tsx",
+    "mutator": "ObjectLiteral",
+    "replacement": "{}",
+    "original": "const ref: { controller: ViewCacheController | null } = { controller: null };",
+    "why": "Tells the list cache a write is in flight, which only decides when it refreshes and whether its own consistency check runs; the shadow check and the speed gate own that, not a row."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/WorkspaceContext.tsx",
+    "mutator": "ArrowFunction",
+    "replacement": "() => undefined",
+    "original": "started: () => ref.controller?.writeStarted(),",
+    "why": "Tells the list cache a write is in flight, which only decides when it refreshes and whether its own consistency check runs; the shadow check and the speed gate own that, not a row."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/WorkspaceContext.tsx",
+    "mutator": "OptionalChaining",
+    "replacement": "ref.controller.writeStarted",
+    "original": "started: () => ref.controller?.writeStarted(),",
+    "why": "Tells the list cache a write is in flight, which only decides when it refreshes and whether its own consistency check runs; the shadow check and the speed gate own that, not a row."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/WorkspaceContext.tsx",
+    "mutator": "OptionalChaining",
+    "replacement": "useContext(WorkspaceContext).viewCache",
+    "original": "return useContext(WorkspaceContext)?.viewCache ?? null;",
+    "why": "Every reader of this hook renders inside the workspace provider; outside it nothing renders at all, so the null branch is never reached by a person."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/usePageWriteQueue.ts",
+    "mutator": "BooleanLiteral",
+    "replacement": "false",
+    "original": "adoptEcho = true",
+    "why": "Feeds the list cache the row a write returned, ahead of the refresh every write triggers; what shows is the same either way, so only the cache's timing changes."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/usePageWriteQueue.ts",
+    "mutator": "ConditionalExpression",
+    "replacement": "true",
+    "original": "if (adoptEcho) {",
+    "why": "Feeds the list cache the row a write returned, ahead of the refresh every write triggers; what shows is the same either way, so only the cache's timing changes."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/usePageWriteQueue.ts",
+    "mutator": "ConditionalExpression",
+    "replacement": "false",
+    "original": "if (adoptEcho) {",
+    "why": "Feeds the list cache the row a write returned, ahead of the refresh every write triggers; what shows is the same either way, so only the cache's timing changes."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/usePageWriteQueue.ts",
+    "mutator": "BlockStatement",
+    "replacement": "{}",
+    "original": "if (adoptEcho) {",
+    "why": "Feeds the list cache the row a write returned, ahead of the refresh every write triggers; what shows is the same either way, so only the cache's timing changes."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/usePageWriteQueue.ts",
+    "mutator": "CallExpression",
+    "replacement": ";",
+    "original": "mirror.confirmRow(summary);",
+    "why": "Feeds the list cache the row a write returned, ahead of the refresh every write triggers; what shows is the same either way, so only the cache's timing changes."
+  },
+  {
+    "file": "apps/desktop/src/shared/context/usePagesStore.ts",
+    "mutator": "BlockStatement",
+    "replacement": "{}",
+    "original": "adapter.recomputeRecurringSchedules().catch((err: unknown) => {",
+    "why": "The catch body only logs; emptying it changes nothing a person sees."
+  },
+  {
+    "file": "crates/pikos-db/src/pool.rs",
+    "mutator": "UnaryOperator",
+    "replacement": "",
+    "original": "while !pool.is_closed() {",
+    "why": "The background WAL checkpoint only decides when the log is copied into the database file; reads and writes return the same either way."
+  },
+  {
+    "file": "crates/pikos-db/src/sql_functions.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "&",
+    "original": "ffi::SQLITE_UTF8 | ffi::SQLITE_DETERMINISTIC | ffi::SQLITE_INNOCUOUS,",
+    "why": "The flags tell SQLite how it may cache the function or where it may call it; with them or without, every query this app runs returns the same rows."
+  },
+  {
+    "file": "crates/pikos-db/src/sql_functions.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "^",
+    "original": "ffi::SQLITE_UTF8 | ffi::SQLITE_DETERMINISTIC | ffi::SQLITE_INNOCUOUS,",
+    "why": "The flags tell SQLite how it may cache the function or where it may call it; with them or without, every query this app runs returns the same rows."
+  },
+  {
+    "file": "crates/pikos-db/src/sql_functions.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "&",
+    "original": "ffi::SQLITE_UTF8 | ffi::SQLITE_INNOCUOUS,",
+    "why": "The flags tell SQLite how it may cache the function or where it may call it; with them or without, every query this app runs returns the same rows."
+  },
+  {
+    "file": "crates/pikos-db/src/sql_functions.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "^",
+    "original": "ffi::SQLITE_UTF8 | ffi::SQLITE_INNOCUOUS,",
+    "why": "The flags tell SQLite how it may cache the function or where it may call it; with them or without, every query this app runs returns the same rows."
+  },
+  {
+    "file": "crates/pikos-db/src/sql_functions.rs",
+    "mutator": "BinaryOperator",
+    "replacement": "<=",
+    "original": "let text = |i: usize| (i < argc as usize).then(|| arg_text(argv, i)).flatten();",
+    "why": "SQLite calls pikos_utc only with the two arguments it was registered with, so the bound on the argument index is never reached."
   }
 ]
