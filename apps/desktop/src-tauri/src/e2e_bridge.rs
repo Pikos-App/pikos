@@ -155,7 +155,11 @@ async fn serve() -> std::io::Result<()> {
         let bridge = bridge.clone();
         tokio::spawn(async move {
             let service = service_fn(move |req| handle(bridge.clone(), req));
+            // One request per connection. Kept alive, WebKit sometimes sent a call down a
+            // connection as it closed, and the page saw "The network connection was lost" for a
+            // write the bridge never ran: a bulk delete left a page behind about one run in ten.
             if let Err(e) = http1::Builder::new()
+                .keep_alive(false)
                 .serve_connection(TokioIo::new(stream), service)
                 .await
             {
