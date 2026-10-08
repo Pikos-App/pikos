@@ -31,6 +31,7 @@ describe("CalendarHeader's jump to the current week", () => {
     vi.useRealTimers();
   });
 
+  // qa: CAL-12:2
   it("stays available from last week on the first day of this week", () => {
     expect(renderWeek("2026-10-05T09:00:00", "2026-09-28T12:00:00")).toBeEnabled();
   });

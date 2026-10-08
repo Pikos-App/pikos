@@ -418,3 +418,71 @@ async fn every_account_is_polled_through_its_own_provider() {
     );
     assert_eq!(page_count(&pool).await, 2, "both accounts synced");
 }
+
+/// Every call a provider could make over the network, counted.
+#[derive(Clone, Default)]
+struct Counting(Rc<Cell<usize>>);
+
+impl CalendarProvider for Counting {
+    async fn list_calendars(&self, _account: &SyncAccountRow) -> AppResult<Vec<RemoteCalendar>> {
+        self.0.set(self.0.get() + 1);
+        Ok(vec![])
+    }
+
+    async fn sync(
+        &self,
+        _calendar: &SyncCalendarRow,
+        _since: Option<SyncToken>,
+    ) -> AppResult<SyncDelta> {
+        self.0.set(self.0.get() + 1);
+        Ok(delta(vec![]))
+    }
+
+    async fn fetch_event(
+        &self,
+        _calendar: &SyncCalendarRow,
+        _event_ref: &str,
+    ) -> AppResult<EventUpsert> {
+        self.0.set(self.0.get() + 1);
+        Err(AppError::NotFound("scripted".into()))
+    }
+
+    async fn current_sync_token(
+        &self,
+        _calendar: &SyncCalendarRow,
+    ) -> AppResult<Option<SyncToken>> {
+        self.0.set(self.0.get() + 1);
+        Ok(None)
+    }
+}
+
+// qa: PRIV-02
+#[tokio::test]
+async fn once_every_account_is_disconnected_polling_reaches_no_provider() {
+    let pool = test_pool().await;
+    seed_account(&pool, "a-dav", "f-dav").await;
+    seed_account(&pool, "a-goog", "f-goog").await;
+    set_account_provider(&pool, "a-goog", pikos_db::sync::PROVIDER_GOOGLE).await;
+    for id in ["a-dav", "a-goog"] {
+        crate::commands::disconnect_account(&pool, test_support::memory_keychain(), id)
+            .await
+            .unwrap();
+    }
+    let provider = Counting::default();
+
+    run_sync_loop(
+        triggers(&[SyncTrigger::Interval, SyncTrigger::Interval]),
+        || async { Some(pool.clone()) },
+        |_account| provider.clone(),
+        SchedulerConfig { min_focus_gap: GAP },
+        || {},
+        |_| {},
+    )
+    .await;
+
+    assert_eq!(
+        provider.0.get(),
+        0,
+        "an idle poll after disconnect asked a provider for something"
+    );
+}

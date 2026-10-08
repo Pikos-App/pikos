@@ -209,6 +209,7 @@ appTest("drag a page above another reorders the page list", async ({ app }) => {
 
 appTest(
   "a page written outside the app shows once the doorbell rings, without a reload",
+  { tag: ["@CLI-08"] },
   async ({ app, storage }) => {
     appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
     await quickAdd(app, "made in the app");
@@ -330,7 +331,8 @@ appTest.describe("with lists loaded a window at a time", () => {
 
   appTest(
     "search lists recently opened pages after a reload, from the database",
-    { tag: ["@SRCH-02:3"] }, async ({ app, storage }) => {
+    { tag: ["@SRCH-02:3"] },
+    async ({ app, storage }) => {
       appTest.skip(storage !== "bridge", "the mock's database doesn't outlive a reload");
       for (const title of ["first opened", "second opened", "never opened"])
         await quickAdd(app, title);
@@ -404,7 +406,8 @@ appTest.describe("with lists loaded a window at a time", () => {
 
   appTest(
     "a selected page trashed outside the app leaves the list and the selection when the bell rings",
-    { tag: ["@LIST-09:10"] }, async ({ app, storage }) => {
+    { tag: ["@LIST-09:10"] },
+    async ({ app, storage }) => {
       appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
       for (const title of ["keep me", "trash me", "leave me"]) await quickAdd(app, title);
       const list = app.locator("[data-page-list-item]");

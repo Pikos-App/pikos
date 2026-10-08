@@ -361,18 +361,26 @@ appTest("bubble toolbar inserts a link around the selection", async ({ app }) =>
 // app would otherwise leave the panels gone on the next launch, with nothing on
 // screen to explain why.
 
-appTest("a focus session hides the left panels and gives them back", async ({ app }) => {
-  await quickAdd(app, "Deep work");
-  await openEditorForPage(app, "Deep work");
+appTest(
+  "a focus session hides the left panels and gives them back",
+  { tag: ["@EDIT-20:4"] },
+  async ({ app }) => {
+    await quickAdd(app, "Deep work");
+    await openEditorForPage(app, "Deep work");
+    const hiddenListRow = app.locator("[inert] [data-page-list-item]").getByText("Deep work");
 
-  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await expect(hiddenListRow).toHaveCount(0);
 
-  await app.getByRole("button", { name: "Start focus timer" }).click();
-  await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    await app.getByRole("button", { name: "Start focus timer" }).click();
+    await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    await expect(hiddenListRow).toHaveCount(1);
 
-  await app.getByRole("button", { name: "Stop focus timer" }).click();
-  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
-});
+    await app.getByRole("button", { name: "Stop focus timer" }).click();
+    await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await expect(hiddenListRow).toHaveCount(0);
+  }
+);
 
 // Opening the sidebar mid-session is an explicit decision, so the session stops
 // driving it — ending must not yank the panels away again.
@@ -417,15 +425,19 @@ appTest("stopping a focus session toasts how long it ran @mock-only", async ({ p
   await expect(page.getByRole("status", { name: "Focused for 25 minutes" })).toBeVisible();
 });
 
-appTest("a session under the floor toasts that nothing was recorded", async ({ app }) => {
-  await quickAdd(app, "Quick glance");
-  await openEditorForPage(app, "Quick glance");
+appTest(
+  "a session under the floor toasts that nothing was recorded",
+  { tag: ["@EDIT-20:4"] },
+  async ({ app }) => {
+    await quickAdd(app, "Quick glance");
+    await openEditorForPage(app, "Quick glance");
 
-  await app.getByRole("button", { name: "Start focus timer" }).click();
-  await app.getByRole("button", { name: "Stop focus timer" }).click();
+    await app.getByRole("button", { name: "Start focus timer" }).click();
+    await app.getByRole("button", { name: "Stop focus timer" }).click();
 
-  await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
-});
+    await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
+  }
+);
 
 // ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
 

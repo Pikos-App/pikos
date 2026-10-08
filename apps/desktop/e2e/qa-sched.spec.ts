@@ -50,7 +50,7 @@ appTest("a date-only page sits in the all-day strip", { tag: ["@SCHED-01"] }, as
 
 appTest(
   "a start with no end draws from the start, and a start and end spans the range",
-  { tag: ["@SCHED-02"] },
+  { tag: ["@SCHED-02:2"] },
   async ({ app }) => {
     await quickAdd(app, "focus time today 2pm");
     await quickAdd(app, "workshop today 3pm to 5pm");

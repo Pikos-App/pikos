@@ -395,6 +395,69 @@ async fn disconnect_goes_dormant_and_hides_the_account() {
     );
 }
 
+// qa: SYNC-07:3
+#[tokio::test]
+async fn same_named_calendars_on_two_accounts_keep_their_own_folders_through_a_disconnect() {
+    let pool = test_pool().await;
+    let mut accounts = Vec::new();
+    for (identity, uid) in [
+        ("work · https://x", "uid-work"),
+        ("home · https://x", "uid-home"),
+    ] {
+        let acc = claim_account(&pool, PROVIDER_CALDAV, identity, "basic")
+            .await
+            .unwrap()
+            .account;
+        let cal = upsert_sync_calendar_impl(&pool, &acc.id, "personal", "Personal", None)
+            .await
+            .unwrap();
+        toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+            .await
+            .unwrap();
+        let provider = Scripted::new(one_event_delta("href-1", uid, uid, "tok-1"));
+        resync_account(&pool, &provider, &acc.id).await.unwrap();
+        accounts.push(acc.id);
+    }
+
+    let folder_of = |uid: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT p.folder_id FROM pages p JOIN page_sync ps ON ps.page_id = p.id
+                 WHERE ps.ical_uid = ?",
+            )
+            .bind(uid)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .expect("a mirror lives in its calendar's folder")
+        }
+    };
+    let work_folder = folder_of("uid-work").await;
+    let home_folder = folder_of("uid-home").await;
+    assert_ne!(
+        work_folder, home_folder,
+        "one folder per account's calendar"
+    );
+
+    disconnect_account(&pool, memory_keychain(), &accounts[1])
+        .await
+        .unwrap();
+
+    let folders: Vec<String> = sqlx::query_scalar("SELECT id FROM folders")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        folders,
+        std::slice::from_ref(&work_folder),
+        "only the disconnected account's folder goes"
+    );
+    assert_eq!(folder_of("uid-work").await, work_folder);
+    let status = get_sync_status_impl(&pool).await.unwrap();
+    assert_eq!(status.len(), 1, "the other account stays connected");
+}
+
 // Revoking a Google grant is a network call that can fail — unreachable, already
 // revoked, or (here) no OAuth client in a test build. The account must still go
 // dormant and lose its credential, or a user who can't reach Google could never
@@ -710,6 +773,7 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
 // and the row counts around it. What the upsert *preserves* (enabled, colour, the
 // cursor) is out of reach here — nothing below would notice a clobber; that is
 // `re_discovery_leaves_enabled_and_the_cursor_alone` in `pikos-db`.
+// qa: SYNC-03:3
 #[tokio::test]
 async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     let pool = test_pool().await;

@@ -79,6 +79,7 @@ async function setup(accountNames: string[]) {
 }
 
 describe("FolderList — synced calendars", () => {
+  // qa: SYNC-07:3
   it("separates same-named calendars under their account", async () => {
     await setup(["alex@work.com", "alex@home.com"]);
 
@@ -95,6 +96,23 @@ describe("FolderList — synced calendars", () => {
     expect(await screen.findByRole("button", { name: "Personal" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "alex@work.com" })).toBeNull();
     expect(screen.queryByText("alex@work.com")).toBeNull();
+  });
+
+  // qa: SYNC-07:3
+  it("drops a disconnected account's heading and keeps the other account's calendar", async () => {
+    await setup(["alex@work.com", "alex@home.com"]);
+    expect(await screen.findByRole("group", { name: "alex@home.com" })).toBeInTheDocument();
+
+    await act(async () => {
+      const storage = workspaceApi().storage!;
+      const home = (await storage.getSyncStatus()).find((a) => a.displayName === "alex@home.com");
+      await storage.disconnectSyncAccount(home!.id);
+      await workspaceApi().reload();
+    });
+
+    expect(screen.queryByText("alex@home.com")).toBeNull();
+    expect(screen.queryByText("alex@work.com")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Personal" })).toHaveLength(1);
   });
 });
 

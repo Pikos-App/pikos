@@ -1,5 +1,6 @@
 use super::*;
 
+// qa: LIST-07:3
 #[test]
 fn the_strip_matches_the_apps() {
     for (title, stripped) in [
@@ -21,6 +22,7 @@ fn the_strip_matches_the_apps() {
 /// `title_order_fixture.json` holds WebKit's order, from `scripts/title-order-fixture.mjs`, as
 /// groups of titles its collator calls equal. The keys have to make the same groups in the same
 /// order.
+// qa: LIST-07:3
 #[test]
 fn keys_order_titles_as_webkit_does_in_every_language() {
     let fixture: serde_json::Value =

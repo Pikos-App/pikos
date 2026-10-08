@@ -294,6 +294,7 @@ async fn search_finds_body_text() {
     assert_eq!(json(&out)["results"][0]["title"], "Groceries");
 }
 
+// qa: CLI-07:2
 #[tokio::test]
 async fn search_pages_through_every_match_with_its_cursor() {
     let db = unique_db();
@@ -329,6 +330,7 @@ async fn search_pages_through_every_match_with_its_cursor() {
     assert_eq!(seen, expected);
 }
 
+// qa: CLI-07:2
 #[tokio::test]
 async fn search_refuses_a_cursor_it_never_printed() {
     let db = unique_db();
@@ -908,6 +910,51 @@ async fn add_single_parses_via_bridge() {
     assert_eq!(v["created"][0]["priority"], 2); // !high
     assert_eq!(v["created"][0]["tags"][0], "errands");
     assert!(v["created"][0]["scheduledStart"].is_string()); // "tomorrow" parsed
+}
+
+// qa: CLI-02
+#[tokio::test]
+async fn add_creates_the_page_with_its_note_and_reminder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(out) = cli_bridge(
+        dbs,
+        &[
+            "add",
+            "Dentist tomorrow 3pm remind 30m before // ask about the crown",
+            "--json",
+        ],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built (pnpm --filter @pikos/bridge build)");
+        return;
+    };
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let created = &json(&out)["created"][0];
+    assert_eq!(created["title"], "Dentist");
+    let id = created["id"].as_str().unwrap().to_string();
+
+    let start = scheduled_start(dbs, &id).await.unwrap();
+    assert!(start.ends_with("T15:00:00"), "not at 3pm: {start}");
+    let lead: i64 = scalar(
+        dbs,
+        &format!("SELECT minutes_before FROM page_reminders WHERE page_id = '{id}'"),
+    )
+    .await;
+    assert_eq!(lead, 30);
+    let body: String = scalar(
+        dbs,
+        &format!("SELECT content_text FROM pages WHERE id = '{id}'"),
+    )
+    .await;
+    assert!(
+        body.contains("ask about the crown"),
+        "note missing: {body:?}"
+    );
 }
 
 #[tokio::test]

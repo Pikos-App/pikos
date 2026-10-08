@@ -55,6 +55,7 @@ appTest.describe("a 20,000-page workspace, with the app's own cache settings", (
 
   appTest(
     "a launch and opening a large folder stay within their counts @large",
+    { tag: ["@PERF-01:2"] },
     async ({ app }) => {
       const reads = countReads(app);
       await app.reload();
@@ -76,6 +77,7 @@ appTest.describe("a 20,000-page workspace, with the app's own cache settings", (
 
   appTest(
     "a write after selecting a large folder whole reads the screen, not the folder @large",
+    { tag: ["@PERF-01:2"] },
     async ({ app }) => {
       await app.getByText("Folder 01", { exact: true }).first().click();
       await expect(app.getByRole("group", { name: "Folder 01" })).toHaveAttribute(
@@ -104,6 +106,7 @@ appTest.describe("a 20,000-page workspace, its lists loaded a window at a time",
 
   appTest(
     "jumping to the bottom of a folder loads and shows its last row @large",
+    { tag: ["@PERF-03"] },
     async ({ app }) => {
       await app.getByText("Folder 01", { exact: true }).first().click();
       const items = app.locator("[data-page-list-item]");

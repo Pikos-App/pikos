@@ -129,6 +129,35 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
     assert_eq!(moved, "2026-10-19T11:00:00");
 }
 
+// qa: PRIV-03
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_connected_accounts_password_is_nowhere_in_the_workspace_files() {
+    let replay = Replay::start(&fixture(&recording("radicale"))).await;
+    let dir = std::env::temp_dir().join(format!("pikos-priv03-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("workspace.sqlite");
+    let pool = pikos_db::open_pool(path.to_str().unwrap()).await.unwrap();
+
+    connect_and_sync(&pool, &replay.url).await;
+
+    // Read while the pool is open, so the write-ahead log still holds what it has.
+    for suffix in ["", "-wal", "-shm"] {
+        let file = dir.join(format!("workspace.sqlite{suffix}"));
+        let Ok(bytes) = std::fs::read(&file) else {
+            continue;
+        };
+        assert!(
+            !bytes
+                .windows(b"replay-password".len())
+                .any(|w| w == b"replay-password"),
+            "the password is in {}",
+            file.display()
+        );
+    }
+    pool.close().await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Writes the fixture above when `scripts/record-sync.sh` runs it against a live server.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "records a live server through the recording proxy; see scripts/record-sync.sh"]

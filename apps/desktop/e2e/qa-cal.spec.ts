@@ -130,9 +130,9 @@ appTest(
 
     await appTest.step("CAL-03 the page is at the clicked time", async () => {
       await nameTitle(app, "Call the bank");
-      await expect(calendarOf(app).getByRole("button", { name: /^Call the bank, 2(–| PM$)/ })).toHaveCount(
-        1
-      );
+      await expect(
+        calendarOf(app).getByRole("button", { name: /^Call the bank, 2(–| PM$)/ })
+      ).toHaveCount(1);
     });
   }
 );
@@ -385,7 +385,7 @@ appTest(
 
 appTest(
   "previous, next, arrows, Today, t and m page by week or month and jump back",
-  { tag: ["@CAL-12"] },
+  { tag: ["@CAL-12:2"] },
   async ({ app }) => {
     await openCalendarMode(app);
     const today = await firstDay(app);

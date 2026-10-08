@@ -16,6 +16,7 @@ describe("formatTimeRange", () => {
     const end = new Date(2026, 2, 15, 13, 0);
     expect(formatTimeRange(start, end)).toBe("11:30 AM–1 PM");
   });
+  // qa: SCHED-02:2
   it("no length → a single time, not a range from a time to itself", () => {
     const at = new Date(2026, 2, 15, 1, 0);
     expect(formatTimeRange(at, at)).toBe("1 AM");

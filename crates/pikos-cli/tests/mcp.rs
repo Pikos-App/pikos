@@ -161,6 +161,7 @@ fn handshake(server: &mut Server) -> Value {
     init
 }
 
+// qa: CLI-04:2
 #[tokio::test]
 async fn initialize_lists_tools_and_round_trips_a_page() {
     let db = unique_db();
@@ -282,6 +283,7 @@ async fn tools_drive_the_page_through_its_whole_life() {
 
 /// A failing tool must not end the session: the agent reads the error and keeps
 /// going, so the same connection has to answer the next call.
+// qa: CLI-04:2
 #[tokio::test]
 async fn a_tool_error_is_reported_in_the_result_and_the_session_survives() {
     let db = unique_db();
@@ -379,6 +381,7 @@ fn listening_tcp(pid: u32) -> Option<String> {
 
 /// Pikos reaches the network only for a calendar the user connected; `mcp` is a
 /// stdio server and must hold no socket at all, which is otherwise a manual QA row.
+// qa: CLI-05
 #[tokio::test]
 async fn the_server_opens_no_listening_socket() {
     let db = unique_db();

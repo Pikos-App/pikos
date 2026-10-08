@@ -91,6 +91,7 @@ fn summary_blocked_during_quiet_hours() {
     ));
 }
 
+// qa: NOTIF-06:4
 #[test]
 fn summary_fires_after_quiet_hours_end_when_summary_time_passed() {
     // Summary 07:00, quiet 22:00-08:00: at 08:00 both conditions met.
@@ -104,6 +105,7 @@ fn summary_fires_after_quiet_hours_end_when_summary_time_passed() {
     ));
 }
 
+// qa: NOTIF-05:6
 #[test]
 fn summary_fires_at_configured_time_when_quiet_hours_off() {
     let mut s = settings_with_quiet("22:00", "08:00");
@@ -167,6 +169,7 @@ fn summary_deferred_when_summary_time_inside_late_quiet_hours() {
     ));
 }
 
+// qa: NOTIF-05:6
 #[test]
 fn summary_does_not_refire_same_day() {
     let s = settings_with_quiet("22:00", "08:00");
@@ -525,6 +528,7 @@ async fn logged(pool: &SqlitePool, kind: &str) -> Vec<String> {
         .unwrap()
 }
 
+// qa: NOTIF-02
 #[tokio::test]
 async fn a_tick_shows_each_due_reminder_and_the_summary_and_logs_them_at_its_time() {
     let pool = test_pool().await;
@@ -571,6 +575,7 @@ async fn the_next_tick_shows_nothing_already_shown() {
     assert!(next.is_empty(), "shown twice: {next:?}");
 }
 
+// qa: NOTIF-06:4
 #[tokio::test]
 async fn a_quiet_tick_shows_nothing_and_records_each_silenced_reminder() {
     let pool = test_pool().await;
@@ -606,6 +611,7 @@ fn the_loop_wakes_at_the_start_of_the_next_minute() {
     assert_eq!(until_next_minute(at(59, 500)), Duration::from_millis(500));
 }
 
+// qa: NOTIF-04:3
 #[tokio::test]
 async fn an_all_day_page_reminds_the_day_before_at_nine() {
     let pool = test_pool().await;
@@ -633,6 +639,240 @@ async fn an_all_day_page_reminds_the_day_before_at_nine() {
         format_lead_time(batch.reminders[0].minutes_before),
         "tomorrow"
     );
+}
+
+// qa: NOTIF-06:4
+#[tokio::test]
+async fn a_reminder_silenced_by_quiet_hours_is_not_replayed_when_they_end() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut runtime = SchedulerRuntime::default();
+    let mut quiet = settings_with_quiet("08:00", "10:00");
+    quiet.overdue_alerts = false;
+    assert!(run_tick(&pool, &quiet, &mut runtime, now).await.is_empty());
+
+    // Quiet hours over, and a tick inside the minute the silenced reminders were due in.
+    let mut loud = quiet.clone();
+    loud.quiet_hours_enabled = false;
+    let after = run_tick(
+        &pool,
+        &loud,
+        &mut runtime,
+        now + chrono::Duration::seconds(30),
+    )
+    .await;
+
+    assert!(after.is_empty(), "replayed: {after:?}");
+}
+
+/// Settings with only reminders on: no quiet hours, no daily summary to wade through.
+fn reminders_only() -> NotificationSettings {
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+    settings.overdue_alerts = false;
+    settings
+}
+
+/// A tick every minute from `from` up to `to`, each banner with the minute it showed.
+async fn run_minutes(
+    pool: &SqlitePool,
+    runtime: &mut SchedulerRuntime,
+    from: chrono::DateTime<chrono::Local>,
+    to: chrono::DateTime<chrono::Local>,
+) -> Vec<(chrono::DateTime<chrono::Local>, String)> {
+    let settings = reminders_only();
+    let mut shown = Vec::new();
+    let mut at = from;
+    while at <= to {
+        for (title, _, _) in run_tick(pool, &settings, runtime, at).await {
+            shown.push((at, title));
+        }
+        at += chrono::Duration::minutes(1);
+    }
+    shown
+}
+
+// qa: NOTIF-03:4
+#[tokio::test]
+async fn two_leads_on_one_page_each_fire_in_their_own_tick() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    insert_test_page(&pool, TestPage::new("p", "Standup"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s", "p", &local_wall(&now, 30), None).await;
+    for (id, lead) in [("r15", 15), ("r5", 5)] {
+        sqlx::query(
+            "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+             VALUES (?, 'p', ?, '2026-05-01T00:00:00')",
+        )
+        .bind(id)
+        .bind(lead)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let shown = run_minutes(
+        &pool,
+        &mut SchedulerRuntime::default(),
+        now,
+        now + chrono::Duration::minutes(30),
+    )
+    .await;
+
+    let at: Vec<_> = shown.iter().map(|(at, _)| *at).collect();
+    assert_eq!(
+        at,
+        [
+            now + chrono::Duration::minutes(15),
+            now + chrono::Duration::minutes(25)
+        ]
+    );
+}
+
+// qa: NOTIF-03:4
+#[tokio::test]
+async fn a_none_reminder_keeps_a_page_silent_against_the_default_lead() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    insert_test_page(&pool, TestPage::new("p", "Quiet one"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s", "p", &local_wall(&now, 20), None).await;
+    insert_reminder(&pool, "p", -1).await;
+
+    let shown = run_minutes(
+        &pool,
+        &mut SchedulerRuntime::default(),
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+
+    assert!(shown.is_empty(), "fired: {shown:?}");
+}
+
+// qa: NOTIF-03:4
+#[tokio::test]
+async fn an_event_moved_after_its_reminder_fired_fires_again_at_its_new_time() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    insert_test_page(&pool, TestPage::new("p", "Review"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s", "p", &local_wall(&now, 15), None).await;
+    insert_reminder(&pool, "p", 15).await;
+    let mut runtime = SchedulerRuntime::default();
+    assert_eq!(run_minutes(&pool, &mut runtime, now, now).await.len(), 1);
+
+    // Through the app's own write, which is what clears the fired reminder for the new time.
+    pikos_db::update_page_schedule_impl(
+        &pool,
+        "s".to_string(),
+        pikos_db::PageScheduleUpdate {
+            scheduled_start: Some(local_wall(&now, 60)),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let shown = run_minutes(
+        &pool,
+        &mut runtime,
+        now + chrono::Duration::minutes(1),
+        now + chrono::Duration::minutes(60),
+    )
+    .await;
+
+    let at: Vec<_> = shown.iter().map(|(at, _)| *at).collect();
+    assert_eq!(at, [now + chrono::Duration::minutes(45)]);
+}
+
+// qa: NOTIF-03:4
+#[tokio::test]
+async fn nothing_fires_again_after_a_relaunch() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    insert_test_page(&pool, TestPage::new("p", "Call"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s", "p", &local_wall(&now, 15), None).await;
+    insert_reminder(&pool, "p", 15).await;
+    assert_eq!(
+        run_minutes(&pool, &mut SchedulerRuntime::default(), now, now)
+            .await
+            .len(),
+        1
+    );
+
+    // A relaunch starts with nothing in memory; the log is all that remembers the banner.
+    let again = run_minutes(
+        &pool,
+        &mut SchedulerRuntime::default(),
+        now,
+        now + chrono::Duration::minutes(15),
+    )
+    .await;
+
+    assert!(again.is_empty(), "fired again: {again:?}");
+}
+
+// qa: NOTIF-04:3
+#[tokio::test]
+async fn an_all_day_page_never_fires_a_minutes_before_lead() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("allday", "allday"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s-allday", "allday", "2026-05-26", None).await;
+    insert_reminder(&pool, "allday", 15).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+    settings.overdue_alerts = false;
+    let mut runtime = SchedulerRuntime::default();
+
+    // Every minute across the day before and the day itself: a lead counted back from a day has
+    // no clock time to count back from.
+    let mut shown = Shown::new();
+    let mut at = local_at(2026, 5, 25, 0, 0);
+    while at < local_at(2026, 5, 27, 0, 0) {
+        shown.extend(run_tick(&pool, &settings, &mut runtime, at).await);
+        at += chrono::Duration::minutes(1);
+    }
+    assert!(shown.is_empty(), "fired: {shown:?}");
+}
+
+// qa: NOTIF-04:3
+#[tokio::test]
+async fn a_synced_all_day_page_reminds_the_day_before_at_nine_reading_starts_tomorrow() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("mirror", "Offsite"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&pool, "mirror", "active")
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s-mirror", "mirror", "2026-05-26", None).await;
+    insert_reminder(&pool, "mirror", pikos_db::DAY_BEFORE_MINUTES).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+    settings.overdue_alerts = false;
+
+    let shown = run_tick(
+        &pool,
+        &settings,
+        &mut SchedulerRuntime::default(),
+        local_at(2026, 5, 25, 9, 0),
+    )
+    .await;
+
+    let banners: Vec<(&str, &str)> = shown
+        .iter()
+        .map(|(t, b, _)| (t.as_str(), b.as_str()))
+        .collect();
+    assert_eq!(banners, [("Offsite", "Starts tomorrow")]);
 }
 
 // ─── format helpers ──────────────────────────────────────────────────
@@ -670,6 +910,7 @@ fn summary_title_format() {
     assert_eq!(t, "Today — Sat, Apr 18");
 }
 
+// qa: NOTIF-05:6
 #[test]
 fn summary_body_both_counts() {
     assert_eq!(
@@ -678,6 +919,7 @@ fn summary_body_both_counts() {
     );
 }
 
+// qa: NOTIF-05:6
 #[test]
 fn summary_body_today_only() {
     assert_eq!(
@@ -686,6 +928,7 @@ fn summary_body_today_only() {
     );
 }
 
+// qa: NOTIF-05:6
 #[test]
 fn summary_body_overdue_only() {
     assert_eq!(
@@ -694,6 +937,7 @@ fn summary_body_overdue_only() {
     );
 }
 
+// qa: NOTIF-05:6
 #[test]
 fn summary_body_empty() {
     assert_eq!(format_summary_body(0, 0), "Open Pikos to review.");
