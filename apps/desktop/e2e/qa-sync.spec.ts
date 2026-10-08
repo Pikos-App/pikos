@@ -558,6 +558,32 @@ appTest(
 );
 
 appTest(
+  "a mirror restored from the trash says its calendar takes it back, and rejoins it",
+  { tag: ["@SYNC-22:5"] },
+  async ({ app }) => {
+    await seedSynced(app);
+    await openCalendarFolder(app, "Personal");
+    const review = rows(app, "Design review (LA team)");
+    await review.click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(review).toHaveCount(0);
+
+    await app.getByRole("button", { exact: true, name: "Trash" }).click();
+    await app.getByRole("button", { name: "Restore Design review (LA team)" }).click();
+    const dialog = app.getByRole("alertdialog", { name: "Restore “Design review (LA team)”?" });
+    await expect(dialog).toContainText(
+      "Restoring gives this page back to its calendar, which takes back its title, time, and folder."
+    );
+    await dialog.getByRole("button", { exact: true, name: "Restore" }).click();
+    await expect(dialog).toHaveCount(0);
+
+    await openCalendarFolder(app, "Personal");
+    await review.click();
+    await expect(app.getByRole("img", { name: LOCK_HINT })).toBeVisible();
+  }
+);
+
+appTest(
   "a synced series' backlog opens the gap dialog, starting at the connect day",
   { tag: ["@SYNC-26"] },
   async ({ app }) => {
