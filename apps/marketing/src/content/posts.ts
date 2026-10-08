@@ -24,7 +24,7 @@ export const posts: Post[] = [
     title: "Fast at any size",
     description:
       "Pikos 0.4.1 opens a page in under a tenth of a second with fifty pages or half a million. What changed, how it stays that way, and how to check it yourself.",
-    date: "2026-10-04",
+    date: "2026-10-11",
     tag: "Releases",
   },
   {
