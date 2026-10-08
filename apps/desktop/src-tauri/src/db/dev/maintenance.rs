@@ -120,12 +120,21 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> AppResult<String> {
 
     let home =
         std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    let dest = format!("{home}/Downloads/pikos-backup-{timestamp}.sqlite");
+    let dest = write_sqlite_export(&pool, &std::path::Path::new(&home).join("Downloads")).await?;
 
-    vacuum_into(&pool, &dest).await?;
-
+    let dest = dest.to_string_lossy().to_string();
     log::info!("backup_db dest={}", dest.replacen(&home, "~", 1));
+    Ok(dest)
+}
+
+/// The SQLite export written into `dir`, split from [`backup_db`] so it runs against a
+/// temp directory.
+pub(crate) async fn write_sqlite_export(
+    pool: &sqlx::SqlitePool,
+    dir: &std::path::Path,
+) -> AppResult<std::path::PathBuf> {
+    let dest = dir.join(super::export::stamped_file_name("pikos-backup", "sqlite"));
+    vacuum_into(pool, &dest.to_string_lossy()).await?;
     Ok(dest)
 }
 

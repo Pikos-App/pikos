@@ -1,7 +1,10 @@
 //! Workspace exports: the full JSON snapshot, the Markdown tree, and the CSV
 //! the importer can read back.
 
+use std::path::Path;
+
 use sqlx::{Column, Row};
+use tauri::Manager;
 
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
@@ -87,18 +90,26 @@ pub(crate) async fn build_export_json_impl(
     }))
 }
 
-/// Collect absolute asset paths from image nodes in ProseMirror JSON.
+/// The stored path of an image node's file: `data-asset-path` where the editor
+/// set it, else a `src` that is a path rather than a URL, which is all Markdown
+/// import writes. The same attribute order `prosemirror_to_markdown` writes out.
+fn stored_image_path(node: &serde_json::Value) -> Option<&str> {
+    let attrs = node.get("attrs")?;
+    let path = attrs
+        .get("data-asset-path")
+        .and_then(|p| p.as_str())
+        .filter(|p| !p.is_empty())
+        .or_else(|| attrs.get("src").and_then(|s| s.as_str()))?;
+    let is_url = path.contains("://") || path.starts_with("data:") || path.starts_with("blob:");
+    (!path.is_empty() && !is_url).then_some(path)
+}
+
+/// Collect the stored asset paths of the image nodes in ProseMirror JSON.
 pub(super) fn collect_asset_paths(node: &serde_json::Value, paths: &mut Vec<String>) {
     let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
     if node_type == "image" {
-        if let Some(path) = node
-            .get("attrs")
-            .and_then(|a| a.get("data-asset-path"))
-            .and_then(|p| p.as_str())
-        {
-            if !path.is_empty() {
-                paths.push(path.to_string());
-            }
+        if let Some(path) = stored_image_path(node) {
+            paths.push(path.to_string());
         }
     }
     if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
@@ -135,35 +146,61 @@ pub(super) async fn fetch_export_pages(
 /// scheduled dates). Folder structure is preserved as subdirectories.
 /// Images are copied into an assets/ subdirectory with references rewritten.
 #[tauri::command]
-pub async fn export_markdown(
+pub async fn export_markdown<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, DbState>,
     include_synced: bool,
 ) -> AppResult<String> {
     let pool = state.get_pool().await?;
-
-    let folders =
-        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
-            .fetch_all(&pool)
-            .await?;
-
-    let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
-
-    let pages = fetch_export_pages(
-        &pool,
-        "id, folder_id, title, content, status, priority, tags, \
-         scheduled_start, scheduled_end, created_at, updated_at",
-        include_synced,
-    )
-    .await?;
+    let assets_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?
+        .join(crate::db::assets::ASSET_DIR);
 
     let home =
         std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
     let base_dir = format!("{home}/Downloads/pikos-markdown-{timestamp}");
 
+    let (pages, assets) =
+        write_markdown_export(&pool, Path::new(&base_dir), &assets_dir, include_synced).await?;
+
+    log::info!(
+        "export_markdown pages={pages} assets={assets} dest={}",
+        base_dir.replacen(&home, "~", 1)
+    );
+    Ok(base_dir)
+}
+
+/// The Markdown export into `base_dir`, reading images from `assets_dir`, split from
+/// [`export_markdown`] so it runs against a temp directory. Returns how many pages
+/// and image files it wrote.
+pub(crate) async fn write_markdown_export(
+    pool: &sqlx::SqlitePool,
+    base_dir: &Path,
+    assets_dir: &Path,
+    include_synced: bool,
+) -> AppResult<(usize, usize)> {
+    let base_dir = base_dir.to_string_lossy().to_string();
+    let folders =
+        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
+            .fetch_all(pool)
+            .await?;
+
+    let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
+
+    let pages = fetch_export_pages(
+        pool,
+        "id, folder_id, title, content, status, priority, tags, \
+         scheduled_start, scheduled_end, created_at, updated_at",
+        include_synced,
+    )
+    .await?;
+
     std::fs::create_dir_all(&base_dir)?;
 
-    // Track copied assets to avoid duplicates (absolute source → relative export path)
+    // Track copied assets to avoid duplicates (stored path → relative export path)
     let mut copied_assets: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     let mut assets_dir_created = false;
@@ -174,11 +211,12 @@ pub async fn export_markdown(
         let status: String = row.try_get("status").unwrap_or_default();
         let priority: i64 = row.try_get("priority").unwrap_or(0);
         let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
-        let scheduled_start: Option<String> = row.try_get("scheduled_start").ok();
-        let scheduled_end: Option<String> = row.try_get("scheduled_end").ok();
+        // As `Option`: SQLite decodes a NULL into a `String` as "", not as an error.
+        let scheduled_start: Option<String> = row.try_get("scheduled_start").ok().flatten();
+        let scheduled_end: Option<String> = row.try_get("scheduled_end").ok().flatten();
         let created_at: String = row.try_get("created_at").unwrap_or_default();
         let updated_at: String = row.try_get("updated_at").unwrap_or_default();
-        let folder_id: Option<String> = row.try_get("folder_id").ok();
+        let folder_id: Option<String> = row.try_get("folder_id").ok().flatten();
 
         // Collect and copy image assets from the page content
         if !content.is_empty() && content != "{}" {
@@ -186,11 +224,11 @@ pub async fn export_markdown(
                 let mut asset_paths = Vec::new();
                 collect_asset_paths(&doc, &mut asset_paths);
 
-                for abs_path in &asset_paths {
-                    if copied_assets.contains_key(abs_path) {
+                for stored in &asset_paths {
+                    if copied_assets.contains_key(stored) {
                         continue;
                     }
-                    let source = std::path::Path::new(abs_path);
+                    let source = crate::db::assets::resolve_asset_path(assets_dir, stored);
                     if !source.exists() {
                         continue;
                     }
@@ -208,12 +246,12 @@ pub async fn export_markdown(
                     let dest = format!("{}/assets/{}", base_dir, filename);
                     let relative = format!("assets/{}", filename);
 
-                    if let Err(e) = std::fs::copy(source, &dest) {
-                        // abs_path is a user asset path — log only the io::ErrorKind, not the path.
+                    if let Err(e) = std::fs::copy(&source, &dest) {
+                        // The source is a user asset path — log only the io::ErrorKind, not the path.
                         log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
                         continue;
                     }
-                    copied_assets.insert(abs_path.to_string(), relative);
+                    copied_assets.insert(stored.to_string(), relative);
                 }
             }
         }
@@ -251,31 +289,25 @@ pub async fn export_markdown(
 
         let mut body = markdown_body(&content);
 
-        // Rewrite absolute asset paths to relative export paths in the markdown body.
+        // Rewrite stored asset paths to relative export paths in the markdown body.
         // The relative path depends on whether the page is in a subfolder:
         // - Root pages: assets/uuid.png
         // - Subfolder pages: ../assets/uuid.png
         let in_subfolder = folder_id.is_some();
-        for (abs_path, rel_path) in &copied_assets {
+        for (stored, rel_path) in &copied_assets {
             let export_ref = if in_subfolder {
                 format!("../{}", rel_path)
             } else {
                 rel_path.clone()
             };
-            body = body.replace(abs_path, &export_ref);
+            body = body.replace(&format!("]({stored})"), &format!("]({export_ref})"));
         }
 
         let full = format!("{frontmatter}{body}");
         std::fs::write(&filepath, full)?;
     }
 
-    log::info!(
-        "export_markdown pages={} assets={} dest={}",
-        pages.len(),
-        copied_assets.len(),
-        base_dir.replacen(&home, "~", 1)
-    );
-    Ok(base_dir)
+    Ok((pages.len(), copied_assets.len()))
 }
 
 /// Export all pages as a CSV file to ~/Downloads/.
@@ -287,22 +319,41 @@ pub async fn export_csv(
     include_synced: bool,
 ) -> AppResult<String> {
     let pool = state.get_pool().await?;
-    let out = build_export_csv_impl(&pool, include_synced).await?;
-
     let home =
         std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    let dest = format!("{home}/Downloads/pikos-export-{timestamp}.csv");
 
-    let row_count = out.lines().count().saturating_sub(1);
-    std::fs::write(&dest, out)?;
+    let (dest, row_count) =
+        write_csv_export(&pool, &Path::new(&home).join("Downloads"), include_synced).await?;
 
+    let dest = dest.to_string_lossy().to_string();
     log::info!(
         "export_csv pages={} dest={}",
         row_count,
         dest.replacen(&home, "~", 1)
     );
     Ok(dest)
+}
+
+/// `<stem>-<UTC timestamp>.<ext>`, the name a one-file export is saved under.
+pub(crate) fn stamped_file_name(stem: &str, ext: &str) -> String {
+    format!(
+        "{stem}-{}.{ext}",
+        chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S")
+    )
+}
+
+/// The CSV export written into `dir`, split from [`export_csv`] so it runs against a
+/// temp directory. Returns the file and how many pages it holds.
+pub(crate) async fn write_csv_export(
+    pool: &sqlx::SqlitePool,
+    dir: &Path,
+    include_synced: bool,
+) -> AppResult<(std::path::PathBuf, usize)> {
+    let out = build_export_csv_impl(pool, include_synced).await?;
+    let dest = dir.join(stamped_file_name("pikos-export", "csv"));
+    let row_count = out.lines().count().saturating_sub(1);
+    std::fs::write(&dest, out)?;
+    Ok((dest, row_count))
 }
 
 /// One reminder offset in the ISO-8601 duration form the importer's
