@@ -28,6 +28,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { Page } from "@playwright/test";
+
 import { expect, mod, quickAdd, test } from "./fixtures";
 
 declare global {
@@ -63,39 +65,49 @@ function withInlineHashes(csp: string, hashes: string[]): string {
   );
 }
 
-test(
-  "the packaged CSP boots the app and runs its main surfaces @csp-prod",
-  { tag: ["@PROD-01", "@PROD-02"] },
-  async ({ page }) => {
-    const csp = releaseCsp();
+/** Load the production bundle under the shipped policy, and return a check that no violation or
+ *  page error has happened since. */
+async function bootUnderReleaseCsp(page: Page): Promise<() => Promise<void>> {
+  const csp = releaseCsp();
 
-    await page.route(
-      (url) => url.pathname === "/" || url.pathname === "/index.html",
-      async (route) => {
-        const response = await route.fetch();
-        const html = await response.text();
-        const meta = `<meta http-equiv="Content-Security-Policy" content="${withInlineHashes(csp, inlineScriptHashes(html))}">`;
-        await route.fulfill({ body: html.replace("</head>", `${meta}</head>`), response });
-      }
-    );
+  await page.route(
+    (url) => url.pathname === "/" || url.pathname === "/index.html",
+    async (route) => {
+      const response = await route.fetch();
+      const html = await response.text();
+      const meta = `<meta http-equiv="Content-Security-Policy" content="${withInlineHashes(csp, inlineScriptHashes(html))}">`;
+      await route.fulfill({ body: html.replace("</head>", `${meta}</head>`), response });
+    }
+  );
 
-    await page.addInitScript(() => {
-      window.__cspViolations = [];
-      document.addEventListener("securitypolicyviolation", (event) => {
-        window.__cspViolations?.push(
-          `${event.violatedDirective} blocked ${event.blockedURI || "an inline resource"}`
-        );
-      });
+  await page.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      window.__cspViolations?.push(
+        `${event.violatedDirective} blocked ${event.blockedURI || "an inline resource"}`
+      );
     });
+  });
 
-    const pageErrors: string[] = [];
-    page.on("pageerror", (error) => pageErrors.push(error.message));
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
 
-    await page.goto("/");
+  await page.goto("/");
 
+  const expectClean = async () => {
     expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
     expect(pageErrors).toEqual([]);
-    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+  };
+  await expectClean();
+  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+  return expectClean;
+}
+
+test(
+  "the packaged CSP boots the app and runs its main surfaces @csp-prod",
+  { tag: ["@PROD-01", "@PROD-02", "@PROD-04"] },
+  async ({ page }) => {
+    const expectClean = await bootUnderReleaseCsp(page);
 
     // A policy can also deny what only loads on use: a lazy chunk, a font, a worker.
     await quickAdd(page, "Under the shipped policy tomorrow at 3pm");
@@ -117,7 +129,41 @@ test(
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.keyboard.press("Escape");
 
-    expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
-    expect(pageErrors).toEqual([]);
+    await expectClean();
+  }
+);
+
+test(
+  "a weekly series renders its repeats under the packaged CSP @csp-prod",
+  { tag: ["@PROD-03"] },
+  async ({ page }) => {
+    const expectClean = await bootUnderReleaseCsp(page);
+
+    await quickAdd(page, "Weekly review every week");
+    await page.getByRole("button", { name: "Calendar view" }).click();
+    await page.getByLabel("Next week", { exact: true }).click();
+    await expect(
+      page
+        .getByRole("region", { name: "Week calendar" })
+        .getByRole("button", { name: /^Weekly review/ })
+        .filter({ has: page.getByLabel("Recurring") })
+    ).toHaveCount(1);
+
+    await expectClean();
+  }
+);
+
+test(
+  "the packaged build's Settings has no Developer panel @csp-prod",
+  { tag: ["@PROD-05"] },
+  async ({ page }) => {
+    const expectClean = await bootUnderReleaseCsp(page);
+
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(page.getByRole("button", { exact: true, name: "General" })).toBeVisible();
+    await expect(page.getByRole("button", { exact: true, name: "Developer" })).toHaveCount(0);
+    await expect(page.getByText("Mock calendar sync")).toHaveCount(0);
+
+    await expectClean();
   }
 );
