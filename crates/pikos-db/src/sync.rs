@@ -46,12 +46,25 @@ pub fn local_day_of(utc_iso: &str) -> Option<String> {
 /// wall-clock into the device zone and clears the stamp), and an all-day value has
 /// no meaningful zone to convert from.
 pub fn viewer_day_of(scheduled_start: &str, timezone: Option<&str>) -> String {
-    let raw = || scheduled_start.chars().take(10).collect::<String>();
-    let Some(source) = timezone.and_then(|tz| tz.parse::<chrono_tz::Tz>().ok()) else {
-        return raw();
-    };
-    crate::reconciler::to_device_wall_clock(scheduled_start, source, crate::pool::device_zone())
-        .map_or_else(raw, |local| local.chars().take(10).collect())
+    viewer_wall_clock(scheduled_start, timezone)
+        .chars()
+        .take(10)
+        .collect()
+}
+
+/// A schedule's start on the viewer's clock, by the same rule as [`viewer_day_of`]:
+/// a zoned timed start converted from its source zone, anything else as stored.
+pub fn viewer_wall_clock(scheduled_start: &str, timezone: Option<&str>) -> String {
+    timezone
+        .and_then(|tz| tz.parse::<chrono_tz::Tz>().ok())
+        .and_then(|source| {
+            crate::reconciler::to_device_wall_clock(
+                scheduled_start,
+                source,
+                crate::pool::device_zone(),
+            )
+        })
+        .unwrap_or_else(|| scheduled_start.to_string())
 }
 
 /// `sync_account` row — one connected account. Secrets are NOT here; only a

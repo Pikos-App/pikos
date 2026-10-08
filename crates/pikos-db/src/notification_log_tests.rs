@@ -1818,6 +1818,7 @@ async fn a_suppressed_reminder_is_logged_without_pinning_the_dedup() {
 
 // ─── History ─────────────────────────────────────────────────────────────────
 
+// qa: NOTIF-08:4
 #[tokio::test]
 async fn history_lists_every_kind_newest_first_with_the_page_title() {
     let pool = test_pool().await;
@@ -1939,5 +1940,87 @@ async fn clicking_a_pruned_notification_is_a_no_op() {
     assert_eq!(
         mark_notification_opened(&pool, "not-a-row").await.unwrap(),
         None
+    );
+}
+
+/// A synced event happens at one instant, and the summary counts it on the day that
+/// instant falls on for the person reading it, as Today lists it. The device zone is UTC
+/// under `cfg(test)`.
+// qa: SYNC-27:3
+#[tokio::test]
+async fn today_count_reads_a_zoned_synced_start_on_the_viewers_day() {
+    // 06:00 in Tokyo is 21:00 the day before in UTC.
+    let tokyo = test_pool().await;
+    insert_page(&tokyo, "tokyo", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(
+        &tokyo,
+        "s_tokyo",
+        "tokyo",
+        "2026-08-08T06:00:00",
+        "Asia/Tokyo",
+    )
+    .await;
+    assert_eq!(
+        today_scheduled_count(&tokyo, "2026-08-07").await.unwrap(),
+        1
+    );
+    assert_eq!(
+        today_scheduled_count(&tokyo, "2026-08-08").await.unwrap(),
+        0
+    );
+
+    // 20:00 in Los Angeles is 03:00 the next day in UTC.
+    let la = test_pool().await;
+    insert_page(&la, "la", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(
+        &la,
+        "s_la",
+        "la",
+        "2026-08-07T20:00:00",
+        "America/Los_Angeles",
+    )
+    .await;
+    assert_eq!(today_scheduled_count(&la, "2026-08-07").await.unwrap(), 0);
+    assert_eq!(today_scheduled_count(&la, "2026-08-08").await.unwrap(), 1);
+}
+
+/// Overdue is judged by when a synced event happens, not by its source zone's clock.
+// qa: SYNC-27:3
+#[tokio::test]
+async fn overdue_count_judges_a_zoned_synced_start_by_its_instant() {
+    // 17:30 in Tokyo is 08:30 UTC: over by the 09:00 UTC tick, though its clock reads later.
+    let over = test_pool().await;
+    insert_page(&over, "tokyo", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(
+        &over,
+        "s_tokyo",
+        "tokyo",
+        "2026-05-25T17:30:00",
+        "Asia/Tokyo",
+    )
+    .await;
+    assert_eq!(
+        overdue_count(&over, NOW_TS, STALE_CUTOFF, now_utc())
+            .await
+            .unwrap(),
+        1
+    );
+
+    // 08:00 in Los Angeles is 15:00 UTC: still ahead, though its clock reads earlier.
+    let ahead = test_pool().await;
+    insert_page(&ahead, "la", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(
+        &ahead,
+        "s_la",
+        "la",
+        "2026-05-25T08:00:00",
+        "America/Los_Angeles",
+    )
+    .await;
+    assert_eq!(
+        overdue_count(&ahead, NOW_TS, STALE_CUTOFF, now_utc())
+            .await
+            .unwrap(),
+        0
     );
 }
