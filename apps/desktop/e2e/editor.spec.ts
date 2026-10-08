@@ -401,6 +401,50 @@ appTest(
   }
 );
 
+/** One second over the 30 s below which a session is discarded unrecorded. */
+const PAST_THE_RECORDING_FLOOR_MS = 31_000;
+
+appTest(
+  "a relaunch mid-session brings back the panels as you had them, and records nothing",
+  { tag: ["@EDIT-23"] },
+  async ({ app, storage }) => {
+    appTest.skip(
+      storage !== "bridge",
+      "EDIT-23 reloads, and the mock keeps nothing across a reload"
+    );
+    // The real writer can't run on a pinned clock, so passing the floor takes real time.
+    appTest.slow();
+    await quickAdd(app, "Deep work");
+    await openEditorForPage(app, "Deep work");
+    const relaunchMidSession = async (ranForMs: number) => {
+      await app.getByRole("button", { name: "Start focus timer" }).click();
+      await app.waitForTimeout(ranForMs);
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    };
+
+    await appTest.step("EDIT-23 an open sidebar comes back open", async () => {
+      await relaunchMidSession(PAST_THE_RECORDING_FLOOR_MS);
+      await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    });
+
+    await appTest.step("EDIT-23 a collapsed sidebar stays collapsed", async () => {
+      await app.keyboard.press(mod("Mod+\\"));
+      await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+      await relaunchMidSession(0);
+      await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    });
+
+    await appTest.step("EDIT-23 neither session was recorded", async () => {
+      await app.getByRole("button", { name: "Expand sidebar" }).click();
+      await app.getByRole("button", { name: "Open settings" }).click();
+      const settings = app.getByRole("region", { name: "Settings" });
+      await settings.getByRole("button", { exact: true, name: "Data" }).click();
+      await expect(settings.getByRole("group", { name: "Focus: not used" })).toBeVisible();
+    });
+  }
+);
+
 // Ending a session is otherwise invisible — the row lands in a settings panel the
 // user isn't looking at — so both outcomes toast. The strings are unit-pinned in
 // useFocusTimer.test.ts; what nothing covered is that they reach the screen.
@@ -435,7 +479,9 @@ appTest(
     await app.getByRole("button", { name: "Start focus timer" }).click();
     await app.getByRole("button", { name: "Stop focus timer" }).click();
 
-    await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
+    await expect(
+      app.getByRole("status", { name: "Under 30 seconds — not recorded" })
+    ).toBeVisible();
   }
 );
 
