@@ -5,6 +5,7 @@ import {
   cleanTitle,
   detectUniqueValues,
   extractText,
+  imageRefCandidates,
   parseMarkdownVault,
   prepareCSVRows,
   storageErrorUserMessage,
@@ -147,14 +148,18 @@ export async function resolveImportImages(
     }
 
     const sep = vaultRoot.endsWith("/") ? "" : "/";
-    const basePath = `${vaultRoot}${sep}${ref.sourcePath}`;
-
-    // Try the path as-is first, then with common image extensions (Obsidian
-    // allows extensionless embeds like ![[Screenshot 2026-04-13 at 7.41.23 PM]])
+    // Each place the image may be as written first, then with common image extensions
+    // (Obsidian allows extensionless embeds like ![[Screenshot 2026-04-13 at 7.41.23 PM]])
     const hasExt = /\.\w+$/.test(ref.sourcePath);
-    const candidates = hasExt
-      ? [basePath]
-      : [basePath, ...["png", "jpg", "jpeg", "gif", "webp", "svg"].map((e) => `${basePath}.${e}`)];
+    const candidates = imageRefCandidates(ref).flatMap((inVault) => {
+      const basePath = `${vaultRoot}${sep}${inVault}`;
+      return hasExt
+        ? [basePath]
+        : [
+            basePath,
+            ...["png", "jpg", "jpeg", "gif", "webp", "svg"].map((e) => `${basePath}.${e}`),
+          ];
+    });
 
     let saved = false;
     for (const candidate of candidates) {

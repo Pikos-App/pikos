@@ -147,6 +147,7 @@ export {
 export type { PreparedCSV, SuggestedMappings } from "./import/csv";
 export {
   extractImageRefs,
+  imageRefCandidates,
   extractWikilinks,
   parseFrontmatter,
   parseMarkdownVault,
