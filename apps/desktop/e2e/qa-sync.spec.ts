@@ -3,6 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import {
   test as appTest,
   bridgeCall,
+  dayFrom,
   expect,
   mod,
   openCalendarMode,
@@ -86,6 +87,37 @@ async function openFromSearch(app: Page, title: string) {
     .click();
   await expect(palette).not.toBeVisible();
 }
+
+appTest(
+  "a synced event from another zone reads one time everywhere, on the day it happens here",
+  { tag: ["@SYNC-11"] },
+  async ({ app }) => {
+    await seedSynced(app);
+
+    await appTest.step("SYNC-11 the list row, week block and popover all read 6pm", async () => {
+      await openCalendarFolder(app, "Personal");
+      await expect(rows(app, "Design review (LA team)")).toContainText("6:00pm");
+      await openCalendarMode(app);
+      await app.getByRole("button", { name: "Design review (LA team), 6–7 PM" }).click();
+      await expect(app.getByRole("dialog")).toContainText("Today 6:00pm · 1h");
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step(
+      "SYNC-11 an event that crosses midnight sits on the day it happens here",
+      async () => {
+        await app.getByRole("button", { name: "Tokyo sync, 9–9:30 PM" }).click();
+        await expect(app.getByRole("dialog")).toContainText("Today 9:00pm · 30m");
+        await app.keyboard.press("Escape");
+      }
+    );
+
+    await appTest.step("SYNC-11 an all-day event stays on its date", async () => {
+      await openCalendarFolder(app, "Personal");
+      await expect(rows(app, "Company offsite")).toContainText((await dayFrom(app, 0)).monthDay);
+    });
+  }
+);
 
 appTest(
   "a mirror locks title, schedule, repeat and folder, and leaves the rest editable",
@@ -496,6 +528,32 @@ appTest(
       ).toBeVisible();
       await controls();
     });
+  }
+);
+
+appTest(
+  "an event removed upstream detaches with its words if you made it yours, and goes if you didn't",
+  { tag: ["@SYNC-21:4"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+
+    await upstream(app, "upstream_sync", {
+      calendar: "Personal",
+      removals: ["Team standup", "Design review (LA team)"],
+    });
+
+    await openCalendarFolder(app, "Personal");
+    await expect(rows(app, "Design review (LA team)")).toHaveCount(0);
+    await rows(app, "Team standup").click();
+    await expect(
+      app.getByText("Removed from the Personal calendar. This is a regular page now.")
+    ).toBeVisible();
+    await expect(app.getByRole("textbox", { name: "Page content" })).toContainText(
+      "My prep: land the calendar-sync PR before we demo."
+    );
+    await expect(app.getByRole("button", { name: /^Scheduled: / })).toBeVisible();
+    await expect(app.getByRole("img", { name: LOCK_HINT })).toHaveCount(0);
   }
 );
 
