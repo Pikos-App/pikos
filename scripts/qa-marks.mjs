@@ -22,7 +22,7 @@
 // not in CI.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,9 +78,25 @@ function listTests(config) {
   }
 }
 
+/** The scripts a CI workflow runs. A test that needs a real OS service is ignored by default and
+ *  run by name from one of these, so its name appearing here is what makes its claim hold. */
+function ciScriptText() {
+  const dir = join(ROOT, ".github/workflows");
+  const workflows = readdirSync(dir)
+    .filter((f) => /\.ya?ml$/.test(f))
+    .map((f) => readFileSync(join(dir, f), "utf8"))
+    .join("\n");
+  return [...new Set(workflows.match(/scripts\/[\w.-]+\.sh/g) ?? [])]
+    .filter((script) => existsSync(join(ROOT, script)))
+    .map((script) => readFileSync(join(ROOT, script), "utf8"))
+    .join("\n");
+}
+
 /** Rust tests that claim a row, from the `// qa:` line above each one's test attribute. Every
- *  crate's tests run in CI and on push, so a claim needs only to be a test that isn't ignored. */
+ *  crate's tests run in CI and on push, so a claim needs a test that isn't ignored, or one a CI
+ *  script runs by name. */
 function rustClaims() {
+  const ciScripts = ciScriptText();
   const claims = [];
   const roots = ["crates", "apps/desktop/src-tauri/src", "apps/desktop/src-tauri/bins"];
   for (const root of roots) {
@@ -97,8 +113,8 @@ function rustClaims() {
         const tags = claim[1].split(/,\s*/);
         if (!/#\[(tokio::)?test/.test(below) || !fn)
           claims.push({ bad: "isn't above a test", id: where, tags });
-        else if (/#\[ignore/.test(below))
-          claims.push({ bad: "is on an ignored test", id: where, tags });
+        else if (/#\[ignore/.test(below) && !new RegExp(`\\b${fn[1]}\\b`).test(ciScripts))
+          claims.push({ bad: "is on an ignored test no CI script runs", id: where, tags });
         else claims.push({ id: where, tags });
       });
     }

@@ -54,6 +54,7 @@ fn a_deleted_credential_is_gone_from_the_session_keyring() {
 ///
 /// Run outside `dbus-run-session`, so there is nothing to talk to. The assertion is about what
 /// somebody is told: a D-Bus error on its own reads as a crash and names nothing to fix.
+// qa: LNX-05
 #[cfg(target_os = "linux")]
 #[test]
 #[ignore = "needs a session with no Secret Service; see scripts/linux-keyring-check.sh"]
