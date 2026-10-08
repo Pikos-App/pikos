@@ -2927,6 +2927,7 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
     assert!(matches!(err, AppError::Conflict(_)));
 }
 
+// qa: SYNC-22:5
 #[tokio::test]
 async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     let pool = test_pool().await;
@@ -2947,6 +2948,49 @@ async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     // Restore resumes syncing.
     restore_page_impl(&pool, "p").await.unwrap();
     assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("active"));
+}
+
+// qa: SYNC-22:5
+#[tokio::test]
+async fn restoring_a_trashed_mirror_drops_only_its_own_calendars_cursor() {
+    let pool = test_pool().await;
+    for (title, synced) in [("mirror", true), ("native", false)] {
+        insert_test_page(&pool, TestPage::new(title, title))
+            .await
+            .unwrap();
+        if synced {
+            mark_synced(&pool, title, "active").await;
+        }
+    }
+    for (id, calendar) in [("cal-row", "cal"), ("other-row", "other")] {
+        sqlx::query(
+            "INSERT INTO sync_calendar (id, account_id, calendar_id, display_name, enabled, sync_token, ctag, created_at, updated_at)
+             VALUES (?, 'test-acct', ?, ?, 1, 'tok', 'ctag', '', '')",
+        )
+        .bind(id)
+        .bind(calendar)
+        .bind(calendar)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let cursors = || async {
+        sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT sync_token, ctag FROM sync_calendar ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let kept = (Some("tok".to_string()), Some("ctag".to_string()));
+
+    soft_delete_page_impl(&pool, "native").await.unwrap();
+    restore_page_impl(&pool, "native").await.unwrap();
+    delete_page_impl(&pool, "mirror").await.unwrap();
+    assert_eq!(cursors().await, [kept.clone(), kept.clone()]);
+
+    restore_page_impl(&pool, "mirror").await.unwrap();
+    assert_eq!(cursors().await, [(None, None), kept]);
 }
 
 #[tokio::test]

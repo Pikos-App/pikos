@@ -1037,6 +1037,70 @@ async fn a_refresh_sweeps_an_upstream_deletion_a_resync_cannot_see() {
     assert_eq!(page_count(&pool).await, 0, "ghost mirror swept");
 }
 
+// qa: SYNC-22:5
+#[tokio::test]
+async fn a_restored_mirror_catches_up_on_an_edit_made_while_it_was_in_the_trash() {
+    let pool = test_pool().await;
+    let (account_id, _) = synced_account(&pool).await;
+    let page_id: String = sqlx::query_scalar("SELECT id FROM pages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    pikos_db::pages::delete_page_impl(&pool, &page_id)
+        .await
+        .unwrap();
+
+    // The calendar now holds the edit; the incremental poll that reports it runs while the
+    // page is in the trash.
+    let moved = || {
+        let mut event = one_event("href-1", "uid-1", "Standup moved");
+        if let UpsertItem::Event(e) = &mut event {
+            e.core.etag = Some("e2".into());
+        }
+        event
+    };
+    let upstream = Scripted::per_cursor(
+        backfill(vec![moved()], "2026-06-01", "tok-3"),
+        SyncDelta {
+            upserts: vec![moved()],
+            next_token: Some(SyncToken("tok-2".into())),
+            ..Default::default()
+        },
+    );
+    resync_account(&pool, &upstream, &account_id).await.unwrap();
+    let (title, trashed): (String, bool) =
+        sqlx::query_as("SELECT title, deleted_at IS NOT NULL FROM pages WHERE id = ?")
+            .bind(&page_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (title.as_str(), trashed),
+        ("Standup", true),
+        "the poll left it in the trash"
+    );
+
+    pikos_db::pages::restore_page_impl(&pool, &page_id)
+        .await
+        .unwrap();
+
+    let quiet = Scripted::per_cursor(
+        backfill(vec![moved()], "2026-06-01", "tok-4"),
+        SyncDelta {
+            next_token: Some(SyncToken("tok-4".into())),
+            ..Default::default()
+        },
+    );
+    resync_account(&pool, &quiet, &account_id).await.unwrap();
+
+    let title: String = sqlx::query_scalar("SELECT title FROM pages WHERE id = ?")
+        .bind(&page_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "Standup moved");
+}
+
 #[tokio::test]
 async fn connect_caldav_persists_nothing_when_discovery_fails() {
     // connect_caldav validates by discovering first, so a failure must leave no

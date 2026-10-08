@@ -872,12 +872,27 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
             .await?;
         // Resume syncing a restored page (only flips the tombstone this delete set;
         // a detached page stays detached). No-op for native pages.
-        sqlx::query(
+        let resumed = sqlx::query(
             "UPDATE page_sync SET sync_state = 'active' WHERE page_id = ? AND sync_state = 'tombstoned'",
         )
         .bind(id)
         .execute(&mut *tx)
-        .await?;
+        .await?
+        .rows_affected()
+            > 0;
+        // The cursor moved on past any change the calendar sent while the page was trashed,
+        // so its calendar re-reads in full on the next pass rather than leaving it stale.
+        if resumed {
+            sqlx::query(
+                "UPDATE sync_calendar SET sync_token = NULL, ctag = NULL, updated_at = ? \
+                 WHERE (account_id, calendar_id) = \
+                       (SELECT account_id, calendar_id FROM page_sync WHERE page_id = ?)",
+            )
+            .bind(&now)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
         // Deleting a folder soft-deletes its pages, so restoring one of them alone
         // would otherwise return it to a folder that is still in the trash: not in
         // the Inbox (`folder_id` is set), not in any listed folder (that folder is

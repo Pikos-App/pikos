@@ -2437,6 +2437,7 @@ async fn removal_is_idempotent() {
     assert_eq!(page_count(&pool).await, 1);
 }
 
+// qa: SYNC-22:5
 #[tokio::test]
 async fn tombstoned_external_id_skipped_on_upsert() {
     let pool = setup().await;
