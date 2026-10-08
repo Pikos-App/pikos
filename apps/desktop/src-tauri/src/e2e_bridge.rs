@@ -241,6 +241,19 @@ impl Bridge {
             "dev_seed_synced_calendar" => {
                 return reply(db::dev::dev_seed_synced_calendar_impl(&pool).await);
             }
+            // A spec runs the real CLI against the file the app is using.
+            "bridge_workspace_path" => return to_value(self.workspace_path(&db)),
+            "bridge_daily_summary" => {
+                let counts = crate::notifications::scheduler::daily_summary_counts(
+                    &pool,
+                    &chrono::Local::now(),
+                )
+                .await
+                .map_err(|e| app_error(AppError::from(e)))?;
+                return to_value(
+                    counts.map(|(today, overdue)| json!({ "overdue": overdue, "today": today })),
+                );
+            }
             // Skips the app's keychain disconnect, which the bridge refuses everywhere.
             "reset_db" => return reply(db::dev::reset_db_impl(&pool).await),
             // The app writes these beside the workspace in its data directory; here the

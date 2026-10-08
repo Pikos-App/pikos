@@ -8,6 +8,7 @@ import {
   openCalendarMode,
   quickAdd,
   seedSynced,
+  stamp,
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
 
@@ -51,19 +52,6 @@ async function dayLabel(app: Page, offset: number, shape: "list" | "gap"): Promi
       return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${month} ${day}`;
     },
     [offset, shape] as const
-  );
-}
-
-/** A wall-clock `offset` days from today, as a provider sends one. */
-async function stamp(app: Page, offset: number, time: string): Promise<string> {
-  return app.evaluate(
-    ([days, hm]) => {
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      const pad = (n: number) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${hm}:00`;
-    },
-    [offset, time] as const
   );
 }
 

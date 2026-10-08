@@ -20,6 +20,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { pikosCli } from "./cli";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CACHE = join(ROOT, "apps/desktop/.e2e-cache");
 const PAGES = 20_000;
@@ -71,15 +73,12 @@ export function ensureLargeTemplate(zone: string): string {
     return path;
   }
   try {
-    execFileSync("cargo", ["build", "--release", "-p", "pikos-cli"], {
-      cwd: ROOT,
-      stdio: "ignore",
-    });
+    const cli = pikosCli();
     const building = `${path}.building`;
     for (const suffix of ["", "-wal", "-shm"]) rmSync(`${building}${suffix}`, { force: true });
     const today = path.match(/large-\d+-(\d{4}-\d{2}-\d{2})-/)![1]!;
     execFileSync(
-      join(ROOT, "target/release/pikos"),
+      cli,
       [
         "--db",
         building,

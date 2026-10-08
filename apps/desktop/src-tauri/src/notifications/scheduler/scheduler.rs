@@ -346,6 +346,22 @@ async fn collect_daily_summary(
     })
 }
 
+/// The daily summary's today and overdue counts at `now`, for the e2e bridge, which runs no
+/// scheduler. None once today's summary has been logged.
+#[cfg(feature = "e2e-bridge")]
+pub(crate) async fn daily_summary_counts(
+    pool: &SqlitePool,
+    now: &chrono::DateTime<chrono::Local>,
+) -> Result<Option<(i64, i64)>, sqlx::Error> {
+    Ok(match collect_daily_summary(pool, now).await? {
+        DueSummary::Due {
+            today_count,
+            overdue_count,
+        } => Some((today_count, overdue_count)),
+        DueSummary::NotDue | DueSummary::AlreadyLogged => None,
+    })
+}
+
 /// One tick against the app: its settings, workspace, runtime state and the real clock.
 ///
 /// Internal scheduler fns return `sqlx::Error` directly (not `String`) so the

@@ -1,13 +1,18 @@
+import { execFileSync } from "node:child_process";
+
 import type { Page } from "@playwright/test";
 
+import { pikosCli } from "./cli";
 import {
   test as appTest,
+  bridgeCall,
   createFolder,
   dayFrom,
   expect,
   mod,
   quickAdd,
   seedSynced,
+  stamp,
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
 
@@ -18,7 +23,8 @@ async function scheduleOnPickerDay(app: Page, title: string, offset: number) {
   await app.getByRole("button", { name: /^(Set schedule|Scheduled: )/ }).click();
   const dialog = app.getByRole("dialog", { name: "Schedule picker" });
   const cell = dialog.getByRole("button", { exact: true, name: day });
-  if (!(await cell.isVisible())) await dialog.getByRole("button", { name: "Previous month" }).click();
+  if (!(await cell.isVisible()))
+    await dialog.getByRole("button", { name: "Previous month" }).click();
   await cell.click();
   await app.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
@@ -41,7 +47,10 @@ appTest(
   "a manual order set by dragging survives a relaunch",
   { tag: ["@LIST-08"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "LIST-08 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "LIST-08 reloads, and the mock keeps nothing across a reload"
+    );
     for (const title of ["alpha task", "bravo task", "charlie task"]) await quickAdd(app, title);
     const items = app.locator("[data-page-list-item]");
     let order: string[] = [];
@@ -58,7 +67,9 @@ appTest(
       if (!source || !target) throw new Error("page rows have no boxes");
       await app.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
       await app.mouse.down();
-      await app.mouse.move(source.x + source.width / 2 + 16, source.y + source.height / 2, { steps: 4 });
+      await app.mouse.move(source.x + source.width / 2 + 16, source.y + source.height / 2, {
+        steps: 4,
+      });
       await app.mouse.move(target.x + target.width / 2, target.y + 4, { steps: 10 });
       await app.mouse.up();
 
@@ -126,16 +137,19 @@ appTest(
     const title = app.getByLabel("Page title");
     const order = await firstLines(app);
 
-    await appTest.step("LIST-01 Arrow Down and Up move the selection and open each page", async () => {
-      await list.filter({ hasText: order[0]! }).click();
-      await expect(title).toHaveText(order[0]!);
-      await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-      await app.keyboard.press("ArrowDown");
-      await expect(title).toHaveText(order[1]!);
-      await expect(list.filter({ hasText: order[1]! })).toHaveAttribute("data-active", "true");
-      await app.keyboard.press("ArrowUp");
-      await expect(title).toHaveText(order[0]!);
-    });
+    await appTest.step(
+      "LIST-01 Arrow Down and Up move the selection and open each page",
+      async () => {
+        await list.filter({ hasText: order[0]! }).click();
+        await expect(title).toHaveText(order[0]!);
+        await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await app.keyboard.press("ArrowDown");
+        await expect(title).toHaveText(order[1]!);
+        await expect(list.filter({ hasText: order[1]! })).toHaveAttribute("data-active", "true");
+        await app.keyboard.press("ArrowUp");
+        await expect(title).toHaveText(order[0]!);
+      }
+    );
 
     await appTest.step("LIST-01 Enter on a focused row opens it", async () => {
       await list.filter({ hasText: order[2]! }).focus();
@@ -216,17 +230,20 @@ appTest(
       await overdue.click();
     });
 
-    await appTest.step("LIST-04 Move to today moves the plain page and names the rest", async () => {
-      await app.getByRole("button", { name: "Move to today" }).click();
-      await expect(
-        app.getByRole("alert", { name: /^Moved 1 · 1 recurring, \d+ synced left$/ })
-      ).toBeVisible();
-      await overdue.click();
-      await expect(overdue).toHaveAttribute("aria-expanded", "false");
-      await expect(items.filter({ hasText: "call the landlord" })).toBeVisible();
-      await expect(items.filter({ hasText: "water the plants" })).toHaveCount(0);
-      await expect(items.filter({ hasText: "Budget sign-off" })).toHaveCount(0);
-    });
+    await appTest.step(
+      "LIST-04 Move to today moves the plain page and names the rest",
+      async () => {
+        await app.getByRole("button", { name: "Move to today" }).click();
+        await expect(
+          app.getByRole("alert", { name: /^Moved 1 · 1 recurring, \d+ synced left$/ })
+        ).toBeVisible();
+        await overdue.click();
+        await expect(overdue).toHaveAttribute("aria-expanded", "false");
+        await expect(items.filter({ hasText: "call the landlord" })).toBeVisible();
+        await expect(items.filter({ hasText: "water the plants" })).toHaveCount(0);
+        await expect(items.filter({ hasText: "Budget sign-off" })).toHaveCount(0);
+      }
+    );
   }
 );
 
@@ -239,7 +256,8 @@ appTest(
     const folderRows = sidebar.getByRole("button").filter({ has: app.getByTestId("folder-color") });
     const folderOrder = async () => {
       const names: string[] = [];
-      for (const row of await folderRows.all()) names.push((await row.getAttribute("aria-label")) ?? "");
+      for (const row of await folderRows.all())
+        names.push((await row.getAttribute("aria-label")) ?? "");
       return names;
     };
 
@@ -295,23 +313,31 @@ appTest(
       }
     });
 
-    await appTest.step("LIST-06 deleting a folder names its page count outside the quotes", async () => {
-      await folder("Chores").click();
-      await quickAdd(app, "buy bulbs");
-      await quickAdd(app, "fix the gate");
-      await folder("Chores").click({ button: "right" });
-      await app.getByRole("menuitem", { name: "Delete" }).click();
-      await expect(app.getByRole("alert", { name: "Deleted “Chores” and 2 pages" })).toBeVisible();
-      await expect(folder("Chores")).toHaveCount(0);
-    });
+    await appTest.step(
+      "LIST-06 deleting a folder names its page count outside the quotes",
+      async () => {
+        await folder("Chores").click();
+        await quickAdd(app, "buy bulbs");
+        await quickAdd(app, "fix the gate");
+        await folder("Chores").click({ button: "right" });
+        await app.getByRole("menuitem", { name: "Delete" }).click();
+        await expect(
+          app.getByRole("alert", { name: "Deleted “Chores” and 2 pages" })
+        ).toBeVisible();
+        await expect(folder("Chores")).toHaveCount(0);
+      }
+    );
   }
 );
 
 appTest(
   "the sort menu reorders each view on its own, survives relaunch, and is absent on date views",
-  { tag: ["@LIST-07"] },
+  { tag: ["@LIST-07:3"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "LIST-07 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "LIST-07 reloads, and the mock keeps nothing across a reload"
+    );
     const sortChip = app.getByRole("button", { name: /^Sort:/ });
     async function sortBy(mode: "Date" | "Title" | "Priority" | "Manual") {
       await sortChip.click();
@@ -375,7 +401,10 @@ appTest(
   "Completed collapses on every view change, and loads more on request",
   { tag: ["@LIST-11:2"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "LIST-11 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "LIST-11 reloads, and the mock keeps nothing across a reload"
+    );
     // One more than a batch, completed before the relaunch, so the batch can't hold them all.
     for (let i = 1; i <= 21; i++) await quickAdd(app, `done item ${i}`);
     await app.locator("body").click({ position: { x: 0, y: 0 } });
@@ -454,20 +483,23 @@ appTest(
     const nav = app.getByRole("navigation", { name: "Workspace navigation" });
     const width = async () => (await nav.boundingBox())?.width ?? 0;
 
-    await appTest.step("LIST-13 the resize handle drags the sidebar wider, and it holds", async () => {
-      const before = await width();
-      const handle = await app.getByRole("separator", { name: "Resize sidebar" }).boundingBox();
-      if (!handle) throw new Error("no resize handle");
-      await app.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
-      await app.mouse.down();
-      await app.mouse.move(handle.x + 60, handle.y + handle.height / 2, { steps: 8 });
-      await app.mouse.up();
-      await expect.poll(width).toBeGreaterThan(before + 40);
-      const dragged = await width();
-      await app.reload();
-      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
-      await expect.poll(width).toBe(dragged);
-    });
+    await appTest.step(
+      "LIST-13 the resize handle drags the sidebar wider, and it holds",
+      async () => {
+        const before = await width();
+        const handle = await app.getByRole("separator", { name: "Resize sidebar" }).boundingBox();
+        if (!handle) throw new Error("no resize handle");
+        await app.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+        await app.mouse.down();
+        await app.mouse.move(handle.x + 60, handle.y + handle.height / 2, { steps: 8 });
+        await app.mouse.up();
+        await expect.poll(width).toBeGreaterThan(before + 40);
+        const dragged = await width();
+        await app.reload();
+        await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+        await expect.poll(width).toBe(dragged);
+      }
+    );
 
     await appTest.step("LIST-13 Cmd+\\ hides the sidebar and brings it back", async () => {
       await app.keyboard.press(mod("Mod+\\"));
@@ -476,13 +508,80 @@ appTest(
       await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
     });
 
-    await appTest.step("LIST-13 a window too narrow for the sidebar gets the switcher", async () => {
-      const switcher = app.getByRole("button", { name: "Switch view" });
-      await expect(switcher).toHaveCount(0);
-      await app.setViewportSize({ height: 720, width: 900 });
-      await switcher.click();
-      await app.getByRole("dialog").getByRole("button", { name: /^Today/ }).click();
-      await expect(switcher).toContainText("Today");
-    });
+    await appTest.step(
+      "LIST-13 a window too narrow for the sidebar gets the switcher",
+      async () => {
+        const switcher = app.getByRole("button", { name: "Switch view" });
+        await expect(switcher).toHaveCount(0);
+        await app.setViewportSize({ height: 720, width: 900 });
+        await switcher.click();
+        await app
+          .getByRole("dialog")
+          .getByRole("button", { name: /^Today/ })
+          .click();
+        await expect(switcher).toContainText("Today");
+      }
+    );
+  }
+);
+
+/** The seeded synced calendar, a native page yesterday and one just after midnight, and a synced
+ *  event just after midnight, so today holds one of each that is already over. */
+async function seedTodayAgreement(app: Page) {
+  appTest.skip(
+    new Date().getHours() === 0 && new Date().getMinutes() < 20,
+    "the synced one-off has to be over"
+  );
+  await seedSynced(app);
+  await quickAdd(app, "call the landlord");
+  await scheduleOnPickerDay(app, "call the landlord", -1);
+  await quickAdd(app, "early start @today at 12:05am");
+  await bridgeCall(app, "upstream_sync", {
+    calendar: "Personal",
+    events: [
+      {
+        end: await stamp(app, 0, "00:15"),
+        start: await stamp(app, 0, "00:05"),
+        timezone: "America/New_York",
+        title: "Dawn call",
+      },
+    ],
+  });
+  await app.setViewportSize({ height: 3000, width: 1400 });
+  await app.reload();
+  await app.getByRole("button", { name: /^Today/ }).click();
+  const overdue = await expandOverdue(app);
+  await expect(app.locator("[data-page-list-item]").filter({ hasText: "Dawn call" })).toBeVisible();
+  return overdue;
+}
+
+appTest("Today lists what pikos today lists", { tag: ["@CLI-06"] }, async ({ app }) => {
+  await seedTodayAgreement(app);
+  const shown = await firstLines(app);
+
+  const db = await bridgeCall<string>(app, "bridge_workspace_path");
+  const cli = JSON.parse(
+    execFileSync(pikosCli(), ["--db", db, "--json", "today"], { encoding: "utf8" })
+  ) as { title: string }[];
+
+  expect(cli.map((p) => p.title).sort()).toEqual([...shown].sort());
+});
+
+appTest(
+  "the daily summary counts as many today as Today lists, past synced one-off included",
+  { tag: ["@SYNC-27:3"] },
+  async ({ app }) => {
+    const overdue = await seedTodayAgreement(app);
+    await overdue.click();
+    await expect(overdue).toHaveAttribute("aria-expanded", "false");
+    const today = await firstLines(app);
+    expect(today).toContain("Dawn call");
+
+    const summary = await bridgeCall<{ overdue: number; today: number } | null>(
+      app,
+      "bridge_daily_summary"
+    );
+
+    expect(summary?.today).toBe(today.length);
   }
 );

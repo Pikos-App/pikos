@@ -207,6 +207,19 @@ export async function seedSynced(page: Page) {
   await expect(page.getByRole("button", { name: "Calendars" })).toBeVisible();
 }
 
+/** A wall-clock `offset` days from today, as a provider sends one. */
+export async function stamp(page: Page, offset: number, time: string): Promise<string> {
+  return page.evaluate(
+    ([days, hm]) => {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${hm}:00`;
+    },
+    [offset, time] as const
+  );
+}
+
 /** A day `offset` from today, spelled the ways the app shows it, read in the
  *  browser so it's the lane's zone, not the test runner's. */
 export function dayFrom(page: Page, offset: number) {
