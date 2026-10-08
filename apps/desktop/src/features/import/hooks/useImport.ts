@@ -1,6 +1,7 @@
 import type { CSVMappingConfig, ImageRef, ImportPlan, VaultFile } from "@pikos/core";
 import {
   applyMappings,
+  ASSET_DIR,
   cleanTitle,
   detectUniqueValues,
   extractText,
@@ -123,9 +124,9 @@ function wrapPlainText(text: string): string {
 
 /**
  * Resolve image references in a markdown body, copy files to workspace assets,
- * and rewrite the body with the saved absolute paths.
+ * and rewrite the body with their stored paths.
  */
-async function resolveImportImages(
+export async function resolveImportImages(
   body: string,
   imageRefs: ImageRef[],
   vaultRoot: string
@@ -192,10 +193,10 @@ function rewriteImageRef(body: string, ref: ImageRef, savedPath: string): string
 function addAssetPathsToJson(json: JSONContent): JSONContent {
   if (json.type === "image" && json.attrs?.["src"]) {
     const src = json.attrs["src"] as string;
-    // If src looks like an absolute filesystem path, set it as data-asset-path.
-    // Decode URI encoding (tiptap-markdown encodes spaces as %20) so the
-    // path matches the actual filesystem.
-    if (src.startsWith("/") && !src.startsWith("//")) {
+    // A stored asset path, or a full filesystem path, is the image's file: set it as
+    // data-asset-path. Decode URI encoding (tiptap-markdown encodes spaces as %20)
+    // so the path matches the actual filesystem.
+    if (src.startsWith(`${ASSET_DIR}/`) || (src.startsWith("/") && !src.startsWith("//"))) {
       const decodedSrc = decodeURIComponent(src);
       return {
         ...json,

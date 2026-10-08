@@ -1,0 +1,40 @@
+{
+  "assetsDir": "/Volumes/Next Mac/Pikos/assets",
+  "cases": [
+    {
+      "name": "a stored relative path",
+      "stored": "assets/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png",
+      "resolved": "/Volumes/Next Mac/Pikos/assets/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png"
+    },
+    {
+      "name": "a full path saved on another Mac",
+      "stored": "/Volumes/Old Mac/Pikos/assets/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png",
+      "resolved": "/Volumes/Next Mac/Pikos/assets/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png"
+    },
+    {
+      "name": "a full path saved by the staging build",
+      "stored": "/Volumes/Next Mac/Pikos Staging/assets/0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.JPG",
+      "resolved": "/Volumes/Next Mac/Pikos/assets/0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.JPG"
+    },
+    {
+      "name": "a full path outside an assets folder is left alone",
+      "stored": "/Volumes/Old Mac/Pictures/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png",
+      "resolved": "/Volumes/Old Mac/Pictures/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png"
+    },
+    {
+      "name": "a file Pikos did not name, in someone's own assets folder, is left alone",
+      "stored": "/Volumes/Old Mac/vault/assets/diagram.png",
+      "resolved": "/Volumes/Old Mac/vault/assets/diagram.png"
+    },
+    {
+      "name": "a relative path not under assets is left alone",
+      "stored": "images/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png",
+      "resolved": "images/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png"
+    },
+    {
+      "name": "a web image is left alone",
+      "stored": "https://example.com/assets/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png",
+      "resolved": "https://example.com/assets/3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png"
+    }
+  ]
+}

@@ -24,13 +24,12 @@ function isImagePath(path: string): boolean {
 async function insertImageAt(editor: Editor, sourcePath: string, pos: number): Promise<number> {
   try {
     const savedPath = await getPlatform().saveAsset(sourcePath);
-    const src = getPlatform().assetUrl(savedPath);
     const filename = sourcePath.split(/[\\/]/).pop() ?? "image";
     const { schema } = editor.view.state;
     const node = schema.nodes["image"]?.create({
       alt: filename.replace(/\.[^.]+$/, ""),
       "data-asset-path": savedPath,
-      src,
+      src: savedPath,
     });
     if (!node) return pos;
     const tr = editor.view.state.tr.insert(pos, node);

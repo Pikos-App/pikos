@@ -231,6 +231,7 @@ export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/a
 export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";
 export type { AccountConnectionState, SyncDotMeta, SyncDotState } from "./sync/syncStatus";
 export * from "./types";
+export { ASSET_DIR, resolveAssetPath } from "./utils/assetPath";
 export {
   dateKey,
   formatDateOnly,
