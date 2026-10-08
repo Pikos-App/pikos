@@ -58,6 +58,7 @@ afterEach(() => {
 });
 
 describe("deleteAllData", () => {
+  // qa: TRASH-08:3
   it("wipes disk, then clears the workspaces store so relaunch reseeds, then relaunches", async () => {
     const order: string[] = [];
     invoke.mockImplementation((cmd) => {

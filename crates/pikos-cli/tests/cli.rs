@@ -612,6 +612,7 @@ async fn update_moves_a_timed_page_and_keeps_its_length() {
     );
 }
 
+// qa: CLI-03
 #[tokio::test]
 async fn update_refuses_a_bare_date_against_a_timed_page() {
     let db = unique_db();

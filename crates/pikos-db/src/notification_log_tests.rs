@@ -450,6 +450,7 @@ async fn default_reminder_skips_pages_with_explicit_reminders() {
         .is_empty());
 }
 
+// qa: NOTIF-10
 #[tokio::test]
 async fn floating_synced_oneoff_default_reminder_fires_on_native_path() {
     // Twin of the explicit-lead case: with no page_reminders row the global
@@ -771,6 +772,7 @@ async fn overdue_count_skips_a_freshly_created_series() {
     assert_eq!(n, 0);
 }
 
+// qa: NOTIF-12:2
 #[tokio::test]
 async fn overdue_count_counts_a_page_created_before_the_utc_recency_cutoff() {
     let pool = test_pool().await;
@@ -791,6 +793,7 @@ async fn overdue_count_counts_a_page_created_before_the_utc_recency_cutoff() {
     assert_eq!(n, 1);
 }
 
+// qa: NOTIF-12:2
 #[tokio::test]
 async fn overdue_count_skips_a_fresh_import_east_of_utc() {
     let pool = test_pool().await;

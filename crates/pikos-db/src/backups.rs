@@ -379,6 +379,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // qa: EXP-09:3
     #[tokio::test]
     async fn restoring_puts_the_backup_back_and_keeps_what_it_displaced() {
         let (dir, path) = workspace().await;

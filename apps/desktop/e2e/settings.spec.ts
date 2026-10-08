@@ -58,6 +58,7 @@ appTest("settings opens via Cmd+, shortcut @smoke", async ({ app }) => {
 
 appTest(
   "Delete All Data dialog requires typing 'delete' to enable confirm",
+  { tag: ["@TRASH-08:3"] },
   async ({ app }) => {
     await app.getByRole("button", { name: "Open settings" }).click();
     await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
