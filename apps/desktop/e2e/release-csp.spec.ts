@@ -28,7 +28,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, test } from "./fixtures";
+import { expect, mod, quickAdd, test } from "./fixtures";
 
 declare global {
   interface Window {
@@ -57,39 +57,67 @@ function inlineScriptHashes(html: string): string[] {
 
 function withInlineHashes(csp: string, hashes: string[]): string {
   if (hashes.length === 0) return csp;
-  return csp.replace(/script-src ([^;]*)/, (_, sources: string) =>
-    `script-src ${sources} ${hashes.join(" ")}`
+  return csp.replace(
+    /script-src ([^;]*)/,
+    (_, sources: string) => `script-src ${sources} ${hashes.join(" ")}`
   );
 }
 
-test("the packaged CSP boots the app @csp-prod", async ({ page }) => {
-  const csp = releaseCsp();
+test(
+  "the packaged CSP boots the app and runs its main surfaces @csp-prod",
+  { tag: ["@PROD-01", "@PROD-02"] },
+  async ({ page }) => {
+    const csp = releaseCsp();
 
-  await page.route(
-    (url) => url.pathname === "/" || url.pathname === "/index.html",
-    async (route) => {
-      const response = await route.fetch();
-      const html = await response.text();
-      const meta = `<meta http-equiv="Content-Security-Policy" content="${withInlineHashes(csp, inlineScriptHashes(html))}">`;
-      await route.fulfill({ body: html.replace("</head>", `${meta}</head>`), response });
-    }
-  );
+    await page.route(
+      (url) => url.pathname === "/" || url.pathname === "/index.html",
+      async (route) => {
+        const response = await route.fetch();
+        const html = await response.text();
+        const meta = `<meta http-equiv="Content-Security-Policy" content="${withInlineHashes(csp, inlineScriptHashes(html))}">`;
+        await route.fulfill({ body: html.replace("</head>", `${meta}</head>`), response });
+      }
+    );
 
-  await page.addInitScript(() => {
-    window.__cspViolations = [];
-    document.addEventListener("securitypolicyviolation", (event) => {
-      window.__cspViolations?.push(
-        `${event.violatedDirective} blocked ${event.blockedURI || "an inline resource"}`
-      );
+    await page.addInitScript(() => {
+      window.__cspViolations = [];
+      document.addEventListener("securitypolicyviolation", (event) => {
+        window.__cspViolations?.push(
+          `${event.violatedDirective} blocked ${event.blockedURI || "an inline resource"}`
+        );
+      });
     });
-  });
 
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.goto("/");
+    await page.goto("/");
 
-  expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
-  expect(pageErrors).toEqual([]);
-  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
-});
+    expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+    // A policy can also deny what only loads on use: a lazy chunk, a font, a worker.
+    await quickAdd(page, "Under the shipped policy tomorrow at 3pm");
+    await page
+      .locator("[data-page-list-item]")
+      .filter({ hasText: "Under the shipped policy" })
+      .click();
+    const body = page.getByRole("textbox", { name: "Page content" });
+    await body.click();
+    await page.keyboard.type("Written under the release CSP.");
+    await expect(body).toContainText("Written under the release CSP.");
+    await page.getByRole("button", { name: "Calendar view" }).click();
+    await expect(page.getByRole("region", { name: "Week calendar" })).toBeVisible();
+    await page.keyboard.press("m");
+    await page.keyboard.press(mod("Mod+k"));
+    await page.keyboard.type("policy");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.keyboard.press("Escape");
+
+    expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  }
+);
