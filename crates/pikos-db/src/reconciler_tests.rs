@@ -2104,6 +2104,7 @@ async fn deleted_at_of(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String>
         .unwrap()
 }
 
+// qa: SYNC-21:4
 #[tokio::test]
 async fn removal_of_bare_mirror_hard_deletes() {
     let pool = setup().await;
@@ -2122,6 +2123,7 @@ async fn removal_of_bare_mirror_hard_deletes() {
     );
 }
 
+// qa: SYNC-21:4
 #[tokio::test]
 async fn removal_of_completed_page_detaches() {
     let pool = setup().await;
@@ -2192,6 +2194,7 @@ async fn removal_of_skipped_occurrence_series_detaches() {
     assert_eq!(sync_state(&pool, &page_id).await, "detached");
 }
 
+// qa: SYNC-21:4
 #[tokio::test]
 async fn removal_of_user_modified_page_detaches() {
     let pool = setup().await;

@@ -129,6 +129,64 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
     assert_eq!(moved, "2026-10-19T11:00:00");
 }
 
+// qa: SYNC-08:4
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_right_password_resumes_a_flagged_account_on_the_same_row_with_its_pages() {
+    let replay = Replay::start(&fixture(&recording("radicale"))).await;
+    let pool = pikos_db::test_pool().await;
+    connect_and_sync(&pool, &replay.url).await;
+    let account_id: String = scalar(&pool, "SELECT id FROM sync_account").await;
+    let pages_before: Vec<String> = sqlx::query_scalar("SELECT id FROM pages ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    pikos_db::sync_commands::set_reconnect_needed_impl(&pool, &account_id, true)
+        .await
+        .unwrap();
+
+    // Discovery asks `/pikos/` twice for different answers, and a spent replay repeats only the
+    // last one, so the reconnect discovers against a fresh replay.
+    let rediscover = Replay::start(&fixture(&recording("radicale"))).await;
+    let store = MemoryStore::default();
+    let seed = Keychain::with_store(Box::new(store.clone()));
+    seed.store(
+        &account_id,
+        &crate::caldav::CaldavCredentials {
+            base_url: rediscover.url.clone(),
+            username: "pikos".into(),
+            password: "a-rotated-out-password".into(),
+        }
+        .to_blob()
+        .unwrap(),
+    )
+    .unwrap();
+    let resumed = crate::reconnect_caldav(
+        &pool,
+        Keychain::with_store(Box::new(store)),
+        &account_id,
+        "replay-password".into(),
+    )
+    .await
+    .expect("reconnect");
+
+    assert_eq!(resumed.account.id, account_id);
+    assert!(!resumed.account.reconnect_needed);
+    assert_eq!(
+        scalar::<i64>(&pool, "SELECT COUNT(*) FROM sync_account").await,
+        1
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, "SELECT reconnect_needed FROM sync_account").await,
+        0
+    );
+    let pages_after: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM pages WHERE deleted_at IS NULL ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pages_after, pages_before);
+}
+
 // qa: PRIV-03
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_connected_accounts_password_is_nowhere_in_the_workspace_files() {

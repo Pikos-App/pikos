@@ -129,6 +129,7 @@ async fn assert_left_dormant_and_empty(pool: &sqlx::SqlitePool) {
     assert_eq!(calendars, 0, "the refused connect saved its calendars");
 }
 
+// qa: LNX-03
 #[tokio::test]
 async fn a_caldav_connect_whose_password_cannot_be_stored_leaves_no_live_account() {
     let pool = test_pool().await;
@@ -346,6 +347,7 @@ fn sweep_for(dir: &std::path::Path, needle: &str, suffixes: &[&str]) {
     );
 }
 
+// qa: SYNC-10:4
 #[tokio::test]
 async fn disconnect_goes_dormant_and_hides_the_account() {
     let pool = test_pool().await;
@@ -393,6 +395,51 @@ async fn disconnect_goes_dormant_and_hides_the_account() {
         backing.get(&acc.id).is_err(),
         "credential removed from the keychain"
     );
+}
+
+// qa: SYNC-10:4
+#[tokio::test]
+async fn a_disconnect_removes_untouched_mirrors_and_keeps_edited_pages_detached() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    let cal = upsert_sync_calendar_impl(&pool, &acc.id, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap();
+    let provider = Scripted::new(SyncDelta {
+        upserts: vec![
+            one_event("href-1", "uid-bare", "Standup"),
+            one_event("href-2", "uid-edited", "Planning"),
+        ],
+        next_token: Some(SyncToken("tok-1".into())),
+        ..Default::default()
+    });
+    resync_account(&pool, &provider, &acc.id).await.unwrap();
+    sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE ical_uid = 'uid-edited'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    disconnect_account(&pool, memory_keychain(), &acc.id)
+        .await
+        .unwrap();
+
+    let live: Vec<String> =
+        sqlx::query_scalar("SELECT title FROM pages WHERE deleted_at IS NULL ORDER BY title")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(live, ["Planning"]);
+    let state: String =
+        sqlx::query_scalar("SELECT sync_state FROM page_sync WHERE ical_uid = 'uid-edited'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(state, "detached");
 }
 
 // qa: SYNC-07:3
@@ -462,6 +509,7 @@ async fn same_named_calendars_on_two_accounts_keep_their_own_folders_through_a_d
 // revoked, or (here) no OAuth client in a test build. The account must still go
 // dormant and lose its credential, or a user who can't reach Google could never
 // disconnect.
+// qa: SYNC-10:4
 #[tokio::test]
 async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
     let pool = test_pool().await;
@@ -493,6 +541,7 @@ async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
 // The wipe deletes the DB, and the account ids in it are the keychain keys — a
 // credential missed here can never be found again, only used. Dormant accounts are
 // swept too: their credential is usually already gone, but this is the last pass.
+// qa: TRASH-08:3
 #[tokio::test]
 async fn releasing_credentials_clears_every_account_including_dormant_ones() {
     let pool = test_pool().await;
@@ -865,6 +914,20 @@ async fn resync_syncs_only_enabled_calendars() {
     assert_eq!(token.as_deref(), Some("tok-1"));
 }
 
+// qa: SYNC-15:2
+#[tokio::test]
+async fn a_synced_event_gets_no_pikos_reminder_of_its_own() {
+    let pool = test_pool().await;
+    synced_account(&pool).await;
+
+    assert_eq!(page_count(&pool).await, 1);
+    let reminders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_reminders")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reminders, 0);
+}
+
 // ─── refresh (full re-read) ─────────────────────────────────────────────────────
 
 /// One account with one enabled calendar, already backfilled — the state a refresh
@@ -893,6 +956,7 @@ async fn synced_account(pool: &sqlx::SqlitePool) -> (String, String) {
 /// re-delivery, every refresh would restamp the whole calendar and float it to the
 /// top of any recently-edited view (invariant 5) — which would make the action
 /// itself the reason not to use it.
+// qa: SYNC-09:5
 #[tokio::test]
 async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
     let pool = test_pool().await;
@@ -942,6 +1006,7 @@ async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
 /// cursor will never revisit. Only a cursor-less enumerate is authoritative enough
 /// to sweep it, and until this action the sole way to force one was the
 /// disable→enable toggle, which tears down the pages it is meant to repair.
+// qa: SYNC-09:5
 #[tokio::test]
 async fn a_refresh_sweeps_an_upstream_deletion_a_resync_cannot_see() {
     let pool = test_pool().await;
@@ -1005,6 +1070,7 @@ async fn connect_caldav_persists_nothing_when_discovery_fails() {
     );
 }
 
+// qa: SYNC-08:4
 #[tokio::test]
 async fn reconnect_caldav_keeps_the_working_credential_when_the_new_password_fails() {
     let pool = test_pool().await;

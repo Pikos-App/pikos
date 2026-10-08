@@ -13,6 +13,7 @@ describe("calendarSyncDot", () => {
     expect(calendarSyncDot(cal(false, NOW.toISOString()), "synced", NOW).state).toBe("off");
   });
 
+  // qa: SYNC-09:5
   it("is active for a fresh successful resync result", () => {
     expect(calendarSyncDot(cal(true, null), "synced", NOW).state).toBe("active");
   });
@@ -23,6 +24,7 @@ describe("calendarSyncDot", () => {
     );
   });
 
+  // qa: SYNC-09:5
   it("is stale when the last resync was offline", () => {
     expect(calendarSyncDot(cal(true, NOW.toISOString()), "offline", NOW).state).toBe("stale");
   });
