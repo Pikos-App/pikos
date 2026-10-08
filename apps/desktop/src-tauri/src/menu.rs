@@ -96,17 +96,17 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     // ── Help ─────────────────────────────────────────────────────
     let help_docs = MenuItemBuilder::new("Pikos FAQ")
-        .id("help_docs")
+        .id(HELP_DOCS)
         .build(handle)?;
     let help_release_notes = MenuItemBuilder::new("Release Notes")
-        .id("help_release_notes")
+        .id(HELP_RELEASE_NOTES)
         .build(handle)?;
     let help_shortcuts = MenuItemBuilder::new("Keyboard Shortcuts")
         .id("keyboard_shortcuts")
         .accelerator("CmdOrCtrl+/")
         .build(handle)?;
     let help_bug = MenuItemBuilder::new("Report a Bug…")
-        .id("help_bug")
+        .id(HELP_BUG)
         .build(handle)?;
     let help_menu = SubmenuBuilder::new(handle, "Help")
         .item(&help_docs)
@@ -126,30 +126,40 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()
 }
 
-/// Route a menu click. The items the frontend owns are forwarded to it by id;
-/// the rest are handled here.
-pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
-    let id = event.id().0.clone();
-    match id.as_str() {
-        "help_docs" => {
-            let _ = tauri_plugin_opener::open_url("https://pikos.app/faq", None::<&str>);
-        }
-        "help_release_notes" => {
-            let _ = tauri_plugin_opener::open_url("https://pikos.app/release-notes", None::<&str>);
-        }
-        "help_bug" => {
+const HELP_DOCS: &str = "help_docs";
+const HELP_RELEASE_NOTES: &str = "help_release_notes";
+const HELP_BUG: &str = "help_bug";
+
+/// The page a Help item opens, by its menu id.
+fn help_url(id: &str) -> Option<String> {
+    match id {
+        HELP_DOCS => Some("https://pikos.app/faq".into()),
+        HELP_RELEASE_NOTES => Some("https://pikos.app/release-notes".into()),
+        HELP_BUG => {
             let os = if cfg!(target_os = "macos") {
                 "macOS"
             } else {
                 "Linux"
             };
-            let url = format!(
+            Some(format!(
                 "https://pikos.app/bugs?os={}&version={}",
                 os,
                 env!("CARGO_PKG_VERSION"),
-            );
-            let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
+            ))
         }
+        _ => None,
+    }
+}
+
+/// Route a menu click. The items the frontend owns are forwarded to it by id;
+/// the rest are handled here.
+pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
+    let id = event.id().0.clone();
+    if let Some(url) = help_url(&id) {
+        let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
+        return;
+    }
+    match id.as_str() {
         "new_page" | "close_page" | "settings" | "toggle_sidebar" | "toggle_calendar"
         | "check_updates" | "keyboard_shortcuts" => {
             if let Some(window) = app.get_webview_window("main") {
@@ -160,5 +170,28 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // qa: SET-10:3
+    #[test]
+    fn report_a_bug_opens_the_bug_page_with_the_os_and_version() {
+        let url = help_url(HELP_BUG).expect("Report a Bug opens a page");
+        let os = if cfg!(target_os = "macos") {
+            "macOS"
+        } else {
+            "Linux"
+        };
+        assert_eq!(
+            url,
+            format!(
+                "https://pikos.app/bugs?os={os}&version={}",
+                env!("CARGO_PKG_VERSION")
+            )
+        );
     }
 }
