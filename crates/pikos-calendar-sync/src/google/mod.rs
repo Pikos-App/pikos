@@ -12,6 +12,8 @@ mod error;
 mod events;
 mod loopback;
 mod model;
+#[cfg(test)]
+pub(crate) mod replay_provider;
 mod sync;
 mod transport;
 

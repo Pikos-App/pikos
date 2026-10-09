@@ -171,7 +171,7 @@ where
 
 /// The half of [`connect_google`] after the grant and the calendar list, so a test can reach
 /// it without Google.
-async fn save_google(
+pub(crate) async fn save_google(
     pool: &SqlitePool,
     keychain: &Keychain,
     credentials: &crate::google::GoogleCredentials,

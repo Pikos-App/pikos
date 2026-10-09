@@ -20,32 +20,53 @@ fn recording(name: &str) -> String {
 /// go on proving behaviour it no longer has. Re-record with `scripts/record-sync.sh`.
 const FRESH_FOR_DAYS: i64 = 180;
 
-/// Connect as a person does, turn the calendar on, and sync it. One keychain store throughout, so
-/// the sync reads the credential the connect stored.
-async fn connect_and_sync(pool: &sqlx::SqlitePool, base_url: &str) {
+/// Connect as a person does, turn the named calendars on, and sync them. One keychain store
+/// throughout, so the sync reads the credential the connect stored. Returns the account and that
+/// store, for a test that syncs again.
+async fn connect_and_sync(
+    pool: &sqlx::SqlitePool,
+    base_url: &str,
+    calendars: &[&str],
+) -> (String, MemoryStore) {
+    connect_and_sync_as(pool, base_url, ("pikos", "replay-password"), calendars).await
+}
+
+async fn connect_and_sync_as(
+    pool: &sqlx::SqlitePool,
+    base_url: &str,
+    (username, password): (&str, &str),
+    calendars: &[&str],
+) -> (String, MemoryStore) {
     let store = MemoryStore::default();
     let connected = connect_caldav(
         pool,
         Keychain::with_store(Box::new(store.clone())),
         base_url.to_string(),
-        "pikos".to_string(),
-        "replay-password".to_string(),
+        username.to_string(),
+        password.to_string(),
         "Replay".to_string(),
     )
     .await
     .expect("connect");
-    let home = connected
-        .calendars
-        .iter()
-        .find(|c| c.display_name == "Home")
-        .expect("the Home calendar was discovered");
-    pikos_db::sync_commands::toggle_sync_calendar_impl(pool, &home.id, true, None)
-        .await
-        .expect("turn Home on");
+    for name in calendars {
+        let calendar = connected
+            .calendars
+            .iter()
+            .find(|c| c.display_name == *name)
+            .unwrap_or_else(|| panic!("{name} was discovered"));
+        pikos_db::sync_commands::toggle_sync_calendar_impl(pool, &calendar.id, true, None)
+            .await
+            .unwrap_or_else(|e| panic!("turn {name} on: {e}"));
+    }
+    sync(pool, &connected.account.id, &store).await;
+    (connected.account.id, store)
+}
+
+async fn sync(pool: &sqlx::SqlitePool, account_id: &str, store: &MemoryStore) {
     let results = resync_account_auto(
         pool,
-        Keychain::with_store(Box::new(store)),
-        &connected.account.id,
+        Keychain::with_store(Box::new(store.clone())),
+        account_id,
     )
     .await
     .expect("sync");
@@ -78,7 +99,7 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
     let replay = Replay::start(&fixture(&recording("radicale"))).await;
     let pool = pikos_db::test_pool().await;
 
-    connect_and_sync(&pool, &replay.url).await;
+    connect_and_sync(&pool, &replay.url, &["Home"]).await;
 
     assert_eq!(replay.unanswered(), Vec::<String>::new());
     let titles: Vec<String> =
@@ -134,7 +155,7 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
 async fn the_right_password_resumes_a_flagged_account_on_the_same_row_with_its_pages() {
     let replay = Replay::start(&fixture(&recording("radicale"))).await;
     let pool = pikos_db::test_pool().await;
-    connect_and_sync(&pool, &replay.url).await;
+    connect_and_sync(&pool, &replay.url, &["Home"]).await;
     let account_id: String = scalar(&pool, "SELECT id FROM sync_account").await;
     let pages_before: Vec<String> = sqlx::query_scalar("SELECT id FROM pages ORDER BY id")
         .fetch_all(&pool)
@@ -196,7 +217,7 @@ async fn a_connected_accounts_password_is_nowhere_in_the_workspace_files() {
     let path = dir.join("workspace.sqlite");
     let pool = pikos_db::open_pool(path.to_str().unwrap()).await.unwrap();
 
-    connect_and_sync(&pool, &replay.url).await;
+    connect_and_sync(&pool, &replay.url, &["Home"]).await;
 
     // Read while the pool is open, so the write-ahead log still holds what it has.
     for suffix in ["", "-wal", "-shm"] {
@@ -216,11 +237,609 @@ async fn a_connected_accounts_password_is_nowhere_in_the_workspace_files() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Writes the fixture above when `scripts/record-sync.sh` runs it against a live server.
+/// Writes a fixture when `scripts/record-sync.sh caldav` runs it against a live server, through the
+/// same connect and sync the app uses. The account is `CALDAV_USER` and `CALDAV_PASSWORD`, the
+/// calendars turned on are `PIKOS_RECORD_CALENDARS`, and both default to the local Radicale the
+/// first fixture came from. With `PIKOS_RECORD_POLL_SECS` it goes on syncing every ten seconds that
+/// long, so changes made upstream meanwhile are recorded as the app would see them.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "records a live server through the recording proxy; see scripts/record-sync.sh"]
 async fn record_a_live_caldav_calendar() {
+    let env = |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());
     let url = std::env::var("PIKOS_CALDAV_URL").expect("PIKOS_CALDAV_URL");
+    let (user, password) = (
+        env("CALDAV_USER", "pikos"),
+        env("CALDAV_PASSWORD", "replay-password"),
+    );
+    let calendars = env("PIKOS_RECORD_CALENDARS", "Home");
+    let calendars: Vec<&str> = calendars.split(',').map(str::trim).collect();
+    let poll_secs: u64 = env("PIKOS_RECORD_POLL_SECS", "0")
+        .parse()
+        .expect("PIKOS_RECORD_POLL_SECS");
     let pool = pikos_db::test_pool().await;
-    connect_and_sync(&pool, &url).await;
+
+    let (account_id, store) =
+        connect_and_sync_as(&pool, &url, (&user, &password), &calendars).await;
+    eprintln!(
+        "Synced {} pages.",
+        scalar::<i64>(&pool, "SELECT COUNT(*) FROM pages").await
+    );
+
+    for left in (0..poll_secs / 10).rev() {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        sync(&pool, &account_id, &store).await;
+        eprintln!(
+            "Synced again: {} pages. {}s left.",
+            scalar::<i64>(&pool, "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL").await,
+            left * 10
+        );
+    }
+}
+
+/// Every page a sync produced: title, folder, then each schedule row's start, end, zone and the
+/// occurrence it overrides, with the page's rule and exclusions. One row per schedule row.
+type Synced = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+async fn synced(pool: &sqlx::SqlitePool) -> Vec<Synced> {
+    sqlx::query_as(
+        "SELECT p.title, f.name, s.scheduled_start, s.scheduled_end, s.timezone, s.original_date,
+                r.rrule || ' ' || r.rrule_exdates
+         FROM pages p JOIN folders f ON f.id = p.folder_id
+         LEFT JOIN page_schedules s ON s.page_id = p.id
+         LEFT JOIN page_recurrence_rules r ON r.page_id = p.id
+         WHERE p.deleted_at IS NULL ORDER BY p.title, s.scheduled_start",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+fn row(title: &str, folder: &str, [start, end, zone, original, rule]: [Option<&str>; 5]) -> Synced {
+    let own = |v: Option<&str>| v.map(str::to_string);
+    (
+        title.into(),
+        folder.into(),
+        own(start),
+        own(end),
+        own(zone),
+        own(original),
+        own(rule),
+    )
+}
+
+/// The seed corpus, `S-01` to `S-22`, as Fastmail serves it. Fastmail holds one copy of an event
+/// per account, so the shared kickoff is in the second calendar only, and the summer course ended
+/// before the sync window, so it never arrives.
+fn seeded() -> Vec<Synced> {
+    let (la, london, tokyo) = (
+        Some("America/Los_Angeles"),
+        Some("Europe/London"),
+        Some("Asia/Tokyo"),
+    );
+    let qa = "Pikos QA";
+    let series = |rule| [None, None, None, None, Some(rule)];
+    vec![
+        row(
+            "Anniversary",
+            qa,
+            series("FREQ=YEARLY;BYMONTHDAY=15;BYMONTH=3 []"),
+        ),
+        row("Book club", qa, series("FREQ=MONTHLY;BYDAY=3TU []")),
+        row(
+            "Company offsite",
+            qa,
+            [Some("2026-10-16"), Some("2026-10-16"), None, None, None],
+        ),
+        row(
+            "Dentist",
+            qa,
+            [
+                Some("2026-10-15T14:00:00"),
+                Some("2026-10-15T14:45:00"),
+                la,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Design review (London)",
+            qa,
+            [
+                Some("2026-10-14T15:00:00"),
+                Some("2026-10-14T16:00:00"),
+                london,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Flight check-in",
+            qa,
+            [
+                Some("2026-10-18T07:00:00"),
+                Some("2026-10-18T07:30:00"),
+                la,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Floating wake-up",
+            qa,
+            [
+                Some("2026-10-14T08:00:00"),
+                Some("2026-10-14T08:15:00"),
+                None,
+                None,
+                None,
+            ],
+        ),
+        row("Gym", qa, series("FREQ=WEEKLY;BYDAY=MO []")),
+        row(
+            "On-call rotation",
+            qa,
+            [
+                Some("2026-10-29"),
+                Some("2026-10-29"),
+                None,
+                Some("2026-10-27"),
+                Some(r#"FREQ=WEEKLY;BYDAY=TU ["2026-10-20"]"#),
+            ],
+        ),
+        row("Physio", qa, series("FREQ=WEEKLY;COUNT=3;BYDAY=MO []")),
+        row(
+            "Product summit",
+            qa,
+            [Some("2026-10-19"), Some("2026-10-21"), None, None, None],
+        ),
+        row(
+            "Recurring review",
+            qa,
+            [
+                Some("2026-10-28T14:00:00"),
+                Some("2026-10-28T14:30:00"),
+                la,
+                Some("2026-10-26T11:00:00"),
+                Some(r#"FREQ=WEEKLY;BYDAY=MO ["2026-10-19T11:00:00"]"#),
+            ],
+        ),
+        row(
+            "Recurring review",
+            qa,
+            [
+                Some("2026-10-30T11:00:00"),
+                Some("2026-10-30T11:30:00"),
+                la,
+                Some("2026-11-02T11:00:00"),
+                Some(r#"FREQ=WEEKLY;BYDAY=MO ["2026-10-19T11:00:00"]"#),
+            ],
+        ),
+        row("Rent due", qa, series("FREQ=MONTHLY;BYMONTHDAY=-1 []")),
+        row(
+            "Shared kickoff",
+            "Pikos QA B",
+            [
+                Some("2026-10-16T10:00:00"),
+                Some("2026-10-16T11:00:00"),
+                la,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Swim class (term ends)",
+            qa,
+            series("FREQ=WEEKLY;UNTIL=20261114T133000;BYDAY=SA []"),
+        ),
+        row(
+            "Swim practice",
+            qa,
+            series("FREQ=WEEKLY;COUNT=4;BYDAY=TH []"),
+        ),
+        row(
+            "Team retro",
+            qa,
+            series("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3 []"),
+        ),
+        row(
+            "Team standup",
+            qa,
+            [
+                Some("2026-10-13T09:30:00"),
+                Some("2026-10-13T09:45:00"),
+                la,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Tokyo sync",
+            qa,
+            [
+                Some("2026-10-15T10:00:00"),
+                Some("2026-10-15T10:30:00"),
+                tokyo,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Trip notes: Tom & Jerry's <draft>",
+            qa,
+            [
+                Some("2026-10-17T12:00:00"),
+                Some("2026-10-17T13:00:00"),
+                la,
+                None,
+                None,
+            ],
+        ),
+        row(
+            "Weekly sync",
+            qa,
+            [
+                Some("2026-10-22T13:00:00"),
+                Some("2026-10-22T13:30:00"),
+                la,
+                Some("2026-10-21T13:00:00"),
+                Some("FREQ=WEEKLY;BYDAY=WE []"),
+            ],
+        ),
+    ]
+}
+
+/// `rows` after the five edits `seed.py cycle` makes upstream: the standup renamed, the London
+/// review two hours later, one more weekly review cancelled, and the offsite deleted. The fifth,
+/// a line added to the trip notes, is in the body rather than these rows.
+fn with_upstream_edits(mut rows: Vec<Synced>) -> Vec<Synced> {
+    rows.retain(|r| r.0 != "Company offsite");
+    for r in &mut rows {
+        match r.0.as_str() {
+            "Team standup" => r.0 = "Team standup (new room)".into(),
+            "Design review (London)" => {
+                r.2 = Some("2026-10-14T17:00:00".into());
+                r.3 = Some("2026-10-14T18:00:00".into());
+            }
+            "Recurring review" => {
+                r.6 = Some(
+                    r#"FREQ=WEEKLY;BYDAY=MO ["2026-10-19T11:00:00","2026-11-09T11:00:00"]"#.into(),
+                )
+            }
+            _ => {}
+        }
+    }
+    rows
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_recorded_fastmail_account_syncs_every_seeded_shape() {
+    let replay = Replay::start(&fixture(&recording("fastmail"))).await;
+    let pool = pikos_db::test_pool().await;
+
+    connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
+
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    assert_eq!(synced(&pool).await, seeded());
+    assert_eq!(
+        scalar::<i64>(&pool, "SELECT COUNT(*) FROM page_reminders").await,
+        0,
+        "a provider alarm never becomes a Pikos reminder"
+    );
+}
+
+/// What the seed wrote as the trip notes' description, with its trailing newline.
+const TRIP_NOTES: &str = "Packing & logistics: don't forget <passport>, 'adapters', snacks.\n\
+Itinéraire : Zürich → Kyōto → São Paulo. 東京で会いましょう。Привет! 🧳✈️🌏🍣\n\
+Budget 1,200 €; check-in by 7am; seats 14A & 14B.\n";
+
+// qa: SYNC-14
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_long_description_with_markup_characters_reads_back_from_fastmail_intact() {
+    let replay = Replay::start(&fixture(&recording("fastmail"))).await;
+    let pool = pikos_db::test_pool().await;
+
+    connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
+
+    let text: String = scalar(
+        &pool,
+        "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+    )
+    .await;
+    assert_eq!(text, TRIP_NOTES.repeat(12).trim_end());
+}
+
+/// Fastmail's later polls answer an unchanged calendar with an empty change list. Read as a full
+/// listing, that would sweep every event away, so two more syncs must leave every page as it was.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fastmail_polls_that_report_no_change_leave_every_page_untouched() {
+    let replay = Replay::start(&fixture(&recording("fastmail"))).await;
+    let pool = pikos_db::test_pool().await;
+    let (account_id, store) =
+        connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
+    let state = || async {
+        let pages: Vec<(String, String, Option<String>)> =
+            sqlx::query_as("SELECT id, updated_at, deleted_at FROM pages ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        let tokens: Vec<Option<String>> = sqlx::query_scalar(
+            "SELECT sync_token FROM sync_calendar WHERE enabled = 1 ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        (pages, tokens, synced(&pool).await)
+    };
+    let before = state().await;
+    assert!(
+        before.1.iter().all(Option::is_some),
+        "the first sync stored a sync token"
+    );
+
+    sync(&pool, &account_id, &store).await;
+    sync(&pool, &account_id, &store).await;
+
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    assert_eq!(state().await, before);
+}
+
+// qa: SYNC-01:2
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn connecting_fastmail_lists_its_calendars_with_every_one_off() {
+    let replay = Replay::start(&fixture(&recording("fastmail"))).await;
+    let pool = pikos_db::test_pool().await;
+
+    let connected = connect_caldav(
+        &pool,
+        Keychain::with_store(Box::new(MemoryStore::default())),
+        replay.url.clone(),
+        "pikos".to_string(),
+        "replay-password".to_string(),
+        "Replay".to_string(),
+    )
+    .await
+    .expect("connect");
+
+    let mut names: Vec<&str> = connected
+        .calendars
+        .iter()
+        .map(|c| c.display_name.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["Pikos QA", "Pikos QA B"]);
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            "SELECT COUNT(*) FROM sync_calendar WHERE enabled = 1"
+        )
+        .await,
+        0
+    );
+    assert_eq!(scalar::<i64>(&pool, "SELECT COUNT(*) FROM pages").await, 0);
+}
+
+/// After the first sync the recording carries the five edits `seed.py cycle` made on Fastmail,
+/// then the poll that picked them up. Syncing until the recording is spent must land each one and
+/// leave every other shape as seeded.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn changes_made_on_fastmail_reach_pikos() {
+    let replay = Replay::start(&fixture(&recording("fastmail"))).await;
+    let pool = pikos_db::test_pool().await;
+    let (account_id, store) =
+        connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
+
+    for _ in 0..20 {
+        if replay.spent() {
+            break;
+        }
+        sync(&pool, &account_id, &store).await;
+    }
+
+    assert!(replay.spent(), "twenty syncs didn't use up the recording");
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    let expected = with_upstream_edits(seeded());
+    assert_eq!(synced(&pool).await, expected);
+    let text: String = scalar(
+        &pool,
+        "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+    )
+    .await;
+    assert_eq!(text, TRIP_NOTES.repeat(12) + "Updated upstream.");
+}
+
+// qa: SYNC-01:2
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_wrong_fastmail_password_fails_and_keeps_nothing() {
+    let replay = Replay::start(&fixture(&recording("fastmail-wrong-password"))).await;
+    let pool = pikos_db::test_pool().await;
+    let store = MemoryStore::default();
+
+    let err = connect_caldav(
+        &pool,
+        Keychain::with_store(Box::new(store.clone())),
+        replay.url.clone(),
+        "pikos".to_string(),
+        "wrong-password".to_string(),
+        "Replay".to_string(),
+    )
+    .await
+    .expect_err("a wrong password doesn't connect");
+
+    assert!(
+        err.to_string()
+            .contains("check the username and app password"),
+        "{err}"
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, "SELECT COUNT(*) FROM sync_account").await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, "SELECT COUNT(*) FROM sync_calendar").await,
+        0
+    );
+    assert!(store.is_empty(), "nothing reached the keychain");
+}
+
+/// Connect a Google account as a person does, from the calendar list a fresh grant reads, then
+/// turn its QA calendar on and sync. The OAuth half is skipped: replaying needs no grant.
+async fn connect_and_sync_google(
+    pool: &sqlx::SqlitePool,
+    google: &crate::google::replay_provider::ReplayGoogle,
+) -> String {
+    let (remote, display_name) = google.list_for_connect().await.expect("list calendars");
+    let credentials = crate::google::GoogleCredentials {
+        access_token: "replay-token".into(),
+        refresh_token: "replay-refresh".into(),
+        expires_at: None,
+        granted_scopes: vec![],
+    };
+    let connected = crate::commands::save_google(
+        pool,
+        &Keychain::with_store(Box::new(MemoryStore::default())),
+        &credentials,
+        &display_name,
+        &remote,
+    )
+    .await
+    .expect("save the account");
+    let qa = connected
+        .calendars
+        .iter()
+        .find(|c| c.display_name == "Pikos QA")
+        .expect("Pikos QA was listed");
+    pikos_db::sync_commands::toggle_sync_calendar_impl(pool, &qa.id, true, None)
+        .await
+        .expect("turn Pikos QA on");
+    sync_google(pool, google, &connected.account.id).await;
+    connected.account.id
+}
+
+async fn sync_google(
+    pool: &sqlx::SqlitePool,
+    google: &crate::google::replay_provider::ReplayGoogle,
+    account_id: &str,
+) {
+    let results = crate::commands::resync_account(pool, google, account_id)
+        .await
+        .expect("sync");
+    assert!(
+        results.iter().all(|r| r.status == "synced"),
+        "a calendar didn't sync: {results:?}"
+    );
+}
+
+/// The seed as Google holds it: no CalDAV-only shapes, and the yearly rule's parts in Google's
+/// own order.
+fn seeded_google() -> Vec<Synced> {
+    let caldav_only = ["Floating wake-up", "Dentist", "Shared kickoff"];
+    let mut rows = seeded();
+    rows.retain(|r| !caldav_only.contains(&r.0.as_str()));
+    for r in &mut rows {
+        if r.0 == "Anniversary" {
+            r.6 = Some("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15 []".into());
+        }
+    }
+    rows
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_recorded_google_account_syncs_every_seeded_shape() {
+    let replay = Replay::start(&fixture(&recording("google"))).await;
+    let pool = pikos_db::test_pool().await;
+    let google = crate::google::replay_provider::ReplayGoogle::new(&replay.url);
+
+    connect_and_sync_google(&pool, &google).await;
+
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    assert_eq!(synced(&pool).await, seeded_google());
+    let text: String = scalar(
+        &pool,
+        "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+    )
+    .await;
+    assert_eq!(text, TRIP_NOTES.repeat(12).trim_end());
+    assert_eq!(
+        scalar::<i64>(&pool, "SELECT COUNT(*) FROM page_reminders").await,
+        0,
+        "a provider alarm never becomes a Pikos reminder"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn changes_made_in_google_calendar_reach_pikos() {
+    let replay = Replay::start(&fixture(&recording("google"))).await;
+    let pool = pikos_db::test_pool().await;
+    let google = crate::google::replay_provider::ReplayGoogle::new(&replay.url);
+    let account_id = connect_and_sync_google(&pool, &google).await;
+
+    for _ in 0..20 {
+        if replay.spent() {
+            break;
+        }
+        sync_google(&pool, &google, &account_id).await;
+    }
+
+    assert!(replay.spent(), "twenty syncs didn't use up the recording");
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    assert_eq!(synced(&pool).await, with_upstream_edits(seeded_google()));
+}
+
+/// The seed as iCloud serves it, less the dentist appointment: iCloud leaves an event with a
+/// duration and no end out of the date-range query a first sync makes, and Pikos fetches nothing
+/// beyond what that query returns, so the appointment never arrives.
+fn seeded_icloud() -> Vec<Synced> {
+    let mut rows = seeded();
+    rows.retain(|r| r.0 != "Dentist");
+    rows
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_recorded_icloud_account_syncs_every_seeded_shape() {
+    let replay = Replay::start(&fixture(&recording("icloud"))).await;
+    let pool = pikos_db::test_pool().await;
+
+    connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
+
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    assert_eq!(synced(&pool).await, seeded_icloud());
+    let text: String = scalar(
+        &pool,
+        "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+    )
+    .await;
+    assert_eq!(text, TRIP_NOTES.repeat(12).trim_end());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn changes_made_on_icloud_reach_pikos() {
+    let replay = Replay::start(&fixture(&recording("icloud"))).await;
+    let pool = pikos_db::test_pool().await;
+    let (account_id, store) =
+        connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
+
+    for _ in 0..30 {
+        if replay.spent() {
+            break;
+        }
+        sync(&pool, &account_id, &store).await;
+    }
+
+    assert!(replay.spent(), "thirty syncs didn't use up the recording");
+    assert_eq!(replay.unanswered(), Vec::<String>::new());
+    assert_eq!(synced(&pool).await, with_upstream_edits(seeded_icloud()));
+    let text: String = scalar(
+        &pool,
+        "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+    )
+    .await;
+    assert_eq!(text, TRIP_NOTES.repeat(12) + "Updated upstream.");
 }

@@ -45,6 +45,12 @@ impl CredentialStore for MemoryStore {
     }
 }
 
+impl MemoryStore {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.lock().unwrap().is_empty()
+    }
+}
+
 pub(crate) fn memory_keychain() -> Keychain {
     Keychain::with_store(Box::new(MemoryStore::default()))
 }

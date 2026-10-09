@@ -18,10 +18,33 @@ fn tls() -> rustls::ClientConfig {
     ))
     .with_safe_default_protocol_versions()
     .expect("the default protocol versions should always build");
+    #[cfg(test)]
+    if let Some(roots) = recording_ca() {
+        return builder.with_root_certificates(roots).with_no_client_auth();
+    }
     builder
         .with_platform_verifier()
         .expect("the platform verifier should always build")
         .with_no_client_auth()
+}
+
+/// Test builds only: when `PIKOS_RECORD_CA` names a PEM certificate, trust that alone. The
+/// recording test reaches a provider through a proxy that signs every host with it, and the OS
+/// refuses that for Apple's servers whatever the Mac trusts, because they are pinned to Apple's
+/// own chain.
+#[cfg(test)]
+fn recording_ca() -> Option<rustls::RootCertStore> {
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::CertificateDer;
+
+    let path = std::env::var("PIKOS_RECORD_CA").ok()?;
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in CertificateDer::pem_file_iter(&path).expect("read PIKOS_RECORD_CA") {
+        roots
+            .add(cert.expect("parse PIKOS_RECORD_CA"))
+            .expect("trust PIKOS_RECORD_CA");
+    }
+    Some(roots)
 }
 
 fn builder() -> reqwest::ClientBuilder {

@@ -2,8 +2,9 @@
 //!
 //! The fixture is what `scripts/sync-record.py` wrote while the app talked to a real provider.
 //! Requests are matched by method and path, each answered with that pair's recorded responses in
-//! order, the last one again once they run out, because sync requests carry a window computed
-//! from today and so never repeat a recorded body. The recorded origin is swapped for this
+//! order, the last one again once they run out. The query string is left out of the match, like
+//! the body, because sync requests carry a window computed from today and so never repeat a
+//! recorded one. The recorded origin is swapped for this
 //! server's wherever a response names it, so redirects and absolute hrefs land back here.
 
 use std::collections::{HashMap, VecDeque};
@@ -32,6 +33,7 @@ type Queues = Arc<Mutex<HashMap<(String, String), VecDeque<Exchange>>>>;
 
 pub struct Replay {
     pub url: String,
+    queues: Queues,
     unanswered: Arc<Mutex<Vec<String>>>,
 }
 
@@ -45,13 +47,21 @@ impl Replay {
         for recorded in &fixture.exchanges {
             let mut exchange = recorded.clone();
             for origin in &fixture.origins {
-                exchange.body = exchange.body.replace(origin.as_str(), &url);
-                for value in exchange.headers.values_mut() {
-                    *value = value.replace(origin.as_str(), &url);
+                // iCloud names its partition host with the default port spelled out.
+                let spellings = [
+                    format!("{origin}:443"),
+                    format!("{origin}:80"),
+                    origin.clone(),
+                ];
+                for spelled in &spellings {
+                    exchange.body = exchange.body.replace(spelled.as_str(), &url);
+                    for value in exchange.headers.values_mut() {
+                        *value = value.replace(spelled.as_str(), &url);
+                    }
                 }
             }
             queues
-                .entry((exchange.method.clone(), exchange.path.clone()))
+                .entry((exchange.method.clone(), without_query(&exchange.path)))
                 .or_default()
                 .push_back(exchange);
         }
@@ -63,13 +73,31 @@ impl Replay {
                 tokio::spawn(serve(stream, q.clone(), u.clone()));
             }
         });
-        Replay { url, unanswered }
+        Replay {
+            url,
+            queues,
+            unanswered,
+        }
+    }
+
+    /// Whether every recorded response has been served, so a client that keeps syncing has seen
+    /// all the recording holds, upstream changes included.
+    pub fn spent(&self) -> bool {
+        self.queues
+            .lock()
+            .expect("replay lock")
+            .values()
+            .all(|queue| queue.len() <= 1)
     }
 
     /// Requests the recording had no answer for: the client asked something it didn't then.
     pub fn unanswered(&self) -> Vec<String> {
         self.unanswered.lock().expect("replay lock").clone()
     }
+}
+
+fn without_query(path: &str) -> String {
+    path.split('?').next().unwrap_or(path).to_string()
 }
 
 async fn serve(stream: TcpStream, queues: Queues, unanswered: Arc<Mutex<Vec<String>>>) {
@@ -83,7 +111,7 @@ async fn serve(stream: TcpStream, queues: Queues, unanswered: Arc<Mutex<Vec<Stri
         let (Some(method), Some(path)) = (parts.next(), parts.next()) else {
             return;
         };
-        let (method, path) = (method.to_string(), path.to_string());
+        let (method, path) = (method.to_string(), without_query(path));
         let mut length = 0;
         loop {
             let mut header = String::new();
