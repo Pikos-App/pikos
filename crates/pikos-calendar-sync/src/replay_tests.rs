@@ -591,7 +591,6 @@ async fn fastmail_polls_that_report_no_change_leave_every_page_untouched() {
     assert_eq!(state().await, before);
 }
 
-// qa: SYNC-01:2
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn connecting_fastmail_lists_its_calendars_with_every_one_off() {
     let replay = Replay::start(&fixture(&recording("fastmail"))).await;
@@ -655,7 +654,6 @@ async fn changes_made_on_fastmail_reach_pikos() {
     assert_eq!(text, TRIP_NOTES.repeat(12) + "Updated upstream.");
 }
 
-// qa: SYNC-01:2
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_wrong_fastmail_password_fails_and_keeps_nothing() {
     let replay = Replay::start(&fixture(&recording("fastmail-wrong-password"))).await;
