@@ -791,6 +791,19 @@ async fn changes_made_in_google_calendar_reach_pikos() {
     assert!(replay.spent(), "twenty syncs didn't use up the recording");
     assert_eq!(replay.unanswered(), Vec::<String>::new());
     assert_eq!(synced(&pool).await, with_upstream_edits(seeded_google()));
+    // Google's editor saved the edit as HTML, having already read `<passport>` as a tag and
+    // dropped it, so this is the text Google itself shows, blank lines included.
+    let body: String = scalar(
+        &pool,
+        "SELECT content FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+    )
+    .await;
+    assert_eq!(
+        body,
+        pikos_db::build_tiptap_doc(
+            &(TRIP_NOTES.replace("<passport>", "").repeat(12) + "\n\nUpdated upstream")
+        )
+    );
 }
 
 /// The seed as iCloud serves it, less the dentist appointment: iCloud leaves an event with a

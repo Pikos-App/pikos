@@ -25,6 +25,7 @@ use pikos_db::sync_delta::{
     OccurrenceKind, OccurrenceOverride, Recurrence, Removal, UpsertItem,
 };
 
+use super::description::description_text;
 use super::error::GoogleError;
 use super::model::{Event, EventDateTime};
 
@@ -228,7 +229,7 @@ fn core_of(e: &Event) -> EventCore {
         ical_uid: e.ical_uid.clone().unwrap_or_else(|| e.id.clone()),
         etag: e.etag.clone(),
         title: e.summary.clone().unwrap_or_default(),
-        description: e.description.clone(),
+        description: e.description.as_deref().map(description_text),
         location: e.location.clone(),
         attendees: e.attendees.iter().filter_map(|a| a.email.clone()).collect(),
     }

@@ -8,6 +8,7 @@
 mod auth;
 mod config;
 mod credentials;
+mod description;
 mod error;
 mod events;
 mod loopback;
