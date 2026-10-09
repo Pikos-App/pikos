@@ -167,6 +167,16 @@ async fn every_backfill_arms_the_sweep_at_the_window_it_queried() {
     }
 }
 
+#[tokio::test]
+async fn a_backfill_asks_for_a_closed_range_so_icloud_returns_events_with_only_a_duration() {
+    let (_, queries) = run_capturing(Mode::Full, None).await;
+    let query = queries
+        .iter()
+        .find(|q| q.contains("calendar-query"))
+        .expect("a backfill sends a calendar-query");
+    assert!(query.contains(r#" end="21000101T000000Z""#), "{query}");
+}
+
 /// Sync tokens are opaque server strings and several servers put a URL in them, so
 /// an `&` in one is ordinary. Interpolated raw it breaks the REPORT body's XML —
 /// the server rejects the request, and since a rejected token is indistinguishable

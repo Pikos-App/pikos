@@ -806,15 +806,6 @@ async fn changes_made_in_google_calendar_reach_pikos() {
     );
 }
 
-/// The seed as iCloud serves it, less the dentist appointment: iCloud leaves an event with a
-/// duration and no end out of the date-range query a first sync makes, and Pikos fetches nothing
-/// beyond what that query returns, so the appointment never arrives.
-fn seeded_icloud() -> Vec<Synced> {
-    let mut rows = seeded();
-    rows.retain(|r| r.0 != "Dentist");
-    rows
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_recorded_icloud_account_syncs_every_seeded_shape() {
     let replay = Replay::start(&fixture(&recording("icloud"))).await;
@@ -823,7 +814,7 @@ async fn a_recorded_icloud_account_syncs_every_seeded_shape() {
     connect_and_sync(&pool, &replay.url, &["Pikos QA", "Pikos QA B"]).await;
 
     assert_eq!(replay.unanswered(), Vec::<String>::new());
-    assert_eq!(synced(&pool).await, seeded_icloud());
+    assert_eq!(synced(&pool).await, seeded());
     let text: String = scalar(
         &pool,
         "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
@@ -848,7 +839,7 @@ async fn changes_made_on_icloud_reach_pikos() {
 
     assert!(replay.spent(), "thirty syncs didn't use up the recording");
     assert_eq!(replay.unanswered(), Vec::<String>::new());
-    assert_eq!(synced(&pool).await, with_upstream_edits(seeded_icloud()));
+    assert_eq!(synced(&pool).await, with_upstream_edits(seeded()));
     let text: String = scalar(
         &pool,
         "SELECT content_text FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",

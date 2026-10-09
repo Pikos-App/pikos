@@ -241,7 +241,13 @@ fn sync_collection_body(token: &str) -> String {
     )
 }
 
-/// `calendar-query` bounded to `window_start` (no upper bound). The server expands
+/// The far end of a backfill's range. Open-ended would be the honest bound, but iCloud leaves an
+/// event with a `DURATION` and no `DTEND` out of an open-ended range, and the backfill is read as
+/// the whole calendar from its start, so the event never arrived. Far enough that no real event
+/// falls past it.
+const BACKFILL_END: &str = "21000101T000000Z";
+
+/// `calendar-query` from `window_start` to [`BACKFILL_END`]. The server expands
 /// recurrences to test overlap, so masters recurring into the window are returned.
 /// Used only for the initial/recovery enumerate.
 fn calendar_query_body(window_start: chrono::DateTime<Utc>) -> String {
@@ -253,7 +259,7 @@ fn calendar_query_body(window_start: chrono::DateTime<Utc>) -> String {
   <c:filter>
     <c:comp-filter name="VCALENDAR">
       <c:comp-filter name="VEVENT">
-        <c:time-range start="{start}"/>
+        <c:time-range start="{start}" end="{BACKFILL_END}"/>
       </c:comp-filter>
     </c:comp-filter>
   </c:filter>
