@@ -14,8 +14,11 @@ pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
 # The engine writes the per-calendar cursor/timestamps back through the same pool
 # pikos-db owns; same version/features so the SqlitePool type unifies.
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
-# rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# rustls (no OpenSSL) keeps non-macOS builds system-lib-free. Manual roots: `http.rs` supplies the
+# TLS config, so no bundled root list is compiled in.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-manual-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
 thiserror = "2"
 # Warn-level facade for provider-side skips (unparseable/bodyless resources); the
 # desktop app installs the logger that routes these to the shared log file.
