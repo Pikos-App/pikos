@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * The marketing recordings, once per theme: `RECORD_TAKE` picks which (default
- * `hero`, e2e/record-hero.spec.ts).
+ * `hero`, e2e/record-hero.spec.ts; or `calendar-sync`, e2e/record-calendar-sync.spec.ts).
  *
  * Its own config for the same reason the tour has one: the seed is read when Vite
  * starts, so each take needs a server launched with its own `VITE_SEED`. The shared
@@ -10,13 +10,15 @@ import { defineConfig, devices } from "@playwright/test";
  * hand back whatever is already listening, which is how the hero spec came to fail
  * against an empty calendar for a week without anyone noticing.
  *
- * Usage: pnpm --filter @pikos/desktop record:hero
+ * Usage: pnpm --filter @pikos/desktop record:hero (or record:calendar-sync)
  */
 
 const RECORD_PORT = 1427;
 
 const TAKES = {
-  hero: { grep: /@recording/, seed: "marketing" },
+  "calendar-sync": { grep: /@recording-sync/, seed: "marketing-sync" },
+  // A lookahead, since "@recording" is a prefix of the other take's tag.
+  hero: { grep: /@recording(?!-)/, seed: "marketing" },
 } as const;
 
 const takeName = process.env["RECORD_TAKE"] ?? "hero";

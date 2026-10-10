@@ -18,13 +18,15 @@ set -euo pipefail
 #   - ffmpeg installed (brew install ffmpeg)
 #
 # Usage:
-#   ./scripts/record.sh hero   # pnpm record:hero
+#   ./scripts/record.sh hero            # pnpm record:hero
+#   ./scripts/record.sh calendar-sync   # pnpm record:calendar-sync
 
 TAKE="${1:-}"
 case "$TAKE" in
   hero) PUBLISH=true ;;
+  calendar-sync) PUBLISH=false ;;
   *)
-    echo "Usage: $0 <hero>"
+    echo "Usage: $0 <hero|calendar-sync>"
     exit 1
     ;;
 esac
