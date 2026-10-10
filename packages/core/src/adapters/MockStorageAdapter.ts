@@ -179,6 +179,28 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
   return true;
 }
 
+/** One event a provider holds for a `StagedCalendar`. */
+export interface StagedProviderEvent {
+  title: string;
+  scheduledStart: string;
+  scheduledEnd?: string;
+  timezone?: string;
+  location?: string;
+}
+
+/** One calendar a CalDAV server offers, as `stageCaldavCalendars` takes it. */
+export interface StagedCalendar {
+  displayName: string;
+  /** Already a palette entry: setup stores a server's own colour as its nearest one. */
+  color?: string;
+  events?: StagedProviderEvent[];
+}
+
+const CANNED_CALDAV_CALENDARS: StagedCalendar[] = [
+  { displayName: "Personal" },
+  { displayName: "Work" },
+];
+
 export class MockStorageAdapter implements StorageAdapter {
   private pages = new Map<string, Page>();
   private folders = new Map<string, Folder>();
@@ -208,6 +230,9 @@ export class MockStorageAdapter implements StorageAdapter {
   // `page_sync.user_modified`: set by the editor path, never by sync. One half of
   // the ownership predicate teardown and export share — see `_isOwned`.
   private userModified = new Set<string>();
+  private stagedCaldavCalendars: StagedCalendar[] | null = null;
+  // What the provider holds for each discovered calendar, keyed by sync_calendar row id.
+  private providerEvents = new Map<string, StagedProviderEvent[]>();
   /** The arguments of the most recent `exportWorkspace` call, for assertions. */
   lastExport: { format: WorkspaceExportFormat; options: WorkspaceExportOptions } | null = null;
 
@@ -226,6 +251,8 @@ export class MockStorageAdapter implements StorageAdapter {
     this.dormantAccounts.clear();
     this.detachedByCalendar.clear();
     this.userModified.clear();
+    this.stagedCaldavCalendars = null;
+    this.providerEvents.clear();
   }
 
   // ─── Command-layer guards ────────────────────────────────────────────────────
@@ -1327,7 +1354,12 @@ export class MockStorageAdapter implements StorageAdapter {
 
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
     return Promise.resolve(
-      this._connectAccount("caldav", data.displayName, "basic", ["Personal", "Work"])
+      this._connectAccount(
+        "caldav",
+        data.displayName,
+        "basic",
+        this.stagedCaldavCalendars ?? CANNED_CALDAV_CALENDARS
+      )
     );
   }
 
@@ -1345,7 +1377,10 @@ export class MockStorageAdapter implements StorageAdapter {
 
   connectGoogleAccount(): Promise<AccountWithCalendars> {
     return Promise.resolve(
-      this._connectAccount("google", "you@gmail.com", "oauth", ["you@gmail.com", "Team"])
+      this._connectAccount("google", "you@gmail.com", "oauth", [
+        { displayName: "you@gmail.com" },
+        { displayName: "Team" },
+      ])
     );
   }
 
@@ -1357,7 +1392,7 @@ export class MockStorageAdapter implements StorageAdapter {
     provider: string,
     displayName: string,
     authKind: string,
-    calendarNames: string[]
+    calendars: StagedCalendar[]
   ): AccountWithCalendars {
     // Identity is provider + displayName, dormant or not: `find_account_by_identity_impl`
     // matches on those two alone and merely *prefers* a live row (`ORDER BY
@@ -1382,20 +1417,20 @@ export class MockStorageAdapter implements StorageAdapter {
       reconnectNeeded: false,
     };
     this.syncAccounts.set(account.id, account);
-    // Canned discovery so test mode has calendars to toggle.
-    for (const name of calendarNames) {
+    for (const staged of calendars) {
       const cal: SyncCalendar = {
         accountId: account.id,
-        calendarId: `${provider}-${name.toLowerCase()}-cal`,
-        color: null,
+        calendarId: `${provider}-${staged.displayName.toLowerCase()}-cal`,
+        color: staged.color ?? null,
         detachedPages: 0,
-        displayName: name,
+        displayName: staged.displayName,
         enabled: false,
         folderId: null,
         id: uuid(),
         lastSyncedAt: null,
       };
       this.syncCalendars.set(cal.id, cal);
+      if (staged.events) this.providerEvents.set(cal.id, staged.events);
     }
     return { ...account, calendars: this._calendarsFor(account.id) };
   }
@@ -1479,6 +1514,47 @@ export class MockStorageAdapter implements StorageAdapter {
     }
   }
 
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): the calendars the next CalDAV discovery
+   * finds in place of the canned Personal and Work, with each one's colour and the
+   * events switching it on backfills as active mirrors — the real enable's first
+   * pass. Without it a mock calendar comes on empty, and nothing in test mode can
+   * show a sync bringing events in.
+   */
+  stageCaldavCalendars(calendars: StagedCalendar[]): void {
+    this.stagedCaldavCalendars = calendars;
+  }
+
+  /** Mirrors each provider event the folder doesn't already hold. Title and start
+   *  stand in for the provider uid, so a re-enable that just reclaimed a kept page
+   *  doesn't plant its twin beside it. */
+  private _backfillCalendar(syncCalendarId: string, folderId: string): void {
+    const key = (title: string, start: string | null | undefined) => `${title}\u0000${start}`;
+    const present = new Set(
+      [...this.pages.values()]
+        .filter((p) => p.folderId === folderId && p.syncState === "active")
+        .map((p) => key(p.title, p.scheduledStart))
+    );
+    for (const event of this.providerEvents.get(syncCalendarId) ?? []) {
+      if (present.has(key(event.title, event.scheduledStart))) continue;
+      const page = this.insertPage({
+        content: "",
+        folderId,
+        priority: 0,
+        scheduledStart: event.scheduledStart,
+        status: "not_started",
+        tags: [],
+        title: event.title,
+        ...(event.scheduledEnd ? { scheduledEnd: event.scheduledEnd } : {}),
+      });
+      this.markPageSynced(page.id, {
+        state: "active",
+        ...(event.timezone ? { timezone: event.timezone } : {}),
+        ...(event.location ? { location: event.location } : {}),
+      });
+    }
+  }
+
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
     return Promise.resolve(this._calendarsFor(accountId));
   }
@@ -1529,6 +1605,7 @@ export class MockStorageAdapter implements StorageAdapter {
       }
       this._relinkCalendar(this.detachedByCalendar.get(syncCalendarId) ?? []);
       this.detachedByCalendar.delete(syncCalendarId);
+      this._backfillCalendar(syncCalendarId, folderId);
     }
     const updated: SyncCalendar = { ...cal, color, detachedPages, enabled, folderId };
     this.syncCalendars.set(syncCalendarId, updated);

@@ -2063,6 +2063,90 @@ describe("calendar sync — teardown keeps the user's work", () => {
   });
 });
 
+describe("calendar sync — a staged CalDAV server", () => {
+  const conn = {
+    baseUrl: "https://x",
+    displayName: "me · https://x",
+    password: "pw",
+    username: "me",
+  };
+
+  async function calendarsByName() {
+    const account = await adapter.connectCaldavAccount(conn);
+    return new Map(account.calendars.map((c) => [c.displayName, c]));
+  }
+
+  beforeEach(() => {
+    adapter.stageCaldavCalendars([
+      { displayName: "Personal" },
+      {
+        color: "#E09B4A",
+        displayName: "Team",
+        events: [
+          {
+            location: "Zoom",
+            scheduledEnd: "2026-03-17T12:00:00",
+            scheduledStart: "2026-03-17T11:00:00",
+            timezone: "America/Los_Angeles",
+            title: "Customer call",
+          },
+          { scheduledStart: "2026-03-18T10:00:00", title: "Product sync" },
+        ],
+      },
+    ]);
+  });
+
+  it("discovery offers the staged calendars, with the server's colour", async () => {
+    const calendars = await calendarsByName();
+
+    expect([...calendars.keys()]).toEqual(["Personal", "Team"]);
+    expect(calendars.get("Team")?.color).toBe("#E09B4A");
+    expect(calendars.get("Personal")?.color).toBeNull();
+  });
+
+  it("enabling a calendar lands its events as locked mirrors in its folder", async () => {
+    const team = (await calendarsByName()).get("Team")!;
+
+    const on = await adapter.toggleSyncCalendar(team.id, true, team.color);
+
+    const mirrors = (await adapter.listPages({ folderId: on.folderId! })).sort((a, b) =>
+      a.title.localeCompare(b.title)
+    );
+    expect(mirrors.map((p) => p.title)).toEqual(["Customer call", "Product sync"]);
+    expect(mirrors[0]).toMatchObject({
+      mirrorLocation: "Zoom",
+      scheduledEnd: "2026-03-17T12:00:00",
+      scheduledStart: "2026-03-17T11:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "America/Los_Angeles",
+    });
+  });
+
+  it("a calendar with no events still comes on empty", async () => {
+    const personal = (await calendarsByName()).get("Personal")!;
+
+    const on = await adapter.toggleSyncCalendar(personal.id, true, "#7c9cf0");
+
+    expect(await adapter.listPages({ folderId: on.folderId! })).toHaveLength(0);
+  });
+
+  it("a re-enable restores the bare mirrors and doesn't duplicate a kept one", async () => {
+    const teamId = (await calendarsByName()).get("Team")!.id;
+    const { folderId } = await adapter.toggleSyncCalendar(teamId, true, "#E09B4A");
+    const kept = (await adapter.listPages({ folderId: folderId! })).find(
+      (p) => p.title === "Customer call"
+    )!;
+    await adapter.updatePage(kept.id, { priority: 2 });
+    await adapter.toggleSyncCalendar(teamId, false, null);
+
+    await adapter.toggleSyncCalendar(teamId, true, "#E09B4A");
+
+    const titles = (await adapter.listPages({ folderId: folderId! })).map((p) => p.title).sort();
+    expect(titles).toEqual(["Customer call", "Product sync"]);
+  });
+});
+
 // ─── Focus sessions ──────────────────────────────────────────────────────────
 //
 // The mock is where every UI test sees this write, so its two refusals have to

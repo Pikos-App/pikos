@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# record-hero.sh — Record marketing hero videos (dark + light mode).
+# record.sh — Record one marketing take (dark + light mode).
 #
-# 1. Runs the Playwright recording script to capture .webm videos
-# 2. Converts them to optimized .mp4 (H.264, silent, web-ready)
-# 3. Copies output to the marketing site's public/ directory
+# 1. Runs the take's Playwright recording to capture .webm videos
+# 2. Converts them to optimized .mp4 (H.264, silent, web-ready) + a .jpg poster
+# 3. For the hero only, copies the output to the marketing site's public/ directory
 #
-# Data is auto-seeded via the marketing seed — no setup appears in the video.
+# Data is auto-seeded by the take's seed — no setup appears in the video.
 #
 # The server is started by playwright.record.config.ts on its own port, with the
-# marketing seed and reuse disabled. Setting VITE_SEED here instead was the old
-# way and it silently did nothing whenever a dev server was already listening:
+# take's seed and reuse disabled. Setting VITE_SEED here instead was the old way
+# and it silently did nothing whenever a dev server was already listening:
 # Playwright handed that one back and the recording ran against an empty calendar.
 #
 # Prerequisites:
 #   - ffmpeg installed (brew install ffmpeg)
 #
 # Usage:
-#   ./scripts/record-hero.sh
-#   pnpm record:hero
+#   ./scripts/record.sh hero            # pnpm record:hero
+#   ./scripts/record.sh calendar-sync   # pnpm record:calendar-sync
+
+TAKE="${1:-}"
+case "$TAKE" in
+  hero) PUBLISH=true ;;
+  calendar-sync) PUBLISH=false ;;
+  *)
+    echo "Usage: $0 <hero|calendar-sync>"
+    exit 1
+    ;;
+esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RECORDINGS_DIR="$DESKTOP_DIR/recordings"
+TAKE_DIR="$RECORDINGS_DIR/$TAKE"
 MARKETING_PUBLIC="$DESKTOP_DIR/../marketing/public"
 
 # Check ffmpeg is available
@@ -32,15 +43,16 @@ if ! command -v ffmpeg &>/dev/null; then
   exit 1
 fi
 
-# Clean previous recordings
-rm -rf "$RECORDINGS_DIR"
-mkdir -p "$RECORDINGS_DIR"
+# Clean this take's previous recordings, and only this take's.
+rm -rf "$TAKE_DIR"
+rm -f "$RECORDINGS_DIR/pikos-$TAKE-"{dark,light}.{mp4,jpg}
+mkdir -p "$TAKE_DIR"
 
-echo "Recording hero videos..."
+echo "Recording $TAKE videos..."
 echo ""
 
 cd "$DESKTOP_DIR"
-npx playwright test --config playwright.record.config.ts --reporter=list
+RECORD_TAKE="$TAKE" pnpm exec playwright test --config playwright.record.config.ts --reporter=list
 
 echo ""
 echo "Converting .webm → .mp4..."
@@ -48,12 +60,12 @@ echo ""
 
 # Find the recorded .webm files (sorted by modification time, oldest first)
 WEBM_FILES=()
-while IFS= read -r f; do WEBM_FILES+=("$f"); done < <(ls -tr "$RECORDINGS_DIR"/*.webm 2>/dev/null)
+while IFS= read -r f; do WEBM_FILES+=("$f"); done < <(ls -tr "$TAKE_DIR"/*.webm 2>/dev/null)
 
 if [ ${#WEBM_FILES[@]} -lt 2 ]; then
   echo "Error: Expected 2 .webm files, found ${#WEBM_FILES[@]}"
-  echo "Files in $RECORDINGS_DIR:"
-  ls -la "$RECORDINGS_DIR/" 2>/dev/null || true
+  echo "Files in $TAKE_DIR:"
+  ls -la "$TAKE_DIR/" 2>/dev/null || true
   exit 1
 fi
 
@@ -76,13 +88,15 @@ convert_to_mp4() {
   fi
 
   # H.264, no audio, web-optimized (faststart moves moov atom to front).
+  # setpts zeroes the first frame's timestamp. The cut lands between two captured
+  # frames, and without it the mp4 opens on a 40 ms empty edit that players paint black.
   ffmpeg -y -ss "$trim" -i "$input" \
     -c:v libx264 \
     -preset slow \
     -crf 23 \
     -an \
     -pix_fmt yuv420p \
-    -vf "scale=1280:-2:flags=lanczos" \
+    -vf "setpts=PTS-STARTPTS,scale=1280:-2:flags=lanczos" \
     -movflags +faststart \
     "$output" \
     -loglevel warning
@@ -97,11 +111,19 @@ convert_to_mp4() {
   echo "  → $output ($size)"
 }
 
-DARK_MP4="$RECORDINGS_DIR/pikos-hero-dark.mp4"
-LIGHT_MP4="$RECORDINGS_DIR/pikos-hero-light.mp4"
+DARK_MP4="$RECORDINGS_DIR/pikos-$TAKE-dark.mp4"
+LIGHT_MP4="$RECORDINGS_DIR/pikos-$TAKE-light.mp4"
 
 convert_to_mp4 "${WEBM_FILES[0]}" "$DARK_MP4"
 convert_to_mp4 "${WEBM_FILES[1]}" "$LIGHT_MP4"
+
+if [ "$PUBLISH" != true ]; then
+  echo ""
+  echo "Done! Videos and posters are at:"
+  echo "  $DARK_MP4 + .jpg"
+  echo "  $LIGHT_MP4 + .jpg"
+  exit 0
+fi
 
 # Copy to marketing site
 echo ""
