@@ -21,6 +21,9 @@ export const RECORDING_DATE = new Date("2026-03-16T11:00:00");
 
 export type Theme = "dark" | "light";
 
+const DEFAULT_CURSOR_TRAVEL_MS = 350;
+const cursorTravel = new WeakMap<Page, number>();
+
 /**
  * Record one take of `flow` into recordings/<take>/, which scripts/record.sh encodes.
  * `flow` returns the wall-clock moment the finished video should open on.
@@ -68,9 +71,14 @@ export async function recordTake(
  * Switch to the week calendar, frame the morning, and return the moment the
  * finished video opens on: calendar framed, nothing selected, cursor parked
  * off-screen. A take ends in that same state so its last frame matches its first.
+ * `cursorTravelMs` is how long the fake cursor takes to glide to each target.
  */
-export async function openFramedWeek(page: Page): Promise<number> {
-  await page.evaluate(INJECT_CURSOR);
+export async function openFramedWeek(
+  page: Page,
+  cursorTravelMs = DEFAULT_CURSOR_TRAVEL_MS
+): Promise<number> {
+  cursorTravel.set(page, cursorTravelMs);
+  await page.evaluate(injectCursor(cursorTravelMs));
   await parkCursor(page);
 
   await page.keyboard.press(mod("Mod+Shift+c"));
@@ -100,7 +108,7 @@ export function weekRegion(page: Page): Locator {
   return page.getByRole("region", { name: "Week calendar" });
 }
 
-const INJECT_CURSOR = `
+const injectCursor = (travelMs: number) => `
 (() => {
   if (document.getElementById('fake-cursor')) return;
   const cursor = document.createElement('div');
@@ -116,7 +124,7 @@ const INJECT_CURSOR = `
     height: 24px;
     z-index: 99999;
     pointer-events: none;
-    transition: transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+    transition: transform ${travelMs}ms cubic-bezier(0.25, 0.1, 0.25, 1);
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
   \`;
   document.body.appendChild(cursor);
@@ -134,7 +142,7 @@ const INJECT_CURSOR = `
     cursor.style.transition = 'transform 0.1s ease';
     cursor.style.transform = \`translate(\${window.__cursorX}px, \${window.__cursorY}px) scale(0.85)\`;
     setTimeout(() => {
-      cursor.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)';
+      cursor.style.transition = 'transform ${travelMs}ms cubic-bezier(0.25, 0.1, 0.25, 1)';
       cursor.style.transform = \`translate(\${window.__cursorX}px, \${window.__cursorY}px) scale(1)\`;
     }, 100);
   };
@@ -156,7 +164,7 @@ export async function parkCursor(page: Page) {
 
 export async function moveTo(page: Page, x: number, y: number) {
   await page.evaluate(([tx, ty]) => window.__moveCursor(tx, ty), [x, y] as const);
-  await page.waitForTimeout(400);
+  await page.waitForTimeout((cursorTravel.get(page) ?? DEFAULT_CURSOR_TRAVEL_MS) + 50);
 }
 
 export async function moveToLocator(page: Page, locator: Locator) {
