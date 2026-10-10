@@ -2063,7 +2063,7 @@ describe("calendar sync — teardown keeps the user's work", () => {
   });
 });
 
-describe("calendar sync — staged provider events backfill on enable", () => {
+describe("calendar sync — a staged CalDAV server", () => {
   const conn = {
     baseUrl: "https://x",
     displayName: "me · https://x",
@@ -2073,26 +2073,41 @@ describe("calendar sync — staged provider events backfill on enable", () => {
 
   async function calendarsByName() {
     const account = await adapter.connectCaldavAccount(conn);
-    return new Map(account.calendars.map((c) => [c.displayName, c.id]));
+    return new Map(account.calendars.map((c) => [c.displayName, c]));
   }
 
   beforeEach(() => {
-    adapter.stageProviderEvents("Work", [
+    adapter.stageCaldavCalendars([
+      { displayName: "Personal" },
       {
-        location: "Zoom",
-        scheduledEnd: "2026-03-17T11:45:00",
-        scheduledStart: "2026-03-17T11:00:00",
-        timezone: "America/Los_Angeles",
-        title: "Customer call",
+        color: "#E09B4A",
+        displayName: "Team",
+        events: [
+          {
+            location: "Zoom",
+            scheduledEnd: "2026-03-17T12:00:00",
+            scheduledStart: "2026-03-17T11:00:00",
+            timezone: "America/Los_Angeles",
+            title: "Customer call",
+          },
+          { scheduledStart: "2026-03-18T10:00:00", title: "Product sync" },
+        ],
       },
-      { scheduledStart: "2026-03-18T10:00:00", title: "Product sync" },
     ]);
   });
 
-  it("enabling the calendar lands its events as locked mirrors in its folder", async () => {
+  it("discovery offers the staged calendars, with the server's colour", async () => {
     const calendars = await calendarsByName();
 
-    const on = await adapter.toggleSyncCalendar(calendars.get("Work")!, true, "#0ea5e9");
+    expect([...calendars.keys()]).toEqual(["Personal", "Team"]);
+    expect(calendars.get("Team")?.color).toBe("#E09B4A");
+    expect(calendars.get("Personal")?.color).toBeNull();
+  });
+
+  it("enabling a calendar lands its events as locked mirrors in its folder", async () => {
+    const team = (await calendarsByName()).get("Team")!;
+
+    const on = await adapter.toggleSyncCalendar(team.id, true, team.color);
 
     const mirrors = (await adapter.listPages({ folderId: on.folderId! })).sort((a, b) =>
       a.title.localeCompare(b.title)
@@ -2100,7 +2115,7 @@ describe("calendar sync — staged provider events backfill on enable", () => {
     expect(mirrors.map((p) => p.title)).toEqual(["Customer call", "Product sync"]);
     expect(mirrors[0]).toMatchObject({
       mirrorLocation: "Zoom",
-      scheduledEnd: "2026-03-17T11:45:00",
+      scheduledEnd: "2026-03-17T12:00:00",
       scheduledStart: "2026-03-17T11:00:00",
       scheduleLocked: true,
       syncState: "active",
@@ -2108,24 +2123,24 @@ describe("calendar sync — staged provider events backfill on enable", () => {
     });
   });
 
-  it("a calendar with nothing staged still comes on empty", async () => {
-    const calendars = await calendarsByName();
+  it("a calendar with no events still comes on empty", async () => {
+    const personal = (await calendarsByName()).get("Personal")!;
 
-    const on = await adapter.toggleSyncCalendar(calendars.get("Personal")!, true, "#7c9cf0");
+    const on = await adapter.toggleSyncCalendar(personal.id, true, "#7c9cf0");
 
     expect(await adapter.listPages({ folderId: on.folderId! })).toHaveLength(0);
   });
 
   it("a re-enable restores the bare mirrors and doesn't duplicate a kept one", async () => {
-    const workId = (await calendarsByName()).get("Work")!;
-    const { folderId } = await adapter.toggleSyncCalendar(workId, true, "#0ea5e9");
+    const teamId = (await calendarsByName()).get("Team")!.id;
+    const { folderId } = await adapter.toggleSyncCalendar(teamId, true, "#E09B4A");
     const kept = (await adapter.listPages({ folderId: folderId! })).find(
       (p) => p.title === "Customer call"
     )!;
     await adapter.updatePage(kept.id, { priority: 2 });
-    await adapter.toggleSyncCalendar(workId, false, null);
+    await adapter.toggleSyncCalendar(teamId, false, null);
 
-    await adapter.toggleSyncCalendar(workId, true, "#0ea5e9");
+    await adapter.toggleSyncCalendar(teamId, true, "#E09B4A");
 
     const titles = (await adapter.listPages({ folderId: folderId! })).map((p) => p.title).sort();
     expect(titles).toEqual(["Customer call", "Product sync"]);

@@ -1,15 +1,15 @@
 /**
  * Records connecting a CalDAV calendar and its meetings landing on a week of tasks,
  * once per theme. Seeded by `marketing-sync`: the marketing week with nothing
- * connected, and a provider "Work" calendar whose meetings arrive when it is enabled.
+ * connected, and a CalDAV server whose "Team" calendar brings meetings in when enabled.
  *
  * Narrative:
  *   1. The framed week of native tasks, cursor parked off-screen. This first frame is
  *      the thumbnail and the poster.
  *   2. Settings → Calendar sync → Add account → CalDAV; type the server, username and
  *      a masked password; Connect.
- *   3. The discovered calendars appear; switch Work on and close settings.
- *   4. The Work meetings sit in the week beside the tasks, in the calendar's colour.
+ *   3. The discovered calendars appear; switch Team on and close settings.
+ *   4. The Team meetings sit in the week beside the tasks, in the calendar's colour.
  *   5. Double-click "Customer call" → its page opens; type two lines of notes.
  *   6. Back to the calendar, cursor parked, a closing hold.
  *
@@ -36,7 +36,7 @@ import {
 const FORM_TYPING_MS = 28;
 const NOTES_TYPING_MS = 45;
 
-async function connectWorkCalendar(page: Page) {
+async function connectTeamCalendar(page: Page) {
   await clickLocator(page, page.getByRole("button", { name: "Open settings" }));
   await clickLocator(page, page.getByRole("button", { exact: true, name: "Calendar sync" }));
   await clickLocator(page, page.getByRole("button", { name: "Add account" }));
@@ -50,11 +50,11 @@ async function connectWorkCalendar(page: Page) {
   await typeSlowly(page, "app-password", FORM_TYPING_MS);
   await clickLocator(page, page.getByRole("button", { name: "Connect" }));
 
-  const work = page.getByRole("switch", { name: "Sync Work" });
-  await work.waitFor();
+  const team = page.getByRole("switch", { name: "Sync Team" });
+  await team.waitFor();
   await page.waitForTimeout(400);
-  await clickLocator(page, work);
-  await expect(work).toBeChecked();
+  await clickLocator(page, team);
+  await expect(team).toBeChecked();
   await page.waitForTimeout(500);
 
   await clickLocator(page, page.getByRole("button", { name: "Close settings" }));
@@ -64,7 +64,7 @@ async function recordCalendarSync(page: Page): Promise<number> {
   const cutAt = await openFramedWeek(page);
   await page.waitForTimeout(1200);
 
-  await connectWorkCalendar(page);
+  await connectTeamCalendar(page);
 
   const meeting = weekRegion(page).getByRole("button", { name: /^Customer call,/ });
   await expect(meeting).toBeVisible();
