@@ -21,7 +21,7 @@
     "test:e2e:perf:prod": "VITE_TEST_MODE=true pnpm build && playwright test --config playwright.perf.config.ts",
     "test:e2e:csp": "VITE_TEST_MODE=true pnpm build && playwright test --config playwright.csp.config.ts",
     "check:bundle": "bash ../../scripts/check-bundle-size.sh",
-    "record:hero": "bash scripts/record-hero.sh",
+    "record:hero": "bash scripts/record.sh hero",
     "screen:tour": "bash ../../scripts/desktop-screen-tour.sh",
     "screenshot:calendar": "node scripts/screenshot-calendar.mjs"
   },
