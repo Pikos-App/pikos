@@ -1,6 +1,9 @@
+import { parseISO } from "date-fns";
 import { describe, expect, it } from "vitest";
 
 import { referrerToCount } from "./referrer";
+
+const NOW = parseISO("2026-10-04T12:00:00Z");
 
 const CHROME =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36";
@@ -19,6 +22,7 @@ function view(
   return referrerToCount(
     new Request("https://pikos.app/download", { headers, method }),
     new Response(null, { headers: { "content-type": type }, status }),
+    NOW,
   );
 }
 

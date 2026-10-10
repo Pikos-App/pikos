@@ -5,22 +5,23 @@ import type { StorageAdapter } from "@pikos/core";
 import type { MockStorageAdapter } from "@pikos/core";
 import { addDays } from "date-fns";
 
+/** The recording week's dates: day 0 is a Monday under the recordings' mocked clock. */
+export function marketingWeek() {
+  const now = new Date();
+  const day = (offset: number) => addDays(now, offset).toISOString().slice(0, 10);
+  return { fri: day(4), mon: day(0), thu: day(3), tue: day(1), wed: day(2) };
+}
+
 export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
+  await seedMarketingNative(adapter);
+  await connectTeamCalendar(adapter);
+}
+
+/** The week's own pages and folders, with no calendar connected. */
+export async function seedMarketingNative(adapter: StorageAdapter): Promise<void> {
   // Clear any existing data to prevent duplicates on re-mount
   (adapter as MockStorageAdapter).clear();
-  // Use the current date (which may be mocked by Playwright's clock)
-  const now = new Date();
-
-  function day(offset: number): string {
-    return addDays(now, offset).toISOString().slice(0, 10);
-  }
-
-  // Day aliases (Mon=0 when clock is mocked to Monday)
-  const mon = day(0);
-  const tue = day(1);
-  const wed = day(2);
-  const thu = day(3);
-  const fri = day(4);
+  const { fri, mon, thu, tue, wed } = marketingWeek();
 
   const work = await adapter.createFolder({ color: "#6366f1", name: "Work", parentId: null });
   const personal = await adapter.createFolder({
@@ -39,7 +40,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
   //     and marks it done.
   //   • "Send recap" — created live during the recording by clicking the Tue
   //     10am calendar slot. The natural follow-up to the planning meeting.
-  //   • "Draft: search relevance" — dragged from the inbox list onto Thu 9am,
+  //   • "Write proposal" — dragged from the inbox list onto Thu 9am,
   //     resized to a 1-hour block, then double-clicked open and edited inline.
   // Tue 10am and Thu 9am are intentionally empty so the recorded interactions
   // read cleanly.
@@ -48,17 +49,17 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
   //
   //         MON            TUE            WED            THU            FRI
   //         ─────────────  ─────────────  ─────────────  ─────────────  ─────────────
-  //  [all-day Thu: Dentist appt]
+  //  [all-day Thu: Dentist]
   //
-  //   9:00  Roadmap        Standup                       (Draft         Deep work
-  //  10:00  planning       (Send recap    Partner call°   dragged)      block
-  //  11:00                  recorded)                    1:1 w/ Sam     Coffee°
+  //   9:00  Roadmap        Standup                       (Write         Deep work
+  //  10:00  planning       (Send recap    Partner call°   dragged)
+  //  11:00                  recorded)                    Sam 1:1        Coffee°
   //  12:00
-  //   1:00  Reply
-  //   2:00                 Design         Focus                         Budget review
-  //   3:00  Vendor demo°   review         time (RFC)     Hiring panel°
-  //   4:00                                Sprint demo
-  //   5:00                                Evening walk
+  //   1:00  Email
+  //   2:00                 Design         Focus                         Budget
+  //   3:00  Vendor demo°   review         time           Hiring panel°
+  //   4:00                                Demo
+  //   5:00                                Walk
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Work — Mon ───────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Clear the inbox before lunch",
     tags: ["admin"],
-    title: "Reply to emails",
+    title: "Email",
   });
   await adapter.createPageSchedule({
     pageId: emails.id,
@@ -149,7 +150,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Quick async post in #team",
     tags: ["meetings"],
-    title: "Team standup",
+    title: "Standup",
   });
   await adapter.createPageSchedule({
     pageId: standup.id,
@@ -175,7 +176,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Onboarding v2 mocks — Maya driving",
     tags: ["design"],
-    title: "Design review — onboarding",
+    title: "Design review",
   });
   await adapter.createPageSchedule({
     pageId: designReview.id,
@@ -188,7 +189,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
 
   const focus = await adapter.createPage({
     content: doc(
-      p("Block this for the search relevance proposal. No meetings, no Slack."),
+      p("Block this for the proposal. No meetings, no Slack."),
       h3("Sections to draft"),
       bullets(
         "Problem statement — what's broken about today's ranking",
@@ -200,9 +201,9 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     folderId: work.id,
     priority: 1,
     status: "not_started",
-    subtitle: "Search relevance proposal — get a v0 done",
+    subtitle: "Get a first draft of the proposal done",
     tags: ["deep work"],
-    title: "Focus time — search proposal",
+    title: "Focus time",
   });
   await adapter.createPageSchedule({
     pageId: focus.id,
@@ -226,7 +227,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Weekly demo — async-friendly",
     tags: ["meetings"],
-    title: "Sprint demo",
+    title: "Demo",
   });
   await adapter.createPageSchedule({
     pageId: sprintDemo.id,
@@ -253,7 +254,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Weekly with manager",
     tags: ["meetings"],
-    title: "1:1 with Sam",
+    title: "Sam 1:1",
   });
   await adapter.createPageSchedule({
     pageId: oneOnOne.id,
@@ -273,7 +274,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Finish the onboarding documentation",
     tags: ["deep work"],
-    title: "Deep work block",
+    title: "Deep work",
   });
   await adapter.createPageSchedule({
     pageId: deepWork.id,
@@ -299,7 +300,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "Q1 actuals vs. plan — flag what's drifting",
     tags: ["finance"],
-    title: "Budget review — Q1 actuals",
+    title: "Budget",
   });
   await adapter.createPageSchedule({
     pageId: budget.id,
@@ -317,7 +318,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "30 minutes, no phone",
     tags: ["exercise"],
-    title: "Evening walk",
+    title: "Walk",
   });
   await adapter.createPageSchedule({
     pageId: walk.id,
@@ -335,7 +336,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "10:30am — confirmed",
     tags: ["health"],
-    title: "Dentist appointment",
+    title: "Dentist",
   });
   await adapter.createPageSchedule({
     pageId: dentist.id,
@@ -389,7 +390,7 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     status: "not_started",
     subtitle: "First pass before Sam reviews",
     tags: ["writing"],
-    title: "Draft: search relevance",
+    title: "Write proposal",
   });
 
   await adapter.createPage({
@@ -401,11 +402,12 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     tags: ["hiring"],
     title: "Review candidate",
   });
+}
 
-  // ── A connected calendar ─────────────────────────────────────────────────
-  // Google, not CalDAV: the mock's canned CalDAV calendars are Personal and Work,
-  // both of which this sidebar already has as native folders.
-
+// Google, not CalDAV: the mock's canned CalDAV calendars are Personal and Work,
+// both of which this sidebar already has as native folders.
+async function connectTeamCalendar(adapter: StorageAdapter): Promise<void> {
+  const { fri, mon, thu, wed } = marketingWeek();
   const mock = adapter as MockStorageAdapter;
   const account = await adapter.connectGoogleAccount();
   const team = account.calendars.find((c) => c.displayName === "Team")!;
