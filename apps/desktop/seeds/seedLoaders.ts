@@ -22,8 +22,8 @@ export type SeedScenario =
   | "synced"
   | "tutorial";
 
-/** Every scenario that exists. `demo` and `marketing` are launch-only — see LAUNCH_SEEDS. */
-export type SeedName = SeedScenario | "demo" | "marketing";
+/** Every scenario that exists. `demo` and the `marketing` pair are launch-only — see LAUNCH_SEEDS. */
+export type SeedName = SeedScenario | "demo" | "marketing" | "marketing-sync";
 
 export interface SeedContext {
   adapter: StorageAdapter;
@@ -65,6 +65,10 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedMarketing } = await import("./marketing");
         await seedMarketing(adapter);
       },
+      "marketing-sync": async ({ adapter }) => {
+        const { seedMarketingSync } = await import("./marketingSync");
+        await seedMarketingSync(adapter);
+      },
       notifications: async ({ adapter }) => {
         const { seedNotifications } = await import("./notifications");
         await seedNotifications(adapter);
@@ -90,6 +94,7 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   "calendar-edges": DEV_LOADERS?.["calendar-edges"] ?? unavailable,
   demo: DEV_LOADERS?.demo ?? unavailable,
   marketing: DEV_LOADERS?.marketing ?? unavailable,
+  "marketing-sync": DEV_LOADERS?.["marketing-sync"] ?? unavailable,
   notifications: DEV_LOADERS?.notifications ?? unavailable,
   realistic: DEV_LOADERS?.realistic ?? unavailable,
   stress: DEV_LOADERS?.stress ?? unavailable,
@@ -125,9 +130,9 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
 /**
  * Scenarios `VITE_SEED=` accepts at launch, and the build each one needs.
  *
- * The two paths are deliberately not the same set. `marketing` and `demo` only
- * ever arrive through the launch flag — scripts/record-hero.sh and
- * playwright.tour.config.ts set them, and the developer menu doesn't list them.
+ * The two paths are deliberately not the same set. `marketing`, `marketing-sync`
+ * and `demo` only ever arrive through the launch flag — playwright.record.config.ts
+ * and playwright.tour.config.ts set them, and the developer menu doesn't list them.
  * `notifications` is the mirror image: its
  * fixtures are anchored to the moment they're planted and you watch them fire
  * over the following minutes, which is a menu action, so it has no launch
@@ -142,6 +147,7 @@ const LAUNCH_SEEDS: Partial<Record<SeedName, "any-build" | "dev-only">> = {
   "calendar-edges": "dev-only",
   demo: "dev-only",
   marketing: "dev-only",
+  "marketing-sync": "dev-only",
   realistic: "dev-only",
   stress: "dev-only",
   synced: "any-build",

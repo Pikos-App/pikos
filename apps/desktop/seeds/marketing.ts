@@ -5,22 +5,23 @@ import type { StorageAdapter } from "@pikos/core";
 import type { MockStorageAdapter } from "@pikos/core";
 import { addDays } from "date-fns";
 
+/** The recording week's dates: day 0 is a Monday under the recordings' mocked clock. */
+export function marketingWeek() {
+  const now = new Date();
+  const day = (offset: number) => addDays(now, offset).toISOString().slice(0, 10);
+  return { fri: day(4), mon: day(0), thu: day(3), tue: day(1), wed: day(2) };
+}
+
 export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
+  await seedMarketingNative(adapter);
+  await connectTeamCalendar(adapter);
+}
+
+/** The week's own pages and folders, with no calendar connected. */
+export async function seedMarketingNative(adapter: StorageAdapter): Promise<void> {
   // Clear any existing data to prevent duplicates on re-mount
   (adapter as MockStorageAdapter).clear();
-  // Use the current date (which may be mocked by Playwright's clock)
-  const now = new Date();
-
-  function day(offset: number): string {
-    return addDays(now, offset).toISOString().slice(0, 10);
-  }
-
-  // Day aliases (Mon=0 when clock is mocked to Monday)
-  const mon = day(0);
-  const tue = day(1);
-  const wed = day(2);
-  const thu = day(3);
-  const fri = day(4);
+  const { fri, mon, thu, tue, wed } = marketingWeek();
 
   const work = await adapter.createFolder({ color: "#6366f1", name: "Work", parentId: null });
   const personal = await adapter.createFolder({
@@ -401,11 +402,12 @@ export async function seedMarketing(adapter: StorageAdapter): Promise<void> {
     tags: ["hiring"],
     title: "Review candidate",
   });
+}
 
-  // ── A connected calendar ─────────────────────────────────────────────────
-  // Google, not CalDAV: the mock's canned CalDAV calendars are Personal and Work,
-  // both of which this sidebar already has as native folders.
-
+// Google, not CalDAV: the mock's canned CalDAV calendars are Personal and Work,
+// both of which this sidebar already has as native folders.
+async function connectTeamCalendar(adapter: StorageAdapter): Promise<void> {
+  const { fri, mon, thu, wed } = marketingWeek();
   const mock = adapter as MockStorageAdapter;
   const account = await adapter.connectGoogleAccount();
   const team = account.calendars.find((c) => c.displayName === "Team")!;
