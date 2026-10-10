@@ -88,13 +88,15 @@ convert_to_mp4() {
   fi
 
   # H.264, no audio, web-optimized (faststart moves moov atom to front).
+  # setpts zeroes the first frame's timestamp. The cut lands between two captured
+  # frames, and without it the mp4 opens on a 40 ms empty edit that players paint black.
   ffmpeg -y -ss "$trim" -i "$input" \
     -c:v libx264 \
     -preset slow \
     -crf 23 \
     -an \
     -pix_fmt yuv420p \
-    -vf "scale=1280:-2:flags=lanczos" \
+    -vf "setpts=PTS-STARTPTS,scale=1280:-2:flags=lanczos" \
     -movflags +faststart \
     "$output" \
     -loglevel warning
