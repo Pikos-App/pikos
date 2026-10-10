@@ -18,7 +18,7 @@
  *      The meeting just wrapped.
  *   4. Click the Tue 10am slot → inline-create "Send recap" — the action
  *      that came out of the planning meeting, scheduled the next morning.
- *   5. Drag "Draft: search relevance" from the inbox list onto Thu 9am,
+ *   5. Drag "Write proposal" from the inbox list onto Thu 9am,
  *      then drag its bottom edge down to extend the block to 1 hour —
  *      blocks time to actually work on the proposal.
  *   6. Double-click the new Thu block → editor opens on the page. Type a
@@ -103,7 +103,7 @@ async function recordHero(page: Page): Promise<number> {
     await page.waitForTimeout(1000);
   }
 
-  // ── 5. Drag "Draft: search relevance" from inbox list onto Thu 9am. ───
+  // ── 5. Drag "Write proposal" from inbox list onto Thu 9am. ───
   // The dnd-kit PointerSensor activates at 8px — dragLocatorTo's step
   // interpolation crosses that on the first move.
 
@@ -118,7 +118,7 @@ async function recordHero(page: Page): Promise<number> {
 
     const draftRfc = page
       .locator("[data-page-list-item]")
-      .filter({ hasText: "Draft: search relevance" })
+      .filter({ hasText: "Write proposal" })
       .first();
     await dragLocatorTo(page, draftRfc, dropX, dropY);
     await page.waitForTimeout(700);
@@ -128,7 +128,7 @@ async function recordHero(page: Page): Promise<number> {
     // We grab the bottom-edge resize handle and pull down 48px so the total
     // block height = 64px = HOUR_HEIGHT. Snaps to the 10am grid line.
 
-    const rfcBlock = calRegion.getByRole("button", { name: /Draft: search relevance/ }).first();
+    const rfcBlock = calRegion.getByRole("button", { name: /Write proposal/ }).first();
     const rfcBox = await rfcBlock.boundingBox();
     if (rfcBox) {
       const handleX = rfcBox.x + rfcBox.width / 2;
