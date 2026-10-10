@@ -179,6 +179,15 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
   return true;
 }
 
+/** One event a provider holds, as `stageProviderEvents` takes it. */
+export interface StagedProviderEvent {
+  title: string;
+  scheduledStart: string;
+  scheduledEnd?: string;
+  timezone?: string;
+  location?: string;
+}
+
 export class MockStorageAdapter implements StorageAdapter {
   private pages = new Map<string, Page>();
   private folders = new Map<string, Folder>();
@@ -208,6 +217,8 @@ export class MockStorageAdapter implements StorageAdapter {
   // `page_sync.user_modified`: set by the editor path, never by sync. One half of
   // the ownership predicate teardown and export share — see `_isOwned`.
   private userModified = new Set<string>();
+  // Keyed by calendar display name, the only identity a test knows before discovery.
+  private stagedEvents = new Map<string, StagedProviderEvent[]>();
   /** The arguments of the most recent `exportWorkspace` call, for assertions. */
   lastExport: { format: WorkspaceExportFormat; options: WorkspaceExportOptions } | null = null;
 
@@ -226,6 +237,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.dormantAccounts.clear();
     this.detachedByCalendar.clear();
     this.userModified.clear();
+    this.stagedEvents.clear();
   }
 
   // ─── Command-layer guards ────────────────────────────────────────────────────
@@ -1479,6 +1491,46 @@ export class MockStorageAdapter implements StorageAdapter {
     }
   }
 
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): events the provider holds for any
+   * calendar named `calendarName`, which switching that calendar on backfills as
+   * active mirrors — the real enable's first pass. Without it a mock calendar comes
+   * on empty, and nothing in test mode can show a sync bringing events in.
+   */
+  stageProviderEvents(calendarName: string, events: StagedProviderEvent[]): void {
+    this.stagedEvents.set(calendarName, events);
+  }
+
+  /** Mirrors each staged event the folder doesn't already hold. Title and start
+   *  stand in for the provider uid, so a re-enable that just reclaimed a kept page
+   *  doesn't plant its twin beside it. */
+  private _backfillCalendar(calendarName: string, folderId: string): void {
+    const key = (title: string, start: string | null | undefined) => `${title}\u0000${start}`;
+    const present = new Set(
+      [...this.pages.values()]
+        .filter((p) => p.folderId === folderId && p.syncState === "active")
+        .map((p) => key(p.title, p.scheduledStart))
+    );
+    for (const event of this.stagedEvents.get(calendarName) ?? []) {
+      if (present.has(key(event.title, event.scheduledStart))) continue;
+      const page = this.insertPage({
+        content: "",
+        folderId,
+        priority: 0,
+        scheduledStart: event.scheduledStart,
+        status: "not_started",
+        tags: [],
+        title: event.title,
+        ...(event.scheduledEnd ? { scheduledEnd: event.scheduledEnd } : {}),
+      });
+      this.markPageSynced(page.id, {
+        state: "active",
+        ...(event.timezone ? { timezone: event.timezone } : {}),
+        ...(event.location ? { location: event.location } : {}),
+      });
+    }
+  }
+
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
     return Promise.resolve(this._calendarsFor(accountId));
   }
@@ -1529,6 +1581,7 @@ export class MockStorageAdapter implements StorageAdapter {
       }
       this._relinkCalendar(this.detachedByCalendar.get(syncCalendarId) ?? []);
       this.detachedByCalendar.delete(syncCalendarId);
+      this._backfillCalendar(cal.displayName, folderId);
     }
     const updated: SyncCalendar = { ...cal, color, detachedPages, enabled, folderId };
     this.syncCalendars.set(syncCalendarId, updated);

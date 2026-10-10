@@ -2063,6 +2063,75 @@ describe("calendar sync — teardown keeps the user's work", () => {
   });
 });
 
+describe("calendar sync — staged provider events backfill on enable", () => {
+  const conn = {
+    baseUrl: "https://x",
+    displayName: "me · https://x",
+    password: "pw",
+    username: "me",
+  };
+
+  async function calendarsByName() {
+    const account = await adapter.connectCaldavAccount(conn);
+    return new Map(account.calendars.map((c) => [c.displayName, c.id]));
+  }
+
+  beforeEach(() => {
+    adapter.stageProviderEvents("Work", [
+      {
+        location: "Zoom",
+        scheduledEnd: "2026-03-17T11:45:00",
+        scheduledStart: "2026-03-17T11:00:00",
+        timezone: "America/Los_Angeles",
+        title: "Customer call",
+      },
+      { scheduledStart: "2026-03-18T10:00:00", title: "Product sync" },
+    ]);
+  });
+
+  it("enabling the calendar lands its events as locked mirrors in its folder", async () => {
+    const calendars = await calendarsByName();
+
+    const on = await adapter.toggleSyncCalendar(calendars.get("Work")!, true, "#0ea5e9");
+
+    const mirrors = (await adapter.listPages({ folderId: on.folderId! })).sort((a, b) =>
+      a.title.localeCompare(b.title)
+    );
+    expect(mirrors.map((p) => p.title)).toEqual(["Customer call", "Product sync"]);
+    expect(mirrors[0]).toMatchObject({
+      mirrorLocation: "Zoom",
+      scheduledEnd: "2026-03-17T11:45:00",
+      scheduledStart: "2026-03-17T11:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "America/Los_Angeles",
+    });
+  });
+
+  it("a calendar with nothing staged still comes on empty", async () => {
+    const calendars = await calendarsByName();
+
+    const on = await adapter.toggleSyncCalendar(calendars.get("Personal")!, true, "#7c9cf0");
+
+    expect(await adapter.listPages({ folderId: on.folderId! })).toHaveLength(0);
+  });
+
+  it("a re-enable restores the bare mirrors and doesn't duplicate a kept one", async () => {
+    const workId = (await calendarsByName()).get("Work")!;
+    const { folderId } = await adapter.toggleSyncCalendar(workId, true, "#0ea5e9");
+    const kept = (await adapter.listPages({ folderId: folderId! })).find(
+      (p) => p.title === "Customer call"
+    )!;
+    await adapter.updatePage(kept.id, { priority: 2 });
+    await adapter.toggleSyncCalendar(workId, false, null);
+
+    await adapter.toggleSyncCalendar(workId, true, "#0ea5e9");
+
+    const titles = (await adapter.listPages({ folderId: folderId! })).map((p) => p.title).sort();
+    expect(titles).toEqual(["Customer call", "Product sync"]);
+  });
+});
+
 // ─── Focus sessions ──────────────────────────────────────────────────────────
 //
 // The mock is where every UI test sees this write, so its two refusals have to
