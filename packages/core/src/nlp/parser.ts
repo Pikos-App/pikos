@@ -235,6 +235,19 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     }
   );
 
+  // --- -0.45. "[by] [the] end of [the|this|next] month" ─────────────────────
+  // chrono reads "end of next month" as "next month", one month from today, and
+  // leaves "by the end of" in the title. Resolve the month's last day ourselves.
+  // Only months: where a week ends depends on the user's week-start setting,
+  // which the parser doesn't know.
+  text = text.replace(
+    /\b(?:by\s+)?(?:the\s+)?end\s+of\s+(?:(the|this|next)\s+)?month\b/gi,
+    (_, which: string | undefined) => {
+      const month = which?.toLowerCase() === "next" ? addMonths(ref, 1) : ref;
+      return ` ${format(set(month, { date: getDaysInMonth(month) }), "MMM d yyyy")} `;
+    }
+  );
+
   // --- -0.4. Day-of-month phrases chrono can't parse on its own ──────────────
   // chrono parses "May 24" but not bare day-of-month forms: "on the 24th" /
   // "by the 1st", or weekday+number like "Sat 24". Resolve each to a concrete
@@ -263,8 +276,10 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     return null;
   };
   // "on/by [the] Nth" — calendar prepositions disambiguate the ordinal as a date.
+  // "of" goes with it when a cadence follows ("on the 1st of every month"), or
+  // the cadence strip below leaves it stranded in the title.
   text = text.replace(
-    /\b(?:on|by)\s+(?:the\s+)?(3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)\b/gi,
+    /\b(?:on|by)\s+(?:the\s+)?(3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)(?:\s+of(?=\s+(?:every|each)\b))?\b/gi,
     (match, dayStr: string) => {
       const target = resolveDayOfMonth(parseInt(dayStr, 10));
       return target ? ` ${format(target, "MMM d yyyy")} ` : match;
@@ -798,9 +813,12 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   // --- 9. Title: remaining text ---
   // Collapse runs of whitespace, then clean up punctuation orphans left
-  // behind when inline tokens (#tag, !urgent, ~folder) were stripped:
-  //   - sentence punct (".", "!", "?") at end-of-string keeps the punctuation
-  //     but drops the whitespace gap before it: "call ." → "call.";
+  // behind when inline tokens (#tag, !urgent, ~folder, a date) were stripped:
+  //   - an orphaned "." at end-of-string ended the sentence the tokens were in,
+  //     not the title, so it goes: "call ." → "call". A "." the title ends with
+  //     itself ("Call mum.") has no gap before it and stays;
+  //   - "!" and "?" at end-of-string carry meaning, so they stay but lose the
+  //     whitespace gap before them: "ship it !" → "ship it!";
   //   - separator punct (",", ";", ":") at end-of-string is dropped entirely
   //     since it was acting as a token separator: "note ," → "note";
   //   - mid-string separator punct surrounded by whitespace is dropped too:
@@ -809,6 +827,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // are touched.
   const title = text
     .replace(/\s+/g, " ")
+    .replace(/\s+\.\s*$/, "")
     .replace(/\s+([.!?])(?=\s|$)/g, "$1")
     .replace(/\s+[,;:]+(?=\s|$)/g, "")
     .replace(/^[\s,;:]+/, "")

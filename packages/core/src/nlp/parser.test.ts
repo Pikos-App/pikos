@@ -1953,6 +1953,80 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
+  // NOW = Sun 2026-03-15 noon. A sentence typed whole, or passed whole by an assistant:
+  // the date phrase, its connecting words and the full stop that ended the sentence all go.
+  describe("title leakage — sentences typed whole", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { scheduledStart: "2026-04-30", title: "Renew passport" },
+          type: "single",
+        },
+        input: "Renew passport by the end of next month",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-31", title: "Renew passport" },
+          type: "single",
+        },
+        input: "Renew passport by the end of the month",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-31", title: "Submit timesheet" },
+          type: "single",
+        },
+        input: "Submit timesheet end of month",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-04-30", title: "Renew passport" },
+          type: "single",
+        },
+        input: "Renew passport by the end of next month.",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-04-01", title: "Pay the gym membership" },
+          rrule: ["FREQ=MONTHLY"],
+          type: "recurring",
+        },
+        input: "Pay the gym membership on the 1st of every month",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-19T15:30:00", title: "Coffee with Jordan" },
+          type: "single",
+        },
+        input: "Coffee with Jordan on Thursday at 3:30pm.",
+      },
+      // Negative: a full stop the title itself ends with stays.
+      {
+        expected: {
+          input: { title: "Call mum." },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Call mum.",
+      },
+      // Negative: "!" and "?" carry meaning and stay after a strip.
+      {
+        expected: { input: { scheduledStart: "2026-03-16", title: "Ship it!" }, type: "single" },
+        input: "Ship it tomorrow!",
+      },
+      // Negative: "end of" about something other than a month is not a date.
+      {
+        expected: {
+          input: { title: "Read the end of the book" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Read the end of the book",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+  });
+
   // ─── time-without-date anchor — additional weekday cases ────────────────────
   describe("time-without-date weekday anchoring", () => {
     // NOW = 2026-03-15 (Sunday).
@@ -2320,9 +2394,9 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["INTERVAL=2", "BYDAY=TU"], type: "recurring" },
         input: "standup EvErY OtHeR TuEsDaY",
       },
-      // Trailing punctuation on priority — known limitation: "." sticks to title.
+      // Trailing punctuation on priority: the "." orphaned by the strip goes.
       {
-        expected: { input: { priority: "urgent", title: "call." }, type: "single" },
+        expected: { input: { priority: "urgent", title: "call" }, type: "single" },
         input: "call !urgent.",
       },
       // Redundant whitespace collapses. NOW=12:00, 3pm tomorrow → 2026-03-16T15:00:00.
@@ -2572,11 +2646,9 @@ describe("NL Page Creation Parser", () => {
         input: "brunch every weekend morning",
       },
       // ─── trailing punctuation cleanup ──────────────────────────────────────
-      // "call !urgent." → priority consumes "!urgent", leaving a stray ".".
-      // The trailing "." currently survives — known limitation pinned for
-      // future cleanup. See adversarial input section.
+      // "call !urgent." → priority consumes "!urgent", and the "." it orphans goes too.
       {
-        expected: { input: { priority: "urgent", title: "call." }, type: "single" },
+        expected: { input: { priority: "urgent", title: "call" }, type: "single" },
         input: "call !urgent.",
       },
       // "note #abc, #def" → tags ["abc","def"], title "note" not "note ,".
