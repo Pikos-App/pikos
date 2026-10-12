@@ -1037,7 +1037,14 @@ pub async fn list_pages_impl(
     pool: &sqlx::SqlitePool,
     filter: Option<PageFilter>,
 ) -> AppResult<Vec<PageSummary>> {
-    list_pages_window(pool, filter, PageOrder::SortOrder, None).await
+    list_pages_window(
+        pool,
+        filter,
+        &ListExtras::default(),
+        PageOrder::SortOrder,
+        None,
+    )
+    .await
 }
 
 /// The order [`list_pages_window`] returns pages in.
@@ -1047,6 +1054,26 @@ pub enum PageOrder {
     SortOrder,
     /// Most recently edited first, manual order among ties.
     RecentlyUpdated,
+    /// Oldest first, so what has waited longest leads.
+    Created,
+}
+
+/// Filters only the CLI and MCP server ask for.
+///
+/// Kept off [`PageFilter`], which is generated into the app's TypeScript types, so the app's
+/// list query and its mock adapter don't grow filters nothing in the app sets.
+#[derive(Debug, Default, Clone)]
+pub struct ListExtras {
+    /// UTC bounds, inclusive and exclusive, in `created_at`'s own format: a caller turns the
+    /// user's local day into these, since `created_at` is stored in UTC.
+    pub created_from_utc: Option<String>,
+    pub created_until_utc: Option<String>,
+    /// Local days, `YYYY-MM-DD`, both inclusive: `completed_at` is stored as local wall-clock.
+    pub completed_from: Option<String>,
+    pub completed_to: Option<String>,
+    pub recurring: bool,
+    /// Pages with at least one reminder that fires; `-1` is the "no reminders" sentinel.
+    pub has_reminders: bool,
 }
 
 /// [`list_pages_impl`] with an order and at most `limit` rows, both applied in the query, so a
@@ -1057,6 +1084,7 @@ pub enum PageOrder {
 pub async fn list_pages_window(
     pool: &sqlx::SqlitePool,
     filter: Option<PageFilter>,
+    extras: &ListExtras,
     order: PageOrder,
     limit: Option<usize>,
 ) -> AppResult<Vec<PageSummary>> {
@@ -1110,9 +1138,37 @@ pub async fn list_pages_window(
         }
     }
 
+    if let Some(ref from) = extras.created_from_utc {
+        builder.push(" AND created_at >= ");
+        builder.push_bind(from.clone());
+    }
+    if let Some(ref until) = extras.created_until_utc {
+        builder.push(" AND created_at < ");
+        builder.push_bind(until.clone());
+    }
+    if let Some(ref from) = extras.completed_from {
+        builder.push(" AND substr(completed_at, 1, 10) >= ");
+        builder.push_bind(from.clone());
+    }
+    if let Some(ref to) = extras.completed_to {
+        builder.push(" AND substr(completed_at, 1, 10) <= ");
+        builder.push_bind(to.clone());
+    }
+    if extras.recurring {
+        builder
+            .push(" AND EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = pages.id)");
+    }
+    if extras.has_reminders {
+        builder.push(
+            " AND EXISTS (SELECT 1 FROM page_reminders m \
+               WHERE m.page_id = pages.id AND m.minutes_before <> -1)",
+        );
+    }
+
     builder.push(match order {
         PageOrder::SortOrder => " ORDER BY sort_order ASC",
         PageOrder::RecentlyUpdated => " ORDER BY updated_at DESC, sort_order ASC",
+        PageOrder::Created => " ORDER BY created_at ASC, sort_order ASC",
     });
     if let (Some(n), None) = (limit, &filter_tags) {
         builder.push(" LIMIT ");

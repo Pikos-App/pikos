@@ -741,27 +741,27 @@ pub async fn bench(
     );
     timings.push(
         time_it(runs, "search one word", || async {
-            search(&pool, "quarterly", false, Some(50), None).await
+            search(&pool, "quarterly", false, false, Some(50), None).await
         })
         .await?,
     );
     timings.push(
         time_it(runs, "search one word, two pages", || async {
-            let first = search(&pool, "quarterly", false, Some(50), None).await?;
-            let after = first.next.as_deref().and_then(SearchCursor::parse);
-            search(&pool, "quarterly", false, Some(50), after).await
+            let first = search(&pool, "quarterly", false, false, Some(50), None).await?;
+            let after = first.page.next.as_deref().and_then(SearchCursor::parse);
+            search(&pool, "quarterly", false, false, Some(50), after).await
         })
         .await?,
     );
     timings.push(
         time_it(runs, "search a rare word", || async {
-            search(&pool, RARE_WORD, false, Some(50), None).await
+            search(&pool, RARE_WORD, false, false, Some(50), None).await
         })
         .await?,
     );
     timings.push(
         time_it(runs, "search two words", || async {
-            search(&pool, "budget review", false, Some(50), None).await
+            search(&pool, "budget review", false, false, Some(50), None).await
         })
         .await?,
     );

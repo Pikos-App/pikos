@@ -176,9 +176,12 @@ fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "search_pages",
-            "Full-text search across every page, ranked by relevance.",
+            "Full-text search across every page, ranked by relevance. A page must hold every word; \
+             when none does, the search falls back to pages holding any of them and says so with \
+             anyWord. Results show a short preview; read_page returns the whole page.",
             json!({
-                "query": string_prop("Words to search for."),
+                "query": string_prop("Words to search for. One or two distinctive words work best."),
+                "anyWord": { "type": "boolean", "description": "Match pages holding any of the words rather than all. Pass it with a cursor from an anyWord result." },
                 "includeCompleted": { "type": "boolean", "description": "Include done pages (default false)." },
                 "limit": { "type": "integer", "description": "Results per page (default 20)." },
                 "cursor": string_prop("The `next` of a previous result, for the page after it."),
@@ -193,8 +196,14 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "list_pages",
-            "List pages, filtered by folder, status, priority, text, tags, due date or whether they are scheduled.",
+            "List pages, filtered by folder, status, priority, text, tags, due date, when they were \
+             created or completed, whether they repeat or have reminders, or whether they are scheduled.",
             json!({
+                "created": string_prop("Created on a day (YYYY-MM-DD) or in an inclusive range (YYYY-MM-DD..YYYY-MM-DD)."),
+                "completed": string_prop("Completed on a day or in an inclusive range, same forms as created."),
+                "repeating": { "type": "boolean", "description": "Only pages that repeat; each result carries its rule in `repeats`." },
+                "hasReminders": { "type": "boolean", "description": "Only pages with a reminder; each result carries minutes before the start in `reminders` (-2 is 9am the day before, for an all-day page)." },
+                "oldestFirst": { "type": "boolean", "description": "Sort by when the page was created, oldest first: what has waited longest." },
                 "folder": string_prop("Folder name or id; \"inbox\" for unfiled pages."),
                 "status": { "type": "string", "enum": ["not_started", "done"], "description": "Only pages in this state." },
                 "priority": { "type": "integer", "description": "Only pages at this priority: 0 none, 1 urgent, 2 high, 3 medium, 4 low." },
@@ -266,7 +275,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "list_reminders",
-            "List a page's reminders.",
+            "List one page's reminders. To find which pages have reminders, use list_pages with hasReminders.",
             json!({ "pageId": string_prop("The page id.") }),
             &["pageId"],
         ),
@@ -318,6 +327,7 @@ async fn call_tool(
             let resp = search(
                 pool,
                 &require_str(args, "query")?,
+                flag(args, "anyWord"),
                 flag(args, "includeCompleted"),
                 count(args, "limit"),
                 match text(args, "cursor") {
@@ -341,8 +351,13 @@ async fn call_tool(
                     query: text(args, "query"),
                     has_schedule: flag(args, "hasSchedule"),
                     due: text(args, "due"),
+                    created: text(args, "created"),
+                    completed: text(args, "completed"),
+                    repeating: flag(args, "repeating"),
+                    has_reminders: flag(args, "hasReminders"),
                     tags: strings(args, "tags"),
                     modified: flag(args, "modified"),
+                    oldest_first: flag(args, "oldestFirst"),
                     limit: count(args, "limit"),
                 },
             )

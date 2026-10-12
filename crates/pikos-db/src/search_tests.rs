@@ -437,7 +437,7 @@ async fn every_page(pool: &sqlx::SqlitePool, limit: usize, window: i64) -> Vec<V
     let mut pages = Vec::new();
     let mut cursor = None;
     loop {
-        let page = search_window(pool, "morning", false, limit, cursor, window)
+        let page = search_window(pool, "morning", Terms::All, false, limit, cursor, window)
             .await
             .unwrap();
         pages.push(page.results.into_iter().map(|r| r.id).collect());
@@ -477,13 +477,31 @@ async fn a_search_page_leaves_done_matches_out_and_counts_them() {
     let pool = test_pool().await;
     seed_matches(&pool, 2, 2).await;
 
-    let page = search_window(&pool, "morning", false, 20, None, 10)
+    let page = search_window(&pool, "morning", Terms::All, false, 20, None, 10)
         .await
         .unwrap();
 
     assert_eq!(page.results.len(), 2);
     assert_eq!(page.completed_count, 2);
     assert_eq!(page.next, None);
+}
+
+#[tokio::test]
+async fn any_terms_finds_pages_holding_one_word_where_all_terms_finds_none() {
+    let pool = test_pool().await;
+    seed_pages(&pool).await;
+
+    let all = search_page(&pool, "coffee roadmap", Terms::All, false, 20, None)
+        .await
+        .unwrap();
+    let any = search_page(&pool, "coffee roadmap", Terms::Any, false, 20, None)
+        .await
+        .unwrap();
+
+    assert!(all.results.is_empty());
+    let mut ids: Vec<&str> = any.results.iter().map(|r| r.id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, ["p1", "p2"]);
 }
 
 #[test]

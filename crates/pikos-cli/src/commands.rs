@@ -12,7 +12,8 @@ use crate::ops::{
     update_page, ListQuery, PageEdit,
 };
 use crate::render::{
-    print_json, render_folders, render_page, render_reminders, render_search, render_summary_list,
+    print_json, render_entry_list, render_folders, render_page, render_reminders, render_search,
+    render_summary_list,
 };
 use crate::workspace::open_workspace;
 
@@ -57,15 +58,27 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         CliCommand::Search {
             query,
+            any,
             include_completed,
             limit,
             after,
         } => {
-            let resp = search(&pool, &query.join(" "), include_completed, limit, after).await?;
+            let resp = search(
+                &pool,
+                &query.join(" "),
+                any,
+                include_completed,
+                limit,
+                after,
+            )
+            .await?;
             if json {
                 print_json(&resp);
             } else {
-                println!("{}", render_search(&resp));
+                if resp.any_word && !any {
+                    println!("No page holds every word; showing pages with any of them.\n");
+                }
+                println!("{}", render_search(&resp.page));
             }
         }
         CliCommand::Read { id } => {
@@ -84,7 +97,12 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             priority,
             query,
             has_schedule,
+            created,
+            completed,
+            repeating,
+            has_reminders,
             modified,
+            oldest_first,
             limit,
         } => {
             let pages = list_pages(
@@ -96,8 +114,13 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                     query,
                     has_schedule,
                     due,
+                    created,
+                    completed,
+                    repeating,
+                    has_reminders,
                     tags: tag,
                     modified,
+                    oldest_first,
                     limit,
                 },
             )
@@ -105,7 +128,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             if json {
                 print_json(&pages);
             } else {
-                println!("{}", render_summary_list(&pages, "No pages match."));
+                println!("{}", render_entry_list(&pages, "No pages match."));
             }
         }
         CliCommand::Today => {

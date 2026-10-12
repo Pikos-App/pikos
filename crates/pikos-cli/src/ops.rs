@@ -6,14 +6,15 @@
 
 use std::collections::HashMap;
 
+use chrono::{Local, NaiveDate, NaiveTime, TimeZone, Utc};
 use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
-    create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
+    create_recurrence_rule_impl, delete_page_reminder, fts_tokens, fuzzy_match_folder, get_page,
     get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
     list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_page,
     soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput, Folder,
-    NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder, PageSummary,
-    PageUpdate, SearchCursor, SearchPage,
+    ListExtras, NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder,
+    PageSummary, PageUpdate, SearchCursor, SearchPage, Terms,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -21,17 +22,19 @@ use sqlx::SqlitePool;
 
 use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
-use crate::schedule::{parse_due, resolve_schedule_change};
+use crate::schedule::{parse_day_range, parse_due, resolve_schedule_change};
 use crate::write::{
     apply_patch, local_tz, page_with_body, priority_num, resolve_folder, schedule_once,
     text_to_tiptap, write_reminders,
 };
 
 pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
-    get_page(pool, id)
-        .await
-        .map_err(classify)?
-        .ok_or_else(|| CliError::not_found(format!("No page with id: {id}")))
+    get_page(pool, id).await.map_err(classify)?.ok_or_else(|| {
+        CliError::not_found(format!(
+            "No page with id: {id}. A page id is a long string that search and list return \
+                 (search_pages or list_pages over MCP); a title is not an id."
+        ))
+    })
 }
 
 /// The two words `status` may hold, checked before anything is written.
@@ -55,7 +58,7 @@ pub fn validate_priority(p: i64) -> Result<(), CliError> {
 // ─── Listing ────────────────────────────────────────────────────────────────
 
 /// Every filter `list` can express, in the shape the flags (and the MCP tool
-/// arguments) arrive in. Translated to a [`PageFilter`] by [`list_pages`].
+/// arguments) arrive in. Translated to a [`PageFilter`] and [`ListExtras`] by [`list_pages`].
 #[derive(Default)]
 pub struct ListQuery {
     pub folder: Option<String>,
@@ -64,12 +67,64 @@ pub struct ListQuery {
     pub query: Option<String>,
     pub has_schedule: bool,
     pub due: Option<String>,
+    pub created: Option<String>,
+    pub completed: Option<String>,
+    pub repeating: bool,
+    pub has_reminders: bool,
     pub tags: Vec<String>,
     pub modified: bool,
+    pub oldest_first: bool,
     pub limit: Option<usize>,
 }
 
-pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<PageSummary>, CliError> {
+/// A listed page, with its repeat rule or reminders when the query asked about them.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListEntry {
+    #[serde(flatten)]
+    pub page: PageSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeats: Option<String>,
+    /// Minutes before the start; see `pikos_db::DAY_BEFORE_MINUTES` for the all-day anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reminders: Option<Vec<i64>>,
+}
+
+/// Midnight starting a local day, as the UTC instant `created_at` is stored in.
+fn local_day_start_utc(day: &str) -> Result<String, CliError> {
+    let date = NaiveDate::parse_from_str(day, "%Y-%m-%d")
+        .map_err(|_| CliError::usage(format!("not a date: \"{day}\"")))?;
+    let midnight = date.and_time(NaiveTime::MIN);
+    let instant = Local.from_local_datetime(&midnight).earliest().map_or_else(
+        || Utc.from_utc_datetime(&midnight),
+        |t| t.with_timezone(&Utc),
+    );
+    Ok(instant.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
+}
+
+fn next_day(day: &str) -> String {
+    NaiveDate::parse_from_str(day, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.succ_opt())
+        .map_or_else(|| day.to_string(), |d| d.format("%Y-%m-%d").to_string())
+}
+
+pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<ListEntry>, CliError> {
+    let mut extras = ListExtras {
+        recurring: q.repeating,
+        has_reminders: q.has_reminders,
+        ..Default::default()
+    };
+    if let Some(range) = &q.created {
+        let (from, to) = parse_day_range("created", range)?;
+        extras.created_from_utc = Some(local_day_start_utc(&from)?);
+        extras.created_until_utc = Some(local_day_start_utc(&next_day(&to))?);
+    }
+    if let Some(range) = &q.completed {
+        let (from, to) = parse_day_range("completed", range)?;
+        extras.completed_from = Some(from);
+        extras.completed_to = Some(to);
+    }
     let mut filter = PageFilter::default();
     if let Some(s) = &q.status {
         validate_status(s)?;
@@ -96,14 +151,47 @@ pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<PageSumma
     if !q.tags.is_empty() {
         filter.tags = Some(q.tags.clone());
     }
-    let order = if q.modified {
+    let order = if q.oldest_first {
+        PageOrder::Created
+    } else if q.modified {
         PageOrder::RecentlyUpdated
     } else {
         PageOrder::SortOrder
     };
-    list_pages_window(pool, Some(filter), order, q.limit)
+    let pages = list_pages_window(pool, Some(filter), &extras, order, q.limit)
         .await
-        .map_err(classify)
+        .map_err(classify)?;
+
+    let mut entries = Vec::with_capacity(pages.len());
+    for page in pages {
+        let repeats = if q.repeating {
+            get_recurrence_rule_impl(pool, &page.id)
+                .await
+                .map_err(classify)?
+                .map(|r| r.rrule)
+        } else {
+            None
+        };
+        let reminders = if q.has_reminders {
+            Some(
+                list_page_reminders(pool, &page.id)
+                    .await
+                    .map_err(classify)?
+                    .into_iter()
+                    .map(|r| r.minutes_before)
+                    .filter(|m| *m != -1)
+                    .collect(),
+            )
+        } else {
+            None
+        };
+        entries.push(ListEntry {
+            page,
+            repeats,
+            reminders,
+        });
+    }
+    Ok(entries)
 }
 
 // ─── Folders ────────────────────────────────────────────────────────────────
@@ -424,17 +512,48 @@ pub async fn trash(pool: &SqlitePool, id: &str) -> Result<(), CliError> {
 /// Results per search page when the caller doesn't say.
 const SEARCH_PAGE_SIZE: usize = 20;
 
+/// A page of search results, and whether it needed every word or fell back to any.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchOutcome {
+    #[serde(flatten)]
+    pub page: SearchPage,
+    pub any_word: bool,
+}
+
+/// Search for pages holding every word, and when none does, pages holding any of them.
+///
+/// The fallback runs only on a first page: a cursor belongs to one mode, so a caller paging
+/// through any-word results says so with `any_word`, which the outcome hands back.
 pub async fn search(
     pool: &SqlitePool,
     query: &str,
+    any_word: bool,
     include_completed: bool,
     limit: Option<usize>,
     after: Option<SearchCursor>,
-) -> Result<SearchPage, CliError> {
+) -> Result<SearchOutcome, CliError> {
     let limit = limit.unwrap_or(SEARCH_PAGE_SIZE);
-    search_page(pool, query, include_completed, limit, after)
+    let terms = if any_word { Terms::Any } else { Terms::All };
+    let first = after.is_none();
+    let page = search_page(pool, query, terms, include_completed, limit, after)
         .await
-        .map_err(classify)
+        .map_err(classify)?;
+    let fall_back = !any_word
+        && first
+        && page.results.is_empty()
+        && page.completed_count == 0
+        && fts_tokens(query).len() > 1;
+    if !fall_back {
+        return Ok(SearchOutcome { page, any_word });
+    }
+    let page = search_page(pool, query, Terms::Any, include_completed, limit, None)
+        .await
+        .map_err(classify)?;
+    Ok(SearchOutcome {
+        page,
+        any_word: true,
+    })
 }
 
 // ─── Updating ───────────────────────────────────────────────────────────────

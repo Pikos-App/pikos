@@ -452,3 +452,162 @@ async fn create_page_dry_run_returns_the_parse_and_writes_nothing() {
 
     server.shutdown();
 }
+
+fn titles(listed: &Value) -> Vec<String> {
+    listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_search_no_page_matches_in_full_falls_back_to_any_word() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(
+        dbs,
+        vec![
+            base_page("Annual checkup"),
+            base_page("Dentist appointment"),
+        ],
+    )
+    .await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let found = server.call(
+        2,
+        "search_pages",
+        json!({ "query": "checkup dentist visits" }),
+    );
+    assert_eq!(found["anyWord"], true);
+    assert_eq!(found["results"].as_array().unwrap().len(), 2, "{found}");
+
+    let exact = server.call(3, "search_pages", json!({ "query": "annual checkup" }));
+    assert_eq!(exact["anyWord"], false);
+    assert_eq!(exact["results"].as_array().unwrap().len(), 1, "{exact}");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn a_missing_page_says_where_ids_come_from() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let missing = server.call_expecting_error(
+        2,
+        "update_page",
+        json!({ "id": "Trip ideas", "priority": 2 }),
+    );
+    let message = missing["error"]["message"].as_str().unwrap();
+    assert!(message.contains("search_pages"), "{message}");
+    assert!(message.contains("list_pages"), "{message}");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn a_date_range_that_ends_before_it_starts_is_refused() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Overdue")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let refused =
+        server.call_expecting_error(2, "list_pages", json!({ "due": "2026-10-11..2026-10-10" }));
+    assert_eq!(refused["error"]["kind"], "Usage");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn list_pages_selects_by_creation_completion_repeat_and_reminder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let pool = open_pool(dbs).await.unwrap();
+    let page = |title: &str, created: &str, completed: Option<&str>| NewPage {
+        status: if completed.is_some() {
+            "done"
+        } else {
+            "not_started"
+        }
+        .into(),
+        completed_at: completed.map(str::to_string),
+        created_at: Some(created.into()),
+        ..base_page(title)
+    };
+    let mut ids = Vec::new();
+    for p in [
+        page("Learn Spanish", "2024-01-01T12:00:00.000Z", None),
+        page(
+            "Pay electricity",
+            "2026-01-02T12:00:00.000Z",
+            Some("2026-02-03T09:00:00"),
+        ),
+        page("Water the plants", "2026-01-03T12:00:00.000Z", None),
+        page("Dentist", "2026-01-04T12:00:00.000Z", None),
+    ] {
+        ids.push(create_page_impl(&pool, p).await.unwrap().id);
+    }
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[2].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=SU".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-01-04T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    pikos_db::create_page_reminder(&pool, &ids[3], 30)
+        .await
+        .unwrap();
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let oldest = server.call(
+        2,
+        "list_pages",
+        json!({ "oldestFirst": true, "status": "not_started" }),
+    );
+    assert_eq!(titles(&oldest)[0], "Learn Spanish");
+
+    let created = server.call(
+        3,
+        "list_pages",
+        json!({ "created": "2026-01-02..2026-01-03" }),
+    );
+    assert_eq!(titles(&created), ["Pay electricity", "Water the plants"]);
+
+    let completed = server.call(
+        4,
+        "list_pages",
+        json!({ "completed": "2026-02-01..2026-02-28" }),
+    );
+    assert_eq!(titles(&completed), ["Pay electricity"]);
+
+    let repeating = server.call(5, "list_pages", json!({ "repeating": true }));
+    assert_eq!(titles(&repeating), ["Water the plants"]);
+    assert_eq!(repeating[0]["repeats"], "FREQ=WEEKLY;BYDAY=SU");
+
+    let reminded = server.call(6, "list_pages", json!({ "hasReminders": true }));
+    assert_eq!(titles(&reminded), ["Dentist"]);
+    assert_eq!(reminded[0]["reminders"], json!([30]));
+
+    server.shutdown();
+}

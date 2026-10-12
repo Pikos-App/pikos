@@ -3,7 +3,7 @@
 
 use pikos_db::{Page, PageReminder, PageSummary, SearchPage};
 
-use crate::ops::FolderEntry;
+use crate::ops::{FolderEntry, ListEntry};
 
 pub fn priority_label(p: i64) -> &'static str {
     match p {
@@ -60,6 +60,27 @@ pub fn render_summary_list(pages: &[PageSummary], empty: &str) -> String {
     pages
         .iter()
         .map(render_summary)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_entry_list(entries: &[ListEntry], empty: &str) -> String {
+    if entries.is_empty() {
+        return empty.to_string();
+    }
+    entries
+        .iter()
+        .map(|e| {
+            let mut line = render_summary(&e.page);
+            if let Some(rule) = &e.repeats {
+                line.push_str(&format!("\n    repeats {rule}"));
+            }
+            if let Some(minutes) = &e.reminders {
+                let leads: Vec<String> = minutes.iter().map(|m| format!("{m}m")).collect();
+                line.push_str(&format!("\n    reminders {}", leads.join(", ")));
+            }
+            line
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }

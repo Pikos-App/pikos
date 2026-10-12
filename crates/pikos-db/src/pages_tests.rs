@@ -1064,12 +1064,13 @@ async fn a_bounded_list_returns_the_first_rows_in_the_order_asked_for() {
     }
     let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
 
-    let manual = list_pages_window(&pool, None, PageOrder::SortOrder, Some(2))
+    let none = ListExtras::default();
+    let manual = list_pages_window(&pool, None, &none, PageOrder::SortOrder, Some(2))
         .await
         .unwrap();
     assert_eq!(ids(manual), ["c", "a"]);
 
-    let recent = list_pages_window(&pool, None, PageOrder::RecentlyUpdated, Some(2))
+    let recent = list_pages_window(&pool, None, &none, PageOrder::RecentlyUpdated, Some(2))
         .await
         .unwrap();
     assert_eq!(ids(recent), ["b", "d"]);
@@ -1080,6 +1081,7 @@ async fn a_bounded_list_returns_the_first_rows_in_the_order_asked_for() {
             tags: Some(vec!["work".into()]),
             ..Default::default()
         }),
+        &none,
         PageOrder::RecentlyUpdated,
         Some(1),
     )
@@ -1089,6 +1091,86 @@ async fn a_bounded_list_returns_the_first_rows_in_the_order_asked_for() {
         ids(tagged),
         ["d"],
         "the limit counts only pages that carry the tag"
+    );
+}
+
+#[tokio::test]
+async fn the_cli_filters_select_by_creation_completion_repeat_and_reminder() {
+    let pool = test_pool().await;
+    // (id, created_at in UTC, completed_at in local wall-clock)
+    let pages = [
+        ("a", "2026-01-01T10:00:00.000Z", None),
+        ("b", "2026-01-02T10:00:00.000Z", Some("2026-02-03T09:00:00")),
+        ("c", "2026-01-03T10:00:00.000Z", Some("2026-03-01T09:00:00")),
+        ("d", "2025-12-31T10:00:00.000Z", None),
+    ];
+    for (id, created_at, completed_at) in pages {
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE pages SET created_at = ?, completed_at = ? WHERE id = ?")
+            .bind(created_at)
+            .bind(completed_at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    crate::schedules::create_recurrence_rule_impl(
+        &pool,
+        crate::schedules::NewRecurrenceRule {
+            page_id: "c".into(),
+            rrule: "FREQ=WEEKLY;BYDAY=SU".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-01-04T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::reminders::create_page_reminder(&pool, "d", 30)
+        .await
+        .unwrap();
+    crate::reminders::create_page_reminder(&pool, "b", -1)
+        .await
+        .unwrap();
+    let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
+    let list = |extras: ListExtras| {
+        let pool = pool.clone();
+        async move {
+            list_pages_window(&pool, None, &extras, PageOrder::Created, None)
+                .await
+                .unwrap()
+        }
+    };
+
+    assert_eq!(ids(list(ListExtras::default()).await), ["d", "a", "b", "c"]);
+    let created_on_the_2nd = ListExtras {
+        created_from_utc: Some("2026-01-02T00:00:00.000Z".into()),
+        created_until_utc: Some("2026-01-03T00:00:00.000Z".into()),
+        ..Default::default()
+    };
+    assert_eq!(ids(list(created_on_the_2nd).await), ["b"]);
+    let completed_in_february = ListExtras {
+        completed_from: Some("2026-02-01".into()),
+        completed_to: Some("2026-02-28".into()),
+        ..Default::default()
+    };
+    assert_eq!(ids(list(completed_in_february).await), ["b"]);
+    let repeating = ListExtras {
+        recurring: true,
+        ..Default::default()
+    };
+    assert_eq!(ids(list(repeating).await), ["c"]);
+    let reminded = ListExtras {
+        has_reminders: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        ids(list(reminded).await),
+        ["d"],
+        "the no-reminders sentinel is not a reminder"
     );
 }
 

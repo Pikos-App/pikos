@@ -335,7 +335,7 @@ pub async fn search_pages_scan(
         });
     }
 
-    let fts_query = fts_match(&tokens);
+    let fts_query = fts_match(&tokens, Terms::All);
 
     let cap = match scan {
         SearchScan::Newest(n) if matches_more_than(pool, &fts_query, n).await? => {
@@ -450,6 +450,17 @@ struct WindowFacts {
     floor: Option<i64>,
 }
 
+/// Which of a query's words a page must contain.
+///
+/// The app always searches with [`Terms::All`], the way a search box narrows as you type.
+/// [`Terms::Any`] exists for an assistant over the CLI, which tends to search a whole phrase
+/// ("health doctor visits") where a person would type one word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Terms {
+    All,
+    Any,
+}
+
 /// Search a page at a time, for a caller that wants more than the app's first twenty: each page
 /// ranks a window of the newest [`SEARCH_PAGE_WINDOW`] matches the way the app does, title hits
 /// first, and shows `limit` of them; the cursor walks through that window, then the next older
@@ -457,6 +468,7 @@ struct WindowFacts {
 pub async fn search_page(
     pool: &sqlx::SqlitePool,
     query: &str,
+    terms: Terms,
     include_completed: bool,
     limit: usize,
     cursor: Option<SearchCursor>,
@@ -464,6 +476,7 @@ pub async fn search_page(
     search_window(
         pool,
         query,
+        terms,
         include_completed,
         limit,
         cursor,
@@ -476,6 +489,7 @@ pub async fn search_page(
 async fn search_window(
     pool: &sqlx::SqlitePool,
     query: &str,
+    terms: Terms,
     include_completed: bool,
     limit: usize,
     cursor: Option<SearchCursor>,
@@ -490,7 +504,7 @@ async fn search_window(
             next: None,
         });
     }
-    let fts_query = fts_match(&tokens);
+    let fts_query = fts_match(&tokens, terms);
     let titled_query = format!("{{title subtitle}}: ({fts_query})");
     let at = cursor.unwrap_or(SearchCursor { before: 0, skip: 0 });
     let below = if at.before == 0 { i64::MAX } else { at.before };
@@ -572,7 +586,7 @@ async fn search_window(
 }
 
 /// The FTS5 query for `tokens`: each a term, the last a prefix, so a word still being typed matches.
-fn fts_match(tokens: &[String]) -> String {
+fn fts_match(tokens: &[String], terms: Terms) -> String {
     tokens
         .iter()
         .enumerate()
@@ -584,7 +598,10 @@ fn fts_match(tokens: &[String]) -> String {
             }
         })
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(match terms {
+            Terms::All => " ",
+            Terms::Any => " OR ",
+        })
 }
 
 /// A matched page as search shows it: an excerpt around the match and where the match was.

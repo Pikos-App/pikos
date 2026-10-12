@@ -31,6 +31,11 @@ pub enum CliCommand {
     /// Full-text search across pages (FTS5, bm25-ranked)
     Search {
         query: Vec<String>,
+        #[arg(
+            long,
+            help = "Match pages holding any of the words; used anyway when none holds them all"
+        )]
+        any: bool,
         #[arg(long)]
         include_completed: bool,
         #[arg(long, help = "Results per page (default 20)")]
@@ -63,8 +68,24 @@ pub enum CliCommand {
         query: Option<String>,
         #[arg(long = "has-schedule", help = "Only pages that are scheduled at all")]
         has_schedule: bool,
+        #[arg(long, help = "Created on YYYY-MM-DD, or in YYYY-MM-DD..YYYY-MM-DD")]
+        created: Option<String>,
+        #[arg(long, help = "Completed on YYYY-MM-DD, or in YYYY-MM-DD..YYYY-MM-DD")]
+        completed: Option<String>,
+        #[arg(long, help = "Only pages that repeat, with their rule")]
+        repeating: bool,
+        #[arg(
+            long = "has-reminders",
+            help = "Only pages with a reminder, with its lead time"
+        )]
+        has_reminders: bool,
         #[arg(long)]
         modified: bool,
+        #[arg(
+            long = "oldest-first",
+            help = "Sort by when the page was created, oldest first"
+        )]
+        oldest_first: bool,
         #[arg(long)]
         limit: Option<usize>,
     },
