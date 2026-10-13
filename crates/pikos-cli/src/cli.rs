@@ -166,6 +166,10 @@ pub enum CliCommand {
     },
     /// Bring a trashed page back
     Restore { id: String },
+    /// List trashed pages, newest first
+    Trash,
+    /// List tags on open pages with how many carry each
+    Tags,
     /// List, create, rename, trash and restore folders
     Folders {
         #[command(subcommand)]

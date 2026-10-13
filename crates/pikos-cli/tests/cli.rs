@@ -1783,6 +1783,59 @@ async fn restore_brings_a_trashed_page_back_into_the_listing() {
     );
 }
 
+#[tokio::test]
+async fn trash_lists_what_restore_can_bring_back() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task"), base_page("Keep")]).await;
+
+    let empty = cli(dbs, &["trash"]);
+    assert!(String::from_utf8_lossy(&empty.stdout).contains("The trash is empty."));
+
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    let trashed = json(&cli(dbs, &["trash", "--json"]));
+    assert_eq!(trashed.as_array().unwrap().len(), 1);
+    assert_eq!(trashed[0]["title"], "Task");
+
+    let id = trashed[0]["id"].as_str().unwrap();
+    assert!(cli(dbs, &["restore", id, "--json"]).status.success());
+    assert!(json(&cli(dbs, &["trash", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn tags_lists_open_pages_tags_most_used_first() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let tagged = |title: &str, tags: &[&str]| NewPage {
+        tags: tags.iter().map(|t| t.to_string()).collect(),
+        ..base_page(title)
+    };
+    let done = NewPage {
+        status: "done".into(),
+        ..tagged("Old", &["archive"])
+    };
+    seed(
+        dbs,
+        vec![tagged("A", &["work", "home"]), tagged("B", &["work"]), done],
+    )
+    .await;
+
+    let tags = json(&cli(dbs, &["tags", "--json"]));
+    assert_eq!(tags[0]["name"], "work");
+    assert_eq!(tags[0]["pageCount"], 2);
+    assert_eq!(tags[1]["name"], "home");
+    assert_eq!(
+        tags.as_array().unwrap().len(),
+        2,
+        "a done page's tag isn't listed"
+    );
+}
+
 /// Trashing a synced page tombstones its mirror; restoring must hand it back to
 /// the reconciler, or the page returns locally and stays suppressed upstream.
 #[tokio::test]

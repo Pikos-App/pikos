@@ -45,7 +45,7 @@ only.
 ## Commands
 
 `search`, `read`, `list`, `today`, `add`, `update`, `done`, `status`, `delete`,
-`restore`, `folders`, `reminders`, `mcp`. Run `pikos <command> --help` for each
+`restore`, `trash`, `tags`, `folders`, `reminders`, `mcp`. Run `pikos <command> --help` for each
 surface. Global flags: `--json`, `--db <path>`, `--yes`, `--migrate`.
 
 `search` ranks matches the way the app does and shows `--limit` of them (default 20). When
@@ -75,7 +75,9 @@ show the parse, then re-issue the same text to commit it.
 `delete` moves a page to the trash on every origin, mirroring the app; `--hard`
 destroys it instead, and refuses on a page whose calendar is still connected
 (the next poll would recreate it). `restore <id>` is the other half — it brings a
-trashed page back and hands a tombstoned mirror back to the reconciler.
+trashed page back and hands a tombstoned mirror back to the reconciler. `trash`
+lists what is in the trash, newest first, so a page can be restored without
+already holding its id. `tags` lists the tags on open pages, most used first.
 
 `folders list` prints every folder with its live page count; `folders create
 <name>` makes one at the top level. `folders rename <folder> <name>` and `folders
@@ -157,7 +159,7 @@ there is nothing to set. Every other tool is DB-only.
 Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 `create_page` (natural language, plus `dryRun` to preview the parse),
 `update_page`, `set_status`, `complete_page`, `delete_page`, `restore_page`,
-`list_folders`, `create_folder`, `rename_folder`, `delete_folder`,
+`list_trash`, `list_tags`, `list_folders`, `create_folder`, `rename_folder`, `delete_folder`,
 `restore_folder`, `list_reminders`, `add_reminder`, `remove_reminder`.
 
 Two things the protocol deliberately does not offer. **Hard delete**:

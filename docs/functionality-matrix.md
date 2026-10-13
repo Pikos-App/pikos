@@ -484,7 +484,7 @@ distinct. Rows are keyed by folder id, headed by account.
 | Daily summary notification | ✅ ⁵⁸ | ✅ same | ✅ same | — | ○ |
 | Quiet hours suppress a reminder | ✅ dropped, not deferred ⁵⁸ | ✅ same | ✅ same | — | ○ |
 | A fired reminder doesn't fire twice | ✅ ¹³ | ✅ ¹³ | ✅ ¹³ | — | ○ |
-| Trash view: list, restore, empty now | ✅ ⁵⁹ | ⚠️ restore resumes sync ⁷ | ⚠️ ⁵⁹ | ⚠️ `restore` only | ○ |
+| Trash view: list, restore, empty now | ✅ ⁵⁹ | ⚠️ restore resumes sync ⁷ | ⚠️ ⁵⁹ | ⚠️ `trash` lists, `restore`; no empty-now | ○ |
 | 30-day trash sweep | ✅ destroyed | ⚠️ kept, by design ⁵⁹ | ⚠️ kept, unintended ⁵⁹ | — | ○ |
 | Search operators (`tag:` `folder:` `is:` `priority:` `due:`) | ✅ ⁶⁰ | ✅ ⁶⁰ | ✅ ⁶⁰ | ⚠️ flags, not operators ⁶⁰ | ○ |
 | Command palette (`>` prefix) | ✅ ⁶¹ | — ⁶¹ | — ⁶¹ | — | ○ |

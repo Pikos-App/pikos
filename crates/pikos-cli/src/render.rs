@@ -1,7 +1,8 @@
 //! Human-readable rendering. `--json` bypasses all of this and prints the
 //! pikos-db types verbatim, so these are the plain-text surface only.
 
-use pikos_db::{Page, PageReminder, PageSummary, SearchPage};
+use pikos_db::reads::TagCount;
+use pikos_db::{Page, PageReminder, PageSummary, SearchPage, TrashedPage};
 
 use crate::ops::{FolderEntry, ListEntry};
 
@@ -216,6 +217,39 @@ pub fn render_reminders(reminders: &[PageReminder]) -> String {
             0 => format!("at the start   id:{}", r.id),
             m => format!("{m} min before   id:{}", r.id),
         })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_trash(pages: &[TrashedPage]) -> String {
+    if pages.is_empty() {
+        return "The trash is empty.".to_string();
+    }
+    pages
+        .iter()
+        .map(|p| {
+            let title = if p.title.is_empty() {
+                "(untitled)"
+            } else {
+                &p.title
+            };
+            let from = p
+                .folder_name
+                .as_deref()
+                .map(|f| format!("  from {f}"))
+                .unwrap_or_default();
+            format!("{title}{from}  trashed {}   id:{}", p.deleted_at, p.id)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_tags(tags: &[TagCount]) -> String {
+    if tags.is_empty() {
+        return "No open page has a tag.".to_string();
+    }
+    tags.iter()
+        .map(|t| format!("#{}  {} page(s)", t.name, t.page_count))
         .collect::<Vec<_>>()
         .join("\n")
 }

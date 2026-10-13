@@ -8,12 +8,13 @@ use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand, StressCommand}
 use crate::error::{classify, CliError};
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
-    mark_done, parse_only, remove_reminder, rename_folder, require_folder, require_page, restore,
-    restore_folder, search, set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
+    list_tags, list_trash, mark_done, parse_only, remove_reminder, rename_folder, require_folder,
+    require_page, restore, restore_folder, search, set_status, trash, trash_folder, update_page,
+    ListQuery, PageEdit,
 };
 use crate::render::{
     print_json, render_entry_list, render_folders, render_page, render_reminders, render_search,
-    render_summary_list,
+    render_summary_list, render_tags, render_trash,
 };
 use crate::workspace::open_workspace;
 
@@ -275,6 +276,22 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 print_json(&page);
             } else {
                 println!("{}", render_page(&page));
+            }
+        }
+        CliCommand::Trash => {
+            let trashed = list_trash(&pool).await?;
+            if json {
+                print_json(&trashed);
+            } else {
+                println!("{}", render_trash(&trashed));
+            }
+        }
+        CliCommand::Tags => {
+            let tags = list_tags(&pool).await?;
+            if json {
+                print_json(&tags);
+            } else {
+                println!("{}", render_tags(&tags));
             }
         }
         CliCommand::Folders { command } => match command {

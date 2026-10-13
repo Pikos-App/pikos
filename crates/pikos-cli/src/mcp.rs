@@ -24,9 +24,9 @@ use sqlx::SqlitePool;
 
 use crate::error::CliError;
 use crate::ops::{
-    add_reminder, cmd_add, create_folder, list_folders, list_pages, list_reminders, mark_done,
-    parse_only, remove_reminder, rename_folder, require_page, restore, restore_folder, search,
-    set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
+    add_reminder, cmd_add, create_folder, list_folders, list_pages, list_reminders, list_tags,
+    list_trash, mark_done, parse_only, remove_reminder, rename_folder, require_page, restore,
+    restore_folder, search, set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
 };
 use crate::workspace::open_workspace;
 
@@ -274,6 +274,18 @@ fn tool_definitions() -> Vec<Value> {
             &["id"],
         ),
         tool(
+            "list_trash",
+            "List trashed pages, newest first, with their ids for restore_page.",
+            json!({}),
+            &[],
+        ),
+        tool(
+            "list_tags",
+            "List the tags on open pages, most used first, with how many pages carry each.",
+            json!({}),
+            &[],
+        ),
+        tool(
             "list_folders",
             "List the workspace's folders with their page counts.",
             json!({}),
@@ -443,6 +455,8 @@ async fn call_tool(
             Ok(json!({ "id": id, "trashed": true }))
         }
         "restore_page" => to_value(&restore(pool, &require_str(args, "id")?).await?),
+        "list_trash" => to_value(&list_trash(pool).await?),
+        "list_tags" => to_value(&list_tags(pool).await?),
         "list_folders" => to_value(&list_folders(pool).await?),
         "create_folder" => to_value(&create_folder(pool, &require_str(args, "name")?).await?),
         "rename_folder" => to_value(
@@ -559,6 +573,8 @@ mod tests {
             "complete_page",
             "delete_page",
             "restore_page",
+            "list_trash",
+            "list_tags",
             "list_folders",
             "create_folder",
             "rename_folder",

@@ -12,10 +12,11 @@ use pikos_db::{
     create_recurrence_rule_impl, delete_page_reminder, delete_page_schedule_impl, fts_tokens,
     fuzzy_match_folder, get_folder_impl, get_page, get_recurrence_rule_impl, list_folders_impl,
     list_page_reminders, list_page_schedules_impl, list_pages_impl, list_pages_window,
-    now_local_iso, restore_folder_impl, restore_page_impl, search_page, soft_delete_folder_impl,
-    soft_delete_page_impl, today_local, update_folder_impl, update_page_impl,
-    CompleteRecurringInput, Folder, FolderUpdate, ListExtras, NewFolder, NewRecurrenceRule, Page,
-    PageFilter, PageOrder, PageReminder, PageSummary, PageUpdate, SearchCursor, SearchPage, Terms,
+    list_trashed_pages_impl, now_local_iso, restore_folder_impl, restore_page_impl, search_page,
+    soft_delete_folder_impl, soft_delete_page_impl, today_local, update_folder_impl,
+    update_page_impl, CompleteRecurringInput, Folder, FolderUpdate, ListExtras, NewFolder,
+    NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder, PageSummary, PageUpdate,
+    SearchCursor, SearchPage, Terms, TrashedPage,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -398,6 +399,16 @@ pub async fn restore(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     require_page(pool, id).await?;
     restore_page_impl(pool, id).await.map_err(classify)?;
     require_page(pool, id).await
+}
+
+/// Trashed pages, newest first, so a page can be restored without already holding its id.
+pub async fn list_trash(pool: &SqlitePool) -> Result<Vec<TrashedPage>, CliError> {
+    list_trashed_pages_impl(pool).await.map_err(classify)
+}
+
+/// Tags on open pages, most used first, so a filter or a retag can spell one as stored.
+pub async fn list_tags(pool: &SqlitePool) -> Result<Vec<pikos_db::reads::TagCount>, CliError> {
+    pikos_db::reads::list_tags(pool).await.map_err(classify)
 }
 
 /// Run the natural-language parser and hand back what it produced, verbatim,

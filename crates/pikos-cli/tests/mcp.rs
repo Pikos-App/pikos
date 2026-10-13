@@ -724,3 +724,25 @@ async fn folder_tools_create_rename_trash_and_restore() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn list_trash_and_list_tags_answer_what_an_agent_cannot_guess() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut page = base_page("Plan");
+    page.tags = vec!["work".into()];
+    let ids = seed(dbs, vec![page, base_page("Gone")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let tags = server.call(2, "list_tags", json!({}));
+    assert_eq!(tags, json!([{ "name": "work", "pageCount": 1 }]));
+
+    server.call(3, "delete_page", json!({ "id": ids[1] }));
+    let trash = server.call(4, "list_trash", json!({}));
+    assert_eq!(trash[0]["id"], ids[1].as_str());
+    assert_eq!(trash[0]["title"], "Gone");
+
+    server.shutdown();
+}
