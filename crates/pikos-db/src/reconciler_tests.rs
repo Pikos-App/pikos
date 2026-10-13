@@ -36,6 +36,7 @@ fn ctx_for(calendar_id: &str) -> ReconcileContext {
         calendar_id: calendar_id.into(),
         provider: "caldav".into(),
         folder_id: "f1".into(),
+        window_start: chrono::NaiveDate::MIN,
     }
 }
 
@@ -4494,4 +4495,155 @@ async fn a_synced_series_sorts_by_its_rules_zone() {
         .unwrap();
     assert!(order_inputs(&pool, &page).await.0);
     assert_order_inputs_current(&pool).await;
+}
+
+// ─── series that ended before the backfill window ─────────────────────────────
+
+fn ctx_now() -> ReconcileContext {
+    ReconcileContext {
+        window_start: backfill_window_start(),
+        ..ctx()
+    }
+}
+
+/// A weekly series from ten weeks ago on today's weekday, under `rrule`.
+fn weekly_from_ten_weeks_ago(etag: &str, rrule: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed(&week_occ(-10), None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+/// `FREQ=WEEKLY` ending `days` from today, as a floating `UNTIL`.
+fn weekly_until_days(days: i64) -> String {
+    format!(
+        "FREQ=WEEKLY;UNTIL={}",
+        (chrono::Local::now() + chrono::Duration::days(days)).format("%Y%m%dT235959")
+    )
+}
+
+// qa: SYNC-31:3
+#[tokio::test]
+async fn a_series_that_ended_before_the_window_gets_no_page() {
+    let pool = setup().await;
+    for (etag, rrule) in [
+        ("v1", weekly_until(-3)),
+        ("v2", "FREQ=WEEKLY;COUNT=3".to_string()),
+    ] {
+        let outcome = reconcile(
+            &pool,
+            &ctx_now(),
+            &delta(vec![weekly_from_ten_weeks_ago(etag, &rrule)]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(outcome.applied, 0, "{rrule}");
+    }
+    assert_eq!(page_count(&pool).await, 0);
+}
+
+// qa: SYNC-31:3
+#[tokio::test]
+async fn a_stored_series_cut_short_before_the_window_goes_as_if_deleted_upstream() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 1);
+
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v2", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 0, "a bare mirror goes");
+}
+
+#[tokio::test]
+async fn a_cut_short_series_you_ticked_is_kept_and_detached() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(week_day(-5))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v2", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    assert!(page_exists(&pool, &page_id).await);
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+#[tokio::test]
+async fn a_series_whose_last_meeting_opens_the_window_still_syncs() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago(
+            "v1",
+            &weekly_until_days(-1),
+        )]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "its last meeting was a week ago today"
+    );
+}
+
+// qa: SYNC-31:3
+#[tokio::test]
+async fn ended_series_stored_by_an_earlier_build_go_on_the_next_pass() {
+    let pool = setup().await;
+    let ended = UpsertItem::Event(EventUpsert {
+        core: core("/ended.ics", "uid-ended", "v1", "Ended"),
+        ..match weekly_from_ten_weeks_ago("v1", &weekly_until(-3)) {
+            UpsertItem::Event(ev) => ev,
+            UpsertItem::Occurrence(_) => unreachable!(),
+        }
+    });
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![ended, weekly_from_ten_weeks_ago("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 2);
+
+    assert_eq!(remove_ended_series(&pool, &ctx_now()).await.unwrap(), 1);
+    assert!(!page_exists_by_uid(&pool, "uid-ended").await);
+    assert!(page_exists_by_uid(&pool, "uid-series").await);
+    assert_eq!(remove_ended_series(&pool, &ctx_now()).await.unwrap(), 0);
 }

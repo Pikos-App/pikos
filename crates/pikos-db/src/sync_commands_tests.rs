@@ -295,6 +295,7 @@ async fn detached_pages_leaves_out_pages_whose_event_was_deleted_upstream() {
             calendar_id: "cal-a".into(),
             provider: "caldav".into(),
             folder_id: folder_id.clone(),
+            window_start: chrono::NaiveDate::MIN,
         },
         &crate::sync_delta::SyncDelta {
             removals: vec![crate::sync_delta::Removal {

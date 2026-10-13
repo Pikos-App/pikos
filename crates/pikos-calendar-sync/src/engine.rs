@@ -91,6 +91,7 @@ async fn run<P: CalendarProvider>(
         calendar_id: calendar.calendar_id.clone(),
         provider: account.provider.clone(),
         folder_id: folder_id.to_string(),
+        window_start: pikos_db::reconciler::backfill_window_start(),
     };
 
     let since = calendar.sync_token.clone().map(SyncToken);
@@ -130,7 +131,8 @@ async fn run<P: CalendarProvider>(
     )
     .await?;
     let swept = sweep_absent_events(pool, &ctx, &delta, &resolved_masters).await?;
-    let changed = outcome.applied > 0 || !resolved_masters.is_empty() || swept > 0;
+    let ended = pikos_db::reconciler::remove_ended_series(pool, &ctx).await?;
+    let changed = outcome.applied > 0 || !resolved_masters.is_empty() || swept > 0 || ended > 0;
 
     let next = match delta.next_token {
         Some(token) => Some(token),

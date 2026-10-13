@@ -641,6 +641,8 @@ provider.
 | Rewrite of a series' rule | — | ✅ completed/skip sets survive ⁷¹ | — ⁷⁰ | — | ○ |
 | Cancel of one instance | — | ✅ EXDATE — the slot empties ⁷² | — ⁷⁰ | — | ○ |
 | Delete of the event / series | — | ⚠️ detach if owned, else hard-delete ⁷² | — ⁷⁰ | — | ○ |
+| A series that ended before the sync window, a week back | — | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷² | — ⁷⁰ | — | ○ |
+| A copy of one instance at its own time | — | ✅ no override row, so one block ⁴⁴ | — ⁷⁰ | — | ○ |
 | Description change | — | ⚠️ silent refresh vs notice ⁷³ | — ⁷⁰ | — | ○ |
 
 ⁶⁸ `pikos mcp` speaks Model Context Protocol on stdio so an agent can drive the workspace:

@@ -1334,6 +1334,7 @@ async fn upgrading_fills_in_the_sort_inputs_of_events_already_synced() {
             calendar_id: "cal".into(),
             provider: "caldav".into(),
             folder_id: "f1".into(),
+            window_start: chrono::NaiveDate::MIN,
         },
         &SyncDelta {
             upserts: vec![UpsertItem::Event(EventUpsert {

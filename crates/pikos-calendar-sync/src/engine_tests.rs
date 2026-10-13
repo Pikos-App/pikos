@@ -167,7 +167,7 @@ fn master(external_id: &str, uid: &str) -> EventUpsert {
         },
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
-            rrule: "FREQ=DAILY;COUNT=5".into(),
+            rrule: "FREQ=DAILY".into(),
             exdates: vec![],
             overrides: vec![],
         }),
@@ -695,6 +695,7 @@ async fn write_contention_converges() {
         calendar_id: CAL_ID.into(),
         provider: "caldav".into(),
         folder_id: FOLDER.into(),
+        window_start: chrono::NaiveDate::MIN,
     };
     reconcile(
         pool,

@@ -53,6 +53,14 @@ pub struct ReconcileContext {
     pub calendar_id: String,
     pub provider: String,
     pub folder_id: String,
+    /// The first day this sync reaches back to, [`backfill_window_start`] for a real
+    /// sync. A series that ended before it is not mirrored (see [`ended_before_window`]).
+    pub window_start: chrono::NaiveDate,
+}
+
+/// The first day a sync reaches back to: [`crate::sync::BACKFILL_DAYS`] before today.
+pub fn backfill_window_start() -> chrono::NaiveDate {
+    chrono::Local::now().date_naive() - chrono::Days::new(crate::sync::BACKFILL_DAYS as u64)
 }
 
 /// What a reconcile surfaced for the engine to act on: orphan masters needing a
@@ -153,6 +161,16 @@ async fn apply_event(
         existing = None;
     }
 
+    if ended_before_window(ev, ctx.window_start) {
+        return match existing {
+            Some((page_sync_id, page_id, _, state, _)) if state == "active" => {
+                detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        };
+    }
+
     let now = now_iso();
     let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
@@ -217,6 +235,84 @@ async fn apply_event(
     write_schedule(tx, &page_id, ev, &now).await?;
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
     Ok(true)
+}
+
+/// Whether a series ran out before `window`, the first day the sync reaches: no occurrence
+/// on or after it, and no instance moved into it.
+///
+/// Google's `events.list` with `singleEvents=false` returns a recurring master whole, so a
+/// series a "this and following" edit cut short a year ago still arrives, and stored it
+/// sits in the list at its last date as an open page nothing can tick. CalDAV's time-range
+/// query leaves such a series out, but neither provider's incremental cursor is windowed,
+/// so the check lives here, for every path. Only a bounded rule can end; one the engine
+/// can't read is kept.
+fn ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> bool {
+    let Some(rec) = &ev.recurrence else {
+        return false;
+    };
+    if !rec.rrule.contains("UNTIL=") && !rec.rrule.contains("COUNT=") {
+        return false;
+    }
+    let window_key = window.format("%Y%m%d").to_string();
+    let moved_in = rec
+        .overrides
+        .iter()
+        .any(|ov| date_key(&ov.schedule.start) >= window_key);
+    let tz = ev.schedule.timezone.as_deref().unwrap_or(SENTINEL_TZ);
+    !moved_in && rule_ended(&rec.rrule, &ev.schedule.start, tz, window)
+}
+
+/// Whether a rule yields nothing on or after `window`. A rule the engine can't read
+/// counts as still running.
+fn rule_ended(rrule: &str, start: &str, tz: &str, window: chrono::NaiveDate) -> bool {
+    let Some(day_before) = window.checked_sub_days(chrono::Days::new(1)) else {
+        return false;
+    };
+    let rrule = rewrite_until_to_wall_clock(rrule, tz);
+    let day_before = day_before.format("%Y-%m-%dT00:00:00").to_string();
+    matches!(
+        pikos_recurrence::next_occurrence_after(&rrule, start, &day_before, &[]),
+        Ok(None)
+    )
+}
+
+/// Remove this calendar's stored live series that ended before `ctx.window_start`, as an
+/// upstream deletion would: detached if owned, deleted if not. Runs on every pass, since
+/// an incremental cursor never re-sends a series that didn't change, so one stored before
+/// [`ended_before_window`] existed would otherwise stay. Its own retried transaction;
+/// returns how many it removed.
+pub async fn remove_ended_series(
+    pool: &sqlx::SqlitePool,
+    ctx: &ReconcileContext,
+) -> AppResult<usize> {
+    let window = ctx.window_start.format("%Y-%m-%d").to_string();
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, bool)>(
+            "SELECT ps.id, ps.page_id, r.rrule, r.scheduled_start, r.timezone,
+                    EXISTS(SELECT 1 FROM page_schedules o
+                            WHERE o.rule_id = r.id AND o.original_date IS NOT NULL
+                              AND substr(o.scheduled_start, 1, 10) >= ?)
+             FROM page_sync ps JOIN page_recurrence_rules r ON r.page_id = ps.page_id
+             WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.sync_state = 'active'
+               AND (r.rrule LIKE '%UNTIL=%' OR r.rrule LIKE '%COUNT=%')",
+        )
+        .bind(&window)
+        .bind(&ctx.account_id)
+        .bind(&ctx.calendar_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let mut removed = 0;
+        for (page_sync_id, page_id, rrule, start, tz, moved_in) in rows {
+            if !moved_in && rule_ended(&rrule, &start, &tz, ctx.window_start) {
+                detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                removed += 1;
+            }
+        }
+        tx.commit().await?;
+        Ok(removed)
+    })
+    .await
 }
 
 /// Move a reactivated page back into its calendar folder. A detached page is
