@@ -10,6 +10,7 @@ import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
+import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { useLeftNavToggle } from "../hooks/useLeftNavToggle";
@@ -33,6 +34,14 @@ export function EditorPanel() {
     },
     { allowInInputs: true, group: "Navigation", label: "Toggle calendar / editor" }
   );
+
+  useKeyboardShortcut("Escape", () => ui.setRightPanel("calendar"), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Back to the calendar",
+    unlessHandled: true,
+    when: () => ui.canReturnToCalendar && !Keyboard.isModalOpen(),
+  });
 
   useKeyboardShortcut("Mod+\\", leftNav.toggle, {
     allowInInputs: true,

@@ -218,6 +218,53 @@ describe("allowInInputs", () => {
   });
 });
 
+describe("unlessHandled", () => {
+  function usedEscape(): KeyboardEvent {
+    return { ...makeKeyEvent("Escape"), defaultPrevented: true } as KeyboardEvent;
+  }
+
+  it("stands down for a key an earlier listener already used", () => {
+    const handler = vi.fn();
+    Keyboard.register({ combo: "Escape", handler, id: "test-unless", unlessHandled: true });
+
+    Keyboard.handle(usedEscape());
+    expect(handler).not.toHaveBeenCalled();
+    Keyboard.handle(makeKeyEvent("Escape"));
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("in the editor, counts only a key a plugin marked as used", () => {
+    const handler = vi.fn();
+    Keyboard.register({
+      allowInInputs: true,
+      combo: "Escape",
+      handler,
+      id: "test-unless-editor",
+      unlessHandled: true,
+    });
+    const editor = document.createElement("div");
+    editor.className = "ProseMirror";
+    const inEditor = () =>
+      ({ ...makeKeyEvent("Escape", { target: editor }), defaultPrevented: true }) as KeyboardEvent;
+
+    const used = inEditor();
+    Keyboard.markUsed(used);
+    Keyboard.handle(used);
+    expect(handler).not.toHaveBeenCalled();
+    Keyboard.handle(inEditor());
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a used key to the next binding that doesn't stand down", () => {
+    const handler = vi.fn();
+    Keyboard.register({ combo: "Escape", handler: vi.fn(), id: "a", unlessHandled: true });
+    Keyboard.register({ combo: "Escape", handler, id: "b" });
+
+    Keyboard.handle(usedEscape());
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});
+
 // ─── blocking dialog suppression ────────────────────────────────────────────
 
 describe("blocking dialog open", () => {

@@ -162,7 +162,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
   function handleOpenPage(e: React.MouseEvent) {
     e.stopPropagation();
-    openPage(page.id);
+    openPage(page.id, { fromCalendar: true });
     onClose?.();
   }
 

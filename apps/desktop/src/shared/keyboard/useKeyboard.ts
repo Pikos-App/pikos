@@ -35,6 +35,7 @@ export function useKeyboardShortcut(
   const scope = opts?.scope;
   const preventDefault = opts?.preventDefault;
   const allowInInputs = opts?.allowInInputs;
+  const unlessHandled = opts?.unlessHandled;
   const repeat = opts?.repeat;
   const stopPropagation = opts?.stopPropagation;
   const label = opts?.label;
@@ -53,6 +54,7 @@ export function useKeyboardShortcut(
       when: stableWhen,
       ...(preventDefault !== undefined && { preventDefault }),
       ...(allowInInputs !== undefined && { allowInInputs }),
+      ...(unlessHandled !== undefined && { unlessHandled }),
       ...(repeat !== undefined && { repeat }),
       ...(stopPropagation !== undefined && { stopPropagation }),
       // Palette + settings metadata. Only the first key of a chord carries it —
@@ -118,6 +120,7 @@ export function useKeyboardShortcut(
     scope,
     preventDefault,
     allowInInputs,
+    unlessHandled,
     repeat,
     stopPropagation,
     label,

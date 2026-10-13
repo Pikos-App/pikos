@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, openCalendarMode, quickAdd } from "./fixtures";
+import { test as appTest, expect, mod, openCalendarMode, quickAdd } from "./fixtures";
 
 /** The last visible all-day column — always >= today within the current week,
  * so the page's denormalised scheduledStart isn't stripped by the
@@ -726,6 +726,44 @@ appTest(
       await app.locator('button[aria-label="Next week"]').click();
       await calendar.getByRole("button", { name: "Standup" }).first().click({ button: "right" });
       await expect(popover).toBeVisible();
+    });
+  }
+);
+
+appTest(
+  "Escape takes a page opened from the calendar back to it",
+  { tag: ["@CAL-21"] },
+  async ({ app }) => {
+    await quickAdd(app, "Review today 2pm");
+    await quickAdd(app, "Loose notes");
+    await openCalendarMode(app);
+    const calendar = calendarRegion(app);
+    const editor = app.getByRole("textbox", { name: "Page content" });
+
+    await calendar.getByRole("button", { name: "Review" }).first().dblclick();
+    await expect(editor).toBeVisible();
+    await editor.click();
+    await app.keyboard.type("agenda");
+    await app.keyboard.press(mod("Mod+a"));
+
+    await appTest.step("the first Escape only clears the selection", async () => {
+      await app.keyboard.press("Escape");
+      await expect(editor).toBeVisible();
+      await expect(calendar).not.toBeVisible();
+    });
+
+    await appTest.step("the next one goes back to the calendar", async () => {
+      await app.keyboard.press("Escape");
+      await expect(calendar).toBeVisible();
+      await expect(editor).not.toBeVisible();
+    });
+
+    await appTest.step("a page opened from the list stays open", async () => {
+      await app.locator("[data-page-list-item]").getByText("Loose notes").click();
+      await expect(editor).toBeVisible();
+      await editor.click();
+      await app.keyboard.press("Escape");
+      await expect(editor).toBeVisible();
     });
   }
 );

@@ -28,6 +28,9 @@ export type Binding = {
   stopPropagation?: boolean;
   repeat?: boolean; // default false -> ignore auto-repeat
   allowInInputs?: boolean; // default false
+  /** Stand down when an earlier listener already used the key, such as a popover
+   *  closing or the editor collapsing a selection on Escape (see `wasUsed`). */
+  unlessHandled?: boolean;
 };
 
 export type NormalizedCombo = {
@@ -152,6 +155,17 @@ const store = new Map<string, Binding & { parsed: NormalizedCombo }>();
 const catalog = new Map<string, ShortcutDoc>();
 let activeScopes: string[] = ["global"]; // top is last
 
+const usedInEditor = new WeakSet<KeyboardEvent>();
+
+/** ProseMirror prevents the default of every Enter and Escape typed in the editor, whether or not
+ *  anything there acted on it, so inside the editor only a `markUsed` call counts as use. */
+function wasUsed(e: KeyboardEvent): boolean {
+  if (usedInEditor.has(e)) return true;
+  const el = e.target as HTMLElement | null;
+  const inEditor = typeof el?.closest === "function" && el.closest(".ProseMirror") != null;
+  return e.defaultPrevented && !inEditor;
+}
+
 function conflictKey(parsed: NormalizedCombo): string {
   return [
     parsed.key,
@@ -184,6 +198,7 @@ export const Keyboard = {
       for (const b of store.values()) {
         if ((b.scope ?? "global") !== scope) continue;
         if (!b.allowInInputs && targetIsEditable) continue;
+        if (b.unlessHandled && wasUsed(e)) continue;
         if (b.repeat === false && e.repeat) continue;
         if (b.when && !b.when()) continue;
         if (!matchCombo(evt, b.parsed)) continue;
@@ -228,6 +243,11 @@ export const Keyboard = {
   /** Every labelled shortcut registered this session — see `catalog`. */
   listShortcutCatalog(): ShortcutDoc[] {
     return Array.from(catalog.values());
+  },
+
+  /** For an editor plugin that acted on a key, which `unlessHandled` can't otherwise tell. */
+  markUsed(e: KeyboardEvent): void {
+    usedInEditor.add(e);
   },
 
   popScope(scope?: string): void {

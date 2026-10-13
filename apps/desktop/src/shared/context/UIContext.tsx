@@ -96,8 +96,14 @@ export interface UIContextValue {
    * Open a page in the editor. Switches to editor panel and sets activePageId
    * atomically — bypasses setRightPanel's restore logic so order never matters.
    * `focusBody` puts the cursor at the end of the body once the page loads.
+   * `fromCalendar` lets Escape take the editor back to the calendar it was opened from.
    */
-  openPage: (page: PageSummary | string, options?: { focusBody?: boolean }) => void;
+  openPage: (
+    page: PageSummary | string,
+    options?: { focusBody?: boolean; fromCalendar?: boolean }
+  ) => void;
+  /** Whether the editor shows a page the calendar opened, so Escape goes back to it. */
+  canReturnToCalendar: boolean;
   /** Whether `pageId` was opened asking for the cursor in its body; true once, for the editor. */
   takeBodyFocus: (pageId: string) => boolean;
 }
@@ -147,6 +153,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     {}
   );
 
+  const [calendarOpenedPageId, setCalendarOpenedPageId] = useState<string | null>(null);
+
   const [highlightedPageId, setHighlightedPageId] = useState<string | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -173,6 +181,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     if (page === null) setActivePageId(null);
     else if (typeof page === "string") setActivePageId(page);
     else setActivePageId(page.id);
+    setCalendarOpenedPageId(null);
     setPageListDrawerOpen(false);
   }
 
@@ -183,6 +192,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     } else if (panel === "editor" && rightPanel !== "editor") {
       setActivePageId(lastEditorPageId);
     }
+    setCalendarOpenedPageId(null);
     setRightPanelRaw(panel);
   }
 
@@ -224,9 +234,13 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setPageListDrawerOpen(false);
   }
 
-  function openPage(page: PageSummary | string, options?: { focusBody?: boolean }) {
+  function openPage(
+    page: PageSummary | string,
+    options?: { focusBody?: boolean; fromCalendar?: boolean }
+  ) {
     const id = typeof page === "string" ? page : page.id;
     bodyFocusRef.current = options?.focusBody ? id : null;
+    setCalendarOpenedPageId(options?.fromCalendar ? id : null);
     showPage(id);
   }
 
@@ -269,6 +283,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     activePageId,
     activeViewId,
     calendarScrollRequest,
+    canReturnToCalendar:
+      rightPanel === "editor" && activePageId !== null && activePageId === calendarOpenedPageId,
     dialogPrefill,
     flashPageBlock,
     focusZen,
