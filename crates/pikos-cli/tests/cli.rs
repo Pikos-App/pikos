@@ -732,6 +732,7 @@ const SCHEDULE_FLAGS: [[&str; 2]; 3] = [
 /// The flags that change a schedule without taking a value.
 const BARE_SCHEDULE_FLAGS: [&str; 2] = ["--unschedule", "--no-end"];
 
+// qa: CLI-10:6
 #[tokio::test]
 async fn schedule_flags_refuse_on_a_synced_page() {
     let db = unique_db();
@@ -828,6 +829,7 @@ async fn schedule_flags_refuse_on_a_recurring_page() {
     }
 }
 
+// qa: CLI-10:6
 #[tokio::test]
 async fn update_unschedule_removes_the_date_and_no_end_keeps_the_start() {
     let db = unique_db();
@@ -881,6 +883,7 @@ async fn update_unschedule_refuses_a_flag_that_would_reschedule() {
     );
 }
 
+// qa: CLI-10:6
 #[tokio::test]
 async fn update_tags_add_and_remove_as_the_writer_stores_them() {
     let db = unique_db();
@@ -920,6 +923,7 @@ async fn update_tags_add_and_remove_as_the_writer_stores_them() {
     assert_eq!(code(&blank), 2);
 }
 
+// qa: CLI-10:6
 #[tokio::test]
 async fn update_subtitle_sets_and_clears_the_line_under_the_title() {
     let db = unique_db();
@@ -1317,6 +1321,7 @@ async fn ticked_clone_start(db: &str, series: &str, day: &str) -> String {
         .to_string()
 }
 
+// qa: CLI-15
 #[tokio::test]
 async fn done_ticks_off_a_calendar_series_at_the_time_the_app_shows() {
     let db = unique_db();
@@ -1421,6 +1426,7 @@ async fn seed_weekly_meeting(db: &str) -> String {
     ids.into_iter().next().unwrap()
 }
 
+// qa: CLI-13:3
 #[tokio::test]
 async fn occurrence_skip_and_unskip_round_trip_on_a_date_the_rule_gives() {
     let db = unique_db();
@@ -1451,6 +1457,7 @@ async fn occurrence_skip_and_unskip_round_trip_on_a_date_the_rule_gives() {
     assert_eq!(code(&again), 2);
 }
 
+// qa: CLI-13:3
 #[tokio::test]
 async fn occurrence_move_gives_it_its_own_page_and_keeps_its_length() {
     let db = unique_db();
@@ -1550,6 +1557,7 @@ async fn occurrence_writes_refuse_a_page_that_does_not_repeat_and_a_synced_move(
     );
 }
 
+// qa: CLI-13:3
 #[tokio::test]
 async fn status_not_started_on_a_ticked_off_occurrence_gives_the_date_back_to_the_series() {
     let db = unique_db();
@@ -1625,6 +1633,7 @@ async fn make_calendar_folder(db: &str, name: &str) -> String {
     id
 }
 
+// qa: CLI-10:6
 #[tokio::test]
 async fn update_folder_moves_a_page_between_folders_and_the_inbox() {
     let db = unique_db();
@@ -1644,6 +1653,7 @@ async fn update_folder_moves_a_page_between_folders_and_the_inbox() {
     assert!(json(&unfiled)["folderId"].is_null());
 }
 
+// qa: CLI-10:6
 #[tokio::test]
 async fn update_folder_refuses_a_calendar_folder_and_a_synced_page() {
     let db = unique_db();
@@ -1879,6 +1889,7 @@ async fn folders_create_makes_a_folder_list_can_filter_on() {
     assert_eq!(json(&cli(dbs, &["folders", "list", "--json"]))[0]["id"], id);
 }
 
+// qa: CLI-11:3
 #[tokio::test]
 async fn folders_rename_takes_a_whole_name_or_an_id() {
     let db = unique_db();
@@ -1911,6 +1922,7 @@ async fn folders_rename_refuses_a_name_two_folders_share() {
     assert_eq!(code(&out), 4);
 }
 
+// qa: CLI-11:3
 #[tokio::test]
 async fn folders_delete_trashes_its_pages_and_restore_brings_them_back() {
     let db = unique_db();
@@ -1945,6 +1957,7 @@ async fn folders_delete_trashes_its_pages_and_restore_brings_them_back() {
     assert_eq!(back[0]["title"], "Dune");
 }
 
+// qa: CLI-11:3
 #[tokio::test]
 async fn folders_rename_and_delete_refuse_a_calendar_folder() {
     let db = unique_db();
@@ -2066,6 +2079,7 @@ async fn restore_brings_a_trashed_page_back_into_the_listing() {
     );
 }
 
+// qa: CLI-12:2
 #[tokio::test]
 async fn trash_lists_what_restore_can_bring_back() {
     let db = unique_db();
@@ -2090,6 +2104,7 @@ async fn trash_lists_what_restore_can_bring_back() {
         .is_empty());
 }
 
+// qa: CLI-12:2
 #[tokio::test]
 async fn tags_lists_open_pages_tags_most_used_first() {
     let db = unique_db();
@@ -2331,6 +2346,7 @@ fn agent_edit_page() -> NewPage {
     }
 }
 
+// qa: CLI-14:2
 #[tokio::test]
 async fn reading_a_page_and_writing_it_back_keeps_its_structure() {
     let db = unique_db();
@@ -2357,6 +2373,7 @@ async fn reading_a_page_and_writing_it_back_keeps_its_structure() {
     assert!(human.contains("- Day one\n  - Museum"), "{human}");
 }
 
+// qa: CLI-14:2
 #[tokio::test]
 async fn update_content_refuses_markdown_the_editor_cannot_hold_and_writes_nothing() {
     let db = unique_db();
