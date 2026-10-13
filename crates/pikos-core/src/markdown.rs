@@ -1,4 +1,11 @@
 //! Convert ProseMirror/Tiptap JSON → Markdown.
+//!
+//! Lives here rather than in the desktop crate because the Markdown export is
+//! not a desktop feature — it is what a workspace's contents look like outside
+//! Pikos, and a phone that cannot produce it cannot get its owner's writing
+//! out. Moved from `apps/desktop/src-tauri/src/markdown/`; the conformance
+//! table came with it, since a second renderer is exactly what the export and
+//! the importer must not have.
 //! Handles the node types produced by our Tiptap editor configuration:
 //! doc, paragraph, heading(1-3), bulletList, orderedList, listItem,
 //! taskList, taskItem, codeBlock, blockquote, horizontalRule, hardBreak,
@@ -393,9 +400,9 @@ fn render_marked_text(out: &mut String, text: &str, marks: Option<&Vec<Value>>) 
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
+#[path = "markdown_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "conformance_tests.rs"]
+#[path = "markdown_conformance_tests.rs"]
 mod conformance_tests;

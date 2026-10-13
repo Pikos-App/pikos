@@ -10,8 +10,6 @@ pub mod e2e_bridge;
 mod error;
 #[path = "logging/logging.rs"]
 mod logging;
-#[path = "markdown/markdown.rs"]
-mod markdown;
 mod menu;
 mod notifications;
 mod window_state;

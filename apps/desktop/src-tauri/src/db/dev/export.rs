@@ -8,7 +8,7 @@ use tauri::Manager;
 
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
-use crate::markdown::prosemirror_to_markdown;
+use pikos_core::prosemirror_to_markdown;
 
 /// Build the full export object: every table as an array of dynamic-column
 /// objects, plus the asset paths its pages reference. Includes folders, pages

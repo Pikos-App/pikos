@@ -11,8 +11,7 @@ use serde::Deserialize;
 use super::prosemirror_to_markdown;
 
 // The cross-language fixture directory; the TS runners read the same file.
-const TABLE: &str =
-    include_str!("../../../../../crates/pikos-db/tests/fixtures/markdown-export.json");
+const TABLE: &str = include_str!("../../pikos-db/tests/fixtures/markdown-export.json");
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

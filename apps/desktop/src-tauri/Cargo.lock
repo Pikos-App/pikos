@@ -3462,6 +3462,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-user-notifications",
  "pikos-calendar-sync",
+ "pikos-core",
  "pikos-db",
  "pikos-recurrence",
  "serde",
@@ -3507,6 +3508,13 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "pikos-core"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
