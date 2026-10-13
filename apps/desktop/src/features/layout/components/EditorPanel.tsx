@@ -8,6 +8,7 @@ import { useLayoutMode } from "@/features/layout/breakpoints";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { Keyboard } from "@/shared/keyboard/registry";
@@ -26,6 +27,7 @@ export function EditorPanel() {
   const navStep = dayCountNavStep(dayCount);
   const isMonth = viewMode === "month";
   const leftNav = useLeftNavToggle();
+  const { clearSelection, selectedPageIds } = useSelection();
 
   useKeyboardShortcut(
     "Mod+Shift+C",
@@ -35,13 +37,21 @@ export function EditorPanel() {
     { allowInInputs: true, group: "Navigation", label: "Toggle calendar / editor" }
   );
 
-  useKeyboardShortcut("Escape", () => ui.setRightPanel("calendar"), {
-    allowInInputs: true,
-    group: "Navigation",
-    label: "Back to the calendar",
-    unlessHandled: true,
-    when: () => ui.canReturnToCalendar && !Keyboard.isModalOpen(),
-  });
+  useKeyboardShortcut(
+    "Escape",
+    () => {
+      if (selectedPageIds.size > 0) clearSelection();
+      else ui.setRightPanel("calendar");
+    },
+    {
+      allowInInputs: true,
+      group: "Navigation",
+      label: "Clear the selection, or go to the calendar",
+      unlessHandled: true,
+      when: () =>
+        (selectedPageIds.size > 0 || ui.rightPanel === "editor") && !Keyboard.isModalOpen(),
+    }
+  );
 
   useKeyboardShortcut("Mod+\\", leftNav.toggle, {
     allowInInputs: true,

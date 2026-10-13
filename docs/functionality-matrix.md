@@ -503,7 +503,7 @@ distinct. Rows are keyed by folder id, headed by account.
 | Move overdue → today (bulk) | ✅ | 🚫 locked ⁶² | ✅ | — | ○ |
 | Month view | ✅ | ✅ | ✅ | — | ○ |
 | Right-click a calendar block | ✅ opens its popover | ✅ same, schedule read-only ⁴ | ✅ | — | ○ |
-| Escape from a page the calendar opened | ✅ back to the calendar | ✅ same | ✅ same | — | ○ |
+| Escape in the editor | ✅ goes to the calendar; a multi-selection clears first | ✅ same | ✅ same | — | ○ |
 | `.ics` calendar export | ✅ ⁶³ | ✅ ⁶³ | ✅ ⁶³ | — | ○ |
 | Notification history panel | ✅ ⁶⁴ | ✅ ⁶⁴ | ✅ ⁶⁴ | — | ○ |
 | Notification click opens its page | ✅ ⁶⁵ | ✅ ⁶⁵ | ✅ ⁶⁵ | — | ○ |

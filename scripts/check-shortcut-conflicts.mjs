@@ -25,15 +25,7 @@ const SRC = join(ROOT, "apps/desktop/src");
 
 // Each entry silences one `scope::combo` and must say why it is not a defect.
 // Removing an entry is how a fix proves itself.
-const ALLOWED = new Map([
-  [
-    "global::escape",
-    "The page list's clears a multi-selection and never fires in the editor; the editor " +
-      "panel's goes back to the calendar a page was opened from. Both are live only with " +
-      "pages selected in the list, a calendar-opened page showing and focus outside the " +
-      "editor. Either may win, and the next Escape does the other.",
-  ],
-]);
+const ALLOWED = new Map([]);
 
 // A scoped binding always beats a global one on the same combo — that is what
 // scopes are for, and it is invisible: the global shortcut simply stops working

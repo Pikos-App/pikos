@@ -286,12 +286,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     if (page) handleSelectPage(page);
   }
 
-  useKeyboardShortcut("Escape", () => clearSelection(), {
-    group: "Page list",
-    label: "Clear multi-selection",
-    when: () => selectedPageIds.size > 0,
-  });
-
   useKeyboardShortcut(
     "Mod+a",
     () => {

@@ -160,7 +160,7 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-foreground focus:outline-none"
           onClick={(e) => {
             e.stopPropagation();
-            openPage(page.id, { fromCalendar: true });
+            openPage(page.id);
             onClose?.();
           }}
         >

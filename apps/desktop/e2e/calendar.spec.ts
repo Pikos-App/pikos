@@ -730,40 +730,46 @@ appTest(
   }
 );
 
-appTest(
-  "Escape takes a page opened from the calendar back to it",
-  { tag: ["@CAL-21"] },
-  async ({ app }) => {
-    await quickAdd(app, "Review today 2pm");
-    await quickAdd(app, "Loose notes");
-    await openCalendarMode(app);
-    const calendar = calendarRegion(app);
-    const editor = app.getByRole("textbox", { name: "Page content" });
+appTest("Escape in the editor goes to the calendar", { tag: ["@CAL-21"] }, async ({ app }) => {
+  await quickAdd(app, "Review today 2pm");
+  await quickAdd(app, "Loose notes");
+  const calendar = calendarRegion(app);
+  const editor = app.getByRole("textbox", { name: "Page content" });
+  const row = (title: string) => app.locator("[data-page-list-item]").filter({ hasText: title });
 
-    await calendar.getByRole("button", { name: "Review" }).first().dblclick();
-    await expect(editor).toBeVisible();
+  await appTest.step("from a page opened in the list, once a selection is cleared", async () => {
+    await row("Loose notes").click();
     await editor.click();
     await app.keyboard.type("agenda");
     await app.keyboard.press(mod("Mod+a"));
+    await app.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    await app.keyboard.press("Escape");
+    await expect(calendar).toBeVisible();
+    await expect(editor).not.toBeVisible();
+  });
 
-    await appTest.step("the first Escape only clears the selection", async () => {
-      await app.keyboard.press("Escape");
-      await expect(editor).toBeVisible();
-      await expect(calendar).not.toBeVisible();
-    });
+  await appTest.step("from a page the calendar opened", async () => {
+    await calendar.getByRole("button", { name: "Review" }).first().dblclick();
+    await expect(editor).toBeVisible();
+    await editor.click();
+    await app.keyboard.press("Escape");
+    await expect(calendar).toBeVisible();
+  });
 
-    await appTest.step("the next one goes back to the calendar", async () => {
-      await app.keyboard.press("Escape");
-      await expect(calendar).toBeVisible();
-      await expect(editor).not.toBeVisible();
-    });
-
-    await appTest.step("a page opened from the list stays open", async () => {
-      await app.locator("[data-page-list-item]").getByText("Loose notes").click();
-      await expect(editor).toBeVisible();
-      await editor.click();
-      await app.keyboard.press("Escape");
-      await expect(editor).toBeVisible();
-    });
-  }
-);
+  await appTest.step("a multi-selection is cleared first, in the view it was made", async () => {
+    // Leaving for the trash remounts the list, so its Escape registers after the editor's.
+    await app.getByRole("button", { name: "Trash" }).click();
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    await row("Loose notes").click();
+    await expect(editor).toBeVisible();
+    await row("Loose notes").click({ modifiers: ["ControlOrMeta"] });
+    await row("Review").click({ modifiers: ["ControlOrMeta"] });
+    await expect(row("Review")).toHaveAttribute("data-selected", "true");
+    await app.keyboard.press("Escape");
+    await expect(row("Review")).not.toHaveAttribute("data-selected", "true");
+    await expect(editor).toBeVisible();
+    await app.keyboard.press("Escape");
+    await expect(calendar).toBeVisible();
+  });
+});

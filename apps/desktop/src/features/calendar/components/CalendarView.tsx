@@ -125,7 +125,7 @@ export function CalendarView() {
   });
 
   function handlePageDoubleClick(pageId: string) {
-    openPage(pageId, { fromCalendar: true });
+    openPage(pageId);
   }
 
   /** Month view's only navigation gesture: land on the picked day in the time
