@@ -701,3 +701,31 @@ appTest("the current-time line moves as time passes @mock-only", async ({ page }
   await page.clock.runFor(60 * 60_000);
   await expect.poll(async () => (await line.boundingBox())!.y).toBeGreaterThan(before);
 });
+
+appTest(
+  "right-clicking a block opens its popover at once",
+  { tag: ["@CAL-20"] },
+  async ({ app }) => {
+    await quickAdd(app, "Review today 2pm");
+    await quickAdd(app, "Offsite today");
+    await quickAdd(app, "Standup every day at 10am");
+    await openCalendarMode(app);
+    const calendar = calendarRegion(app);
+    const popover = app.getByRole("dialog");
+
+    for (const title of ["Review", "Offsite"]) {
+      await appTest.step(`a ${title === "Review" ? "timed" : "all-day"} block`, async () => {
+        await calendar.getByRole("button", { name: title }).first().click({ button: "right" });
+        await expect(popover).toBeVisible();
+        await app.keyboard.press("Escape");
+        await expect(popover).not.toBeVisible();
+      });
+    }
+
+    await appTest.step("a later occurrence of a repeating page", async () => {
+      await app.locator('button[aria-label="Next week"]').click();
+      await calendar.getByRole("button", { name: "Standup" }).first().click({ button: "right" });
+      await expect(popover).toBeVisible();
+    });
+  }
+);

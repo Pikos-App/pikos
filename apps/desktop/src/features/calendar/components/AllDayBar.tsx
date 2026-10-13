@@ -68,6 +68,7 @@ export function AllDayBar({
 
   const {
     handleClick,
+    handleContextMenu,
     handlePopoverOpenChange,
     markDragging,
     popoverOpen,
@@ -158,7 +159,7 @@ export function AllDayBar({
             continuesRight && "rounded-tr-none rounded-br-none"
           )}
           onClick={handleClick}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={handleContextMenu}
           onPointerDown={handlePointerDown}
           style={{ ...chipStyle, ...position }}
         >

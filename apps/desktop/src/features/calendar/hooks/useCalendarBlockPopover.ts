@@ -24,6 +24,8 @@ export interface UseCalendarBlockPopoverResult {
    * popover after CLICK_DELAY) from double-click (fires `onDoubleClick`),
    * and swallows the click fired at the end of a drag gesture. */
   handleClick: (e: React.MouseEvent) => void;
+  /** Bind to the block's `onContextMenu` — opens the popover at once. */
+  handleContextMenu: (e: React.MouseEvent) => void;
   /** Cancel a pending single-click timer. Call from checkbox + edge-resize
    * presses so the block's click doesn't also open the popover. */
   suppressPendingClick: () => void;
@@ -104,6 +106,13 @@ export function useCalendarBlockPopover(
     }, CLICK_DELAY);
   }
 
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    suppressPendingClick();
+    setPopoverOpen(true);
+  }
+
   function suppressPendingClick() {
     if (clickTimerRef.current !== null) {
       clearTimeout(clickTimerRef.current);
@@ -130,6 +139,7 @@ export function useCalendarBlockPopover(
 
   return {
     handleClick,
+    handleContextMenu,
     handlePopoverOpenChange,
     markDragging,
     popoverOpen,
