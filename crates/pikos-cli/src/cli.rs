@@ -127,6 +127,11 @@ pub enum CliCommand {
         end: Option<String>,
         #[arg(long)]
         priority: Option<i64>,
+        #[arg(
+            long,
+            help = "Move the page to this folder, by name or id — \"inbox\" for unfiled"
+        )]
+        folder: Option<String>,
     },
     /// Mark a page done (clones + advances recurring pages)
     Done { id: String },

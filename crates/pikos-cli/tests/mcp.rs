@@ -611,3 +611,34 @@ async fn list_pages_selects_by_creation_completion_repeat_and_reminder() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn update_page_refiles_a_page_into_a_folder_and_back_to_the_inbox() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    let projects = pikos_db::create_folder_impl(
+        &pool,
+        pikos_db::NewFolder {
+            name: "Projects".into(),
+            parent_id: None,
+            color: None,
+            icon: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let filed = server.call(2, "update_page", json!({ "id": ids[0], "folder": "Projects" }));
+    assert_eq!(filed["folderId"], projects.as_str());
+    let unfiled = server.call(3, "update_page", json!({ "id": ids[0], "folder": "inbox" }));
+    assert!(unfiled["folderId"].is_null());
+
+    server.shutdown();
+}

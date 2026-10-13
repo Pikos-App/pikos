@@ -175,6 +175,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             all_day,
             end,
             priority,
+            folder,
         } => {
             let page = update_page(
                 &pool,
@@ -187,6 +188,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                     all_day,
                     end,
                     priority,
+                    folder,
                 },
             )
             .await?;

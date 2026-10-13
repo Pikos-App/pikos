@@ -94,6 +94,10 @@ refused rather than silently converted; a move keeps the length the page had.
 All three refuse on a recurring or synced page, whose head belongs to the series
 or the calendar.
 
+`update --folder <name-or-id>` refiles a page, resolved as `list --folder` resolves it,
+so `inbox` unfiles it when no folder is named for it. A calendar folder takes no
+pages, and a synced page stays in its calendar's folder.
+
 ## Exit codes
 
 `0` ok · `2` usage · `3` not found · `4` conflict · `5` workspace not found ·

@@ -569,6 +569,8 @@ pub struct PageEdit {
     pub all_day: Option<String>,
     pub end: Option<String>,
     pub priority: Option<i64>,
+    /// A folder name or id, resolved as `list --folder` resolves it.
+    pub folder: Option<String>,
 }
 
 /// Apply an edit, settling every rejection before the first write so a bad field
@@ -618,8 +620,15 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         edit.all_day.as_deref(),
         edit.end.as_deref(),
     )?;
+    let folder_id = match &edit.folder {
+        Some(name) => Some(resolve_folder_ref(pool, name).await?),
+        None => None,
+    };
 
-    let mut upd = PageUpdate::default();
+    let mut upd = PageUpdate {
+        folder_id,
+        ..Default::default()
+    };
     if let Some(t) = edit.title {
         upd.title = Some(t);
     }

@@ -1198,6 +1198,60 @@ async fn list_filters_by_folder_name_id_and_inbox() {
     assert_eq!(inbox[0]["title"], "Unfiled");
 }
 
+async fn make_calendar_folder(db: &str, name: &str) -> String {
+    let id = make_folder(db, name).await;
+    let pool = open_pool(db).await.unwrap();
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    id
+}
+
+#[tokio::test]
+async fn update_folder_moves_a_page_between_folders_and_the_inbox() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan")]).await;
+    let projects = make_folder(dbs, "Projects").await;
+    let archive = make_folder(dbs, "Archive").await;
+
+    let by_name = cli(dbs, &["update", &ids[0], "--folder", "proj", "--json"]);
+    assert!(by_name.status.success());
+    assert_eq!(json(&by_name)["folderId"], projects.as_str());
+
+    let by_id = cli(dbs, &["update", &ids[0], "--folder", &archive, "--json"]);
+    assert_eq!(json(&by_id)["folderId"], archive.as_str());
+
+    let unfiled = cli(dbs, &["update", &ids[0], "--folder", "inbox", "--json"]);
+    assert!(json(&unfiled)["folderId"].is_null());
+}
+
+#[tokio::test]
+async fn update_folder_refuses_a_calendar_folder_and_a_synced_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan"), base_page("Standup")]).await;
+    let calendar = make_calendar_folder(dbs, "Work calendar").await;
+    let projects = make_folder(dbs, "Projects").await;
+    mark_synced(dbs, &ids[1], "active").await;
+
+    let into_calendar = cli(dbs, &["update", &ids[0], "--folder", &calendar, "--json"]);
+    assert_eq!(code(&into_calendar), 4);
+    let by_name = cli(dbs, &["update", &ids[0], "--folder", "work", "--json"]);
+    assert_eq!(code(&by_name), 3, "a calendar folder is no candidate by name");
+
+    let synced_out = cli(dbs, &["update", &ids[1], "--folder", &projects, "--json"]);
+    assert_eq!(code(&synced_out), 4);
+
+    let pool = open_pool(dbs).await.unwrap();
+    for id in &ids {
+        let page = pikos_db::get_page(&pool, id).await.unwrap().unwrap();
+        assert!(page.folder_id.is_none(), "{} stayed put", page.title);
+    }
+}
+
 #[tokio::test]
 async fn list_folder_that_matches_nothing_exits_3() {
     let db = unique_db();

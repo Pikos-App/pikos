@@ -227,7 +227,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "update_page",
-            "Change a page's title, body, status, priority or schedule.",
+            "Change a page's title, body, status, priority, schedule or folder.",
             json!({
                 "id": string_prop("The page id."),
                 "title": string_prop("New title."),
@@ -237,6 +237,7 @@ fn tool_definitions() -> Vec<Value> {
                 "allDay": string_prop("Make the page all-day on YYYY-MM-DD — the only way to drop an existing time."),
                 "end": string_prop("When the page ends, in the page's own shape. Valid on its own."),
                 "priority": { "type": "integer", "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low." },
+                "folder": string_prop("Move the page to this folder, by name or id; \"inbox\" for unfiled."),
             }),
             &["id"],
         ),
@@ -380,6 +381,7 @@ async fn call_tool(
                     all_day: text(args, "allDay"),
                     end: text(args, "end"),
                     priority: args.get("priority").and_then(Value::as_i64),
+                    folder: text(args, "folder"),
                 },
             )
             .await?;

@@ -65,7 +65,7 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ○ |
 | Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ⚠️ `add` only, no tag flag on `update` | ○ |
 | Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status` | ○ |
-| Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | — no `--folder` | ○ |
+| Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ○ |
 | Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ○ |
 | Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ○ |
 | Delete page | ✅ soft → trash | ⚠️ soft + tombstone ⁷ | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹ | ○ |
