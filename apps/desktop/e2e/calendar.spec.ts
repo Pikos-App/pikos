@@ -688,3 +688,16 @@ appTest("a page restored from the trash opens no popover", async ({ app }) => {
   await expect(calendarRegion(app).getByText("Restored not created")).toBeVisible();
   await expect(app.getByPlaceholder("Untitled")).not.toBeVisible();
 });
+
+appTest("the current-time line moves as time passes @mock-only", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-06-08T10:00:00") });
+  await page.clock.resume();
+  await page.goto("/");
+  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+  await openCalendarMode(page);
+
+  const line = page.getByRole("separator", { name: "Current time" });
+  const before = (await line.boundingBox())!.y;
+  await page.clock.runFor(60 * 60_000);
+  await expect.poll(async () => (await line.boundingBox())!.y).toBeGreaterThan(before);
+});

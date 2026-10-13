@@ -32,7 +32,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
-import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { useNow } from "@/shared/hooks/useNow";
 import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
 interface PageListItemProps {
   page: PageSummary;
@@ -90,7 +90,7 @@ export function PageListItem({
   const { density } = useInterfaceSettings();
   const showSubtitle = density !== "compact" && Boolean(page.subtitle);
 
-  useMinuteTick();
+  const now = useNow();
 
   return (
     <ContextMenu>
@@ -245,7 +245,7 @@ export function PageListItem({
                       end > start;
                     const { isPast, label, tooltip } = isAllDaySpan
                       ? (() => {
-                          const d = formatPageDate(start);
+                          const d = formatPageDate(start, now);
                           return {
                             isPast: d.isPast,
                             label: formatDateRange(start, end),
@@ -253,9 +253,9 @@ export function PageListItem({
                           };
                         })()
                       : !isCompleted && showRelative
-                        ? formatPageRelativeTime(start)
-                        : formatPageDate(start);
-                    const dueSoon = !isCompleted && !isPast && isDueSoon(start);
+                        ? formatPageRelativeTime(start, now)
+                        : formatPageDate(start, now);
+                    const dueSoon = !isCompleted && !isPast && isDueSoon(start, now);
                     return (
                       <button
                         aria-label={`Toggle date format: ${label}`}

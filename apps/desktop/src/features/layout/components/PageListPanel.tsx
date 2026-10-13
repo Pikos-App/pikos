@@ -28,7 +28,7 @@ import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
-import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { useNow } from "@/shared/hooks/useNow";
 import { isArrowKeyConsumer, isInteractiveTarget } from "@/shared/keyboard/isInteractiveTarget";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
@@ -141,9 +141,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const isTodayView = activeViewId === "today";
   const isUpcomingView = activeViewId === "upcoming";
   // Re-renders once per minute so the overdue/today split follows the date over midnight.
-  useMinuteTick();
+  const now = useNow();
   const { overdue, today } = isTodayView
-    ? groupTodayPages(visiblePages)
+    ? groupTodayPages(visiblePages, now)
     : { overdue: [], today: [] };
   const daySections = isUpcomingView ? groupUpcomingPages(visiblePages) : [];
 

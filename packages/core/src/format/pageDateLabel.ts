@@ -43,17 +43,15 @@ function tooltipFor(iso: string): string {
       });
 }
 
-export function isDueSoon(iso: string): boolean {
+export function isDueSoon(iso: string, now: Date = new Date()): boolean {
   const date = parseLocalISO(iso);
-  const now = new Date();
   const threeDaysOut = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59);
   return date > now && date <= threeDaysOut;
 }
 
-export function formatPageDate(iso: string): PageDateLabel {
+export function formatPageDate(iso: string, now: Date = new Date()): PageDateLabel {
   const isAllDay = isAllDayIso(iso);
   const date = parseLocalISO(iso);
-  const now = new Date();
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
   const isPast = isAllDay ? date < todayMidnight : date < now;
@@ -78,14 +76,13 @@ export function formatPageDate(iso: string): PageDateLabel {
   return { isPast, label, tooltip };
 }
 
-export function formatPageRelativeTime(iso: string): PageDateLabel {
+export function formatPageRelativeTime(iso: string, now: Date = new Date()): PageDateLabel {
   const isAllDay = isAllDayIso(iso);
   const tooltip = tooltipFor(iso);
 
   if (isAllDay) {
     const date = parseLocalISO(iso);
-    const todayMidnight = new Date();
-    todayMidnight.setHours(0, 0, 0, 0);
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
     if (diffDays === 0) return { isPast: false, label: "today", tooltip };
     if (diffDays < 0) return { isPast: true, label: `${Math.abs(diffDays)}d`, tooltip };
@@ -93,7 +90,7 @@ export function formatPageRelativeTime(iso: string): PageDateLabel {
   }
 
   const date = parseLocalISO(iso);
-  const diffMs = date.getTime() - Date.now();
+  const diffMs = date.getTime() - now.getTime();
   const isPast = diffMs < 0;
   const abs = Math.abs(diffMs);
   const absMins = Math.round(abs / 60000);

@@ -8,7 +8,7 @@ import {
   useCalendarSettings,
 } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { useAllDayCreate } from "../hooks/useAllDayCreate";
 import { useAllDayDrag } from "../hooks/useAllDayDrag";
@@ -68,8 +68,7 @@ export function WeekGrid({
   const settings = useCalendarSettings();
   const weekGridRef = useRef<HTMLDivElement>(null);
   const dayColumnsRef = useRef<HTMLDivElement>(null);
-  useMinuteTick();
-  const today = new Date();
+  const today = useNow();
 
   // Geometry needs a stable shape before useScrollPersist can map an hour to
   // a pixel, but the final fit-to-viewport geometry depends on the measured
