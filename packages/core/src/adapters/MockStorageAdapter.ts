@@ -1259,7 +1259,7 @@ export class MockStorageAdapter implements StorageAdapter {
         status: head.status === "done" ? "not_started" : head.status,
         updatedAt: now(),
       });
-    } else {
+    } else if (!head.scheduleLocked || this.tickedThrough(head, rule)) {
       this.pages.set(pageId, {
         ...head,
         completedAt: head.status === "done" ? (head.completedAt ?? null) : nowLocalISO(),
@@ -1272,6 +1272,26 @@ export class MockStorageAdapter implements StorageAdapter {
       before.start !== after.scheduledStart ||
       before.end !== after.scheduledEnd ||
       before.status !== after.status
+    );
+  }
+
+  /** `ticked_through` (recurrence_derive.rs): an exhausted live mirror completes only once
+   *  the person ticked or skipped something and no moved occurrence since connecting is
+   *  still open; otherwise it stays as it was. */
+  private tickedThrough(head: PageSummary, rule: PageRecurrenceRule): boolean {
+    const resolved = new Set(
+      [...Object.keys(head.completedOccurrences ?? {}), ...(head.skippedOccurrences ?? [])].map(
+        dateKey
+      )
+    );
+    if (resolved.size === 0) return false;
+    const floor = head.syncedSince ?? "";
+    return ![...this.schedules.values()].some(
+      (s) =>
+        s.ruleId === rule.id &&
+        s.originalDate &&
+        dateKey(s.originalDate) >= floor &&
+        !resolved.has(dateKey(s.originalDate))
     );
   }
 

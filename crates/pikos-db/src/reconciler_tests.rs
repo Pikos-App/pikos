@@ -691,19 +691,8 @@ async fn completed_single_gaining_an_rrule_unmarks_done() {
     assert!(completed_at.is_none());
 }
 
-/// The provider cancels the very occurrence the head is parked on. The Cancel arm
-/// merges the EXDATE and stops there — no recompute — so the denorm still points at
-/// a date the rule no longer yields until something heals it; the foreground load
-/// recompute is what does, and after it the head sits on the next open day.
-///
-/// **Characterization, deliberately.** Whether the reconciler should recompute in
-/// step or leave it to the heal is an open call: healing later means a session left
-/// open shows a cancelled occurrence until the next load, recomputing in step means
-/// a poll writes `pages` on every cancellation. This pins the chain as it behaves
-/// today so a change to either half is visible; re-point the first assertion if the
-/// ruling goes the other way.
 #[tokio::test]
-async fn cancelling_the_heads_own_occurrence_leaves_the_denorm_to_the_heal() {
+async fn cancelling_the_heads_own_occurrence_moves_the_head_in_step() {
     let pool = setup().await;
     reconcile(
         &pool,
@@ -739,21 +728,11 @@ async fn cancelling_the_heads_own_occurrence_leaves_the_denorm_to_the_heal() {
         .await
         .unwrap();
 
-    assert_eq!(
-        head(&pool).await.as_deref(),
-        Some(parked.as_str()),
-        "the cancel merges the exdate and leaves the denorm alone"
-    );
     assert_eq!(rule_exdates(&pool, &page_id).await, vec![parked.clone()]);
-
-    crate::recurrence_derive::recompute_recurring_schedule_pool(&pool, &page_id)
-        .await
-        .unwrap();
-
-    let healed = head(&pool).await.expect("still a head");
-    assert_ne!(healed, parked, "the heal walks it off the cancelled day");
+    let moved = head(&pool).await.expect("still a head");
+    assert_ne!(moved, parked, "the cancel walks it off the cancelled day");
     assert!(
-        !rule_exdates(&pool, &page_id).await.contains(&healed),
+        !rule_exdates(&pool, &page_id).await.contains(&moved),
         "and lands on a day the rule still yields"
     );
 }
@@ -1529,6 +1508,78 @@ async fn reapplying_a_series_does_not_accumulate_rows() {
         rule_exdates(&pool, &page_id).await,
         vec!["2026-06-15T09:00:00"]
     );
+}
+
+#[tokio::test]
+async fn a_provider_copy_of_an_instance_left_at_its_slot_stores_no_override() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![series(
+            "v1",
+            vec![],
+            vec![
+                ov("2026-06-08T09:00:00", "2026-06-08T09:00:00"),
+                ov("2026-06-15T09:00:00", "2026-06-15T11:00:00"),
+            ],
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        override_count(&pool).await,
+        1,
+        "only the moved one is a move"
+    );
+    assert!(override_row(&pool, &page_id, "2026-06-08T09:00:00")
+        .await
+        .is_none());
+}
+
+// qa: SYNC-30
+#[tokio::test]
+async fn copies_of_upcoming_instances_leave_the_next_meeting_where_it_is() {
+    let pool = setup().await;
+    let copies = (0..3).map(|w| ov(&week_occ(w), &week_occ(w))).collect();
+    let UpsertItem::Event(mut ev) = weekly_from_today("v1", &weekly_until(2)) else {
+        unreachable!()
+    };
+    ev.recurrence.as_mut().unwrap().overrides = copies;
+    reconcile(&pool, &ctx(), &delta(vec![UpsertItem::Event(ev)]))
+        .await
+        .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(override_count(&pool).await, 0);
+    assert_eq!(page_denorm(&pool, &page_id).await.0, Some(week_occ(0)));
+}
+
+#[tokio::test]
+async fn an_instance_moved_back_to_its_slot_drops_its_override() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![series(
+            "v1",
+            vec![],
+            vec![ov("2026-06-08T09:00:00", "2026-06-08T14:00:00")],
+        )]),
+    )
+    .await
+    .unwrap();
+    let back = UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: "2026-06-08T09:00:00".into(),
+        kind: OccurrenceKind::Modify(timed("2026-06-08T09:00:00", None, "UTC")),
+    });
+    reconcile(&pool, &ctx(), &delta(vec![back])).await.unwrap();
+
+    assert_eq!(override_count(&pool).await, 0);
 }
 
 #[tokio::test]
@@ -3432,9 +3483,8 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
     );
 }
 
-/// An exhausted mirror stays open, and the provider extending it (a later UNTIL)
-/// still un-marks a head an older build left `done` — over the reconcile path, not
-/// just a bare recompute.
+/// A mirror ticked through to its end completes, and the provider extending it (a later
+/// UNTIL) un-marks it — over the reconcile path, not just a bare recompute.
 #[tokio::test]
 async fn provider_re_extension_unmarks_exhausted_head() {
     let pool = setup().await;
@@ -3465,11 +3515,8 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     .await
     .unwrap();
     let (_, status, completed_at) = page_denorm(&pool, &page_id).await;
-    assert_eq!(status, "not_started", "an exhausted mirror stays open");
-    assert_eq!(completed_at, None);
-
-    // A head this build would no longer write, but an upgraded database still holds.
-    force_terminal_done(&pool, &page_id).await;
+    assert_eq!(status, "done", "its only occurrence was ticked");
+    assert!(completed_at.is_some());
 
     // Provider extends the series → the next occurrence opens → head un-marked.
     reconcile(

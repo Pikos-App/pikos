@@ -374,17 +374,16 @@ export function useRecurrenceExpansion({
     });
   }, [startStr, endStr, rulesKey]);
 
-  // Suppress a recurring head block when its own date is completed. Usually a
-  // no-op (the head already advances past a completed occurrence), but load-
-  // bearing for an out-of-envelope rule the engine rejects: recompute never
-  // advances such a head, so without this it'd render next to its done clone.
-  // Applies to native or synced rules alike. Computed before the empty-rules
-  // early return so a completed base is hidden even before the rules load.
-  const headCompleted = (p: PageSummary): boolean => {
+  // Suppress a recurring head block when its own date is completed or skipped. The
+  // head only stays on such a date when nothing after it is open: a series ticked
+  // through to its end, or an out-of-envelope rule recompute can't advance. Drawn,
+  // it renders next to its done clone, or where the person dismissed the meeting.
+  // Computed before the empty-rules early return so it's hidden before rules load.
+  const headSpent = (p: PageSummary): boolean => {
     const baseDate = p.scheduledStart?.slice(0, 10);
-    return !!(baseDate && p.completedOccurrences?.[baseDate]);
+    return !!(baseDate && completedOrSkippedKeys(p).has(baseDate));
   };
-  const visiblePages = pages.some(headCompleted) ? pages.filter((p) => !headCompleted(p)) : pages;
+  const visiblePages = pages.some(headSpent) ? pages.filter((p) => !headSpent(p)) : pages;
 
   if (recurrenceRules.length === 0) return visiblePages;
 

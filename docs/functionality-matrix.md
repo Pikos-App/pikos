@@ -312,7 +312,7 @@ the raw base. The completed/skip sets survive a wholesale rule rewrite and push 
 | Uncomplete (uncheck a done clone) | ✅ ³⁶ | ✅ ³⁶ | ✅ | ✅ `status <clone> not_started` ³⁶ | ○ |
 | Delete the head | ✅ series stops ³⁷ | ⚠️ soft + tombstone ⁷ ³⁷ | ✅ ³⁷ | ✅ soft ⁹ ³⁷ | ○ |
 | Restore the head | ✅ series returns ³⁸ | ✅ ³⁸ | ✅ | — | ○ |
-| Terminal state (series exhausted) | ✅ head marked done, no clone | ⚠️ stays open at its last occurrence, never self-completes | ✅ like native | ✅ | ○ |
+| Terminal state (series exhausted) | ✅ head marked done, no clone | ⚠️ done once you ticked or skipped every occurrence since connecting; a series you never touched stays open at its last occurrence | ✅ like native | ✅ | ○ |
 
 ³¹ The sets model can't represent a head parked on a date the rule can't yield, and the heal
 would silently revert it on relaunch (decided 2026-07-03), so an off-pattern move lands on a
@@ -426,7 +426,11 @@ names. Its popover carries the matching Status row. A **native** virtual keeps t
 and no checkbox: a task series funnels to its head, which is the next thing due. To complete a
 specific future native occurrence, materialize it first, then complete the resulting real page.
 ⁴⁴ Override rows exist only on synced series, whichever side authored them. A native move
-produces a clone + EXDATE instead. Why, and what a re-link does to them: ⁴² above.
+produces a clone + EXDATE instead. Why, and what a re-link does to them: ⁴² above. A provider's
+copy of an instance that keeps its time, which Google sends whenever an attendee, call link or
+description differs on one occurrence, writes no override row: an override stores only a
+schedule, so the copy would read as a move, push the head past it and draw the meeting twice.
+It renders as an ordinary occurrence, and a later move of it does write one.
 ⁴⁵ Content lives on the head and applies to every occurrence. Per-occurrence notes happen
 naturally: write in the head before completing, and the clone captures them.
 

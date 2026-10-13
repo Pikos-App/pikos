@@ -650,6 +650,31 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
+  it("draws no head on a date the person skipped, however its key is written", async () => {
+    const head = makePage({
+      scheduledStart: "2026-03-13T09:00:00",
+      skippedOccurrences: ["2026-03-13T09:00:00"],
+      status: "done",
+      ...SYNCED,
+    });
+    const rule = makeRule({ scheduledStart: "2026-03-09T09:00:00" });
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
+        pages: [head],
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.some((p) => "isVirtual" in p)).toBe(true);
+    });
+    expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeUndefined();
+  });
+
   it("expands multiple rules independently in the same week", async () => {
     const pageA = makePage({ id: "page-A", scheduledStart: "2026-03-02T09:00:00" });
     const pageB = makePage({

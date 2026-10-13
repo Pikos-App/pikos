@@ -345,12 +345,26 @@ async fn write_schedule(
         .execute(&mut **tx)
         .await?;
 
+        let base = Occurrence {
+            start: &ev.schedule.start,
+            end: base_end.as_deref(),
+            timezone: tz,
+        };
         for ov in &rec.overrides {
+            let end = InclusiveEnd::from_provider(&ov.schedule.end);
+            if base.unmoved(
+                &ov.original_date,
+                &ov.schedule.start,
+                end.as_deref(),
+                ov.schedule.timezone.as_deref(),
+            ) {
+                continue;
+            }
             insert_schedule_row(
                 tx,
                 page_id,
                 &ov.schedule.start,
-                &InclusiveEnd::from_provider(&ov.schedule.end),
+                &end,
                 ov.schedule.timezone.as_deref(),
                 Some(&rule_id),
                 Some(&ov.original_date),
@@ -364,6 +378,7 @@ async fn write_schedule(
                 .overrides
                 .iter()
                 .any(|ov| &ov.original_date == original_date)
+                || base.unmoved(original_date, start, end.as_deref(), timezone.as_deref())
             {
                 continue;
             }
@@ -480,8 +495,9 @@ async fn apply_occurrence(
     ctx: &ReconcileContext,
     occ: &OccurrenceDelta,
 ) -> AppResult<OccurrenceResult> {
-    let rule = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT r.id, r.page_id, ps.sync_state FROM page_recurrence_rules r
+    let rule = sqlx::query_as::<_, (String, String, String, String, Option<String>, String)>(
+        "SELECT r.id, r.page_id, ps.sync_state, r.scheduled_start, r.scheduled_end, r.timezone
+         FROM page_recurrence_rules r
          JOIN page_sync ps ON ps.page_id = r.page_id
          WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.ical_uid = ?",
     )
@@ -491,7 +507,7 @@ async fn apply_occurrence(
     .fetch_optional(&mut **tx)
     .await?;
 
-    let Some((rule_id, page_id, state)) = rule else {
+    let Some((rule_id, page_id, state, base_start, base_end, base_tz)) = rule else {
         return Ok(OccurrenceResult::Missing(MissingMaster {
             ical_uid: occ.ical_uid.clone(),
             series_ref: occ.series_ref.clone(),
@@ -514,25 +530,41 @@ async fn apply_occurrence(
             .await?;
         }
         OccurrenceKind::Modify(schedule) => {
-            // One override per original_date — replace any prior one.
+            // One override per original_date — replace any prior one, and an instance
+            // back at its own slot needs none.
             sqlx::query("DELETE FROM page_schedules WHERE rule_id = ? AND original_date = ?")
                 .bind(&rule_id)
                 .bind(&occ.original_date)
                 .execute(&mut **tx)
                 .await?;
-            insert_schedule_row(
-                tx,
-                &page_id,
+            let end = InclusiveEnd::from_provider(&schedule.end);
+            let base = Occurrence {
+                start: &base_start,
+                end: base_end.as_deref(),
+                timezone: &base_tz,
+            };
+            if !base.unmoved(
+                &occ.original_date,
                 &schedule.start,
-                &InclusiveEnd::from_provider(&schedule.end),
+                end.as_deref(),
                 schedule.timezone.as_deref(),
-                Some(&rule_id),
-                Some(&occ.original_date),
-                &now_iso(),
-            )
-            .await?;
+            ) {
+                insert_schedule_row(
+                    tx,
+                    &page_id,
+                    &schedule.start,
+                    &end,
+                    schedule.timezone.as_deref(),
+                    Some(&rule_id),
+                    Some(&occ.original_date),
+                    &now_iso(),
+                )
+                .await?;
+            }
         }
     }
+    // Either change can cover or uncover the head's date.
+    crate::recurrence_derive::recompute_recurring_schedule(tx, &page_id).await?;
     Ok(OccurrenceResult::Applied)
 }
 
@@ -1193,6 +1225,46 @@ async fn update_page_title(
         .execute(&mut **tx)
         .await?;
     Ok(())
+}
+
+/// A series' own occurrence shape: where its base starts and ends, and the zone it
+/// keeps, against which a provider's per-instance copy is judged.
+struct Occurrence<'a> {
+    start: &'a str,
+    end: Option<&'a str>,
+    timezone: &'a str,
+}
+
+impl Occurrence<'_> {
+    /// Whether an override puts its occurrence exactly where the rule already does: same
+    /// start, same length, same zone. Google sends an instance as its own resource
+    /// whenever anything about it differs (attendees, a call link, a description), and
+    /// none of that is stored on an override row. Stored, such a copy reads as a moved
+    /// occurrence: it is excluded from the head and drawn as its own block, which on a
+    /// series with nothing else open left the head on the copy's date, drawn twice.
+    fn unmoved(
+        &self,
+        original_date: &str,
+        start: &str,
+        end: Option<&str>,
+        timezone: Option<&str>,
+    ) -> bool {
+        start == original_date
+            && timezone.is_none_or(|tz| tz == self.timezone)
+            && span(start, end) == span(self.start, self.end)
+    }
+}
+
+/// An occurrence's length: whole days for an all-day one, seconds for a timed one,
+/// `None` when it has no end.
+fn span(start: &str, end: Option<&str>) -> Option<i64> {
+    let start = WallClock::parse(start)?;
+    let end = WallClock::parse(end?)?;
+    if start.is_all_day() {
+        Some((end.date - start.date).num_days())
+    } else {
+        Some((end.as_datetime() - start.as_datetime()).num_seconds())
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

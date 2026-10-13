@@ -58,6 +58,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../migrations/020_statistics_table.sql"),
     ),
     ("021", include_str!("../migrations/021_detached_by.sql")),
+    (
+        "022",
+        include_str!("../migrations/022_drop_unmoved_overrides.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -1192,6 +1196,93 @@ async fn only_a_background_checkpointing_pool_turns_inline_checkpoints_off() {
     .unwrap();
     assert_eq!(setting(background).await, 0);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn upgrading_drops_overrides_that_leave_their_occurrence_in_place() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let staged = std::env::temp_dir().join(format!("pkos_mig_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&staged).unwrap();
+    for entry in std::fs::read_dir(&source).unwrap() {
+        let name = entry.unwrap().file_name();
+        if name.to_string_lossy().as_ref() < "022" {
+            std::fs::copy(source.join(&name), staged.join(&name)).unwrap();
+        }
+    }
+    let pool = with_functions(SqlitePoolOptions::new())
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::from_str(":memory:")
+                .unwrap()
+                .foreign_keys(true),
+        )
+        .await
+        .unwrap();
+    Migrator::new(staged.as_path())
+        .await
+        .unwrap()
+        .run(&pool)
+        .await
+        .unwrap();
+
+    insert_test_page(&pool, TestPage::new("p1", "Weekly"))
+        .await
+        .unwrap();
+    let now = now_iso();
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, rrule_exdates, scheduled_start, scheduled_end, timezone, created_at)
+         VALUES ('r1', 'p1', 'FREQ=WEEKLY', '[]', '2026-10-14T12:30:00', '2026-10-14T13:30:00',
+                 'America/Los_Angeles', ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    for (id, original, start, end) in [
+        (
+            "copy",
+            "2026-10-21T12:30:00",
+            "2026-10-21T12:30:00",
+            "2026-10-21T13:30:00",
+        ),
+        (
+            "later",
+            "2026-10-28T12:30:00",
+            "2026-10-28T15:00:00",
+            "2026-10-28T16:00:00",
+        ),
+        (
+            "longer",
+            "2026-11-04T12:30:00",
+            "2026-11-04T12:30:00",
+            "2026-11-04T14:00:00",
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO page_schedules
+             (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+             VALUES (?, 'p1', ?, ?, 'America/Los_Angeles', 'r1', ?, 'not_started', ?)",
+        )
+        .bind(id)
+        .bind(start)
+        .bind(end)
+        .bind(original)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+    let left: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM page_schedules WHERE rule_id = 'r1' ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(left, ["later", "longer"]);
+    let _ = std::fs::remove_dir_all(&staged);
 }
 
 #[tokio::test]

@@ -145,6 +145,41 @@ async fn synced_head_floor(
     Ok(created.as_deref().and_then(crate::sync::local_day_of))
 }
 
+/// Whether the person has resolved a synced series to its end: they ticked or skipped
+/// something, and no moved occurrence on or after the connect day is still open. The
+/// caller has already found no open occurrence of the rule itself.
+///
+/// Such a series completes like a native one. A live mirror is otherwise never marked
+/// done, because the `completed_at` the flip stamps counts as ownership
+/// (`PAGE_OWNED_SQL`), and a mirror nobody touched must not survive disconnect or ship
+/// in an export as if it were authored. A tick or a skip already makes the page owned,
+/// so the flip claims nothing new here. Left undone it parked on a date already ticked:
+/// open in the page list, where a tick could change nothing.
+async fn ticked_through(
+    conn: &mut sqlx::SqliteConnection,
+    page_id: &str,
+    rule_id: &str,
+    floor: Option<&str>,
+) -> AppResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT (EXISTS(SELECT 1 FROM completed_set WHERE page_id = ?1)
+                 OR EXISTS(SELECT 1 FROM skip_set WHERE page_id = ?1))
+            AND NOT EXISTS(
+                SELECT 1 FROM page_schedules o
+                 WHERE o.rule_id = ?2 AND o.original_date IS NOT NULL
+                   AND substr(o.original_date, 1, 10) >= coalesce(?3, '')
+                   AND substr(o.original_date, 1, 10) NOT IN (
+                       SELECT substr(occurrence_date, 1, 10) FROM completed_set WHERE page_id = ?1
+                       UNION
+                       SELECT substr(occurrence_date, 1, 10) FROM skip_set WHERE page_id = ?1))",
+    )
+    .bind(page_id)
+    .bind(rule_id)
+    .bind(floor)
+    .fetch_one(&mut *conn)
+    .await?)
+}
+
 /// Recomputes `pages.scheduled_start` for one recurring page from truth and flips
 /// its terminal status. Runs inside the caller's transaction so the cache write is
 /// atomic with the write that changed the truth (completion, skip, reconcile, …).
@@ -204,13 +239,12 @@ pub async fn recompute_recurring_schedule(
             .await?;
         }
         // Finite series exhausted. A native series terminates here: head done, no
-        // clone. A live mirror must not. The flip reads as the page completing
-        // itself, and the `completed_at` it stamps is one of `PAGE_OWNED_SQL`'s
-        // ownership signals, so the mirror would then survive disconnect and ship
-        // in a user-facing export as if it had been authored. Park the head on the
-        // last occurrence instead and leave the status alone.
+        // clone, and so does a live mirror the person ticked through; any other
+        // mirror parks on its last occurrence with its status alone (`ticked_through`).
         None => {
-            if crate::sync::page_schedule_locked_conn(tx, page_id).await? {
+            if crate::sync::page_schedule_locked_conn(tx, page_id).await?
+                && !ticked_through(tx, page_id, &rule.id, floor.as_deref()).await?
+            {
                 if let Some(occ) = last_open_occurrence(&rule, &excl) {
                     sqlx::query(
                         "UPDATE pages SET
