@@ -309,7 +309,7 @@ the raw base. The completed/skip sets survive a wholesale rule rewrite and push 
 | Complete head, overdue | ✅ scope dialog ³³ | ✅ same dialog ³⁴ | ✅ same dialog | ⚠️ one occurrence, no prompt ³⁵ | ○ |
 | … scope *Just this one* | ✅ head's own day; the rest stay open ³³ | ✅ same | ✅ | ✅ the only CLI behavior ³⁵ | ○ |
 | … scope *This and everything before today* | ✅ a done clone per open day ³³ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | 🚫 ³⁵ | ○ |
-| Uncomplete (uncheck a done clone) | ✅ ³⁶ | ✅ ³⁶ | ✅ | — | ○ |
+| Uncomplete (uncheck a done clone) | ✅ ³⁶ | ✅ ³⁶ | ✅ | ✅ `status <clone> not_started` ³⁶ | ○ |
 | Delete the head | ✅ series stops ³⁷ | ⚠️ soft + tombstone ⁷ ³⁷ | ✅ ³⁷ | ✅ soft ⁹ ³⁷ | ○ |
 | Restore the head | ✅ series returns ³⁸ | ✅ ³⁸ | ✅ | — | ○ |
 | Terminal state (series exhausted) | ✅ head marked done, no clone | ⚠️ stays open at its last occurrence, never self-completes | ✅ like native | ✅ | ○ |
@@ -365,11 +365,11 @@ survive soft-delete). Skipped for an active-synced head, whose cache is reconcil
 | --- | --- | --- | --- | --- | --- |
 | Render a virtual occurrence | ✅ repeat glyph, no checkbox | ✅ checkbox | ✅ checkbox | — no expansion; real rows only | ○ |
 | Open a virtual occurrence | ✅ opens the head | ✅ | ✅ | — | ○ |
-| Delete a single virtual | ✅ skip-set + undo toast ³⁹ | ✅ skip-set survives sync ³⁹ | ✅ | — | ○ |
+| Delete a single virtual | ✅ skip-set + undo toast ³⁹ | ✅ skip-set survives sync ³⁹ | ✅ | ✅ `occurrence skip` / `unskip` ³⁹ | ○ |
 | Delete an occurrence with a backlog behind it | ✅ scope dialog ³⁹ | ✅ same, copy reads local-only ³⁹ | ✅ plain delete copy ³⁹ | — | ○ |
 | … scope *Just this one* | ✅ that date to the skip-set | ✅ same | ✅ | — | ○ |
 | … scope *This and everything before today* | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | — | ○ |
-| Move a single virtual | ✅ detached clone ⁴⁰ | 🚫 locked ⁴¹ | ✅ mints an override ⁴² | — | ○ |
+| Move a single virtual | ✅ detached clone ⁴⁰ | 🚫 locked ⁴¹ | ✅ mints an override ⁴² | ✅ `occurrence move`, same arms ⁴⁰ ⁴² | ○ |
 | Complete a single virtual | 🚫 head-only ⁴³ | ✅ that occurrence ⁴³ | ✅ ⁴³ | — | ○ |
 | Tick an occurrence with a backlog behind it | — head-only ⁴³ | ✅ the same scope dialog ³³ ⁴³ | ✅ ⁴³ | — | ○ |
 | Render a materialized override | — synced series only ⁴⁴ | ✅ locked block at the moved slot ⁴² | ✅ same block, unlocked ⁴² | — | ○ |

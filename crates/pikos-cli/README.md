@@ -18,8 +18,8 @@ The Pikos command-line interface, in Rust, over the shared `pikos-db` writer.
   operations, in pikos-db terms) → `render.rs` (plain text). `workspace.rs`
   resolves and gates the DB file, `bridge.rs` runs the parser subprocess,
   `schedule.rs` reads and resolves schedule shapes, `write.rs` holds the writes
-  that mirror the app's persistence path, and `mcp.rs` is a second front end onto
-  `ops.rs`.
+  that mirror the app's persistence path, `occurrences.rs` handles one occurrence
+  of a repeating page, and `mcp.rs` is a second front end onto `ops.rs`.
 
 ## Build & run
 
@@ -86,6 +86,15 @@ delete <folder>` take an id or the folder's whole name, never a prefix, because
 restore <id>` brings the folder back with the pages that went with it. A folder
 that mirrors a calendar refuses both. Folders don't nest in Pikos, so nothing here
 sets a parent.
+
+`occurrence skip <page-id> <date>` and `occurrence unskip` dismiss one
+occurrence of a repeating page and bring it back. `occurrence move <page-id>
+<date> --due <when>` moves one, reading `--due`, `--all-day` and `--end` as
+`update` does against that occurrence's own time, so it keeps its length; in a
+series made in Pikos the moved occurrence becomes a page of its own, as a drag
+on the calendar makes it. The date must be one the rule gives. `status <id>
+not_started` on the done page a ticked-off occurrence left gives the date back
+to its series, as unchecking it in the app does.
 
 `reminders list <page-id>`, `reminders add <page-id> --minutes <n>` and
 `reminders rm <reminder-id>` manage per-page reminders. `--minutes` counts back
@@ -158,8 +167,8 @@ there is nothing to set. Every other tool is DB-only.
 
 Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 `create_page` (natural language, plus `dryRun` to preview the parse),
-`update_page`, `set_status`, `complete_page`, `delete_page`, `restore_page`,
-`list_trash`, `list_tags`, `list_folders`, `create_folder`, `rename_folder`, `delete_folder`,
+`update_page`, `set_status`, `complete_page`, `skip_occurrence`,
+`unskip_occurrence`, `move_occurrence`, `delete_page`, `restore_page`, `list_trash`, `list_tags`, `list_folders`, `create_folder`, `rename_folder`, `delete_folder`,
 `restore_folder`, `list_reminders`, `add_reminder`, `remove_reminder`.
 
 Two things the protocol deliberately does not offer. **Hard delete**:

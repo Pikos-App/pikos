@@ -585,7 +585,12 @@ pub async fn set_status(pool: &SqlitePool, id: &str, state: &str) -> Result<Page
     if state == "done" {
         return mark_done(pool, id).await;
     }
-    require_page(pool, id).await?;
+    let page = require_page(pool, id).await?;
+    if page.status == "done" {
+        if let Some(series) = crate::occurrences::reopen_occurrence(pool, &page).await? {
+            return Ok(series);
+        }
+    }
     write_patch(
         pool,
         id,

@@ -1303,6 +1303,193 @@ async fn done_refuses_a_synced_series_but_not_a_synced_one_off() {
     assert_eq!(json(&allowed)["status"], "done");
 }
 
+// ─── one occurrence of a series ──────────────────────────────────────────────
+
+/// A weekly hour-long meeting on Mondays from 2026-06-01, so every listed date is past.
+async fn seed_weekly_meeting(db: &str) -> String {
+    let ids = seed(db, vec![base_page("Review")]).await;
+    let pool = open_pool(db).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: Vec::new(),
+            scheduled_start: "2026-06-01T09:00:00".into(),
+            scheduled_end: Some("2026-06-01T10:00:00".into()),
+            timezone: "America/New_York".into(),
+        },
+    )
+    .await
+    .unwrap();
+    ids.into_iter().next().unwrap()
+}
+
+#[tokio::test]
+async fn occurrence_skip_and_unskip_round_trip_on_a_date_the_rule_gives() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+
+    let skipped = cli(dbs, &["occurrence", "skip", &id, "2026-06-08", "--json"]);
+    assert!(
+        skipped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&skipped.stderr)
+    );
+    assert_eq!(
+        json(&skipped)["skippedOccurrences"],
+        serde_json::json!(["2026-06-08"])
+    );
+
+    let tuesday = cli(dbs, &["occurrence", "skip", &id, "2026-06-09", "--json"]);
+    assert_eq!(code(&tuesday), 2, "the rule never gives a Tuesday");
+    let shapeless = cli(dbs, &["occurrence", "skip", &id, "next monday", "--json"]);
+    assert_eq!(code(&shapeless), 2);
+
+    let back = cli(dbs, &["occurrence", "unskip", &id, "2026-06-08", "--json"]);
+    assert!(json(&back)["skippedOccurrences"]
+        .as_array()
+        .is_none_or(Vec::is_empty));
+    let again = cli(dbs, &["occurrence", "unskip", &id, "2026-06-08", "--json"]);
+    assert_eq!(code(&again), 2);
+}
+
+#[tokio::test]
+async fn occurrence_move_gives_it_its_own_page_and_keeps_its_length() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+
+    let moved = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &id,
+            "2026-06-15",
+            "--due",
+            "2026-06-16T14:00:00",
+            "--json",
+        ],
+    );
+    assert!(
+        moved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&moved.stderr)
+    );
+    let out = json(&moved);
+    assert_eq!(out["clone"]["scheduledStart"], "2026-06-16T14:00:00");
+    assert_eq!(
+        out["clone"]["scheduledEnd"], "2026-06-16T15:00:00",
+        "still an hour"
+    );
+    assert_eq!(
+        out["ruleExdates"],
+        serde_json::json!(["2026-06-15"]),
+        "only that date left"
+    );
+
+    let twice = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &id,
+            "2026-06-15",
+            "--due",
+            "2026-06-17T14:00:00",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&twice), 2, "a moved date is no longer the series'");
+    let bare = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &id,
+            "2026-06-22",
+            "--due",
+            "2026-06-23",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&bare), 2, "a bare date can't silently drop the time");
+}
+
+#[tokio::test]
+async fn occurrence_writes_refuse_a_page_that_does_not_repeat_and_a_synced_move() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Once")]).await;
+    let one_off = cli(
+        dbs,
+        &["occurrence", "skip", &ids[0], "2026-06-08", "--json"],
+    );
+    assert_eq!(code(&one_off), 4);
+
+    let series = seed_weekly_meeting(dbs).await;
+    mark_synced(dbs, &series, "active").await;
+    let synced = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &series,
+            "2026-06-15",
+            "--due",
+            "2026-06-16T14:00:00",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&synced), 4);
+    let skip = cli(
+        dbs,
+        &["occurrence", "skip", &series, "2026-06-15", "--json"],
+    );
+    assert!(
+        skip.status.success(),
+        "a synced skip stays local, as in the app"
+    );
+}
+
+#[tokio::test]
+async fn status_not_started_on_a_ticked_off_occurrence_gives_the_date_back_to_the_series() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+
+    assert!(cli(dbs, &["done", &id, "--json"]).status.success());
+    let series = json(&cli(dbs, &["read", &id, "--json"]));
+    let clone = series["completedOccurrences"]["2026-06-01"]
+        .as_str()
+        .expect("the first Monday was ticked off")
+        .to_string();
+    assert_eq!(series["scheduledStart"], "2026-06-08T09:00:00");
+
+    let reopened = cli(dbs, &["status", &clone, "not_started", "--json"]);
+    assert!(
+        reopened.status.success(),
+        "{}",
+        String::from_utf8_lossy(&reopened.stderr)
+    );
+    let series = json(&reopened);
+    assert_eq!(series["id"], id.as_str());
+    assert_eq!(
+        series["scheduledStart"], "2026-06-01T09:00:00",
+        "the series has it back"
+    );
+    assert_eq!(
+        code(&cli(dbs, &["read", &clone, "--json"])),
+        3,
+        "the done copy is gone"
+    );
+
+    let skip = cli(dbs, &["occurrence", "skip", &id, "2026-06-01", "--json"]);
+    assert!(skip.status.success(), "a reopened date can be skipped");
+}
+
 // ─── list: the rest of the PageFilter ────────────────────────────────────────
 
 #[tokio::test]

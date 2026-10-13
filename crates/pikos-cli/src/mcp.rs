@@ -23,6 +23,7 @@ use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
 use crate::error::CliError;
+use crate::occurrences;
 use crate::ops::{
     add_reminder, cmd_add, create_folder, list_folders, list_pages, list_reminders, list_tags,
     list_trash, mark_done, parse_only, remove_reminder, rename_folder, require_page, restore,
@@ -262,6 +263,38 @@ fn tool_definitions() -> Vec<Value> {
             &["id"],
         ),
         tool(
+            "skip_occurrence",
+            "Skip one occurrence of a repeating page, named by its date. unskip_occurrence brings it back.",
+            json!({
+                "id": string_prop("The repeating page's id."),
+                "date": string_prop("The occurrence's date, YYYY-MM-DD."),
+            }),
+            &["id", "date"],
+        ),
+        tool(
+            "unskip_occurrence",
+            "Bring back an occurrence skip_occurrence skipped.",
+            json!({
+                "id": string_prop("The repeating page's id."),
+                "date": string_prop("The skipped occurrence's date, YYYY-MM-DD."),
+            }),
+            &["id", "date"],
+        ),
+        tool(
+            "move_occurrence",
+            "Move one occurrence of a repeating page, keeping its length unless end says otherwise. \
+             The rest of the series stays put. To reopen a ticked-off occurrence, set_status its \
+             done page to not_started.",
+            json!({
+                "id": string_prop("The repeating page's id."),
+                "date": string_prop("The occurrence's date, YYYY-MM-DD."),
+                "due": string_prop("Where it goes: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it is not timed."),
+                "allDay": string_prop("Make it all-day on YYYY-MM-DD instead."),
+                "end": string_prop("When it ends, in its own shape."),
+            }),
+            &["id", "date"],
+        ),
+        tool(
             "delete_page",
             "Move a page to the trash, where restore_page can bring it back. Never destroys anything.",
             json!({ "id": string_prop("The page id.") }),
@@ -455,6 +488,33 @@ async fn call_tool(
             Ok(json!({ "id": id, "trashed": true }))
         }
         "restore_page" => to_value(&restore(pool, &require_str(args, "id")?).await?),
+        "skip_occurrence" => to_value(
+            &occurrences::skip(pool, &require_str(args, "id")?, &require_str(args, "date")?)
+                .await?,
+        ),
+        "unskip_occurrence" => to_value(
+            &occurrences::unskip(pool, &require_str(args, "id")?, &require_str(args, "date")?)
+                .await?,
+        ),
+        "move_occurrence" => {
+            let (due, all_day, end) = (text(args, "due"), text(args, "allDay"), text(args, "end"));
+            if due.is_some() && all_day.is_some() {
+                return Err(CliError::usage(
+                    "due and allDay name the same field in different shapes — pass one.",
+                ));
+            }
+            to_value(
+                &occurrences::move_occurrence(
+                    pool,
+                    &require_str(args, "id")?,
+                    &require_str(args, "date")?,
+                    due.as_deref(),
+                    all_day.as_deref(),
+                    end.as_deref(),
+                )
+                .await?,
+            )
+        }
         "list_trash" => to_value(&list_trash(pool).await?),
         "list_tags" => to_value(&list_tags(pool).await?),
         "list_folders" => to_value(&list_folders(pool).await?),
@@ -573,6 +633,9 @@ mod tests {
             "complete_page",
             "delete_page",
             "restore_page",
+            "skip_occurrence",
+            "unskip_occurrence",
+            "move_occurrence",
             "list_trash",
             "list_tags",
             "list_folders",

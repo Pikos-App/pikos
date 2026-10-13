@@ -175,6 +175,11 @@ pub enum CliCommand {
         #[command(subcommand)]
         command: FolderCommand,
     },
+    /// Skip or move one occurrence of a repeating page, named by its date
+    Occurrence {
+        #[command(subcommand)]
+        command: OccurrenceCommand,
+    },
     /// Per-page reminders, in minutes ahead of the scheduled start
     Reminders {
         #[command(subcommand)]
@@ -205,6 +210,32 @@ pub enum FolderCommand {
     Delete { folder: String },
     /// Bring a trashed folder back with the pages trashed along with it
     Restore { id: String },
+}
+
+#[derive(Subcommand)]
+pub enum OccurrenceCommand {
+    /// Skip one occurrence, as deleting it from the calendar does
+    Skip { id: String, date: String },
+    /// Bring a skipped occurrence back
+    Unskip { id: String, date: String },
+    /// Move one occurrence, keeping its length unless --end says otherwise
+    Move {
+        id: String,
+        date: String,
+        #[arg(
+            long,
+            help = "Where it goes: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it isn't timed"
+        )]
+        due: Option<String>,
+        #[arg(
+            long = "all-day",
+            conflicts_with = "due",
+            help = "Make it all-day on YYYY-MM-DD"
+        )]
+        all_day: Option<String>,
+        #[arg(long, help = "When it ends, in its own shape")]
+        end: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

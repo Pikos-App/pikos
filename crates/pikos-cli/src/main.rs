@@ -13,6 +13,7 @@ mod cli;
 mod commands;
 mod error;
 mod mcp;
+mod occurrences;
 mod ops;
 mod render;
 mod schedule;

@@ -4,8 +4,11 @@
 use pikos_db::{hard_delete_page_impl, hard_delete_would_resurrect, list_pages_today_impl};
 use serde_json::json;
 
-use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand, StressCommand};
+use crate::cli::{
+    Cli, CliCommand, FolderCommand, OccurrenceCommand, ReminderCommand, StressCommand,
+};
 use crate::error::{classify, CliError};
+use crate::occurrences;
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
     list_tags, list_trash, mark_done, parse_only, remove_reminder, rename_folder, require_folder,
@@ -14,7 +17,7 @@ use crate::ops::{
 };
 use crate::render::{
     print_json, render_entry_list, render_folders, render_page, render_reminders, render_search,
-    render_summary_list, render_tags, render_trash,
+    render_summary, render_summary_list, render_tags, render_trash,
 };
 use crate::workspace::open_workspace;
 
@@ -352,6 +355,48 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                     print_json(&folder);
                 } else {
                     println!("Restored {}: {}", folder.id, folder.name);
+                }
+            }
+        },
+        CliCommand::Occurrence { command } => match command {
+            OccurrenceCommand::Skip { id, date } => {
+                let page = occurrences::skip(&pool, &id, &date).await?;
+                if json {
+                    print_json(&page);
+                } else {
+                    println!("Skipped {date}\n{}", render_page(&page));
+                }
+            }
+            OccurrenceCommand::Unskip { id, date } => {
+                let page = occurrences::unskip(&pool, &id, &date).await?;
+                if json {
+                    print_json(&page);
+                } else {
+                    println!("Brought {date} back\n{}", render_page(&page));
+                }
+            }
+            OccurrenceCommand::Move {
+                id,
+                date,
+                due,
+                all_day,
+                end,
+            } => {
+                let moved = occurrences::move_occurrence(
+                    &pool,
+                    &id,
+                    &date,
+                    due.as_deref(),
+                    all_day.as_deref(),
+                    end.as_deref(),
+                )
+                .await?;
+                if json {
+                    print_json(&moved);
+                } else if let Some(clone) = &moved.clone {
+                    println!("Moved {date} to its own page\n{}", render_summary(clone));
+                } else {
+                    println!("Moved {date}");
                 }
             }
         },

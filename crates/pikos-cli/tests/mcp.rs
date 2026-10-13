@@ -746,3 +746,56 @@ async fn list_trash_and_list_tags_answer_what_an_agent_cannot_guess() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn occurrence_tools_skip_and_move_one_date_of_a_series() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Review")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-01T09:00:00".into(),
+            scheduled_end: Some("2026-06-01T10:00:00".into()),
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let skipped = server.call(
+        2,
+        "skip_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-08" }),
+    );
+    assert_eq!(skipped["skippedOccurrences"], json!(["2026-06-08"]));
+    server.call(
+        3,
+        "unskip_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-08" }),
+    );
+
+    let moved = server.call(
+        4,
+        "move_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-15", "due": "2026-06-16T14:00:00" }),
+    );
+    assert_eq!(moved["clone"]["scheduledEnd"], "2026-06-16T15:00:00");
+
+    let refused = server.call_expecting_error(
+        5,
+        "skip_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-09" }),
+    );
+    assert_eq!(refused["error"]["kind"], "Usage");
+
+    server.shutdown();
+}
