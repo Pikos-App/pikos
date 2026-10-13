@@ -433,10 +433,10 @@ naturally: write in the head before completing, and the clone captures them.
 | Functionality | Regular folder | External-calendar folder | CLI | Mobile |
 | --- | --- | --- | --- | --- |
 | Create | ✅ | 🚫 sync enable path only | ✅ `folders create` | ○ |
-| Rename | ✅ | 🚫 sync-owned, follows the calendar ⁴⁶ | — | ○ |
+| Rename | ✅ | 🚫 sync-owned, follows the calendar ⁴⁶ | ✅ `folders rename`, refused on a calendar folder | ○ |
 | Recolor | ✅ | ✅ Pikos palette, user pick wins ⁴⁷ | — | ○ |
 | Reparent / nest | ✅ | 🚫 both directions ⁴⁸ | — | ○ |
-| Delete | ✅ | 🚫 disconnect in settings ⁴⁸ | — | ○ |
+| Delete | ✅ | 🚫 disconnect in settings ⁴⁸ | ✅ `folders delete` to the trash, `folders restore` | ○ |
 | Enable / disable (per-calendar) | — | ⚠️ sync teardown, not hide ⁴⁹ | — | ○ |
 | Default page-list sort | ✅ manual | ⚠️ date ⁵⁰ | — | ○ |
 | Grouped under an account heading | — | ✅ with >1 account ⁵¹ | — | ○ |

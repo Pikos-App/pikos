@@ -1596,6 +1596,104 @@ async fn folders_create_makes_a_folder_list_can_filter_on() {
     assert_eq!(json(&cli(dbs, &["folders", "list", "--json"]))[0]["id"], id);
 }
 
+#[tokio::test]
+async fn folders_rename_takes_a_whole_name_or_an_id() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let id = make_folder(dbs, "Projects").await;
+
+    let prefix = cli(dbs, &["folders", "rename", "proj", "Work", "--json"]);
+    assert_eq!(code(&prefix), 3, "a prefix renames nothing");
+
+    let by_name = cli(
+        dbs,
+        &[
+            "folders", "rename", "projects", "Side", "projects", "--json",
+        ],
+    );
+    assert_eq!(json(&by_name)["name"], "Side projects");
+    let by_id = cli(dbs, &["folders", "rename", &id, "Work", "--json"]);
+    assert_eq!(json(&by_id)["name"], "Work");
+}
+
+#[tokio::test]
+async fn folders_rename_refuses_a_name_two_folders_share() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    make_folder(dbs, "Notes").await;
+    make_folder(dbs, "notes").await;
+    let out = cli(dbs, &["folders", "rename", "Notes", "Journal", "--json"]);
+    assert_eq!(code(&out), 4);
+}
+
+#[tokio::test]
+async fn folders_delete_trashes_its_pages_and_restore_brings_them_back() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let reading = make_folder(dbs, "Reading").await;
+    let mut book = base_page("Dune");
+    book.folder_id = Some(reading.clone());
+    seed(dbs, vec![book, base_page("Loose")]).await;
+
+    let unconfirmed = cli(dbs, &["folders", "delete", "Reading", "--json"]);
+    assert_eq!(code(&unconfirmed), 2);
+    assert_eq!(
+        json(&cli(dbs, &["list", "--json"]))
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let trashed = cli(dbs, &["folders", "delete", "Reading", "--yes", "--json"]);
+    assert_eq!(json(&trashed)["id"], reading.as_str());
+    assert_eq!(titles(&cli(dbs, &["list", "--json"])), ["Loose"]);
+    assert!(json(&cli(dbs, &["folders", "list", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let restored = cli(dbs, &["folders", "restore", &reading, "--json"]);
+    assert_eq!(json(&restored)["name"], "Reading");
+    let back = json(&cli(dbs, &["list", "--folder", "Reading", "--json"]));
+    assert_eq!(back[0]["title"], "Dune");
+}
+
+#[tokio::test]
+async fn folders_rename_and_delete_refuse_a_calendar_folder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    make_calendar_folder(dbs, "Work calendar").await;
+
+    let renamed = cli(
+        dbs,
+        &["folders", "rename", "Work calendar", "Work", "--json"],
+    );
+    assert_eq!(code(&renamed), 4);
+    let deleted = cli(
+        dbs,
+        &["folders", "delete", "Work calendar", "--yes", "--json"],
+    );
+    assert_eq!(code(&deleted), 4);
+    assert_eq!(
+        json(&cli(dbs, &["folders", "list", "--json"]))[0]["name"],
+        "Work calendar"
+    );
+}
+
+#[tokio::test]
+async fn folders_restore_of_an_unknown_id_exits_3() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let out = cli(dbs, &["folders", "restore", "nope", "--json"]);
+    assert_eq!(code(&out), 3);
+}
+
 // ─── reminders ───────────────────────────────────────────────────────────────
 
 #[tokio::test]

@@ -8,8 +8,8 @@ use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand, StressCommand}
 use crate::error::{classify, CliError};
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
-    mark_done, parse_only, remove_reminder, require_page, restore, search, set_status, trash,
-    update_page, ListQuery, PageEdit,
+    mark_done, parse_only, remove_reminder, rename_folder, require_folder, require_page, restore,
+    restore_folder, search, set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
 };
 use crate::render::{
     print_json, render_entry_list, render_folders, render_page, render_reminders, render_search,
@@ -292,6 +292,49 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                     print_json(&folder);
                 } else {
                     println!("Created {}: {}", folder.id, folder.name);
+                }
+            }
+            FolderCommand::Rename { folder, name } => {
+                let renamed = rename_folder(&pool, &folder, &name.join(" ")).await?;
+                if json {
+                    print_json(&renamed);
+                } else {
+                    println!("Renamed {} to {}", renamed.id, renamed.name);
+                }
+            }
+            FolderCommand::Delete { folder } => {
+                let target = require_folder(&pool, &folder).await?;
+                if !cli.yes {
+                    if json {
+                        return Err(CliError::usage(
+                            "refusing to delete without --yes in --json mode",
+                        ));
+                    }
+                    let question = format!(
+                        "Move the folder \"{}\" and every page in it to the trash?",
+                        target.name
+                    );
+                    if !confirm(&question).await {
+                        eprintln!("Aborted.");
+                        return Ok(());
+                    }
+                }
+                let trashed = trash_folder(&pool, &target.id).await?;
+                if json {
+                    print_json(&json!({ "id": trashed.id, "trashed": true }));
+                } else {
+                    println!(
+                        "Moved {} and its pages to the trash; `pikos folders restore {}` brings them back",
+                        trashed.name, trashed.id
+                    );
+                }
+            }
+            FolderCommand::Restore { id } => {
+                let folder = restore_folder(&pool, &id).await?;
+                if json {
+                    print_json(&folder);
+                } else {
+                    println!("Restored {}: {}", folder.id, folder.name);
                 }
             }
         },

@@ -24,9 +24,9 @@ use sqlx::SqlitePool;
 
 use crate::error::CliError;
 use crate::ops::{
-    add_reminder, cmd_add, list_folders, list_pages, list_reminders, mark_done, parse_only,
-    remove_reminder, require_page, restore, search, set_status, trash, update_page, ListQuery,
-    PageEdit,
+    add_reminder, cmd_add, create_folder, list_folders, list_pages, list_reminders, mark_done,
+    parse_only, remove_reminder, rename_folder, require_page, restore, restore_folder, search,
+    set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
 };
 use crate::workspace::open_workspace;
 
@@ -280,6 +280,33 @@ fn tool_definitions() -> Vec<Value> {
             &[],
         ),
         tool(
+            "create_folder",
+            "Create a folder. Pages are filed into it with create_page's ~folder or update_page's folder.",
+            json!({ "name": string_prop("The folder's name.") }),
+            &["name"],
+        ),
+        tool(
+            "rename_folder",
+            "Rename a folder. A folder that mirrors a connected calendar follows its calendar's name and is refused.",
+            json!({
+                "folder": string_prop("The folder's id or its whole current name."),
+                "name": string_prop("The new name."),
+            }),
+            &["folder", "name"],
+        ),
+        tool(
+            "delete_folder",
+            "Move a folder and every page in it to the trash. restore_folder brings both back; never destroys anything.",
+            json!({ "folder": string_prop("The folder's id or its whole name.") }),
+            &["folder"],
+        ),
+        tool(
+            "restore_folder",
+            "Bring a trashed folder back, with the pages that were trashed along with it.",
+            json!({ "id": string_prop("The folder id delete_folder returned.") }),
+            &["id"],
+        ),
+        tool(
             "list_reminders",
             "List one page's reminders. To find which pages have reminders, use list_pages with hasReminders.",
             json!({ "pageId": string_prop("The page id.") }),
@@ -417,6 +444,20 @@ async fn call_tool(
         }
         "restore_page" => to_value(&restore(pool, &require_str(args, "id")?).await?),
         "list_folders" => to_value(&list_folders(pool).await?),
+        "create_folder" => to_value(&create_folder(pool, &require_str(args, "name")?).await?),
+        "rename_folder" => to_value(
+            &rename_folder(
+                pool,
+                &require_str(args, "folder")?,
+                &require_str(args, "name")?,
+            )
+            .await?,
+        ),
+        "delete_folder" => {
+            let folder = trash_folder(pool, &require_str(args, "folder")?).await?;
+            Ok(json!({ "id": folder.id, "name": folder.name, "trashed": true }))
+        }
+        "restore_folder" => to_value(&restore_folder(pool, &require_str(args, "id")?).await?),
         "list_reminders" => to_value(&list_reminders(pool, &require_str(args, "pageId")?).await?),
         "add_reminder" => {
             let minutes = args
@@ -519,6 +560,10 @@ mod tests {
             "delete_page",
             "restore_page",
             "list_folders",
+            "create_folder",
+            "rename_folder",
+            "delete_folder",
+            "restore_folder",
             "list_reminders",
             "add_reminder",
             "remove_reminder",

@@ -10,11 +10,12 @@ use chrono::{Local, NaiveDate, NaiveTime, TimeZone, Utc};
 use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, delete_page_schedule_impl, fts_tokens,
-    fuzzy_match_folder, get_page, get_recurrence_rule_impl, list_folders_impl, list_page_reminders,
-    list_page_schedules_impl, list_pages_impl, list_pages_window, now_local_iso, restore_page_impl,
-    search_page, soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput,
-    Folder, ListExtras, NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder,
-    PageSummary, PageUpdate, SearchCursor, SearchPage, Terms,
+    fuzzy_match_folder, get_folder_impl, get_page, get_recurrence_rule_impl, list_folders_impl,
+    list_page_reminders, list_page_schedules_impl, list_pages_impl, list_pages_window,
+    now_local_iso, restore_folder_impl, restore_page_impl, search_page, soft_delete_folder_impl,
+    soft_delete_page_impl, today_local, update_folder_impl, update_page_impl,
+    CompleteRecurringInput, Folder, FolderUpdate, ListExtras, NewFolder, NewRecurrenceRule, Page,
+    PageFilter, PageOrder, PageReminder, PageSummary, PageUpdate, SearchCursor, SearchPage, Terms,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -241,6 +242,89 @@ pub async fn create_folder(pool: &SqlitePool, name: &str) -> Result<Folder, CliE
     )
     .await
     .map_err(classify)
+}
+
+/// The live folder a rename or delete names, by id or by its whole name.
+///
+/// Exact, unlike [`resolve_folder_ref`]: deleting a folder trashes every page in it, so
+/// "proj" must not reach "Projects" the way it may when only filtering a list.
+pub async fn require_folder(pool: &SqlitePool, needle: &str) -> Result<Folder, CliError> {
+    let folders = list_folders_impl(pool).await.map_err(classify)?;
+    let mut by_name = folders
+        .into_iter()
+        .filter(|f| f.id == needle || f.name.eq_ignore_ascii_case(needle));
+    match (by_name.next(), by_name.next()) {
+        (Some(f), None) => Ok(f),
+        (Some(_), Some(_)) => Err(CliError::conflict(format!(
+            "More than one folder is named \"{needle}\" — pass its id from `pikos folders list`."
+        ))),
+        (None, _) => Err(CliError::not_found(format!(
+            "No folder is named \"{needle}\" — run `pikos folders list` to see them."
+        ))),
+    }
+}
+
+/// Calendar folders follow their calendar: sync renames one back on its next pass and
+/// trashing one would orphan the link, so the app offers neither.
+fn refuse_calendar_folder(folder: &Folder) -> Result<(), CliError> {
+    if folder.is_external_calendar {
+        return Err(CliError::conflict(format!(
+            "\"{}\" mirrors a connected calendar — rename or remove it in the calendar, or \
+             disconnect it in the Pikos app's Calendar Sync settings.",
+            folder.name
+        )));
+    }
+    Ok(())
+}
+
+pub async fn rename_folder(
+    pool: &SqlitePool,
+    needle: &str,
+    name: &str,
+) -> Result<Folder, CliError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CliError::usage("a folder needs a name"));
+    }
+    let folder = require_folder(pool, needle).await?;
+    refuse_calendar_folder(&folder)?;
+    update_folder_impl(
+        pool,
+        folder.id,
+        FolderUpdate {
+            name: Some(name.to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .map_err(classify)
+}
+
+/// Trash a folder with every page in it, as the sidebar's delete does; [`restore_folder`]
+/// brings both back.
+pub async fn trash_folder(pool: &SqlitePool, needle: &str) -> Result<Folder, CliError> {
+    let folder = require_folder(pool, needle).await?;
+    refuse_calendar_folder(&folder)?;
+    soft_delete_folder_impl(pool, folder.id.clone())
+        .await
+        .map_err(classify)?;
+    Ok(folder)
+}
+
+/// Takes an id only: a trashed folder is in no listing a name could be matched against.
+pub async fn restore_folder(pool: &SqlitePool, id: &str) -> Result<Folder, CliError> {
+    if get_folder_impl(pool, id).await.map_err(classify)?.is_none() {
+        return Err(CliError::not_found(format!(
+            "No folder with id: {id}. `pikos folders delete` prints the id it trashed."
+        )));
+    }
+    restore_folder_impl(pool, id.to_string())
+        .await
+        .map_err(classify)?;
+    get_folder_impl(pool, id)
+        .await
+        .map_err(classify)?
+        .ok_or_else(|| CliError::internal("the folder vanished while it was restored"))
 }
 
 /// Resolve a `--folder` argument to the value a [`PageFilter`] wants: an exact id

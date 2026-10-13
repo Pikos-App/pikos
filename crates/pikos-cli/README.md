@@ -78,7 +78,12 @@ destroys it instead, and refuses on a page whose calendar is still connected
 trashed page back and hands a tombstoned mirror back to the reconciler.
 
 `folders list` prints every folder with its live page count; `folders create
-<name>` makes one at the top level.
+<name>` makes one at the top level. `folders rename <folder> <name>` and `folders
+delete <folder>` take an id or the folder's whole name, never a prefix, because
+`delete` trashes every page in the folder; it asks first unless `--yes`. `folders
+restore <id>` brings the folder back with the pages that went with it. A folder
+that mirrors a calendar refuses both. Folders don't nest in Pikos, so nothing here
+sets a parent.
 
 `reminders list <page-id>`, `reminders add <page-id> --minutes <n>` and
 `reminders rm <reminder-id>` manage per-page reminders. `--minutes` counts back
@@ -152,7 +157,8 @@ there is nothing to set. Every other tool is DB-only.
 Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 `create_page` (natural language, plus `dryRun` to preview the parse),
 `update_page`, `set_status`, `complete_page`, `delete_page`, `restore_page`,
-`list_folders`, `list_reminders`, `add_reminder`, `remove_reminder`.
+`list_folders`, `create_folder`, `rename_folder`, `delete_folder`,
+`restore_folder`, `list_reminders`, `add_reminder`, `remove_reminder`.
 
 Two things the protocol deliberately does not offer. **Hard delete**:
 `delete_page` only trashes, and `restore_page` undoes it, so nothing an agent

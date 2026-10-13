@@ -166,7 +166,7 @@ pub enum CliCommand {
     },
     /// Bring a trashed page back
     Restore { id: String },
-    /// Inspect and create folders
+    /// List, create, rename, trash and restore folders
     Folders {
         #[command(subcommand)]
         command: FolderCommand,
@@ -191,6 +191,16 @@ pub enum FolderCommand {
     List,
     /// Create a folder at the top level
     Create { name: Vec<String> },
+    /// Rename a folder, named by its id or its whole name
+    Rename {
+        folder: String,
+        #[arg(required = true)]
+        name: Vec<String>,
+    },
+    /// Move a folder and every page in it to the trash
+    Delete { folder: String },
+    /// Bring a trashed folder back with the pages trashed along with it
+    Restore { id: String },
 }
 
 #[derive(Subcommand)]

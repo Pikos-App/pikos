@@ -683,3 +683,44 @@ async fn update_page_edits_tags_subtitle_and_clears_the_schedule() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn folder_tools_create_rename_trash_and_restore() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Dune")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let made = server.call(2, "create_folder", json!({ "name": "Reading" }));
+    let id = made["id"].as_str().unwrap().to_string();
+    let page = server.call(3, "list_pages", json!({}))[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    server.call(4, "update_page", json!({ "id": page, "folder": id }));
+
+    let renamed = server.call(
+        5,
+        "rename_folder",
+        json!({ "folder": "Reading", "name": "Books" }),
+    );
+    assert_eq!(renamed["name"], "Books");
+
+    let trashed = server.call(6, "delete_folder", json!({ "folder": "Books" }));
+    assert_eq!(trashed["trashed"], true);
+    assert!(server
+        .call(7, "list_pages", json!({}))
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    server.call(8, "restore_folder", json!({ "id": id }));
+    assert_eq!(
+        server.call(9, "list_pages", json!({ "folder": "Books" }))[0]["title"],
+        "Dune"
+    );
+
+    server.shutdown();
+}
