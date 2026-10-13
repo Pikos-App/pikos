@@ -1,14 +1,16 @@
-//! One occurrence of a repeating page: skip it, bring it back, move it, or reopen it once done.
+//! One occurrence of a repeating page: tick it off, skip it, bring it back, move it, or
+//! reopen it once done.
 //!
 //! An occurrence is named by its series and the date the rule gives it. Each write checks
 //! that date against the rule first, because the writers take any date: a skip for a day the
 //! rule never yields lands in the skip-set and changes nothing anyone can see.
 
 use pikos_db::{
-    get_recurrence_rule_impl, list_pages_window, reschedule_virtual_occurrence_impl,
-    skip_occurrence_impl, uncomplete_recurring_occurrence_impl, undo_skip_occurrence_impl, Page,
-    PageOrder, PageRecurrenceRule, RescheduleVirtualInput, RescheduleVirtualResult,
-    SkipOccurrenceInput, UncompleteRecurringInput,
+    complete_recurring_page_impl, get_recurrence_rule_impl, list_pages_window,
+    oldest_open_for_page, reschedule_virtual_occurrence_impl, skip_occurrence_impl,
+    uncomplete_recurring_occurrence_impl, undo_skip_occurrence_impl, viewer_wall_clock,
+    CompleteRecurringInput, Page, PageOrder, PageRecurrenceRule, RescheduleVirtualInput,
+    RescheduleVirtualResult, SkipOccurrenceInput, UncompleteRecurringInput,
 };
 use pikos_recurrence::{occurrences_in_window, Occurrence};
 use sqlx::SqlitePool;
@@ -76,6 +78,63 @@ fn is_skipped(page: &Page, day: &str) -> bool {
     page.skipped_occurrences
         .as_ref()
         .is_some_and(|skipped| skipped.iter().any(|d| d == day))
+}
+
+/// Tick off one occurrence of a series a calendar owns: `day`, or the oldest still open.
+///
+/// The writer can't find the occurrence itself, because the head of a synced series is
+/// kept on the calendar's clock; it takes the occurrence's start on the viewer's, which
+/// is what the app hands it from the block that was ticked.
+pub async fn complete_synced(
+    pool: &SqlitePool,
+    page: &Page,
+    day: Option<&str>,
+) -> Result<Page, CliError> {
+    let (_, rule) = require_series(pool, &page.id).await?;
+    let occurrence = match day {
+        Some(day) => {
+            let occurrence = occurrence_on(page, &rule, day)?;
+            if is_completed(page, day) {
+                return require_page(pool, &page.id).await;
+            }
+            if is_skipped(page, day) {
+                return Err(CliError::conflict(format!(
+                    "{day} was skipped — `pikos occurrence unskip` brings it back first."
+                )));
+            }
+            if page
+                .synced_since
+                .as_deref()
+                .is_some_and(|since| day < since)
+            {
+                return Err(CliError::conflict(format!(
+                    "{day} is before this calendar was connected, so Pikos never showed it."
+                )));
+            }
+            occurrence
+        }
+        None => oldest_open_for_page(pool, &page.id)
+            .await
+            .map_err(classify)?
+            .ok_or_else(|| CliError::conflict("Every occurrence of this event is already done."))?,
+    };
+    let zone = page.timezone.as_deref();
+    complete_recurring_page_impl(
+        pool,
+        CompleteRecurringInput {
+            page_id: page.id.clone(),
+            occurrence_date: Some(occurrence.original_date.clone()),
+            scheduled_start: Some(viewer_wall_clock(&occurrence.scheduled_start, zone)),
+            scheduled_end: occurrence
+                .scheduled_end
+                .as_deref()
+                .map(|end| viewer_wall_clock(end, zone)),
+            expected_occurrence_date: Some(occurrence.original_date),
+        },
+    )
+    .await
+    .map_err(classify)?;
+    require_page(pool, &page.id).await
 }
 
 /// Skip one occurrence, as deleting it from the calendar does. Skipping it twice is harmless.

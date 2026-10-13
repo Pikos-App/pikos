@@ -61,6 +61,11 @@ async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
 /// Link a page to a synced calendar, creating a throwaway account on first use.
 /// `sync_state` ∈ active | detached | tombstoned.
 async fn mark_synced(db: &str, page_id: &str, sync_state: &str) {
+    mark_synced_at(db, page_id, sync_state, "2026-01-01T00:00:00Z").await;
+}
+
+/// [`mark_synced`], connected at `connected` (UTC), which sets the page's synced-since day.
+async fn mark_synced_at(db: &str, page_id: &str, sync_state: &str, connected: &str) {
     let pool = open_pool(db).await.unwrap();
     sqlx::query(
         "INSERT OR IGNORE INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
@@ -72,13 +77,14 @@ async fn mark_synced(db: &str, page_id: &str, sync_state: &str) {
     sqlx::query(
         "INSERT INTO page_sync
          (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
-         VALUES (?, ?, 'acct', 'caldav', 'cal', ?, ?, ?, '2026-01-01T00:00:00Z')",
+         VALUES (?, ?, 'acct', 'caldav', 'cal', ?, ?, ?, ?)",
     )
     .bind(format!("ps-{page_id}"))
     .bind(page_id)
     .bind(format!("href-{page_id}"))
     .bind(format!("uid-{page_id}"))
     .bind(sync_state)
+    .bind(connected)
     .execute(&pool)
     .await
     .unwrap();
@@ -1265,42 +1271,132 @@ async fn mark_recurring(db: &str, page_id: &str, start: &str) {
     .unwrap();
 }
 
-/// The CLI has no expansion engine, so it can't name which occurrence a tick means
-/// — for a live mirror it refuses and says where to do it. The refusal is on the
-/// *pair* (synced **and** recurring): a synced one-off has exactly one occurrence,
-/// so completing it needs no engine and must still work. Guard the placement from
-/// both sides, since widening it to all synced pages would quietly make `pikos done`
-/// useless against a calendar, and narrowing it would complete the wrong week.
+/// A weekly Monday 9am in London from 2026-10-19, mirrored from a connected calendar.
+/// London leaves summer time on 25 October and the US a week later, so the two
+/// Mondays sit on different offsets for any viewer outside London.
+async fn seed_london_standup(db: &str, connected: &str) -> String {
+    let ids = seed(db, vec![base_page("Standup")]).await;
+    let pool = open_pool(db).await.unwrap();
+    // The rule goes on before the mirror locks — the order the reconciler writes in.
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: Vec::new(),
+            scheduled_start: "2026-10-19T09:00:00".into(),
+            scheduled_end: Some("2026-10-19T09:15:00".into()),
+            timezone: "Europe/London".into(),
+        },
+    )
+    .await
+    .unwrap();
+    mark_synced_at(db, &ids[0], "active", connected).await;
+    ids.into_iter().next().unwrap()
+}
+
+/// London wall-clock → this machine's, computed apart from the code under test.
+fn on_this_machine(london: &str) -> String {
+    let wall = chrono::NaiveDateTime::parse_from_str(london, "%Y-%m-%dT%H:%M:%S").unwrap();
+    let utc = pikos_recurrence::zoned::wall_clock_to_utc("Europe/London", wall).unwrap();
+    pikos_recurrence::zoned::utc_to_wall_clock(pikos_db::device_zone().name(), utc)
+        .unwrap()
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+async fn ticked_clone_start(db: &str, series: &str, day: &str) -> String {
+    let page = json(&cli(db, &["read", series, "--json"]));
+    let clone = page["completedOccurrences"][day]
+        .as_str()
+        .unwrap_or_else(|| panic!("{day} was ticked off: {page}"))
+        .to_string();
+    json(&cli(db, &["read", &clone, "--json"]))["scheduledStart"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
 #[tokio::test]
-async fn done_refuses_a_synced_series_but_not_a_synced_one_off() {
+async fn done_ticks_off_a_calendar_series_at_the_time_the_app_shows() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
-    let ids = seed(dbs, vec![base_page("Standup"), base_page("Review")]).await;
-    // The rule goes on before the mirror locks — the order the reconciler writes in.
-    mark_recurring(dbs, &ids[0], "2026-06-01T09:00:00").await;
+    let id = seed_london_standup(dbs, "2026-01-01T00:00:00Z").await;
+
+    let oldest = cli(dbs, &["done", &id, "--json"]);
+    assert!(
+        oldest.status.success(),
+        "{}",
+        String::from_utf8_lossy(&oldest.stderr)
+    );
+    assert_eq!(
+        ticked_clone_start(dbs, &id, "2026-10-19").await,
+        on_this_machine("2026-10-19T09:00:00")
+    );
+
+    let named = cli(dbs, &["done", &id, "--date", "2026-10-26", "--json"]);
+    assert!(
+        named.status.success(),
+        "{}",
+        String::from_utf8_lossy(&named.stderr)
+    );
+    assert_eq!(
+        ticked_clone_start(dbs, &id, "2026-10-26").await,
+        on_this_machine("2026-10-26T09:00:00"),
+        "the week London's clocks changed converts at London's new offset"
+    );
+
+    let again = cli(dbs, &["done", &id, "--date", "2026-10-26", "--json"]);
+    assert!(again.status.success(), "ticking it twice is harmless");
+}
+
+#[tokio::test]
+async fn done_with_a_date_refuses_what_the_calendar_series_cannot_tick() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_london_standup(dbs, "2026-10-20T12:00:00Z").await;
+
+    let tuesday = cli(dbs, &["done", &id, "--date", "2026-10-27", "--json"]);
+    assert_eq!(code(&tuesday), 2, "the rule never gives a Tuesday");
+    let before = cli(dbs, &["done", &id, "--date", "2026-10-19", "--json"]);
+    assert_eq!(code(&before), 4, "before the calendar was connected");
+
+    assert!(
+        cli(dbs, &["occurrence", "skip", &id, "2026-11-02", "--json"])
+            .status
+            .success()
+    );
+    let skipped = cli(dbs, &["done", &id, "--date", "2026-11-02", "--json"]);
+    assert_eq!(code(&skipped), 4);
+}
+
+#[tokio::test]
+async fn done_with_a_date_takes_only_the_head_of_a_native_series_and_no_one_off() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+    let once = seed(dbs, vec![base_page("Once")]).await;
+
+    let later = cli(dbs, &["done", &id, "--date", "2026-06-08", "--json"]);
+    assert_eq!(code(&later), 4);
+    let head = cli(dbs, &["done", &id, "--date", "2026-06-01", "--json"]);
+    assert!(
+        head.status.success(),
+        "{}",
+        String::from_utf8_lossy(&head.stderr)
+    );
+    let one_off = cli(dbs, &["done", &once[0], "--date", "2026-06-01", "--json"]);
+    assert_eq!(code(&one_off), 2);
+}
+
+#[tokio::test]
+async fn done_still_completes_a_synced_one_off() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Review")]).await;
     mark_synced(dbs, &ids[0], "active").await;
-    mark_synced(dbs, &ids[1], "active").await;
-
-    let refused = cli(dbs, &["done", &ids[0], "--json"]);
-    assert_eq!(code(&refused), 4);
-    // Errors are JSON-on-stderr; stdout is reserved for successful payloads.
-    let body: Value = serde_json::from_slice(&refused.stderr).expect("stderr JSON");
-    let msg = body["error"]["message"]
-        .as_str()
-        .unwrap_or("")
-        .to_lowercase();
-    assert!(
-        msg.contains("pikos app"),
-        "message points at the app: {msg}"
-    );
-
-    let allowed = cli(dbs, &["done", &ids[1], "--json"]);
-    assert!(
-        allowed.status.success(),
-        "a synced one-off completes: {}",
-        String::from_utf8_lossy(&allowed.stderr)
-    );
-    assert_eq!(json(&allowed)["status"], "done");
+    let out = cli(dbs, &["done", &ids[0], "--json"]);
+    assert_eq!(json(&out)["status"], "done");
 }
 
 // ─── one occurrence of a series ──────────────────────────────────────────────

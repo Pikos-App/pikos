@@ -547,12 +547,19 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
     Ok(created)
 }
 
-pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
+/// Tick a page off. On a repeating page `date` names the occurrence; without it, the
+/// oldest one still open.
+pub async fn mark_done(pool: &SqlitePool, id: &str, date: Option<&str>) -> Result<Page, CliError> {
     let page = require_page(pool, id).await?;
+    let rule = get_recurrence_rule_impl(pool, id).await.map_err(classify)?;
+    if rule.is_none() && date.is_some() {
+        return Err(CliError::usage(
+            "only a repeating page takes a date — this one has a single occurrence.",
+        ));
+    }
     if page.status == "done" {
         return Ok(page);
     }
-    let rule = get_recurrence_rule_impl(pool, id).await.map_err(classify)?;
     if rule.is_none() {
         let upd = PageUpdate {
             status: Some("done".to_string()),
@@ -561,15 +568,19 @@ pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
         };
         return write_patch(pool, id, upd).await;
     }
-
-    // A synced series' head is pinned at the series base, so the occurrence being
-    // completed only exists as a client-rendered virtual — which the CLI has no
-    // recurrence engine to enumerate. Say so rather than let the backend reject it
-    // with a message written for the desktop caller.
     if page.schedule_locked {
-        return Err(CliError::conflict(
-            "This event comes from a connected calendar — complete it in the Pikos app.",
-        ));
+        return crate::occurrences::complete_synced(pool, &page, date).await;
+    }
+    let head_day = page
+        .scheduled_start
+        .as_deref()
+        .map(|s| s[..s.len().min(10)].to_string());
+    if let Some(day) = date.filter(|d| Some(*d) != head_day.as_deref()) {
+        return Err(CliError::conflict(format!(
+            "A series made in Pikos ticks off its oldest open occurrence, {}, first — \
+             skip the ones before {day} with `pikos occurrence skip` to reach it.",
+            head_day.as_deref().unwrap_or("none")
+        )));
     }
 
     // The occurrence, the exclusion and the next head are all derived server-side
@@ -583,10 +594,7 @@ pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
-            expected_occurrence_date: page
-                .scheduled_start
-                .as_deref()
-                .map(|s| s[..s.len().min(10)].to_string()),
+            expected_occurrence_date: head_day,
         },
     )
     .await
@@ -606,7 +614,7 @@ async fn write_patch(pool: &SqlitePool, id: &str, upd: PageUpdate) -> Result<Pag
 pub async fn set_status(pool: &SqlitePool, id: &str, state: &str) -> Result<Page, CliError> {
     validate_status(state)?;
     if state == "done" {
-        return mark_done(pool, id).await;
+        return mark_done(pool, id, None).await;
     }
     let page = require_page(pool, id).await?;
     if page.status == "done" {

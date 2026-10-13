@@ -152,7 +152,14 @@ pub enum CliCommand {
         no_end: bool,
     },
     /// Mark a page done (clones + advances recurring pages)
-    Done { id: String },
+    Done {
+        id: String,
+        #[arg(
+            long,
+            help = "On a repeating page, the occurrence to tick off (YYYY-MM-DD); default the oldest open one"
+        )]
+        date: Option<String>,
+    },
     /// Set a page's status: done | not_started
     Status { id: String, state: String },
     /// Move a page to the trash, where Pikos can restore it

@@ -259,8 +259,12 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "complete_page",
-            "Mark a page done, advancing a repeating page to its next occurrence.",
-            json!({ "id": string_prop("The page id.") }),
+            "Mark a page done. On a repeating page this ticks off one occurrence, the oldest \
+             open one unless date names another, and the page moves on to the next.",
+            json!({
+                "id": string_prop("The page id."),
+                "date": string_prop("On a repeating page, the occurrence to tick off, YYYY-MM-DD. A series made in Pikos takes only its oldest open one; a calendar's takes any since it was connected."),
+            }),
             &["id"],
         ),
         tool(
@@ -491,7 +495,14 @@ async fn call_tool(
             .await?;
             to_value(&page)
         }
-        "complete_page" => to_value(&mark_done(pool, &require_str(args, "id")?).await?),
+        "complete_page" => to_value(
+            &mark_done(
+                pool,
+                &require_str(args, "id")?,
+                text(args, "date").as_deref(),
+            )
+            .await?,
+        ),
         "delete_page" => {
             let id = require_str(args, "id")?;
             trash(pool, &id).await?;

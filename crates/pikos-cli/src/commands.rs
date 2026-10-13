@@ -212,8 +212,8 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 println!("{}", render_page(&page));
             }
         }
-        CliCommand::Done { id } => {
-            let page = mark_done(&pool, &id).await?;
+        CliCommand::Done { id, date } => {
+            let page = mark_done(&pool, &id, date.as_deref()).await?;
             if json {
                 print_json(&page);
             } else {

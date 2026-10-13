@@ -349,8 +349,10 @@ the connect day sit below the floor. The backfill fetches them, but the render f
 (`syncedSince`) keeps them off the calendar and they never open a freshly connected series as
 overdue.
 ³⁵ `pikos done` completes one occurrence and never asks about a backlog. The scope question is
-the app's. On an **active-synced** recurring page it refuses outright with "complete it in the
-Pikos app" (`main.rs`). The CLI has no expansion engine to name the occurrence.
+the app's. On a synced series it ticks the oldest open occurrence, or the one `--date` names,
+expanding the rule itself and handing the writer the occurrence's start on the viewer's clock,
+as the app does from the block that was ticked. On a native series `--date` may name only the
+head, since a native series ticks through its head.
 ³⁶ Drops the `completed_set` entry, deletes the clone via its back-link, un-marks a `done`
 head, recomputes. **Pre-0.4.0 native completions have no back-link and are not uncompletable**.
 Stated boundary, not a regression.
@@ -370,7 +372,7 @@ survive soft-delete). Skipped for an active-synced head, whose cache is reconcil
 | … scope *Just this one* | ✅ that date to the skip-set | ✅ same | ✅ | — | ○ |
 | … scope *This and everything before today* | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | — | ○ |
 | Move a single virtual | ✅ detached clone ⁴⁰ | 🚫 locked ⁴¹ | ✅ mints an override ⁴² | ✅ `occurrence move`, same arms ⁴⁰ ⁴² | ○ |
-| Complete a single virtual | 🚫 head-only ⁴³ | ✅ that occurrence ⁴³ | ✅ ⁴³ | — | ○ |
+| Complete a single virtual | 🚫 head-only ⁴³ | ✅ that occurrence ⁴³ | ✅ ⁴³ | ✅ synced, `done --date` ³⁵ | ○ |
 | Tick an occurrence with a backlog behind it | — head-only ⁴³ | ✅ the same scope dialog ³³ ⁴³ | ✅ ⁴³ | — | ○ |
 | Render a materialized override | — synced series only ⁴⁴ | ✅ locked block at the moved slot ⁴² | ✅ same block, unlocked ⁴² | — | ○ |
 | Move a materialized override | — synced series only ⁴⁴ | 🚫 provider-owned | ✅ moves the row in place ⁴² | — | ○ |

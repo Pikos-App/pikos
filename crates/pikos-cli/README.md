@@ -99,6 +99,12 @@ restore <id>` brings the folder back with the pages that went with it. A folder
 that mirrors a calendar refuses both. Folders don't nest in Pikos, so nothing here
 sets a parent.
 
+`done` on a repeating page ticks off its oldest open occurrence; `done --date
+<YYYY-MM-DD>` names one. On a series from a connected calendar that can be any
+open occurrence since the calendar was connected, recorded at the time the app
+shows it. A series made in Pikos ticks through its oldest open occurrence, so
+there `--date` may only name that one.
+
 `occurrence skip <page-id> <date>` and `occurrence unskip` dismiss one
 occurrence of a repeating page and bring it back. `occurrence move <page-id>
 <date> --due <when>` moves one, reading `--due`, `--all-day` and `--end` as

@@ -844,3 +844,56 @@ async fn read_page_hands_back_markdown_that_update_page_takes_unchanged() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn complete_page_ticks_off_a_named_occurrence_of_a_calendar_series() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-10-19T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "Europe/London".into(),
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'caldav', 'Test', 'basic', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
+         VALUES ('ps', ?, 'acct', 'caldav', 'cal', 'href', 'uid', 'active', '2026-01-01T00:00:00Z')",
+    )
+    .bind(&ids[0])
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let series = server.call(
+        2,
+        "complete_page",
+        json!({ "id": ids[0], "date": "2026-10-26" }),
+    );
+    assert!(
+        series["completedOccurrences"]["2026-10-26"].is_string(),
+        "{series}"
+    );
+
+    server.shutdown();
+}
