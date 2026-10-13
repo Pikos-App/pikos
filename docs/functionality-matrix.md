@@ -63,7 +63,7 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Adjust page title | ✅ | 🚫 locked ⁴ | ✅ | ⚠️ `update --title`, refused on synced ⁴ | ○ |
 | Edit body / content | ✅ | ✅ marks owned ⁵ | ✅ | ⚠️ `update --content`, plain text, replaces body | ○ |
 | Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ○ |
-| Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ⚠️ `add` only, no tag flag on `update` | ○ |
+| Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ○ |
 | Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status` | ○ |
 | Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ○ |
 | Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ○ |
@@ -121,7 +121,7 @@ it.
 | Adjust page date | ✅ | 🚫 locked ⁴ | ✅ | ✅ `update --due` ¹⁰ | ○ |
 | Adjust page time | ✅ | 🚫 locked ⁴ | ✅ | ✅ `--due` with a time ¹⁰ | ○ |
 | Adjust duration (end) | ✅ | 🚫 locked ⁴ | ✅ | ✅ `--end` ¹⁰ | ○ |
-| Clear the schedule | ✅ | 🚫 locked ⁴ | ✅ | 🚫 ¹⁰ | ○ |
+| Clear the schedule | ✅ | 🚫 locked ⁴ | ✅ | ✅ `update --unschedule` ¹⁰ | ○ |
 | Drag block on calendar | ✅ | 🚫 locked ¹¹ | ✅ | — | ○ |
 | Resize block on calendar | ✅ | 🚫 locked ¹¹ | ✅ | — | ○ |
 | Drag page from list onto calendar | ✅ | 🚫 locked ¹² | ✅ | — | ○ |
@@ -141,7 +141,8 @@ replaced) a bare date pointed at a timed page, which names both ways to say what
 instead of silently converting. A locked mirror or a recurring page is refused up front with a
 surface-appropriate message. **Duration is the one thing still inferred:** a bare timed `--due`
 shifts the end with the start, and a move within all-day keeps the span, because a drag in the
-app keeps its length. Nothing clears a schedule.
+app keeps its length. `--unschedule` removes every one-off schedule row, as the app's Clear
+Date does, and `--no-end` drops only the end; both take the same refusals.
 ¹¹ `useTimedDrag` / `useTimedResize` / `useAllDayDrag` short-circuit on `scheduleLocked`, and
 `PageBlock` also suppresses the grab/resize *affordances* so the cursor never advertises a move
 that can't happen (`PageBlock.tsx`).

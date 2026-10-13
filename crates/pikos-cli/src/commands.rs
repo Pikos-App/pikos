@@ -176,6 +176,11 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             end,
             priority,
             folder,
+            add_tags,
+            remove_tags,
+            subtitle,
+            unschedule,
+            no_end,
         } => {
             let page = update_page(
                 &pool,
@@ -189,6 +194,11 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                     end,
                     priority,
                     folder,
+                    add_tags,
+                    remove_tags,
+                    subtitle,
+                    unschedule,
+                    no_end,
                 },
             )
             .await?;

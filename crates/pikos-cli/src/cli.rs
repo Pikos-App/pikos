@@ -132,6 +132,24 @@ pub enum CliCommand {
             help = "Move the page to this folder, by name or id — \"inbox\" for unfiled"
         )]
         folder: Option<String>,
+        #[arg(long = "tag", help = "Add a tag; repeat for several")]
+        add_tags: Vec<String>,
+        #[arg(long = "untag", help = "Remove a tag; repeat for several")]
+        remove_tags: Vec<String>,
+        #[arg(long, help = "Set the line under the title; \"\" clears it")]
+        subtitle: Option<String>,
+        #[arg(
+            long,
+            conflicts_with_all = ["due", "all_day", "end", "no_end"],
+            help = "Remove the page's date and time"
+        )]
+        unschedule: bool,
+        #[arg(
+            long = "no-end",
+            conflicts_with = "end",
+            help = "Drop the end, keeping the start"
+        )]
+        no_end: bool,
     },
     /// Mark a page done (clones + advances recurring pages)
     Done { id: String },

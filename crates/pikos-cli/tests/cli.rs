@@ -723,6 +723,9 @@ const SCHEDULE_FLAGS: [[&str; 2]; 3] = [
     ["--end", "2026-09-01T18:00:00"],
 ];
 
+/// The flags that change a schedule without taking a value.
+const BARE_SCHEDULE_FLAGS: [&str; 2] = ["--unschedule", "--no-end"];
+
 #[tokio::test]
 async fn schedule_flags_refuse_on_a_synced_page() {
     let db = unique_db();
@@ -746,6 +749,15 @@ async fn schedule_flags_refuse_on_a_synced_page() {
             "{flag} moved the start"
         );
         assert_eq!(scheduled_end(dbs, &ids[0]).await, None, "{flag} set an end");
+    }
+    for flag in BARE_SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &ids[0], flag, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &ids[0]).await.as_deref(),
+            Some("2026-09-01T14:00:00"),
+            "{flag} touched the start"
+        );
     }
 }
 
@@ -794,6 +806,127 @@ async fn schedule_flags_refuse_on_a_recurring_page() {
             "{flag} moved the rule's base"
         );
     }
+    for flag in BARE_SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &id, flag, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &id).await,
+            head,
+            "{flag} moved the head"
+        );
+        assert_eq!(
+            scheduled_end(dbs, &id).await,
+            end,
+            "{flag} moved the head's end"
+        );
+    }
+}
+
+#[tokio::test]
+async fn update_unschedule_removes_the_date_and_no_end_keeps_the_start() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+
+    let trimmed = cli(dbs, &["update", &id, "--no-end", "--json"]);
+    assert!(trimmed.status.success());
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-01T14:00:00")
+    );
+    assert_eq!(scheduled_end(dbs, &id).await, None);
+
+    let cleared = cli(dbs, &["update", &id, "--unschedule", "--json"]);
+    assert!(cleared.status.success());
+    assert!(json(&cleared)["scheduledStart"].is_null());
+    let rows: i64 = scalar(
+        dbs,
+        &format!("SELECT COUNT(*) FROM page_schedules WHERE page_id = '{id}'"),
+    )
+    .await;
+    assert_eq!(rows, 0);
+
+    let again = cli(dbs, &["update", &id, "--unschedule", "--json"]);
+    assert!(again.status.success(), "unscheduling twice is harmless");
+    let nothing_to_trim = cli(dbs, &["update", &id, "--no-end", "--json"]);
+    assert_eq!(code(&nothing_to_trim), 2);
+}
+
+#[tokio::test]
+async fn update_unschedule_refuses_a_flag_that_would_reschedule() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &id,
+            "--unschedule",
+            "--due",
+            "2026-09-03",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-01T14:00:00")
+    );
+}
+
+#[tokio::test]
+async fn update_tags_add_and_remove_as_the_writer_stores_them() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut page = base_page("Plan");
+    page.tags = vec!["work".into(), "q3".into()];
+    let ids = seed(dbs, vec![page]).await;
+
+    let out = cli(
+        dbs,
+        &[
+            "update", &ids[0], "--tag", "#Errands", "--tag", "work", "--untag", "Q3", "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(json(&out)["tags"], serde_json::json!(["work", "errands"]));
+
+    let tagged = json(&cli(dbs, &["list", "--tag", "errands", "--json"]));
+    assert_eq!(
+        tagged.as_array().unwrap().len(),
+        1,
+        "the tag index follows the edit"
+    );
+    let dropped = json(&cli(dbs, &["list", "--tag", "q3", "--json"]));
+    assert!(dropped.as_array().unwrap().is_empty());
+
+    let both = cli(
+        dbs,
+        &["update", &ids[0], "--tag", "x", "--untag", "X", "--json"],
+    );
+    assert_eq!(code(&both), 2);
+    let blank = cli(dbs, &["update", &ids[0], "--tag", "#", "--json"]);
+    assert_eq!(code(&blank), 2);
+}
+
+#[tokio::test]
+async fn update_subtitle_sets_and_clears_the_line_under_the_title() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan")]).await;
+
+    let set = cli(
+        dbs,
+        &["update", &ids[0], "--subtitle", "For Monday", "--json"],
+    );
+    assert_eq!(json(&set)["subtitle"], "For Monday");
+    let cleared = cli(dbs, &["update", &ids[0], "--subtitle", "", "--json"]);
+    assert_eq!(json(&cleared)["subtitle"], "");
 }
 
 // ─── workspace targeting + migration consent ─────────────────────────────────
@@ -1240,7 +1373,11 @@ async fn update_folder_refuses_a_calendar_folder_and_a_synced_page() {
     let into_calendar = cli(dbs, &["update", &ids[0], "--folder", &calendar, "--json"]);
     assert_eq!(code(&into_calendar), 4);
     let by_name = cli(dbs, &["update", &ids[0], "--folder", "work", "--json"]);
-    assert_eq!(code(&by_name), 3, "a calendar folder is no candidate by name");
+    assert_eq!(
+        code(&by_name),
+        3,
+        "a calendar folder is no candidate by name"
+    );
 
     let synced_out = cli(dbs, &["update", &ids[1], "--folder", &projects, "--json"]);
     assert_eq!(code(&synced_out), 4);

@@ -98,6 +98,12 @@ or the calendar.
 so `inbox` unfiles it when no folder is named for it. A calendar folder takes no
 pages, and a synced page stays in its calendar's folder.
 
+`--tag` and `--untag` (each repeatable) add and remove tags, matched as the app
+stores them: lowercase, with Quick Add's `#` dropped. `--subtitle` sets the line
+under the title, and `--subtitle ""` clears it. `--unschedule` removes the date
+and time, and `--no-end` drops the end and keeps the start; both refuse on a
+recurring or synced page, like the three schedule flags.
+
 ## Exit codes
 
 `0` ok · `2` usage · `3` not found · `4` conflict · `5` workspace not found ·

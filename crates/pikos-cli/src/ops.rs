@@ -9,11 +9,11 @@ use std::collections::HashMap;
 use chrono::{Local, NaiveDate, NaiveTime, TimeZone, Utc};
 use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
-    create_recurrence_rule_impl, delete_page_reminder, fts_tokens, fuzzy_match_folder, get_page,
-    get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
-    list_pages_impl, list_pages_window, now_local_iso, restore_page_impl, search_page,
-    soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput, Folder,
-    ListExtras, NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder,
+    create_recurrence_rule_impl, delete_page_reminder, delete_page_schedule_impl, fts_tokens,
+    fuzzy_match_folder, get_page, get_recurrence_rule_impl, list_folders_impl, list_page_reminders,
+    list_page_schedules_impl, list_pages_impl, list_pages_window, now_local_iso, restore_page_impl,
+    search_page, soft_delete_page_impl, today_local, update_page_impl, CompleteRecurringInput,
+    Folder, ListExtras, NewFolder, NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder,
     PageSummary, PageUpdate, SearchCursor, SearchPage, Terms,
 };
 use serde::Serialize;
@@ -22,7 +22,7 @@ use sqlx::SqlitePool;
 
 use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
-use crate::schedule::{parse_day_range, parse_due, resolve_schedule_change};
+use crate::schedule::{parse_day_range, parse_due, resolve_schedule_change, ScheduleChange};
 use crate::write::{
     apply_patch, local_tz, page_with_body, priority_num, resolve_folder, schedule_once,
     text_to_tiptap, write_reminders,
@@ -571,6 +571,57 @@ pub struct PageEdit {
     pub priority: Option<i64>,
     /// A folder name or id, resolved as `list --folder` resolves it.
     pub folder: Option<String>,
+    pub add_tags: Vec<String>,
+    pub remove_tags: Vec<String>,
+    /// An empty string clears it, as emptying the field in the editor does.
+    pub subtitle: Option<String>,
+    pub unschedule: bool,
+    pub no_end: bool,
+}
+
+/// A tag as the writer stores it, so `--untag Work` finds the stored `work`. A
+/// leading `#` is Quick Add's syntax for a tag, not part of its name.
+fn tag_name(raw: &str) -> Result<String, CliError> {
+    let name = raw.trim().trim_start_matches('#').trim().to_lowercase();
+    if name.is_empty() {
+        return Err(CliError::usage(format!("\"{raw}\" is not a tag name")));
+    }
+    Ok(name)
+}
+
+/// The page's tags after the edit, or None when the edit names no tag.
+fn edited_tags(
+    current: &[String],
+    add: &[String],
+    remove: &[String],
+) -> Result<Option<Vec<String>>, CliError> {
+    if add.is_empty() && remove.is_empty() {
+        return Ok(None);
+    }
+    let add = add
+        .iter()
+        .map(|t| tag_name(t))
+        .collect::<Result<Vec<_>, _>>()?;
+    let remove = remove
+        .iter()
+        .map(|t| tag_name(t))
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(both) = add.iter().find(|t| remove.contains(t)) {
+        return Err(CliError::usage(format!(
+            "\"{both}\" is both added and removed — pass it once."
+        )));
+    }
+    let mut tags: Vec<String> = current
+        .iter()
+        .filter(|t| !remove.contains(&t.to_lowercase()))
+        .cloned()
+        .collect();
+    for t in add {
+        if !tags.iter().any(|existing| existing.to_lowercase() == t) {
+            tags.push(t);
+        }
+    }
+    Ok(Some(tags))
 }
 
 /// Apply an edit, settling every rejection before the first write so a bad field
@@ -584,7 +635,18 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
             "due and allDay name the same field in different shapes — pass one.",
         ));
     }
-    let touches_schedule = edit.due.is_some() || edit.all_day.is_some() || edit.end.is_some();
+    let moves = edit.due.is_some() || edit.all_day.is_some() || edit.end.is_some();
+    if edit.unschedule && (moves || edit.no_end) {
+        return Err(CliError::usage(
+            "unschedule removes the schedule, so it takes no due, allDay, end or noEnd.",
+        ));
+    }
+    if edit.no_end && edit.end.is_some() {
+        return Err(CliError::usage(
+            "end and noEnd contradict each other — pass one.",
+        ));
+    }
+    let touches_schedule = moves || edit.unschedule || edit.no_end;
     if touches_schedule {
         if page.schedule_locked {
             return Err(CliError::conflict(
@@ -603,30 +665,48 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
             ));
         }
     }
-    let existing = if touches_schedule {
+    let one_offs: Vec<_> = if touches_schedule {
         list_page_schedules_impl(pool, id)
             .await
             .map_err(classify)?
             .into_iter()
-            .find(|s| s.rule_id.is_none())
+            .filter(|s| s.rule_id.is_none())
+            .collect()
     } else {
-        None
+        Vec::new()
     };
-    let change = resolve_schedule_change(
-        existing
-            .as_ref()
-            .map(|s| (s.scheduled_start.as_str(), s.scheduled_end.as_deref())),
+    let existing = one_offs.first();
+    let current = existing.map(|s| (s.scheduled_start.as_str(), s.scheduled_end.as_deref()));
+    let mut change = resolve_schedule_change(
+        current,
         edit.due.as_deref(),
         edit.all_day.as_deref(),
         edit.end.as_deref(),
     )?;
+    if edit.no_end {
+        change = Some(match (change, current) {
+            (Some(c), _) => ScheduleChange { end: None, ..c },
+            (None, Some((start, _))) => ScheduleChange {
+                start: start.to_string(),
+                end: None,
+            },
+            (None, None) => {
+                return Err(CliError::usage(
+                    "noEnd needs a page that is already scheduled.",
+                ))
+            }
+        });
+    }
     let folder_id = match &edit.folder {
         Some(name) => Some(resolve_folder_ref(pool, name).await?),
         None => None,
     };
+    let tags = edited_tags(&page.tags, &edit.add_tags, &edit.remove_tags)?;
 
     let mut upd = PageUpdate {
         folder_id,
+        tags,
+        subtitle: edit.subtitle.map(Value::String),
         ..Default::default()
     };
     if let Some(t) = edit.title {
@@ -655,6 +735,13 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         schedule_once(pool, id, &change.start, change.end.as_deref())
             .await
             .map_err(classify)?;
+    }
+    if edit.unschedule {
+        for s in one_offs {
+            delete_page_schedule_impl(pool, s.id)
+                .await
+                .map_err(classify)?;
+        }
     }
     require_page(pool, id).await
 }

@@ -227,7 +227,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "update_page",
-            "Change a page's title, body, status, priority, schedule or folder.",
+            "Change a page's title, subtitle, body, status, priority, tags, schedule or folder.",
             json!({
                 "id": string_prop("The page id."),
                 "title": string_prop("New title."),
@@ -238,6 +238,11 @@ fn tool_definitions() -> Vec<Value> {
                 "end": string_prop("When the page ends, in the page's own shape. Valid on its own."),
                 "priority": { "type": "integer", "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low." },
                 "folder": string_prop("Move the page to this folder, by name or id; \"inbox\" for unfiled."),
+                "addTags": { "type": "array", "items": { "type": "string" }, "description": "Tags to add." },
+                "removeTags": { "type": "array", "items": { "type": "string" }, "description": "Tags to remove." },
+                "subtitle": string_prop("The line under the title; an empty string clears it."),
+                "unschedule": { "type": "boolean", "description": "Remove the page's date and time." },
+                "noEnd": { "type": "boolean", "description": "Drop the end, keeping the start." },
             }),
             &["id"],
         ),
@@ -382,6 +387,14 @@ async fn call_tool(
                     end: text(args, "end"),
                     priority: args.get("priority").and_then(Value::as_i64),
                     folder: text(args, "folder"),
+                    add_tags: strings(args, "addTags"),
+                    remove_tags: strings(args, "removeTags"),
+                    subtitle: args
+                        .get("subtitle")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    unschedule: flag(args, "unschedule"),
+                    no_end: flag(args, "noEnd"),
                 },
             )
             .await?;

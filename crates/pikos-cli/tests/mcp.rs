@@ -635,10 +635,51 @@ async fn update_page_refiles_a_page_into_a_folder_and_back_to_the_inbox() {
     let mut server = Server::start(dbs);
     handshake(&mut server);
 
-    let filed = server.call(2, "update_page", json!({ "id": ids[0], "folder": "Projects" }));
+    let filed = server.call(
+        2,
+        "update_page",
+        json!({ "id": ids[0], "folder": "Projects" }),
+    );
     assert_eq!(filed["folderId"], projects.as_str());
     let unfiled = server.call(3, "update_page", json!({ "id": ids[0], "folder": "inbox" }));
     assert!(unfiled["folderId"].is_null());
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn update_page_edits_tags_subtitle_and_clears_the_schedule() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut page = base_page("Plan");
+    page.tags = vec!["work".into()];
+    let ids = seed(dbs, vec![page]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let edited = server.call(
+        2,
+        "update_page",
+        json!({
+            "id": ids[0],
+            "addTags": ["errands"],
+            "removeTags": ["work"],
+            "subtitle": "For Monday",
+            "due": "2026-09-01",
+        }),
+    );
+    assert_eq!(edited["tags"], json!(["errands"]));
+    assert_eq!(edited["subtitle"], "For Monday");
+    assert_eq!(edited["scheduledStart"], "2026-09-01");
+
+    let cleared = server.call(
+        3,
+        "update_page",
+        json!({ "id": ids[0], "subtitle": "", "unschedule": true }),
+    );
+    assert_eq!(cleared["subtitle"], "");
+    assert!(cleared["scheduledStart"].is_null());
 
     server.shutdown();
 }
