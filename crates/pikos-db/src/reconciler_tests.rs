@@ -4647,3 +4647,39 @@ async fn ended_series_stored_by_an_earlier_build_go_on_the_next_pass() {
     assert!(page_exists_by_uid(&pool, "uid-series").await);
     assert_eq!(remove_ended_series(&pool, &ctx_now()).await.unwrap(), 0);
 }
+
+#[tokio::test]
+async fn an_ended_series_an_earlier_build_left_open_reads_as_done_once_kept() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(week_day(-4))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
+        .bind(&page_id)
+        .bind(week_day(-3))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET status = 'not_started', completed_at = NULL WHERE id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    remove_ended_series(&pool, &ctx_now()).await.unwrap();
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+    assert_eq!(page_status(&pool, &page_id).await.0, "done");
+}
