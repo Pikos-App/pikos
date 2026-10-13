@@ -34,6 +34,11 @@ function walkNode(node: TiptapNode, parts: string[]): void {
     parts.push(node.text);
     return;
   }
+  // A block's children join with no separator, so a line break has to bring its own.
+  if (node.type === "hardBreak") {
+    parts.push("\n");
+    return;
+  }
 
   if (!node.content) return;
 

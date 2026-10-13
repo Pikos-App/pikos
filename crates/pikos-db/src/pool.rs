@@ -519,6 +519,11 @@ fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
         parts.push(text.to_string());
         return;
     }
+    // A block's children join with no separator, so a line break has to bring its own.
+    if node.get("type").and_then(|t| t.as_str()) == Some("hardBreak") {
+        parts.push("\n".to_string());
+        return;
+    }
 
     let children = match node.get("content").and_then(|c| c.as_array()) {
         Some(arr) => arr,
