@@ -26,9 +26,28 @@ use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
 use crate::schedule::{parse_day_range, parse_due, resolve_schedule_change, ScheduleChange};
 use crate::write::{
-    apply_patch, local_tz, page_with_body, priority_num, resolve_folder, schedule_once,
-    text_to_tiptap, write_reminders,
+    apply_patch, local_tz, markdown_to_tiptap, page_with_body, priority_num, resolve_folder,
+    schedule_once, write_reminders,
 };
+
+/// A page as `read` shows it: everything the writer stores, plus the body as markdown,
+/// the one form an edit can hand back to `update --content` without losing structure.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageRead {
+    #[serde(flatten)]
+    pub page: Page,
+    pub markdown: String,
+}
+
+pub async fn read_page(pool: &SqlitePool, id: &str) -> Result<PageRead, CliError> {
+    let page = require_page(pool, id).await?;
+    let markdown = match serde_json::from_str::<Value>(&page.content) {
+        Ok(doc) => pikos_core::prosemirror_to_markdown(&doc),
+        Err(_) => page.content_text.clone().unwrap_or_default(),
+    };
+    Ok(PageRead { page, markdown })
+}
 
 pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     get_page(pool, id).await.map_err(classify)?.ok_or_else(|| {
@@ -438,7 +457,7 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
                 .map_err(classify)?;
             let page = create_page_impl(
                 pool,
-                page_with_body(folder, input.title.clone(), input.content.as_ref()),
+                page_with_body(folder, input.title.clone(), input.content.as_ref())?,
             )
             .await
             .map_err(classify)?;
@@ -473,13 +492,17 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
             created.push(require_page(pool, &page.id).await?);
         }
         ParseResult::Finite { inputs } => {
+            // Several pages from one line: refuse a body before the first page is written.
+            for body in inputs.iter().filter_map(|i| i.content.as_deref()) {
+                markdown_to_tiptap(body)?;
+            }
             for inp in inputs {
                 let folder = resolve_folder(pool, &inp.folder_query)
                     .await
                     .map_err(classify)?;
                 let page = create_page_impl(
                     pool,
-                    page_with_body(folder, inp.title.clone(), inp.content.as_ref()),
+                    page_with_body(folder, inp.title.clone(), inp.content.as_ref())?,
                 )
                 .await
                 .map_err(classify)?;
@@ -503,7 +526,7 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
                 .map_err(classify)?;
             let page = create_page_impl(
                 pool,
-                page_with_body(folder, input.title.clone(), input.content.as_ref()),
+                page_with_body(folder, input.title.clone(), input.content.as_ref())?,
             )
             .await
             .map_err(classify)?;
@@ -813,7 +836,7 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         upd.title = Some(t);
     }
     if let Some(c) = edit.content {
-        let (doc, txt) = text_to_tiptap(&c);
+        let (doc, txt) = markdown_to_tiptap(&c)?;
         upd.content = Some(doc);
         upd.content_text = Some(txt);
     }

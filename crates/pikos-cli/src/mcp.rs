@@ -26,7 +26,7 @@ use crate::error::CliError;
 use crate::occurrences;
 use crate::ops::{
     add_reminder, cmd_add, create_folder, list_folders, list_pages, list_reminders, list_tags,
-    list_trash, mark_done, parse_only, remove_reminder, rename_folder, require_page, restore,
+    list_trash, mark_done, parse_only, read_page, remove_reminder, rename_folder, restore,
     restore_folder, search, set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
 };
 use crate::workspace::open_workspace;
@@ -191,7 +191,8 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "read_page",
-            "Read one page's full body and metadata by id.",
+            "Read one page's metadata and its body as markdown, by id. Edit the markdown and pass \
+             it to update_page's content to change the body.",
             json!({ "id": string_prop("The page id.") }),
             &["id"],
         ),
@@ -221,7 +222,7 @@ fn tool_definitions() -> Vec<Value> {
             "create_page",
             "Create pages from natural language, parsing dates, tags, priority, folder, repetition and reminders out of the text.",
             json!({
-                "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects remind 30m before // what to ask him\" — everything after \" // \" becomes the page body, verbatim."),
+                "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects remind 30m before // what to ask him\" — everything after \" // \" becomes the page body, as markdown."),
                 "dryRun": { "type": "boolean", "description": "Return the parse for review and write nothing." },
             }),
             &["text"],
@@ -232,7 +233,7 @@ fn tool_definitions() -> Vec<Value> {
             json!({
                 "id": string_prop("The page id."),
                 "title": string_prop("New title."),
-                "content": string_prop("New body, as plain text."),
+                "content": string_prop("New body, as markdown: headings, lists, - [ ] tasks, links, **bold**, `code`, quotes, tables. It replaces the whole body. Raw HTML is refused."),
                 "status": { "type": "string", "enum": ["not_started", "done"], "description": "New state." },
                 "due": string_prop("Move the page: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it is not already timed."),
                 "allDay": string_prop("Make the page all-day on YYYY-MM-DD — the only way to drop an existing time."),
@@ -418,7 +419,16 @@ async fn call_tool(
             .await?;
             to_value(&resp)
         }
-        "read_page" => to_value(&require_page(pool, &require_str(args, "id")?).await?),
+        "read_page" => {
+            // The editor's JSON and its plain-text shadow are both the body again, and
+            // neither can be written back; markdown alone is what update_page takes.
+            let mut read = to_value(&read_page(pool, &require_str(args, "id")?).await?)?;
+            if let Some(fields) = read.as_object_mut() {
+                fields.remove("content");
+                fields.remove("contentText");
+            }
+            Ok(read)
+        }
         "list_pages" => {
             let pages = list_pages(
                 pool,

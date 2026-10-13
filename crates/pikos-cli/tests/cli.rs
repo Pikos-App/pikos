@@ -2165,7 +2165,7 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
     );
     let v = json(&add);
     assert_eq!(v["created"][0]["title"], "Buy a gift");
-    // The body is verbatim — the "#blue" in it never became a tag.
+    // The body is markdown, never Quick Add — the "#blue" in it never became a tag.
     assert!(v["created"][0]["tags"].as_array().unwrap().is_empty());
     let id = v["created"][0]["id"].as_str().unwrap().to_string();
 
@@ -2175,12 +2175,10 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
         "she likes the #blue one\nask her sister"
     );
     let doc: Value = serde_json::from_str(page["content"].as_str().unwrap()).unwrap();
-    assert_eq!(doc["type"], "doc");
-    assert_eq!(
-        doc["content"][0]["content"][0]["text"],
-        "she likes the #blue one"
-    );
-    assert_eq!(doc["content"][1]["content"][0]["text"], "ask her sister");
+    let line = &doc["content"][0]["content"];
+    assert_eq!(line[0]["text"], "she likes the #blue one");
+    assert_eq!(line[1]["type"], "hardBreak");
+    assert_eq!(line[2]["text"], "ask her sister");
 }
 
 #[tokio::test]
@@ -2213,4 +2211,78 @@ async fn add_dry_run_previews_the_reminder_and_the_body() {
             .is_empty(),
         "a dry run must not write"
     );
+}
+
+// ─── markdown bodies ─────────────────────────────────────────────────────────
+
+/// The app's own document for a page with a heading, marks, a link, a nested list,
+/// tasks and a quote, from the corpus the desktop suite generates.
+fn agent_edit_page() -> NewPage {
+    let corpus: Value = serde_json::from_str(include_str!(
+        "../../pikos-core/tests/corpus/markdown-import.json"
+    ))
+    .unwrap();
+    let doc = corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "a page an agent edits")
+        .expect("the corpus has the agent's page")["doc"]
+        .to_string();
+    NewPage {
+        content: doc,
+        ..base_page("Trip")
+    }
+}
+
+#[tokio::test]
+async fn reading_a_page_and_writing_it_back_keeps_its_structure() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let page = agent_edit_page();
+    let before: Value = serde_json::from_str(&page.content).unwrap();
+    let ids = seed(dbs, vec![page]).await;
+
+    let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
+    let markdown = read["markdown"].as_str().unwrap().to_string();
+    assert!(markdown.starts_with("# Trip\n"), "{markdown}");
+    assert!(markdown.contains("* [x] passport"), "{markdown}");
+
+    let out = cli(dbs, &["update", &ids[0], "--content", &markdown, "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let after: Value = serde_json::from_str(json(&out)["content"].as_str().unwrap()).unwrap();
+    assert_eq!(after, before);
+
+    let human = String::from_utf8_lossy(&cli(dbs, &["read", &ids[0]]).stdout).to_string();
+    assert!(human.contains("- Day one\n  - Museum"), "{human}");
+}
+
+#[tokio::test]
+async fn update_content_refuses_markdown_the_editor_cannot_hold_and_writes_nothing() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let page = agent_edit_page();
+    let before = page.content.clone();
+    let ids = seed(dbs, vec![page]).await;
+
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--content",
+            "a <b>bold</b> word",
+            "--title",
+            "X",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
+    assert_eq!(read["content"], before.as_str());
+    assert_eq!(read["title"], "Trip");
 }

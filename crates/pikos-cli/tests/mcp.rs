@@ -799,3 +799,48 @@ async fn occurrence_tools_skip_and_move_one_date_of_a_series() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn read_page_hands_back_markdown_that_update_page_takes_unchanged() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let corpus: Value = serde_json::from_str(include_str!(
+        "../../pikos-core/tests/corpus/markdown-import.json"
+    ))
+    .unwrap();
+    let doc = corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "a page an agent edits")
+        .unwrap()["doc"]
+        .clone();
+    let ids = seed(
+        dbs,
+        vec![NewPage {
+            content: doc.to_string(),
+            ..base_page("Trip")
+        }],
+    )
+    .await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let read = server.call(2, "read_page", json!({ "id": ids[0] }));
+    assert!(
+        read.get("content").is_none(),
+        "the editor JSON stays out of an agent's way"
+    );
+    let markdown = read["markdown"].as_str().unwrap().to_string();
+
+    let updated = server.call(
+        3,
+        "update_page",
+        json!({ "id": ids[0], "content": markdown }),
+    );
+    let after: Value = serde_json::from_str(updated["content"].as_str().unwrap()).unwrap();
+    assert_eq!(after, doc);
+
+    server.shutdown();
+}

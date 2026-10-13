@@ -4,5 +4,7 @@
 //! which is what makes it testable against a fixture table.
 
 pub mod markdown;
+pub mod markdown_import;
 
 pub use markdown::prosemirror_to_markdown;
+pub use markdown_import::{markdown_to_prosemirror, Refused};

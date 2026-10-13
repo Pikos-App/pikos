@@ -4,7 +4,7 @@
 use pikos_db::reads::TagCount;
 use pikos_db::{Page, PageReminder, PageSummary, SearchPage, TrashedPage};
 
-use crate::ops::{FolderEntry, ListEntry};
+use crate::ops::{FolderEntry, ListEntry, PageRead};
 
 pub fn priority_label(p: i64) -> &'static str {
     match p {
@@ -87,6 +87,15 @@ pub fn render_entry_list(entries: &[ListEntry], empty: &str) -> String {
 }
 
 pub fn render_page(page: &Page) -> String {
+    with_body(page, page.content_text.as_deref().unwrap_or(""))
+}
+
+/// `read`'s page, with the body as markdown so its structure shows.
+pub fn render_read(read: &PageRead) -> String {
+    with_body(&read.page, &read.markdown)
+}
+
+fn with_body(page: &Page, body: &str) -> String {
     let title = if page.title.is_empty() {
         "(untitled)"
     } else {
@@ -115,12 +124,10 @@ pub fn render_page(page: &Page) -> String {
         "created:{}  updated:{}",
         page.created_at, page.updated_at
     ));
-    if let Some(body) = page.content_text.as_deref() {
-        let body = body.trim();
-        if !body.is_empty() {
-            lines.push(String::new());
-            lines.push(body.to_string());
-        }
+    let body = body.trim();
+    if !body.is_empty() {
+        lines.push(String::new());
+        lines.push(body.to_string());
     }
     lines.join("\n")
 }

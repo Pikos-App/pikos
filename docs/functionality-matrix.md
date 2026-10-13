@@ -61,7 +61,7 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Create page | ✅ | 🚫 ¹ | 🚫 ¹ | ✅ `add` ² | ○ |
 | Open in editor | ✅ | ✅ read-only mirror ³ | ✅ | ✅ `read` | ○ |
 | Adjust page title | ✅ | 🚫 locked ⁴ | ✅ | ⚠️ `update --title`, refused on synced ⁴ | ○ |
-| Edit body / content | ✅ | ✅ marks owned ⁵ | ✅ | ⚠️ `update --content`, plain text, replaces body | ○ |
+| Edit body / content | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --content`, markdown, replaces body | ○ |
 | Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ○ |
 | Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ○ |
 | Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status` | ○ |

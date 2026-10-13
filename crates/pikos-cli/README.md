@@ -65,8 +65,20 @@ lead, and `remind day before` asks for the morning-before anchor. A lead only
 sticks when the text also names a schedule — nothing else could anchor it — and
 an all-day page takes the day-before anchor whatever lead was typed, since it has
 no start time to count minutes back from. Everything after the first `//` that
-has whitespace on both sides becomes the page body, verbatim — no tag, date or
+has whitespace on both sides becomes the page body, as markdown — no tag, date or
 cadence is read out of it, and a URL's slashes never split anything.
+
+Page bodies are markdown both ways. `read` shows the body as markdown, and
+`--json` adds a `markdown` field beside the stored document; `update --content`
+takes markdown and replaces the whole body. The two are made to meet: what `read`
+prints, `update --content` writes back to the same page. Markdown is read the way
+the app's import reads it, by a Rust port graded against a corpus the desktop
+suite generates from the app's own converter
+(`crates/pikos-core/tests/corpus/markdown-import.json`). What the editor can't
+hold, or what the app's import would mangle, is refused with a usage error rather
+than half-written: raw HTML, an image inside a line of text, a list mixing tasks
+and plain items, a numbered task list, a heading inside a list item, and code
+inside a link.
 
 `add --dry-run` runs the parser and prints what it made of the text — the exact
 shape `add` would then persist — without writing. It is the agent-preview mode:

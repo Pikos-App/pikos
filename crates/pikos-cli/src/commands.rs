@@ -11,13 +11,13 @@ use crate::error::{classify, CliError};
 use crate::occurrences;
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
-    list_tags, list_trash, mark_done, parse_only, remove_reminder, rename_folder, require_folder,
-    require_page, restore, restore_folder, search, set_status, trash, trash_folder, update_page,
-    ListQuery, PageEdit,
+    list_tags, list_trash, mark_done, parse_only, read_page, remove_reminder, rename_folder,
+    require_folder, require_page, restore, restore_folder, search, set_status, trash, trash_folder,
+    update_page, ListQuery, PageEdit,
 };
 use crate::render::{
-    print_json, render_entry_list, render_folders, render_page, render_reminders, render_search,
-    render_summary, render_summary_list, render_tags, render_trash,
+    print_json, render_entry_list, render_folders, render_page, render_read, render_reminders,
+    render_search, render_summary, render_summary_list, render_tags, render_trash,
 };
 use crate::workspace::open_workspace;
 
@@ -86,11 +86,11 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             }
         }
         CliCommand::Read { id } => {
-            let page = require_page(&pool, &id).await?;
+            let read = read_page(&pool, &id).await?;
             if json {
-                print_json(&page);
+                print_json(&read);
             } else {
-                println!("{}", render_page(&page));
+                println!("{}", render_read(&read));
             }
         }
         CliCommand::List {
