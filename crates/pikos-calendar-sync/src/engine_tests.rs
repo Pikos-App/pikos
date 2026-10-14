@@ -697,13 +697,11 @@ async fn write_contention_converges() {
         folder_id: FOLDER.into(),
         window_start: chrono::NaiveDate::MIN,
     };
-    reconcile(
-        pool,
-        &ctx,
-        &delta(vec![event("/e1.ics", "u1", "v1", "Title")], None),
-    )
-    .await
-    .unwrap();
+    // Opening the pool starts a background title re-key, which can hold the write lock here too.
+    let first = delta(vec![event("/e1.ics", "u1", "v1", "Title")], None);
+    pikos_db::tx::retry_on_busy(|| reconcile(pool, &ctx, &first))
+        .await
+        .unwrap();
     let page_id: String = sqlx::query_scalar("SELECT id FROM pages LIMIT 1")
         .fetch_one(pool)
         .await
