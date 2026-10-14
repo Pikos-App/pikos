@@ -154,6 +154,13 @@
     "until": "2027-04-01"
   },
   {
+    "id": "GHSA-wq5f-xc86-pv6w",
+    "package": "sharp",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
     "id": "GHSA-7w5x-hrqm-74c2",
     "package": "smol-toml",
     "severity": "high",
