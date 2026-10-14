@@ -258,12 +258,12 @@ export function isTouched(reasons, section, row) {
   return reasons.has(section.key) || reasons.has(row.id);
 }
 
-/** The marks a person can add to a copy: untouched, automated, manual or both. */
-const MARK = /· \*\*(untouched|automated|manual|both)\*\*(.*)$/;
+/** The marks a person can add to a copy: untouched, automated, manual, both or deferred. */
+const MARK = /· \*\*(untouched|automated|manual|both|deferred)\*\*(.*)$/;
 
 /**
  * A release copy as a person has left it: per row whether its box is ticked, its mark and
- * what follows the mark (the tests, or the reason a row is driven anyway); the commit it
+ * what follows the mark (the tests, or the reason a row is driven anyway or deferred); the commit it
  * was generated at; the lines of its sign-off section; any full-sweep waiver; and the
  * release kind it was written for.
  */

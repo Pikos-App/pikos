@@ -7,8 +7,8 @@
 //
 // A copy is finished when it was written for this commit (or nothing since reaches a row),
 // holds every row of the master with a mark, every row a person drives is ticked, every row
-// marked both says why, every automated row still has its tests, and the sign-off names who
-// ran the pass. A hotfix signs the copy's hotfix block instead of driving the rows.
+// marked both or deferred says why, every automated row still has its tests, and the sign-off
+// names who ran the pass. A deferred row needs no tick, so the record names each one. A hotfix signs the copy's hotfix block instead of driving the rows.
 //
 // `release.sh` runs the check before it bumps the version and writes the record after it
 // tags, so an aborted release records nothing.
@@ -131,6 +131,7 @@ function check(opts) {
 
   const automated = automatedRows();
   const count = { automated: 0, driven: 0, touched: 0 };
+  const deferred = [];
   for (const [id, row] of copy.rows) {
     if (!row.mark) {
       problems.push(`${id} has no mark`);
@@ -147,6 +148,12 @@ function check(opts) {
         problems.push(`${id} is ${row.mark === "both" ? "marked both" : "manual"} and not ticked`);
       if (row.mark === "both" && !row.tail) problems.push(`${id} is marked both without a reason`);
     }
+    if (row.mark === "deferred") {
+      deferred.push(id);
+      if (!row.tail) problems.push(`${id} is deferred without a reason`);
+      if (id.startsWith("GOLD-"))
+        problems.push(`${id} is deferred, and no release ships without GOLD`);
+    }
   }
 
   const runBy = copy.signOff.find((l) => l.startsWith("- Run by"));
@@ -161,7 +168,8 @@ function check(opts) {
     : " No complete mutation run.";
   const line =
     `QA at \`${head.slice(0, 8)}\`: ${count.touched} of ${copy.rows.size} rows touched, ` +
-    `${count.automated} automated, ${count.driven} driven by a person.${mutation}`;
+    `${count.automated} automated, ${count.driven} driven by a person` +
+    `${deferred.length > 0 ? `, ${deferred.length} deferred (${deferred.join(", ")})` : ""}.${mutation}`;
   return { line, problems };
 }
 
