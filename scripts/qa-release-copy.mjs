@@ -11,8 +11,8 @@
 // for a person to judge before anyone drives a row.
 //
 // Run again on a copy that exists, it keeps what a person has done: a ticked row, or a row
-// marked both with its reason, stays so unless a commit since the last run reaches it; a
-// deferred row stays deferred.
+// marked both or judged untouched with its reason, stays so unless a commit since the last run
+// reaches it; a deferred row stays deferred.
 // `--force` starts over.
 //
 // Reads the master and writes the copy in the working tree, so it runs where the
@@ -117,6 +117,16 @@ function main() {
         mark = "deferred";
         tail = before.tail;
         ticked = before.ticked;
+        carried++;
+      } else if (
+        mark === "manual" &&
+        before?.mark === "untouched" &&
+        before.tail &&
+        !isTouched(since, s, row)
+      ) {
+        // A person's untouched judgment, with its reason (PKOS-0145), until a commit reaches the row.
+        mark = "untouched";
+        tail = before.tail;
         carried++;
       } else if (touched && before && (before.ticked || before.mark === "both")) {
         if (isTouched(since, s, row)) {
