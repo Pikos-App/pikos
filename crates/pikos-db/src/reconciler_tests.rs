@@ -4683,3 +4683,39 @@ async fn an_ended_series_an_earlier_build_left_open_reads_as_done_once_kept() {
     assert_eq!(sync_state(&pool, &page_id).await, "detached");
     assert_eq!(page_status(&pool, &page_id).await.0, "done");
 }
+
+#[tokio::test]
+async fn a_trashed_ended_series_is_not_mirrored_again_whatever_its_link_says() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v2", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    let live: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(live, 0);
+    assert!(
+        page_exists(&pool, &page_id).await,
+        "the trashed copy stays in the trash"
+    );
+}
