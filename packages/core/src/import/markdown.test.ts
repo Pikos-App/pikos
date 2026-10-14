@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractImageRefs,
   extractWikilinks,
+  imageRefCandidates,
   parseFrontmatter,
   parseMarkdownVault,
   transformCallouts,
@@ -674,6 +675,42 @@ Some text
     const refs = extractImageRefs("![[photo.png|My Photo]]");
     expect(refs).toHaveLength(1);
     expect(refs[0]!.sourcePath).toBe("photo.png");
+  });
+});
+
+describe("imageRefCandidates", () => {
+  const candidates = (body: string, fromDir: string) =>
+    imageRefCandidates(extractImageRefs(body, fromDir)[0]!);
+
+  it("reads a standard link from its file's folder first, then from the vault root", () => {
+    expect(candidates("![](img/a.png)", "notes")).toEqual(["notes/img/a.png", "img/a.png"]);
+  });
+
+  it("reads a wiki embed from the vault root first, then from its file's folder", () => {
+    expect(candidates("![[attachments/a.png]]", "notes")).toEqual([
+      "attachments/a.png",
+      "notes/attachments/a.png",
+    ]);
+  });
+
+  it("resolves a link that climbs to a sibling folder, dropping the reading that leaves the vault", () => {
+    expect(candidates("![](../assets/a.png)", "notes")).toEqual(["assets/a.png"]);
+  });
+
+  it("lists a path once when both readings agree", () => {
+    expect(candidates("![](./img/./a.png)", "")).toEqual(["img/a.png"]);
+  });
+
+  it("has no candidate for a path that climbs out of the vault", () => {
+    expect(candidates("![](../../a.png)", "notes")).toEqual([]);
+  });
+
+  it("takes the folder from the file the reference is written in", () => {
+    const plan = parseMarkdownVault([{ content: "![](a.png)", path: "projects/trip/plan.md" }]);
+    expect(imageRefCandidates(plan.pages[0]!.imageRefs[0]!)).toEqual([
+      "projects/trip/a.png",
+      "a.png",
+    ]);
   });
 });
 
