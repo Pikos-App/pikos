@@ -546,6 +546,80 @@ async fn fts_rebuilds_on_schema_version_mismatch() {
     );
 }
 
+#[tokio::test]
+async fn a_page_saved_before_line_breaks_counted_is_found_by_the_word_after_one() {
+    let path = std::env::temp_dir().join(format!("pkos_breaks_{}.db", uuid::Uuid::new_v4()));
+    let path_str = path.to_str().unwrap().to_string();
+    let body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"one"},{"type":"hardBreak"},{"type":"text","text":"ask"}]}]}"#;
+    let stamped = "2026-01-01T00:00:00Z";
+
+    async fn state(pool: &SqlitePool) -> (String, String, i64, i64) {
+        let (text, updated): (String, String) =
+            sqlx::query_as("SELECT content_text, updated_at FROM pages WHERE id = 'p1'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        let hits: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH 'ask'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        let owned: i64 =
+            sqlx::query_scalar("SELECT user_modified FROM page_sync WHERE page_id = 'p1'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        (text, updated, hits, owned)
+    }
+
+    {
+        let pool = open_pool(&path_str).await.unwrap();
+        insert_test_page(
+            &pool,
+            TestPage {
+                content_text: "oneask",
+                ..TestPage::new("p1", "Notes")
+            },
+        )
+        .await
+        .unwrap();
+        insert_test_page_sync_connected_at(&pool, "p1", "active", stamped)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE pages SET content = ?, updated_at = ? WHERE id = 'p1'")
+            .bind(body)
+            .bind(stamped)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA user_version = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+    }
+
+    let pool = open_pool(&path_str).await.unwrap();
+    let after_upgrade = state(&pool).await;
+    sqlx::query("UPDATE pages SET content_text = 'oneask' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+    let pool = open_pool(&path_str).await.unwrap();
+    let after_second_open = state(&pool).await.0;
+    pool.close().await;
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{path_str}{suffix}"));
+    }
+
+    assert_eq!(
+        after_upgrade,
+        ("one\nask".to_string(), stamped.to_string(), 1, 0)
+    );
+    assert_eq!(after_second_open, "oneask", "the pass runs once");
+}
+
 // ── pre-migration backup ───────────────────────────────────────────────
 //
 // These tests drive `maybe_backup_before_migrations` directly rather than

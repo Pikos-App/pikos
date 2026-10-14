@@ -17,9 +17,10 @@ use crate::error::{AppError, AppResult};
 /// pre-migration backup check (to read the highest known version).
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
-/// Bump when a migration changes an FTS-indexed column; see the desktop app's
-/// note. Kept identical so the rebuild/skip decision matches the app.
-const FTS_SCHEMA_VERSION: i64 = 1;
+/// Bump when what the search index holds changes: a migration that changes an indexed column, or
+/// a change to how `content_text` is derived. A workspace opened at an older version re-derives
+/// what the change reaches and rebuilds the index, once.
+const FTS_SCHEMA_VERSION: i64 = 2;
 
 /// How many pre-migration snapshots to retain. Older ones are pruned so they
 /// don't accumulate; recovery only ever needs the most recent few.
@@ -323,6 +324,9 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         .fetch_one(&pool)
         .await?;
     if stored != FTS_SCHEMA_VERSION {
+        if stored < 2 {
+            rederive_line_breaks(&pool).await?;
+        }
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
             .execute(&pool)
             .await?;
@@ -470,6 +474,27 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
                 .await?;
         }
     }
+    Ok(())
+}
+
+/// Version 2 reads a line break inside a paragraph as one, where 1 ran the words either side
+/// together. A page saved before it is re-derived from its body, trashed pages too so a restore
+/// finds them, without stamping `updated_at`: nobody edited it, and it mustn't float to the top of
+/// recently edited.
+async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, content FROM pages WHERE content LIKE '%\"hardBreak\"%'")
+            .fetch_all(pool)
+            .await?;
+    let mut tx = pool.begin().await?;
+    for (id, content) in &rows {
+        sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
+            .bind(extract_text_from_tiptap(content))
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 
