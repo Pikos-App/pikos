@@ -5,12 +5,16 @@ Fast at any size. Pikos now loads only what's on screen, so opening a page, sear
 - **Large workspaces.** Opening a page, searching, switching views, completing a task, and paging through the calendar each take under a tenth of a second, from fifty pages to half a million.
 - **No more stalled saves.** Now and then a save used to take ten to twenty times longer than usual. That work now happens in the background.
 - **Clicks and searches respond at once.** A page you click opens straight away, and a search runs as soon as you pause typing.
-- **Command-line search.** Results come back a page at a time, so a common word in a huge workspace takes a fraction of a second rather than minutes.
+
+### New
+
+- **Right-click a calendar block** to open its details.
+- **Esc goes to the calendar** from any page.
+- **Meeting links are links.** A Google Meet or Zoom link in a synced event's description is clickable.
 
 ### Fixed
 
-- **Quick Add** saves a page's tags, priority, and body along with it, so they no longer appear a moment later.
-- **Quick Add** no longer drops the end of a weekday range.
-- **Turning a calendar back on** no longer promises to bring back pages it removed for good.
-- **Reading time** on a short note says "< 1 min" rather than "1 min".
-- **The command palette** no longer lists two commands that did nothing from inside it.
+- **The current-time line moves.** It used to stay where it was when you opened the calendar.
+- **Old repeating meetings stay gone.** Calendar sync no longer brings in series that ended before you connected, and ones already synced are cleared.
+- **Each meeting shows once.** A repeating meeting no longer shows twice, and one you've ticked through to its end stays done.
+- **Google descriptions read as text**, not HTML, when they were written in Google Calendar on the web.
