@@ -680,7 +680,8 @@ ref discriminates (`RECURRENCE-ID` / `recurringEventId` present → EXDATE on th
 → lifecycle removal). Ownership = completed, `user_modified`, or user content: owned detaches
 in place, a bare mirror hard-deletes.
 ⁷³ A Google description saved as HTML reads as the text Google shows for it; plain text is
-kept as written. A seeded body the user never edited refreshes silently (hash match on `content_text`); an
+kept as written. Each web address in a seeded body is a link. A seeded body the user never
+edited refreshes silently (hash match on `content_text`); an
 edited one gets a "calendar description changed" notice, the new text parked in
 `pending_description`. Never overwritten. The notice resolves two ways, both clearing the
 column via `clear_pending_description`: **Append** adds the parked text to the end of the body

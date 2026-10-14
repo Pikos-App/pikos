@@ -1468,6 +1468,38 @@ async fn apply_seeded_description(
     Ok(())
 }
 
+/// Link the web addresses in seeded bodies written before seeds carried links. Only a body still as
+/// seeded, its text hashing to the stored seed, since any other is the person's. Links are marks, so
+/// the text, and with it search and the seed hash, is unchanged, and `updated_at` stays put.
+pub(crate) async fn link_addresses_in_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT p.id, p.content, p.content_text, ps.seeded_description_hash
+         FROM pages p JOIN page_sync ps ON ps.page_id = p.id
+         WHERE ps.seeded_description_hash_version = ? AND p.content LIKE '%http%'",
+    )
+    .bind(CONTENT_TEXT_PROJECTION_VERSION)
+    .fetch_all(pool)
+    .await?;
+    let mut tx = pool.begin().await?;
+    for (id, content, text, hash) in rows {
+        if fnv_hex(&text) != hash {
+            continue;
+        }
+        let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&content) else {
+            continue;
+        };
+        if crate::pool::link_addresses(&mut doc) {
+            sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
+                .bind(doc.to_string())
+                .bind(&id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Read the body + seed bookkeeping needed to classify a description change.
 async fn fetch_seed_state(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,

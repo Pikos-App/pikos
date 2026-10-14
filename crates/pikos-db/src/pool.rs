@@ -17,10 +17,10 @@ use crate::error::{AppError, AppResult};
 /// pre-migration backup check (to read the highest known version).
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
-/// Bump when what the search index holds changes: a migration that changes an indexed column, or
-/// a change to how `content_text` is derived. A workspace opened at an older version re-derives
-/// what the change reaches and rebuilds the index, once.
-const FTS_SCHEMA_VERSION: i64 = 2;
+/// Bump when what the app derives from a page's text changes: an indexed column, how
+/// `content_text` is derived, or how a seeded body is built. A workspace opened at an older
+/// version gets each pass it missed and an index rebuild, once.
+const DERIVED_TEXT_VERSION: i64 = 3;
 
 /// How many pre-migration snapshots to retain. Older ones are pruned so they
 /// don't accumulate; recovery only ever needs the most recent few.
@@ -323,14 +323,17 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
     let stored: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&pool)
         .await?;
-    if stored != FTS_SCHEMA_VERSION {
+    if stored != DERIVED_TEXT_VERSION {
         if stored < 2 {
             rederive_line_breaks(&pool).await?;
+        }
+        if stored < 3 {
+            crate::reconciler::link_addresses_in_seeded_bodies(&pool).await?;
         }
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
             .execute(&pool)
             .await?;
-        sqlx::query(&format!("PRAGMA user_version = {FTS_SCHEMA_VERSION}")) // sql-ok: compile-time constant
+        sqlx::query(&format!("PRAGMA user_version = {DERIVED_TEXT_VERSION}")) // sql-ok: compile-time constant
             .execute(&pool)
             .await?;
     }
@@ -498,14 +501,14 @@ async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
-/// Plain text → a Tiptap JSON document, one paragraph per line — the doc the
-/// editor produces for pasted text.
+/// Plain text → a Tiptap JSON document, one paragraph per line, each web address a link — the
+/// doc the editor produces for pasted text.
 ///
 /// Paired with [`extract_text_from_tiptap`], and here rather than at either
 /// caller because the round trip has to hold: the reconciler hashes a seeded
 /// description through the extractor to decide whether the body is still
 /// pristine, so a builder that drifted from the projection would classify every
-/// synced page as user-edited.
+/// synced page as user-edited. Links are marks, so they leave the text alone.
 pub fn build_tiptap_doc(text: &str) -> String {
     let content: Vec<serde_json::Value> = text
         .split('\n')
@@ -513,11 +516,126 @@ pub fn build_tiptap_doc(text: &str) -> String {
             if line.is_empty() {
                 serde_json::json!({ "type": "paragraph" })
             } else {
-                serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+                serde_json::json!({ "type": "paragraph", "content": linked_runs(line, &[]) })
             }
         })
         .collect();
     serde_json::json!({ "type": "doc", "content": content }).to_string()
+}
+
+/// Turn every web address in the document's unlinked text into a link, keeping each run's other
+/// marks. Code is left as written. Returns whether anything changed.
+pub(crate) fn link_addresses(node: &mut serde_json::Value) -> bool {
+    if node.get("type").and_then(|t| t.as_str()) == Some("codeBlock") {
+        return false;
+    }
+    let Some(children) = node.get_mut("content").and_then(|c| c.as_array_mut()) else {
+        return false;
+    };
+    let mut changed = false;
+    let mut out = Vec::with_capacity(children.len());
+    for mut child in children.drain(..) {
+        let marks: Vec<serde_json::Value> = child
+            .get("marks")
+            .and_then(|m| m.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let plain = !marks
+            .iter()
+            .any(|m| matches!(m["type"].as_str(), Some("link" | "code")));
+        match child.get("text").and_then(|t| t.as_str()) {
+            Some(text) if plain && !addresses(text).is_empty() => {
+                out.extend(linked_runs(text, &marks));
+                changed = true;
+            }
+            Some(_) => out.push(child),
+            None => {
+                changed |= link_addresses(&mut child);
+                out.push(child);
+            }
+        }
+    }
+    *children = out;
+    changed
+}
+
+/// `text` as text runs carrying `marks`, with a link mark added on each web address.
+fn linked_runs(text: &str, marks: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let run = |part: &str, href: Option<&str>| {
+        let mut run_marks = marks.to_vec();
+        if let Some(href) = href {
+            run_marks.push(serde_json::json!({
+                "type": "link",
+                "attrs": {
+                    "href": href,
+                    "target": "_blank",
+                    "rel": "noopener noreferrer nofollow",
+                    "class": null,
+                    "title": null,
+                }
+            }));
+        }
+        let mut node = serde_json::json!({ "type": "text", "text": part });
+        if !run_marks.is_empty() {
+            node["marks"] = serde_json::Value::Array(run_marks);
+        }
+        node
+    };
+    let mut runs = Vec::new();
+    let mut at = 0;
+    for (start, end) in addresses(text) {
+        if start > at {
+            runs.push(run(&text[at..start], None));
+        }
+        runs.push(run(&text[start..end], Some(&text[start..end])));
+        at = end;
+    }
+    if at < text.len() {
+        runs.push(run(&text[at..], None));
+    }
+    runs
+}
+
+/// Byte ranges of the `http://` and `https://` addresses in `text`. An address runs to the next
+/// space, less closing punctuation that belongs to the sentence: a full stop, or the bracket of
+/// "Join (https://…)".
+fn addresses(text: &str) -> Vec<(usize, usize)> {
+    let mut found = Vec::new();
+    let mut from = 0;
+    while let Some(offset) = text[from..].find("http") {
+        let start = from + offset;
+        let rest = &text[start..];
+        let scheme = ["https://", "http://"]
+            .into_iter()
+            .find(|s| rest.starts_with(s));
+        let boundary = text[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let (Some(scheme), true) = (scheme, boundary) else {
+            from = start + "http".len();
+            continue;
+        };
+        let mut end = start + rest.find(char::is_whitespace).unwrap_or(rest.len());
+        while let Some(last) = text[start..end].chars().next_back() {
+            let open = |o: char| text[start..end].matches(o).count();
+            let unbalanced = match last {
+                ')' => open('(') < open(')'),
+                ']' => open('[') < open(']'),
+                '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '"' | '>' => true,
+                _ => false,
+            };
+            if !unbalanced {
+                break;
+            }
+            end -= last.len_utf8();
+        }
+        if end > start + scheme.len() {
+            found.push((start, end));
+        }
+        from = end.max(start + scheme.len());
+    }
+    found
 }
 
 /// Recursively extract plain text from a Tiptap JSON document. Mirrors the

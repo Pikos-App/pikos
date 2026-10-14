@@ -4719,3 +4719,99 @@ async fn a_trashed_ended_series_is_not_mirrored_again_whatever_its_link_says() {
         "the trashed copy stays in the trash"
     );
 }
+
+const INVITE: &str = "Join with Google Meet (https://meet.google.com/abc-defg-hij)\nNotes: https://docs.example.com/notes. See https://en.wikipedia.org/wiki/Foo_(bar) too";
+
+fn hrefs(content: &str) -> Vec<String> {
+    fn walk(node: &serde_json::Value, out: &mut Vec<String>) {
+        for mark in node["marks"].as_array().into_iter().flatten() {
+            if mark["type"] == "link" {
+                out.push(mark["attrs"]["href"].as_str().unwrap().to_string());
+            }
+        }
+        for child in node["content"].as_array().into_iter().flatten() {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(&serde_json::from_str(content).unwrap(), &mut out);
+    out
+}
+
+async fn seed_invite(pool: &sqlx::SqlitePool) -> String {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![single_full(
+            "/ev.ics",
+            "uid-1",
+            "v1",
+            "Sync",
+            Some(INVITE),
+            None,
+            &[],
+        )]),
+    )
+    .await
+    .unwrap();
+    only_page_sync(pool).await.0
+}
+
+#[tokio::test]
+async fn a_seeded_description_links_its_addresses_and_keeps_its_text() {
+    let pool = setup().await;
+    let page_id = seed_invite(&pool).await;
+
+    assert_eq!(
+        hrefs(&page_content(&pool, &page_id).await),
+        [
+            "https://meet.google.com/abc-defg-hij",
+            "https://docs.example.com/notes",
+            "https://en.wikipedia.org/wiki/Foo_(bar)",
+        ]
+    );
+    assert_eq!(page_content_text(&pool, &page_id).await, INVITE);
+}
+
+#[tokio::test]
+async fn upgrading_links_the_addresses_in_a_seed_left_as_written() {
+    let pool = setup().await;
+    let untouched = seed_invite(&pool).await;
+    let unlinked = serde_json::json!({ "type": "doc", "content": INVITE.split('\n').map(|line| {
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+    }).collect::<Vec<_>>() })
+    .to_string();
+    sqlx::query("UPDATE pages SET content = ?, updated_at = '2026-01-01T00:00:00Z' WHERE id = ?")
+        .bind(&unlinked)
+        .bind(&untouched)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    assert_eq!(hrefs(&page_content(&pool, &untouched).await).len(), 3);
+    assert_eq!(page_content_text(&pool, &untouched).await, INVITE);
+    let updated: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = ?")
+        .bind(&untouched)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(updated, "2026-01-01T00:00:00Z");
+}
+
+#[tokio::test]
+async fn upgrading_leaves_a_body_the_person_edited_as_it_is() {
+    let pool = setup().await;
+    let page_id = seed_invite(&pool).await;
+    let edited = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Mine: https://example.com/plan"}]}]}"#;
+    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
+        .bind(edited)
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    simulate_user_body_edit(&pool, &page_id, "Mine: https://example.com/plan").await;
+
+    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    assert_eq!(page_content(&pool, &page_id).await, edited);
+}

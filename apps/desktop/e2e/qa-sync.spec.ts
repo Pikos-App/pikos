@@ -908,3 +908,32 @@ appTest(
     );
   }
 );
+
+appTest(
+  "a synced description's web addresses are links that open",
+  { tag: ["@SYNC-32"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+    await upstream(app, "upstream_sync", {
+      calendar: "Personal",
+      events: [
+        {
+          // Below the first line: the editor links an address there by itself as it loads.
+          description:
+            "Agenda first.\nThen demos.\nJoin with Google Meet (https://meet.google.com/abc-defg-hij)",
+          title: "Design review (LA team)",
+        },
+      ],
+    });
+    await openCalendarFolder(app, "Personal");
+    await rows(app, "Design review (LA team)").click();
+    const body = app.getByRole("textbox", { name: "Page content" });
+    const meet = body.getByRole("link", { name: "https://meet.google.com/abc-defg-hij" });
+
+    await expect(meet).toBeVisible();
+    await expect(body).toContainText("Join with Google Meet (https://meet.google.com/abc-defg-hij)");
+    await meet.click();
+    await expect(app.getByRole("button", { name: "Open link" })).toBeVisible();
+  }
+);
