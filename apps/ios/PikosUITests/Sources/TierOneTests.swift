@@ -51,6 +51,26 @@ final class TierOneTests: PikosUITestCase {
             "and is counted as finished")
     }
 
+    func testTheCompletedSectionLoadsAgainAfterSwitchingViews() {
+        showView("Inbox")
+        quickAdd("Buy milk")
+        assertRowExists("Buy milk")
+        app.buttons["Mark as done"].firstMatch.tap()
+        let completed = app.buttons["Completed (1)"]
+        XCTAssertTrue(completed.waitForExistence(timeout: Self.timeout))
+        completed.tap()
+        assertRowExists("Buy milk", "opening the section shows what was finished")
+
+        showView("Start here")
+        showView("Inbox")
+
+        XCTAssertTrue(completed.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(completed.value as? String, "Collapsed", "a view switched to starts with the section closed")
+        completed.tap()
+        assertRowExists("Buy milk", "and opening it loads that view's finished pages")
+        XCTAssertFalse(app.staticTexts["Loading…"].exists)
+    }
+
     func testSearchFindsAPageByItsTitle() {
         quickAdd("Quarterly review today")
         assertRowExists("Quarterly review")

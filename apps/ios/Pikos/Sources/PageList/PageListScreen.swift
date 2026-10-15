@@ -14,7 +14,6 @@ struct PageListScreen: View {
     @Environment(PageDragSession.self) private var drag
 
     @State private var actions = PageActionState()
-    @State private var isCompletedExpanded = false
     @State private var isMovingOverdue = false
     @State private var isSelecting = false
     @State private var selection: Set<String> = []
@@ -366,12 +365,12 @@ struct PageListScreen: View {
     @ViewBuilder
     private var completedSection: some View {
         Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { isCompletedExpanded.toggle() }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { store.toggleCompleted() }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
-                    .rotationEffect(.degrees(isCompletedExpanded ? 90 : 0))
+                    .rotationEffect(.degrees(store.isCompletedExpanded ? 90 : 0))
                 Text("Completed")
                     .font(.pkUI)
                 if store.completedTotal > 0 {
@@ -391,13 +390,9 @@ struct PageListScreen: View {
         .listRowBackground(Color.surfacePrimary)
         .listRowSeparator(.hidden)
         .accessibilityLabel(completedTitle)
-        .accessibilityValue(isCompletedExpanded ? "Expanded" : "Collapsed")
-        .onChange(of: isCompletedExpanded) { _, expanded in
-            guard expanded else { return }
-            Task { await store.expandCompleted() }
-        }
+        .accessibilityValue(store.isCompletedExpanded ? "Expanded" : "Collapsed")
 
-        if isCompletedExpanded {
+        if store.isCompletedExpanded {
             if store.completedPages.isEmpty {
                 Text(store.hasLoadedCompleted ? "Nothing finished here yet." : "Loading…")
                     .font(.pkBodySm)
@@ -641,7 +636,7 @@ struct PageListScreen: View {
     }
 
     private var selectable: [PageSummary] {
-        visibleSections.flatMap(\.pages) + (isCompletedExpanded ? store.completedPages : [])
+        visibleSections.flatMap(\.pages) + (store.isCompletedExpanded ? store.completedPages : [])
     }
 
     private var orderedSelection: [PageSummary] {

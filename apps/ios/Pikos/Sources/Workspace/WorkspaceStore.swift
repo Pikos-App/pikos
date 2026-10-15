@@ -165,6 +165,7 @@ public final class WorkspaceStore {
             // across every folder. Dropped rather than re-fetched, so the
             // section starts collapsed in the new view and costs nothing until
             // somebody asks for it.
+            isCompletedExpanded = false
             completedPages = []
             completedTotal = 0
             hasLoadedCompleted = false
@@ -184,10 +185,17 @@ public final class WorkspaceStore {
     /// than `completedPages.count`. The difference is what "Show more" is for.
     public private(set) var completedTotal: UInt32 = 0
 
-    /// Whether the section has been opened at all. Distinct from
-    /// `completedPages.isEmpty`, which is also true for a view that has been
-    /// opened and genuinely has nothing finished in it — a state that should
-    /// say so rather than silently re-fetching on every redraw.
+    /// Whether the Completed section is open.
+    ///
+    /// Held here rather than by the list screen because it changes together with
+    /// what the section has loaded. The screen is one view across every scope;
+    /// while it owned this flag, a switch dropped the rows and kept the section
+    /// open, and nothing loaded the new scope's, so it read "Loading…" for good.
+    public private(set) var isCompletedExpanded = false
+
+    /// Whether this scope's first page of finished work has arrived. Distinct
+    /// from `completedPages.isEmpty`, which is also true for a view that
+    /// genuinely has nothing finished in it — a state that should say so.
     public private(set) var hasLoadedCompleted = false
 
     private var workspace: Workspace?
@@ -437,15 +445,18 @@ public final class WorkspaceStore {
     /// How many finished pages one fetch brings back.
     private static let completedPageSize: UInt32 = 20
 
-    /// Load the first page of finished work. Call it when the section opens.
+    /// Open or close the section, loading the first page the first time it opens.
     ///
-    /// Idempotent: reopening a section that is already loaded shows what is
-    /// there rather than re-querying, which is what makes expanding and
-    /// collapsing free.
-    public func expandCompleted() async {
-        guard !hasLoadedCompleted else { return }
-        hasLoadedCompleted = true
-        await fetchCompleted(offset: 0, replacing: true)
+    /// Reopening a section that is already loaded shows what is there rather
+    /// than re-querying, which is what makes expanding and collapsing free.
+    public func toggleCompleted() {
+        isCompletedExpanded.toggle()
+        guard isCompletedExpanded, !hasLoadedCompleted else { return }
+        let asked = scope
+        Task {
+            await fetchCompleted(offset: 0, replacing: true)
+            if scope == asked { hasLoadedCompleted = true }
+        }
     }
 
     /// Load the next page. The caller checks `hasMoreCompleted` first.
@@ -483,11 +494,14 @@ public final class WorkspaceStore {
         offset: UInt32, replacing: Bool, limit: UInt32? = nil
     ) async {
         guard let workspace else { return }
+        let asked = scope
         do {
             let result = try await workspace.listCompleted(
-                scope: scope.completedScope,
+                scope: asked.completedScope,
                 limit: limit ?? Self.completedPageSize,
                 offset: offset)
+            // A view switch while the read was out: these rows are the old view's.
+            guard scope == asked else { return }
             completedTotal = result.total
             if replacing {
                 completedPages = result.pages
