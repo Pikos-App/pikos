@@ -81,7 +81,7 @@ pikos search "quarterly review"</pre>
     <section class="mt-10">
       <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">What it won't do</h2>
       <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        <strong class="font-medium text-neutral-900 dark:text-neutral-50">Lose your work.</strong> Deleting moves a page to the trash and restoring brings it back. There's no hard delete over MCP, so nothing an agent does is one-way.
+        <strong class="font-medium text-neutral-900 dark:text-neutral-50">Lose your work.</strong> Deleting moves a page to the trash and restoring brings it back. The MCP server has no permanent delete, so nothing an agent does through it is one-way. The terminal does: <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">pikos delete --hard</code> destroys a page for good, after asking. An agent you've given a shell can run that too.
       </p>
       <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
         <strong class="font-medium text-neutral-900 dark:text-neutral-50">Upgrade your workspace behind your back.</strong> A schema upgrade is one-way and would lock your installed app out until you update it too, so the server refuses and tells you to run it yourself.
