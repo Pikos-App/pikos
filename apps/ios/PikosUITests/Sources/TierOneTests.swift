@@ -170,8 +170,7 @@ final class TierOneTests: PikosUITestCase {
             quickAdd(title)
             assertRowExists(title)
         }
-        app.buttons["Sort and select"].firstMatch.tap()
-        app.buttons["Select Pages"].firstMatch.tap()
+        app.buttons["Select"].firstMatch.tap()
 
         let handle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Reorder' AND label CONTAINS 'Gamma'")).firstMatch
         XCTAssertTrue(handle.waitForExistence(timeout: Self.timeout), "select mode shows reorder handles")

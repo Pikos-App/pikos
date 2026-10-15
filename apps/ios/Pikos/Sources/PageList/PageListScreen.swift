@@ -97,7 +97,24 @@ struct PageListScreen: View {
             PaneHeader {
                 switcherButton
             } trailing: {
-                orderMenu
+                if !store.scope.isDateGrouped {
+                    sortMenu
+                }
+                Button("Select") { enterSelection() }
+                    .font(.pkUI)
+                    .foregroundStyle(.textAction)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
+                Button {
+                    route.isSettingsPresented = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Settings")
             }
         }
     }
@@ -143,24 +160,14 @@ struct PageListScreen: View {
         }
     }
 
-    private var orderMenu: some View {
+    /// Today and Upcoming leave it out: they are ordered by time, which is what makes them those views.
+    private var sortMenu: some View {
         Menu {
-            if store.scope.isDateGrouped {
-                Text("Sorted by time")
-            } else {
-                Picker("Sort by", selection: sortBinding) {
-                    ForEach(PageSort.Mode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
-                    }
+            Picker("Sort by", selection: sortBinding) {
+                ForEach(PageSort.Mode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
                 }
             }
-            Divider()
-            Button {
-                enterSelection()
-            } label: {
-                Label("Select Pages", systemImage: "checkmark.circle")
-            }
-            .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
         } label: {
             Image(systemName: "arrow.up.arrow.down")
                 .font(.system(size: 16, weight: .regular))
@@ -168,7 +175,7 @@ struct PageListScreen: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
-        .accessibilityLabel("Sort and select")
+        .accessibilityLabel("Sort")
     }
 
     private var switcherLayer: some View {

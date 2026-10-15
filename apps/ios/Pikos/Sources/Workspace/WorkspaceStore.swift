@@ -339,7 +339,7 @@ public final class WorkspaceStore {
 
                         In a list. Swipe right to complete. Swipe left to send to another day. Hold a page for everything else. Tap the title at the top to switch between Today, Upcoming, your Inbox and your folders.
 
-                        Several at once. Tap the sort button, choose Select Pages, and act on everything you tick.
+                        Several at once. Tap Select at the top, and act on everything you tick.
 
                         On the calendar. Tap the title to jump to another date or show more days. Hold a block to move it, complete it or skip it.
 

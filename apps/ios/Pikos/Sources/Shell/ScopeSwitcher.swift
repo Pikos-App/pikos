@@ -112,11 +112,6 @@ struct ScopeSwitcher: View {
                 route.isSwitcherPresented = false
                 route.isTrashPresented = true
             }
-            Rectangle().fill(.borderSecondary).frame(width: 1, height: 20)
-            footerButton("Settings", systemImage: "gearshape") {
-                route.isSwitcherPresented = false
-                route.isSettingsPresented = true
-            }
         }
         .frame(height: 48)
         .background(.surfaceElevated)

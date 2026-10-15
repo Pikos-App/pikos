@@ -57,9 +57,9 @@ final class ScreenTour: PikosUITestCase {
             shot(section, 7, "New folder, named in place")
         }
 
-        relaunch()
-        if tap(button("Sort and select"), "sort menu") {
-            shot(section, 8, "Sort and select menu")
+        relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
+        if tap(button("Sort"), "sort menu") {
+            shot(section, 8, "Sort menu")
         }
 
         if selectTwo() { shot(section, 9, "Select mode") }
@@ -129,7 +129,7 @@ final class ScreenTour: PikosUITestCase {
         shot(section, 24, "Holding a page over the day")
 
         relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
-        if tap(button("Sort and select"), "sort menu"), tap(button("Select Pages"), "select pages") {
+        if tap(button("Select"), "select") {
             shot(section, 25, "Select mode in a hand-sorted list, with reorder handles")
         }
 
@@ -461,7 +461,7 @@ final class ScreenTour: PikosUITestCase {
     /// menu by tapping elsewhere is not reliable and once chose one of its items.
     private func selectTwo() -> Bool {
         relaunch()
-        guard tap(button("Sort and select"), "sort menu"), tap(button("Select Pages"), "select pages") else {
+        guard tap(button("Select"), "select") else {
             return false
         }
         tapRow("Call mom")
