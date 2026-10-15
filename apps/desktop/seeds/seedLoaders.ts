@@ -44,13 +44,13 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedDeep } = await import("./deep");
         await seedDeep(adapter);
       },
-      editor: async ({ adapter }) => {
-        const { seedEditor } = await import("./editor");
-        await seedEditor(adapter);
-      },
       demo: async ({ adapter }) => {
         const { seedDemo } = await import("./demo");
         await seedDemo(adapter);
+      },
+      editor: async ({ adapter }) => {
+        const { seedEditor } = await import("./editor");
+        await seedEditor(adapter);
       },
       marketing: async ({ adapter }) => {
         const { seedMarketing } = await import("./marketing");
