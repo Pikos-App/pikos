@@ -5192,10 +5192,24 @@ async fn occurrences_before_the_connect_day_are_history_rather_than_backlog() {
 
 /// Backdates a calendar link, so a test can put the connect day inside the
 /// series rather than before all of it.
+///
+/// The instant is local midday on `day`, stored as UTC the way the reconciler
+/// writes it. UTC midnight of a local date falls on the day before anywhere west
+/// of UTC, and midday is never skipped by a DST change.
 async fn connected_on(path: &str, page_id: &str, day: &str) {
+    use chrono::TimeZone;
+    let midday = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d")
+        .unwrap()
+        .and_hms_opt(12, 0, 0)
+        .unwrap();
+    let instant = chrono::Local
+        .from_local_datetime(&midday)
+        .single()
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     let pool = pikos_db::open_pool(path).await.unwrap();
     sqlx::query("UPDATE page_sync SET created_at = ? WHERE page_id = ?")
-        .bind(format!("{day}T00:00:00.000Z"))
+        .bind(instant.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
         .bind(page_id)
         .execute(&pool)
         .await
