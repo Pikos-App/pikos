@@ -19,3 +19,12 @@ Fast at any size. Pikos now loads only what's on screen, so opening a page, sear
 - **Old repeating meetings stay gone.** Calendar sync no longer brings in series that ended before you connected, and ones already synced are cleared.
 - **Each meeting shows once.** A repeating meeting no longer shows twice, and one you've ticked through to its end stays done.
 - **Google descriptions read as text**, not HTML, when they were written in Google Calendar on the web.
+
+### CLI and MCP
+
+An assistant pointed at `pikos mcp` can now get through a normal day's work.
+
+- **Pages read and write as Markdown.** Editing a page from the CLI or MCP keeps its formatting.
+- **More to change.** Move a page to another folder, edit its tags and subtitle, clear its schedule, and rename, trash or restore folders.
+- **Repeating pages.** Tick off a calendar series, and skip, move or reopen one occurrence.
+- **Better answers.** List pages by when they were created or completed, see tags and the trash, and search falls back to any matching word.
