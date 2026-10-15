@@ -9,6 +9,10 @@ import UniformTypeIdentifiers
 /// It shows the next few hours from now. Lifting a page grows it to six so there is room to aim,
 /// and dropping on an hour is the desktop's drag-to-schedule with no picker in between. With
 /// nothing left today it shrinks to one line rather than disappearing, so the list never jumps.
+///
+/// Today and Upcoming already are the schedule, so over them it rests out of sight and rises only
+/// while a page is lifted. It stays mounted at no height rather than being added on lift: the
+/// drag session never finds a drop target that appears after the drag began.
 struct DayPeek: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -58,25 +62,31 @@ struct DayPeek: View {
         let isDropping = drag.page != nil
         let hours = isDropping ? Self.droppingHours : Self.restingHours
         let firstHour = Self.firstHour(now: now, hours: hours)
+        let isShown = isDropping || !store.scope.isDateGrouped
 
         VStack(spacing: 0) {
-            header(day: day, isDropping: isDropping)
-            if day.remaining.isEmpty && !isDropping {
-                emptyStrip(day: day)
-            } else if isOnToday && !isDropping {
-                nextStrip(day: day)
-            } else {
-                grid(day: day, firstHour: firstHour, hours: hours)
+            if isShown {
+                VStack(spacing: 0) {
+                    header(day: day, isDropping: isDropping)
+                    if day.remaining.isEmpty && !isDropping {
+                        emptyStrip(day: day)
+                    } else {
+                        grid(day: day, firstHour: firstHour, hours: hours)
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             Color.clear.frame(height: ShellBar.clearance)
         }
         // A tray set into the page, in the desktop sidebar's tone, so it reads as a separate
         // surface without a second heading saying what day it is.
         .background {
-            Self.trayShape
-                .fill(.surfaceTertiary)
-                .overlay(Self.trayShape.stroke(.borderSecondary, lineWidth: 1))
-                .ignoresSafeArea(edges: .bottom)
+            if isShown {
+                Self.trayShape
+                    .fill(.surfaceTertiary)
+                    .overlay(Self.trayShape.stroke(.borderSecondary, lineWidth: 1))
+                    .ignoresSafeArea(edges: .bottom)
+            }
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.32), value: isDropping)
     }
@@ -120,38 +130,6 @@ struct DayPeek: View {
         .accessibilityLabel(day.summary.isEmpty ? String(localized: "Up next today") : String(localized: "Up next today, \(day.summary)"))
         .accessibilityHint("Opens the calendar")
         .accessibilityIdentifier("Day peek")
-    }
-
-    /// Today's list already shows today's times, so over it the hours rest as one line naming what
-    /// is next, and open to the grid only when a page is lifted.
-    private var isOnToday: Bool {
-        store.scope == .today
-    }
-
-    private func nextStrip(day: Timeline) -> some View {
-        HStack(spacing: 8) {
-            if let next = day.remaining.sorted(by: { $0.scheduledStart < $1.scheduledStart }).first {
-                Circle()
-                    .fill(CalendarPalette.tint(folderId: next.folderId, colors: CalendarPalette.folderColors(store.folders)))
-                    .frame(width: 7, height: 7)
-                Text(next.title.isEmpty ? String(localized: "Untitled") : next.title)
-                    .font(.pkBodyMedium)
-                    .foregroundStyle(.textPrimary)
-                    .lineLimit(1)
-                if let time = CalendarPalette.timeLabel(start: next.scheduledStart, end: nil) {
-                    Text(time)
-                        .font(.pkBodySm)
-                        .monospacedDigit()
-                        .foregroundStyle(.textTertiary)
-                        .fixedSize()
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .contentShape(Rectangle())
-        .onTapGesture { route.showWeek(on: Date()) }
     }
 
     private func emptyStrip(day: Timeline) -> some View {

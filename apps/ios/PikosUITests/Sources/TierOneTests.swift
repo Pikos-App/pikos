@@ -205,10 +205,9 @@ final class TierOneTests: PikosUITestCase {
         let title = app.staticTexts["Plan the offsite"].firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
 
-        XCTAssertTrue(
-            app.buttons["Day peek"].waitForExistence(timeout: Self.timeout), "the day sits under the list")
+        XCTAssertFalse(app.buttons["Day peek"].exists, "Today is already the schedule, so the day rests out of sight")
 
-        // Where the day has grown to by the time the finger arrives: it opens to six hours on lift.
+        // Where the day has risen to by the time the finger arrives: it opens to six hours on lift.
         let target = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.8))
         title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 1.2, thenDragTo: target, withVelocity: .default, thenHoldForDuration: 0.8)
@@ -216,6 +215,13 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(
             app.buttons["Undo"].waitForExistence(timeout: 5), "the drop schedules the page and offers it back")
         XCTAssertFalse(app.staticTexts["Drop on an hour"].exists, "and the day settles back")
+    }
+
+    func testTheDaySitsUnderEveryListButTheTwoThatAreTheSchedule() {
+        showView("Inbox")
+        XCTAssertTrue(app.buttons["Day peek"].waitForExistence(timeout: Self.timeout), "under the Inbox")
+        showView("Upcoming")
+        XCTAssertTrue(waitForDisappearance(of: app.buttons["Day peek"]), "and not under Upcoming")
     }
 
     /// A drag that ends anywhere but the day must not leave the day waiting for a drop.
