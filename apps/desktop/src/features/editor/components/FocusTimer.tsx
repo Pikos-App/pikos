@@ -72,7 +72,7 @@ export function FocusTimer({ pageId }: { pageId: string }) {
         </TooltipTrigger>
         <TooltipContent side="bottom">
           {elapsedS < MIN_SESSION_S
-            ? `Stop — under ${MIN_SESSION_S}s won't be recorded`
+            ? `Stop. Under ${MIN_SESSION_S}s won't be recorded`
             : "Stop and record this session"}
         </TooltipContent>
       </Tooltip>

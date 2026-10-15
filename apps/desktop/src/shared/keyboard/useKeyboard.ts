@@ -35,10 +35,13 @@ export function useKeyboardShortcut(
   const scope = opts?.scope;
   const preventDefault = opts?.preventDefault;
   const allowInInputs = opts?.allowInInputs;
+  const unlessHandled = opts?.unlessHandled;
   const repeat = opts?.repeat;
   const stopPropagation = opts?.stopPropagation;
   const label = opts?.label;
   const group = opts?.group;
+  // Stryker disable next-line OptionalChaining: the label and group reads above already need the options
+  const inPalette = opts?.inPalette;
 
   useEffect(() => {
     const id = `shortcut-${crypto.randomUUID()}`;
@@ -51,12 +54,15 @@ export function useKeyboardShortcut(
       when: stableWhen,
       ...(preventDefault !== undefined && { preventDefault }),
       ...(allowInInputs !== undefined && { allowInInputs }),
+      ...(unlessHandled !== undefined && { unlessHandled }),
       ...(repeat !== undefined && { repeat }),
       ...(stopPropagation !== undefined && { stopPropagation }),
       // Palette + settings metadata. Only the first key of a chord carries it —
       // the second half is an implementation detail, not a command.
       ...(label !== undefined && { label }),
       ...(group !== undefined && { group }),
+      // Stryker disable next-line ConditionalExpression: spreading an undefined inPalette equals leaving it out
+      ...(inPalette !== undefined && { inPalette }),
     };
 
     if (second !== undefined) {
@@ -108,7 +114,19 @@ export function useKeyboardShortcut(
     // ── Single binding ─────────────────────────────────────────────────────
     Keyboard.register({ combo: first, handler: stableHandler, id, ...baseOpts });
     return () => Keyboard.unregister(id);
-  }, [first, second, scope, preventDefault, allowInInputs, repeat, stopPropagation, label, group]);
+  }, [
+    first,
+    second,
+    scope,
+    preventDefault,
+    allowInInputs,
+    unlessHandled,
+    repeat,
+    stopPropagation,
+    label,
+    group,
+    inPalette,
+  ]);
 }
 
 /**

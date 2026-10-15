@@ -43,6 +43,7 @@ vi.mock("@/shared/context/PagesContext", async (importOriginal) => ({
 function makePage(over: Partial<PageSummary> & { id: string }): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     isRecurring: false,
     priority: 0,
@@ -107,10 +108,21 @@ describe("MonthGrid — grid rendering", () => {
 });
 
 describe("MonthGrid — event chips", () => {
-  it("renders a timed event with its start time in the cell it belongs to", () => {
+  it("renders a timed event in the cell it belongs to", () => {
     renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
-    const chip = screen.getByRole("button", { name: "9 AM Standup" });
+    const chip = screen.getByRole("button", { name: "Standup 9 AM" });
     expect(cell("Tuesday March 10, 2026")).toContainElement(chip);
+  });
+
+  // A month cell is an overview and its width is the scarce thing. The time used
+  // to lead the chip and refuse to shrink, leaving "10:30am Standu…" — a time and
+  // nothing scannable. It is off the chip entirely now, and stays in the name.
+  it("shows the title alone, keeping the time in the accessible name", () => {
+    renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
+    const chip = screen.getByRole("button", { name: "Standup 9 AM" });
+
+    expect(chip).toHaveTextContent("Standup");
+    expect(chip).not.toHaveTextContent("9 AM");
   });
 
   it("colours a chip from its folder, matching the week grid's source", () => {
@@ -139,10 +151,10 @@ describe("MonthGrid — event chips", () => {
     vi.useFakeTimers();
     try {
       renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
-      fireEvent.click(screen.getByRole("button", { name: "9 AM Standup" }));
+      fireEvent.click(screen.getByRole("button", { name: "Standup 9 AM" }));
       // The chip discriminates click from double-click on a timer.
       act(() => {
-        vi.runAllTimers();
+        vi.runOnlyPendingTimers();
       });
       expect(screen.getByPlaceholderText("Untitled")).toBeInTheDocument();
     } finally {
@@ -158,9 +170,9 @@ describe("MonthGrid — overflow and click routing", () => {
 
   it("caps the chips and collapses the rest into a +K more pill", () => {
     renderGrid(crowd);
-    expect(screen.getByRole("button", { name: "1 AM Event 0" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "3 AM Event 2" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "4 AM Event 3" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Event 0 1 AM" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Event 2 3 AM" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Event 3 4 AM" })).not.toBeInTheDocument();
     expect(screen.getByText("+2 more")).toBeInTheDocument();
   });
 
@@ -193,7 +205,7 @@ describe("MonthGrid — overflow and click routing", () => {
     const { onOpenDay } = renderGrid([
       makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" }),
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "9 AM Standup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Standup 9 AM" }));
     expect(onOpenDay).not.toHaveBeenCalled();
   });
 });

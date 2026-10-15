@@ -31,6 +31,7 @@ describe("NotificationHistory", () => {
     expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
   });
 
+  // qa: NOTIF-08:4
   it("opens the page a delivered reminder was about", () => {
     const onOpenPage = vi.fn();
     render(<NotificationHistory entries={[entry()]} onOpenPage={onOpenPage} />);
@@ -39,6 +40,7 @@ describe("NotificationHistory", () => {
     expect(onOpenPage).toHaveBeenCalledWith("p1");
   });
 
+  // qa: NOTIF-06:4
   it("renders a quiet-hours silence as silenced, not as delivered", () => {
     render(<NotificationHistory entries={[entry({ kind: "suppressed" })]} onOpenPage={vi.fn()} />);
     expect(screen.getByText("Silenced by quiet hours")).toBeInTheDocument();
@@ -70,6 +72,7 @@ describe("NotificationHistory", () => {
 });
 
 describe("row formatting", () => {
+  // qa: NOTIF-08:4
   it("labels each kind in the user's terms", () => {
     expect(describeEntry(entry())).toBe("Reminder");
     expect(describeEntry(entry({ action: "opened" }))).toBe("Reminder · opened");

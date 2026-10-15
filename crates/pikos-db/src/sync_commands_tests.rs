@@ -65,6 +65,42 @@ async fn status_lists_accounts_with_their_calendars() {
     assert!(status[0].calendars.iter().all(|c| !c.enabled));
 }
 
+/// Connection order is not an order: with three providers the panel read as a pile.
+/// Case-insensitive so "work" and "Work" don't split a provider's group, and the
+/// last account connected has to land in its place rather than at the bottom.
+#[tokio::test]
+async fn accounts_list_by_provider_then_name_whatever_the_connect_order() {
+    let pool = test_pool().await;
+    for (provider, name) in [
+        ("google", "zoe@example.com"),
+        ("caldav", "work · https://x"),
+        ("google", "Amy@example.com"),
+        ("caldav", "Home · https://y"),
+    ] {
+        insert_sync_account_impl(&pool, provider, name, "basic")
+            .await
+            .unwrap();
+    }
+
+    let listed: Vec<String> = get_sync_status_impl(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|a| a.account.display_name)
+        .collect();
+
+    assert_eq!(
+        listed,
+        [
+            "Home · https://y",
+            "work · https://x",
+            "Amy@example.com",
+            "zoe@example.com",
+        ],
+        "providers group, names sort case-insensitively inside them"
+    );
+}
+
 #[tokio::test]
 async fn account_is_reused_by_identity_whether_dormant_or_active() {
     let pool = test_pool().await;
@@ -213,6 +249,82 @@ async fn detached_pages_counts_only_this_calendars_survivors() {
     let by_id = |id: &str| all.iter().find(|c| c.id == id).unwrap().detached_pages;
     assert_eq!(by_id(&cal.id), 1);
     assert_eq!(by_id(&sibling.id), 0, "scoped to its own calendar");
+}
+
+/// An event deleted upstream leaves its owned page with nothing to re-link to, so turning the
+/// calendar off and on again can't take it back, and the re-enable confirm mustn't count it.
+#[tokio::test]
+async fn detached_pages_leaves_out_pages_whose_event_was_deleted_upstream() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (cal, folder_id) = enabled_calendar(&pool, &acc, "Work", None).await;
+    for (page, link, href) in [
+        ("p-kept", "ps-kept", "/kept.ics"),
+        ("p-gone", "ps-gone", "/gone.ics"),
+    ] {
+        insert_test_page(
+            &pool,
+            TestPage {
+                folder_id: Some(&folder_id),
+                ..TestPage::new(page, page)
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO page_sync
+               (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+                user_modified, created_at)
+             VALUES (?, ?, ?, 'caldav', 'cal-a', ?, ?, 1, ?)",
+        )
+        .bind(link)
+        .bind(page)
+        .bind(&acc)
+        .bind(href)
+        .bind(format!("uid-{page}"))
+        .bind(now_iso())
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    crate::reconciler::reconcile(
+        &pool,
+        &crate::reconciler::ReconcileContext {
+            account_id: acc.clone(),
+            calendar_id: "cal-a".into(),
+            provider: "caldav".into(),
+            folder_id: folder_id.clone(),
+            window_start: chrono::NaiveDate::MIN,
+        },
+        &crate::sync_delta::SyncDelta {
+            removals: vec![crate::sync_delta::Removal {
+                external_id: "/gone.ics".into(),
+            }],
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, false, None)
+        .await
+        .unwrap();
+
+    let all = list_sync_calendars_impl(&pool, &acc).await.unwrap();
+    let counted = all.iter().find(|c| c.id == cal.id).unwrap().detached_pages;
+    assert_eq!(counted, 1, "only the page the turn-off kept");
+    let reasons: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT id, detached_by FROM page_sync ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        reasons,
+        vec![
+            ("ps-gone".into(), Some("upstream".into())),
+            ("ps-kept".into(), Some("turn_off".into())),
+        ]
+    );
 }
 
 #[tokio::test]
@@ -567,4 +679,28 @@ async fn an_unchanged_re_discovery_does_not_restamp_the_folder() {
         before, after,
         "every discovery pass hits this, so an unchanged one must not churn updated_at"
     );
+}
+
+/// A hostname is case-insensitive by DNS, so reconnecting a server typed with a capital
+/// has to revive the account rather than open a second one beside it — which would
+/// re-sync every event and leave the first account's pages detached.
+#[tokio::test]
+async fn an_account_is_matched_whatever_case_the_server_was_typed_in() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(
+        &pool,
+        "caldav",
+        "you · https://Caldav.fastmail.com",
+        "basic",
+    )
+    .await
+    .unwrap()
+    .id;
+
+    let matched =
+        find_account_by_identity_impl(&pool, "caldav", "you · https://caldav.fastmail.com")
+            .await
+            .unwrap()
+            .expect("the same server, spelled in lower case");
+    assert_eq!(matched.id, acc);
 }

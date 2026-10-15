@@ -75,6 +75,14 @@ struct SchedulerRuntime {
     /// Local date of the last fired daily summary. Fast-path dedup; the DB
     /// marker row is the source of truth across restarts.
     last_summary_date: Option<NaiveDate>,
+    /// Where the last successful tick's window ended, so the next one starts
+    /// there instead of overlapping it. Ticks are meant to land a minute apart,
+    /// but tokio's timer does not advance while the machine sleeps, so after a
+    /// wake two can fall seconds apart with most of a minute in common — and a
+    /// reminder inside that overlap is collected by both. Only a tick that
+    /// finished sets it: a failed one leaves the window open so its reminders
+    /// are retried rather than skipped.
+    last_window_end: Option<chrono::DateTime<chrono::Local>>,
 }
 
 pub struct SchedulerRuntimeState(tokio::sync::Mutex<SchedulerRuntime>);
@@ -147,12 +155,7 @@ pub async fn run(app: AppHandle) {
     }
 
     loop {
-        let now = chrono::Local::now();
-        let secs_until_next_minute = 60 - now.second() as u64;
-        let nanos_offset = now.nanosecond() as u64;
-        let wait = Duration::from_secs(secs_until_next_minute)
-            - Duration::from_nanos(nanos_offset.min(secs_until_next_minute * 1_000_000_000));
-        tokio::time::sleep(wait).await;
+        tokio::time::sleep(until_next_minute(chrono::Local::now())).await;
 
         if let Err(e) = check_and_fire(&app).await {
             // Tick failure is recoverable — next tick retries. Surface as
@@ -162,6 +165,13 @@ pub async fn run(app: AppHandle) {
             log::warn!("scheduler_tick_failed kind={}", classify_sqlx(&e));
         }
     }
+}
+
+/// How long from `now` to the start of the next minute, where the next tick lands.
+fn until_next_minute(now: chrono::DateTime<chrono::Local>) -> Duration {
+    let secs = 60 - now.second() as u64;
+    let nanos = now.nanosecond() as u64;
+    Duration::from_secs(secs) - Duration::from_nanos(nanos.min(secs * 1_000_000_000))
 }
 
 /// Stable, content-free label for an `sqlx::Error`. Use at log sites instead
@@ -286,24 +296,15 @@ async fn collect_due(
         DueSummary::NotDue
     };
 
-    // Use space separator to match SQLite's datetime() output format.
-    // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
-    // lexicographic, so both sides must use the same separator.
-    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    let window_start = (*now - chrono::Duration::seconds(60))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    let window = pikos_db::ReminderWindow::ending_at(*now, runtime.last_window_end);
     let minutes = settings.default_minutes_before;
-    let now_utc = now.to_utc();
 
-    let mut reminders = pikos_db::due_explicit_reminders(pool, &window_start, &now_ts).await?;
-    reminders.extend(pikos_db::due_default_reminders(pool, minutes, &window_start, &now_ts).await?);
-    reminders.extend(pikos_db::due_day_before_reminders(pool, &window_start, &now_ts).await?);
-    reminders.extend(
-        pikos_db::due_recurring_reminders(pool, now.naive_local(), now_utc, minutes).await?,
-    );
-    reminders.extend(pikos_db::due_synced_reminders(pool, now_utc, minutes).await?);
-    reminders.extend(pikos_db::due_synced_override_reminders(pool, now_utc, minutes).await?);
+    let mut reminders = pikos_db::due_explicit_reminders(pool, &window).await?;
+    reminders.extend(pikos_db::due_default_reminders(pool, minutes, &window).await?);
+    reminders.extend(pikos_db::due_day_before_reminders(pool, &window).await?);
+    reminders.extend(pikos_db::due_recurring_reminders(pool, &window, minutes).await?);
+    reminders.extend(pikos_db::due_synced_reminders(pool, &window, minutes).await?);
+    reminders.extend(pikos_db::due_synced_override_reminders(pool, &window, minutes).await?);
 
     // Backstop: the six partition the schedules by construction, but nothing
     // logs between them any more, so an overlap would now deliver twice.
@@ -345,7 +346,23 @@ async fn collect_daily_summary(
     })
 }
 
-/// One tick: resolve what's due, then show it.
+/// The daily summary's today and overdue counts at `now`, for the e2e bridge, which runs no
+/// scheduler. None once today's summary has been logged.
+#[cfg(feature = "e2e-bridge")]
+pub(crate) async fn daily_summary_counts(
+    pool: &SqlitePool,
+    now: &chrono::DateTime<chrono::Local>,
+) -> Result<Option<(i64, i64)>, sqlx::Error> {
+    Ok(match collect_daily_summary(pool, now).await? {
+        DueSummary::Due {
+            today_count,
+            overdue_count,
+        } => Some((today_count, overdue_count)),
+        DueSummary::NotDue | DueSummary::AlreadyLogged => None,
+    })
+}
+
+/// One tick against the app: its settings, workspace, runtime state and the real clock.
 ///
 /// Internal scheduler fns return `sqlx::Error` directly (not `String`) so the
 /// run-loop log site can use `classify_sqlx` to log a stable error class
@@ -369,52 +386,65 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
         }
     };
 
-    let runtime = {
-        let runtime_state = app.state::<SchedulerRuntimeState>();
-        let guard = runtime_state.lock().await;
-        guard.clone()
-    };
+    let runtime_state = app.state::<SchedulerRuntimeState>();
+    let mut runtime = runtime_state.lock().await.clone();
+    let result = tick(
+        &pool,
+        &settings,
+        &mut runtime,
+        chrono::Local::now(),
+        &mut |title, body, log_id| deliver(app, title, body, log_id),
+    )
+    .await;
+    // Written back on failure too: a summary already marked stays marked, and the window
+    // stays open because only a finished tick moves it.
+    *runtime_state.lock().await = runtime;
+    result
+}
 
-    let now = chrono::Local::now();
-    let batch = collect_due(&pool, &settings, &runtime, &now).await?;
+/// Resolve everything due at `now`, show it through `show` (title, body, log row id), and log
+/// it. `runtime` records the day's summary as it goes and the window's end once every
+/// reminder is through.
+async fn tick(
+    pool: &SqlitePool,
+    settings: &NotificationSettings,
+    runtime: &mut SchedulerRuntime,
+    now: chrono::DateTime<chrono::Local>,
+    show: &mut impl FnMut(&str, &str, &str),
+) -> Result<(), sqlx::Error> {
+    let batch = collect_due(pool, settings, runtime, &now).await?;
 
     match batch.summary {
         DueSummary::NotDue => {}
-        DueSummary::AlreadyLogged => mark_summary_fired(app, &now).await,
+        DueSummary::AlreadyLogged => runtime.last_summary_date = Some(now.date_naive()),
         DueSummary::Due {
             today_count,
             overdue_count,
         } => {
             // Local time, consistent with the date(fired_at) dedup read.
             let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
-            let log_id = pikos_db::log_daily_summary(&pool, &now_ts).await?;
+            let log_id = pikos_db::log_daily_summary(pool, &now_ts).await?;
             if today_count > 0 || overdue_count > 0 {
-                deliver(
-                    app,
+                show(
                     &format_summary_title(&now),
                     &format_summary_body(today_count, overdue_count),
                     &log_id,
                 );
             }
-            mark_summary_fired(app, &now).await;
+            runtime.last_summary_date = Some(now.date_naive());
         }
     }
 
     for row in &batch.reminders {
         if batch.quiet {
-            record_suppressed(&pool, row, &now).await?;
+            record_suppressed(pool, row, &now).await?;
         } else {
-            fire_reminder(app, &pool, row).await?;
+            fire_reminder(pool, row, &now, show).await?;
         }
     }
 
+    runtime.last_window_end = Some(now);
     Ok(())
-}
-
-async fn mark_summary_fired(app: &AppHandle, now: &chrono::DateTime<chrono::Local>) {
-    let runtime_state = app.state::<SchedulerRuntimeState>();
-    let mut guard = runtime_state.lock().await;
-    guard.last_summary_date = Some(now.date_naive());
 }
 
 // ─── Delivery ────────────────────────────────────────────────────────────────
@@ -559,9 +589,10 @@ fn format_summary_body(today_count: i64, overdue_count: i64) -> String {
 }
 
 async fn fire_reminder(
-    app: &AppHandle,
     pool: &SqlitePool,
     row: &DueReminder,
+    now: &chrono::DateTime<chrono::Local>,
+    show: &mut impl FnMut(&str, &str, &str),
 ) -> Result<(), sqlx::Error> {
     let lead = format_lead_time(row.minutes_before);
     let time_str = format_time_from_iso(&row.scheduled_start);
@@ -573,11 +604,11 @@ async fn fire_reminder(
 
     // Log to prevent re-firing. The row id doubles as the notification's OS
     // identifier, so a click routes back to this page (see `notifications::click`).
-    let fired_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let fired_at = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let log_id =
         pikos_db::log_reminder_fired(pool, &row.page_id, &row.schedule_id, &fired_at).await?;
 
-    deliver(app, &row.title, &body, &log_id);
+    show(&row.title, &body, &log_id);
 
     // Reminder actually fired — meaningful audit anchor at INFO. Empty
     // ticks are silent (most ticks find nothing).

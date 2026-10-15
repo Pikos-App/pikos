@@ -11,9 +11,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
+import { useWindowWidth } from "@/shared/hooks/useWindowWidth";
 
 import { useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
@@ -25,6 +27,20 @@ import { TitleBar } from "./TitleBar";
 
 const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
+const LEFT_PANEL = { defaultWidth: 180, max: 320, min: 180 };
+const MID_PANEL = { defaultWidth: 280, max: 480, min: 240 };
+
+/**
+ * What the calendar keeps whatever the two panels do, in screen px.
+ *
+ * Unscaled, unlike the panels: an hour column stays readable narrow, where a
+ * panel's text does not. Scaling this too would leave nothing to drag into at
+ * the largest text size, which is what capping each panel at a share of the
+ * window used to do — at 200% the two panels' minimums are wider than the half
+ * window that rule allowed them, so both dividers were inert.
+ */
+const CALENDAR_MIN_WIDTH = 320;
+
 export function ThreePanelLayout() {
   const { focusZen, pageListDrawerOpen, setPageListDrawerOpen, sidebarCollapsed } = useUI();
   const leftHidden = sidebarCollapsed || focusZen;
@@ -32,6 +48,8 @@ export function ThreePanelLayout() {
   const { isDraggingOverCalendar } = useCalendarDnD();
   const isFullscreen = useIsFullscreen();
   const layoutMode = useLayoutMode();
+  const windowWidth = useWindowWidth();
+  const { textScale } = useInterfaceSettings();
   const hideSidebar = shouldHideSidebar(layoutMode);
   const pageListOverlay = shouldOverlayPageList(layoutMode);
 
@@ -56,16 +74,17 @@ export function ThreePanelLayout() {
         });
       };
 
+  // The sidebar is measured first, so it leaves the page list a minimum rather
+  // than the page list's actual width; the page list then takes what is left.
   const left = usePanelResize({
-    defaultWidth: 180,
-    max: 320,
-    min: 180,
+    ...LEFT_PANEL,
+    ceiling: windowWidth - CALENDAR_MIN_WIDTH - MID_PANEL.min * textScale,
     storageKey: STORAGE_KEYS.leftPanelWidth,
   });
+  const leftOccupies = leftHidden || hideSidebar ? 0 : left.width;
   const mid = usePanelResize({
-    defaultWidth: 280,
-    max: 480,
-    min: 240,
+    ...MID_PANEL,
+    ceiling: windowWidth - CALENDAR_MIN_WIDTH - leftOccupies,
     storageKey: STORAGE_KEYS.midPanelWidth,
   });
   const {
@@ -94,7 +113,11 @@ export function ThreePanelLayout() {
           (activePageData ?? activeFolderData) && "select-none"
         )}
         onMouseDown={(e) => {
-          if (selectedPageIds.size > 0 && !(e.target as HTMLElement).closest("[data-page-item]")) {
+          // React bubbles a press in a portaled menu up to here, so a page's own
+          // context menu read as an outside click and dropped the selection it acts on.
+          const target = e.target as HTMLElement;
+          if (!e.currentTarget.contains(target)) return;
+          if (selectedPageIds.size > 0 && !target.closest("[data-page-item]")) {
             clearSelection();
           }
         }}
@@ -183,7 +206,7 @@ export function ThreePanelLayout() {
         ) : activeFolderData ? (
           <div className="flex cursor-grabbing items-center gap-2 rounded bg-accent px-2 py-1.5 text-sm text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
             <span
-              className="h-2 w-2 shrink-0 rounded-full"
+              className="color-dot h-2 w-2 shrink-0 rounded-full"
               style={{
                 backgroundColor: activeFolderData.color ?? "hsl(var(--muted-foreground) / 0.4)",
               }}

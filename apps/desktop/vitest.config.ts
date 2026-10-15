@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // Pin a deterministic timezone so wall-clock-sensitive logic expands identically
@@ -8,16 +9,13 @@ import { defineConfig } from "vitest/config";
 process.env["TZ"] = "UTC";
 
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [["babel-plugin-react-compiler", {}]],
-      },
-    }),
-  ],
+  // Tests run the compiled components for the same reason production does; the
+  // shape of this is explained in vite.config.ts.
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@bridge": fileURLToPath(new URL("./bridge", import.meta.url)),
       // Mirrors vite.config.ts — the seed fixtures live in apps/desktop/seeds,
       // outside the app source.
       "@seeds": fileURLToPath(new URL("./seeds", import.meta.url)),
@@ -64,6 +62,18 @@ export default defineConfig({
       VITE_TEST_MODE: "true",
     },
     environment: "jsdom",
+    // The conformance tables are read off disk with `node:fs`, so they are not in
+    // vitest's module graph and `--changed` selects nothing when one is edited. The
+    // Rust runners catch a break because `cargo test` runs everything; this side
+    // would stay quiet until CI, which is the half of a two-sided table that matters.
+    // Vitest replaces the default list rather than extending it, so the defaults are
+    // repeated here.
+    forceRerunTriggers: [
+      "**/package.json/**",
+      "**/{vitest,vite}.config.*/**",
+      "**/crates/pikos-db/tests/fixtures/**",
+      "**/crates/pikos-recurrence/tests/fixtures/**",
+    ],
     // seeds/ carries two suites of its own — the tutorial seed's unit test and
     // the synced-calendar conformance runner — so it has to be swept too.
     include: ["src/**/*.test.{ts,tsx}", "seeds/**/*.test.{ts,tsx}"],

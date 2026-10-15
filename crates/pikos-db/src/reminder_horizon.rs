@@ -29,10 +29,10 @@ use sqlx::SqlitePool;
 use crate::error::AppResult;
 use crate::notification_log::{
     due_day_before_reminders, due_default_reminders, due_explicit_reminders, max_reminder_lead,
-    synced_override_reminders_firing_between, synced_reminders_firing_between, DueReminder, FireAt,
-    ReminderFire, DAY_BEFORE_MINUTES,
+    synced_override_reminders_firing_in, synced_reminders_firing_in, DueReminder, FireAt,
+    ReminderFire, ReminderWindow, DAY_BEFORE_MINUTES,
 };
-use crate::recurrence_derive::occurrences_with_reminders_firing_between;
+use crate::recurrence_derive::occurrences_with_reminders_firing_in;
 
 /// A reminder that will fire inside the horizon, placed on the device's clock.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,7 +56,6 @@ pub struct UpcomingReminder {
 /// same 09:00 [`due_day_before_reminders`] resolves the sentinel to.
 const DAY_BEFORE_HOUR: u32 = 9;
 
-const SQL_TS: &str = "%Y-%m-%d %H:%M:%S";
 const WALL_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 
 /// Every reminder firing in `(now, now + horizon]`, soonest first.
@@ -79,43 +78,27 @@ pub async fn upcoming_reminders(
     horizon: Duration,
     default_minutes: i64,
 ) -> AppResult<Vec<UpcomingReminder>> {
-    let now_local = now_utc.with_timezone(&device_zone).naive_local();
-    let end_local = now_local + horizon;
-    let end_utc = now_utc + horizon;
-    let now_ts = now_local.format(SQL_TS).to_string();
-    let end_ts = end_local.format(SQL_TS).to_string();
-
+    let window = ReminderWindow::ahead(now_utc, device_zone, horizon);
     let mut fires: Vec<ReminderFire> = Vec::new();
 
     // The three wall-clock arms return rows without an instant; each fire is
     // reconstructed here by the same arithmetic the SQL selected on.
-    for row in due_explicit_reminders(pool, &now_ts, &end_ts).await? {
+    for row in due_explicit_reminders(pool, &window).await? {
         fires.extend(lead_fire(row));
     }
-    for row in due_default_reminders(pool, default_minutes, &now_ts, &end_ts).await? {
+    for row in due_default_reminders(pool, default_minutes, &window).await? {
         fires.extend(lead_fire(row));
     }
-    for row in due_day_before_reminders(pool, &now_ts, &end_ts).await? {
+    for row in due_day_before_reminders(pool, &window).await? {
         fires.extend(day_before_fire(row));
     }
 
     let max_lead = max_reminder_lead(pool, default_minutes).await?;
     fires.extend(
-        occurrences_with_reminders_firing_between(
-            pool,
-            now_local,
-            end_local,
-            now_utc,
-            end_utc,
-            default_minutes,
-            max_lead,
-        )
-        .await?,
+        occurrences_with_reminders_firing_in(pool, &window, default_minutes, max_lead).await?,
     );
-    fires.extend(synced_reminders_firing_between(pool, now_utc, end_utc, default_minutes).await?);
-    fires.extend(
-        synced_override_reminders_firing_between(pool, now_utc, end_utc, default_minutes).await?,
-    );
+    fires.extend(synced_reminders_firing_in(pool, &window, default_minutes).await?);
+    fires.extend(synced_override_reminders_firing_in(pool, &window, default_minutes).await?);
 
     // The six partition the schedules by construction; the desktop keeps the
     // same backstop against an overlap delivering twice.

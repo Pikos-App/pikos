@@ -1,5 +1,5 @@
 import type { AccountWithCalendars, SyncCalendar } from "@pikos/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SyncAccountCard } from "./SyncAccountCard";
@@ -59,7 +59,7 @@ describe("SyncAccountCard", () => {
   it("shows Connected by default and lists the account's calendars", () => {
     render_();
     expect(screen.getByText("me@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByText("CalDAV · Connected")).toBeInTheDocument();
     expect(screen.getByText("Personal")).toBeInTheDocument();
   });
 
@@ -67,9 +67,10 @@ describe("SyncAccountCard", () => {
     // results is keyed by sync_calendar row id (cal() → id "c1").
     render_({ results: { c1: "reconnectNeeded" } });
     expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();
   });
 
+  // qa: SYNC-08:4
   it("shows Reconnect needed from the stored flag, with no resync result in hand", () => {
     render_({ account: account([cal()], { reconnectNeeded: true }) });
     expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
@@ -84,10 +85,11 @@ describe("SyncAccountCard", () => {
 
   it("spins a syncing indicator while the account is busy", () => {
     render_({ busy: true });
-    expect(screen.getByText("Syncing…")).toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(screen.getByText("CalDAV · Syncing…")).toBeInTheDocument();
+    expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();
   });
 
+  // qa: SYNC-09:5
   it("offers a full refresh alongside the incremental resync", async () => {
     const onRefresh = vi.fn();
     const onResync = vi.fn();
@@ -101,6 +103,24 @@ describe("SyncAccountCard", () => {
 
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(onResync).not.toHaveBeenCalled();
+  });
+
+  // qa: SYNC-10:4
+  it("asks before disconnecting, naming the account, and disconnects only on confirm", async () => {
+    const onDisconnect = vi.fn(() => Promise.resolve());
+    render_({ onDisconnect });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Account actions for me@example.com" }),
+      { button: 0, ctrlKey: false }
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Disconnect me@example.com?");
+    expect(onDisconnect).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+    expect(onDisconnect).toHaveBeenCalledOnce();
   });
 
   it("handles an account with no discovered calendars", () => {

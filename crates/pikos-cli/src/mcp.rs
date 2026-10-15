@@ -18,14 +18,16 @@
 
 use std::io::{BufRead, Write};
 
+use pikos_db::SearchCursor;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
 use crate::error::CliError;
+use crate::occurrences;
 use crate::ops::{
-    add_reminder, cmd_add, list_folders, list_pages, list_reminders, mark_done, parse_only,
-    remove_reminder, require_page, restore, search, set_status, trash, update_page, ListQuery,
-    PageEdit,
+    add_reminder, cmd_add, create_folder, list_folders, list_pages, list_reminders, list_tags,
+    list_trash, mark_done, parse_only, read_page, remove_reminder, rename_folder, restore,
+    restore_folder, search, set_status, trash, trash_folder, update_page, ListQuery, PageEdit,
 };
 use crate::workspace::open_workspace;
 
@@ -175,24 +177,35 @@ fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "search_pages",
-            "Full-text search across every page, ranked by relevance.",
+            "Full-text search across every page, ranked by relevance. A page must hold every word; \
+             when none does, the search falls back to pages holding any of them and says so with \
+             anyWord. Results show a short preview; read_page returns the whole page.",
             json!({
-                "query": string_prop("Words to search for."),
+                "query": string_prop("Words to search for. One or two distinctive words work best."),
+                "anyWord": { "type": "boolean", "description": "Match pages holding any of the words rather than all. Pass it with a cursor from an anyWord result." },
                 "includeCompleted": { "type": "boolean", "description": "Include done pages (default false)." },
-                "limit": { "type": "integer", "description": "Keep at most this many results." },
+                "limit": { "type": "integer", "description": "Results per page (default 20)." },
+                "cursor": string_prop("The `next` of a previous result, for the page after it."),
             }),
             &["query"],
         ),
         tool(
             "read_page",
-            "Read one page's full body and metadata by id.",
+            "Read one page's metadata and its body as markdown, by id. Edit the markdown and pass \
+             it to update_page's content to change the body.",
             json!({ "id": string_prop("The page id.") }),
             &["id"],
         ),
         tool(
             "list_pages",
-            "List pages, filtered by folder, status, priority, text, tags, due date or whether they are scheduled.",
+            "List pages, filtered by folder, status, priority, text, tags, due date, when they were \
+             created or completed, whether they repeat or have reminders, or whether they are scheduled.",
             json!({
+                "created": string_prop("Created on a day (YYYY-MM-DD) or in an inclusive range (YYYY-MM-DD..YYYY-MM-DD)."),
+                "completed": string_prop("Completed on a day or in an inclusive range, same forms as created."),
+                "repeating": { "type": "boolean", "description": "Only pages that repeat; each result carries its rule in `repeats`." },
+                "hasReminders": { "type": "boolean", "description": "Only pages with a reminder; each result carries minutes before the start in `reminders` (-2 is 9am the day before, for an all-day page)." },
+                "oldestFirst": { "type": "boolean", "description": "Sort by when the page was created, oldest first: what has waited longest." },
                 "folder": string_prop("Folder name or id; \"inbox\" for unfiled pages."),
                 "status": { "type": "string", "enum": ["not_started", "done"], "description": "Only pages in this state." },
                 "priority": { "type": "integer", "description": "Only pages at this priority: 0 none, 1 urgent, 2 high, 3 medium, 4 low." },
@@ -209,23 +222,29 @@ fn tool_definitions() -> Vec<Value> {
             "create_page",
             "Create pages from natural language, parsing dates, tags, priority, folder, repetition and reminders out of the text.",
             json!({
-                "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects remind 30m before // what to ask him\" — everything after \" // \" becomes the page body, verbatim."),
+                "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects remind 30m before // what to ask him\" — everything after \" // \" becomes the page body, as markdown."),
                 "dryRun": { "type": "boolean", "description": "Return the parse for review and write nothing." },
             }),
             &["text"],
         ),
         tool(
             "update_page",
-            "Change a page's title, body, status, priority or schedule.",
+            "Change a page's title, subtitle, body, status, priority, tags, schedule or folder.",
             json!({
                 "id": string_prop("The page id."),
                 "title": string_prop("New title."),
-                "content": string_prop("New body, as plain text."),
+                "content": string_prop("New body, as markdown: headings, lists, - [ ] tasks, links, **bold**, `code`, quotes, tables. It replaces the whole body. Raw HTML is refused."),
                 "status": { "type": "string", "enum": ["not_started", "done"], "description": "New state." },
                 "due": string_prop("Move the page: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it is not already timed."),
                 "allDay": string_prop("Make the page all-day on YYYY-MM-DD — the only way to drop an existing time."),
                 "end": string_prop("When the page ends, in the page's own shape. Valid on its own."),
                 "priority": { "type": "integer", "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low." },
+                "folder": string_prop("Move the page to this folder, by name or id; \"inbox\" for unfiled."),
+                "addTags": { "type": "array", "items": { "type": "string" }, "description": "Tags to add." },
+                "removeTags": { "type": "array", "items": { "type": "string" }, "description": "Tags to remove." },
+                "subtitle": string_prop("The line under the title; an empty string clears it."),
+                "unschedule": { "type": "boolean", "description": "Remove the page's date and time." },
+                "noEnd": { "type": "boolean", "description": "Drop the end, keeping the start." },
             }),
             &["id"],
         ),
@@ -240,9 +259,45 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "complete_page",
-            "Mark a page done, advancing a repeating page to its next occurrence.",
-            json!({ "id": string_prop("The page id.") }),
+            "Mark a page done. On a repeating page this ticks off one occurrence, the oldest \
+             open one unless date names another, and the page moves on to the next.",
+            json!({
+                "id": string_prop("The page id."),
+                "date": string_prop("On a repeating page, the occurrence to tick off, YYYY-MM-DD. A series made in Pikos takes only its oldest open one; a calendar's takes any since it was connected."),
+            }),
             &["id"],
+        ),
+        tool(
+            "skip_occurrence",
+            "Skip one occurrence of a repeating page, named by its date. unskip_occurrence brings it back.",
+            json!({
+                "id": string_prop("The repeating page's id."),
+                "date": string_prop("The occurrence's date, YYYY-MM-DD."),
+            }),
+            &["id", "date"],
+        ),
+        tool(
+            "unskip_occurrence",
+            "Bring back an occurrence skip_occurrence skipped.",
+            json!({
+                "id": string_prop("The repeating page's id."),
+                "date": string_prop("The skipped occurrence's date, YYYY-MM-DD."),
+            }),
+            &["id", "date"],
+        ),
+        tool(
+            "move_occurrence",
+            "Move one occurrence of a repeating page, keeping its length unless end says otherwise. \
+             The rest of the series stays put. To reopen a ticked-off occurrence, set_status its \
+             done page to not_started.",
+            json!({
+                "id": string_prop("The repeating page's id."),
+                "date": string_prop("The occurrence's date, YYYY-MM-DD."),
+                "due": string_prop("Where it goes: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it is not timed."),
+                "allDay": string_prop("Make it all-day on YYYY-MM-DD instead."),
+                "end": string_prop("When it ends, in its own shape."),
+            }),
+            &["id", "date"],
         ),
         tool(
             "delete_page",
@@ -257,14 +312,53 @@ fn tool_definitions() -> Vec<Value> {
             &["id"],
         ),
         tool(
+            "list_trash",
+            "List trashed pages, newest first, with their ids for restore_page.",
+            json!({}),
+            &[],
+        ),
+        tool(
+            "list_tags",
+            "List the tags on open pages, most used first, with how many pages carry each.",
+            json!({}),
+            &[],
+        ),
+        tool(
             "list_folders",
             "List the workspace's folders with their page counts.",
             json!({}),
             &[],
         ),
         tool(
+            "create_folder",
+            "Create a folder. Pages are filed into it with create_page's ~folder or update_page's folder.",
+            json!({ "name": string_prop("The folder's name.") }),
+            &["name"],
+        ),
+        tool(
+            "rename_folder",
+            "Rename a folder. A folder that mirrors a connected calendar follows its calendar's name and is refused.",
+            json!({
+                "folder": string_prop("The folder's id or its whole current name."),
+                "name": string_prop("The new name."),
+            }),
+            &["folder", "name"],
+        ),
+        tool(
+            "delete_folder",
+            "Move a folder and every page in it to the trash. restore_folder brings both back; never destroys anything.",
+            json!({ "folder": string_prop("The folder's id or its whole name.") }),
+            &["folder"],
+        ),
+        tool(
+            "restore_folder",
+            "Bring a trashed folder back, with the pages that were trashed along with it.",
+            json!({ "id": string_prop("The folder id delete_folder returned.") }),
+            &["id"],
+        ),
+        tool(
             "list_reminders",
-            "List a page's reminders.",
+            "List one page's reminders. To find which pages have reminders, use list_pages with hasReminders.",
             json!({ "pageId": string_prop("The page id.") }),
             &["pageId"],
         ),
@@ -316,13 +410,29 @@ async fn call_tool(
             let resp = search(
                 pool,
                 &require_str(args, "query")?,
+                flag(args, "anyWord"),
                 flag(args, "includeCompleted"),
                 count(args, "limit"),
+                match text(args, "cursor") {
+                    Some(cursor) => Some(SearchCursor::parse(&cursor).ok_or_else(|| {
+                        CliError::usage(format!("\"{cursor}\" isn't a cursor search returned"))
+                    })?),
+                    None => None,
+                },
             )
             .await?;
             to_value(&resp)
         }
-        "read_page" => to_value(&require_page(pool, &require_str(args, "id")?).await?),
+        "read_page" => {
+            // The editor's JSON and its plain-text shadow are both the body again, and
+            // neither can be written back; markdown alone is what update_page takes.
+            let mut read = to_value(&read_page(pool, &require_str(args, "id")?).await?)?;
+            if let Some(fields) = read.as_object_mut() {
+                fields.remove("content");
+                fields.remove("contentText");
+            }
+            Ok(read)
+        }
         "list_pages" => {
             let pages = list_pages(
                 pool,
@@ -333,8 +443,13 @@ async fn call_tool(
                     query: text(args, "query"),
                     has_schedule: flag(args, "hasSchedule"),
                     due: text(args, "due"),
+                    created: text(args, "created"),
+                    completed: text(args, "completed"),
+                    repeating: flag(args, "repeating"),
+                    has_reminders: flag(args, "hasReminders"),
                     tags: strings(args, "tags"),
                     modified: flag(args, "modified"),
+                    oldest_first: flag(args, "oldestFirst"),
                     limit: count(args, "limit"),
                 },
             )
@@ -357,6 +472,15 @@ async fn call_tool(
                     all_day: text(args, "allDay"),
                     end: text(args, "end"),
                     priority: args.get("priority").and_then(Value::as_i64),
+                    folder: text(args, "folder"),
+                    add_tags: strings(args, "addTags"),
+                    remove_tags: strings(args, "removeTags"),
+                    subtitle: args
+                        .get("subtitle")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    unschedule: flag(args, "unschedule"),
+                    no_end: flag(args, "noEnd"),
                 },
             )
             .await?;
@@ -371,14 +495,64 @@ async fn call_tool(
             .await?;
             to_value(&page)
         }
-        "complete_page" => to_value(&mark_done(pool, &require_str(args, "id")?).await?),
+        "complete_page" => to_value(
+            &mark_done(
+                pool,
+                &require_str(args, "id")?,
+                text(args, "date").as_deref(),
+            )
+            .await?,
+        ),
         "delete_page" => {
             let id = require_str(args, "id")?;
             trash(pool, &id).await?;
             Ok(json!({ "id": id, "trashed": true }))
         }
         "restore_page" => to_value(&restore(pool, &require_str(args, "id")?).await?),
+        "skip_occurrence" => to_value(
+            &occurrences::skip(pool, &require_str(args, "id")?, &require_str(args, "date")?)
+                .await?,
+        ),
+        "unskip_occurrence" => to_value(
+            &occurrences::unskip(pool, &require_str(args, "id")?, &require_str(args, "date")?)
+                .await?,
+        ),
+        "move_occurrence" => {
+            let (due, all_day, end) = (text(args, "due"), text(args, "allDay"), text(args, "end"));
+            if due.is_some() && all_day.is_some() {
+                return Err(CliError::usage(
+                    "due and allDay name the same field in different shapes — pass one.",
+                ));
+            }
+            to_value(
+                &occurrences::move_occurrence(
+                    pool,
+                    &require_str(args, "id")?,
+                    &require_str(args, "date")?,
+                    due.as_deref(),
+                    all_day.as_deref(),
+                    end.as_deref(),
+                )
+                .await?,
+            )
+        }
+        "list_trash" => to_value(&list_trash(pool).await?),
+        "list_tags" => to_value(&list_tags(pool).await?),
         "list_folders" => to_value(&list_folders(pool).await?),
+        "create_folder" => to_value(&create_folder(pool, &require_str(args, "name")?).await?),
+        "rename_folder" => to_value(
+            &rename_folder(
+                pool,
+                &require_str(args, "folder")?,
+                &require_str(args, "name")?,
+            )
+            .await?,
+        ),
+        "delete_folder" => {
+            let folder = trash_folder(pool, &require_str(args, "folder")?).await?;
+            Ok(json!({ "id": folder.id, "name": folder.name, "trashed": true }))
+        }
+        "restore_folder" => to_value(&restore_folder(pool, &require_str(args, "id")?).await?),
         "list_reminders" => to_value(&list_reminders(pool, &require_str(args, "pageId")?).await?),
         "add_reminder" => {
             let minutes = args
@@ -480,7 +654,16 @@ mod tests {
             "complete_page",
             "delete_page",
             "restore_page",
+            "skip_occurrence",
+            "unskip_occurrence",
+            "move_occurrence",
+            "list_trash",
+            "list_tags",
             "list_folders",
+            "create_folder",
+            "rename_folder",
+            "delete_folder",
+            "restore_folder",
             "list_reminders",
             "add_reminder",
             "remove_reminder",

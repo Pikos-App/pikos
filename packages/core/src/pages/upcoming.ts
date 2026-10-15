@@ -12,6 +12,7 @@ import { addDays } from "date-fns";
 
 import type { PageSummary } from "../types";
 import { dateKey, formatDateOnly, localToday, parseLocalISO } from "../utils/dates";
+import { viewerStart } from "../utils/syncedTime";
 import { compareByScheduledStart } from "./pageFilters";
 
 export interface UpcomingDaySection {
@@ -23,7 +24,7 @@ export interface UpcomingDaySection {
 }
 
 /** Locale is left to the system, the way every other date surface here reads. */
-function dayLabel(date: string, todayStr: string): string {
+export function upcomingDayLabel(date: string, todayStr: string): string {
   if (date === todayStr) return "Today";
   // addDays, not +86_400_000: a DST boundary inside the window would otherwise
   // land "tomorrow" on today or the day after.
@@ -46,8 +47,9 @@ export function groupUpcomingPages(
 ): UpcomingDaySection[] {
   const byDay = new Map<string, PageSummary[]>();
   for (const page of pages) {
-    if (!page.scheduledStart) continue;
-    const day = dateKey(page.scheduledStart);
+    const start = viewerStart(page);
+    if (!start) continue;
+    const day = dateKey(start);
     const bucket = byDay.get(day);
     if (bucket) bucket.push(page);
     else byDay.set(day, [page]);
@@ -57,7 +59,7 @@ export function groupUpcomingPages(
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([date, dayPages]) => ({
       date,
-      label: dayLabel(date, todayStr),
+      label: upcomingDayLabel(date, todayStr),
       pages: dayPages.sort(compareByScheduledStart),
     }));
 }

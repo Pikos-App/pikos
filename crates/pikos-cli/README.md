@@ -18,8 +18,8 @@ The Pikos command-line interface, in Rust, over the shared `pikos-db` writer.
   operations, in pikos-db terms) → `render.rs` (plain text). `workspace.rs`
   resolves and gates the DB file, `bridge.rs` runs the parser subprocess,
   `schedule.rs` reads and resolves schedule shapes, `write.rs` holds the writes
-  that mirror the app's persistence path, and `mcp.rs` is a second front end onto
-  `ops.rs`.
+  that mirror the app's persistence path, `occurrences.rs` handles one occurrence
+  of a repeating page, and `mcp.rs` is a second front end onto `ops.rs`.
 
 ## Build & run
 
@@ -30,10 +30,14 @@ pnpm --filter @pikos/bridge build
 # the CLI binary
 cargo build -p pikos-cli --release   # target/release/pikos
 
-# point the CLI at the bridge (until packaging bundles it next to the binary)
+# point the CLI at the bridge, which a build from source cannot find on its own
+# unless it is run from the repo root
 export PIKOS_BRIDGE_JS="$PWD/packages/pikos-bridge/dist/bridge.mjs"
 pikos add "Email Sam tomorrow 2pm #work !high"
 ```
+
+A released build needs none of that: the tarball puts the bundle where the binary
+already looks, and the Homebrew formula pins the variable anyway.
 
 Requires Node on PATH for `add` (including `--dry-run`) and recurring `done`
 only.
@@ -41,8 +45,13 @@ only.
 ## Commands
 
 `search`, `read`, `list`, `today`, `add`, `update`, `done`, `status`, `delete`,
-`restore`, `folders`, `reminders`, `mcp`. Run `pikos <command> --help` for each
+`restore`, `trash`, `tags`, `folders`, `reminders`, `mcp`. Run `pikos <command> --help` for each
 surface. Global flags: `--json`, `--db <path>`, `--yes`, `--migrate`.
+
+`search` ranks matches the way the app does and shows `--limit` of them (default 20). When
+there are more it prints a cursor, and `--after <cursor>` shows the next page. Each page ranks
+the newest 2,000 matches past the cursor, so a word in most of a large workspace still answers in
+milliseconds.
 
 `list` takes the whole page filter: `--status`, `--priority 0..4`, `--tag`
 (repeatable, all must match), `--due <day>` or `--due <from>..<to>`,
@@ -56,8 +65,20 @@ lead, and `remind day before` asks for the morning-before anchor. A lead only
 sticks when the text also names a schedule — nothing else could anchor it — and
 an all-day page takes the day-before anchor whatever lead was typed, since it has
 no start time to count minutes back from. Everything after the first `//` that
-has whitespace on both sides becomes the page body, verbatim — no tag, date or
+has whitespace on both sides becomes the page body, as markdown — no tag, date or
 cadence is read out of it, and a URL's slashes never split anything.
+
+Page bodies are markdown both ways. `read` shows the body as markdown, and
+`--json` adds a `markdown` field beside the stored document; `update --content`
+takes markdown and replaces the whole body. The two are made to meet: what `read`
+prints, `update --content` writes back to the same page. Markdown is read the way
+the app's import reads it, by a Rust port graded against a corpus the desktop
+suite generates from the app's own converter
+(`crates/pikos-core/tests/corpus/markdown-import.json`). What the editor can't
+hold, or what the app's import would mangle, is refused with a usage error rather
+than half-written: raw HTML, an image inside a line of text, a list mixing tasks
+and plain items, a numbered task list, a heading inside a list item, and code
+inside a link.
 
 `add --dry-run` runs the parser and prints what it made of the text — the exact
 shape `add` would then persist — without writing. It is the agent-preview mode:
@@ -66,10 +87,32 @@ show the parse, then re-issue the same text to commit it.
 `delete` moves a page to the trash on every origin, mirroring the app; `--hard`
 destroys it instead, and refuses on a page whose calendar is still connected
 (the next poll would recreate it). `restore <id>` is the other half — it brings a
-trashed page back and hands a tombstoned mirror back to the reconciler.
+trashed page back and hands a tombstoned mirror back to the reconciler. `trash`
+lists what is in the trash, newest first, so a page can be restored without
+already holding its id. `tags` lists the tags on open pages, most used first.
 
 `folders list` prints every folder with its live page count; `folders create
-<name>` makes one at the top level.
+<name>` makes one at the top level. `folders rename <folder> <name>` and `folders
+delete <folder>` take an id or the folder's whole name, never a prefix, because
+`delete` trashes every page in the folder; it asks first unless `--yes`. `folders
+restore <id>` brings the folder back with the pages that went with it. A folder
+that mirrors a calendar refuses both. Folders don't nest in Pikos, so nothing here
+sets a parent.
+
+`done` on a repeating page ticks off its oldest open occurrence; `done --date
+<YYYY-MM-DD>` names one. On a series from a connected calendar that can be any
+open occurrence since the calendar was connected, recorded at the time the app
+shows it. A series made in Pikos ticks through its oldest open occurrence, so
+there `--date` may only name that one.
+
+`occurrence skip <page-id> <date>` and `occurrence unskip` dismiss one
+occurrence of a repeating page and bring it back. `occurrence move <page-id>
+<date> --due <when>` moves one, reading `--due`, `--all-day` and `--end` as
+`update` does against that occurrence's own time, so it keeps its length; in a
+series made in Pikos the moved occurrence becomes a page of its own, as a drag
+on the calendar makes it. The date must be one the rule gives. `status <id>
+not_started` on the done page a ticked-off occurrence left gives the date back
+to its series, as unchecking it in the app does.
 
 `reminders list <page-id>`, `reminders add <page-id> --minutes <n>` and
 `reminders rm <reminder-id>` manage per-page reminders. `--minutes` counts back
@@ -85,12 +128,23 @@ refused rather than silently converted; a move keeps the length the page had.
 All three refuse on a recurring or synced page, whose head belongs to the series
 or the calendar.
 
+`update --folder <name-or-id>` refiles a page, resolved as `list --folder` resolves it,
+so `inbox` unfiles it when no folder is named for it. A calendar folder takes no
+pages, and a synced page stays in its calendar's folder.
+
+`--tag` and `--untag` (each repeatable) add and remove tags, matched as the app
+stores them: lowercase, with Quick Add's `#` dropped. `--subtitle` sets the line
+under the title, and `--subtitle ""` clears it. `--unschedule` removes the date
+and time, and `--no-end` drops the end and keeps the start; both refuse on a
+recurring or synced page, like the three schedule flags.
+
 ## Exit codes
 
 `0` ok · `2` usage · `3` not found · `4` conflict · `5` workspace not found ·
-`6` schema too new (DB newer than this CLI — upgrade) · `8` migration required
-(DB older; re-run with `--migrate`) · `1` other. Foreign (SQLite) error text is
-never surfaced; failures carry a stable `kind`.
+`6` schema too new (DB newer than this CLI — upgrade) · `7` node missing ·
+`8` migration required (DB older; re-run with `--migrate`) · `9` database file
+damaged (restore a backup from the app) · `1` other. Foreign (SQLite) error text
+is never surfaced; failures carry a stable `kind`.
 
 ## Schema skew
 
@@ -123,14 +177,17 @@ nothing in the server reaches `pikos-db` directly.
 ```
 
 Add `"--db", "/path/to/workspace.sqlite"` to the args to target a workspace other
-than the default one, and `"env": { "PIKOS_BRIDGE_JS": "…/bridge.mjs" }` until
-packaging puts the bridge next to the binary (`create_page` needs it; every other
-tool is DB-only).
+than the default one.
+
+`create_page` is the one tool that needs Node on PATH and the parser bridge, both
+covered under **Build & run** — an installed build resolves the bridge itself, so
+there is nothing to set. Every other tool is DB-only.
 
 Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 `create_page` (natural language, plus `dryRun` to preview the parse),
-`update_page`, `set_status`, `complete_page`, `delete_page`, `restore_page`,
-`list_folders`, `list_reminders`, `add_reminder`, `remove_reminder`.
+`update_page`, `set_status`, `complete_page`, `skip_occurrence`,
+`unskip_occurrence`, `move_occurrence`, `delete_page`, `restore_page`, `list_trash`, `list_tags`, `list_folders`, `create_folder`, `rename_folder`, `delete_folder`,
+`restore_folder`, `list_reminders`, `add_reminder`, `remove_reminder`.
 
 Two things the protocol deliberately does not offer. **Hard delete**:
 `delete_page` only trashes, and `restore_page` undoes it, so nothing an agent

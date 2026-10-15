@@ -1,10 +1,18 @@
 import { expect } from "@playwright/test";
 
-import { mod, quickAdd, test as appTest } from "./fixtures";
+import {
+  test as appTest,
+  bridgeCall,
+  createFolder,
+  mod,
+  quickAdd,
+  ringDoorbell,
+  WRITE_QUEUE_DEBOUNCE_MS,
+} from "./fixtures";
 
 // ─── Open page and edit content ────────────────────────────────────────────
 
-appTest("open page and edit content @tier1", async ({ app }) => {
+appTest("open page and edit content @smoke", async ({ app }) => {
   await quickAdd(app, "my test page");
   await quickAdd(app, "other page");
 
@@ -49,9 +57,38 @@ appTest("open page and edit content @tier1", async ({ app }) => {
   await expect(editor).toContainText("Hello world");
 });
 
+// ─── Typing into the middle of a title ─────────────────────────────────────
+
+// Two characters, not one: the old bug re-placed the caret after the state
+// round-trip, so the first character landed correctly and every one after it
+// went to the end. "abcXdefY" instead of "abcXYdef".
+appTest("typing into the middle of a title or description stays there @smoke", async ({ app }) => {
+  await quickAdd(app, "abcdef");
+
+  await app.locator("[data-page-list-item]").getByText("abcdef").click();
+
+  await app.getByLabel("Page title").click();
+  const titleInput = app.getByRole("textbox", { name: "Page title" });
+  await expect(titleInput).toBeFocused();
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.type("XY");
+  await expect(titleInput).toHaveValue("abcXYdef");
+
+  await app.getByLabel("Page description").click();
+  const descInput = app.getByRole("textbox", { name: "Page description" });
+  await app.keyboard.type("abcdef");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.type("XY");
+  await expect(descInput).toHaveValue("abcXYdef");
+});
+
 // ─── Complete a page (toggle status) ───────────────────────────────────────
 
-appTest("complete a page via status toggle @tier1", async ({ app }) => {
+appTest("complete a page via status toggle @smoke", async ({ app }) => {
   await quickAdd(app, "task to complete");
 
   const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "task to complete" });
@@ -73,7 +110,7 @@ appTest("complete a page via status toggle @tier1", async ({ app }) => {
 
 // ─── Delete a page and undo ────────────────────────────────────────────────
 
-appTest("delete a page and undo @tier1", async ({ app }) => {
+appTest("delete a page and undo @smoke", { tag: ["@TRASH-02:3"] }, async ({ app }) => {
   await quickAdd(app, "page to delete");
 
   const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "page to delete" });
@@ -94,14 +131,8 @@ appTest("delete a page and undo @tier1", async ({ app }) => {
 
 // ─── Move page to folder via context menu ──────────────────────────────────
 
-appTest("move page to folder via context menu @tier1", async ({ app }) => {
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type("Work");
-  await app.keyboard.press("Enter");
+appTest("move page to folder via context menu @smoke", { tag: ["@LIST-05"] }, async ({ app }) => {
+  await createFolder(app, "Work");
 
   // Create the page from Inbox — quickAdd lands pages in the active view's folder.
   await app.getByRole("button", { name: /Inbox/ }).click();
@@ -111,7 +142,7 @@ appTest("move page to folder via context menu @tier1", async ({ app }) => {
   await expect(pageItem).toBeVisible();
 
   await pageItem.click({ button: "right" });
-  await app.getByRole("menuitem", { name: "Move to Folder" }).click();
+  await app.getByRole("menuitem", { name: "Move to folder" }).click();
   await app.getByRole("menuitem", { name: /Work/ }).click();
 
   await expect(pageItem).not.toBeVisible();
@@ -132,7 +163,7 @@ appTest("move page to folder via context menu @tier1", async ({ app }) => {
 // A regression in the sortable wiring would leave drag-reorder silently
 // failing inside the page list even though folders still rearrange.
 
-appTest("drag a page above another reorders the page list @tier2", async ({ app }) => {
+appTest("drag a page above another reorders the page list", async ({ app }) => {
   await quickAdd(app, "alpha task");
   await quickAdd(app, "bravo task");
   await quickAdd(app, "charlie task");
@@ -172,4 +203,241 @@ appTest("drag a page above another reorders the page list @tier2", async ({ app 
   // The dragged title (last in `before`) is now first.
   const formerLastTitle = before[before.length - 1]!.trim().split("\n")[0]!;
   expect(after[0]!.trim().split("\n")[0]).toBe(formerLastTitle);
+});
+
+// ─── Outside changes ────────────────────────────────────────────────────────
+
+appTest(
+  "a page written outside the app shows once the doorbell rings, without a reload",
+  { tag: ["@CLI-08"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "made in the app");
+    await bridgeCall(app, "create_page", {
+      data: {
+        completedAt: null,
+        content: "",
+        contentText: "",
+        folderId: null,
+        lastOpenedAt: null,
+        parentId: null,
+        priority: 0,
+        scheduledEnd: null,
+        scheduledStart: null,
+        status: "not_started",
+        subtitle: null,
+        tags: [],
+        title: "made outside",
+      },
+    });
+    const list = app.locator("[data-page-list-item]");
+    await expect(list.getByText("made in the app")).toBeVisible();
+    await expect(list.getByText("made outside")).toHaveCount(0);
+
+    // The app ignores the bell for 1.5 s after its own last write (`externalChange.ts`), so it
+    // rings until the change lands; the change counter in the large-workspace rebuild ends that.
+    await expect
+      .poll(async () => {
+        await ringDoorbell(app);
+        return list.getByText("made outside").count();
+      })
+      .toBe(1);
+  }
+);
+
+appTest(
+  "the list reads answer over the real writer with the adapter's argument names",
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "reads the real writer's commands");
+    await quickAdd(app, "first today at 9am #work");
+    await quickAdd(app, "second #work");
+    const zone = "America/New_York";
+    const inbox = { dates: null, scope: { kind: "inbox" }, sort: "manual", zone };
+
+    const window = await bridgeCall<{ rows: { id: string }[]; next: unknown; total: number }>(
+      app,
+      "list_view",
+      { after: null, key: inbox, limit: 1 }
+    );
+    expect(window.rows).toHaveLength(1);
+    expect(window.total).toBe(2);
+    const second = await bridgeCall<{ rows: { id: string }[] }>(app, "list_view", {
+      after: window.next,
+      key: inbox,
+      limit: 1,
+    });
+    const ids = await bridgeCall<string[]>(app, "list_view_ids", {
+      after: null,
+      key: inbox,
+      through: null,
+    });
+    expect(ids).toEqual([window.rows[0]!.id, second.rows[0]!.id]);
+
+    const moved = await bridgeCall<{ renumbered: boolean }>(app, "move_pages", {
+      ids: [ids[1]],
+      place: { after: null, before: ids[0] },
+    });
+    expect(moved.renumbered).toBe(false);
+    expect(
+      await bridgeCall<string[]>(app, "list_view_ids", { after: null, key: inbox, through: null })
+    ).toEqual([ids[1], ids[0]]);
+
+    const today = await app.evaluate(() => {
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    });
+    const counts = await bridgeCall<{ inbox: number; today: number }>(app, "count_views", {
+      today,
+      zone,
+    });
+    expect(counts).toMatchObject({ inbox: 2, today: 1 });
+    const pages = await bridgeCall<{ tags: string[] }[]>(app, "get_pages", { ids });
+    expect(pages.map((p) => p.tags)).toEqual([["work"], ["work"]]);
+    expect(await bridgeCall<{ name: string; pageCount: number }[]>(app, "list_tags")).toEqual([
+      { name: "work", pageCount: 2 },
+    ]);
+    expect(pages).toHaveLength(2);
+    expect(
+      await bridgeCall<{ kind: string }>(app, "get_page_if_newer", { id: ids[0], known: null })
+    ).toMatchObject({ kind: "newer" });
+    expect(await bridgeCall<unknown[]>(app, "list_series_heads", { openOnly: true })).toEqual([]);
+    expect(
+      await bridgeCall<unknown[]>(app, "list_recent_pages", { exclude: null, limit: 10 })
+    ).toBeInstanceOf(Array);
+    expect(
+      await bridgeCall<unknown[]>(app, "list_range", {
+        end: "2100-01-01T00:00:00Z",
+        openOnly: true,
+        start: null,
+        zone,
+      })
+    ).toHaveLength(1);
+    expect(
+      await bridgeCall<{ total: number }>(app, "list_completed_window", {
+        after: null,
+        limit: 10,
+        scope: { kind: "inbox" },
+        since: null,
+      })
+    ).toMatchObject({ total: 0 });
+    const state = await bridgeCall<{ seq: number; ownChanges: number }>(app, "change_state");
+    expect(state.seq).toBeGreaterThan(0);
+  }
+);
+
+appTest.describe("with lists loaded a window at a time", () => {
+  appTest.use({ tightCache: true });
+
+  appTest(
+    "search lists recently opened pages after a reload, from the database",
+    { tag: ["@SRCH-02:3"] },
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "the mock's database doesn't outlive a reload");
+      for (const title of ["first opened", "second opened", "never opened"])
+        await quickAdd(app, title);
+      const rows = app.locator("[data-page-list-item]");
+      await rows.filter({ hasText: "first opened" }).click();
+      await expect(app.getByLabel("Page title")).toHaveText("first opened");
+      await rows.filter({ hasText: "second opened" }).click();
+      await expect(app.getByLabel("Page title")).toHaveText("second opened");
+      await app.waitForTimeout(WRITE_QUEUE_DEBOUNCE_MS);
+      // An empty folder on screen, so after the reload no list holds the pages.
+      await createFolder(app, "Elsewhere");
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+      await app.keyboard.press(mod("Mod+k"));
+      const dialog = app.getByRole("dialog", { name: "Search pages" });
+      await expect(dialog.getByText("first opened")).toBeVisible();
+      await expect(dialog.getByText("never opened")).toHaveCount(0);
+    }
+  );
+
+  appTest("the page open at launch opens again after a reload", async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "the mock's database doesn't outlive a reload");
+    await quickAdd(app, "remember me");
+    await app.locator("[data-page-list-item]").filter({ hasText: "remember me" }).click();
+    const title = app.getByLabel("Page title");
+    await expect(title).toHaveText("remember me");
+    await app.reload();
+    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    await expect(title).toHaveText("remember me");
+  });
+
+  appTest(
+    "the page open in the editor closes when it's trashed outside the app",
+    { tag: ["@TRASH-01:5"] },
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+      await quickAdd(app, "trashed elsewhere");
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "trashed elsewhere" });
+      await row.click();
+      const title = app.getByLabel("Page title");
+      await expect(title).toHaveText("trashed elsewhere");
+
+      await bridgeCall(app, "soft_delete_page", { id: await row.getAttribute("data-page-id") });
+      await expect
+        .poll(async () => {
+          await ringDoorbell(app);
+          return title.count();
+        })
+        .toBe(0);
+    }
+  );
+
+  appTest(
+    "a page trashed outside the app isn't reopened at launch",
+    { tag: ["@TRASH-01:5"] },
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+      await quickAdd(app, "open elsewhere");
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "open elsewhere" });
+      await row.click();
+      const title = app.getByLabel("Page title");
+      await expect(title).toHaveText("open elsewhere");
+
+      await bridgeCall(app, "soft_delete_page", { id: await row.getAttribute("data-page-id") });
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+      await expect(title).toHaveCount(0);
+    }
+  );
+
+  appTest(
+    "a selected page trashed outside the app leaves the list and the selection when the bell rings",
+    { tag: ["@LIST-09:10"] },
+    async ({ app, storage }) => {
+      appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+      for (const title of ["keep me", "trash me", "leave me"]) await quickAdd(app, title);
+      const list = app.locator("[data-page-list-item]");
+      const row = (title: string) => list.filter({ hasText: title });
+      await row("keep me").click({
+        modifiers: [process.platform === "darwin" ? "Meta" : "Control"],
+      });
+      await row("trash me").click({
+        modifiers: [process.platform === "darwin" ? "Meta" : "Control"],
+      });
+      await expect(app.locator("[data-selected]")).toHaveCount(2);
+
+      const window = await bridgeCall<{ rows: { id: string; title: string }[] }>(app, "list_view", {
+        after: null,
+        key: { scope: { kind: "inbox" }, sort: "manual", zone: "America/New_York" },
+        limit: 10,
+      });
+      const trashed = window.rows.find((p) => p.title === "trash me");
+      await bridgeCall(app, "soft_delete_page", { id: trashed?.id });
+
+      await expect
+        .poll(async () => {
+          await ringDoorbell(app);
+          return row("trash me").count();
+        })
+        .toBe(0);
+      await expect(row("keep me")).toHaveAttribute("data-selected", "true");
+      // A menu acting on one page offers Rename; the trashed id still selected would make it two.
+      await row("keep me").click({ button: "right" });
+      await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+    }
+  );
 });

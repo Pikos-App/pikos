@@ -8,7 +8,7 @@ import { PALETTE_COLORS } from "@pikos/core";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
+import { InterfaceSettingsProvider } from "@/shared/context/InterfaceSettingsContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { ExternalCalendarItem } from "./ExternalCalendarItem";
@@ -31,7 +31,7 @@ function renderItem(props: Partial<Parameters<typeof ExternalCalendarItem>[0]> =
   const onColorChange = vi.fn();
   const onSelect = vi.fn();
   renderWithProviders(
-    <ListSettingsProvider>
+    <InterfaceSettingsProvider>
       <ExternalCalendarItem
         folder={makeFolder()}
         isActive={false}
@@ -39,7 +39,7 @@ function renderItem(props: Partial<Parameters<typeof ExternalCalendarItem>[0]> =
         onSelect={onSelect}
         {...props}
       />
-    </ListSettingsProvider>
+    </InterfaceSettingsProvider>
   );
   return { onColorChange, onSelect };
 }

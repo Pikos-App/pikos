@@ -1,5 +1,10 @@
 import type { AccountWithCalendars, CalendarSyncResult } from "@pikos/core";
-import { accountConnectionState, defaultColorForProvider } from "@pikos/core";
+import {
+  accountAddress,
+  accountConnectionState,
+  accountProviderLabel,
+  defaultColorForProvider,
+} from "@pikos/core";
 import { CalendarSync, KeyRound, MoreHorizontal, RefreshCw, Server } from "lucide-react";
 import { useState } from "react";
 
@@ -51,15 +56,15 @@ export function SyncAccountCard({
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
         <Server className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{account.displayName}</p>
+          <p className="truncate text-sm font-medium">{accountAddress(account)}</p>
           {busy ? (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <RefreshCw className="size-3 animate-spin" />
-              Syncing…
+              {accountProviderLabel(account)} · Syncing…
             </p>
           ) : connection === "reconnectNeeded" ? (
             <p className="text-xs text-destructive">
-              Reconnect needed ·{" "}
+              {accountProviderLabel(account)} · Reconnect needed ·{" "}
               <button
                 className="underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => setReconnectOpen(true)}
@@ -68,12 +73,14 @@ export function SyncAccountCard({
               </button>
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">Connected</p>
+            <p className="text-xs text-muted-foreground">
+              {accountProviderLabel(account)} · Connected
+            </p>
           )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
-            aria-label={`Account actions for ${account.displayName}`}
+            aria-label={`Account actions for ${accountAddress(account)}`}
             className="rounded p-1 text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MoreHorizontal className="size-4" />

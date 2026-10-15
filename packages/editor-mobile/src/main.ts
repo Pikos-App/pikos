@@ -13,6 +13,7 @@ import { extractText } from "@pikos/core";
 import { createDocumentExtensions, createPikosImageNode } from "@pikos/editor-schema";
 import { Editor } from "@tiptap/core";
 
+import { resolveAssetUrl } from "./assetUrl";
 import { debounce, hasHost, send } from "./bridge";
 import { parseHostMessage, PROTOCOL_VERSION } from "./protocol";
 
@@ -26,20 +27,6 @@ import { parseHostMessage, PROTOCOL_VERSION } from "./protocol";
  * The M0 spike should confirm this against a real device rather than trust it.
  */
 const DOC_CHANGE_DEBOUNCE_MS = 300;
-
-/**
- * Assets are served by a custom WKURLSchemeHandler registered by the host.
- *
- * A custom scheme rather than file:// because WKWebView treats file:// as a
- * distinct, heavily restricted origin — loading the editor from one and images
- * from another runs into cross-origin rules that have no workaround worth
- * having.
- */
-const ASSET_SCHEME = "pikos-asset";
-
-function resolveAssetUrl(path: string): string {
-  return `${ASSET_SCHEME}://asset/${encodeURI(path)}`;
-}
 
 let currentPageId: string | null = null;
 
@@ -210,7 +197,7 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
     case "insertImage": {
       const { assetPath } = parsed.payload as { assetPath: string };
       editor.commands.insertContent({
-        attrs: { "data-asset-path": assetPath },
+        attrs: { "data-asset-path": assetPath, src: assetPath },
         type: "image",
       });
       return;

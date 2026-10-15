@@ -9,6 +9,7 @@ import type { AllDayBar as AllDayBarData, PageSummary } from "@pikos/core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { AllDayBar } from "./AllDayBar";
@@ -19,6 +20,7 @@ afterEach(cleanup);
 function makePage(over: Partial<PageSummary>): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -48,16 +50,20 @@ function makeBar(page: PageSummary): AllDayBarData {
   };
 }
 
-function renderBar(page: PageSummary, onDragStart = vi.fn()) {
+function renderBar(page: PageSummary, onDragStart = vi.fn(), folderColor?: string) {
+  // The bar sizes its contents from the calendar's own metrics, so it needs the
+  // settings around it the way it has them in the app.
   renderWithProviders(
-    <AllDayBar
-      bar={makeBar(page)}
-      draggingPageId={null}
-      folderColor={undefined}
-      onDoubleClick={vi.fn()}
-      onDragStart={onDragStart}
-      position={{}}
-    />
+    <CalendarSettingsProvider>
+      <AllDayBar
+        bar={makeBar(page)}
+        draggingPageId={null}
+        folderColor={folderColor}
+        onDoubleClick={vi.fn()}
+        onDragStart={onDragStart}
+        position={{}}
+      />
+    </CalendarSettingsProvider>
   );
   return onDragStart;
 }
@@ -65,7 +71,7 @@ function renderBar(page: PageSummary, onDragStart = vi.fn()) {
 describe("AllDayBar — detached synced rendering", () => {
   it("shows the broken-sync glyph and is not struck through when not done", () => {
     renderBar(makePage({ status: "not_started", syncState: "detached" }));
-    expect(screen.getByLabelText("Disconnected from calendar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Not synced with a calendar")).toBeInTheDocument();
     expect(screen.getByText("Conference")).toBeInTheDocument();
     const bar = screen.getByRole("button", { name: "Conference" });
     expect(bar.className).not.toContain("opacity-50");
@@ -110,5 +116,24 @@ describe("AllDayBar — occurrence identity on drag", () => {
     dragPast(screen.getByRole("button", { name: "Conference" }));
 
     expect(onDragStart).toHaveBeenCalledWith({ folderColor: undefined, pageId: "p1" });
+  });
+});
+
+// The chip paints itself in the folder's color, so a checkbox left on the default
+// neutral stroke sinks into its own fill. Timed blocks have always passed the color
+// through; the all-day chip did not, which showed up worst on the dark theme.
+describe("AllDayBar — the checkbox stays visible on a colored chip", () => {
+  it("strokes the checkbox in the folder color", () => {
+    renderBar(makePage({ status: "not_started", syncState: null }), vi.fn(), "rgb(255, 0, 0)");
+
+    const box = document.querySelector(".task-checkbox");
+    expect(box).toHaveStyle({ borderColor: "rgb(255, 0, 0)" });
+  });
+
+  it("falls back to the event color when the page has no folder", () => {
+    renderBar(makePage({ status: "not_started", syncState: null }), vi.fn(), undefined);
+
+    const box = document.querySelector(".task-checkbox");
+    expect(box).toHaveAttribute("style", expect.stringContaining("border-color"));
   });
 });

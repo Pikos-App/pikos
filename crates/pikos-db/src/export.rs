@@ -40,18 +40,26 @@ pub async fn fetch_export_pages(
     Ok(sqlx::query(&sql).fetch_all(pool).await?)
 }
 
-/// Every `data-asset-path` in a document, in document order.
+/// The stored path of an image node's file: `data-asset-path` where the editor
+/// set it, else a `src` that is a path rather than a URL, which is all Markdown
+/// import writes. The same attribute order `prosemirror_to_markdown` writes out.
+fn stored_image_path(node: &serde_json::Value) -> Option<&str> {
+    let attrs = node.get("attrs")?;
+    let path = attrs
+        .get("data-asset-path")
+        .and_then(|p| p.as_str())
+        .filter(|p| !p.is_empty())
+        .or_else(|| attrs.get("src").and_then(|s| s.as_str()))?;
+    let is_url = path.contains("://") || path.starts_with("data:") || path.starts_with("blob:");
+    (!path.is_empty() && !is_url).then_some(path)
+}
+
+/// The stored asset path of every image in a document, in document order.
 pub fn collect_asset_paths(node: &serde_json::Value, paths: &mut Vec<String>) {
     let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
     if node_type == "image" {
-        if let Some(path) = node
-            .get("attrs")
-            .and_then(|a| a.get("data-asset-path"))
-            .and_then(|p| p.as_str())
-        {
-            if !path.is_empty() {
-                paths.push(path.to_string());
-            }
+        if let Some(path) = stored_image_path(node) {
+            paths.push(path.to_string());
         }
     }
     if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
@@ -87,9 +95,9 @@ pub struct MarkdownPage {
     /// The page is inside a folder directory, which is what decides whether an
     /// asset reference needs a `../`.
     pub in_folder: bool,
-    /// Frontmatter plus body, with asset references still absolute.
+    /// Frontmatter plus body, with asset references still as stored.
     pub contents: String,
-    /// The absolute asset paths this page's body refers to, in document order.
+    /// The stored asset paths this page's body refers to, in document order.
     pub assets: Vec<String>,
 }
 
@@ -185,10 +193,11 @@ pub async fn plan_markdown_export(
 /// A page's final text, with every asset that was actually copied pointed at its
 /// place in the export.
 ///
-/// `copied` maps an absolute source path to its path relative to the export
-/// root (`"assets/1234.png"`). An asset missing from the map keeps its original
-/// absolute reference — which resolves to nothing outside this machine, and is
-/// still better than a link into the export that goes nowhere inside it.
+/// `copied` maps a stored asset path to its path relative to the export root
+/// (`"assets/1234.png"`). An asset missing from the map keeps its stored
+/// reference, which is still better than a link into the export that goes
+/// nowhere inside it. Only a link target is rewritten, so a path that also
+/// appears in a page's text is left as written.
 pub fn render_markdown_page(page: &MarkdownPage, copied: &HashMap<String, String>) -> String {
     let mut body = page.contents.clone();
     for (source, relative) in copied {
@@ -198,7 +207,7 @@ pub fn render_markdown_page(page: &MarkdownPage, copied: &HashMap<String, String
         } else {
             relative.clone()
         };
-        body = body.replace(source, &reference);
+        body = body.replace(&format!("]({source})"), &format!("]({reference})"));
     }
     body
 }
@@ -456,7 +465,7 @@ pub async fn reset_workspace(pool: &sqlx::SqlitePool) -> AppResult<()> {
             .execute(pool)
             .await?;
     }
-    Ok(())
+    crate::changes::new_epoch(pool).await
 }
 
 #[cfg(test)]

@@ -1,28 +1,41 @@
 import type {
   AccountWithCalendars,
+  BackupEntry,
   CalendarSyncResult,
+  ChangeState,
+  CompletedCursor,
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompletedWindow,
   CompleteRecurringInput,
   CompleteRecurringResult,
   FocusSession,
   Folder,
+  MoveOutcome,
   NotificationHistoryEntry,
   Page,
   PageFilter,
+  PageIfNewer,
   PageRecurrenceRule,
   PageReminder,
   PageSchedule,
   PageStatus,
   PageSummary,
+  Placement,
   RawRuleExpansion,
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
   SkipOccurrenceInput,
   SyncCalendar,
+  TagCount,
   TrashedPage,
   UncompleteRecurringInput,
+  ViewCounts,
+  ViewCursor,
+  ViewKey,
+  ViewScope,
+  ViewWindow,
 } from "./types";
 
 // ─── Page input helpers ───────────────────────────────────────────────────────
@@ -47,6 +60,7 @@ export type NewPage = Omit<
   | "scheduleLocked"
   | "isRecurring"
   | "contentSchemaVersion"
+  | "detachIsReversible"
 > & {
   /** Optional override for created_at (used during import to preserve original dates). */
   createdAt?: string;
@@ -56,7 +70,13 @@ export type NewPage = Omit<
 export type PageUpdate = Partial<
   Omit<
     Page,
-    "id" | "createdAt" | "updatedAt" | "scheduleLocked" | "isRecurring" | "contentSchemaVersion"
+    | "id"
+    | "createdAt"
+    | "updatedAt"
+    | "scheduleLocked"
+    | "isRecurring"
+    | "detachIsReversible"
+    | "contentSchemaVersion"
   >
 >;
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),
@@ -230,6 +250,48 @@ export interface StorageAdapter {
   ): Promise<PageSummary[]>;
   /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
   listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse>;
+  /** The next window of a list after `after`, or from the top; its total on the first window. */
+  listView(key: ViewKey, after: ViewCursor | null, limit: number): Promise<ViewWindow>;
+  /** A list's ids after `after`, through `through` or to the end: for selecting unloaded rows. */
+  listViewIds(
+    key: ViewKey,
+    after: ViewCursor | null,
+    through: ViewCursor | null
+  ): Promise<string[]>;
+  /** Done pages newest first, a window at a time. `scope` null is every folder, for Today's and
+   *  Upcoming's sections, which `since` (a date) limits to pages done on or after it. */
+  listCompletedWindow(
+    scope: ViewScope | null,
+    since: string | null,
+    after: CompletedCursor | null,
+    limit: number
+  ): Promise<CompletedWindow>;
+  /** Pages touching the range from `start` (null: no limit) to `end`, UTC instants, placed in
+   *  `zone`; done ones too unless `openOnly`. */
+  listRange(
+    start: string | null,
+    end: string,
+    zone: string,
+    openOnly: boolean
+  ): Promise<PageSummary[]>;
+  /** Every recurring series' head; finished series too unless `openOnly`; with `since`, only the
+   *  heads changed after that change number. */
+  listSeriesHeads(openOnly: boolean, since?: number | null): Promise<PageSummary[]>;
+  /** The sidebar's counts on `today` (a date) in `zone`. */
+  countViews(zone: string, today: string): Promise<ViewCounts>;
+  /** Summaries of `ids` that exist and aren't trashed, in the order asked. */
+  getPages(ids: string[]): Promise<PageSummary[]>;
+  /** The full page, unless the copy held at `known` is still current. */
+  getPageIfNewer(id: string, known: number | null): Promise<PageIfNewer>;
+  /** Open pages opened before, most recent first, without `exclude`. */
+  listRecentPages(exclude: string | null, limit: number): Promise<PageSummary[]>;
+  /** Tags on open pages, most used first. */
+  listTags(): Promise<TagCount[]>;
+  /** Move `ids`, in that order, between two open neighbours in their folder's manual order.
+   *  Rejects with a conflict when the neighbours aren't where they were. */
+  movePages(ids: string[], place: Placement): Promise<MoveOutcome>;
+  /** The change counter, its epoch, and how many changes this process made. */
+  changeState(): Promise<ChangeState>;
   /** Unified FTS5 search — title matches ranked above content matches via bm25(). */
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse>;
   /** Returns tag names whose prefix matches query — for autocomplete. */
@@ -367,13 +429,23 @@ export interface StorageAdapter {
   // where a backup landed is the platform's job; producing it is this one's.
   /** Write a full database backup; resolves to where it landed. */
   backupDatabase(): Promise<string>;
+  /** Snapshots sitting beside the workspace, newest first. Written by the
+   *  migrator and by imports; this is the only way to read them back. */
+  listBackups(): Promise<BackupEntry[]>;
+  /** Replace the workspace with a snapshot and restart into it. Never resolves
+   *  on success — the process re-execs — so callers must not sequence work
+   *  after it. Rejects, with the app still running, when the snapshot is
+   *  damaged or was written by a newer build. */
+  restoreBackup(fileName: string): Promise<void>;
   /** Snapshot taken before an import so the user can roll back. Best-effort at
    *  the call site — an import must not fail because the backup did. */
   backupBeforeImport(): Promise<void>;
   /** Render the workspace into `format`; resolves to where it landed. */
   exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string>;
-  /** Aggregate counts for the Data settings panel. */
-  getUsageStats(): Promise<WorkspaceUsageStats>;
+  /** Aggregate counts for the Data settings panel. `weekStartsOn` buckets the
+   *  activity chart, since the counting happens where the rows are and the
+   *  preference lives with the user. */
+  getUsageStats(weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats>;
   /** Dev tool: empty every table so a seed scenario can start from nothing.
    *  Leaves the database file and the workspace registry in place — unlike
    *  `wipeAllData`, this is a truncate, not an uninstall. */

@@ -6,15 +6,19 @@
 // remounts the body, which resets all its state via useState initializers —
 // no reset effect, no eslint-disable, no flicker.
 
-import type { PagePriority, PageUpdate, ParsedInput, ParseResult } from "@pikos/core";
+import type { PagePriority, ParsedInput, ParseResult } from "@pikos/core";
 import {
   DAY_BEFORE_MINUTES,
+  folderIdForNewPage,
   fuzzyMatchFolder,
   getLocalTimezone,
   localToday,
   NLP_PRIORITY_MAP,
   parseInput,
   snapScheduleToRule,
+  storageErrorUserMessage,
+  toStorageError,
+  writableFolders,
 } from "@pikos/core";
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -23,13 +27,18 @@ import type React from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
+import { MOD_KEY_SPOKEN } from "@/shared/constants/platform";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import type { NewPageFields } from "@/shared/context/usePageWrites";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { createLogger } from "@/shared/logger";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
+
+const log = createLogger("QuickAddDialog");
 
 /**
  * Plain body text → the Tiptap document a page stores, one paragraph per line —
@@ -90,8 +99,8 @@ export function QuickAddDialog() {
         <DialogTitle className="sr-only">Quick add</DialogTitle>
         <DialogDescription className="sr-only">
           Type a title with optional date, time, tags, folder, and recurrence shortcuts. Enter
-          commits, Cmd+Enter commits and stays open for the next page, Shift+Enter commits and opens
-          the new page.
+          commits, {MOD_KEY_SPOKEN}+Enter commits and stays open for the next page, Shift+Enter
+          commits and opens the new page.
         </DialogDescription>
         {isOpen && <QuickAddDialogBody onClose={() => setOpenDialog(null)} />}
       </DialogContent>
@@ -115,18 +124,17 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   // dropdown makes once the page is open.
   const { storage } = useWorkspace();
 
-  // External-calendar folders are placement-locked — a new native page can't land
-  // in one, so they're never a quick-add target (chip, NLP, or active-view default).
-  const creatableFolders = folders.filter((f) => !f.isExternalCalendar);
-
-  // Active sidebar folder takes precedence, then settings default, then Inbox (null).
-  const initialFolderId =
-    creatableFolders.find((folder) => folder.id === activeViewId)?.id ?? settingsDefaultFolder;
+  const creatableFolders = writableFolders(folders);
+  const initialFolderId = folderIdForNewPage(activeViewId, folders, settingsDefaultFolder);
   const dateActiveToday = activeViewId === "today";
 
   const [inputValue, setInputValue] = useState(() => dialogPrefill ?? "");
   const [shake, setShake] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // A refused write needs words on screen. The empty-title case explains itself
+  // through the shake and the input the user is still looking at; a storage
+  // failure leaves nothing to look at, so it renders rather than only announcing.
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
   // ── Chip state ───────────────────────────────────────────────────────────────
@@ -294,9 +302,17 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       return null;
     }
     setValidationError(null);
+    setSubmitError(null);
 
     const result = parseInput(trimmed);
-    return executeCreate(result);
+    try {
+      return await executeCreate(result);
+    } catch (e) {
+      log.error("quick add failed", e);
+      setSubmitError(storageErrorUserMessage(toStorageError(e), "adding the page"));
+      inputRef.current?.focus();
+      return null;
+    }
   }
 
   /** Actually creates the page(s) from a parse result (after any confirmation). */
@@ -338,7 +354,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     // Fresh NLP tags from re-parse + manual additions.
     const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];
 
-    const patch: PageUpdate = {};
+    const patch: NewPageFields = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
     // Body from the "//" separator, written as the page's document so opening
@@ -368,8 +384,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
     if (resolvedRrule) {
       // Infinite recurrence: 1 template page + recurrence rule.
-      const page = await createPage({ folderId: resolvedFolderId, title });
-      if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+      const page = await createPage({ folderId: resolvedFolderId, title, ...patch });
 
       const tz = getLocalTimezone();
       // Snap onto the first date the rule permits — a chip-set M/W/F rule on a
@@ -402,9 +417,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       // Finite recurrence: N independent pages, each with its own schedule.
       let firstId: string | null = null;
       for (const inp of result.inputs) {
-        const pg = await createPage({ folderId: resolvedFolderId, title: inp.title || title });
-        if (firstId === null) firstId = pg.id;
-        const finPatch: PageUpdate = {};
+        const finPatch: NewPageFields = {};
         if (resolvedPriority !== 0) finPatch.priority = resolvedPriority;
         const finTags = [...new Set([...inp.tags, ...manualTags])];
         if (finTags.length > 0) finPatch.tags = finTags;
@@ -412,7 +425,12 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
           finPatch.content = bodyToTiptap(inp.content);
           finPatch.contentText = inp.content;
         }
-        if (Object.keys(finPatch).length > 0) updatePage(pg.id, finPatch);
+        const pg = await createPage({
+          folderId: resolvedFolderId,
+          title: inp.title || title,
+          ...finPatch,
+        });
+        if (firstId === null) firstId = pg.id;
         if (inp.scheduledStart) {
           await scheduleOnce(pg.id, inp.scheduledStart, inp.scheduledEnd);
         }
@@ -422,8 +440,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     }
 
     // Single page
-    const page = await createPage({ folderId: resolvedFolderId, title });
-    if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+    const page = await createPage({ folderId: resolvedFolderId, title, ...patch });
 
     if (resolvedDate) {
       const resolvedEnd = parsed?.scheduledEnd ?? endDateValue ?? undefined;
@@ -444,7 +461,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   async function handleSubmitAndOpen() {
     const result = await submitPage();
     if (result === null) return;
-    openPage(result.id);
+    openPage(result.id, { focusBody: true });
     onClose();
   }
 
@@ -486,7 +503,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         ) : (
           <input
             aria-describedby="quick-add-error"
-            aria-invalid={validationError !== null}
+            aria-invalid={validationError !== null || submitError !== null}
             aria-label="Quick add input"
             autoCapitalize="off"
             autoComplete="off"
@@ -499,6 +516,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             onChange={(event) => {
               setInputValue(event.target.value);
               if (validationError !== null) setValidationError(null);
+              if (submitError !== null) setSubmitError(null);
             }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
@@ -506,9 +524,15 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             value={inputValue}
           />
         )}
+        {submitError !== null && (
+          <p className="mt-1.5 text-xs text-destructive" role="alert">
+            {submitError}
+          </p>
+        )}
         {/* Validation announcement — screen-reader-only; sighted users see
             the shake animation. aria-live="assertive" so it interrupts and
-            reads immediately when submission fails. */}
+            reads immediately when submission fails. A refused write announces
+            through its own visible `role="alert"` instead, so it stays one copy. */}
         <div aria-atomic="true" aria-live="assertive" className="sr-only" id="quick-add-error">
           {validationError ?? ""}
         </div>

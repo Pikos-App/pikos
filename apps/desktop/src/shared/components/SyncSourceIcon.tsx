@@ -22,7 +22,9 @@ export function SyncSourceIcon({ className, syncState }: SyncSourceIconProps) {
   const Icon = detached ? CalendarOff : CalendarSync;
   return (
     <Icon
-      aria-label={detached ? "Disconnected from calendar" : "Synced from external calendar"}
+      // "Disconnected" is what the app says when an *account* disconnects, which is a
+      // different thing that happens to every page on it at once.
+      aria-label={detached ? "Not synced with a calendar" : "Synced from external calendar"}
       className={cn("shrink-0 text-subtle", className)}
       strokeWidth={2}
     />

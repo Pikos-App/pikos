@@ -9,6 +9,7 @@ import {
   snapAnchorToRule,
   storageErrorUserMessage,
   toStorageError,
+  viewerStart,
 } from "@pikos/core";
 import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -16,11 +17,13 @@ import { useEffect, useRef, useState } from "react";
 import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
 import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
+import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
+import { useCaretAtEndOnFocus } from "../hooks/useCaretAtEndOnFocus";
 import { Byline } from "./Byline";
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
 import { FocusTimer } from "./FocusTimer";
@@ -58,7 +61,8 @@ export function MetadataHeader({
   } = usePages();
   const togglePageStatus = useRecurringStatusToggle();
   const { lineWidth } = useEditorSettings();
-  const { flashPageBlock, requestCalendarScroll, setReferenceDate, setRightPanel } = useUI();
+  const { flashPageBlock, requestCalendarScroll, setRightPanel } = useUI();
+  const { setReferenceDate } = useCalendarDate();
   const allTagNames = tags.map((t) => t.name);
 
   const metadataError = pageErrors.get(page.id) ?? null;
@@ -88,7 +92,9 @@ export function MetadataHeader({
   }
 
   function handleOpenInCalendar() {
-    const start = page.scheduledStart!;
+    // The grid draws a synced event in the viewer's zone, so the day to jump to
+    // and the hour to scroll are read the same way or the jump misses the block.
+    const start = viewerStart(page)!;
     setReferenceDate(parseLocalISO(start));
     // Date-only (all-day) strings have no time component — the chip sits in the
     // always-visible all-day strip, so no timed-grid scroll needed.
@@ -174,11 +180,9 @@ export function MetadataHeader({
     el.style.height = titleHeightRef.current !== undefined ? `${titleHeightRef.current}px` : "0";
     titleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
-    if (titleFocused) {
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
   }, [titleValue, titleFocused]);
+
+  useCaretAtEndOnFocus(titleRef, titleFocused);
 
   function handleTitleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const next = e.target.value;
@@ -212,16 +216,23 @@ export function MetadataHeader({
       subtitleHeightRef.current !== undefined ? `${subtitleHeightRef.current}px` : "0";
     subtitleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
-    if (subtitleFocused) {
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
   }, [subtitleValue, subtitleFocused]);
+
+  useCaretAtEndOnFocus(subtitleRef, subtitleFocused);
 
   function handleSubtitleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const next = e.target.value;
     setSubtitleValue(next);
     updatePage(page.id, { subtitle: next });
+  }
+
+  /** Leaving a metadata field writes it out now rather than on the debounce.
+   *  The window listener below is a different event: it fires when the whole app
+   *  loses focus, never when focus moves between elements inside it. Without
+   *  this, clicking from the title into the body left the edit unwritten for
+   *  800ms, and a quit inside that window dropped it. */
+  function commitField() {
+    void flushPage(page.id);
   }
 
   useEffect(() => {
@@ -247,7 +258,9 @@ export function MetadataHeader({
           <div className="mt-10 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90">
             <CalendarOff aria-hidden="true" className="shrink-0" size={14} />
             <span className="type-ui-sm">
-              Disconnected from {calendarName} — this is now a regular page you can edit.
+              {page.detachIsReversible
+                ? `The ${calendarName} calendar is turned off. Turn it back on and this page rejoins.`
+                : `Removed from the ${calendarName} calendar. This is a regular page now.`}
             </span>
           </div>
         )}
@@ -269,12 +282,16 @@ export function MetadataHeader({
               autoComplete="off"
               autoCorrect="off"
               className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
-              onBlur={() => setTitleFocused(false)}
+              onBlur={() => {
+                setTitleFocused(false);
+                commitField();
+              }}
               onChange={handleTitleChange}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   setTitleFocused(false);
+                  commitField();
                   handleSubtitleFocus();
                 }
                 if (e.key === "Escape") {
@@ -325,8 +342,11 @@ export function MetadataHeader({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[23px] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[23px] text-muted-foreground outline-none [border:none] placeholder:text-faint"
-            onBlur={() => setSubtitleFocused(false)}
+            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[1.643em] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[1.643] text-muted-foreground outline-none [border:none] placeholder:text-faint"
+            onBlur={() => {
+              setSubtitleFocused(false);
+              commitField();
+            }}
             onChange={handleSubtitleChange}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -350,7 +370,7 @@ export function MetadataHeader({
         ) : (
           <div
             aria-label="Page description"
-            className="type-body mt-1 min-h-[23px] w-full cursor-text leading-[23px] text-muted-foreground outline-none"
+            className="type-body mt-1 min-h-[1.643em] w-full cursor-text leading-[1.643] text-muted-foreground outline-none"
             onClick={handleSubtitleFocus}
             onFocus={handleSubtitleFocus}
             onKeyDown={(e) => {

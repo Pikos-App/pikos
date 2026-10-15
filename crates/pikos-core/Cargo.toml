@@ -3,7 +3,7 @@ name = "pikos-core"
 version = "0.1.0"
 edition = "2021"
 license = "BUSL-1.1"
-description = "Pikos portable domain logic — local wall-clock dates and recurrence. Ported from @pikos/core; graded against a golden corpus generated from the TypeScript reference."
+description = "Pikos portable domain logic, shared by the desktop app, the CLI and the iPhone app."
 
 [dependencies]
 # The RRULE engine. One engine, shared: this crate had its own until the
@@ -14,6 +14,7 @@ pikos-recurrence = { path = "../pikos-recurrence" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 chrono-tz = "0.10"
 fancy-regex = "0.19"
+pulldown-cmark = { version = "0.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
@@ -22,4 +23,5 @@ url = "2"
 # Integration tests are their own crates and do not inherit [dependencies];
 # the recurrence corpora below call the engine directly.
 pikos-recurrence = { path = "../pikos-recurrence" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -14,8 +14,8 @@ import type { StorageAdapter } from "@pikos/core";
 /** Scenarios the developer menu offers (see DeveloperSettings). */
 export type SeedScenario = "calendar" | "deep" | "editor" | "synced" | "tutorial" | "wide";
 
-/** Every scenario that exists. `demo` and `marketing` are launch-only — see LAUNCH_SEEDS. */
-export type SeedName = SeedScenario | "demo" | "marketing";
+/** Every scenario that exists. `demo` and the `marketing` pair are launch-only — see LAUNCH_SEEDS. */
+export type SeedName = SeedScenario | "demo" | "marketing" | "marketing-sync";
 
 export interface SeedContext {
   adapter: StorageAdapter;
@@ -29,11 +29,11 @@ export interface SeedContext {
 export type SeedLoader = (ctx: SeedContext) => Promise<void>;
 
 // The dev-only loaders live behind a static `import.meta.env.DEV` so Rollup
-// drops their `import()` calls — and therefore their chunks — from a user
-// build. They are unreachable there anyway: launchSeedLoader refuses dev-only
-// names in a non-dev build, and the only other caller is the developer menu,
-// which is itself DEV-gated (SettingsNav/SettingsPage). The stubs below keep
-// every key present so `isSeedName`'s `in` check stays truthful in both builds.
+// drops their `import()` calls, and therefore their chunks, from a user build.
+// They are unreachable there anyway: launchSeedLoader refuses dev-only names in
+// a non-dev build, and the only other caller is the developer menu, which is
+// itself DEV-gated (SettingsNav/SettingsPage). The stubs below keep every key
+// present so `isSeedName`'s `in` check stays truthful in both builds.
 const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.meta.env.DEV
   ? {
       calendar: async ({ adapter }) => {
@@ -56,6 +56,10 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedMarketing } = await import("./marketing");
         await seedMarketing(adapter);
       },
+      "marketing-sync": async ({ adapter }) => {
+        const { seedMarketingSync } = await import("./marketingSync");
+        await seedMarketingSync(adapter);
+      },
       wide: async ({ adapter }) => {
         const { seedWide } = await import("./wide");
         await seedWide(adapter);
@@ -73,6 +77,7 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   demo: DEV_LOADERS?.demo ?? unavailable,
   editor: DEV_LOADERS?.editor ?? unavailable,
   marketing: DEV_LOADERS?.marketing ?? unavailable,
+  "marketing-sync": DEV_LOADERS?.["marketing-sync"] ?? unavailable,
   synced: async ({ adapter, phase }) => {
     // Only reset lays the realistic week under the mirrors; the launch flag
     // plants the mirrors alone, which the synced-calendar e2e fixtures expect.
@@ -96,8 +101,9 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
 /**
  * Scenarios `VITE_SEED=` accepts at launch, and the build each one needs.
  *
- * `marketing` and `demo` only ever arrive through the launch flag — scripts/record-hero.sh
- * and playwright.tour.config.ts set them, and the developer menu doesn't list them.
+ * `marketing`, `marketing-sync` and `demo` only ever arrive through the launch flag —
+ * playwright.record.config.ts and playwright.tour.config.ts set them, and the developer menu
+ * doesn't list them.
  *
  * "any-build" scenarios must also work with import.meta.env.DEV false, since a
  * production `vite preview` build can be launched with one.
@@ -108,6 +114,7 @@ const LAUNCH_SEEDS: Partial<Record<SeedName, "any-build" | "dev-only">> = {
   demo: "dev-only",
   editor: "dev-only",
   marketing: "dev-only",
+  "marketing-sync": "dev-only",
   synced: "any-build",
   tutorial: "any-build",
   wide: "dev-only",

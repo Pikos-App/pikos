@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+
 import { expect } from "./fixtures";
 
 export interface LongTaskMetrics {
@@ -22,13 +23,14 @@ export async function observeLongTasks(page: Page, key: string) {
       obs?: PerformanceObserver;
     }
     const w = window as unknown as Record<string, ObsState>;
-    w[k] = { entries: [] };
+    const state: ObsState = { entries: [] };
+    w[k] = state;
     const obs = new PerformanceObserver((list) => {
-      w[k].entries.push(...list.getEntries());
+      state.entries.push(...list.getEntries());
     });
     // "longtask" is valid at runtime but not in the TS EntryType union
-    obs.observe({ type: "longtask" as string, buffered: true });
-    w[k].obs = obs;
+    obs.observe({ buffered: true, type: "longtask" as string });
+    state.obs = obs;
   }, key);
 }
 
@@ -51,7 +53,7 @@ export async function readLongTasks(page: Page, key: string): Promise<LongTaskMe
     }
     const w = window as unknown as Record<string, ObsState | undefined>;
     const state = w[k];
-    if (!state) return { longest: 0, tbt: 0, count: 0 };
+    if (!state) return { count: 0, longest: 0, tbt: 0 };
     const drained = state.obs?.takeRecords() ?? [];
     state.entries.push(...drained);
     let longest = 0;
@@ -60,7 +62,7 @@ export async function readLongTasks(page: Page, key: string): Promise<LongTaskMe
       if (e.duration > longest) longest = e.duration;
       if (e.duration > 50) tbt += e.duration - 50;
     }
-    return { longest, tbt, count: state.entries.length };
+    return { count: state.entries.length, longest, tbt };
   }, key);
 }
 

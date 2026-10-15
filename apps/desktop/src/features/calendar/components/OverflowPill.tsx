@@ -1,5 +1,5 @@
 import type { OverflowPill as OverflowPillData, PageSummary } from "@pikos/core";
-import { formatTimeRange } from "@pikos/core";
+import { formatTimeRange, parseLocalISO, viewerEnd, viewerStart } from "@pikos/core";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -38,15 +38,20 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
             width: `calc(${pill.widthPct}% - 2px)`,
           }}
         >
-          +{pill.pageIds.length} more
+          +{pill.pageIds.length}
+          {!pill.countOnly && " more"}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-1.5" side="bottom" sideOffset={4}>
         <div className="type-ui-sm px-2 py-1 text-subtle">{items.length} events hidden</div>
         <div className="flex flex-col">
           {items.map((p) => {
-            const start = p.scheduledStart ? new Date(p.scheduledStart) : null;
-            const end = p.scheduledEnd ? new Date(p.scheduledEnd) : null;
+            // The cell placed these in the viewer's zone; the times listed under
+            // it have to agree or the popover contradicts the grid behind it.
+            const startIso = viewerStart(p);
+            const endIso = viewerEnd(p);
+            const start = startIso ? parseLocalISO(startIso) : null;
+            const end = endIso ? parseLocalISO(endIso) : null;
             const time =
               start && end
                 ? formatTimeRange(start, end)

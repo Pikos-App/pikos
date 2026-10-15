@@ -28,7 +28,7 @@ import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
@@ -62,7 +62,7 @@ export function FolderList() {
   } = useFolderList();
   const calendarGroups = useCalendarAccountGroups(externalFolders);
   const { openSortMenu, setOpenSortMenu } = useUI();
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
   const [calendarsCollapsed, setCalendarsCollapsed] = useLocalStorage(
     STORAGE_KEYS.calendarsCollapsed,
@@ -279,12 +279,16 @@ export function FolderList() {
             </button>
             {!calendarsCollapsed &&
               calendarGroups.map((group) => {
-                const accountName = calendarGroups.length > 1 ? group.accountName : null;
+                const grouped = calendarGroups.length > 1;
+                const accountName = grouped ? group.accountName : null;
+                // A lone group keeps one key, so its rows survive the account read
+                // moving every folder out of the unlinked group.
+                const groupKey = grouped ? (group.accountId ?? "unlinked") : "calendars";
                 return (
                   <div
                     aria-label={accountName ?? undefined}
                     className="flex flex-col gap-0.5"
-                    key={group.accountId ?? "unlinked"}
+                    key={groupKey}
                     role={accountName ? "group" : undefined}
                   >
                     {accountName && (
@@ -314,7 +318,7 @@ export function FolderList() {
           a place you go to see pages — but it is not somewhere pages live and
           nothing can be dropped into it, so it must not sit in the scrolling
           list beside Inbox and the folders. */}
-      <div className="shrink-0 border-t border-border-subtle px-1 py-1">
+      <div className="shrink-0 border-t border-border-subtle px-1 py-2">
         <SmartViewEntry
           icon={<Trash2 size={16} />}
           id="nav-trash"

@@ -91,6 +91,7 @@ async fn run<P: CalendarProvider>(
         calendar_id: calendar.calendar_id.clone(),
         provider: account.provider.clone(),
         folder_id: folder_id.to_string(),
+        window_start: pikos_db::reconciler::backfill_window_start(),
     };
 
     let since = calendar.sync_token.clone().map(SyncToken);
@@ -130,7 +131,8 @@ async fn run<P: CalendarProvider>(
     )
     .await?;
     let swept = sweep_absent_events(pool, &ctx, &delta, &resolved_masters).await?;
-    let changed = outcome.applied > 0 || !resolved_masters.is_empty() || swept > 0;
+    let ended = pikos_db::reconciler::remove_ended_series(pool, &ctx).await?;
+    let changed = outcome.applied > 0 || !resolved_masters.is_empty() || swept > 0 || ended > 0;
 
     let next = match delta.next_token {
         Some(token) => Some(token),
@@ -217,6 +219,8 @@ async fn reconcile_batched(
             ..Default::default()
         };
         applied += reconcile_safe(pool, ctx, &sub).await?.applied;
+        #[cfg(test)]
+        pause_between_batches().await;
     }
 
     if tail.is_empty() && delta.removals.is_empty() {
@@ -234,6 +238,25 @@ async fn reconcile_batched(
     let mut outcome = reconcile_safe(pool, ctx, &sub).await?;
     outcome.applied += applied;
     Ok(outcome)
+}
+
+#[cfg(test)]
+tokio::task_local! {
+    /// Set by a test around one sync: after each committed batch the backfill hands the
+    /// test a resume handle and waits, so the test can act while no batch holds the write
+    /// lock. Task-local, so a test running beside it in the same binary never pauses.
+    pub(crate) static BATCH_GATE: tokio::sync::mpsc::UnboundedSender<tokio::sync::oneshot::Sender<()>>;
+}
+
+#[cfg(test)]
+async fn pause_between_batches() {
+    let Ok(gate) = BATCH_GATE.try_with(Clone::clone) else {
+        return;
+    };
+    let (resume, wait) = tokio::sync::oneshot::channel();
+    if gate.send(resume).is_ok() {
+        let _ = wait.await;
+    }
 }
 
 /// `reconcile` under WAL busy/snapshot retry. Its deferred read-then-write can

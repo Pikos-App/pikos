@@ -17,7 +17,7 @@ use pikos_db::test_pool;
 
 use super::*;
 use crate::keychain::{CredentialStore, Keychain};
-use crate::test_support::{memory_keychain, page_count, MemoryStore};
+use crate::test_support::{memory_keychain, page_count, refusing_keychain, MemoryStore};
 
 // ─── scripted provider (sync returns a trivial backfill) ────────────────────────
 
@@ -56,6 +56,298 @@ impl CalendarProvider for OneShot {
 
 // ─── tests ──────────────────────────────────────────────────────────────────────
 
+/// A credential that cannot be stored leaves no account behind.
+///
+/// The row has to be written before the credential, because the keychain key is the account id.
+/// An account left active with an empty keychain polls for ever and says "reconnect needed" on
+/// every pass, which is what a Linux session with no Secret Service daemon produced.
+#[tokio::test]
+async fn a_failed_credential_store_takes_its_new_account_back_out() {
+    let pool = test_pool().await;
+    let refused: AppResult<()> = Err(AppError::Internal("no keyring".into()));
+
+    let claimed = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    assert!(claimed.created, "precondition: this connect made the row");
+    let id = claimed.account.id.clone();
+
+    let outcome = keep_or_release(&pool, claimed, refused).await;
+
+    assert!(outcome.is_err());
+    assert!(
+        is_dormant(&pool, &id).await,
+        "an account with nothing in the keychain is dormant, not active"
+    );
+}
+
+/// An account that already existed keeps its own working credential.
+#[tokio::test]
+async fn a_failed_credential_store_leaves_an_existing_account_alone() {
+    let pool = test_pool().await;
+    let refused: AppResult<()> = Err(AppError::Internal("no keyring".into()));
+
+    let first = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    let id = first.account.id.clone();
+    let again = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    assert!(!again.created, "precondition: the second connect reuses it");
+
+    let _ = keep_or_release(&pool, again, refused).await;
+
+    assert!(
+        !is_dormant(&pool, &id).await,
+        "the working account stayed connected"
+    );
+}
+
+fn one_calendar() -> Vec<pikos_db::sync_delta::RemoteCalendar> {
+    vec![pikos_db::sync_delta::RemoteCalendar {
+        calendar_id: "cal-home".into(),
+        color: None,
+        display_name: "Home".into(),
+    }]
+}
+
+/// The one account a refused connect left, which has to be dormant and hold no calendars.
+async fn assert_left_dormant_and_empty(pool: &sqlx::SqlitePool) {
+    let id: String = sqlx::query_scalar("SELECT id FROM sync_account")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert!(
+        is_dormant(pool, &id).await,
+        "the refused connect left a live account"
+    );
+    let calendars: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_calendar")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(calendars, 0, "the refused connect saved its calendars");
+}
+
+// qa: LNX-03
+#[tokio::test]
+async fn a_caldav_connect_whose_password_cannot_be_stored_leaves_no_live_account() {
+    let pool = test_pool().await;
+    let creds = CaldavCredentials {
+        base_url: "https://caldav.example.com/".into(),
+        password: "app-password".into(),
+        username: "you".into(),
+    };
+
+    let result = save_caldav(
+        &pool,
+        &refusing_keychain(),
+        &creds,
+        "you@caldav.example.com/",
+        &one_calendar(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert_left_dormant_and_empty(&pool).await;
+}
+
+#[tokio::test]
+async fn a_google_connect_whose_tokens_cannot_be_stored_leaves_no_live_account() {
+    let pool = test_pool().await;
+    let credentials = crate::google::GoogleCredentials {
+        access_token: "access".into(),
+        expires_at: None,
+        granted_scopes: Vec::new(),
+        refresh_token: "refresh".into(),
+    };
+
+    let result = save_google(
+        &pool,
+        &refusing_keychain(),
+        &credentials,
+        "you@gmail.com",
+        &one_calendar(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert_left_dormant_and_empty(&pool).await;
+}
+
+async fn is_dormant(pool: &sqlx::SqlitePool, id: &str) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT disconnected FROM sync_account WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        == 1
+}
+
+async fn account_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sync_account")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A CalDAV account connected before the typed URL was reduced is still the same account.
+///
+/// Every `0.4.0-beta` account is this shape: its identity carries the URL as typed, with no
+/// trailing slash, and a fresh connect now builds one. Reconnecting had to find the dormant
+/// row and revive it, or the server arrives twice and the first copy's pages stay detached.
+#[tokio::test]
+async fn a_pre_reduction_identity_reconnects_to_its_own_account() {
+    const STORED: &str = "me@example.com · https://caldav.fastmail.com";
+    const TYPED: &str = "me@example.com · https://caldav.fastmail.com/";
+    let pool = test_pool().await;
+
+    let original = insert_sync_account_impl(&pool, PROVIDER_CALDAV, STORED, "basic")
+        .await
+        .unwrap();
+    mark_account_disconnected_impl(&pool, &original.id)
+        .await
+        .unwrap();
+
+    let identity = caldav_stored_identity(&pool, TYPED).await.unwrap();
+    let claimed = claim_account(&pool, PROVIDER_CALDAV, &identity, "basic")
+        .await
+        .unwrap();
+
+    assert!(
+        !claimed.created,
+        "the dormant account was revived rather than duplicated"
+    );
+    assert_eq!(claimed.account.id, original.id);
+    assert_eq!(account_count(&pool).await, 1, "one server, one account");
+}
+
+/// An identity nothing matches is used as typed, and one already stored with the slash
+/// matches itself without the fallback changing it.
+#[tokio::test]
+async fn an_unmatched_identity_is_left_as_it_was_typed() {
+    const TYPED: &str = "me@example.com · https://caldav.fastmail.com/";
+    let pool = test_pool().await;
+
+    assert_eq!(caldav_stored_identity(&pool, TYPED).await.unwrap(), TYPED);
+
+    insert_sync_account_impl(&pool, PROVIDER_CALDAV, TYPED, "basic")
+        .await
+        .unwrap();
+
+    assert_eq!(caldav_stored_identity(&pool, TYPED).await.unwrap(), TYPED);
+    assert_eq!(account_count(&pool).await, 1);
+}
+
+/// Two people on one server stay two accounts — the fallback keys on the whole identity,
+/// so a shared host cannot collapse them.
+#[tokio::test]
+async fn one_server_two_users_stays_two_accounts() {
+    let pool = test_pool().await;
+
+    insert_sync_account_impl(
+        &pool,
+        PROVIDER_CALDAV,
+        "me@example.com · https://caldav.fastmail.com",
+        "basic",
+    )
+    .await
+    .unwrap();
+
+    let identity = caldav_stored_identity(&pool, "you@example.com · https://caldav.fastmail.com/")
+        .await
+        .unwrap();
+    let claimed = claim_account(&pool, PROVIDER_CALDAV, &identity, "basic")
+        .await
+        .unwrap();
+
+    assert!(claimed.created, "a different user is a different account");
+    assert_eq!(account_count(&pool).await, 2);
+}
+
+/// A password never reaches the database file.
+///
+/// The claim the privacy page makes, and what a `strings` sweep over a real workspace is looking
+/// for in the pre-release pass. Asserted against the bytes on disk rather than against a query,
+/// because a credential can arrive there by a column nobody meant to add or by an error string
+/// parked in a row. The WAL counts: it holds pages the main file has not been given yet, and a
+/// sweep that read only `pikos.sqlite` would call a fresh write clean.
+#[tokio::test]
+async fn a_caldav_password_never_lands_in_the_database_file() {
+    const PASSWORD: &str = "correct-horse-battery-staple";
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("pikos-credentials-{unique}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pikos.sqlite");
+    let pool = pikos_db::open_pool(path.to_str().unwrap()).await.unwrap();
+
+    // The connect path's two writes, without the discovery that proves the credentials first.
+    let backing = MemoryStore::default();
+    let keychain = Keychain::with_store(Box::new(backing.clone()));
+    let account = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap()
+        .account;
+    let blob = CaldavCredentials {
+        base_url: "https://caldav.fastmail.com".into(),
+        username: "person@example.com".into(),
+        password: PASSWORD.into(),
+    }
+    .to_blob()
+    .unwrap();
+    keychain.store(&account.id, &blob).unwrap();
+
+    assert!(
+        backing.get(&account.id).unwrap().contains(PASSWORD),
+        "precondition: the keychain is where it went"
+    );
+
+    // Swept with the pool still open. Closing it checkpoints the WAL and unlinks both sidecars,
+    // so a sweep that ran only after the close read the main file and called that the whole proof.
+    let wal = dir.join("pikos.sqlite-wal");
+    assert!(
+        std::fs::metadata(&wal)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false),
+        "no write-ahead log to sweep, so the pages the main file has not been given yet were \
+         never looked at"
+    );
+    sweep_for(&dir, PASSWORD, &["", "-wal", "-shm"]);
+
+    pool.close().await;
+    sweep_for(&dir, PASSWORD, &[""]);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Panics if `needle` appears in any of the named files, or if none of them could be read.
+fn sweep_for(dir: &std::path::Path, needle: &str, suffixes: &[&str]) {
+    let mut swept = 0;
+    for suffix in suffixes {
+        let file = dir.join(format!("pikos.sqlite{suffix}"));
+        let Ok(bytes) = std::fs::read(&file) else {
+            continue;
+        };
+        swept += 1;
+        assert!(
+            !bytes.windows(needle.len()).any(|w| w == needle.as_bytes()),
+            "the password is in {}",
+            file.display()
+        );
+    }
+    assert_eq!(
+        swept,
+        suffixes.len(),
+        "only {swept} of {} files were readable, so the sweep proved less than it claims",
+        suffixes.len()
+    );
+}
+
+// qa: SYNC-10:4
 #[tokio::test]
 async fn disconnect_goes_dormant_and_hides_the_account() {
     let pool = test_pool().await;
@@ -105,10 +397,119 @@ async fn disconnect_goes_dormant_and_hides_the_account() {
     );
 }
 
+// qa: SYNC-10:4
+#[tokio::test]
+async fn a_disconnect_removes_untouched_mirrors_and_keeps_edited_pages_detached() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    let cal = upsert_sync_calendar_impl(&pool, &acc.id, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap();
+    let provider = Scripted::new(SyncDelta {
+        upserts: vec![
+            one_event("href-1", "uid-bare", "Standup"),
+            one_event("href-2", "uid-edited", "Planning"),
+        ],
+        next_token: Some(SyncToken("tok-1".into())),
+        ..Default::default()
+    });
+    resync_account(&pool, &provider, &acc.id).await.unwrap();
+    sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE ical_uid = 'uid-edited'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    disconnect_account(&pool, memory_keychain(), &acc.id)
+        .await
+        .unwrap();
+
+    let live: Vec<String> =
+        sqlx::query_scalar("SELECT title FROM pages WHERE deleted_at IS NULL ORDER BY title")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(live, ["Planning"]);
+    let state: String =
+        sqlx::query_scalar("SELECT sync_state FROM page_sync WHERE ical_uid = 'uid-edited'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(state, "detached");
+}
+
+// qa: SYNC-07:3
+#[tokio::test]
+async fn same_named_calendars_on_two_accounts_keep_their_own_folders_through_a_disconnect() {
+    let pool = test_pool().await;
+    let mut accounts = Vec::new();
+    for (identity, uid) in [
+        ("work · https://x", "uid-work"),
+        ("home · https://x", "uid-home"),
+    ] {
+        let acc = claim_account(&pool, PROVIDER_CALDAV, identity, "basic")
+            .await
+            .unwrap()
+            .account;
+        let cal = upsert_sync_calendar_impl(&pool, &acc.id, "personal", "Personal", None)
+            .await
+            .unwrap();
+        toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+            .await
+            .unwrap();
+        let provider = Scripted::new(one_event_delta("href-1", uid, uid, "tok-1"));
+        resync_account(&pool, &provider, &acc.id).await.unwrap();
+        accounts.push(acc.id);
+    }
+
+    let folder_of = |uid: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT p.folder_id FROM pages p JOIN page_sync ps ON ps.page_id = p.id
+                 WHERE ps.ical_uid = ?",
+            )
+            .bind(uid)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .expect("a mirror lives in its calendar's folder")
+        }
+    };
+    let work_folder = folder_of("uid-work").await;
+    let home_folder = folder_of("uid-home").await;
+    assert_ne!(
+        work_folder, home_folder,
+        "one folder per account's calendar"
+    );
+
+    disconnect_account(&pool, memory_keychain(), &accounts[1])
+        .await
+        .unwrap();
+
+    let folders: Vec<String> = sqlx::query_scalar("SELECT id FROM folders")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        folders,
+        std::slice::from_ref(&work_folder),
+        "only the disconnected account's folder goes"
+    );
+    assert_eq!(folder_of("uid-work").await, work_folder);
+    let status = get_sync_status_impl(&pool).await.unwrap();
+    assert_eq!(status.len(), 1, "the other account stays connected");
+}
+
 // Revoking a Google grant is a network call that can fail — unreachable, already
 // revoked, or (here) no OAuth client in a test build. The account must still go
 // dormant and lose its credential, or a user who can't reach Google could never
 // disconnect.
+// qa: SYNC-10:4
 #[tokio::test]
 async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
     let pool = test_pool().await;
@@ -140,6 +541,7 @@ async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
 // The wipe deletes the DB, and the account ids in it are the keychain keys — a
 // credential missed here can never be found again, only used. Dormant accounts are
 // swept too: their credential is usually already gone, but this is the last pass.
+// qa: TRASH-08:3
 #[tokio::test]
 async fn releasing_credentials_clears_every_account_including_dormant_ones() {
     let pool = test_pool().await;
@@ -420,6 +822,7 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
 // and the row counts around it. What the upsert *preserves* (enabled, colour, the
 // cursor) is out of reach here — nothing below would notice a clobber; that is
 // `re_discovery_leaves_enabled_and_the_cursor_alone` in `pikos-db`.
+// qa: SYNC-03:3
 #[tokio::test]
 async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     let pool = test_pool().await;
@@ -428,7 +831,8 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     // folder), one sync so a mirror page exists.
     let acc = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
-        .unwrap();
+        .unwrap()
+        .account;
     let cal = upsert_sync_calendar_impl(&pool, &acc.id, "cal-a", "Work", None)
         .await
         .unwrap();
@@ -440,7 +844,8 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
 
     let acc2 = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
-        .unwrap();
+        .unwrap()
+        .account;
     assert_eq!(
         acc2.id, acc.id,
         "reconnect reuses the active row, no new account"
@@ -509,6 +914,20 @@ async fn resync_syncs_only_enabled_calendars() {
     assert_eq!(token.as_deref(), Some("tok-1"));
 }
 
+// qa: SYNC-15:2
+#[tokio::test]
+async fn a_synced_event_gets_no_pikos_reminder_of_its_own() {
+    let pool = test_pool().await;
+    synced_account(&pool).await;
+
+    assert_eq!(page_count(&pool).await, 1);
+    let reminders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_reminders")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reminders, 0);
+}
+
 // ─── refresh (full re-read) ─────────────────────────────────────────────────────
 
 /// One account with one enabled calendar, already backfilled — the state a refresh
@@ -537,6 +956,7 @@ async fn synced_account(pool: &sqlx::SqlitePool) -> (String, String) {
 /// re-delivery, every refresh would restamp the whole calendar and float it to the
 /// top of any recently-edited view (invariant 5) — which would make the action
 /// itself the reason not to use it.
+// qa: SYNC-09:5
 #[tokio::test]
 async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
     let pool = test_pool().await;
@@ -586,6 +1006,7 @@ async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
 /// cursor will never revisit. Only a cursor-less enumerate is authoritative enough
 /// to sweep it, and until this action the sole way to force one was the
 /// disable→enable toggle, which tears down the pages it is meant to repair.
+// qa: SYNC-09:5
 #[tokio::test]
 async fn a_refresh_sweeps_an_upstream_deletion_a_resync_cannot_see() {
     let pool = test_pool().await;
@@ -614,6 +1035,70 @@ async fn a_refresh_sweeps_an_upstream_deletion_a_resync_cannot_see() {
         .await
         .unwrap();
     assert_eq!(page_count(&pool).await, 0, "ghost mirror swept");
+}
+
+// qa: SYNC-22:5
+#[tokio::test]
+async fn a_restored_mirror_catches_up_on_an_edit_made_while_it_was_in_the_trash() {
+    let pool = test_pool().await;
+    let (account_id, _) = synced_account(&pool).await;
+    let page_id: String = sqlx::query_scalar("SELECT id FROM pages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    pikos_db::pages::delete_page_impl(&pool, &page_id)
+        .await
+        .unwrap();
+
+    // The calendar now holds the edit; the incremental poll that reports it runs while the
+    // page is in the trash.
+    let moved = || {
+        let mut event = one_event("href-1", "uid-1", "Standup moved");
+        if let UpsertItem::Event(e) = &mut event {
+            e.core.etag = Some("e2".into());
+        }
+        event
+    };
+    let upstream = Scripted::per_cursor(
+        backfill(vec![moved()], "2026-06-01", "tok-3"),
+        SyncDelta {
+            upserts: vec![moved()],
+            next_token: Some(SyncToken("tok-2".into())),
+            ..Default::default()
+        },
+    );
+    resync_account(&pool, &upstream, &account_id).await.unwrap();
+    let (title, trashed): (String, bool) =
+        sqlx::query_as("SELECT title, deleted_at IS NOT NULL FROM pages WHERE id = ?")
+            .bind(&page_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (title.as_str(), trashed),
+        ("Standup", true),
+        "the poll left it in the trash"
+    );
+
+    pikos_db::pages::restore_page_impl(&pool, &page_id)
+        .await
+        .unwrap();
+
+    let quiet = Scripted::per_cursor(
+        backfill(vec![moved()], "2026-06-01", "tok-4"),
+        SyncDelta {
+            next_token: Some(SyncToken("tok-4".into())),
+            ..Default::default()
+        },
+    );
+    resync_account(&pool, &quiet, &account_id).await.unwrap();
+
+    let title: String = sqlx::query_scalar("SELECT title FROM pages WHERE id = ?")
+        .bind(&page_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "Standup moved");
 }
 
 #[tokio::test]
@@ -649,6 +1134,7 @@ async fn connect_caldav_persists_nothing_when_discovery_fails() {
     );
 }
 
+// qa: SYNC-08:4
 #[tokio::test]
 async fn reconnect_caldav_keeps_the_working_credential_when_the_new_password_fails() {
     let pool = test_pool().await;

@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 pikos-db = { path = "../pikos-db" }
+pikos-core = { path = "../pikos-core" }
 pikos-recurrence = { path = "../pikos-recurrence" }
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }

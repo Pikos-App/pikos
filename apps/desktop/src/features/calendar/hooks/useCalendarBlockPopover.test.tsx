@@ -163,12 +163,17 @@ describe("useCalendarBlockPopover — click discrimination", () => {
   });
 });
 
+function releasePointer() {
+  window.dispatchEvent(new Event("pointerup"));
+}
+
 describe("useCalendarBlockPopover — drag suppression", () => {
-  it("a click after markDragging is swallowed (no popover, no double-click)", async () => {
+  it("the click that ends a drag is swallowed (no popover, no double-click)", async () => {
     const onDoubleClick = vi.fn();
     const { result } = renderHookWithProviders(() => useCalendarBlockPopover({ onDoubleClick }));
 
     act(() => result.current.markDragging());
+    releasePointer();
     act(() => result.current.handleClick(makeClickEvent()));
 
     // No timer was queued; advancing time does not open the popover.
@@ -183,8 +188,36 @@ describe("useCalendarBlockPopover — drag suppression", () => {
     );
 
     act(() => result.current.markDragging());
+    releasePointer();
     act(() => result.current.handleClick(makeClickEvent()));
-    // Reset of draggingRef happens in a microtask via setTimeout(0).
+    await act(() => vi.advanceTimersByTime(0));
+
+    act(() => result.current.handleClick(makeClickEvent()));
+    await act(() => vi.advanceTimersByTime(CLICK_DELAY));
+    expect(result.current.popoverOpen).toBe(true);
+  });
+
+  it("a drag the system cancels doesn't swallow the next click", async () => {
+    const { result } = renderHookWithProviders(() =>
+      useCalendarBlockPopover({ onDoubleClick: vi.fn() })
+    );
+
+    act(() => result.current.markDragging());
+    window.dispatchEvent(new Event("pointercancel"));
+    await act(() => vi.advanceTimersByTime(0));
+
+    act(() => result.current.handleClick(makeClickEvent()));
+    await act(() => vi.advanceTimersByTime(CLICK_DELAY));
+    expect(result.current.popoverOpen).toBe(true);
+  });
+
+  it("a drag released off the block doesn't swallow the next click", async () => {
+    const { result } = renderHookWithProviders(() =>
+      useCalendarBlockPopover({ onDoubleClick: vi.fn() })
+    );
+
+    act(() => result.current.markDragging());
+    releasePointer();
     await act(() => vi.advanceTimersByTime(0));
 
     act(() => result.current.handleClick(makeClickEvent()));

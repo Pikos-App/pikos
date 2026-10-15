@@ -7,15 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import {
-  folderIdForView,
-  getVisiblePages,
-  isDateGroupedView,
-  isDone,
-  isTimedIso,
-  parseLocalISO,
-  sortPages,
-} from "@pikos/core";
+import { isDateGroupedView, isDone, isTimedIso, parseLocalISO } from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -24,6 +16,9 @@ import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useViewCacheController } from "@/shared/context/WorkspaceContext";
+import { cachedListNow } from "@/shared/viewCache/useCachedView";
+import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 /** Gap between timed pages when multi-dropping on calendar (ms). */
 const MULTI_DROP_GAP_MS = 15 * 60 * 1000; // 15 minutes
@@ -41,14 +36,16 @@ function getPageDurationMs(page: PageSummary): number | undefined {
 
 /** Excludes synced mirrors: the reconciler owns their schedule and folder, so the
  *  backend rejects a drop that changes either and the page silently reverts. */
-function unlockedIds(ids: string[], pages: PageSummary[]): string[] {
-  return ids.filter((id) => !pages.find((p) => p.id === id)?.scheduleLocked);
+function unlockedIds(ids: string[], lookup: (id: string) => PageSummary | undefined): string[] {
+  return ids.filter((id) => !lookup(id)?.scheduleLocked);
 }
 
 export function useThreePanelDnD() {
-  const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = usePages();
+  const { folders, movePages, reorderFolders, scheduleOnce, updatePage } = usePages();
   const { activeViewId } = useUI();
   const sortMode = useActiveSortMode();
+  const viewCache = useViewCacheController();
+  const lookup = usePageLookup();
   const { clearSelection, selectedPageIds } = useSelection();
   const { callExternalDragUpdater, setIsDraggingOverCalendar } = useCalendarDnD();
 
@@ -131,15 +128,19 @@ export function useThreePanelDnD() {
   function handleDragStart({ active }: DragStartEvent) {
     const type = active.data.current?.["type"] as string | undefined;
     if (type === "page") {
-      const page = pages.find((p) => p.id === active.id) ?? null;
+      const page = lookup(String(active.id)) ?? null;
       setActivePageData(page);
 
       // If dragging a selected item, drag all selected pages (in list order).
       // If dragging an unselected item, treat as single-drag and clear selection.
       if (selectedPageIds.has(String(active.id))) {
-        const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
-        const ids = visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id);
-        setDraggedPageIds(ids);
+        // Today and Upcoming are several lists, so the selection drags in the order it was made.
+        const visible = cachedListNow(viewCache, activeViewId, sortMode)?.pages;
+        setDraggedPageIds(
+          visible
+            ? visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id)
+            : [...selectedPageIds]
+        );
       } else {
         clearSelection();
         setDraggedPageIds(page ? [page.id] : []);
@@ -148,6 +149,26 @@ export function useThreePanelDnD() {
       setActiveFolderData(folders.find((f) => f.id === active.id) ?? null);
       setDraggedPageIds([]);
     }
+  }
+
+  /** A cached list holds a window, so the move names the pages it lands between rather than
+   *  sending the whole order. Dropped below where it started, it lands after the target. */
+  function moveBetweenNeighbours(
+    visible: PageSummary[],
+    dragged: string[],
+    activeId: string,
+    overId: string
+  ) {
+    const moving = dragged.length > 0 ? dragged : [activeId];
+    const rest = visible.filter((p) => !moving.includes(p.id));
+    const dropIdx = rest.findIndex((p) => p.id === overId);
+    const activeIdx = visible.findIndex((p) => p.id === activeId);
+    const overIdx = visible.findIndex((p) => p.id === overId);
+    if (dropIdx === -1 || activeIdx === -1) return;
+    const insertIdx = activeIdx < overIdx ? dropIdx + 1 : dropIdx;
+    const place = { after: rest[insertIdx - 1]?.id ?? null, before: rest[insertIdx]?.id ?? null };
+    cachedListNow(viewCache, activeViewId, sortMode)?.place(moving, place);
+    void movePages(moving, place);
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
@@ -165,10 +186,10 @@ export function useThreePanelDnD() {
 
     // Calendar drop takes priority over list reorder.
     if (calendarStart && pageData) {
-      const targets = unlockedIds(idsToMove.length > 0 ? idsToMove : [pageData.id], pages);
+      const targets = unlockedIds(idsToMove.length > 0 ? idsToMove : [pageData.id], lookup);
       if (targets.length === 1) {
         // Single-page drop: preserve existing behavior (keep duration)
-        const target = pages.find((p) => p.id === targets[0]) ?? pageData;
+        const target = lookup(targets[0] ?? "") ?? pageData;
         let calendarEnd: string | undefined;
         if (isTimedIso(calendarStart)) {
           const durationMs = getPageDurationMs(target);
@@ -189,7 +210,7 @@ export function useThreePanelDnD() {
           const baseTime = new Date(calendarStart).getTime();
           let offset = 0;
           for (const id of targets) {
-            const page = pages.find((p) => p.id === id);
+            const page = lookup(id);
             const durationMs = page ? getPageDurationMs(page) : undefined;
             const startTime = new Date(baseTime + offset);
             const start = format(startTime, "yyyy-MM-dd'T'HH:mm:ss");
@@ -224,40 +245,16 @@ export function useThreePanelDnD() {
       // Only reorder in manual sort mode — other modes lock DnD.
       if (isDateGroupedView(activeViewId)) return;
       if (sortMode !== "manual") return;
-      const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
-      const folderId = folderIdForView(activeViewId);
-
-      if (idsToMove.length > 1) {
-        // Multi-page reorder: remove all dragged pages, reinsert as group at drop target.
-        const dragSet = new Set(idsToMove);
-        const dragged = visible.filter((p) => dragSet.has(p.id));
-        const rest = visible.filter((p) => !dragSet.has(p.id));
-        const dropIdx = rest.findIndex((p) => p.id === over.id);
-        if (dropIdx === -1) return;
-        // Insert after drop target if dragging downward, before if upward.
-        const activeIdx = visible.findIndex((p) => p.id === active.id);
-        const overIdx = visible.findIndex((p) => p.id === over.id);
-        const insertIdx = activeIdx < overIdx ? dropIdx + 1 : dropIdx;
-
-        rest.splice(insertIdx, 0, ...dragged);
-        void reorderPages(
-          folderId,
-          rest.map((p) => p.id)
-        );
-      } else {
-        const oldIdx = visible.findIndex((p) => p.id === active.id);
-        const newIdx = visible.findIndex((p) => p.id === over.id);
-
-        if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
-        void reorderPages(
-          folderId,
-          arrayMove(visible, oldIdx, newIdx).map((p) => p.id)
-        );
-      }
+      const cached = cachedListNow(viewCache, activeViewId, sortMode);
+      if (cached)
+        moveBetweenNeighbours(cached.pages, idsToMove, String(active.id), String(over.id));
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;
-      for (const id of unlockedIds(idsToMove.length > 0 ? idsToMove : [String(active.id)], pages)) {
+      for (const id of unlockedIds(
+        idsToMove.length > 0 ? idsToMove : [String(active.id)],
+        lookup
+      )) {
         updatePage(id, { folderId });
       }
       clearSelection();
@@ -266,7 +263,10 @@ export function useThreePanelDnD() {
       // with an all-day occurrence for today. For recurring pages this also
       // shifts the rule anchor (see scheduleOnce).
       const today = format(new Date(), "yyyy-MM-dd");
-      for (const id of unlockedIds(idsToMove.length > 0 ? idsToMove : [String(active.id)], pages)) {
+      for (const id of unlockedIds(
+        idsToMove.length > 0 ? idsToMove : [String(active.id)],
+        lookup
+      )) {
         void scheduleOnce(id, today);
       }
       clearSelection();

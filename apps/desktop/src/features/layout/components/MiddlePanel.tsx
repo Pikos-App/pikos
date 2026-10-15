@@ -1,3 +1,4 @@
+import { DeletePageShortcut, PageListProvider } from "@/features/pages";
 import { TrashPanel } from "@/features/trash";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { useUI } from "@/shared/context/UIContext";
@@ -11,6 +12,10 @@ import { PageListPanel } from "./PageListPanel";
  * deleted pages with their own actions, and none of what the page list is —
  * selection, drag-to-reorder, virtualization, the status toggle — applies to
  * them.
+ *
+ * The column's contents are resolved here, above that branch, so anything that
+ * outlives one view — the delete shortcuts, which act on the active page — keeps
+ * working when the trash takes the column.
  */
 export function MiddlePanel({
   onResizeStart,
@@ -20,16 +25,20 @@ export function MiddlePanel({
   width: number;
 }) {
   const { activeViewId } = useUI();
-  if (activeViewId === "trash") {
-    return (
-      <ErrorBoundary
-        fallback={({ error, reset }) => (
-          <PaneErrorFallback error={error} label="Trash" onReset={reset} />
-        )}
-      >
-        <TrashPanel onResizeStart={onResizeStart} width={width} />
-      </ErrorBoundary>
-    );
-  }
-  return <PageListPanel onResizeStart={onResizeStart} width={width} />;
+  return (
+    <PageListProvider>
+      <DeletePageShortcut />
+      {activeViewId === "trash" ? (
+        <ErrorBoundary
+          fallback={({ error, reset }) => (
+            <PaneErrorFallback error={error} label="Trash" onReset={reset} />
+          )}
+        >
+          <TrashPanel onResizeStart={onResizeStart} width={width} />
+        </ErrorBoundary>
+      ) : (
+        <PageListPanel onResizeStart={onResizeStart} width={width} />
+      )}
+    </PageListProvider>
+  );
 }

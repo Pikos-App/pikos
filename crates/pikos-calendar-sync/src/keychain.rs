@@ -21,6 +21,22 @@ impl KeychainError {
     pub fn is_reconnect_needed(&self) -> bool {
         matches!(self, KeychainError::NotFound)
     }
+
+    /// What to show somebody whose credential could not be stored.
+    ///
+    /// The backend's own message is a D-Bus or Security.framework string, which reads as a crash.
+    /// On Linux the usual cause is a session with no Secret Service provider running, which is
+    /// fixable and worth naming: a minimal window manager or a headless login has none.
+    pub fn user_message(&self) -> String {
+        if cfg!(target_os = "linux") {
+            format!(
+                "Pikos couldn't reach your system keyring, so the password was not saved. \
+                 Calendar sync needs GNOME Keyring, KWallet or KeePassXC running. ({self})"
+            )
+        } else {
+            format!("Pikos couldn't reach your system keychain, so the password was not saved. ({self})")
+        }
+    }
 }
 
 /// Secret backend. Production = OS keychain; tests inject an in-memory map

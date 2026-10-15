@@ -18,7 +18,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
   const leftNav = useLeftNavToggle();
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-1 border-border pr-3 pl-2">
+    <div className="flex h-[calc(3rem*var(--ui-text-scale,1))] shrink-0 items-center gap-2 border-border pr-3 pl-2">
       <TooltipIconButton
         className="text-text-tertiary/50"
         icon={leftNav.isOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
@@ -27,7 +27,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
         shortcut="mod+\"
       />
 
-      <div className="flex flex-1 items-center">{children}</div>
+      <div className="flex flex-1 items-center gap-1">{children}</div>
 
       <div className="flex items-center gap-0.5 rounded-md border border-border/50 bg-background">
         <Tooltip>
@@ -36,7 +36,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               aria-label="Editor view"
               aria-pressed={ui.rightPanel === "editor"}
               className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-md transition-[background-color,color] duration-[var(--transition-fast)]",
+                "ui-control flex items-center justify-center rounded-md transition-[background-color,color] duration-[var(--transition-fast)]",
                 ui.rightPanel === "editor"
                   ? "bg-surface-active text-text-secondary"
                   : "text-text-tertiary/50 hover:bg-surface-hover hover:text-text-secondary"
@@ -58,7 +58,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               aria-label="Calendar view"
               aria-pressed={ui.rightPanel === "calendar"}
               className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-md transition-[background-color,color] duration-[var(--transition-fast)]",
+                "ui-control flex items-center justify-center rounded-md transition-[background-color,color] duration-[var(--transition-fast)]",
                 ui.rightPanel === "calendar"
                   ? "bg-surface-active text-text-secondary"
                   : "text-text-tertiary/50 hover:bg-surface-hover hover:text-text-secondary"

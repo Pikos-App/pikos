@@ -4,14 +4,27 @@ import { makePage } from "./calendar.testHelpers";
 import {
   CASCADE_OFFSET_PCT,
   COMPACT_BLOCK_HEIGHT,
+  DEFAULT_COLLAPSE_CONFIG,
   GRID_HEIGHT,
   GRID_START_HOUR,
   HOUR_HEIGHT,
   MAX_VISIBLE_CASCADE_DEPTH,
   OVERFLOW_MIN_WIDTH_PX,
 } from "./calendarConstants";
-import { buildCollapseGeometry, collapsedBandInnerOffset } from "./calendarGeometry";
-import { buildDayBlocks, collapseUnderWidth, remapBlocksForCollapse } from "./calendarLayout";
+import {
+  buildCollapseGeometry,
+  collapsedBandInnerOffset,
+  computeCalendarMetrics,
+  fallsShortOf,
+} from "./calendarGeometry";
+import {
+  buildDayBlocks,
+  collapseUnderWidth,
+  remapBlocksForCollapse,
+  timedPagesByDay,
+  timedPagesInRange,
+} from "./calendarLayout";
+import type { CalendarDensity } from "./dayCount";
 
 // ─── collapseUnderWidth ──────────────────────────────────────────────────────
 
@@ -39,9 +52,9 @@ describe("collapseUnderWidth", () => {
 
   it("no measurement (columnWidth=0) → unchanged, no pill", () => {
     const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
-    const { pill, visible } = collapseUnderWidth(blocks, 0);
+    const { pills, visible } = collapseUnderWidth(blocks, 0);
     expect(visible).toBe(blocks);
-    expect(pill).toBe(null);
+    expect(pills).toEqual([]);
   });
 
   it("all blocks above threshold → no pill", () => {
@@ -49,7 +62,7 @@ describe("collapseUnderWidth", () => {
     const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
     const result = collapseUnderWidth(blocks, 200);
     expect(result.visible).toHaveLength(2);
-    expect(result.pill).toBe(null);
+    expect(result.pills).toEqual([]);
   });
 
   it("pill anchors at rightmost collapsed slot, expanded to PILL_MIN_WIDTH_PX", () => {
@@ -57,13 +70,13 @@ describe("collapseUnderWidth", () => {
     // 28px wide), expand left so the pill has a readable 32% width and
     // stays right-anchored. Pill is chip-shaped — anchored at slotHost.top.
     const blocks = [
-      makeBlock("wide", 0, 60),
+      makeBlock("wide", 0, 60, 0, 300),
       makeBlock("n1", 60, 13, 100),
       makeBlock("n2", 73, 13, 200),
       makeBlock("n3", 86, 14, 150),
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 200);
-    expect(visible.map((b) => b.page.id)).toEqual(["wide"]);
+    const [pill] = collapseUnderWidth(blocks, 200).pills;
+    expect(collapseUnderWidth(blocks, 200).visible.map((b) => b.page.id)).toEqual(["wide"]);
     expect(pill?.pageIds).toEqual(["n1", "n2", "n3"]);
     expect(pill?.widthPct).toBe(32);
     expect(pill?.leftPct).toBe(68);
@@ -73,46 +86,53 @@ describe("collapseUnderWidth", () => {
   it("pill widthPct caps at 50% on extremely narrow columns", () => {
     // Column 80px → uncapped floor would be 80%. Cap kicks in at 50%.
     const blocks = [makeBlock("a", 0, 30), makeBlock("b", 30, 30), makeBlock("c", 60, 40)];
-    const { pill } = collapseUnderWidth(blocks, 80);
-    // All three are under the 60px collapse threshold (24, 24, 32 px).
+    const [pill] = collapseUnderWidth(blocks, 80).pills;
+    // All three are under the 60px collapse threshold (24, 24, 32 px); the first stays.
     expect(pill?.widthPct).toBe(50);
     expect(pill?.leftPct).toBe(50);
   });
 
   it("pill height tracks the chipHeight argument so it scales with density", () => {
-    const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
+    const blocks = [
+      makeBlock("h", 0, 50, 0, 300),
+      makeBlock("n1", 50, 20, 100, 40),
+      makeBlock("n2", 70, 20, 200, 60),
+    ];
     // Compact: hourHeight=40 → compactBlockHeight=10, but the floor kicks in.
-    expect(collapseUnderWidth(blocks, 100, 10).pill?.height).toBe(14);
+    expect(collapseUnderWidth(blocks, 100, 10).pills[0]?.height).toBe(14);
     // Normal: hourHeight=64 → compactBlockHeight=16.
-    expect(collapseUnderWidth(blocks, 100, 16).pill?.height).toBe(16);
+    expect(collapseUnderWidth(blocks, 100, 16).pills[0]?.height).toBe(16);
     // Spacious: hourHeight=88 → compactBlockHeight=22.
-    expect(collapseUnderWidth(blocks, 100, 22).pill?.height).toBe(22);
+    expect(collapseUnderWidth(blocks, 100, 22).pills[0]?.height).toBe(22);
   });
 
   it("pill height defaults to COMPACT_BLOCK_HEIGHT when no chipHeight is passed", () => {
-    const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
-    expect(collapseUnderWidth(blocks, 100).pill?.height).toBe(COMPACT_BLOCK_HEIGHT);
+    const blocks = [makeBlock("h", 0, 50, 0, 300), makeBlock("n1", 50, 20, 100, 40)];
+    expect(collapseUnderWidth(blocks, 100).pills[0]?.height).toBe(COMPACT_BLOCK_HEIGHT);
   });
 
   it("uses OVERFLOW_MIN_WIDTH_PX as the threshold", () => {
     // Block at exactly threshold passes; one pixel under collapses.
     const ok = makeBlock("ok", 0, OVERFLOW_MIN_WIDTH_PX);
     const bad = makeBlock("bad", 50, OVERFLOW_MIN_WIDTH_PX - 1);
-    const { pill, visible } = collapseUnderWidth([ok, bad], 100);
+    const { pills, visible } = collapseUnderWidth([ok, bad], 100);
     expect(visible.map((b) => b.page.id)).toEqual(["ok"]);
-    expect(pill?.pageIds).toEqual(["bad"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["bad"]]);
   });
 
   it("conservation: every input block ends up either visible or in the pill", () => {
     // Mixed cluster — wide host, narrow chips of various widthPct/leftPct.
     const blocks = [
-      makeBlock("a", 0, 60), // wide → visible
+      makeBlock("a", 0, 60, 0, 400), // wide → visible
       makeBlock("b", 60, 12, 100), // narrow → collapsed
       makeBlock("c", 72, 14, 200), // narrow → collapsed
       makeBlock("d", 86, 14, 300), // narrow → collapsed
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 200);
-    const seen = new Set<string>([...visible.map((b) => b.page.id), ...(pill?.pageIds ?? [])]);
+    const { pills, visible } = collapseUnderWidth(blocks, 200);
+    const seen = new Set<string>([
+      ...visible.map((b) => b.page.id),
+      ...pills.flatMap((p) => p.pageIds),
+    ]);
     expect(seen.size).toBe(blocks.length);
     for (const b of blocks) expect(seen.has(b.page.id)).toBe(true);
   });
@@ -121,20 +141,20 @@ describe("collapseUnderWidth", () => {
     // One block per cascade depth, all 90 px wide (well above
     // OVERFLOW_MIN_WIDTH_PX) so width never gates collapse — only depth.
     const blocks = [
-      makeBlock("h", 0, 30, 0, 60, 0),
+      makeBlock("h", 0, 30, 0, 600, 0),
       ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) =>
         makeBlock(`v${i + 1}`, (i + 1) * 12, 30, (i + 1) * 50, 60, i + 1)
       ),
       makeBlock("over1", 60, 30, 400, 60, MAX_VISIBLE_CASCADE_DEPTH + 1),
       makeBlock("over2", 72, 30, 450, 60, MAX_VISIBLE_CASCADE_DEPTH + 2),
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 300);
+    const { pills, visible } = collapseUnderWidth(blocks, 300);
     const expectedVisible = [
       "h",
       ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) => `v${i + 1}`),
     ];
     expect(visible.map((b) => b.page.id)).toEqual(expectedVisible);
-    expect(pill?.pageIds).toEqual(["over1", "over2"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["over1", "over2"]]);
   });
 
   it("depth ≤ MAX_VISIBLE_CASCADE_DEPTH stays visible regardless of column width", () => {
@@ -147,8 +167,40 @@ describe("collapseUnderWidth", () => {
         makeBlock(`v${i + 1}`, 50, 50, (i + 1) * 50, 60, i + 1)
       ),
     ];
-    const { pill, visible } = collapseUnderWidth(blocks, 100);
-    expect(visible.length + (pill?.pageIds.length ?? 0)).toBe(blocks.length);
+    const { pills, visible } = collapseUnderWidth(blocks, 100);
+    expect(visible.length + pills.flatMap((p) => p.pageIds).length).toBe(blocks.length);
+  });
+
+  it("gives each overlap cluster its own pill, in that cluster", () => {
+    const blocks = [
+      makeBlock("morning", 0, 50, 100, 90),
+      makeBlock("morning-guest", 50, 50, 120, 60),
+      makeBlock("noon", 0, 50, 500, 90),
+      makeBlock("noon-guest", 50, 50, 520, 60),
+    ];
+    const { pills, visible } = collapseUnderWidth(blocks, 110);
+    expect(visible.map((b) => b.page.id)).toEqual(["morning", "noon"]);
+    expect(pills.map((p) => [p.pageIds, p.top])).toEqual([
+      [["morning-guest"], 120],
+      [["noon-guest"], 520],
+    ]);
+  });
+
+  it("keeps a cluster's first event when every block in it is too narrow", () => {
+    const blocks = [makeBlock("left", 0, 50, 100), makeBlock("right", 50, 50, 100)];
+    const { pills, visible } = collapseUnderWidth(blocks, 110);
+    expect(visible.map((b) => b.page.id)).toEqual(["left"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["right"]]);
+  });
+
+  it('widens the pill with the text, and drops the "more" past half the column', () => {
+    const blocks = [makeBlock("h", 0, 80, 0, 300), makeBlock("n", 80, 20, 100)];
+    const atDefault = collapseUnderWidth(blocks, 200, 16, 1).pills[0];
+    expect([atDefault?.widthPct, atDefault?.countOnly]).toEqual([32, false]);
+    const zoomed = collapseUnderWidth(blocks, 200, 16, 1.5).pills[0];
+    expect([zoomed?.widthPct, zoomed?.countOnly]).toEqual([48, false]);
+    const capped = collapseUnderWidth(blocks, 200, 16, 2).pills[0];
+    expect([capped?.widthPct, capped?.countOnly]).toEqual([50, true]);
   });
 });
 
@@ -186,6 +238,7 @@ describe("buildDayBlocks", () => {
       title: "Native 3pm",
     });
     const synced = makePage({
+      detachIsReversible: false,
       id: "synced",
       scheduledStart: "2026-03-15T15:00:00",
       scheduleLocked: true,
@@ -202,6 +255,7 @@ describe("buildDayBlocks", () => {
 
   it("all-day synced event never shifts", () => {
     const synced = makePage({
+      detachIsReversible: false,
       id: "allday",
       scheduledStart: "2026-03-15",
       scheduleLocked: true,
@@ -1131,5 +1185,176 @@ describe("remapBlocksForCollapse — boundary cases", () => {
     const r = remapBlocksForCollapse([block(64 * 9, 64, "middle")], g);
     expect(r.visible[0]!.straddlesTopBand).toBeUndefined();
     expect(r.visible[0]!.straddlesBottomBand).toBeUndefined();
+  });
+});
+
+describe("block treatment across the calendar text-size ladder", () => {
+  const TEXT_SIZE_RUNGS = [10, 12, 14, 16, 18, 20, 22, 24, 28];
+  const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
+  const day = new Date(2026, 2, 15);
+
+  function at(minutes: number): string {
+    const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+    const mm = String(minutes % 60).padStart(2, "0");
+    return `2026-03-15T${hh}:${mm}:00`;
+  }
+
+  function layOut(
+    density: CalendarDensity,
+    textSize: number,
+    pages: ReturnType<typeof makePage>[]
+  ) {
+    const metrics = computeCalendarMetrics(density, textSize / 14);
+    const geometry = buildCollapseGeometry(DEFAULT_COLLAPSE_CONFIG, metrics.hourHeight);
+    const { visible } = remapBlocksForCollapse(buildDayBlocks(pages, day, metrics), geometry);
+    return { blocks: visible, metrics };
+  }
+
+  function treatment(density: CalendarDensity, textSize: number, start: number, minutes: number) {
+    const page = makePage({ scheduledEnd: at(start + minutes), scheduledStart: at(start) });
+    const { blocks, metrics } = layOut(density, textSize, [page]);
+    const b = blocks[0]!;
+    return {
+      isCompact: b.isCompact,
+      timeRow: !fallsShortOf(b.height, metrics.timeRowMinHeight),
+      twoLineTitle: !fallsShortOf(b.height, metrics.twoLineTitleMinHeight),
+    };
+  }
+
+  it("gives every block the treatment it has at the default text size", () => {
+    for (const density of DENSITIES) {
+      for (let start = 7 * 60; start < 21 * 60; start += 15) {
+        for (const minutes of [15, 30, 45, 60, 75, 90]) {
+          const expected = treatment(density, 14, start, minutes);
+          for (const size of TEXT_SIZE_RUNGS) {
+            expect(
+              treatment(density, size, start, minutes),
+              `${density} ${size}px ${at(start)}+${minutes}`
+            ).toEqual(expected);
+          }
+        }
+      }
+    }
+  });
+
+  it("cascades or splits overlapping blocks the same way at every text size", () => {
+    for (const density of DENSITIES) {
+      for (const gap of [0, 15, 30, 45, 60, 75]) {
+        for (const guestMinutes of [15, 90]) {
+          const pages = [
+            makePage({ id: "host", scheduledEnd: at(12 * 60), scheduledStart: at(9 * 60) }),
+            makePage({
+              id: "guest",
+              scheduledEnd: at(9 * 60 + gap + guestMinutes),
+              scheduledStart: at(9 * 60 + gap),
+            }),
+          ];
+          const columns = (size: number) =>
+            layOut(density, size, pages).blocks.map((b) => [b.page.id, b.leftPct, b.widthPct]);
+          const expected = columns(14);
+          for (const size of TEXT_SIZE_RUNGS) {
+            expect(columns(size), `${density} ${size}px gap ${gap}`).toEqual(expected);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe("block height floor", () => {
+  const day = new Date(2026, 2, 15);
+  const compact = computeCalendarMetrics("compact");
+
+  it("draws an item with no end time at compact density as tall as a normal quarter hour", () => {
+    const [b] = buildDayBlocks([makePage({ scheduledStart: "2026-03-15T09:00:00" })], day, compact);
+    expect(b!.height).toBe(16);
+  });
+
+  it("sets a floored item beside the event it would otherwise cover", () => {
+    const pages = [
+      makePage({ id: "reminder", scheduledStart: "2026-03-15T09:00:00" }),
+      makePage({
+        id: "call",
+        scheduledEnd: "2026-03-15T09:30:00",
+        scheduledStart: "2026-03-15T09:15:00",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day, compact);
+    const reminder = blocks.find((b) => b.page.id === "reminder")!;
+    const call = blocks.find((b) => b.page.id === "call")!;
+    expect(reminder.top + reminder.height).toBeGreaterThan(call.top);
+    expect(reminder.leftPct + reminder.widthPct).toBeLessThanOrEqual(call.leftPct);
+  });
+
+  it("keeps an item starting in the day's last minutes on the grid", () => {
+    const [b] = buildDayBlocks([makePage({ scheduledStart: "2026-03-15T23:55:00" })], day, compact);
+    expect(b!.top + b!.height).toBe(compact.hourHeight * 24);
+  });
+
+  it("grows a block squeezed against the evening band away from the band", () => {
+    const geometry = buildCollapseGeometry(DEFAULT_COLLAPSE_CONFIG, compact.hourHeight);
+    const start = `2026-03-15T${String(DEFAULT_COLLAPSE_CONFIG.bottomHour - 1)}:55:00`;
+    const end = `2026-03-15T${String(DEFAULT_COLLAPSE_CONFIG.bottomHour + 1)}:00:00`;
+    const blocks = buildDayBlocks(
+      [makePage({ scheduledEnd: end, scheduledStart: start })],
+      day,
+      compact
+    );
+    const [b] = remapBlocksForCollapse(blocks, geometry, compact.compactBlockHeight).visible;
+    expect(b!.straddlesBottomBand).toBe(true);
+    expect(b!.height).toBeGreaterThanOrEqual(compact.compactBlockHeight);
+    expect(b!.top + b!.height).toBe(
+      geometry.middleEnd + collapsedBandInnerOffset(geometry.bottomBandHeight) - 1
+    );
+  });
+});
+
+describe("timedPagesInRange", () => {
+  it("keeps the timed pages touching the range and nothing else", () => {
+    const pages = [
+      makePage({ id: "inside", scheduledStart: "2026-03-16T09:00:00" }),
+      makePage({
+        id: "spans-in",
+        scheduledEnd: "2026-03-15T01:00:00",
+        scheduledStart: "2026-03-14T23:00:00",
+      }),
+      makePage({ id: "before", scheduledStart: "2026-03-14T09:00:00" }),
+      makePage({ id: "after", scheduledStart: "2026-03-22T09:00:00" }),
+      makePage({ id: "all-day", scheduledStart: "2026-03-16" }),
+      makePage({ id: "unscheduled" }),
+    ];
+    const ids = timedPagesInRange(pages, new Date(2026, 2, 15), new Date(2026, 2, 22)).map(
+      (p) => p.id
+    );
+    expect(ids).toEqual(["inside", "spans-in"]);
+  });
+});
+
+describe("timedPagesByDay", () => {
+  it("puts each page on every day timedPagesInRange would", () => {
+    const pages = [
+      makePage({ scheduledEnd: "2026-03-02T10:00:00", scheduledStart: "2026-03-02T09:00:00" }),
+      makePage({ scheduledEnd: "2026-03-04T01:00:00", scheduledStart: "2026-03-03T23:00:00" }),
+      makePage({ scheduledStart: "2026-03-05T12:00:00" }),
+      makePage({ scheduledStart: "2026-03-06" }),
+      makePage({ scheduledStart: null }),
+      makePage({ scheduledStart: "2026-05-01T09:00:00" }),
+      makePage({ scheduledEnd: "2026-03-01T23:30:00", scheduledStart: "2026-03-01T22:00:00" }),
+      makePage({ scheduledEnd: "2026-03-02T00:30:00", scheduledStart: "2026-03-01T23:00:00" }),
+    ];
+    const days = [2, 3, 4, 5, 6].map((d) => new Date(2026, 2, d));
+    const byDay = timedPagesByDay(pages, days);
+    days.forEach((day, i) => {
+      const end = new Date(2026, 2, day.getDate() + 1);
+      expect(byDay[i]).toEqual(timedPagesInRange(pages, day, end));
+    });
+    expect(byDay.map((d) => d.length)).toEqual([2, 1, 1, 1, 0]);
+  });
+  it("puts a page starting at midnight with no end on its own day, and only there", () => {
+    const midnight = makePage({ scheduledStart: "2026-03-04T00:00:00" });
+    const days = [3, 4, 5].map((d) => new Date(2026, 2, d));
+    expect(timedPagesByDay([midnight], days)).toEqual([[], [midnight], []]);
+    expect(timedPagesInRange([midnight], days[1]!, days[2]!)).toEqual([midnight]);
+    expect(timedPagesInRange([midnight], days[0]!, days[1]!)).toEqual([]);
   });
 });

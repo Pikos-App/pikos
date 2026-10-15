@@ -7,7 +7,10 @@ import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
-import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
+
+import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
+import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
   onClose?: () => void;
@@ -60,12 +63,7 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
   }
 
   useKeyboardScope("modal");
-  useKeyboardShortcut("Mod+Backspace", () => onDelete(), { scope: "modal" });
-  useKeyboardShortcut("Mod+Shift+Backspace", () => onDelete(), {
-    allowInInputs: true,
-    preventDefault: true,
-    scope: "modal",
-  });
+  useBlockDeleteShortcut(onDelete);
 
   const rule = recurrenceRules.find((r) => r.id === page.ruleId);
   const folder = folders.find((f) => f.id === page.folderId);
@@ -173,7 +171,7 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
           <TooltipIconButton
             className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
             icon={<CalendarX size={11} />}
-            label={locked ? "Remove this occurrence from Pikos" : "Delete this occurrence"}
+            label={occurrenceDeleteLabel(locked)}
             onClick={onDelete}
             shortcut="mod+backspace"
           />

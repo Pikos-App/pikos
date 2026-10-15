@@ -1,0 +1,5022 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "markdown": "",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "only whitespace",
+      "markdown": "   \n  ",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "one paragraph",
+      "markdown": "Hello world",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello world"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a trailing newline",
+      "markdown": "Hello world\n",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello world"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "two paragraphs",
+      "markdown": "First\n\nSecond",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Second"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a single newline breaks the line",
+      "markdown": "First\nSecond",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              },
+              {
+                "type": "hardBreak"
+              },
+              {
+                "type": "text",
+                "text": "Second"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "two blank lines",
+      "markdown": "First\n\n\nSecond",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Second"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "three blank lines",
+      "markdown": "First\n\n\n\nSecond",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Second"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "windows line endings",
+      "markdown": "First\r\n\r\nSecond\r\nThird",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Second"
+              },
+              {
+                "type": "hardBreak"
+              },
+              {
+                "type": "text",
+                "text": "Third"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "headings one to three",
+      "markdown": "# One\n\n## Two\n\n### Three",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "One"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Two"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 3
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Three"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a fourth-level heading",
+      "markdown": "#### Four",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Four"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a heading straight into a paragraph",
+      "markdown": "# Title\nBody",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Title"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Body"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a hash with no space",
+      "markdown": "#work is a tag",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "#work is a tag"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "bold and italic",
+      "markdown": "**bold** and *italic* and _under_ and __strong__",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "bold"
+              },
+              {
+                "type": "text",
+                "text": " and "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": "italic"
+              },
+              {
+                "type": "text",
+                "text": " and "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": "under"
+              },
+              {
+                "type": "text",
+                "text": " and "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "strong"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "bold italic",
+      "markdown": "***both***",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  },
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": "both"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "strikethrough",
+      "markdown": "~~gone~~",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "strike"
+                  }
+                ],
+                "text": "gone"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "inline code",
+      "markdown": "run `pikos list` now",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "run "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ],
+                "text": "pikos list"
+              },
+              {
+                "type": "text",
+                "text": " now"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "code keeps its stars",
+      "markdown": "`**not bold**`",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ],
+                "text": "**not bold**"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a link",
+      "markdown": "[Pikos](https://pikos.app)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://pikos.app",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "Pikos"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bold link",
+      "markdown": "[**Pikos**](https://pikos.app)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://pikos.app",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  },
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "Pikos"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a link with a title",
+      "markdown": "[Pikos](https://pikos.app \"home\")",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://pikos.app",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": "home"
+                    }
+                  }
+                ],
+                "text": "Pikos"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare url",
+      "markdown": "see https://pikos.app today",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "see https://pikos.app today"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an autolink",
+      "markdown": "<https://pikos.app>",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://pikos.app",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "https://pikos.app"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bullet list",
+      "markdown": "- one\n- two\n- three",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "three"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a star bullet list",
+      "markdown": "* one\n* two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a nested bullet list",
+      "markdown": "- one\n  - inner\n- two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "attrs": {
+                      "tight": true
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "inner"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an ordered list",
+      "markdown": "1. one\n2. two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 1,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an ordered list from three",
+      "markdown": "3. three\n4. four",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 3,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "three"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "four"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an ordered list inside a bullet",
+      "markdown": "- one\n  1. first\n  2. second",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "orderedList",
+                    "attrs": {
+                      "tight": true,
+                      "start": 1,
+                      "type": null
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "first"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "second"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a loose list",
+      "markdown": "- one\n\n- two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": false
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a list item with two paragraphs",
+      "markdown": "- one\n\n  more\n- two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": false
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "more"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a task list",
+      "markdown": "- [ ] todo\n- [x] done",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "todo"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": true
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "done"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a capital X task",
+      "markdown": "- [X] done",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": true
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "done"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a nested task list",
+      "markdown": "- [ ] parent\n  - [ ] child",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "parent"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "taskList",
+                    "content": [
+                      {
+                        "type": "taskItem",
+                        "attrs": {
+                          "checked": false
+                        },
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "child"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a task list after a paragraph",
+      "markdown": "Shopping\n\n- [ ] milk\n- [ ] eggs",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Shopping"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "milk"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "eggs"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bullet and a task in one list",
+      "markdown": "- plain\n- [ ] task",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "plain"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "task"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a fenced code block",
+      "markdown": "```rust\nfn main() {}\n```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "rust"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "fn main() {}"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a fenced code block with no language",
+      "markdown": "```\nplain\n```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "plain"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a tilde fence",
+      "markdown": "~~~\nplain\n~~~",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "plain"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an indented code block",
+      "markdown": "    indented code",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "indented code"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code block with a blank line",
+      "markdown": "```\na\n\nb\n```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "a\n\nb"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a blockquote",
+      "markdown": "> quoted",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "quoted"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a blockquote of two lines",
+      "markdown": "> one\n> two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "one"
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "two"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a blockquote of two paragraphs",
+      "markdown": "> one\n>\n> two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "one"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "two"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a nested blockquote",
+      "markdown": "> outer\n>> inner",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "outer"
+                  }
+                ]
+              },
+              {
+                "type": "blockquote",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "inner"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a horizontal rule",
+      "markdown": "Above\n\n---\n\nBelow",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Above"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "horizontalRule"
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Below"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a star rule",
+      "markdown": "***",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "horizontalRule"
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a table",
+      "markdown": "| Name | Value |\n| --- | --- |\n| A | 1 |",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Name"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Value"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "A"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "1"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an image",
+      "markdown": "![alt text](https://example.com/a.png)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "image",
+            "attrs": {
+              "src": "https://example.com/a.png",
+              "alt": "alt text",
+              "title": null,
+              "width": null,
+              "height": null,
+              "data-asset-path": null
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an escaped star",
+      "markdown": "\\*not italic\\*",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "*not italic*"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "two trailing spaces",
+      "markdown": "line one  \nline two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "line one"
+              },
+              {
+                "type": "hardBreak"
+              },
+              {
+                "type": "text",
+                "text": "line two"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a backslash break",
+      "markdown": "line one\\\nline two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "line one"
+              },
+              {
+                "type": "hardBreak"
+              },
+              {
+                "type": "text",
+                "text": "line two"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a wikilink",
+      "markdown": "see [[Other page]]",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "see [[Other page]]"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unicode",
+      "markdown": "café ✓ 日本語 🎉",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "café ✓ 日本語 🎉"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "html inline",
+      "markdown": "a <b>bold</b> word",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "a "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "bold"
+              },
+              {
+                "type": "text",
+                "text": " word"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "html block",
+      "markdown": "<div>block</div>",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "block"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "underline html",
+      "markdown": "<u>under</u>",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "underline"
+                  }
+                ],
+                "text": "under"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a setext heading",
+      "markdown": "Title\n=====",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Title"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a mixed document",
+      "markdown": "# Plan\n\nSome **bold** text with a [link](https://x.io).\n\n- [ ] first\n- [x] second\n\n1. one\n2. two\n\n> note\n\n```js\nlet a = 1;\n```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Plan"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Some "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "bold"
+              },
+              {
+                "type": "text",
+                "text": " text with a "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://x.io",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "link"
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "first"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": true
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "second"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 1,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "note"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "js"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "let a = 1;"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "nested emphasis",
+      "markdown": "*a **b** c*",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": "a "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  },
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": "b"
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": " c"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "bold around code",
+      "markdown": "**`x`**",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ],
+                "text": "x"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "code inside a link",
+      "markdown": "[`x`](https://x.io)",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ],
+                "text": "x"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an image inside text",
+      "markdown": "see ![a](https://x.io/a.png) here",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "see"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "image",
+            "attrs": {
+              "src": "https://x.io/a.png",
+              "alt": "a",
+              "title": null,
+              "width": null,
+              "height": null,
+              "data-asset-path": null
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "here"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a heading with marks",
+      "markdown": "## A **bold** heading",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "A "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "bold"
+              },
+              {
+                "type": "text",
+                "text": " heading"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty code block",
+      "markdown": "```\n```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code block inside a list item",
+      "markdown": "- item\n\n  ```\n  code\n  ```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": false
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "item"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "codeBlock",
+                    "attrs": {
+                      "language": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "code"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an ordered list with parens",
+      "markdown": "1) one\n2) two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 1,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty table cell",
+      "markdown": "| a | b |\n| --- | --- |\n|  | 2 |",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "a"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "b"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "2"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a task with marks",
+      "markdown": "- [ ] **bold** task",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "marks": [
+                          {
+                            "type": "bold"
+                          }
+                        ],
+                        "text": "bold"
+                      },
+                      {
+                        "type": "text",
+                        "text": " task"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a link with an ampersand",
+      "markdown": "[q](https://x.io/?a=1&b=2)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://x.io/?a=1&b=2",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "q"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "text after a list",
+      "markdown": "- one\n\nAfter",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "After"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a paragraph then a heading",
+      "markdown": "Intro\n\n# Heading",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Intro"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Heading"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "entities",
+      "markdown": "AT&amp;T &copy; 5 &lt; 6",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "AT&T © 5 < 6"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a long dash and quotes",
+      "markdown": "it -- is \"quoted\"",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "it -- is \"quoted\""
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a list inside a quote",
+      "markdown": "> - one\n> - two",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "bulletList",
+                "attrs": {
+                  "tight": true
+                },
+                "content": [
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "one"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "two"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a quote inside a list",
+      "markdown": "- item\n\n  > quoted",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": false
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "item"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "blockquote",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "quoted"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code block inside a quote",
+      "markdown": "> ```\n> code\n> ```",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "codeBlock",
+                "attrs": {
+                  "language": null
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "code"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a heading inside a quote",
+      "markdown": "> # Title",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "heading",
+                "attrs": {
+                  "indent": 0,
+                  "level": 1
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Title"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a heading inside a list",
+      "markdown": "- # Title",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Title"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a table after text",
+      "markdown": "Intro\n\n| a |\n| --- |\n| 1 |",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Intro"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "a"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "1"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "marks in a table cell",
+      "markdown": "| **a** |\n| --- |\n| `b` |",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "marks": [
+                              {
+                                "type": "bold"
+                              }
+                            ],
+                            "text": "a"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "colwidth": null
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "indent": 0
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "marks": [
+                              {
+                                "type": "code"
+                              }
+                            ],
+                            "text": "b"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a task list inside a bullet",
+      "markdown": "- parent\n  - [ ] child",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "parent"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "taskList",
+                    "content": [
+                      {
+                        "type": "taskItem",
+                        "attrs": {
+                          "checked": false
+                        },
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "child"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a soft break inside a list item",
+      "markdown": "- one\n  continued",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      },
+                      {
+                        "type": "hardBreak"
+                      },
+                      {
+                        "type": "text",
+                        "text": "continued"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an ordered task list",
+      "markdown": "1. [ ] first",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 1,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "first"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "single tildes",
+      "markdown": "~single~",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "~single~"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a loose task list",
+      "markdown": "- [ ] a\n\n- [ ] b",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "a"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "unicode in a link",
+      "markdown": "[x](https://x.io/café)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://x.io/caf%C3%A9",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "x"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a link with a space",
+      "markdown": "[x](<https://x.io/a b>)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://x.io/a%20b",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "x"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an email autolink",
+      "markdown": "<a@b.co>",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "mailto:a@b.co",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "a@b.co"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an already encoded link",
+      "markdown": "[x](https://x.io/a%20b)",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://x.io/a%20b",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "x"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bullet list then a task list",
+      "markdown": "- a\n\n- [ ] b",
+      "refused": true,
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "a"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bullet list then a star task list",
+      "markdown": "- a\n\n* [ ] b",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "a"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a task list then a star bullet list",
+      "markdown": "- [ ] a\n\n* b",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "a"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "two bullet lists by marker",
+      "markdown": "- a\n\n* b",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "a"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "two ordered lists by delimiter",
+      "markdown": "1. a\n\n1) b",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 1,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "a"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "tight": true,
+              "start": 1,
+              "type": null
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a page an agent edits",
+      "markdown": "# Trip\n\nBook **flights** with [the agent](https://x.io).\n\n- Day one\n  - Museum\n  - Dinner\n- Day two\n\n* [ ] pack\n* [x] passport\n\n> Bring the charger",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "indent": 0,
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Trip"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Book "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "flights"
+              },
+              {
+                "type": "text",
+                "text": " with "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://x.io",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "class": "editor-link",
+                      "title": null
+                    }
+                  }
+                ],
+                "text": "the agent"
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "tight": true
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Day one"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "attrs": {
+                      "tight": true
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Museum"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "indent": 0
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Dinner"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Day two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": false
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "pack"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "checked": true
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "indent": 0
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "passport"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "indent": 0
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Bring the charger"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "indent": 0
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -190,7 +190,7 @@ pub struct Page {
     pub created_at: String,
     pub updated_at: String,
     /// Which editor schema wrote `content`. A client finding a version above
-    /// its own must not save over the document — see pikos-db migration 013.
+    /// its own must not save over the document — see pikos-db migration 023.
     pub content_schema_version: i64,
     /// Carried for the same reason `PageSummary` carries it: an open page
     /// offers the same menu a listed one does, and which entries that menu
@@ -3466,6 +3466,7 @@ fn page_summary_of(page: pikos_db::Page) -> pikos_db::PageSummary {
         updated_at: page.updated_at,
         schedule_locked: page.schedule_locked,
         sync_state: page.sync_state,
+        detach_is_reversible: page.detach_is_reversible,
         timezone: page.timezone,
         completed_occurrences: page.completed_occurrences,
         skipped_occurrences: page.skipped_occurrences,
@@ -3474,5 +3475,7 @@ fn page_summary_of(page: pikos_db::Page) -> pikos_db::PageSummary {
         pending_description: page.pending_description,
         synced_since: page.synced_since,
         is_recurring: page.is_recurring,
+        row_seq: page.row_seq,
+        series_id: page.series_id,
     }
 }

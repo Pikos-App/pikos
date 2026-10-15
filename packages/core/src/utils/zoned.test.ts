@@ -10,6 +10,7 @@ import {
 // US DST 2026: spring forward Mar 8 (2am → 3am), fall back Nov 1 (2am → 1am).
 const NY = "America/New_York";
 const LA = "America/Los_Angeles";
+const BERLIN = "Europe/Berlin";
 
 describe("wallClockToUtc / utcToWallClock", () => {
   it("round-trips standard-time and daylight-time wall clocks", () => {
@@ -34,6 +35,13 @@ describe("wallClockToUtc / utcToWallClock", () => {
     const utc = wallClockToUtc(NY, "2026-03-08T02:30:00");
     expect(utc.toISOString()).toBe("2026-03-08T07:30:00.000Z");
     expect(utcToWallClock(NY, utc)).toBe("2026-03-08T03:30:00");
+  });
+
+  it("shifts a spring-forward gap forward east of UTC too", () => {
+    // 02:30 never happens on Mar 29 2026 in Berlin; CET (UTC+1) → 01:30Z, which reads 03:30 CEST.
+    const utc = wallClockToUtc(BERLIN, "2026-03-29T02:30:00");
+    expect(utc.toISOString()).toBe("2026-03-29T01:30:00.000Z");
+    expect(utcToWallClock(BERLIN, utc)).toBe("2026-03-29T03:30:00");
   });
 
   it("resolves ambiguous fall-back times to the earliest instant", () => {
@@ -61,6 +69,12 @@ describe("normalizeUntilToZone", () => {
   it("leaves date-only UNTIL and UNTIL-less rules unchanged", () => {
     expect(normalizeUntilToZone("FREQ=DAILY;UNTIL=20260701", NY)).toBe("FREQ=DAILY;UNTIL=20260701");
     expect(normalizeUntilToZone("FREQ=DAILY;COUNT=3", NY)).toBe("FREQ=DAILY;COUNT=3");
+  });
+
+  it("leaves a malformed UNTIL unchanged", () => {
+    for (const rule of ["FREQ=DAILY;UNTIL=2026071T035959Z", "FREQ=DAILY;UNTIL=20260701T0359Z"]) {
+      expect(normalizeUntilToZone(rule, NY)).toBe(rule);
+    }
   });
 });
 

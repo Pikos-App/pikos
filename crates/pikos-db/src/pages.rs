@@ -42,6 +42,7 @@ struct PageRow {
     updated_at: String,
     content_schema_version: i64,
     schedule_locked: bool,
+    detach_is_reversible: bool,
     sync_state: Option<String>,
     timezone: Option<String>,
     completed_occurrences: Option<String>,
@@ -51,6 +52,8 @@ struct PageRow {
     pending_description: Option<String>,
     sync_created_at: Option<String>,
     is_recurring: bool,
+    row_seq: i64,
+    series_id: Option<String>,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -95,7 +98,7 @@ pub struct Page {
     pub created_at: String,
     pub updated_at: String,
     #[ts(type = "number")]
-    /// Which Tiptap document schema produced `content`. See migration 013:
+    /// Which Tiptap document schema produced `content`. See migration 023:
     /// a client finding a version above its own must not save over the document,
     /// or it silently drops node types it cannot represent.
     pub content_schema_version: i64,
@@ -107,6 +110,13 @@ pub struct Page {
     /// was deleted locally. `null` for a page created in Pikos.
     #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
+    /// Whether a detached page could rejoin its calendar, which is what the copy
+    /// splits on: the user wants to know if this is undoable, not how it happened.
+    /// True when the calendar is merely switched off or its account disconnected —
+    /// both of which the user can reverse. False when the event is gone from the
+    /// provider, which nothing here can undo. Meaningless unless `sync_state` is
+    /// `detached`; a live page reads false because nothing is switched off.
+    pub detach_is_reversible: bool,
     /// IANA zone the schedule was authored in. Only read for a page a calendar owns,
     /// which renders at its true instant — 3pm in Berlin shows as 2pm in London. A
     /// page created in Pikos floats: it shows at its wall-clock time everywhere.
@@ -133,6 +143,13 @@ pub struct Page {
     pub synced_since: Option<String>,
     /// Whether this page repeats, without having to load its rule.
     pub is_recurring: bool,
+    /// The change counter's value at this row's last change, its own or a child row's. A copy
+    /// held elsewhere is current while its number is at least this. Always set when read.
+    #[ts(type = "number | null", optional)]
+    pub row_seq: Option<i64>,
+    /// For a done clone of a recurring page's occurrence, the series it was done from, so
+    /// unticking it finds the series without searching every one.
+    pub series_id: Option<String>,
 }
 
 impl From<PageRow> for Page {
@@ -144,6 +161,7 @@ impl From<PageRow> for Page {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
         Page {
+            detach_is_reversible: row.detach_is_reversible,
             id: row.id,
             folder_id: row.folder_id,
             title: row.title,
@@ -176,6 +194,8 @@ impl From<PageRow> for Page {
                 .as_deref()
                 .and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
+            row_seq: Some(row.row_seq),
+            series_id: row.series_id,
         }
     }
 }
@@ -203,7 +223,7 @@ fn parse_skipped_occurrences(raw: Option<String>) -> Option<Vec<String>> {
 // ─── Summary row (no content/content_text — for list views) ──────────────
 
 #[derive(sqlx::FromRow)]
-struct PageSummaryRow {
+pub(crate) struct PageSummaryRow {
     id: String,
     folder_id: Option<String>,
     title: String,
@@ -221,6 +241,7 @@ struct PageSummaryRow {
     created_at: String,
     updated_at: String,
     schedule_locked: bool,
+    detach_is_reversible: bool,
     sync_state: Option<String>,
     timezone: Option<String>,
     completed_occurrences: Option<String>,
@@ -230,6 +251,8 @@ struct PageSummaryRow {
     pending_description: Option<String>,
     sync_created_at: Option<String>,
     is_recurring: bool,
+    row_seq: i64,
+    series_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -263,6 +286,8 @@ pub struct PageSummary {
     /// See `Page::sync_state`.
     #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
+    /// See `Page::detach_is_reversible`.
+    pub detach_is_reversible: bool,
     /// See `Page::timezone`.
     pub timezone: Option<String>,
     /// See `Page::completed_occurrences`.
@@ -279,6 +304,11 @@ pub struct PageSummary {
     pub synced_since: Option<String>,
     /// See `Page::is_recurring`.
     pub is_recurring: bool,
+    /// See `Page::row_seq`.
+    #[ts(type = "number | null", optional)]
+    pub row_seq: Option<i64>,
+    /// See `Page::series_id`.
+    pub series_id: Option<String>,
 }
 
 impl From<PageSummaryRow> for PageSummary {
@@ -290,6 +320,7 @@ impl From<PageSummaryRow> for PageSummary {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
         PageSummary {
+            detach_is_reversible: row.detach_is_reversible,
             id: row.id,
             folder_id: row.folder_id,
             title: row.title,
@@ -319,22 +350,30 @@ impl From<PageSummaryRow> for PageSummary {
                 .as_deref()
                 .and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
+            row_seq: Some(row.row_seq),
+            series_id: row.series_id,
         }
     }
 }
 
-const SUMMARY_COLUMNS: &str =
+pub(crate) const SUMMARY_COLUMNS: &str =
     "id, folder_id, title, subtitle, status, priority, tags, sort_order, \
      scheduled_start, scheduled_end, completed_at, links, \
-     parent_id, last_opened_at, created_at, updated_at";
+     parent_id, last_opened_at, created_at, updated_at, row_seq";
 
 /// Appended to every page-hydrating SELECT to populate the derived sync columns
 /// (see the `Page` field docs). Correlated on the unqualified `pages.id`, so it
 /// works whether or not the query aliases the table.
-const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
+pub(crate) const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
      AS schedule_locked\
      , (SELECT sync_state FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_state\
+     , EXISTS(SELECT 1 FROM page_sync sy \
+         JOIN sync_calendar sc ON sc.account_id = sy.account_id \
+              AND sc.calendar_id = sy.calendar_id \
+         JOIN sync_account sa ON sa.id = sc.account_id \
+         WHERE sy.page_id = pages.id \
+           AND (sc.enabled = 0 OR sa.disconnected = 1)) AS detach_is_reversible\
      , NULLIF((SELECT json_group_object(occurrence_date, clone_id) FROM completed_set \
          WHERE completed_set.page_id = pages.id), '{}') AS completed_occurrences\
      , NULLIF((SELECT json_group_array(occurrence_date) FROM skip_set \
@@ -348,7 +387,9 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      , (SELECT pending_description FROM page_sync WHERE page_sync.page_id = pages.id) AS pending_description\
      , (SELECT created_at FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_created_at\
      , EXISTS(SELECT 1 FROM page_recurrence_rules \
-         WHERE page_recurrence_rules.page_id = pages.id) AS is_recurring";
+         WHERE page_recurrence_rules.page_id = pages.id) AS is_recurring\
+     , (SELECT page_id FROM completed_set WHERE completed_set.clone_id = pages.id LIMIT 1) \
+     AS series_id";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
@@ -508,6 +549,7 @@ async fn upsert_page_tags_tx(
 }
 
 async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
     ))
@@ -519,24 +561,13 @@ async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
 }
 
 async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> AppResult<i64> {
-    let value = match folder_id {
-        Some(folder_id) => {
-            sqlx::query_scalar(
-                "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id = ?",
-            )
-            .bind(folder_id)
-            .fetch_one(pool)
-            .await?
-        }
-        None => {
-            sqlx::query_scalar(
-                "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id IS NULL",
-            )
-            .fetch_one(pool)
-            .await?
-        }
-    };
-    Ok(value)
+    Ok(sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sort_order) + ?, 0) FROM pages WHERE folder_id IS ?",
+    )
+    .bind(crate::moves::ORDER_SPACING)
+    .bind(folder_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -818,11 +849,14 @@ pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()
 /// diverts synced ones. Callers reaching it directly own the sync question — see
 /// [`crate::sync::hard_delete_would_resurrect`].
 pub async fn hard_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    sqlx::query("DELETE FROM pages WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query("DELETE FROM pages WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    })
+    .await
 }
 
 pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
@@ -864,12 +898,27 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
             .await?;
         // Resume syncing a restored page (only flips the tombstone this delete set;
         // a detached page stays detached). No-op for native pages.
-        sqlx::query(
+        let resumed = sqlx::query(
             "UPDATE page_sync SET sync_state = 'active' WHERE page_id = ? AND sync_state = 'tombstoned'",
         )
         .bind(id)
         .execute(&mut *tx)
-        .await?;
+        .await?
+        .rows_affected()
+            > 0;
+        // The cursor moved on past any change the calendar sent while the page was trashed,
+        // so its calendar re-reads in full on the next pass rather than leaving it stale.
+        if resumed {
+            sqlx::query(
+                "UPDATE sync_calendar SET sync_token = NULL, ctag = NULL, updated_at = ? \
+                 WHERE (account_id, calendar_id) = \
+                       (SELECT account_id, calendar_id FROM page_sync WHERE page_id = ?)",
+            )
+            .bind(&now)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
         // Deleting a folder soft-deletes its pages, so restoring one of them alone
         // would otherwise return it to a folder that is still in the trash: not in
         // the Inbox (`folder_id` is set), not in any listed folder (that folder is
@@ -1014,6 +1063,61 @@ pub async fn list_pages_impl(
     pool: &sqlx::SqlitePool,
     filter: Option<PageFilter>,
 ) -> AppResult<Vec<PageSummary>> {
+    list_pages_window(
+        pool,
+        filter,
+        &ListExtras::default(),
+        PageOrder::SortOrder,
+        None,
+    )
+    .await
+}
+
+/// The order [`list_pages_window`] returns pages in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageOrder {
+    /// The user's manual order.
+    SortOrder,
+    /// Most recently edited first, manual order among ties.
+    RecentlyUpdated,
+    /// Oldest first, so what has waited longest leads.
+    Created,
+}
+
+/// Filters only the CLI and MCP server ask for.
+///
+/// Kept off [`PageFilter`], which is generated into the app's TypeScript types, so the app's
+/// list query and its mock adapter don't grow filters nothing in the app sets.
+#[derive(Debug, Default, Clone)]
+pub struct ListExtras {
+    /// UTC bounds, inclusive and exclusive, in `created_at`'s own format: a caller turns the
+    /// user's local day into these, since `created_at` is stored in UTC.
+    pub created_from_utc: Option<String>,
+    pub created_until_utc: Option<String>,
+    /// Local days, `YYYY-MM-DD`, both inclusive: `completed_at` is stored as local wall-clock.
+    pub completed_from: Option<String>,
+    pub completed_to: Option<String>,
+    pub recurring: bool,
+    /// Pages with at least one reminder that fires; `-1` is the "no reminders" sentinel.
+    pub has_reminders: bool,
+}
+
+/// [`list_pages_impl`] with an order and at most `limit` rows, both applied in the query, so a
+/// short list costs the same however large the workspace is.
+///
+/// A tag filter is the exception: tags match against the page's JSON tag list in Rust, so with
+/// one set every candidate row is still fetched and the limit applies after the match.
+pub async fn list_pages_window(
+    pool: &sqlx::SqlitePool,
+    filter: Option<PageFilter>,
+    extras: &ListExtras,
+    order: PageOrder,
+    limit: Option<usize>,
+) -> AppResult<Vec<PageSummary>> {
+    let filter_tags = filter
+        .as_ref()
+        .and_then(|f| f.tags.clone())
+        .filter(|tags| !tags.is_empty());
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE deleted_at IS NULL"
     ));
@@ -1063,7 +1167,42 @@ pub async fn list_pages_impl(
         }
     }
 
-    builder.push(" ORDER BY sort_order ASC");
+    if let Some(ref from) = extras.created_from_utc {
+        builder.push(" AND created_at >= ");
+        builder.push_bind(from.clone());
+    }
+    if let Some(ref until) = extras.created_until_utc {
+        builder.push(" AND created_at < ");
+        builder.push_bind(until.clone());
+    }
+    if let Some(ref from) = extras.completed_from {
+        builder.push(" AND substr(completed_at, 1, 10) >= ");
+        builder.push_bind(from.clone());
+    }
+    if let Some(ref to) = extras.completed_to {
+        builder.push(" AND substr(completed_at, 1, 10) <= ");
+        builder.push_bind(to.clone());
+    }
+    if extras.recurring {
+        builder
+            .push(" AND EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = pages.id)");
+    }
+    if extras.has_reminders {
+        builder.push(
+            " AND EXISTS (SELECT 1 FROM page_reminders m \
+               WHERE m.page_id = pages.id AND m.minutes_before <> -1)",
+        );
+    }
+
+    builder.push(match order {
+        PageOrder::SortOrder => " ORDER BY sort_order ASC",
+        PageOrder::RecentlyUpdated => " ORDER BY updated_at DESC, sort_order ASC",
+        PageOrder::Created => " ORDER BY created_at ASC, sort_order ASC",
+    });
+    if let (Some(n), None) = (limit, &filter_tags) {
+        builder.push(" LIMIT ");
+        builder.push_bind(i64::try_from(n).unwrap_or(i64::MAX));
+    }
 
     let rows = builder
         .build_query_as::<PageSummaryRow>()
@@ -1072,12 +1211,10 @@ pub async fn list_pages_impl(
 
     let mut summaries: Vec<PageSummary> = rows.into_iter().map(PageSummary::from).collect();
 
-    // Tags filter is post-query (JSON array in SQLite is opaque)
-    if let Some(f) = &filter {
-        if let Some(filter_tags) = &f.tags {
-            if !filter_tags.is_empty() {
-                summaries.retain(|page| filter_tags.iter().all(|tag| page.tags.contains(tag)));
-            }
+    if let Some(filter_tags) = &filter_tags {
+        summaries.retain(|page| filter_tags.iter().all(|tag| page.tags.contains(tag)));
+        if let Some(n) = limit {
+            summaries.truncate(n);
         }
     }
 
@@ -1131,17 +1268,93 @@ pub async fn list_pages_today_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Pag
 /// Inner form taking an explicit local day (`YYYY-MM-DD`), so the boundary is
 /// deterministically testable without depending on the machine clock or timezone.
 async fn list_pages_today_at(pool: &sqlx::SqlitePool, today: &str) -> AppResult<Vec<PageSummary>> {
+    // The stored date is the source zone's for a synced row, and reading it in the
+    // viewer's zone can move it either side of midnight. SQL cannot do that
+    // conversion, so the window reaches a day past today and `viewer_day_of`
+    // decides; no real zone offset moves a date by more than one day.
+    let window_end = chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.checked_add_days(chrono::Days::new(1)))
+        .map_or_else(|| today.to_string(), |d| d.format("%Y-%m-%d").to_string());
+
+    // A moved occurrence is a rule-backed `page_schedules` row, and moving it puts
+    // its original date in the exclusion set, so the head derives *past* today and
+    // a head-only read misses the one day the series is due. `today_scheduled_count`
+    // reads these rows too, which is why the daily summary counted a page this list
+    // then left out.
+    let moved = moved_occurrences_through(pool, &window_end).await?;
+
+    // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
     let rows = sqlx::query_as::<_, PageSummaryRow>(&format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages
          WHERE deleted_at IS NULL
-           AND substr(scheduled_start, 1, 10) <= ?
            AND status != 'done'
+           AND (substr(scheduled_start, 1, 10) <= ?1
+                OR EXISTS (SELECT 1 FROM page_schedules ps
+                             WHERE ps.page_id = pages.id
+                               AND ps.rule_id IS NOT NULL
+                               AND ps.status != 'done'
+                               AND substr(ps.scheduled_start, 1, 10) <= ?1))
          ORDER BY sort_order ASC"
     ))
-    .bind(today)
+    .bind(&window_end)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(PageSummary::from).collect())
+
+    Ok(rows
+        .into_iter()
+        .map(PageSummary::from)
+        .map(|mut p| {
+            // Only when the head is on a later day. A head already at or before
+            // today is the row to show, moved instance or not.
+            let head_ahead = p.scheduled_start.as_deref().is_none_or(|start| {
+                crate::sync::viewer_day_of(start, p.timezone.as_deref()).as_str() > today
+            });
+            if head_ahead {
+                if let Some((start, end)) = moved.get(&p.id) {
+                    p.scheduled_start = Some(start.clone());
+                    p.scheduled_end = end.clone();
+                }
+            }
+            p
+        })
+        .filter(|p| {
+            p.scheduled_start.as_deref().is_some_and(|start| {
+                crate::sync::viewer_day_of(start, p.timezone.as_deref()).as_str() <= today
+            })
+        })
+        .collect())
+}
+
+/// The earliest open moved occurrence per page, at or before `through`.
+///
+/// Earliest because the head it stands in for is the oldest open occurrence, so a
+/// series with two moved instances behind it reads the same way a series with two
+/// un-moved ones does.
+async fn moved_occurrences_through(
+    pool: &sqlx::SqlitePool,
+    through: &str,
+) -> AppResult<std::collections::HashMap<String, (String, Option<String>)>> {
+    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ps.page_id, ps.scheduled_start, ps.scheduled_end
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE ps.rule_id IS NOT NULL
+           AND ps.status != 'done'
+           AND p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND substr(ps.scheduled_start, 1, 10) <= ?
+         ORDER BY ps.scheduled_start ASC",
+    )
+    .bind(through)
+    .fetch_all(pool)
+    .await?;
+
+    let mut earliest = std::collections::HashMap::new();
+    for (page_id, start, end) in rows {
+        earliest.entry(page_id).or_insert((start, end));
+    }
+    Ok(earliest)
 }
 
 pub async fn reorder_pages_impl(
@@ -1487,6 +1700,7 @@ async fn complete_recurring_page_once(
     // Fetch the head inside the tx, rejecting soft-deleted pages — completing a
     // trashed series must not resurrect it as a visible "done" clone. The
     // sort_order read also lives in the tx so concurrent completions can't collide.
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
     ))
@@ -1842,9 +2056,10 @@ pub async fn undo_skip_occurrence_impl(
 pub async fn recompute_recurring_schedules_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<PageSummary>> {
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let page_ids: Vec<String> = sqlx::query_scalar(
         "SELECT r.page_id FROM page_recurrence_rules r
-         JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL",
     )
     .fetch_all(pool)
@@ -1981,6 +2196,7 @@ async fn reschedule_virtual_occurrence_once(
 
     // Reject soft-deleted heads: rescheduling an occurrence of a trashed series
     // must not resurrect its content as a visible page.
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
     ))
@@ -2109,11 +2325,21 @@ async fn reschedule_virtual_occurrence_once(
 
 /// Fetch a single page by id (mirrors the app's get_page — no deleted_at filter).
 pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Page>> {
+    let mut conn = pool.acquire().await?;
+    get_page_in(&mut conn, id).await
+}
+
+/// [`get_page`] on a connection the caller holds, such as inside a transaction.
+pub(crate) async fn get_page_in(
+    conn: &mut sqlx::SqliteConnection,
+    id: &str,
+) -> AppResult<Option<Page>> {
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let row = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
     ))
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(conn)
     .await?;
     Ok(row.map(Page::from))
 }

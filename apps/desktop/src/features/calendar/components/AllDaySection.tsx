@@ -1,20 +1,25 @@
 import type { PageSummary } from "@pikos/core";
 import {
-  ALL_DAY_BAR_HEIGHT,
-  ALL_DAY_ROW_HEIGHT,
-  ALL_DAY_TOP_PADDING,
   assignStableAllDayRows,
   barPositionStyle,
   buildAllDayBars,
   firstFreeRowInSpan,
 } from "@pikos/core";
 import { format } from "date-fns";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { chipFolderStyle } from "../utils/calendarColors";
+import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
 import { AllDayBar } from "./AllDayBar";
+
+/** Rows drawn past each edge of the strip's scrolled view, so a scroll shows bars already drawn. A
+ *  busy week holds hundreds of bars in a strip a few rows tall, and drawing them all was most of
+ *  the cost of showing the week. */
+const OVERSCAN_ROWS = 4;
 
 interface AllDaySectionProps {
   allDayDragHoverIndex: number | null;
@@ -70,6 +75,7 @@ export function AllDaySection({
   timedDragTarget,
 }: AllDaySectionProps) {
   const { folders } = usePages();
+  const { metrics } = useCalendarSettings();
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
@@ -80,7 +86,7 @@ export function AllDaySection({
   // Reserve enough height for every row plus symmetric top/bottom padding.
   // min-h-full on the scroll container ensures backgrounds still reach the
   // bottom edge when the bar count is short.
-  const contentMinHeight = ALL_DAY_TOP_PADDING * 2 + rowCount * ALL_DAY_ROW_HEIGHT;
+  const contentMinHeight = metrics.allDayTopPadding * 2 + rowCount * metrics.allDayRowHeight;
 
   // Auto-open fires on at most one bar. `!continuesLeft` rules out week-crossed
   // continuation bars (autoOpen targets a newly-created page, which always
@@ -89,6 +95,17 @@ export function AllDaySection({
   const autoOpenBarKey = autoOpenPageId
     ? (bars.find((b) => b.page.id === autoOpenPageId && !b.continuesLeft)?.key ?? null)
     : null;
+
+  const [scrollTop, setScrollTop] = useState(0);
+  const firstRow =
+    Math.floor((scrollTop - metrics.allDayTopPadding) / metrics.allDayRowHeight) - OVERSCAN_ROWS;
+  const lastRow = Math.ceil((scrollTop + height) / metrics.allDayRowHeight) + OVERSCAN_ROWS;
+  const drawnBars = bars.filter(
+    (bar) =>
+      (bar.row >= firstRow && bar.row <= lastRow) ||
+      bar.key === autoOpenBarKey ||
+      bar.page.id === draggingPageId
+  );
 
   // Normalise create-preview bounds (the drag could go in either direction).
   const previewBounds = createPreview
@@ -100,8 +117,8 @@ export function AllDaySection({
   // Ghost row matches where assignAllDayRows will actually place the new bar
   // on commit, so there's no visual jump when the ghost becomes a real bar.
   const previewTopPx = previewBounds
-    ? ALL_DAY_TOP_PADDING +
-      firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * ALL_DAY_ROW_HEIGHT
+    ? metrics.allDayTopPadding +
+      firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * metrics.allDayRowHeight
     : 0;
 
   function handleColumnPointerDown(e: React.PointerEvent, dayIndex: number) {
@@ -118,10 +135,14 @@ export function AllDaySection({
           section height, scroll instead of clipping. `min-h-full` keeps the
           columns tall when bars are short so weekend bg + dividers reach the
           bottom edge. */}
-      <div className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden">
+      <div
+        aria-label="All-day events"
+        className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden"
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        role="group"
+      >
         <div className="flex min-h-full">
-          {/* Gutter spacer — aligns with TimeGutter's w-14 */}
-          <div className="w-14 shrink-0" />
+          <div className={cn(CALENDAR_GUTTER_WIDTH, "shrink-0")} />
 
           <div className="relative flex flex-1" style={{ minHeight: contentMinHeight }}>
             {days.map((day, dayIndex) => {
@@ -132,8 +153,14 @@ export function AllDaySection({
                 <div
                   aria-label={`All-day events, ${format(day, "EEEE MMMM d")}`}
                   className={cn(
-                    "relative min-w-0 flex-1 cursor-cell",
-                    "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border/40",
+                    // The same divider the time grid draws, rather than a look-alike:
+                    // a pseudo-element at a different opacity antialiased differently
+                    // on a fractional column edge, which read as the all-day lines
+                    // sitting a pixel off the ones below. Unlike the grid, the first
+                    // column keeps its border — the gutter beside it is empty here,
+                    // so the line closes the row, where in the grid it would fence
+                    // off the hour labels.
+                    "relative min-w-0 flex-1 cursor-cell border-l border-border/50",
                     weekend && "bg-white/[0.012]",
                     (isAllDayTarget || isTimedTarget) && "bg-accent/30"
                   )}
@@ -151,7 +178,7 @@ export function AllDaySection({
                 bar re-enables pointer-events-auto on itself. No aria-hidden:
                 that would take every bar out of the accessibility tree. */}
             <div className="pointer-events-none absolute inset-0">
-              {bars.map((bar) => {
+              {drawnBars.map((bar) => {
                 const folderColor = bar.page.folderId
                   ? folderColorMap.get(bar.page.folderId)
                   : undefined;
@@ -166,7 +193,10 @@ export function AllDaySection({
                     onDoubleClick={onPageDoubleClick}
                     onDragStart={onChipDragStart}
                     onEdgeResizeStart={onEdgeResizeStart}
-                    position={barPositionStyle(bar, columnCount)}
+                    position={barPositionStyle(bar, columnCount, {
+                      rowHeight: metrics.allDayRowHeight,
+                      topPadding: metrics.allDayTopPadding,
+                    })}
                   />
                 );
               })}
@@ -178,7 +208,7 @@ export function AllDaySection({
                 className="pointer-events-none absolute rounded-sm border-l-[2px]"
                 style={{
                   ...chipFolderStyle(),
-                  height: ALL_DAY_BAR_HEIGHT,
+                  height: metrics.allDayBarHeight,
                   left: `${(previewBounds.lo / columnCount) * 100}%`,
                   top: previewTopPx,
                   width: `calc(${((previewBounds.hi - previewBounds.lo + 1) / columnCount) * 100}% - 2px)`,

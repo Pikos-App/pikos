@@ -1,9 +1,11 @@
 import type { CSVMappingConfig, ImageRef, ImportPlan, VaultFile } from "@pikos/core";
 import {
   applyMappings,
+  ASSET_DIR,
   cleanTitle,
   detectUniqueValues,
   extractText,
+  imageRefCandidates,
   parseMarkdownVault,
   prepareCSVRows,
   storageErrorUserMessage,
@@ -130,9 +132,9 @@ function wrapPlainText(text: string): string {
 
 /**
  * Resolve image references in a markdown body, copy files to workspace assets,
- * and rewrite the body with the saved absolute paths.
+ * and rewrite the body with their stored paths.
  */
-async function resolveImportImages(
+export async function resolveImportImages(
   body: string,
   imageRefs: ImageRef[],
   vaultRoot: string
@@ -153,14 +155,18 @@ async function resolveImportImages(
     }
 
     const sep = vaultRoot.endsWith("/") ? "" : "/";
-    const basePath = `${vaultRoot}${sep}${ref.sourcePath}`;
-
-    // Try the path as-is first, then with common image extensions (Obsidian
-    // allows extensionless embeds like ![[Screenshot 2026-04-13 at 7.41.23 PM]])
+    // Each place the image may be as written first, then with common image extensions
+    // (Obsidian allows extensionless embeds like ![[Screenshot 2026-04-13 at 7.41.23 PM]])
     const hasExt = /\.\w+$/.test(ref.sourcePath);
-    const candidates = hasExt
-      ? [basePath]
-      : [basePath, ...["png", "jpg", "jpeg", "gif", "webp", "svg"].map((e) => `${basePath}.${e}`)];
+    const candidates = imageRefCandidates(ref).flatMap((inVault) => {
+      const basePath = `${vaultRoot}${sep}${inVault}`;
+      return hasExt
+        ? [basePath]
+        : [
+            basePath,
+            ...["png", "jpg", "jpeg", "gif", "webp", "svg"].map((e) => `${basePath}.${e}`),
+          ];
+    });
 
     let saved = false;
     for (const candidate of candidates) {
@@ -199,10 +205,10 @@ function rewriteImageRef(body: string, ref: ImageRef, savedPath: string): string
 function addAssetPathsToJson(json: JSONContent): JSONContent {
   if (json.type === "image" && json.attrs?.["src"]) {
     const src = json.attrs["src"] as string;
-    // If src looks like an absolute filesystem path, set it as data-asset-path.
-    // Decode URI encoding (tiptap-markdown encodes spaces as %20) so the
-    // path matches the actual filesystem.
-    if (src.startsWith("/") && !src.startsWith("//")) {
+    // A stored asset path, or a full filesystem path, is the image's file: set it as
+    // data-asset-path. Decode URI encoding (tiptap-markdown encodes spaces as %20)
+    // so the path matches the actual filesystem.
+    if (src.startsWith(`${ASSET_DIR}/`) || (src.startsWith("/") && !src.startsWith("//"))) {
       const decodedSrc = decodeURIComponent(src);
       return {
         ...json,
@@ -296,7 +302,6 @@ export type ImportState =
       step: "done";
       pageCount: number;
       folderCount: number;
-      batchTag: string;
       pageIds: string[];
       folderIds: string[];
     }
@@ -387,7 +392,6 @@ export function useImport() {
   }
 
   async function executeImport(plan: ImportPlan): Promise<boolean> {
-    const batchTag = `_import_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "_")}`;
     setState({ step: "importing" });
 
     try {
@@ -443,14 +447,12 @@ export function useImport() {
       }
 
       const result = await importBatch({
-        batchTag,
         folders: plan.folders,
         pages: batchPages,
         source: plan.source,
       });
 
       setState({
-        batchTag,
         folderCount: result.folderIds.length,
         folderIds: result.folderIds,
         pageCount: plan.pages.length,

@@ -5,6 +5,7 @@
     "types": ["node"],
     "paths": {
       "@/*": ["./src/*"],
+      "@bridge/*": ["./bridge/*"],
       "@pikos/core": ["../../packages/core/src/index.ts"],
       "@pikos/core/*": ["../../packages/core/src/*"],
       "@seeds/*": ["./seeds/*"]

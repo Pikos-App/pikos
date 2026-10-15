@@ -76,6 +76,15 @@ async fn set_status(pool: &SqlitePool, id: &str, status: &str) {
         .unwrap();
 }
 
+async fn set_completed(pool: &SqlitePool, id: &str, completed_at: &str) {
+    sqlx::query("UPDATE pages SET status = 'done', completed_at = ? WHERE id = ?")
+        .bind(completed_at)
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
 async fn soft_delete(pool: &SqlitePool, id: &str) {
     sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
         .bind(now_iso())
@@ -94,6 +103,9 @@ async fn set_parent(pool: &SqlitePool, child: &str, parent: &str) {
         .unwrap();
 }
 
+/// Writes the denorm alongside the row, as `refresh_schedule_denorm` does. A schedule row
+/// whose page carries no `scheduled_start` is a state no writer produces, and reading the
+/// stats against one measured the fixture rather than the app.
 async fn insert_schedule(pool: &SqlitePool, id: &str, page_id: &str, start: &str) {
     sqlx::query(
         "INSERT INTO page_schedules (id, page_id, scheduled_start, created_at) VALUES (?, ?, ?, ?)",
@@ -105,6 +117,12 @@ async fn insert_schedule(pool: &SqlitePool, id: &str, page_id: &str, start: &str
     .execute(pool)
     .await
     .unwrap();
+    sqlx::query("UPDATE pages SET scheduled_start = ? WHERE id = ?")
+        .bind(start)
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn insert_rule(pool: &SqlitePool, id: &str, page_id: &str) {
@@ -138,6 +156,10 @@ async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, durati
 
 // ── get_usage_stats_impl ───────────────────────────────────────────────────────
 
+/// SQLite's weekday numbering, which the frontend's `WeekStart` shares.
+const SUNDAY: i64 = 0;
+const MONDAY: i64 = 1;
+
 /// The card and its producer, end to end. Every other stats test here inserts the
 /// rows by hand, which measures the query and not the path a user's session takes;
 /// the "Focus time" card read zero for the whole life of the table, so the writer
@@ -168,7 +190,7 @@ async fn usage_stats_count_sessions_written_by_the_focus_writer() {
     .await
     .unwrap();
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
     assert_eq!(s.total_focus_sessions, 2);
     assert_eq!(s.total_focus_minutes, 40); // (1500 + 900) / 60
     assert!(s.has_focus_sessions);
@@ -177,7 +199,7 @@ async fn usage_stats_count_sessions_written_by_the_focus_writer() {
 #[tokio::test]
 async fn usage_stats_empty_db_is_all_zeros() {
     let pool = test_pool().await;
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
 
     assert_eq!(s.total_pages, 0);
     assert_eq!(s.total_folders, 0);
@@ -229,7 +251,7 @@ async fn usage_stats_counts_totals_and_adoption() {
     insert_focus_session(&pool, "fs1", "p1", 600).await;
     insert_focus_session(&pool, "fs2", "p1", 600).await;
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
 
     assert_eq!(s.total_pages, 3);
     assert_eq!(s.total_folders, 1);
@@ -285,13 +307,70 @@ async fn usage_stats_count_monday_in_its_own_week() {
     .await
     .unwrap();
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
 
     assert_eq!(
         s.weekly_activity.last().unwrap().focus_minutes,
         10,
         "a Monday session belongs to the week that Monday opens"
     );
+}
+
+/// The Data page was the last surface ignoring `weekStart`, so the same day's work
+/// fell in a different column than the calendar it came from. Sunday is the day
+/// that moves: it opens its own week for a Sunday-start user and closes the
+/// previous one for a Monday-start user.
+#[tokio::test]
+async fn usage_stats_bucket_weeks_on_the_users_week_start() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
+
+    let sunday: String = sqlx::query_scalar("SELECT date('now', '-6 days', 'weekday 0')")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
+         VALUES ('fs1', 'p1', ?, ?, 600)",
+    )
+    .bind(format!("{sunday}T09:00:00"))
+    .bind(format!("{sunday}T09:10:00"))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let sun = get_usage_stats_impl(&pool, SUNDAY).await.unwrap();
+    let mon = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+
+    let labels = |s: &UsageStats| -> Vec<String> {
+        s.weekly_activity.iter().map(|w| w.week.clone()).collect()
+    };
+    let (sun_labels, mon_labels) = (labels(&sun), labels(&mon));
+    assert!(
+        sun_labels.iter().all(|l| !mon_labels.contains(l)),
+        "every column moves; no week opens on both a Sunday and a Monday\n{sun_labels:?}\n{mon_labels:?}"
+    );
+
+    let total = |s: &UsageStats| -> i64 { s.weekly_activity.iter().map(|w| w.focus_minutes).sum() };
+    assert_eq!(
+        (total(&sun), total(&mon)),
+        (10, 10),
+        "the session is counted whichever day opens the week"
+    );
+    assert_eq!(
+        sun.weekly_activity.last().unwrap().focus_minutes,
+        10,
+        "the most recent Sunday opens the current week for a Sunday-start user"
+    );
+}
+
+/// An unrecognised modifier makes SQLite's `date()` answer NULL, which would empty
+/// every bar rather than fail, so the range is checked before the query runs.
+#[tokio::test]
+async fn usage_stats_reject_a_week_start_outside_the_week() {
+    let pool = test_pool().await;
+    assert!(get_usage_stats_impl(&pool, 7).await.is_err());
+    assert!(get_usage_stats_impl(&pool, -1).await.is_err());
 }
 
 /// The chart sums a week's sessions into whole minutes, truncating like the
@@ -303,7 +382,7 @@ async fn usage_stats_bucket_focus_minutes_into_the_current_week() {
     insert_focus_session(&pool, "fs1", "p1", 90).await;
     insert_focus_session(&pool, "fs2", "p1", 90).await;
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
     let latest = s.weekly_activity.last().unwrap();
 
     assert_eq!(latest.focus_minutes, 3);
@@ -324,8 +403,18 @@ async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Parent", "{}", "one two", 0, "[]").await;
 
-    assert!(!get_usage_stats_impl(&pool).await.unwrap().has_reminders);
-    assert!(!get_usage_stats_impl(&pool).await.unwrap().has_calendar_sync);
+    assert!(
+        !get_usage_stats_impl(&pool, MONDAY)
+            .await
+            .unwrap()
+            .has_reminders
+    );
+    assert!(
+        !get_usage_stats_impl(&pool, MONDAY)
+            .await
+            .unwrap()
+            .has_calendar_sync
+    );
 
     pikos_db::create_page_reminder(&pool, "p1", 30)
         .await
@@ -341,7 +430,7 @@ async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     .await
     .unwrap();
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
     assert!(s.has_reminders);
     assert!(s.has_calendar_sync);
 }
@@ -353,7 +442,7 @@ async fn usage_stats_excludes_soft_deleted_pages() {
     insert_rich_page(&pool, "p2", "Gone", "{}", "x y z", 3, "[\"drop\"]").await;
     soft_delete(&pool, "p2").await;
 
-    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
     assert_eq!(s.total_pages, 1);
     assert_eq!(s.total_words, 2); // only the live page
                                   // adoption flags only reflect the surviving page
@@ -619,6 +708,198 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
         imported["content"]["content"][1]["attrs"]["data-asset-path"], image_path,
         "the image node's asset path must be preserved verbatim"
     );
+}
+
+// ── write_markdown_export ──────────────────────────────────────────────────────
+
+const NEW_IMAGE: &str = "3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png";
+const OLD_IMAGE: &str = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.jpg";
+const IMPORTED_IMAGE: &str = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d.gif";
+
+/// One image node per way a page has stored its file: the stored path the editor
+/// writes now, a full path saved on another machine, and an import's bare `src`.
+fn page_with_images() -> String {
+    serde_json::json!({
+        "type": "doc",
+        "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": "Day one" }] },
+            { "type": "image", "attrs": {
+                "src": format!("assets/{NEW_IMAGE}"),
+                "data-asset-path": format!("assets/{NEW_IMAGE}"),
+                "alt": "new" } },
+            { "type": "image", "attrs": {
+                "src": "asset://localhost/elsewhere",
+                "data-asset-path": format!(
+                    "/Volumes/Old Mac/Pikos/assets/{OLD_IMAGE}"
+                ),
+                "alt": "old" } },
+            { "type": "image", "attrs": {
+                "src": format!(
+                    "/Volumes/Old Mac/Pikos/assets/{IMPORTED_IMAGE}"
+                ),
+                "alt": "imported" } }
+        ]
+    })
+    .to_string()
+}
+
+// The export this test writes, committed; `roundtrip.test.ts` imports it back.
+const MARKDOWN_VAULT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../crates/pikos-db/tests/fixtures/markdown-vault"
+);
+
+// qa: EXP-03
+// qa: EXP-05:2
+// qa: PRIV-04:4
+#[tokio::test]
+async fn a_markdown_export_writes_the_tree_and_carries_every_image_from_a_moved_workspace() {
+    let pool = test_pool().await;
+    let root = std::env::temp_dir().join(format!("pkos_md_export_{}", uuid::Uuid::new_v4()));
+    let assets_dir = root.join("workspace").join("assets");
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        std::fs::write(assets_dir.join(name), name.as_bytes()).unwrap();
+    }
+    insert_test_folder(&pool, "f1", "Trips").await.unwrap();
+    insert_rich_page(
+        &pool,
+        "p1",
+        "Paris",
+        &page_with_images(),
+        "Day one",
+        2,
+        "[\"travel\"]",
+    )
+    .await;
+    sqlx::query("UPDATE pages SET folder_id = 'f1' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    insert_rich_page(
+        &pool,
+        "p2",
+        "Packing",
+        &page_with_images(),
+        "Day one",
+        0,
+        "[]",
+    )
+    .await;
+    sqlx::query(
+        "UPDATE pages SET created_at = '2026-05-20T08:00:00', updated_at = '2026-05-21T08:00:00'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let out = root.join("export");
+
+    let (pages, images) = write_markdown_export(&pool, &out, &assets_dir, false)
+        .await
+        .unwrap();
+
+    assert_eq!((pages, images), (2, 3));
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        assert_eq!(
+            std::fs::read(out.join("assets").join(name)).unwrap(),
+            name.as_bytes()
+        );
+    }
+    let in_folder = std::fs::read_to_string(out.join("Trips").join("Paris.md")).unwrap();
+    assert!(in_folder.starts_with("---\n"), "{in_folder}");
+    assert!(in_folder.contains("title: \"Paris\""), "{in_folder}");
+    assert!(in_folder.contains("Day one"), "{in_folder}");
+    let at_root = std::fs::read_to_string(out.join("Packing.md")).unwrap();
+    assert!(!at_root.contains("scheduled_start"), "{at_root}");
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        assert!(
+            in_folder.contains(&format!("](../assets/{name})")),
+            "{in_folder}"
+        );
+        assert!(at_root.contains(&format!("](assets/{name})")), "{at_root}");
+    }
+    assert!(!in_folder.contains("/Volumes/Old Mac"), "{in_folder}");
+
+    let vault = std::path::Path::new(MARKDOWN_VAULT);
+    assert_eq!(
+        in_folder,
+        std::fs::read_to_string(vault.join("Trips").join("Paris.md")).unwrap()
+    );
+    assert_eq!(
+        at_root,
+        std::fs::read_to_string(vault.join("Packing.md")).unwrap()
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The UTC stamp inside `<stem>-<stamp>.<ext>`, or a panic naming the file.
+fn stamp_of(file: &std::path::Path, stem: &str, ext: &str) -> chrono::NaiveDateTime {
+    let name = file.file_name().unwrap().to_string_lossy();
+    let stamp = name
+        .strip_prefix(&format!("{stem}-"))
+        .and_then(|rest| rest.strip_suffix(&format!(".{ext}")))
+        .unwrap_or_else(|| panic!("{name} is not {stem}-<stamp>.{ext}"));
+    chrono::NaiveDateTime::parse_from_str(stamp, "%Y-%m-%dT%H-%M-%S")
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+fn export_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("pkos_export_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+// qa: EXP-02:3
+#[tokio::test]
+async fn a_csv_export_is_one_stamped_file_holding_completed_pages_too() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Open", "{}", "", 0, "[]").await;
+    insert_rich_page(&pool, "p2", "Finished", "{}", "", 0, "[]").await;
+    set_completed(&pool, "p2", "2026-05-01T12:00:00Z").await;
+    let dir = export_dir();
+
+    let (file, rows) = write_csv_export(&pool, &dir, false).await.unwrap();
+
+    assert_eq!(file.parent().unwrap(), dir);
+    stamp_of(&file, "pikos-export", "csv");
+    assert_eq!(rows, 2);
+    let csv = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        csv.contains("Finished") && csv.contains("2026-05-01T12:00:00Z"),
+        "{csv}"
+    );
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// qa: EXP-01:2
+#[tokio::test]
+async fn a_sqlite_export_is_one_stamped_database_that_opens_whole() {
+    let dir = export_dir();
+    let source = file_pool(&dir.join("live.sqlite").to_string_lossy()).await;
+    insert_rich_page(&source, "p1", "Kept", "{}", "", 0, "[]").await;
+    let out = dir.join("out");
+    std::fs::create_dir_all(&out).unwrap();
+
+    let file = write_sqlite_export(&source, &out).await.unwrap();
+
+    assert_eq!(file.parent().unwrap(), out);
+    stamp_of(&file, "pikos-backup", "sqlite");
+    let names: Vec<_> = std::fs::read_dir(&out)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(names.len(), 1, "no -wal or -shm beside it: {names:?}");
+    let copy = open_existing(&file.to_string_lossy()).await;
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&copy)
+        .await
+        .unwrap();
+    assert_eq!(integrity, "ok");
+    assert_eq!(count(&copy, "pages").await, 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ── vacuum_into ────────────────────────────────────────────────────────────────
@@ -1035,4 +1316,40 @@ async fn seed_synced_calendar_is_idempotent() {
         .await
         .unwrap();
     assert_eq!(after_first, after_second);
+}
+
+/// The figure sits beside Pages, Folders and Completed, so it has to be a page count.
+/// Counting `page_schedules` rows read 271 against 324 real ones: a trashed page keeps its
+/// rows, and a recurring page has none at all.
+#[tokio::test]
+async fn usage_stats_count_scheduled_pages_not_schedule_rows() {
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-01T09:00:00"),
+            ..TestPage::new("kept", "Scheduled")
+        },
+    )
+    .await
+    .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-02T09:00:00"),
+            ..TestPage::new("trashed", "Scheduled then trashed")
+        },
+    )
+    .await
+    .unwrap();
+    insert_test_page(&pool, TestPage::new("unscheduled", "No date"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET deleted_at = '2026-05-01T00:00:00Z' WHERE id = 'trashed'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    assert_eq!(s.total_schedules, 1);
 }

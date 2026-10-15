@@ -82,7 +82,7 @@ export function ShortcutsSettings() {
   ]);
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       <h2 className="mb-1 text-base font-semibold">Keyboard Shortcuts</h2>
       <p className="mb-6 text-sm text-muted-foreground">
         {IS_MACOS ? "⌘ is Cmd, ⇧ is Shift, ⌥ is Option." : "Ctrl replaces Cmd on this platform."}
@@ -94,17 +94,20 @@ export function ShortcutsSettings() {
             <p className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               {group.label}
             </p>
-            <div className="divide-y divide-border rounded-lg border border-border bg-card">
+            <ul
+              aria-label={group.label}
+              className="divide-y divide-border rounded-lg border border-border bg-card"
+            >
               {group.items.map((item) => (
-                <div
+                <li
                   className="flex items-center justify-between gap-4 px-4 py-2.5"
                   key={`${item.group}-${item.label}`}
                 >
                   <span className="text-sm">{item.label}</span>
                   <ComboDisplay combo={item.combo} />
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         ))}
       </div>

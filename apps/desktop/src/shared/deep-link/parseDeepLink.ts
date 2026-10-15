@@ -9,7 +9,9 @@
 //   pikos://quick-add?text=...     → open quick-add prefilled
 //   pikos://search?q=...           → open search prefilled
 //
-// Unknown or malformed URLs return null. The router treats null as a no-op.
+// The staging build registers `pikos-staging://` instead, with the same shapes, so a link
+// meant for the installed app never opens staging. Unknown or malformed URLs return null.
+// The router treats null as a no-op.
 
 import type { SmartViewId } from "@pikos/core";
 
@@ -29,7 +31,7 @@ export function parseDeepLink(raw: string): DeepLinkAction | null {
   } catch {
     return null;
   }
-  if (url.protocol !== "pikos:") return null;
+  if (url.protocol !== "pikos:" && url.protocol !== "pikos-staging:") return null;
 
   // URL.host is empty for `pikos://today` on some implementations and `today`
   // on others (host parsing differs across spec variants). Normalise by

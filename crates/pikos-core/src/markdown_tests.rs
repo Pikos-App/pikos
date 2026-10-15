@@ -203,3 +203,61 @@ fn consecutive_empty_paragraphs_scale_blank_lines_one_for_one() {
     });
     assert_eq!(prosemirror_to_markdown(&doc), "A\n\n\nB\n");
 }
+
+// qa: EXP-11:2
+#[test]
+fn a_quote_marks_every_line_of_every_block() {
+    let doc = json!({
+        "type": "doc",
+        "content": [{
+            "type": "blockquote",
+            "content": [
+                { "type": "paragraph", "content": [{ "type": "text", "text": "one" }] },
+                { "type": "bulletList", "content": [
+                    { "type": "listItem", "content": [
+                        { "type": "paragraph", "content": [{ "type": "text", "text": "a" }] }
+                    ]},
+                    { "type": "listItem", "content": [
+                        { "type": "paragraph", "content": [{ "type": "text", "text": "b" }] }
+                    ]}
+                ]},
+                { "type": "codeBlock", "content": [{ "type": "text", "text": "x\ny" }] }
+            ]
+        }]
+    });
+    assert_eq!(
+        prosemirror_to_markdown(&doc),
+        "> one\n>\n> - a\n> - b\n>\n> ```\n> x\n> y\n> ```\n"
+    );
+}
+
+// qa: EXP-11:2
+#[test]
+fn back_to_back_lists_take_turns_with_the_marker_so_they_stay_apart() {
+    let item = |text: &str| {
+        json!({ "type": "listItem", "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": text }] }
+        ]})
+    };
+    let task = |text: &str| {
+        json!({ "type": "taskItem", "attrs": { "checked": false }, "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": text }] }
+        ]})
+    };
+    let doc = json!({
+        "type": "doc",
+        "content": [
+            { "type": "bulletList", "content": [item("a")] },
+            { "type": "paragraph" },
+            { "type": "taskList", "content": [task("b")] },
+            { "type": "bulletList", "content": [item("c")] },
+            { "type": "paragraph", "content": [{ "type": "text", "text": "then" }] },
+            { "type": "orderedList", "content": [item("d")] },
+            { "type": "orderedList", "content": [item("e")] }
+        ]
+    });
+    assert_eq!(
+        prosemirror_to_markdown(&doc),
+        "- a\n\n* [ ] b\n\n- c\n\nthen\n\n1. d\n\n1) e\n"
+    );
+}

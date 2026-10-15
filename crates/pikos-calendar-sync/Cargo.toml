@@ -14,15 +14,18 @@ pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
 # The engine writes the per-calendar cursor/timestamps back through the same pool
 # pikos-db owns; same version/features so the SqlitePool type unifies.
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
-# rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# rustls (no OpenSSL) keeps non-macOS builds system-lib-free. Manual roots: `http.rs` supplies the
+# TLS config, so no bundled root list is compiled in.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-manual-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
 thiserror = "2"
 # Warn-level facade for provider-side skips (unparseable/bodyless resources); the
 # desktop app installs the logger that routes these to the shared log file.
 log = "0.4"
 # CalDAV: namespace-aware multistatus parsing + base-URL/redirect resolution +
 # the keychain credential blob ({base_url, username, password}).
-quick-xml = "0.37"
+quick-xml = "0.41"
 url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -34,24 +37,34 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 chrono-tz = "0.10"
 oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 tokio = { version = "1", features = ["net", "io-util", "time"] }
+# The registrable domain of a host, from a compiled-in public suffix list. Discovery needs it to
+# tell `p42-caldav.icloud.com` (iCloud's own partition, and legitimate) from a redirect that leaves
+# the account's domain carrying its password — which counting labels cannot do, since `co.uk` and
+# `icloud.com` are both two.
+psl = "2.1.232"
 
-# OS-specific backend: apple-native on every Apple platform, none elsewhere so a
-# Linux `cargo check` stays system-lib-free (no libdbus/secret-service).
-#
-# Both Apple targets, not just macOS. iOS is `target_os = "ios"`, so a
-# macOS-only gate drops it into the arm below — and `keyring` with no backend
-# feature is a *mock* store with no persistence. Credentials would appear to
-# save and be gone on the next launch, with nothing logged and no error raised.
-# Found by the Tauri-era mobile spike; carried across because the failure is a
-# property of the gate, not of the UI layer.
+# OS-specific backend, and every platform needs one named: with no feature
+# keyring falls back to a mock store that keeps secrets in memory and does not
+# share them between `Entry` instances, so Connect appears to work and the next
+# launch reads NotFound for ever. iOS is its own `target_os`, so a macOS-only
+# gate would drop the phone into that mock.
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 keyring = { version = "3.6.3", features = ["apple-native"] }
 
-[target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
+# Secret Service over D-Bus: GNOME Keyring, KWallet 5.97+, KeePassXC. `sync-` because
+# `CredentialStore` is a sync trait, and keyring's async backend still blocks, which
+# deadlocks under a tokio runtime. `crypto-rust` encrypts the D-Bus session without
+# pulling OpenSSL. Building this needs `libdbus-1-dev`, which both workflows install.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+
+# Windows has no backend yet, and no build either; named here so adding one is a
+# one-line change rather than a discovery.
+[target.'cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))'.dependencies]
 keyring = "3.6.3"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
 # test-support re-exports test_pool + insert_test_* so the engine's Layer-3 tests
 # share pikos-db's migration tree + fixtures rather than carrying their own.
 pikos-db = { path = "../pikos-db", features = ["test-support"] }

@@ -13,8 +13,8 @@ function CmdNHint() {
   return (
     <p className="type-ui-sm mt-1 text-subtle">
       Press{" "}
-      <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">{MOD_KEY_LABEL}N</kbd>{" "}
-      to create a new page
+      <kbd className="rounded border border-border px-1 py-0.5 text-3xs">{MOD_KEY_LABEL}N</kbd> to
+      create a new page
     </p>
   );
 }

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ImportBatchInput, ImportBatchItem } from "@/features/import/types";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { usePages } from "@/shared/context/PagesContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -24,6 +24,7 @@ async function setup() {
     ...useWorkspace(),
     ...usePages(),
     ...useImportBatch(),
+    viewCache: useViewCacheController()!,
   }));
 
   await act(async () => {
@@ -57,7 +58,7 @@ function item(overrides: Partial<ImportBatchItem> = {}): ImportBatchItem {
 }
 
 function batch(overrides: Partial<ImportBatchInput> = {}): ImportBatchInput {
-  return { batchTag: "import-2026", folders: [], pages: [], source: "ticktick", ...overrides };
+  return { folders: [], pages: [], source: "ticktick", ...overrides };
 }
 
 beforeEach(() => {
@@ -81,16 +82,39 @@ describe("importBatch", () => {
       result = await hook.result.current.importBatch(
         batch({
           folders: [{ key: "f1", name: "Work" }],
-          pages: [item({ folderKey: "f1", title: "Task A" })],
+          pages: [item({ folderKey: "f1", tags: ["errands"], title: "Task A" })],
         })
       );
     });
 
     expect(result.folderIds).toHaveLength(1);
     expect(result.pageIds).toHaveLength(1);
-    const imported = hook.result.current.pages.find((p) => p.id === result.pageIds[0]);
+    const [imported] = await hook.result.current.viewCache.rows(result.pageIds);
     expect(imported?.title).toBe("Task A");
-    expect(imported?.tags).toContain("import-2026");
+    expect(imported?.tags).toEqual(["errands"]);
+  });
+
+  it("keeps an imported page's completed and modified times", async () => {
+    const { hook } = await setup();
+
+    let result!: Awaited<ReturnType<typeof hook.result.current.importBatch>>;
+    await act(async () => {
+      result = await hook.result.current.importBatch(
+        batch({
+          pages: [
+            item({
+              completedAt: "2026-01-02T10:00:00.000Z",
+              status: "done",
+              updatedAt: "2026-01-03T11:00:00.000Z",
+            }),
+          ],
+        })
+      );
+    });
+
+    const imported = await hook.result.current.storage!.getPage(result.pageIds[0]!);
+    expect(imported?.completedAt).toBe("2026-01-02T10:00:00.000Z");
+    expect(imported?.updatedAt).toBe("2026-01-03T11:00:00.000Z");
   });
 
   it("reuses an existing folder by name instead of creating a duplicate", async () => {
@@ -139,7 +163,7 @@ describe("importBatch", () => {
 
     expect(result.folderIds).toHaveLength(1);
     expect(result.folderIds[0]).not.toBe(enabled.folderId);
-    const imported = hook.result.current.pages.filter((p) => result.pageIds.includes(p.id));
+    const imported = await hook.result.current.viewCache.rows(result.pageIds);
     expect(imported.map((p) => p.folderId)).toEqual([result.folderIds[0], result.folderIds[0]]);
   });
 

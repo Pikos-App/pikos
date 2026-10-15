@@ -18,6 +18,7 @@ import {
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
     isRecurring: false,
@@ -233,14 +234,41 @@ describe("groupTodayPages", () => {
     vi.useRealTimers();
   });
 
-  it("timed item 2 hours ago — in 'overdue' group", () => {
+  it("timed item 2 hours ago — still in 'today' group", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
 
     const pages = [makePage({ scheduledStart: "2026-03-27T12:00:00", title: "Past timed" })];
     const { overdue, today } = groupTodayPages(pages);
-    expect(overdue.map((p) => p.title)).toEqual(["Past timed"]);
+    expect(today.map((p) => p.title)).toEqual(["Past timed"]);
+    expect(overdue).toHaveLength(0);
+
+    vi.useRealTimers();
+  });
+
+  it("timed item yesterday evening — in 'overdue' group", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
+
+    const pages = [makePage({ scheduledStart: "2026-03-26T22:00:00", title: "Last night" })];
+    const { overdue, today } = groupTodayPages(pages);
+    expect(overdue.map((p) => p.title)).toEqual(["Last night"]);
     expect(today).toHaveLength(0);
+
+    vi.useRealTimers();
+  });
+
+  it("a timed page and an all-day page on the same date group together", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
+
+    const pages = [
+      makePage({ scheduledStart: "2026-03-27T09:00:00", title: "Timed" }),
+      makePage({ scheduledStart: "2026-03-27", title: "All-day" }),
+    ];
+    const { overdue, today } = groupTodayPages(pages);
+    expect(today.map((p) => p.title).sort()).toEqual(["All-day", "Timed"]);
+    expect(overdue).toHaveLength(0);
 
     vi.useRealTimers();
   });
@@ -352,6 +380,7 @@ describe("belongsToView — past synced events", () => {
 
   it("keeps a past detached page — user-owned, keeps task semantics", () => {
     const page = makePage({
+      detachIsReversible: false,
       scheduledStart: "2026-07-30T09:00:00",
       scheduleLocked: false,
       syncState: "detached",
@@ -368,5 +397,93 @@ describe("belongsToView — past synced events", () => {
     const page = synced({ folderId: "f1", scheduledStart: "2026-07-30T09:00:00" });
     expect(belongsToView(page, "inbox", TODAY)).toBe(false);
     expect(belongsToView(page, "f1", TODAY)).toBe(true);
+  });
+});
+
+// ─── synced events are read in the viewer's zone ──────────────────────────────
+
+// A synced event happens at one instant; which day and time that is depends on
+// who is looking. The stored wall-clock is the source calendar's, so reading it
+// directly files a Tokyo morning under tomorrow and leaves a London afternoon
+// looking like it has not happened yet. Vitest pins TZ=UTC, so these offsets are
+// relative to UTC rather than to whatever machine runs them.
+describe("viewer-zone bucketing", () => {
+  // 06:00 in Tokyo (UTC+9) is 21:00 the previous day in UTC.
+  const tokyoMorning = makePage({
+    detachIsReversible: false,
+    id: "tokyo",
+    scheduledStart: "2026-08-08T06:00:00",
+    scheduleLocked: true,
+    syncState: "active",
+    timezone: "Asia/Tokyo",
+  });
+
+  // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC.
+  const laEvening = makePage({
+    detachIsReversible: false,
+    id: "la",
+    scheduledStart: "2026-08-07T20:00:00",
+    scheduleLocked: true,
+    syncState: "active",
+    timezone: "America/Los_Angeles",
+  });
+
+  const floating = makePage({ id: "native", scheduledStart: "2026-08-07T09:00:00" });
+
+  it("puts a page in Today by the day the viewer sees, not the source calendar's", () => {
+    expect(belongsToView(tokyoMorning, "today", "2026-08-07")).toBe(true);
+    expect(belongsToView(laEvening, "today", "2026-08-07")).toBe(false);
+    expect(belongsToView(floating, "today", "2026-08-07")).toBe(true);
+  });
+
+  it("puts a page in Upcoming by the same day", () => {
+    expect(belongsToView(laEvening, "upcoming", "2026-08-07")).toBe(true);
+    expect(belongsToView(tokyoMorning, "upcoming", "2026-08-08")).toBe(false);
+  });
+
+  it("leaves an all-day synced page on its own date whatever the account's zone", () => {
+    const allDay = makePage({
+      detachIsReversible: false,
+      id: "all-day",
+      scheduledStart: "2026-08-07",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "Asia/Tokyo",
+    });
+    expect(belongsToView(allDay, "today", "2026-08-07")).toBe(true);
+    expect(belongsToView(allDay, "today", "2026-08-06")).toBe(false);
+  });
+
+  it("calls a synced event overdue by the day it falls on for the viewer", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"));
+
+    // Both of these land on the opposite day if the stored wall-clock is taken as
+    // local. 08:00 on the 8th in Tokyo (UTC+9) is 23:00 UTC on the 7th, so it is
+    // yesterday for the viewer while the bare date reads as today. 18:00 on the
+    // 7th in Los Angeles (UTC-7) is 01:00 UTC on the 8th, so it is today while
+    // the bare date reads as yesterday.
+    const tokyoEarly = makePage({
+      detachIsReversible: false,
+      id: "tokyo-early",
+      scheduledStart: "2026-08-08T08:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "Asia/Tokyo",
+    });
+    const laEvening = makePage({
+      detachIsReversible: false,
+      id: "la-evening",
+      scheduledStart: "2026-08-07T18:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "America/Los_Angeles",
+    });
+
+    const { overdue, today } = groupTodayPages([tokyoEarly, laEvening]);
+    expect(overdue.map((p) => p.id)).toEqual(["tokyo-early"]);
+    expect(today.map((p) => p.id)).toEqual(["la-evening"]);
+
+    vi.useRealTimers();
   });
 });

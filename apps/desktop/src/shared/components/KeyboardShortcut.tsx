@@ -54,7 +54,7 @@ export function KeyboardShortcut({ shortcut }: KeyboardShortcutProps) {
     <span className="inline-flex items-center gap-0.5">
       {keys.map((key, i) => (
         <kbd
-          className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-background/20 bg-background/10 px-0.5 font-mono text-[10px] leading-none"
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-background/20 bg-background/10 px-0.5 font-mono text-3xs leading-none"
           key={i}
         >
           {key}

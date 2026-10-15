@@ -45,7 +45,7 @@ function makeCollapsedBandPill(
     edge === "top"
       ? bandTop + PILL_OUTER_EDGE_PAD
       : bandTop + bandHeight - pillHeight - PILL_OUTER_EDGE_PAD;
-  return { height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
+  return { countOnly: false, height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
 }
 
 export interface BlockDragStartInfo {
@@ -139,7 +139,7 @@ export function DayColumn({
     bottomCollapsedPageIds,
     topCollapsedPageIds,
     visible: blocks,
-  } = remapBlocksForCollapse(rawBlocks, geometry);
+  } = remapBlocksForCollapse(rawBlocks, geometry, metrics.compactBlockHeight);
   const showNowIndicator = isCurrentWeek && isSameDay(now, day);
   const weekend = day.getDay() === 0 || day.getDay() === 6;
 
@@ -171,10 +171,11 @@ export function DayColumn({
     return () => ro.disconnect();
   }, []);
 
-  const { pill, visible: visibleBlocks } = collapseUnderWidth(
+  const { pills, visible: visibleBlocks } = collapseUnderWidth(
     blocks,
     columnWidth,
-    metrics.compactBlockHeight
+    metrics.compactBlockHeight,
+    metrics.zoom
   );
   const pagesById = new Map(pages.map((p) => [p.id, p]));
 
@@ -415,19 +416,13 @@ export function DayColumn({
               <>
                 <span
                   className={cn(
-                    "flex shrink-0 items-center justify-center rounded-[2px] border",
-                    dragGhost.height < 16 ? "h-2.5 w-2.5" : "h-3.5 w-3.5",
+                    "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
                     dragGhost.isDone ? "border-foreground/40 bg-foreground/10" : "border-current/30"
                   )}
                 >
                   {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
                 </span>
-                <span
-                  className={cn(
-                    "min-w-0 truncate font-medium text-foreground",
-                    dragGhost.height < 16 ? "-mt-px text-[10px] leading-none" : "type-body-sm"
-                  )}
-                >
+                <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
                   {dragGhost.title || "Untitled"}
                 </span>
               </>
@@ -515,7 +510,14 @@ export function DayColumn({
             />
           );
         })}
-        {pill && <OverflowPill onOpen={onPageDoubleClick} pagesById={pagesById} pill={pill} />}
+        {pills.map((pill) => (
+          <OverflowPill
+            key={pill.pageIds[0]}
+            onOpen={onPageDoubleClick}
+            pagesById={pagesById}
+            pill={pill}
+          />
+        ))}
 
         {/* Collapsed-band overflow pills — one per band when there are pages
             whose entire span sits inside a collapsed time range. */}

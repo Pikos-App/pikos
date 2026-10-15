@@ -4,6 +4,7 @@ import type { PageSummary } from "../types";
 import { formatDateOnly, isAllDayIso, localToday, parseLocalISO } from "../utils/dates";
 import { isDone, isOpen } from "../utils/page";
 import { emojiAwareCompare } from "../utils/sort";
+import { viewerStart } from "../utils/syncedTime";
 
 export type SortMode = "manual" | "date" | "title" | "priority";
 
@@ -17,10 +18,13 @@ export function isSmartViewId(viewId: string): viewId is SmartViewId {
 }
 
 /**
- * The folder a view implies for a page created or dropped inside it — null for
- * every smart view, since none of them is a place a page can live. Keeps the
- * "is this id a folder?" question in one place so a fourth smart view can never
- * leak its id into a `folderId` column.
+ * The folder scope a view names — null for every smart view, since none of them
+ * is a place a page can live. Keeps the "is this id a folder?" question in one
+ * place so a fourth smart view can never leak its id into a `folderId` column.
+ *
+ * Answers membership, not permission: an external-calendar folder is a folder
+ * and comes back verbatim. Anything choosing where to *put* a page wants
+ * `folderIdForNewPage`, which also excludes the folders that can't hold one.
  */
 export function folderIdForView(viewId: string): string | null {
   return isSmartViewId(viewId) ? null : viewId;
@@ -57,12 +61,14 @@ export function upcomingWindowEnd(todayStr: string): string {
  */
 export function belongsToView(page: PageSummary, viewId: string, todayStr: string): boolean {
   if (viewId === "today") {
-    if (page.scheduledStart == null) return false;
-    return page.scheduledStart.slice(0, 10) <= todayStr;
+    const start = viewerStart(page);
+    if (start == null) return false;
+    return start.slice(0, 10) <= todayStr;
   }
   if (viewId === "upcoming") {
-    if (page.scheduledStart == null) return false;
-    const day = page.scheduledStart.slice(0, 10);
+    const start = viewerStart(page);
+    if (start == null) return false;
+    const day = start.slice(0, 10);
     return day >= todayStr && day <= upcomingWindowEnd(todayStr);
   }
   if (viewId === "inbox") return page.folderId === null;
@@ -79,7 +85,8 @@ export function belongsToView(page: PageSummary, viewId: string, todayStr: strin
  * All-day strings for other days sort at midnight (start of day).
  * Timed strings are parsed as Date so JS DST normalization applies.
  */
-function toSortMs(iso: string): number {
+function toSortMs(page: PageSummary): number {
+  const iso = viewerStart(page) ?? "";
   if (isAllDayIso(iso)) {
     if (iso === localToday()) return Date.now();
     return parseLocalISO(iso).getTime();
@@ -92,7 +99,7 @@ function toSortMs(iso: string): number {
  * so a day group in Upcoming reads exactly like the Today view's sections do.
  */
 export function compareByScheduledStart(a: PageSummary, b: PageSummary): number {
-  return toSortMs(a.scheduledStart ?? "") - toSortMs(b.scheduledStart ?? "");
+  return toSortMs(a) - toSortMs(b);
 }
 
 /** Returns a new array. */
@@ -104,7 +111,7 @@ export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
       // Unscheduled items sink to the bottom
       if (aHas !== bHas) return aHas ? -1 : 1;
       if (!aHas) return 0;
-      return toSortMs(a.scheduledStart!) - toSortMs(b.scheduledStart!);
+      return toSortMs(a) - toSortMs(b);
     });
   }
   if (mode === "title") {
@@ -122,7 +129,7 @@ export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
       const bHas = b.scheduledStart != null;
       if (aHas !== bHas) return aHas ? -1 : 1;
       if (!aHas) return 0;
-      return toSortMs(a.scheduledStart!) - toSortMs(b.scheduledStart!);
+      return toSortMs(a) - toSortMs(b);
     });
   }
   // manual — sort by sortOrder ascending
@@ -156,24 +163,28 @@ export function getCompletedViewPages(pages: PageSummary[], activeViewId: string
   );
 }
 
-/** Splits today-view pages into overdue (before now) and today (today, not yet past).
+/** Splits today-view pages into overdue (scheduled on an earlier day) and today.
  *
- * All-day items ('YYYY-MM-DD') use date-only comparison so they stay in "today" all day.
- * Timed items ('YYYY-MM-DDTHH:MM:SS') use a full datetime comparison so past-today
- * times (e.g. 1:45 AM when it is now 10 AM) correctly appear in "overdue".
+ * Overdue compares days, never the passing moment, so a page set for 9am today is still
+ * under Today at 2pm and reads as late only through its own red time. Grouping on the
+ * moment instead moved a page to Overdue the minute its time passed, which by the
+ * afternoon filled the section with the day's own plan and left it saying nothing about
+ * what needs rescheduling. It also split a timed page from an all-day one on the same
+ * date, which no one chose.
  */
-export function groupTodayPages(pages: PageSummary[]): {
+export function groupTodayPages(
+  pages: PageSummary[],
+  now: Date = new Date()
+): {
   overdue: PageSummary[];
   today: PageSummary[];
 } {
-  const todayStr = localToday();
-  const now = new Date();
+  const todayStr = formatDateOnly(now);
 
   function isOverdue(p: PageSummary): boolean {
-    if (!p.scheduledStart) return false;
-    if (isAllDayIso(p.scheduledStart)) return p.scheduledStart < todayStr;
-    // Timed: treat as past once the scheduled moment has passed
-    return parseLocalISO(p.scheduledStart) < now;
+    const start = viewerStart(p);
+    if (!start) return false;
+    return start.slice(0, 10) < todayStr;
   }
 
   return {

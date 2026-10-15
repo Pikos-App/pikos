@@ -6,8 +6,10 @@ import type { PagePriority, PageStatus } from "../types";
 export interface ImageRef {
   /** The full regex match (e.g. "![[photo.png]]" or "![alt](path/to/img.png)"). */
   fullMatch: string;
-  /** Path as written in the source file (relative to vault root). */
+  /** Path as written in the source file. Where it points is {@link imageRefCandidates}'s call. */
   sourcePath: string;
+  /** The folder of the file the reference is written in, from the vault root; "" at the top. */
+  fromDir: string;
   /** "wiki" for ![[...]] or "standard" for ![alt](...). */
   syntax: "wiki" | "standard";
   /** Alt text (filename for wiki, explicit alt for standard). */

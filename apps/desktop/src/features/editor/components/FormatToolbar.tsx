@@ -178,7 +178,7 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
         ed.isFocused && !state.selection.empty && !ed.isActive("image") && !ed.isActive("table")
       }
     >
-      <div className="bubble-toolbar" data-format-toolbar>
+      <div aria-label="Format" className="bubble-toolbar" data-format-toolbar role="toolbar">
         {groups.map((group, gi) => (
           <div className="flex items-center" key={gi}>
             {gi > 0 && <div className="bubble-toolbar-divider" />}

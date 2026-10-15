@@ -1,6 +1,7 @@
 //! The clap surface: globals, subcommands and their flags.
 
 use clap::{Parser, Subcommand};
+use pikos_db::SearchCursor;
 
 #[derive(Parser)]
 #[command(
@@ -30,10 +31,21 @@ pub enum CliCommand {
     /// Full-text search across pages (FTS5, bm25-ranked)
     Search {
         query: Vec<String>,
+        #[arg(
+            long,
+            help = "Match pages holding any of the words; used anyway when none holds them all"
+        )]
+        any: bool,
         #[arg(long)]
         include_completed: bool,
-        #[arg(long)]
+        #[arg(long, help = "Results per page (default 20)")]
         limit: Option<usize>,
+        #[arg(
+            long,
+            value_parser = parse_cursor,
+            help = "Continue from the cursor a previous page printed"
+        )]
+        after: Option<SearchCursor>,
     },
     /// Print a page's full content and metadata
     Read { id: String },
@@ -56,8 +68,24 @@ pub enum CliCommand {
         query: Option<String>,
         #[arg(long = "has-schedule", help = "Only pages that are scheduled at all")]
         has_schedule: bool,
+        #[arg(long, help = "Created on YYYY-MM-DD, or in YYYY-MM-DD..YYYY-MM-DD")]
+        created: Option<String>,
+        #[arg(long, help = "Completed on YYYY-MM-DD, or in YYYY-MM-DD..YYYY-MM-DD")]
+        completed: Option<String>,
+        #[arg(long, help = "Only pages that repeat, with their rule")]
+        repeating: bool,
+        #[arg(
+            long = "has-reminders",
+            help = "Only pages with a reminder, with its lead time"
+        )]
+        has_reminders: bool,
         #[arg(long)]
         modified: bool,
+        #[arg(
+            long = "oldest-first",
+            help = "Sort by when the page was created, oldest first"
+        )]
+        oldest_first: bool,
         #[arg(long)]
         limit: Option<usize>,
     },
@@ -99,9 +127,39 @@ pub enum CliCommand {
         end: Option<String>,
         #[arg(long)]
         priority: Option<i64>,
+        #[arg(
+            long,
+            help = "Move the page to this folder, by name or id — \"inbox\" for unfiled"
+        )]
+        folder: Option<String>,
+        #[arg(long = "tag", help = "Add a tag; repeat for several")]
+        add_tags: Vec<String>,
+        #[arg(long = "untag", help = "Remove a tag; repeat for several")]
+        remove_tags: Vec<String>,
+        #[arg(long, help = "Set the line under the title; \"\" clears it")]
+        subtitle: Option<String>,
+        #[arg(
+            long,
+            conflicts_with_all = ["due", "all_day", "end", "no_end"],
+            help = "Remove the page's date and time"
+        )]
+        unschedule: bool,
+        #[arg(
+            long = "no-end",
+            conflicts_with = "end",
+            help = "Drop the end, keeping the start"
+        )]
+        no_end: bool,
     },
     /// Mark a page done (clones + advances recurring pages)
-    Done { id: String },
+    Done {
+        id: String,
+        #[arg(
+            long,
+            help = "On a repeating page, the occurrence to tick off (YYYY-MM-DD); default the oldest open one"
+        )]
+        date: Option<String>,
+    },
     /// Set a page's status: done | not_started
     Status { id: String, state: String },
     /// Move a page to the trash, where Pikos can restore it
@@ -115,10 +173,19 @@ pub enum CliCommand {
     },
     /// Bring a trashed page back
     Restore { id: String },
-    /// Inspect and create folders
+    /// List trashed pages, newest first
+    Trash,
+    /// List tags on open pages with how many carry each
+    Tags,
+    /// List, create, rename, trash and restore folders
     Folders {
         #[command(subcommand)]
         command: FolderCommand,
+    },
+    /// Skip or move one occurrence of a repeating page, named by its date
+    Occurrence {
+        #[command(subcommand)]
+        command: OccurrenceCommand,
     },
     /// Per-page reminders, in minutes ahead of the scheduled start
     Reminders {
@@ -127,6 +194,11 @@ pub enum CliCommand {
     },
     /// Speak the Model Context Protocol on stdio, for an agent to drive
     Mcp,
+    /// Seed a throwaway workspace and time it. Never touches your real one.
+    Stress {
+        #[command(subcommand)]
+        action: StressCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -135,6 +207,42 @@ pub enum FolderCommand {
     List,
     /// Create a folder at the top level
     Create { name: Vec<String> },
+    /// Rename a folder, named by its id or its whole name
+    Rename {
+        folder: String,
+        #[arg(required = true)]
+        name: Vec<String>,
+    },
+    /// Move a folder and every page in it to the trash
+    Delete { folder: String },
+    /// Bring a trashed folder back with the pages trashed along with it
+    Restore { id: String },
+}
+
+#[derive(Subcommand)]
+pub enum OccurrenceCommand {
+    /// Skip one occurrence, as deleting it from the calendar does
+    Skip { id: String, date: String },
+    /// Bring a skipped occurrence back
+    Unskip { id: String, date: String },
+    /// Move one occurrence, keeping its length unless --end says otherwise
+    Move {
+        id: String,
+        date: String,
+        #[arg(
+            long,
+            help = "Where it goes: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it isn't timed"
+        )]
+        due: Option<String>,
+        #[arg(
+            long = "all-day",
+            conflicts_with = "due",
+            help = "Make it all-day on YYYY-MM-DD"
+        )]
+        all_day: Option<String>,
+        #[arg(long, help = "When it ends, in its own shape")]
+        end: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -152,4 +260,46 @@ pub enum ReminderCommand {
     },
     /// Remove a reminder by its own id
     Rm { reminder_id: String },
+}
+
+#[derive(Subcommand)]
+pub enum StressCommand {
+    /// Fill a scratch workspace with generated pages
+    Seed {
+        #[arg(long, default_value_t = 100_000, help = "Ordinary pages to create")]
+        pages: usize,
+        #[arg(long, default_value_t = 20, help = "Very large pages to create")]
+        large_pages: usize,
+        #[arg(long, default_value_t = 50_000, help = "Words in each large page")]
+        large_words: usize,
+        #[arg(long, value_enum, default_value_t = crate::stress::Shape::Plain)]
+        shape: crate::stress::Shape,
+        #[arg(
+            long,
+            help = "The day mixed dates spread around, as YYYY-MM-DD (default: today)"
+        )]
+        today: Option<chrono::NaiveDate>,
+    },
+    /// Time the operations that decide whether Pikos feels instant
+    Bench {
+        #[arg(
+            long,
+            default_value_t = 1,
+            value_parser = clap::value_parser!(u32).range(1..),
+            help = "Times to measure each operation, reporting the median and the 95th percentile"
+        )]
+        runs: u32,
+        #[arg(
+            long,
+            value_delimiter = ',',
+            help = "Time only the operations whose names contain one of these, e.g. --only list,save"
+        )]
+        only: Vec<String>,
+    },
+}
+
+fn parse_cursor(value: &str) -> Result<SearchCursor, String> {
+    SearchCursor::parse(value).ok_or_else(|| {
+        format!("expected a cursor a previous search printed, like 4120.20 (got \"{value}\")")
+    })
 }

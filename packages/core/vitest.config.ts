@@ -8,6 +8,18 @@ export default defineConfig({
   test: {
     ...(process.env["CI"] ? {} : { maxWorkers: "50%" }),
     environment: "jsdom",
+    // The conformance tables are read off disk with `node:fs`, so they are not in
+    // vitest's module graph and `--changed` selects nothing when one is edited. The
+    // Rust runners catch a break because `cargo test` runs everything; this side
+    // would stay quiet until CI, which is the half of a two-sided table that matters.
+    // Vitest replaces the default list rather than extending it, so the defaults are
+    // repeated here.
+    forceRerunTriggers: [
+      "**/package.json/**",
+      "**/{vitest,vite}.config.*/**",
+      "**/crates/pikos-db/tests/fixtures/**",
+      "**/crates/pikos-recurrence/tests/fixtures/**",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "html", "json-summary"],

@@ -40,6 +40,7 @@ beforeEach(() => {
 function makePage(over: Partial<PageSummary>): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -70,6 +71,7 @@ describe("PageBlockPopover — mirror metadata", () => {
   it("renders location + attendees read-only on a locked event", () => {
     renderPopover(
       makePage({
+        detachIsReversible: false,
         mirrorAttendees: ["alex@example.com", "sam@example.com"],
         mirrorLocation: "Zoom",
         scheduleLocked: true,
@@ -126,6 +128,7 @@ describe("PageBlockPopover — reminder bell", () => {
     mocks.recurrenceRules = [rule];
     renderPopover(
       makePage({
+        detachIsReversible: false,
         scheduledEnd: "2099-01-06",
         scheduledStart: "2099-01-05",
         scheduleLocked: true,
@@ -136,16 +139,24 @@ describe("PageBlockPopover — reminder bell", () => {
     expect(bell).toBeInTheDocument();
 
     fireEvent.pointerDown(bell, { button: 0, ctrlKey: false });
-    expect(await screen.findByRole("menuitem", { name: /Day before at 9:00/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /10 min before/ })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /Day before at 9:00/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /10 min before/ })
+    ).not.toBeInTheDocument();
   });
 
   it("offers lead times on a timed page", async () => {
     renderPopover(makePage({}));
 
     fireEvent.pointerDown(screen.getByLabelText("Page reminders"), { button: 0, ctrlKey: false });
-    expect(await screen.findByRole("menuitem", { name: /10 min before/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Day before at 9:00/ })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /10 min before/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Day before at 9:00/ })
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -177,5 +188,41 @@ describe("PageBlockPopover — a locked mirror offers no schedule affordances", 
 
     expect(schedulePicker()).toBeInTheDocument();
     expect(folderPicker()).toBeInTheDocument();
+  });
+});
+
+describe("PageBlockPopover — the delete names what it removes", () => {
+  function renderWithDelete(page: PageSummary) {
+    return renderWithProviders(
+      <AppSettingsProvider>
+        <TooltipProvider>
+          <PageBlockPopover onClose={vi.fn()} onDelete={vi.fn()} page={page} />
+        </TooltipProvider>
+      </AppSettingsProvider>
+    );
+  }
+
+  it("names a moved occurrence of an active mirror as a local-only removal", () => {
+    renderWithDelete({
+      ...makePage({ scheduleLocked: true, syncState: "active" }),
+      originalDate: "2099-01-03T09:00:00",
+    } as PageSummary);
+    expect(
+      screen.getByRole("button", { name: "Remove this occurrence from Pikos" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete page" })).toBeNull();
+  });
+
+  it("names a moved occurrence of an unlocked series as that occurrence", () => {
+    renderWithDelete({
+      ...makePage({ syncState: "detached" }),
+      originalDate: "2099-01-03T09:00:00",
+    } as PageSummary);
+    expect(screen.getByRole("button", { name: "Delete this occurrence" })).toBeInTheDocument();
+  });
+
+  it("names a real page as the page", () => {
+    renderWithDelete(makePage({}));
+    expect(screen.getByRole("button", { name: "Delete page" })).toBeInTheDocument();
   });
 });

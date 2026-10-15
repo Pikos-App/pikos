@@ -52,7 +52,7 @@ export type Page = {
   createdAt: string;
   updatedAt: string;
   /**
-   * Which Tiptap document schema produced `content`. See migration 013:
+   * Which Tiptap document schema produced `content`. See migration 023:
    * a client finding a version above its own must not save over the document,
    * or it silently drops node types it cannot represent.
    */
@@ -68,6 +68,15 @@ export type Page = {
    * was deleted locally. `null` for a page created in Pikos.
    */
   syncState?: "active" | "detached" | "tombstoned" | null;
+  /**
+   * Whether a detached page could rejoin its calendar, which is what the copy
+   * splits on: the user wants to know if this is undoable, not how it happened.
+   * True when the calendar is merely switched off or its account disconnected —
+   * both of which the user can reverse. False when the event is gone from the
+   * provider, which nothing here can undo. Meaningless unless `sync_state` is
+   * `detached`; a live page reads false because nothing is switched off.
+   */
+  detachIsReversible: boolean;
   /**
    * IANA zone the schedule was authored in. Only read for a page a calendar owns,
    * which renders at its true instant — 3pm in Berlin shows as 2pm in London. A
@@ -110,4 +119,14 @@ export type Page = {
    * Whether this page repeats, without having to load its rule.
    */
   isRecurring: boolean;
+  /**
+   * The change counter's value at this row's last change, its own or a child row's. A copy
+   * held elsewhere is current while its number is at least this. Always set when read.
+   */
+  rowSeq?: number | null;
+  /**
+   * For a done clone of a recurring page's occurrence, the series it was done from, so
+   * unticking it finds the series without searching every one.
+   */
+  seriesId?: string | null;
 };

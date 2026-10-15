@@ -1,0 +1,41 @@
+# The Homebrew tap is a second repository with no CI of its own, and it breaks in ways nobody
+# sees: a release ships and the cask keeps naming the version before it, or Homebrew deprecates a
+# stanza the tap still uses. Both surface as a failed `brew install` for somebody else.
+#
+# Weekly, and on demand. Installs and downloads nothing: it audits, and checks the URLs and
+# checksums against the digests GitHub publishes.
+name: Homebrew tap
+
+# On publish it moves the tap to the release first, then checks it: bumping the tap is part of
+# shipping, not a chore found a week later by the Monday run. The weekly run only checks.
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  tap:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # A fine-grained token with contents write on Pikos-App/homebrew-tap, and nothing else.
+      - name: Move the tap to this release
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error::No TAP_TOKEN secret, so the tap can't be moved to ${{ github.event.release.tag_name }}."
+            echo "Add one, or run scripts/brew-bump.sh ${{ github.event.release.tag_name }} --push locally."
+            exit 1
+          fi
+          bash scripts/brew-bump.sh "${{ github.event.release.tag_name }}" --push
+
+      - name: Check the tap
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/brew-check.sh

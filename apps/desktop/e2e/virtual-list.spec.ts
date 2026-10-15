@@ -1,4 +1,4 @@
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, bridgeCall, createFolder, expect, mod, quickAdd } from "./fixtures";
 
 /**
  * Virtualized list tests — validates that keyboard navigation,
@@ -17,8 +17,8 @@ async function seedPages(app: import("@playwright/test").Page, count: number, pr
 // ─── Keyboard nav scrolls through virtualized list ─────────────────────────
 
 appTest(
-  "arrow keys navigate through entire virtualized page list @tier2",
-  async ({ app }) => {
+  "arrow keys navigate through entire virtualized page list",
+  { tag: ["@LIST-01:2"] }, async ({ app }) => {
     await seedPages(app, PAGE_COUNT);
 
     const list = app.locator("[data-page-list-item]");
@@ -47,8 +47,8 @@ appTest(
 // ─── Completed accordion works within virtualized list ─────────────────────
 
 appTest(
-  "completed accordion expands and collapses inside virtual list @tier2",
-  async ({ app }) => {
+  "completed accordion expands and collapses inside virtual list",
+  { tag: ["@LIST-11:2"] }, async ({ app }) => {
     await seedPages(app, 5);
 
     const firstItem = app.locator("[data-page-list-item]").filter({ hasText: "virt 000" });
@@ -74,16 +74,12 @@ appTest(
 // ─── Folder switch re-renders virtualized list correctly ───────────────────
 
 appTest(
-  "switching between folders re-renders virtualized list @tier2",
+  "switching between folders re-renders virtualized list",
+  { tag: ["@LIST-02:3"] },
   async ({ app }) => {
     await seedPages(app, 15, "inbox-page");
 
-    await app
-      .getByRole("toolbar", { name: "Folder actions" })
-      .getByRole("button", { name: "New Folder" })
-      .click();
-    await app.keyboard.type("Test Folder");
-    await app.keyboard.press("Enter");
+    await createFolder(app, "Test Folder");
 
     // The new folder is active after creation, so these land inside it.
     await seedPages(app, 10, "folder-page");
@@ -111,19 +107,25 @@ appTest(
 
 // ─── Cmd+A selects all in a virtualized list ───────────────────────────────
 
-appTest(
-  "Cmd+A selects all pages including those off-screen @tier2",
-  async ({ app }) => {
-    await seedPages(app, PAGE_COUNT);
+appTest("Cmd+A selects every page, off-screen too, and deleting them leaves none", { tag: ["@LIST-09:10"] }, async ({ app, storage }) => {
+  await seedPages(app, PAGE_COUNT);
 
-    // Focus the page list area (not an input)
-    await app.locator("body").click({ position: { x: 0, y: 0 } });
-    await app.keyboard.press(mod("Mod+a"));
+  // Focus the page list area (not an input)
+  await app.locator("body").click({ position: { x: 0, y: 0 } });
+  await app.keyboard.press(mod("Mod+a"));
 
-    const selected = app.locator("[data-page-list-item][data-selected=true]");
-    // Virtualized list only renders visible items, so we can't count all 25
-    // in the DOM. Instead verify that ALL rendered items are selected.
-    const renderedCount = await app.locator("[data-page-list-item]").count();
-    await expect(selected).toHaveCount(renderedCount);
-  }
-);
+  const selected = app.locator("[data-page-list-item][data-selected=true]");
+  // Virtualized list only renders visible items, so we can't count all 25
+  // in the DOM. Instead verify that ALL rendered items are selected.
+  const renderedCount = await app.locator("[data-page-list-item]").count();
+  await expect(selected).toHaveCount(renderedCount);
+
+  // Most of the 25 were never loaded, so this deletes pages the list only knows by id.
+  await app.keyboard.press(mod("Mod+Backspace"));
+  await expect(app.locator("[data-page-list-item]")).toHaveCount(0);
+  if (storage !== "bridge") return;
+  const inbox = { scope: { kind: "inbox" }, sort: "manual", zone: "America/New_York" };
+  await expect
+    .poll(() => bridgeCall<string[]>(app, "list_view_ids", { after: null, key: inbox, through: null }))
+    .toEqual([]);
+});

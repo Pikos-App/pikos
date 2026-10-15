@@ -26,10 +26,72 @@ pub fn prosemirror_to_markdown(doc: &Value) -> String {
     }
 }
 
+/// Lists that read back as one list when nothing but blank lines parts them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ListFamily {
+    /// Bullet and task lists both open with `-`.
+    Dash,
+    Numbered,
+}
+
+fn list_family(node: &Value) -> Option<ListFamily> {
+    match node.get("type").and_then(|t| t.as_str()) {
+        Some("bulletList" | "taskList") => Some(ListFamily::Dash),
+        Some("orderedList") => Some(ListFamily::Numbered),
+        _ => None,
+    }
+}
+
+/// The same list written with the other marker (`*` for `-`, `1)` for `1.`), which
+/// CommonMark reads as the start of a new list. Only the list's own items move;
+/// nested items are indented and keep theirs.
+fn with_alternate_marker(list: &str, family: ListFamily) -> String {
+    list.lines()
+        .map(|line| match family {
+            ListFamily::Dash => match line.strip_prefix("- ") {
+                Some(rest) => format!("* {rest}"),
+                None => line.to_string(),
+            },
+            ListFamily::Numbered => {
+                let digits = line.bytes().take_while(u8::is_ascii_digit).count();
+                if digits > 0 && line[digits..].starts_with(". ") {
+                    format!("{}){}", &line[..digits], &line[digits + 1..])
+                } else {
+                    line.to_string()
+                }
+            }
+        })
+        .fold(String::new(), |mut out, line| {
+            out.push_str(&line);
+            out.push('\n');
+            out
+        })
+}
+
 fn render_blocks(out: &mut String, nodes: &[Value], depth: usize) {
     let len = nodes.len();
+    // The previous top-level list, if only blank lines have come since, and whether
+    // it took the alternate marker.
+    let mut previous: Option<(ListFamily, bool)> = None;
     for (i, node) in nodes.iter().enumerate() {
-        render_block(out, node, depth);
+        match (depth, list_family(node)) {
+            (0, Some(family)) => {
+                let alternate = previous.is_some_and(|(f, alt)| f == family && !alt);
+                let mut list = String::new();
+                render_block(&mut list, node, depth);
+                if alternate {
+                    list = with_alternate_marker(&list, family);
+                }
+                out.push_str(&list);
+                previous = Some((family, alternate));
+            }
+            _ => {
+                render_block(out, node, depth);
+                if !is_empty_paragraph(node) {
+                    previous = None;
+                }
+            }
+        }
         // Blank line between top-level blocks (not after the last one).
         //
         // An empty paragraph is the importer's representation of a blank line
@@ -96,10 +158,7 @@ fn render_block(out: &mut String, node: &Value, depth: usize) {
         }
         "blockquote" => {
             if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
-                for child in content {
-                    out.push_str("> ");
-                    render_block_inline(out, child);
-                }
+                render_quote(out, content);
             }
         }
         "bulletList" => {
@@ -222,15 +281,19 @@ fn render_block(out: &mut String, node: &Value, depth: usize) {
     }
 }
 
-/// Render a block node as a single line (used inside blockquotes).
-fn render_block_inline(out: &mut String, node: &Value) {
-    let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
-    match node_type {
-        "paragraph" => {
-            render_inline_content(out, node);
+/// Every line of a quote carries the marker, blank ones included, so a second
+/// paragraph, a list or a code block stays inside it when read back.
+fn render_quote(out: &mut String, content: &[Value]) {
+    let mut inner = String::new();
+    render_blocks(&mut inner, content, 0);
+    for line in inner.trim_end().lines() {
+        if line.is_empty() {
+            out.push_str(">\n");
+        } else {
+            out.push_str("> ");
+            out.push_str(line);
             out.push('\n');
         }
-        _ => render_block(out, node, 0),
     }
 }
 

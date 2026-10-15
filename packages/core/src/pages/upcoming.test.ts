@@ -7,6 +7,7 @@ import { groupUpcomingPages } from "./upcoming";
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
     isRecurring: false,
@@ -77,6 +78,7 @@ describe("belongsToView — upcoming", () => {
 
   it("keeps a synced mirror scheduled in range", () => {
     const page = makePage({
+      detachIsReversible: false,
       scheduledStart: "2026-03-27T09:00:00",
       scheduleLocked: true,
       syncState: "active",

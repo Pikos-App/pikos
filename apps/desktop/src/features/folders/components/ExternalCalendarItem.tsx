@@ -54,6 +54,7 @@ export function ExternalCalendarItem({
           prefix={
             <CalendarSync
               className="mt-0.5 shrink-0"
+              data-testid="calendar-color"
               size={13}
               style={{ color: folder.color ?? "var(--text-tertiary)" }}
             />
@@ -76,7 +77,7 @@ export function ExternalCalendarItem({
             {PALETTE_COLORS.map(({ label, value }) => (
               <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
                 <span
-                  className="mr-2 h-3 w-3 shrink-0 rounded-full"
+                  className="color-dot mr-2 h-3 w-3 shrink-0 rounded-full"
                   style={{ backgroundColor: value }}
                 />
                 {label}

@@ -13,7 +13,11 @@ import {
 } from "date-fns";
 
 import {
+  ALL_DAY_BAR_HEIGHT,
+  ALL_DAY_ROW_HEIGHT,
+  ALL_DAY_TOP_PADDING,
   type CalendarCollapseConfig,
+  CHIP_STACKED_THRESHOLD,
   COLLAPSED_BAND_HEIGHT,
   HOUR_HEIGHT,
   MAX_BOTTOM_HOUR,
@@ -28,10 +32,33 @@ import type { CalendarDayCount, CalendarDensity } from "./dayCount";
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {
   hourHeight: number;
-  /** Height of a 15-minute slot — the minimum block height for timed events. */
+  /** The shortest a timed block renders: a 15-minute slot, or `MIN_BLOCK_HEIGHT`
+   *  where the slot is shorter than that. */
   compactBlockHeight: number;
   gridHeight: number;
   minResizeHeight: number;
+  /** The shortest block that can carry a time row under the title, and the
+   *  shortest that can give the title a second line. Both scale with the calendar
+   *  text size: they were fixed pixel counts, so raising the text size crossed them
+   *  while the rows inside had grown taller than the block — a 45-minute block at
+   *  200% cleared the 40px time-row bar with content that wanted about 60px, and
+   *  spilled its checkbox and title past its own bottom edge. */
+  timeRowMinHeight: number;
+  twoLineTitleMinHeight: number;
+  /** The shortest block that stacks its title over a time row rather than
+   *  rendering as a one-line chip. Scaled for the same reason as the tiers above:
+   *  fixed, it turned a quarter-hour chip into a clipped stacked block at the
+   *  largest text size. */
+  stackedBlockMinHeight: number;
+  /** The all-day strip's row geometry. Here rather than read as constants so it
+   *  zooms with everything else — left fixed, its bars stayed 19px tall while the
+   *  text inside them grew, which is the same way a timed block used to break. */
+  allDayBarHeight: number;
+  allDayRowHeight: number;
+  allDayTopPadding: number;
+  /** What the calendar is multiplied by. Carried so a threshold measured in
+   *  pixels can scale with it and mean the same thing at every zoom. */
+  zoom: number;
 }
 
 const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
@@ -40,13 +67,72 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
   spacious: 88,
 };
 
-export function computeCalendarMetrics(density: CalendarDensity): CalendarMetrics {
-  const hourHeight = DENSITY_HOUR_HEIGHT[density];
+/** The tier heights the block layout was tuned to at the default zoom. */
+const TIME_ROW_MIN_HEIGHT = 40;
+const TWO_LINE_TITLE_MIN_HEIGHT = 52;
+
+/**
+ * The floor on a timed block's height at the default zoom: a quarter hour at
+ * normal density, the shortest chip that holds the body type and a checkbox.
+ *
+ * A block was as tall as its duration, so at compact density an item with no end
+ * time was a 10px sliver with 10px type, and 7px zoomed out — too small to hit.
+ * It scales up with zoom but never below this, because zooming out is for seeing
+ * more of the day, not for making a target smaller than a pointer can land on.
+ * The layout reserves the extra height, so a floored block cascades beside its
+ * neighbour rather than covering it.
+ */
+const MIN_BLOCK_HEIGHT = 16;
+
+/** Far below a visible pixel or a millisecond, far above the rounding a zoomed
+ *  position carries. */
+const ROUNDING_TOLERANCE = 1e-6;
+
+/**
+ * Whether a value derived from block pixels falls short of a threshold, where
+ * landing exactly on it is reaching it.
+ *
+ * Block heights, gaps and edges are whole quarter-hours, and several thresholds
+ * sit exactly on one: an hour at compact is the time-row bar, and an event ending
+ * at 10 PM ends on the collapsed band's edge. At the default zoom both sides are
+ * exact and the tie resolves one way. Zoomed, a height or hour arrives through a
+ * subtraction or a division and lands a rounding error either side, so a plain `<`
+ * gave the same block a different treatment on alternate rungs of the text-size
+ * ladder.
+ */
+export function fallsShortOf(value: number, threshold: number): boolean {
+  return value < threshold - ROUNDING_TOLERANCE;
+}
+
+/**
+ * Density picks the hour height; zoom multiplies everything by the same number
+ * the text is multiplied by.
+ *
+ * The two used to move independently — density set the hour, the calendar text
+ * size set the type, and nothing made them agree. A block's height comes from its
+ * duration, so raising the text alone grew the contents inside a box that did not
+ * grow with them, and a short block clipped its checkbox to two slivers of its own
+ * border. A floor on the hour height was added to compensate and could not: it
+ * guaranteed a *half*-hour block, while the shortest block is a quarter of an hour.
+ *
+ * Scaling the hour by the same factor keeps every proportion fixed, so the zoomed
+ * calendar is the default one drawn larger and nothing can outgrow its container.
+ * `zoom` is 1 at the default text size, so the calendar a user opens is unchanged.
+ */
+export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): CalendarMetrics {
+  const hourHeight = DENSITY_HOUR_HEIGHT[density] * zoom;
   return {
-    compactBlockHeight: hourHeight / 4,
+    allDayBarHeight: ALL_DAY_BAR_HEIGHT * zoom,
+    allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
+    allDayTopPadding: ALL_DAY_TOP_PADDING * zoom,
+    compactBlockHeight: Math.max(hourHeight / 4, MIN_BLOCK_HEIGHT * Math.max(zoom, 1)),
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,
+    stackedBlockMinHeight: CHIP_STACKED_THRESHOLD * zoom,
+    timeRowMinHeight: TIME_ROW_MIN_HEIGHT * zoom,
+    twoLineTitleMinHeight: TWO_LINE_TITLE_MIN_HEIGHT * zoom,
+    zoom,
   };
 }
 

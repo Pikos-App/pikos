@@ -10,7 +10,7 @@
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use chrono::{Duration, NaiveDateTime};
 use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
@@ -79,6 +79,33 @@ fn derive_oldest_open(
     .map_err(|e| AppError::Internal(format!("recurrence derivation failed: {e}")))
 }
 
+/// Upper bound for expanding a whole series. Only reached on a series the
+/// derivation has already found exhausted, which means finite — an unbounded rule
+/// always yields, so it never lands there.
+const SERIES_END: &str = "9999-12-31T23:59:59";
+
+/// The newest occurrence no exclusion covers, ignoring the synced head floor.
+/// Where an exhausted mirror's head parks: the floor is what left it with nothing
+/// at or after the connect day, and the provider's base would date the row at the
+/// *first* occurrence of a series that has already ended. `None` when every
+/// occurrence is excluded, which leaves the head where it is — the user completed
+/// or dismissed them all, and the frontend hides a head sitting on a completed date.
+fn last_open_occurrence(
+    rule: &RuleRow,
+    exclusions: &[String],
+) -> Option<pikos_recurrence::Occurrence> {
+    pikos_recurrence::occurrences_in_window(
+        &rule.rrule,
+        &rule.base_start,
+        rule.base_end.as_deref(),
+        &rule.base_start,
+        SERIES_END,
+        exclusions,
+    )
+    .ok()?
+    .pop()
+}
+
 /// Lower bound on a synced series' head: the day the page was first synced.
 /// Without one the head parks on the master's original `DTSTART` — which a
 /// provider returns whenever the series still yields instances in the backfill
@@ -116,6 +143,41 @@ async fn synced_head_floor(
             .fetch_optional(&mut *conn)
             .await?;
     Ok(created.as_deref().and_then(crate::sync::local_day_of))
+}
+
+/// Whether the person has resolved a synced series to its end: they ticked or skipped
+/// something, and no moved occurrence on or after the connect day is still open. The
+/// caller has already found no open occurrence of the rule itself.
+///
+/// Such a series completes like a native one. A live mirror is otherwise never marked
+/// done, because the `completed_at` the flip stamps counts as ownership
+/// (`PAGE_OWNED_SQL`), and a mirror nobody touched must not survive disconnect or ship
+/// in an export as if it were authored. A tick or a skip already makes the page owned,
+/// so the flip claims nothing new here. Left undone it parked on a date already ticked:
+/// open in the page list, where a tick could change nothing.
+async fn ticked_through(
+    conn: &mut sqlx::SqliteConnection,
+    page_id: &str,
+    rule_id: &str,
+    floor: Option<&str>,
+) -> AppResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT (EXISTS(SELECT 1 FROM completed_set WHERE page_id = ?1)
+                 OR EXISTS(SELECT 1 FROM skip_set WHERE page_id = ?1))
+            AND NOT EXISTS(
+                SELECT 1 FROM page_schedules o
+                 WHERE o.rule_id = ?2 AND o.original_date IS NOT NULL
+                   AND substr(o.original_date, 1, 10) >= coalesce(?3, '')
+                   AND substr(o.original_date, 1, 10) NOT IN (
+                       SELECT substr(occurrence_date, 1, 10) FROM completed_set WHERE page_id = ?1
+                       UNION
+                       SELECT substr(occurrence_date, 1, 10) FROM skip_set WHERE page_id = ?1))",
+    )
+    .bind(page_id)
+    .bind(rule_id)
+    .bind(floor)
+    .fetch_one(&mut *conn)
+    .await?)
 }
 
 /// Recomputes `pages.scheduled_start` for one recurring page from truth and flips
@@ -176,9 +238,32 @@ pub async fn recompute_recurring_schedule(
             .execute(&mut **tx)
             .await?;
         }
-        // Finite series exhausted → head done, no clone (native terminal
-        // behavior). Guarded so a repeat recompute doesn't re-stamp completed_at.
+        // Finite series exhausted. A native series terminates here: head done, no
+        // clone, and so does a live mirror the person ticked through; any other
+        // mirror parks on its last occurrence with its status alone (`ticked_through`).
         None => {
+            if crate::sync::page_schedule_locked_conn(tx, page_id).await?
+                && !ticked_through(tx, page_id, &rule.id, floor.as_deref()).await?
+            {
+                if let Some(occ) = last_open_occurrence(&rule, &excl) {
+                    sqlx::query(
+                        "UPDATE pages SET
+                           scheduled_start = ?1,
+                           scheduled_end = ?2,
+                           updated_at = ?3
+                         WHERE id = ?4
+                           AND (scheduled_start IS NOT ?1 OR scheduled_end IS NOT ?2)",
+                    )
+                    .bind(&occ.scheduled_start)
+                    .bind(&occ.scheduled_end)
+                    .bind(&now)
+                    .bind(page_id)
+                    .execute(&mut **tx)
+                    .await?;
+                }
+                return Ok(());
+            }
+            // Guarded so a repeat recompute doesn't re-stamp completed_at.
             sqlx::query(
                 "UPDATE pages SET status = 'done', completed_at = ?1, updated_at = ?2
                  WHERE id = ?3 AND status != 'done'",
@@ -257,11 +342,12 @@ pub(crate) async fn recurring_pages_in_window(
     timed_only: bool,
     created_before: Option<&str>,
 ) -> AppResult<Vec<String>> {
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let series: Vec<WindowSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, r.rrule, r.rrule_exdates,
                 r.scheduled_start AS base_start, r.scheduled_end AS base_end
          FROM page_recurrence_rules r
-         JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL
            AND p.status != 'done'
            AND (?1 = 0 OR r.scheduled_start LIKE '%T%')
@@ -319,12 +405,11 @@ struct ReminderSeries {
     synced: bool,
 }
 
-/// Recurring occurrences whose reminder fire instant lands in the scheduler's
-/// fixed 60-second window `[now − 60s, now]` — an enumeration per (occurrence ×
-/// reminder-lead), so a series with two occurrences in-window fires both (a scalar
-/// head misses one). Native series compare wall-clock in device-local time
-/// (`now_local`); synced series resolve occurrence wall-clock + TZID → absolute
-/// UTC and compare against `now_utc`. `synced` is `sync_state = 'active'`, so a
+/// Recurring occurrences whose reminder fire instant lands in the tick's window —
+/// an enumeration per (occurrence × reminder-lead), so a series with two
+/// occurrences in-window fires both (a scalar head misses one). Native series
+/// compare wall-clock in device-local time; synced series resolve occurrence
+/// wall-clock + TZID → absolute UTC and compare against the window's instants. `synced` is `sync_state = 'active'`, so a
 /// **detached** series is treated as native and fires on device-local wall-clock —
 /// consistent with the display, which also treats a detached series as native once
 /// it unlocks (`useRecurrenceExpansion`), even though its wall-clock stays
@@ -335,50 +420,33 @@ struct ReminderSeries {
 /// an upper bound over every configured lead.
 pub async fn occurrences_with_open_reminder_window(
     pool: &SqlitePool,
-    now_local: NaiveDateTime,
-    now_utc: DateTime<Utc>,
+    window: &crate::notification_log::ReminderWindow,
     default_minutes: i64,
     max_lead: i64,
 ) -> AppResult<Vec<DueReminder>> {
-    let fires = occurrences_with_reminders_firing_between(
-        pool,
-        now_local - Duration::seconds(60),
-        now_local,
-        now_utc - Duration::seconds(60),
-        now_utc,
-        default_minutes,
-        max_lead,
-    )
-    .await?;
+    let fires =
+        occurrences_with_reminders_firing_in(pool, window, default_minutes, max_lead).await?;
     Ok(fires.into_iter().map(|fire| fire.reminder).collect())
 }
 
-/// The windowed form of [`occurrences_with_open_reminder_window`]: every
-/// (occurrence × lead) of every timed series whose reminder fires in the
-/// inclusive window — `[lo_local, hi_local]` for a native series, whose wall
-/// clock is the device's, and `[lo_utc, hi_utc]` for a synced one, whose wall
-/// clock is the source zone's. The two windows describe the same span of time
-/// in two frames; the caller supplies both because only it knows the device
-/// zone. Each fire comes back with its instant so a forward-looking caller
-/// can place it.
-pub async fn occurrences_with_reminders_firing_between(
+/// [`occurrences_with_open_reminder_window`] with each fire's instant kept, so a caller
+/// planning ahead over a long window can place every one on the device's clock.
+pub async fn occurrences_with_reminders_firing_in(
     pool: &SqlitePool,
-    lo_local: NaiveDateTime,
-    hi_local: NaiveDateTime,
-    lo_utc: DateTime<Utc>,
-    hi_utc: DateTime<Utc>,
+    window: &crate::notification_log::ReminderWindow,
     default_minutes: i64,
     max_lead: i64,
 ) -> AppResult<Vec<crate::notification_log::ReminderFire>> {
     use crate::notification_log::ReminderFire;
 
+    // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let series: Vec<ReminderSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, p.title, r.rrule, r.rrule_exdates,
                 r.scheduled_start AS base_start, r.scheduled_end AS base_end, r.timezone,
                 EXISTS(SELECT 1 FROM page_sync sy
                        WHERE sy.page_id = r.page_id AND sy.sync_state = 'active') AS synced
          FROM page_recurrence_rules r
-         JOIN pages p ON p.id = r.page_id
+         CROSS JOIN pages p ON p.id = r.page_id
          WHERE p.deleted_at IS NULL
            AND p.status != 'done'
            AND r.scheduled_start LIKE '%T%'",
@@ -394,13 +462,13 @@ pub async fn occurrences_with_reminders_firing_between(
         let (zone_lo, zone_hi) = if s.synced {
             match s.timezone.parse::<chrono_tz::Tz>() {
                 Ok(tz) => (
-                    lo_utc.with_timezone(&tz).naive_local(),
-                    hi_utc.with_timezone(&tz).naive_local(),
+                    window.start_utc().with_timezone(&tz).naive_local(),
+                    window.end_utc().with_timezone(&tz).naive_local(),
                 ),
                 Err(_) => continue,
             }
         } else {
-            (lo_local, hi_local)
+            (window.start_local(), window.end_local())
         };
         // An occurrence's reminder can fire up to `max_lead` before it, so the
         // enumeration runs that much past the window's end; widened by an hour
@@ -437,13 +505,8 @@ pub async fn occurrences_with_reminders_firing_between(
 
         for occ in &occurrences {
             for lead in &leads {
-                let Some(fire_at) = fire_between(
-                    &s,
-                    &occ.scheduled_start,
-                    lead.minutes,
-                    (lo_local, hi_local),
-                    (lo_utc, hi_utc),
-                ) else {
+                let Some(fire_at) = fire_in_window(&s, &occ.scheduled_start, lead.minutes, window)
+                else {
                     continue;
                 };
                 candidates.push(ReminderFire {
@@ -555,24 +618,23 @@ async fn reminder_leads(
     Ok(leads)
 }
 
-/// When `scheduled_start - lead` fires, if that lands in the inclusive window —
-/// the local one for a native series, the absolute one for a synced series.
-fn fire_between(
+/// When `scheduled_start - lead` fires, if that lands in the window. A synced series resolves
+/// to an instant; a native one stays device-local wall-clock.
+fn fire_in_window(
     series: &ReminderSeries,
     scheduled_start: &str,
     minutes_before: i64,
-    local: (NaiveDateTime, NaiveDateTime),
-    absolute: (DateTime<Utc>, DateTime<Utc>),
+    window: &crate::notification_log::ReminderWindow,
 ) -> Option<crate::notification_log::FireAt> {
     use crate::notification_log::FireAt;
 
     if series.synced {
         let fire = synced_fire_instant(scheduled_start, &series.timezone, minutes_before)?;
-        (fire >= absolute.0 && fire <= absolute.1).then_some(FireAt::Absolute(fire))
+        window.holds_utc(fire).then_some(FireAt::Absolute(fire))
     } else {
         let start = NaiveDateTime::parse_from_str(scheduled_start, WALL_FMT).ok()?;
         let fire = start - Duration::minutes(minutes_before);
-        (fire >= local.0 && fire <= local.1).then_some(FireAt::Local(fire))
+        window.holds_local(fire).then_some(FireAt::Local(fire))
     }
 }
 

@@ -47,7 +47,7 @@ package. Generating the bindings needs no Mac, so the API iOS will consume is
 reviewable in a pull request and drift-checked in CI; only the XCFramework build
 is platform-gated.
 
-**Documents are version-stamped.** `pages.content_schema_version` (migration 013) closes the gap that open question 2 identified. A client finding a version
+**Documents are version-stamped.** `pages.content_schema_version` (migration 023) closes the gap that open question 2 identified. A client finding a version
 above its own must not save over the document — the corruption mode a second
 writing client introduces, and the one the plan cites as its reason for
 choosing TipTap-in-webview over a native editor.

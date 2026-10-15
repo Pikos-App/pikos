@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
+import { postNotice } from "@/shared/events/noticeBus";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import { getPlatform } from "@/shared/platform";
 
@@ -104,7 +105,11 @@ function useAppSettingsValue(): AppSettingsValue {
         summaryTime,
       })
       .catch(() => {
-        // Host scheduler unavailable — settings still persist locally.
+        // The settings persist locally either way, so the panel goes on showing
+        // reminders as on while nothing is scheduled to fire. That gap is the
+        // whole reason this says anything: a reminder that never arrives is
+        // indistinguishable from one that was never set.
+        postNotice("Saved, but reminders may not fire until you restart Pikos.");
       });
   }, [
     notificationsEnabled,

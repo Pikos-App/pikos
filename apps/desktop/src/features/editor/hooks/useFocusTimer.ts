@@ -129,5 +129,6 @@ async function writeSession(
     postNotice(`Focused for ${formatSessionLength(durationS)}`);
   } catch (err) {
     log.warn("focus session not recorded", err);
+    postNotice("Focus session finished, but it wasn't recorded.");
   }
 }

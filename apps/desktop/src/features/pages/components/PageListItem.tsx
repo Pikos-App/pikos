@@ -2,7 +2,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 import {
-  folderMoveTargets,
   formatDateRange,
   formatLongDate,
   formatPageDate,
@@ -12,6 +11,9 @@ import {
   isDueSoon,
   isOpen,
   parseLocalISO,
+  viewerEnd,
+  viewerStart,
+  writableFolders,
 } from "@pikos/core";
 import type React from "react";
 
@@ -27,10 +29,11 @@ import {
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
-import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { useNow } from "@/shared/hooks/useNow";
+import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
 interface PageListItemProps {
   page: PageSummary;
   isActive: boolean;
@@ -40,6 +43,10 @@ interface PageListItemProps {
   onClearDate?: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onRenameStart: () => void;
+  /** How many pages this row's context menu will act on — the selection it belongs
+   *  to, or 1. A menu that reads the same on one page and on five cannot say what a
+   *  click is about to do, and Delete is in it. */
+  menuActsOn?: number;
   onRenameChange?: (title: string) => void;
   onRenameCommit: (title: string) => void;
   onRenameCancel: () => void;
@@ -56,6 +63,7 @@ export function PageListItem({
   isActive,
   isRenaming,
   isSelected,
+  menuActsOn = 1,
   onClearDate,
   onDelete,
   onMoveToFolder,
@@ -70,6 +78,7 @@ export function PageListItem({
   page,
   showRelative = false,
 }: PageListItemProps) {
+  const prefetch = usePrefetchOnHover(page.id);
   const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
     data: { type: "page" },
     disabled: isRenaming,
@@ -78,10 +87,10 @@ export function PageListItem({
   });
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
   const { openPage } = useUI();
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   const showSubtitle = density !== "compact" && Boolean(page.subtitle);
 
-  useMinuteTick();
+  const now = useNow();
 
   return (
     <ContextMenu>
@@ -100,6 +109,7 @@ export function PageListItem({
           }}
           {...attributes}
           {...listeners}
+          {...prefetch}
           className={cn(
             "flex cursor-pointer items-start border-b border-l-2 border-border px-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
             density === "compact"
@@ -142,21 +152,25 @@ export function PageListItem({
           role={undefined}
           tabIndex={isActive ? 0 : -1}
         >
-          {/* Checkbox — border color encodes priority when not done */}
-          <TaskCheckbox
-            borderColor={
-              isOpen(page)
-                ? page.priority === 1
-                  ? "var(--color-status-overdue)"
-                  : page.priority === 2
-                    ? "var(--color-status-due-soon)"
-                    : undefined
-                : undefined
-            }
-            checked={isDone(page)}
-            className="mt-px"
-            onChange={() => onToggleStatus()}
-          />
+          {/* Checkbox — border color encodes priority when not done.
+              Centred on the title's line rather than the row's top edge: the row is
+              `items-start` so a two-line row keeps the box beside the title instead of
+              floating to the middle, and on a one-line row that left it sitting high. */}
+          <span className="type-body flex h-[1em] shrink-0 items-center leading-none">
+            <TaskCheckbox
+              borderColor={
+                isOpen(page)
+                  ? page.priority === 1
+                    ? "var(--color-status-overdue)"
+                    : page.priority === 2
+                      ? "var(--color-status-due-soon)"
+                      : undefined
+                  : undefined
+              }
+              checked={isDone(page)}
+              onChange={() => onToggleStatus()}
+            />
+          </span>
 
           {/* Content */}
           <div className="min-w-0 flex-1">
@@ -216,29 +230,32 @@ export function PageListItem({
                 {page.scheduledStart &&
                   (() => {
                     const isCompleted = isDone(page);
+                    // A synced event's stored time is its source calendar's, so the
+                    // row reads the viewer's — otherwise a London 5pm meeting reads
+                    // as still to come at 5pm long after it happened at 9am here.
+                    const start = viewerStart(page)!;
+                    const end = viewerEnd(page);
                     // Multi-day all-day span: show the explicit range ("May 2 – 10").
                     // Falls back to single-date formatting for timed events or
                     // when end is missing/equal to start.
                     const isAllDaySpan =
-                      isAllDayIso(page.scheduledStart) &&
-                      typeof page.scheduledEnd === "string" &&
-                      isAllDayIso(page.scheduledEnd) &&
-                      page.scheduledEnd > page.scheduledStart;
+                      isAllDayIso(start) &&
+                      typeof end === "string" &&
+                      isAllDayIso(end) &&
+                      end > start;
                     const { isPast, label, tooltip } = isAllDaySpan
                       ? (() => {
-                          const d = formatPageDate(page.scheduledStart);
+                          const d = formatPageDate(start, now);
                           return {
                             isPast: d.isPast,
-                            label: formatDateRange(page.scheduledStart, page.scheduledEnd),
-                            tooltip: `${d.tooltip} – ${formatLongDate(
-                              parseLocalISO(page.scheduledEnd!)
-                            )}`,
+                            label: formatDateRange(start, end),
+                            tooltip: `${d.tooltip} – ${formatLongDate(parseLocalISO(end))}`,
                           };
                         })()
                       : !isCompleted && showRelative
-                        ? formatPageRelativeTime(page.scheduledStart)
-                        : formatPageDate(page.scheduledStart);
-                    const dueSoon = !isCompleted && !isPast && isDueSoon(page.scheduledStart);
+                        ? formatPageRelativeTime(start, now)
+                        : formatPageDate(start, now);
+                    const dueSoon = !isCompleted && !isPast && isDueSoon(start, now);
                     return (
                       <button
                         aria-label={`Toggle date format: ${label}`}
@@ -272,14 +289,15 @@ export function PageListItem({
       </ContextMenuTrigger>
 
       <ContextMenuContent {...contextMenuContentProps}>
-        {!page.scheduleLocked && (
+        {/* One page has a name; a selection does not. */}
+        {!page.scheduleLocked && menuActsOn === 1 && (
           <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
             Rename
           </ContextMenuItem>
         )}
         {!page.scheduleLocked && (
           <ContextMenuSub>
-            <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
+            <ContextMenuSubTrigger>Move to folder</ContextMenuSubTrigger>
             <ContextMenuSubContent>
               <ContextMenuItem
                 className={cn(page.folderId === null && "font-medium")}
@@ -287,14 +305,14 @@ export function PageListItem({
               >
                 Inbox
               </ContextMenuItem>
-              {folderMoveTargets(folders).map((folder) => (
+              {writableFolders(folders).map((folder) => (
                 <ContextMenuItem
                   className={cn(page.folderId === folder.id && "font-medium")}
                   key={folder.id}
                   onSelect={() => onMoveToFolder(folder.id)}
                 >
                   <span
-                    className="mr-2 h-2 w-2 shrink-0 rounded-full"
+                    className="color-dot mr-2 h-2 w-2 shrink-0 rounded-full"
                     style={{
                       backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
                     }}
@@ -306,10 +324,10 @@ export function PageListItem({
           </ContextMenuSub>
         )}
         {page.scheduledStart && onClearDate && !page.scheduleLocked && (
-          <ContextMenuItem onSelect={onClearDate}>Clear Date</ContextMenuItem>
+          <ContextMenuItem onSelect={onClearDate}>No date</ContextMenuItem>
         )}
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
-          Delete
+          {menuActsOn > 1 ? `Delete ${menuActsOn} pages` : "Delete"}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

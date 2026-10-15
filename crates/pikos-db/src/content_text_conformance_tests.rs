@@ -22,6 +22,7 @@ struct Case {
     text: String,
 }
 
+// qa: SRCH-06
 #[test]
 fn every_case_projects_to_the_shared_expectation() {
     let table: Table = serde_json::from_str(TABLE).expect("parse content-text-projection.json");

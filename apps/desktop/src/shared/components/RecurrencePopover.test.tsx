@@ -218,3 +218,47 @@ describe("RecurrencePopover Ends editor", () => {
     expect(onChange).toHaveBeenCalledWith(expect.stringContaining(kept));
   });
 });
+
+// A read-only chip is still a button, and a button's cursor is a pointer unless it is
+// told otherwise — which on a calendar-owned page is the surface advertising an edit
+// it will refuse. The only way to learn the field was locked was to click and watch
+// nothing happen.
+describe("read-only", () => {
+  it("does not offer a pointer on a chip that refuses the edit", () => {
+    render(
+      <AppSettingsProvider>
+        <TooltipProvider>
+          <RecurrencePopover
+            anchorDate={ANCHOR}
+            onChange={() => {}}
+            readOnly
+            rrule={THIRD_TUESDAY_BYDAY}
+          />
+        </TooltipProvider>
+      </AppSettingsProvider>
+    );
+
+    const trigger = screen.getByRole("button", { name: /Recurrence:/ });
+    expect(trigger.className).toContain("cursor-default");
+  });
+
+  it("opens nothing when clicked", () => {
+    const onChange = vi.fn();
+    render(
+      <AppSettingsProvider>
+        <TooltipProvider>
+          <RecurrencePopover
+            anchorDate={ANCHOR}
+            onChange={onChange}
+            readOnly
+            rrule={THIRD_TUESDAY_BYDAY}
+          />
+        </TooltipProvider>
+      </AppSettingsProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Recurrence:/ }));
+    expect(screen.queryByRole("button", { name: "After" })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

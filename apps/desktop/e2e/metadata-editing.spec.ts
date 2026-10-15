@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, quickAdd, test as appTest } from "./fixtures";
+import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
 /** Open a page in the editor and return when the byline is mounted. The
  *  byline carries every editable metadata chip we assert against. */
@@ -25,26 +25,29 @@ async function openPageInEditor(app: Page, title: string) {
 // the contract: a regression in the dropdown→onSelect→updatePage→re-render
 // chain shows up here.
 
-appTest("priority edit via byline reflects in the chip aria-label @tier2", async ({ app }) => {
-  await quickAdd(app, "policy review");
-  await openPageInEditor(app, "policy review");
+appTest(
+  "priority edit via byline reflects in the chip aria-label",
+  async ({ app }) => {
+    await quickAdd(app, "policy review");
+    await openPageInEditor(app, "policy review");
 
-  // Default is priority=0 ("Priority" label).
-  const priorityChip = app.getByRole("button", { name: "Priority: Priority" });
-  await expect(priorityChip).toBeVisible();
+    // Default is priority=0 ("Priority" label).
+    const priorityChip = app.getByRole("button", { name: "Priority: Priority" });
+    await expect(priorityChip).toBeVisible();
 
-  await priorityChip.click();
-  await app.getByRole("menuitem", { name: /High/ }).click();
+    await priorityChip.click();
+    await app.getByRole("menuitem", { name: /High/ }).click();
 
-  await expect(app.getByRole("button", { name: "Priority: High" })).toBeVisible();
-  await expect(priorityChip).not.toBeVisible();
+    await expect(app.getByRole("button", { name: "Priority: High" })).toBeVisible();
+    await expect(priorityChip).not.toBeVisible();
 
-  // Round-trip: change again to Low — proves the menu isn't sticky on the
-  // first selection.
-  await app.getByRole("button", { name: "Priority: High" }).click();
-  await app.getByRole("menuitem", { name: /Low/ }).click();
-  await expect(app.getByRole("button", { name: "Priority: Low" })).toBeVisible();
-});
+    // Round-trip: change again to Low — proves the menu isn't sticky on the
+    // first selection.
+    await app.getByRole("button", { name: "Priority: High" }).click();
+    await app.getByRole("menuitem", { name: /Low/ }).click();
+    await expect(app.getByRole("button", { name: "Priority: Low" })).toBeVisible();
+  }
+);
 
 // ─── Tag add + remove via byline ────────────────────────────────────────────
 //
@@ -52,7 +55,7 @@ appTest("priority edit via byline reflects in the chip aria-label @tier2", async
 // Toggling an existing tag removes it. The chip's aria-label spells out the
 // selected tag list — empty state reads "Tags: none".
 
-appTest("tags add and remove via byline updates the chip @tier2", async ({ app }) => {
+appTest("tags add and remove via byline updates the chip", async ({ app }) => {
   await quickAdd(app, "field research");
   await openPageInEditor(app, "field research");
 
@@ -89,7 +92,7 @@ appTest("tags add and remove via byline updates the chip @tier2", async ({ app }
 // Today smart-view filter.
 
 appTest(
-  "schedule via byline picker shows the page in Today after picking Today @tier2",
+  "schedule via byline picker shows the page in Today after picking Today",
   async ({ app }) => {
     // Create from Inbox — when the active view is Today, QuickAdd auto-anchors
     // schedules to today and defeats the "originally unscheduled" premise.
@@ -105,7 +108,7 @@ appTest(
     // smart-view button (same accessible name, different element).
     const picker = app.getByRole("dialog", { name: "Schedule picker" });
     await expect(picker).toBeVisible();
-    await picker.getByRole("button", { name: "Today", exact: true }).click();
+    await picker.getByRole("button", { exact: true, name: "Today" }).click();
 
     // Byline chip flipped to a "Scheduled:" state — proves the schedule
     // committed even with the popover still open.
@@ -122,10 +125,10 @@ appTest(
   }
 );
 
-// ─── Clear schedule via byline → page leaves Today ──────────────────────────
+// ─── No date via byline → page leaves Today ─────────────────────────────────
 
 appTest(
-  "clearing schedule via byline removes the page from Today @tier2",
+  "clearing schedule via byline removes the page from Today",
   async ({ app }) => {
     await quickAdd(app, "lunch today");
 
@@ -142,7 +145,7 @@ appTest(
 
     await app.getByRole("button", { name: /^Scheduled:/ }).click();
     const picker = app.getByRole("dialog", { name: "Schedule picker" });
-    await picker.getByRole("button", { name: "Clear", exact: true }).click();
+    await picker.getByRole("button", { exact: true, name: "No date" }).click();
 
     await app.keyboard.press(mod("Mod+w")); // close active page so list refreshes
     await expect(app.getByRole("button", { name: "Set schedule" })).not.toBeVisible();
@@ -154,8 +157,6 @@ appTest(
     // The page does still exist (in Inbox) — clearing the schedule mustn't
     // delete the page itself.
     await app.getByRole("button", { name: /^Inbox/ }).click();
-    await expect(
-      app.locator("[data-page-list-item]").filter({ hasText: "lunch" })
-    ).toBeVisible();
+    await expect(app.locator("[data-page-list-item]").filter({ hasText: "lunch" })).toBeVisible();
   }
 );

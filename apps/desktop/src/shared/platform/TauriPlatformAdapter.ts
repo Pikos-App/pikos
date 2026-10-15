@@ -18,8 +18,9 @@ import type {
   PlatformNotificationSettings,
   PlatformWindowAction,
 } from "@pikos/core";
+import { resolveAssetPath } from "@pikos/core";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { appLogDir, join } from "@tauri-apps/api/path";
+import { appDataDir, appLogDir, join } from "@tauri-apps/api/path";
 
 export class TauriPlatformAdapter implements PlatformAdapter {
   async openExternal(url: string): Promise<void> {
@@ -39,6 +40,10 @@ export class TauriPlatformAdapter implements PlatformAdapter {
 
   async openLogFile(): Promise<void> {
     await this.openPath(await join(await appLogDir(), "pikos.log"));
+  }
+
+  async openBackupsDir(): Promise<void> {
+    await this.revealInDir(await join(await appDataDir(), "backups"));
   }
 
   async relaunch(): Promise<void> {
@@ -62,6 +67,10 @@ export class TauriPlatformAdapter implements PlatformAdapter {
 
   async applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void> {
     await invoke("update_notification_settings", { settings });
+  }
+
+  async replayPendingNotificationClicks(): Promise<void> {
+    await invoke("replay_pending_notification_clicks");
   }
 
   async pickDirectory(title: string): Promise<string | null> {
@@ -92,8 +101,12 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     return entries.map((e) => ({ isDirectory: e.isDirectory, name: e.name }));
   }
 
+  /** Known once `ensureAssetsDir` has run, which opening a workspace does before it
+   *  loads a page. */
+  private assetsDir: string | null = null;
+
   async ensureAssetsDir(): Promise<void> {
-    await invoke("init_assets_dir");
+    this.assetsDir = await invoke<string>("init_assets_dir");
   }
 
   saveAsset(sourcePath: string): Promise<string> {
@@ -105,7 +118,9 @@ export class TauriPlatformAdapter implements PlatformAdapter {
   }
 
   assetUrl(storedPath: string): string {
-    return convertFileSrc(storedPath);
+    return convertFileSrc(
+      this.assetsDir ? resolveAssetPath(storedPath, this.assetsDir) : storedPath
+    );
   }
 
   async onNativeFileDrop(handler: (drop: NativeFileDrop) => void): Promise<() => void> {

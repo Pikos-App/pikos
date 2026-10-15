@@ -40,19 +40,13 @@ export function DragGhostOverlay({
         <>
           <span
             className={cn(
-              "flex shrink-0 items-center justify-center rounded-[2px] border",
-              content.height < 16 ? "h-2.5 w-2.5" : "h-3.5 w-3.5",
+              "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
               content.isDone ? "border-foreground/40 bg-foreground/10" : "border-current/30"
             )}
           >
             {content.isDone && <Check size={8} strokeWidth={2.5} />}
           </span>
-          <span
-            className={cn(
-              "min-w-0 truncate font-medium text-foreground",
-              content.height < 16 ? "-mt-px text-[10px] leading-none" : "type-body-sm"
-            )}
-          >
+          <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
             {content.title || "Untitled"}
           </span>
         </>

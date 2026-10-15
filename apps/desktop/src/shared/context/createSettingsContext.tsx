@@ -14,7 +14,7 @@ export interface SettingsContext<T> {
 }
 
 /**
- * @param name Bare context name ("ListSettings") — spells the provider element
+ * @param name Bare context name ("InterfaceSettings") — spells the provider element
  *   and hook in the out-of-provider error, so it must match the exported names.
  * @param useValue Hook building the context value. Runs inside the provider.
  */

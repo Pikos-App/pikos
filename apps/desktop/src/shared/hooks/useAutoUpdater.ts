@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { createLogger } from "@/shared/logger";
+import { flushPendingWrites } from "@/shared/pendingWrites";
 
 const log = createLogger("AutoUpdater");
 
@@ -39,6 +40,10 @@ export function useAutoUpdater(): AutoUpdater {
   async function doCheck({ ignoreSkip = false } = {}) {
     if (import.meta.env["VITE_TEST_MODE"] === "true") return;
     if (import.meta.env.DEV) return;
+    // The bench relaunches hundreds of times, and GitHub counts each check as a download of the manifest.
+    if (__PIKOS_BENCH__) return;
+    // An update is the production app, and installing it would replace staging with it.
+    if (__PIKOS_STAGING__) return;
 
     log.info("Checking for updates");
     setStatus({ state: "checking" });
@@ -98,6 +103,10 @@ export function useAutoUpdater(): AutoUpdater {
         setStatus({ state: "up-to-date" });
         return;
       }
+      // Relaunch restarts the process without closing the window, so the write
+      // queue's close-time flush never runs. The user clicked this from a dialog
+      // they opened mid-session, most likely with an editor full of unsaved text.
+      await flushPendingWrites();
       await update.downloadAndInstall();
       log.info(`Update ${targetVersion} installed, relaunching`);
       const { relaunch } = await import("@tauri-apps/plugin-process");

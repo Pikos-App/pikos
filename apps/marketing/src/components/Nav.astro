@@ -7,9 +7,12 @@ interface Props {
 }
 const { current = "/" } = Astro.props;
 
+// A newcomer's questions, in order: what does it do, who is building it. Compare
+// and Release Notes sit in the footer instead: one answers someone already
+// weighing Pikos against another app, the other only an existing user.
 const links = [
+  { href: "/guides", label: "Guides" },
   { href: "/blog", label: "Blog" },
-  { href: "/release-notes", label: "Release Notes" },
 ];
 ---
 

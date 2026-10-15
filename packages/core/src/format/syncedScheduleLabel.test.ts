@@ -6,6 +6,7 @@ import { syncedScheduleLabel } from "./syncedScheduleLabel";
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,

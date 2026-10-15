@@ -13,6 +13,35 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::NsReader;
 
+/// Decodes a text event's bytes, and does nothing else.
+///
+/// Not `xml_content`, which looks like the replacement for the old `unescape`
+/// and is the wrong one: it normalizes end-of-line sequences, and a
+/// `calendar-data` body is an ICS whose CRLF endings RFC 5545 line unfolding
+/// depends on. Entities are not this function's job either — see
+/// [`resolve_entity`].
+pub(super) fn decode_text(t: &quick_xml::events::BytesText<'_>) -> Result<String, CaldavError> {
+    Ok(t.decode()
+        .map_err(|e| CaldavError::Protocol(e.to_string()))?
+        .into_owned())
+}
+
+/// Resolves one `&name;` or `&#nn;` reference to the character it stands for.
+///
+/// quick-xml 0.41 reports a reference as its own event instead of folding it
+/// into the surrounding text, so a parser that matches only on text events drops
+/// every `&amp;` on the floor without erroring. Both readers here re-fold it,
+/// because their accumulators trim each call and would otherwise eat the spaces
+/// on either side of the entity too: `Work &amp; Life` became `WorkLife`.
+pub(super) fn resolve_entity(r: &quick_xml::events::BytesRef<'_>) -> Result<String, CaldavError> {
+    let name = r
+        .decode()
+        .map_err(|e| CaldavError::Protocol(e.to_string()))?;
+    Ok(quick_xml::escape::unescape(&format!("&{name};"))
+        .map_err(|e| CaldavError::Protocol(e.to_string()))?
+        .into_owned())
+}
+
 const NS_DAV: &[u8] = b"DAV:";
 const NS_CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
 const NS_APPLE: &[u8] = b"http://apple.com/ns/ical/";
@@ -29,6 +58,11 @@ struct RawResponse {
     home_href: Option<String>,
     is_calendar: bool,
     display_name: Option<String>,
+    /// Whether a `<displayname>` element appeared at all, which `display_name`
+    /// cannot say: an absent element and an empty one both parse to `None`,
+    /// because the text handler drops whitespace. The two mean different things
+    /// when a server returns no name, so the distinction is kept here.
+    display_name_seen: bool,
     color: Option<String>,
     components: Vec<String>,
     /// `<cs:getctag>` — the collection change-tag, present only on a ctag PROPFIND.
@@ -39,6 +73,8 @@ struct RawResponse {
 pub(crate) struct RawCalendar {
     pub href: String,
     pub display_name: Option<String>,
+    /// See [`RawResponse::display_name_seen`].
+    pub display_name_seen: bool,
     pub color: Option<String>,
     /// `supported-calendar-component-set` comp names; empty when the server omits
     /// the prop (RFC default: all components supported).
@@ -70,6 +106,7 @@ pub(crate) fn parse_calendars(xml: &str) -> Result<Vec<RawCalendar>, CaldavError
         .map(|r| RawCalendar {
             href: r.href,
             display_name: r.display_name,
+            display_name_seen: r.display_name_seen,
             color: r.color,
             components: r.components,
         })
@@ -112,6 +149,7 @@ struct PropBuf {
     home_href: Option<String>,
     is_calendar: bool,
     display_name: Option<String>,
+    display_name_seen: bool,
     color: Option<String>,
     components: Vec<String>,
     ctag: Option<String>,
@@ -139,6 +177,9 @@ impl Parse {
     fn open(&mut self, ns: &[u8], local: &[u8], e: &BytesStart, is_start: bool) {
         if self.in_resourcetype && (ns, local) == (NS_CALDAV, b"calendar".as_ref()) {
             self.pbuf.is_calendar = true;
+        }
+        if (ns, local) == (NS_DAV, b"displayname".as_ref()) {
+            self.pbuf.display_name_seen = true;
         }
         if self.in_compset && (ns, local) == (NS_CALDAV, b"comp".as_ref()) {
             if let Some(name) = attr(e, b"name") {
@@ -238,6 +279,7 @@ impl Parse {
 
 fn parse_multistatus(xml: &str) -> Result<Vec<RawResponse>, CaldavError> {
     let mut reader = NsReader::from_str(xml);
+    let mut chars = String::new();
     let mut p = Parse::new();
 
     loop {
@@ -249,26 +291,37 @@ fn parse_multistatus(xml: &str) -> Result<Vec<RawResponse>, CaldavError> {
             _ => Vec::new(),
         };
         match ev {
-            Event::Start(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.open(&ns, &local, &e, true);
+            // Character data arrives in as many pieces as the document splits it
+            // into, so it is gathered here and handed over whole at the next
+            // structural event. CDATA joins it unescaped: its content is literal
+            // by definition. Dropping CDATA made an element wrapping its value in
+            // one look byte-identical to an empty element, which is a silent wrong
+            // answer rather than a parse failure.
+            Event::Text(t) => chars.push_str(&decode_text(&t)?),
+            Event::GeneralRef(r) => chars.push_str(&resolve_entity(&r)?),
+            Event::CData(t) => chars.push_str(&String::from_utf8_lossy(t.as_ref())),
+            structural => {
+                if !chars.is_empty() {
+                    p.text(&chars);
+                    chars.clear();
+                }
+                match structural {
+                    Event::Start(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.open(&ns, &local, &e, true);
+                    }
+                    Event::Empty(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.open(&ns, &local, &e, false);
+                    }
+                    Event::End(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.close(&ns, &local);
+                    }
+                    Event::Eof => break,
+                    _ => {}
+                }
             }
-            Event::Empty(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.open(&ns, &local, &e, false);
-            }
-            Event::Text(t) => {
-                let text = t
-                    .unescape()
-                    .map_err(|e| CaldavError::Protocol(e.to_string()))?;
-                p.text(&text);
-            }
-            Event::End(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.close(&ns, &local);
-            }
-            Event::Eof => break,
-            _ => {}
         }
     }
 
@@ -299,6 +352,9 @@ fn merge(cur: Option<&mut RawResponse>, pbuf: &mut PropBuf) {
     }
     if pbuf.display_name.is_some() {
         c.display_name = pbuf.display_name.take();
+    }
+    if pbuf.display_name_seen {
+        c.display_name_seen = true;
     }
     if pbuf.color.is_some() {
         c.color = pbuf.color.take();

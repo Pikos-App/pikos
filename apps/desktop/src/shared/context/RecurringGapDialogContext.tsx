@@ -22,6 +22,7 @@ import { createContext, type ReactNode, useContext, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 /** Which gesture opened the dialog — it decides the copy and the write, never
  *  the scope question itself. */
@@ -81,6 +82,9 @@ function occurrenceExclusions(rule: PageRecurrenceRule, head: PageSummary | unde
  * — and it is itself part of the backlog whenever the gesture pointed elsewhere,
  * which is why the window opens a millisecond before its day rather than at the
  * head's own instant.
+ *
+ * So the dialog calls these days "other", never "earlier": a tick lands on the
+ * head, and every day left in this set is later than it.
  */
 function missedBefore(
   rule: PageRecurrenceRule,
@@ -109,11 +113,11 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     completeRecurringToToday,
     completeSyncedOccurrence,
     listOverridesForRules,
-    pages,
     recurrenceRules,
     skipOccurrences,
   } = usePages();
   const { requestUndoableAction } = useUndoDelete();
+  const lookup = usePageLookup();
   const [pending, setPending] = useState<PendingGap | null>(null);
 
   /** A moved occurrence is an override row, not a gap: its original date is
@@ -128,7 +132,7 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
   }
 
   async function open(kind: GapKind, page: PageSummary): Promise<void> {
-    const head = pages.find((p) => p.id === page.id);
+    const head = lookup(page.id);
     const rule = recurrenceRules.find((r) => r.pageId === page.id);
     // Not a recurring series — the caller is wrong to route here. A tick still
     // reaches the writer (which rejects it loudly); a dismissal has no series to
@@ -192,8 +196,8 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     const undo = await skipOccurrences(page.id, dates);
     const label =
       dates.length === 1
-        ? `Deleted one occurrence of “${page.title || "Untitled"}”`
-        : `Deleted ${dates.length} occurrences of “${page.title || "Untitled"}”`;
+        ? `Deleted one day of “${page.title || "Untitled"}”`
+        : `Deleted ${dates.length} days of “${page.title || "Untitled"}”`;
     requestUndoableAction(`skip:${page.id}:${gesturedDate}`, label, undo);
   }
 

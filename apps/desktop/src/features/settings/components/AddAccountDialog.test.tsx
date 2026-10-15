@@ -60,11 +60,47 @@ describe("AddAccountDialog", () => {
     expect(onConnectGoogle).toHaveBeenCalled();
     // Why the waiting state exists: see submitGoogle in AddAccountDialog.tsx.
     expect(
-      await screen.findByText("Waiting for your browser. Finish signing in there.")
+      await screen.findByText(
+        "Waiting for your browser. Finish signing in there, or close this to stop waiting."
+      )
     ).toBeInTheDocument();
 
     finish();
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  // Closing the browser without consenting leaves the grant pending for the five
+  // minutes the loopback listener holds its port. While one boolean covered both
+  // kinds of waiting, that was a dialog nobody could dismiss.
+  it("can be dismissed while the Google grant is still pending", async () => {
+    const onConnectGoogle = vi.fn(() => new Promise<void>(() => {}));
+    const onOpenChange = vi.fn();
+    render({ onConnectGoogle, onOpenChange });
+    fireEvent.click(screen.getByRole("button", { name: /Google Calendar/ }));
+    await screen.findByText(/Waiting for your browser/);
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  // The grant is abandoned, not cancelled: the account still lands if the user goes
+  // back and finishes, so a late success must not reopen a dialog they have closed.
+  it("ignores a Google grant that finishes after the dialog was dismissed", async () => {
+    let finish: () => void = () => {};
+    const onConnectGoogle = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const onOpenChange = vi.fn();
+    render({ onConnectGoogle, onOpenChange });
+    fireEvent.click(screen.getByRole("button", { name: /Google Calendar/ }));
+    await screen.findByText(/Waiting for your browser/);
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    onOpenChange.mockClear();
+
+    finish();
+    await waitFor(() => expect(onConnectGoogle).toHaveBeenCalled());
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it("returns to the picker with an error when the Google grant fails", async () => {
@@ -92,6 +128,38 @@ describe("AddAccountDialog", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
+  // C113: the Server URL placeholder was a real, working iCloud URL, sitting above
+  // two placeholders that obviously are examples. An iCloud user read the field as
+  // answered, filled in the other two, and met a Connect button that stayed grey
+  // and said nothing.
+  it("offers a server URL you cannot mistake for a value", () => {
+    render();
+    fireEvent.click(screen.getByText("CalDAV"));
+
+    const url = screen.getByLabelText("Server URL");
+    expect(url).toHaveValue("");
+    expect(url.getAttribute("placeholder")).toContain("example.com");
+    expect(url.getAttribute("placeholder")).not.toContain("icloud.com");
+  });
+
+  it("names the field a disabled Connect is waiting on", () => {
+    render();
+    fireEvent.click(screen.getByText("CalDAV"));
+
+    // Nothing typed: the empty inputs already say it, so no line.
+    expect(screen.queryByText(/^Needs /)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Server URL"), {
+      target: { value: "https://caldav.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "me@example.com" },
+    });
+
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByText("Needs an app password.")).toBeInTheDocument();
+  });
+
   it("submits trimmed credentials", async () => {
     const onConnect = vi.fn().mockResolvedValue(undefined);
     render({ onConnect });
@@ -101,15 +169,15 @@ describe("AddAccountDialog", () => {
 
     await waitFor(() =>
       expect(onConnect).toHaveBeenCalledWith({
-        baseUrl: "https://caldav.example.com",
-        displayName: "me@example.com · https://caldav.example.com",
+        baseUrl: "https://caldav.example.com/",
+        displayName: "me@example.com · https://caldav.example.com/",
         password: "app-pw",
         username: "me@example.com",
       })
     );
   });
 
-  it("defaults a bare host to https://", async () => {
+  it("reduces what was typed to one spelling of the server", async () => {
     const onConnect = vi.fn().mockResolvedValue(undefined);
     render({ onConnect });
     fireEvent.click(screen.getByText("CalDAV"));
@@ -122,9 +190,32 @@ describe("AddAccountDialog", () => {
 
     await waitFor(() =>
       expect(onConnect).toHaveBeenCalledWith(
-        expect.objectContaining({ baseUrl: "https://caldav.icloud.com" })
+        expect.objectContaining({ baseUrl: "https://caldav.icloud.com/" })
       )
     );
+  });
+
+  // qa: SYNC-03:3
+  it("connects a bare host and the host in capitals as one account", async () => {
+    const onConnect = vi.fn().mockResolvedValue(undefined);
+    for (const [i, typed] of ["caldav.fastmail.com", "CALDAV.FASTMAIL.COM"].entries()) {
+      render({ onConnect });
+      fireEvent.click(screen.getByText("CalDAV"));
+      fireEvent.change(screen.getByLabelText("Server URL"), { target: { value: typed } });
+      fireEvent.change(screen.getByLabelText("Username"), { target: { value: "me@example.com" } });
+      fireEvent.change(screen.getByLabelText("App password"), { target: { value: "app-pw" } });
+      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(onConnect).toHaveBeenCalledTimes(i + 1));
+      cleanup();
+    }
+
+    const identities = onConnect.mock.calls.map(
+      ([args]) => (args as { displayName: string }).displayName
+    );
+    expect(identities).toEqual([
+      "me@example.com · https://caldav.fastmail.com/",
+      "me@example.com · https://caldav.fastmail.com/",
+    ]);
   });
 
   it("shows the error and stays open when the connection fails", async () => {

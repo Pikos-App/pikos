@@ -32,6 +32,41 @@ pub fn local_day_of(utc_iso: &str) -> Option<String> {
     )
 }
 
+/// The local calendar day a page's schedule falls on **for the person looking at
+/// it**.
+///
+/// A synced timed event is absolute: stored as source-zone wall-clock plus the
+/// source zone, happening at one instant that lands on whatever day the viewer's
+/// own zone says. Slicing the date prefix answers in the *source's* day instead,
+/// so a Tokyo morning reads as tomorrow to someone in California and drops out of
+/// Today while its calendar block sits on today's grid.
+///
+/// Everything else keeps its own date, and that is not a fallback but the model:
+/// native and detached pages float and carry no zone (detach rewrites the stored
+/// wall-clock into the device zone and clears the stamp), and an all-day value has
+/// no meaningful zone to convert from.
+pub fn viewer_day_of(scheduled_start: &str, timezone: Option<&str>) -> String {
+    viewer_wall_clock(scheduled_start, timezone)
+        .chars()
+        .take(10)
+        .collect()
+}
+
+/// A schedule's start on the viewer's clock, by the same rule as [`viewer_day_of`]:
+/// a zoned timed start converted from its source zone, anything else as stored.
+pub fn viewer_wall_clock(scheduled_start: &str, timezone: Option<&str>) -> String {
+    timezone
+        .and_then(|tz| tz.parse::<chrono_tz::Tz>().ok())
+        .and_then(|source| {
+            crate::reconciler::to_device_wall_clock(
+                scheduled_start,
+                source,
+                crate::pool::device_zone(),
+            )
+        })
+        .unwrap_or_else(|| scheduled_start.to_string())
+}
+
 /// `sync_account` row — one connected account. Secrets are NOT here; only a
 /// stable handle (`auth_kind` + the row id as the keychain key).
 #[derive(Debug, sqlx::FromRow)]
@@ -167,11 +202,21 @@ pub(crate) async fn page_schedule_locked(
     pool: &sqlx::SqlitePool,
     page_id: &str,
 ) -> crate::error::AppResult<bool> {
+    let mut conn = pool.acquire().await?;
+    page_schedule_locked_conn(&mut conn, page_id).await
+}
+
+/// [`page_schedule_locked`] on the caller's connection, for a guard that has to
+/// read the same snapshot as the write it gates.
+pub(crate) async fn page_schedule_locked_conn(
+    conn: &mut sqlx::SqliteConnection,
+    page_id: &str,
+) -> crate::error::AppResult<bool> {
     Ok(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ? AND sync_state = 'active')",
     )
     .bind(page_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?)
 }
 

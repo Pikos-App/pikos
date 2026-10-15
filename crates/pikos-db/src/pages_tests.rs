@@ -804,8 +804,9 @@ async fn create_page_persists_fields_and_assigns_sort_order() {
     assert_ne!(first.id, second.id, "ids must be unique");
     assert_eq!(first.sort_order, 0);
     assert_eq!(
-        second.sort_order, 1,
-        "sort_order auto-increments per folder"
+        second.sort_order,
+        crate::moves::ORDER_SPACING,
+        "each new page lands a full gap after the last, leaving room to move pages between"
     );
     assert_eq!(count_pages(&pool).await, 2);
 }
@@ -1034,6 +1035,146 @@ async fn list_pages_filters_by_status_and_folder() {
 }
 
 #[tokio::test]
+async fn a_bounded_list_returns_the_first_rows_in_the_order_asked_for() {
+    let pool = test_pool().await;
+    // (id, sort_order, updated_at, tags): manual order runs c, a, b, d; edit order runs b, d, c, a.
+    let pages = [
+        ("a", 1, "2026-01-01T00:00:00Z", r#"["work"]"#),
+        ("b", 2, "2026-01-04T00:00:00Z", "[]"),
+        ("c", 0, "2026-01-02T00:00:00Z", "[]"),
+        ("d", 3, "2026-01-03T00:00:00Z", r#"["work"]"#),
+    ];
+    for (id, sort_order, updated_at, tags) in pages {
+        insert_test_page(
+            &pool,
+            TestPage {
+                tags_json: tags,
+                ..TestPage::new(id, id)
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ?")
+            .bind(sort_order)
+            .bind(updated_at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
+
+    let none = ListExtras::default();
+    let manual = list_pages_window(&pool, None, &none, PageOrder::SortOrder, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(ids(manual), ["c", "a"]);
+
+    let recent = list_pages_window(&pool, None, &none, PageOrder::RecentlyUpdated, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(ids(recent), ["b", "d"]);
+
+    let tagged = list_pages_window(
+        &pool,
+        Some(PageFilter {
+            tags: Some(vec!["work".into()]),
+            ..Default::default()
+        }),
+        &none,
+        PageOrder::RecentlyUpdated,
+        Some(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ids(tagged),
+        ["d"],
+        "the limit counts only pages that carry the tag"
+    );
+}
+
+#[tokio::test]
+async fn the_cli_filters_select_by_creation_completion_repeat_and_reminder() {
+    let pool = test_pool().await;
+    // (id, created_at in UTC, completed_at in local wall-clock)
+    let pages = [
+        ("a", "2026-01-01T10:00:00.000Z", None),
+        ("b", "2026-01-02T10:00:00.000Z", Some("2026-02-03T09:00:00")),
+        ("c", "2026-01-03T10:00:00.000Z", Some("2026-03-01T09:00:00")),
+        ("d", "2025-12-31T10:00:00.000Z", None),
+    ];
+    for (id, created_at, completed_at) in pages {
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE pages SET created_at = ?, completed_at = ? WHERE id = ?")
+            .bind(created_at)
+            .bind(completed_at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    crate::schedules::create_recurrence_rule_impl(
+        &pool,
+        crate::schedules::NewRecurrenceRule {
+            page_id: "c".into(),
+            rrule: "FREQ=WEEKLY;BYDAY=SU".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-01-04T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::reminders::create_page_reminder(&pool, "d", 30)
+        .await
+        .unwrap();
+    crate::reminders::create_page_reminder(&pool, "b", -1)
+        .await
+        .unwrap();
+    let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
+    let list = |extras: ListExtras| {
+        let pool = pool.clone();
+        async move {
+            list_pages_window(&pool, None, &extras, PageOrder::Created, None)
+                .await
+                .unwrap()
+        }
+    };
+
+    assert_eq!(ids(list(ListExtras::default()).await), ["d", "a", "b", "c"]);
+    let created_on_the_2nd = ListExtras {
+        created_from_utc: Some("2026-01-02T00:00:00.000Z".into()),
+        created_until_utc: Some("2026-01-03T00:00:00.000Z".into()),
+        ..Default::default()
+    };
+    assert_eq!(ids(list(created_on_the_2nd).await), ["b"]);
+    let completed_in_february = ListExtras {
+        completed_from: Some("2026-02-01".into()),
+        completed_to: Some("2026-02-28".into()),
+        ..Default::default()
+    };
+    assert_eq!(ids(list(completed_in_february).await), ["b"]);
+    let repeating = ListExtras {
+        recurring: true,
+        ..Default::default()
+    };
+    assert_eq!(ids(list(repeating).await), ["c"]);
+    let reminded = ListExtras {
+        has_reminders: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        ids(list(reminded).await),
+        ["d"],
+        "the no-reminders sentinel is not a reminder"
+    );
+}
+
+#[tokio::test]
 async fn reorder_pages_assigns_positional_indices() {
     let pool = test_pool().await;
     let a = create_page_impl(&pool, new_page("A")).await.unwrap();
@@ -1065,6 +1206,25 @@ async fn insert_schedule(pool: &sqlx::SqlitePool, page_id: &str, scheduled_start
     .unwrap();
 }
 
+async fn insert_schedule_in_zone(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+    scheduled_start: &str,
+    timezone: &str,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, timezone, status, created_at)
+         VALUES (?, ?, ?, ?, 'not_started', datetime('now'))",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn insert_scheduled_page(pool: &sqlx::SqlitePool, id: &str, scheduled_start: &str) {
     insert_test_page(
         pool,
@@ -1091,6 +1251,138 @@ async fn list_pages_today_boundary_is_the_local_day() {
     let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
     let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, vec!["overdue", "today"]);
+}
+
+/// A synced event happens at one instant. Which day that instant falls on is the
+/// viewer's question, not the source calendar's, and the two disagree for most of
+/// every day once the zones differ. Reading the stored date put a Tokyo morning
+/// under tomorrow while its block sat on today's grid.
+///
+/// `device_zone()` is UTC under `cfg(test)`, so both offsets here are relative to
+/// UTC rather than to whatever machine is running this.
+#[tokio::test]
+async fn list_pages_today_reads_a_synced_day_in_the_viewer_zone() {
+    let pool = test_pool().await;
+
+    // 06:00 in Tokyo (UTC+9) is 21:00 the day before in UTC — today for the viewer,
+    // tomorrow by the stored date.
+    insert_scheduled_page(&pool, "tokyo-morning", "2026-08-08T06:00:00").await;
+    insert_schedule_in_zone(&pool, "tokyo-morning", "2026-08-08T06:00:00", "Asia/Tokyo").await;
+
+    // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC — tomorrow for the
+    // viewer, today by the stored date.
+    insert_scheduled_page(&pool, "la-evening", "2026-08-07T20:00:00").await;
+    insert_schedule_in_zone(
+        &pool,
+        "la-evening",
+        "2026-08-07T20:00:00",
+        "America/Los_Angeles",
+    )
+    .await;
+
+    // No zone: floats, and keeps its own date whatever the viewer's zone is.
+    insert_scheduled_page(&pool, "native", "2026-08-07T09:00:00").await;
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
+
+    assert!(ids.contains(&"tokyo-morning"), "got {ids:?}");
+    assert!(!ids.contains(&"la-evening"), "got {ids:?}");
+    assert!(ids.contains(&"native"), "got {ids:?}");
+}
+
+/// An all-day synced event has no zone to convert from and floats like a native
+/// one, so it must not be dragged across midnight by the account's zone.
+#[tokio::test]
+async fn list_pages_today_leaves_an_all_day_synced_page_on_its_own_date() {
+    let pool = test_pool().await;
+
+    insert_scheduled_page(&pool, "all-day", "2026-08-07").await;
+    insert_schedule_in_zone(&pool, "all-day", "2026-08-07", "Asia/Tokyo").await;
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(ids, vec!["all-day"]);
+}
+
+/// C111: moving an occurrence onto today puts its original date in the exclusion
+/// set, so the head derives *past* today and a head-only read lists nothing — while
+/// `today_scheduled_count`, which reads the override row, counts it. A reminder
+/// pointing at an empty list is the shape of a page having been lost.
+#[tokio::test]
+async fn list_pages_today_shows_an_occurrence_moved_onto_today() {
+    let pool = test_pool().await;
+
+    // Head two weeks out; the series is daily from there.
+    insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
+    add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
+
+    let rule_id: String =
+        sqlx::query_scalar("SELECT id FROM page_recurrence_rules WHERE page_id = 'series'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    // One occurrence moved back onto today.
+    sqlx::query(
+        "INSERT INTO page_schedules
+           (id, page_id, scheduled_start, scheduled_end, rule_id, original_date, status, created_at)
+         VALUES (?, 'series', '2026-08-07T15:00:00', NULL, ?, '2026-08-22', 'not_started',
+                 datetime('now'))",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&rule_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    let listed = pages
+        .iter()
+        .find(|p| p.id == "series")
+        .expect("series is listed");
+
+    // And at the moved time, not the head's — the row has to name the day it is
+    // being listed for.
+    assert_eq!(
+        listed.scheduled_start.as_deref(),
+        Some("2026-08-07T15:00:00")
+    );
+}
+
+/// The same row must not drag a series into Today when it was moved to some other
+/// future day.
+#[tokio::test]
+async fn list_pages_today_ignores_an_occurrence_moved_to_a_later_day() {
+    let pool = test_pool().await;
+
+    insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
+    add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
+
+    let rule_id: String =
+        sqlx::query_scalar("SELECT id FROM page_recurrence_rules WHERE page_id = 'series'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    sqlx::query(
+        "INSERT INTO page_schedules
+           (id, page_id, scheduled_start, scheduled_end, rule_id, original_date, status, created_at)
+         VALUES (?, 'series', '2026-08-19T15:00:00', NULL, ?, '2026-08-22', 'not_started',
+                 datetime('now'))",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&rule_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    assert!(
+        pages.iter().all(|p| p.id != "series"),
+        "got {:?}",
+        pages.iter().map(|p| &p.id).collect::<Vec<_>>()
+    );
 }
 
 #[tokio::test]
@@ -1952,8 +2244,13 @@ async fn reschedule_virtual_re_arms_a_fired_reminder_on_the_moved_override() {
 
     let due = crate::notification_log::due_explicit_reminders(
         &pool,
-        "2026-06-13 13:49:00",
-        "2026-06-13 13:50:00",
+        &crate::notification_log::ReminderWindow::for_test(
+            "2026-06-13T13:50:00".parse().unwrap(),
+            "2026-06-13T13:50:00"
+                .parse::<chrono::NaiveDateTime>()
+                .unwrap()
+                .and_utc(),
+        ),
     )
     .await
     .unwrap();
@@ -2712,6 +3009,7 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
     assert!(matches!(err, AppError::Conflict(_)));
 }
 
+// qa: SYNC-22:5
 #[tokio::test]
 async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     let pool = test_pool().await;
@@ -2732,6 +3030,49 @@ async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     // Restore resumes syncing.
     restore_page_impl(&pool, "p").await.unwrap();
     assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("active"));
+}
+
+// qa: SYNC-22:5
+#[tokio::test]
+async fn restoring_a_trashed_mirror_drops_only_its_own_calendars_cursor() {
+    let pool = test_pool().await;
+    for (title, synced) in [("mirror", true), ("native", false)] {
+        insert_test_page(&pool, TestPage::new(title, title))
+            .await
+            .unwrap();
+        if synced {
+            mark_synced(&pool, title, "active").await;
+        }
+    }
+    for (id, calendar) in [("cal-row", "cal"), ("other-row", "other")] {
+        sqlx::query(
+            "INSERT INTO sync_calendar (id, account_id, calendar_id, display_name, enabled, sync_token, ctag, created_at, updated_at)
+             VALUES (?, 'test-acct', ?, ?, 1, 'tok', 'ctag', '', '')",
+        )
+        .bind(id)
+        .bind(calendar)
+        .bind(calendar)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let cursors = || async {
+        sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT sync_token, ctag FROM sync_calendar ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let kept = (Some("tok".to_string()), Some("ctag".to_string()));
+
+    soft_delete_page_impl(&pool, "native").await.unwrap();
+    restore_page_impl(&pool, "native").await.unwrap();
+    delete_page_impl(&pool, "mirror").await.unwrap();
+    assert_eq!(cursors().await, [kept.clone(), kept.clone()]);
+
+    restore_page_impl(&pool, "mirror").await.unwrap();
+    assert_eq!(cursors().await, [(None, None), kept]);
 }
 
 #[tokio::test]
@@ -3798,7 +4139,7 @@ async fn emptying_the_trash_is_the_same_sweep_at_zero_days() {
     assert!(list_trashed_pages_impl(&pool).await.unwrap().is_empty());
 }
 
-// ─── content_schema_version (migration 013) ──────────────────────────────────
+// ─── content_schema_version (migration 023) ──────────────────────────────────
 
 #[tokio::test]
 async fn new_pages_are_stamped_with_the_current_content_schema_version() {
@@ -3811,7 +4152,7 @@ async fn new_pages_are_stamped_with_the_current_content_schema_version() {
 
 #[tokio::test]
 async fn existing_rows_backfill_to_version_one() {
-    // Rows written before migration 013 must read as version 1 rather than 0 or
+    // Rows written before migration 023 must read as version 1 rather than 0 or
     // NULL — they came from the single desktop editor, which is what 1 denotes.
     // Simulated by writing the column's pre-migration absence directly.
     let pool = test_pool().await;

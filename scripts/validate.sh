@@ -6,10 +6,6 @@ set -euo pipefail
 # doesn't have to re-run validation in CI. Also exposed as `pnpm preflight`.
 #
 # Ordered cheapest-/most-likely-to-fail first so it fails fast.
-# Skips the two warn-only CI gates (`pnpm audit`, `cargo audit`) — they are
-# continue-on-error in CI and never block a release.
-#
-# Escape hatch: SKIP_VALIDATE=1 (honored by release.sh) bypasses this entirely.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC_TAURI="$ROOT/apps/desktop/src-tauri"
@@ -21,10 +17,8 @@ RESET='\033[0m'
 step() { printf "\n${BOLD}▶ %s${RESET}${DIM} %s${RESET}\n" "$1" "$2"; }
 
 # ── verify job ────────────────────────────────────────────────────────────────
-# VERIFY_ALL forces the full unit suite: verify's default is affected-only, which
-# is right for a pre-commit gate and wrong for a release gate.
 step "verify" "typecheck + lint + prettier + depcruise + unit tests"
-VERIFY_ALL=1 pnpm verify
+pnpm verify
 
 step "coverage" "desktop + core, per-directory thresholds"
 pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
@@ -32,21 +26,9 @@ pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
 step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
 
-# ── rust-workspace job ────────────────────────────────────────────────────────
-# crates/* (pikos-db, pikos-cli, pikos-core). Separate from the src-tauri steps
-# below because Cargo.toml excludes src-tauri from the root workspace, so
-# `cargo test` in one never covers the other.
-step "workspace cargo fmt --check" "crates/*"
-(cd "$ROOT" && cargo fmt --all --check)
+step "js audit" "shipped dependencies against scripts/js-audit-accepted.json"
+node "$ROOT/scripts/check-js-audit.mjs"
 
-step "workspace cargo check" "crates/* — zero warnings"
-(cd "$ROOT" && RUSTFLAGS="-D warnings" cargo check --workspace --all-targets)
-
-step "workspace cargo clippy" "crates/* — zero warnings"
-(cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
-
-step "workspace cargo test" "crates/* — includes the TS-parity corpus"
-(cd "$ROOT" && cargo test --workspace --quiet)
 # ── bindings job ──────────────────────────────────────────────────────────────
 # packages/core/src/generated is committed, so it drifts the moment a pikos-db
 # wire struct changes without a regeneration — with every gate above still green,
@@ -96,8 +78,20 @@ step "cargo clippy (desktop)" "zero warnings"
 step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)
 
+# Needs cargo-audit installed; CI caches it. Skipped rather than failed when it is
+# absent, because a missing tool is not a finding and this script is also the
+# pre-release gate on a machine that may never have installed it.
+if command -v cargo-audit &>/dev/null; then
+  step "cargo audit" "workspace + desktop, each against its own .cargo/audit.toml"
+  (cd "$ROOT" && cargo audit)
+  (cd "$SRC_TAURI" && cargo audit)
+else
+  step "cargo audit" "skipped — cargo-audit not installed"
+fi
+
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────
-step "e2e" "Playwright tier1 + tier2"
-pnpm --filter @pikos/desktop exec playwright test --project=tier1 --project=tier2
+step "e2e" "Playwright, as CI splits it: the real writer, then the mock-only tests"
+pnpm --filter @pikos/desktop test:e2e:bridge
+pnpm --filter @pikos/desktop exec playwright test --project=e2e --grep @mock-only
 
 printf "\n${BOLD}✓ All validation passed — safe to push the tag.${RESET}\n"

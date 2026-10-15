@@ -22,14 +22,14 @@ afterEach(() => {
 
 describe("formatCompactTime", () => {
   it("always shows minutes and a single-letter period", () => {
-    expect(formatCompactTime(new Date("2026-06-15T14:00:00Z"))).toBe("2:00p");
-    expect(formatCompactTime(new Date("2026-06-15T14:30:00Z"))).toBe("2:30p");
-    expect(formatCompactTime(new Date("2026-06-15T10:00:00Z"))).toBe("10:00a");
-    expect(formatCompactTime(new Date("2026-06-15T12:15:00Z"))).toBe("12:15p");
+    expect(formatCompactTime(new Date("2026-06-15T14:00:00Z"))).toBe("2:00pm");
+    expect(formatCompactTime(new Date("2026-06-15T14:30:00Z"))).toBe("2:30pm");
+    expect(formatCompactTime(new Date("2026-06-15T10:00:00Z"))).toBe("10:00am");
+    expect(formatCompactTime(new Date("2026-06-15T12:15:00Z"))).toBe("12:15pm");
   });
 
   it("renders midnight as 12a", () => {
-    expect(formatCompactTime(new Date("2026-06-15T00:05:00Z"))).toBe("12:05a");
+    expect(formatCompactTime(new Date("2026-06-15T00:05:00Z"))).toBe("12:05am");
   });
 });
 
@@ -51,7 +51,7 @@ describe("isDueSoon", () => {
 describe("formatPageDate", () => {
   it("shows the time for a timed schedule today", () => {
     const { isPast, label } = formatPageDate("2026-06-15T14:00:00");
-    expect(label).toBe("2:00p");
+    expect(label).toBe("2:00pm");
     expect(isPast).toBe(false);
   });
 

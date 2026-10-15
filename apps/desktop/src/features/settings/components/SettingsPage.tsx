@@ -3,12 +3,11 @@ import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { CSVColumnMappingPage, ImportPreviewModal, useImport } from "@/features/import";
-import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
-import { getKeyValueStore } from "@/shared/kv";
 
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
@@ -22,15 +21,6 @@ const DeveloperSettings = import.meta.env.DEV
   ? lazy(() => import("./DeveloperSettings").then((m) => ({ default: m.DeveloperSettings })))
   : null;
 
-function readLeftPanelWidth(): number {
-  try {
-    const raw = getKeyValueStore().getItem(STORAGE_KEYS.leftPanelWidth);
-    return raw ? (JSON.parse(raw) as number) : 180;
-  } catch {
-    return 180;
-  }
-}
-
 export function SettingsPage() {
   const {
     activePageId,
@@ -42,6 +32,7 @@ export function SettingsPage() {
     settingsSection: section,
   } = useUI();
   const { storage } = useWorkspace();
+  const { weekStart } = useAppSettings();
   const { clearLastImport, lastImportResult, undoLastImport } = useImportBatch();
 
   // Undo deletes the imported pages; if one is open in the editor, deselect it
@@ -52,7 +43,6 @@ export function SettingsPage() {
     await undoLastImport();
   }
   const isFullscreen = useIsFullscreen();
-  const [sidebarWidth] = useState(readLeftPanelWidth);
   const [usageStats, setUsageStats] = useState<UsageStatsData | null>(null);
   const {
     applyCSVMapping,
@@ -69,10 +59,10 @@ export function SettingsPage() {
   useEffect(() => {
     if (!storage || !settingsOpen) return;
     storage
-      .getUsageStats()
+      .getUsageStats(weekStart)
       .then(setUsageStats)
       .catch(() => {});
-  }, [storage, settingsOpen]);
+  }, [storage, settingsOpen, weekStart]);
 
   // Close on Escape — go back from mapping/preview first, then close settings
   useEffect(() => {
@@ -100,6 +90,7 @@ export function SettingsPage() {
     <div
       aria-label="Settings"
       className="fixed inset-x-0 bottom-0 z-50 flex bg-background text-foreground"
+      data-modal-surface
       role="region"
       style={{ top: isFullscreen ? 0 : 30 }}
     >
@@ -107,7 +98,6 @@ export function SettingsPage() {
         active={section}
         onClose={() => setSettingsOpen(false)}
         onNavigate={setSettingsSection}
-        width={sidebarWidth}
       />
 
       {/* Content — mapping → preview → progress, or normal section */}

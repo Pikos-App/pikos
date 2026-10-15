@@ -345,6 +345,7 @@ const EXPANSION_CASES: {
  *  the expander computes are projected into the corpus below. */
 const TEMPLATE_PAGE: PageSummary = {
   createdAt: "2026-03-01T00:00:00",
+  detachIsReversible: false,
   folderId: null,
   id: "page-0000",
   isRecurring: false,

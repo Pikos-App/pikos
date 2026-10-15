@@ -4,6 +4,7 @@
 
 import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import type { Page } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,6 +29,7 @@ function makePage(over: Partial<Page>): Page {
     content: "",
     contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -131,15 +133,31 @@ describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own
   });
 });
 
+// The notice splits on whether the detach can be undone, not on what caused it —
+// that is the only part the reader can act on. Both arms name the thing as a
+// calendar: the folder carries the same name and stays in the sidebar, so a
+// notice saying only "Removed from Work" reads as contradicting the folder chip
+// beside it. Two screen reviews filed that as a bug.
 describe("MetadataHeader — detached notice", () => {
-  it("shows the disconnected notice for a detached page", async () => {
-    await renderHeader(makePage({ scheduleLocked: false, syncState: "detached" }));
-    expect(screen.getByText(/Disconnected from/)).toBeInTheDocument();
+  it("says a page can rejoin when its calendar is only switched off", async () => {
+    await renderHeader(
+      makePage({ detachIsReversible: true, scheduleLocked: false, syncState: "detached" })
+    );
+    expect(screen.getByText(/The .* calendar is turned off\. Turn it back on/)).toBeInTheDocument();
   });
 
-  it("omits the disconnected notice for an active synced page", async () => {
+  it("says a page is its own when the event is gone from the provider", async () => {
+    await renderHeader(
+      makePage({ detachIsReversible: false, scheduleLocked: false, syncState: "detached" })
+    );
+    expect(
+      screen.getByText(/Removed from the .* calendar\. This is a regular page now\./)
+    ).toBeInTheDocument();
+  });
+
+  it("omits the notice for an active synced page", async () => {
     await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
-    expect(screen.queryByText(/Disconnected from/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/turned off|Removed from/)).not.toBeInTheDocument();
   });
 });
 
@@ -147,6 +165,7 @@ describe("MetadataHeader — read-only mirror metadata", () => {
   it("renders location + attendees read-only on a locked page", async () => {
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         mirrorAttendees: ["alex@example.com", "sam@example.com"],
         mirrorLocation: "Room 4B",
         scheduleLocked: true,
@@ -170,6 +189,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
   it("shows the notice on a locked page with a pending description, revealing the text on View", async () => {
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda for the meeting.",
         scheduleLocked: true,
         syncState: "active",
@@ -198,6 +218,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
     const append = vi.fn();
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda for the meeting.",
         scheduleLocked: true,
         syncState: "active",
@@ -213,6 +234,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
     const append = vi.fn();
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda for the meeting.",
         scheduleLocked: true,
         syncState: "active",
@@ -229,6 +251,7 @@ describe("MetadataHeader — calendar description-changed notice", () => {
   it("offers no action that overwrites the body", async () => {
     await renderHeader(
       makePage({
+        detachIsReversible: false,
         pendingDescription: "New agenda.",
         scheduleLocked: true,
         syncState: "active",
@@ -305,5 +328,111 @@ describe("MetadataHeader — why a locked field can't be edited", () => {
     expect(
       screen.queryByRole("img", { name: /are read-only for synced pages/ })
     ).not.toBeInTheDocument();
+  });
+});
+
+// The caret is placed once, when the field swaps from its div to its textarea.
+// Re-placing it on every value change is what made typing into the middle of a
+// title impossible: each keystroke threw the caret back to the end.
+describe("MetadataHeader — the caret stays where you put it", () => {
+  async function focusField(name: string) {
+    await renderHeader(makePage({ scheduleLocked: false, subtitle: "Weekly", syncState: null }));
+    fireEvent.click(screen.getByRole("button", { name }));
+    const field = screen.getByRole<HTMLTextAreaElement>("textbox", { name });
+    const setSelectionRange = vi.spyOn(field, "setSelectionRange");
+    return { field, setSelectionRange };
+  }
+
+  it("does not move the caret while you type in the title", async () => {
+    const { field, setSelectionRange } = await focusField("Page title");
+
+    fireEvent.change(field, { target: { value: "Team Xsync" } });
+
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
+  it("does not move the caret while you type in the description", async () => {
+    const { field, setSelectionRange } = await focusField("Page description");
+
+    fireEvent.change(field, { target: { value: "WeXekly" } });
+
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
+  it("puts the caret at the end when the title opens for editing", async () => {
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null, title: "Team sync" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Page title" }));
+
+    const field = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Page title" });
+    expect(field.selectionStart).toBe("Team sync".length);
+  });
+});
+
+// The 800ms auto-save debounce is meant to flush on blur. It did not:
+// the only flush listened on `window`'s blur, which fires when the whole app
+// loses focus and never when focus moves between elements inside it. So moving
+// from the title into the body left the rename unwritten, and anything reading
+// storage in that window — search, the CLI, a quit — saw the old title.
+describe("MetadataHeader — leaving a field commits it", () => {
+  async function editField(label: string, value: string) {
+    // The harness renders a page object without seeding it into the adapter, so
+    // the real updatePage would reject on a missing row. Resolving here keeps the
+    // assertion on "was it called, and when" rather than on the mock's bookkeeping.
+    const updatePage = vi
+      .spyOn(MockStorageAdapter.prototype, "updatePage")
+      .mockImplementation((id, patch) => Promise.resolve(makePage({ id, ...patch })));
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null, title: "Team sync" }));
+
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    const field = screen.getByRole("textbox", { name: label });
+    fireEvent.change(field, { target: { value } });
+    updatePage.mockClear();
+
+    return { field, updatePage };
+  }
+
+  it("writes the title on blur instead of waiting out the debounce", async () => {
+    const { field, updatePage } = await editField("Page title", "zenith proposal");
+
+    expect(updatePage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.blur(field);
+      await Promise.resolve();
+    });
+
+    expect(updatePage).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ title: "zenith proposal" })
+    );
+  });
+
+  it("writes the description on blur", async () => {
+    const { field, updatePage } = await editField("Page description", "the quarterly one");
+
+    await act(async () => {
+      fireEvent.blur(field);
+      await Promise.resolve();
+    });
+
+    expect(updatePage).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ subtitle: "the quarterly one" })
+    );
+  });
+
+  it("writes the title when Enter moves focus to the description", async () => {
+    const { field, updatePage } = await editField("Page title", "zenith proposal");
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+      await Promise.resolve();
+    });
+
+    expect(updatePage).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ title: "zenith proposal" })
+    );
   });
 });

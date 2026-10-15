@@ -10,6 +10,9 @@ import { ChevronsDownUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+
+import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
+
 function hourLabel(hour: number): string {
   return formatTime12hParts(hour % 24, 0);
 }
@@ -70,7 +73,10 @@ export function TimeGutter() {
   }
 
   return (
-    <div className="relative w-14 shrink-0 select-none" style={{ height: geometry.totalHeight }}>
+    <div
+      className={cn(CALENDAR_GUTTER_WIDTH, "relative shrink-0 whitespace-nowrap select-none")}
+      style={{ height: geometry.totalHeight }}
+    >
       {collapse.topCollapsed ? (
         // Compressed band: two endpoint labels + chevron between, click to expand.
         // Bottom divider matches the day columns so the band/middle seam reads

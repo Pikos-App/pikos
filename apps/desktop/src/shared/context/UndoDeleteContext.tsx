@@ -15,6 +15,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { subscribeNotices } from "@/shared/events/noticeBus";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 export interface UndoDeleteContextValue {
   /** Soft-delete + hide the page immediately; the toast's Undo restores it. */
@@ -46,7 +47,8 @@ const FOLDER_UNDO_PREFIX = "folder:";
 const UndoDeleteContext = createContext<UndoDeleteContextValue | null>(null);
 
 export function UndoDeleteProvider({ children }: { children: ReactNode }) {
-  const { pages, restoreFolder, restorePage, softDeleteFolder, softDeletePage } = usePages();
+  const { restoreFolder, restorePage, softDeleteFolder, softDeletePage } = usePages();
+  const lookup = usePageLookup();
   const { activePageId, setActivePage } = useUI();
 
   const pendingDeleteIds = useRef<Set<string>>(new Set());
@@ -110,17 +112,17 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     pendingFolderIds.current.add(folder.id);
     // Close the editor if the active page lives inside the folder we're about
     // to hide — the cascade soft-delete removes it from the pages list.
-    const activePage = activePageId ? pages.find((p) => p.id === activePageId) : null;
+    const activePage = activePageId ? lookup(activePageId) : null;
     if (activePage && activePage.folderId === folder.id) setActivePage(null);
     setHiddenFolderIds((prev) => new Set([...prev, folder.id]));
-    const suffix = pageCount > 0 ? ` (${pageCount} ${pageCount === 1 ? "page" : "pages"})` : "";
+    const suffix = pageCount > 0 ? ` and ${pageCount} ${pageCount === 1 ? "page" : "pages"}` : "";
     setToastItems((prev) => [
       ...prev,
       {
         action: { label: "Undo", onClick: () => undoFolder(undoId) },
         duration: 16000,
         id: undoId,
-        label: `Deleted “${folder.name}${suffix}”`,
+        label: `Deleted “${folder.name}”${suffix}`,
       },
     ]);
     void softDeleteFolder(folder.id);

@@ -77,16 +77,29 @@ pub async fn connect_caldav(
         password,
     };
     let remote = CaldavProvider::discover_with(&creds).await?;
+    save_caldav(pool, &keychain, &creds, &display_name, &remote).await
+}
+
+/// The half of [`connect_caldav`] after discovery, so a test can reach it without a server.
+async fn save_caldav(
+    pool: &SqlitePool,
+    keychain: &Keychain,
+    creds: &CaldavCredentials,
+    display_name: &str,
+    remote: &[pikos_db::sync_delta::RemoteCalendar],
+) -> AppResult<AccountWithCalendars> {
     let blob = creds
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let account = claim_account(pool, PROVIDER_CALDAV, &display_name, "basic").await?;
-    keychain
-        .store(&account.id, &blob)
-        .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
+    let identity = caldav_stored_identity(pool, display_name).await?;
+    let claimed = claim_account(pool, PROVIDER_CALDAV, &identity, "basic").await?;
+    let stored = keychain
+        .store(&claimed.account.id, &blob)
+        .map_err(|e| AppError::Internal(e.user_message()));
+    let account = keep_or_release(pool, claimed, stored).await?;
 
-    let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    let calendars = upsert_calendars(pool, &account.id, remote).await?;
     Ok(AccountWithCalendars { account, calendars })
 }
 
@@ -122,7 +135,7 @@ pub async fn reconnect_caldav(
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
     keychain
         .store(account_id, &blob)
-        .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
+        .map_err(|e| AppError::Internal(e.user_message()))?;
     reactivate_account_impl(pool, account_id).await?;
 
     let calendars = upsert_calendars(pool, account_id, &remote).await?;
@@ -153,12 +166,67 @@ where
     // Proves the grant actually reads calendars before anything is persisted —
     // the same validate-first order connect_caldav uses.
     let (remote, display_name) = crate::google::GoogleProvider::list_with(&credentials).await?;
+    save_google(pool, &keychain, &credentials, &display_name, &remote).await
+}
 
-    let account = claim_account(pool, PROVIDER_GOOGLE, &display_name, "oauth").await?;
-    crate::google::store(&keychain, &account.id, &credentials)?;
+/// The half of [`connect_google`] after the grant and the calendar list, so a test can reach
+/// it without Google.
+pub(crate) async fn save_google(
+    pool: &SqlitePool,
+    keychain: &Keychain,
+    credentials: &crate::google::GoogleCredentials,
+    display_name: &str,
+    remote: &[pikos_db::sync_delta::RemoteCalendar],
+) -> AppResult<AccountWithCalendars> {
+    let claimed = claim_account(pool, PROVIDER_GOOGLE, display_name, "oauth").await?;
+    let stored = crate::google::store(keychain, &claimed.account.id, credentials);
+    let account = keep_or_release(pool, claimed, stored.map_err(AppError::from)).await?;
 
-    let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    let calendars = upsert_calendars(pool, &account.id, remote).await?;
     Ok(AccountWithCalendars { account, calendars })
+}
+
+/// An account row a connect has taken, and whether this connect is what created it.
+struct Claimed {
+    account: pikos_db::sync_commands::SyncAccount,
+    /// Only a row this connect created may be taken back out when the credential cannot be
+    /// stored. An account that already existed still has its own working credential.
+    created: bool,
+}
+
+/// The spelling an existing CalDAV account is stored under, when this identity is
+/// the same user and server written a different way.
+///
+/// Identity is matched as a string, and the lookup's `COLLATE NOCASE` already absorbs
+/// a difference in case. A trailing slash it does not. Before the connect dialog
+/// reduced the typed URL it stored whatever was typed, so an account added in
+/// `0.4.0-beta` carries `https://caldav.fastmail.com` where a fresh connect now builds
+/// `https://caldav.fastmail.com/`. Missing that row adds a second account for one
+/// server and leaves the first one's pages detached, which is the failure reducing the
+/// URL was meant to end.
+///
+/// Resolved on connect rather than by rewriting stored identities, so no migration is
+/// owed and a workspace stays readable by the build that wrote it. The narrower
+/// reductions `URL` also applies — a default port, a dot segment — are deliberately
+/// not matched: comparing two spellings of a whole identity is sound, while reaching
+/// those would mean splitting it into a username and a URL and agreeing with the
+/// frontend on where the seam is.
+async fn caldav_stored_identity(pool: &SqlitePool, identity: &str) -> AppResult<String> {
+    if find_account_by_identity_impl(pool, PROVIDER_CALDAV, identity)
+        .await?
+        .is_some()
+    {
+        return Ok(identity.to_string());
+    }
+    let Some(without_slash) = identity.strip_suffix('/') else {
+        return Ok(identity.to_string());
+    };
+    Ok(
+        match find_account_by_identity_impl(pool, PROVIDER_CALDAV, without_slash).await? {
+            Some(existing) => existing.display_name,
+            None => identity.to_string(),
+        },
+    )
 }
 
 /// Reuse an existing account row on (re)connect, else create one. Shared by both
@@ -170,17 +238,45 @@ async fn claim_account(
     provider: &str,
     display_name: &str,
     auth_kind: &str,
-) -> AppResult<pikos_db::sync_commands::SyncAccount> {
+) -> AppResult<Claimed> {
     match find_account_by_identity_impl(pool, provider, display_name).await? {
         Some(existing) => {
             reactivate_account_impl(pool, &existing.id).await?;
-            Ok(existing)
+            Ok(Claimed {
+                account: existing,
+                created: false,
+            })
         }
-        None => insert_sync_account_impl(pool, provider, display_name, auth_kind).await,
+        None => Ok(Claimed {
+            account: insert_sync_account_impl(pool, provider, display_name, auth_kind).await?,
+            created: true,
+        }),
     }
 }
 
-async fn upsert_calendars(
+/// Keep the claimed row when the credential landed, and put it back when it did not.
+///
+/// The row is written before the credential because the keychain key *is* the account id. An
+/// account left active with nothing in the keychain polls for ever and reports "reconnect needed"
+/// on every pass, with no way back except deleting it, so a store that fails takes its own row
+/// dormant again.
+async fn keep_or_release(
+    pool: &SqlitePool,
+    claimed: Claimed,
+    stored: AppResult<()>,
+) -> AppResult<pikos_db::sync_commands::SyncAccount> {
+    match stored {
+        Ok(()) => Ok(claimed.account),
+        Err(e) => {
+            if claimed.created {
+                mark_account_disconnected_impl(pool, &claimed.account.id).await?;
+            }
+            Err(e)
+        }
+    }
+}
+
+pub async fn upsert_calendars(
     pool: &SqlitePool,
     account_id: &str,
     remote: &[pikos_db::sync_delta::RemoteCalendar],
@@ -367,3 +463,7 @@ pub async fn refresh_account<P: CalendarProvider>(
 #[cfg(test)]
 #[path = "commands_tests.rs"]
 mod commands_tests;
+
+#[cfg(test)]
+#[path = "live_caldav_tests.rs"]
+mod live_caldav_tests;

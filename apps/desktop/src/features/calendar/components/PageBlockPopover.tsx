@@ -19,7 +19,10 @@ import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
-import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
+
+import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
+import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface PageBlockPopoverProps {
   page: PageSummary;
   onClose?: () => void;
@@ -46,13 +49,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
-  useKeyboardShortcut("Mod+Backspace", () => onDelete?.(), { scope: "modal" });
-  // Alias that overrides the OS line-delete inside the title input.
-  useKeyboardShortcut("Mod+Shift+Backspace", () => onDelete?.(), {
-    allowInInputs: true,
-    preventDefault: true,
-    scope: "modal",
-  });
+  useBlockDeleteShortcut(() => onDelete?.());
 
   // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);
@@ -160,6 +157,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const detached = page.syncState === "detached";
   const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
   const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "Calendar";
+  // A moved occurrence is shaped from its series page, but deleting it dismisses one date.
+  const isOccurrence = "originalDate" in page;
 
   function handleOpenPage(e: React.MouseEvent) {
     e.stopPropagation();
@@ -175,17 +174,22 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
       {detached && (
         <div className="flex items-center gap-1.5 text-xs text-subtle">
           <CalendarOff size={12} />
-          <span className="truncate">Disconnected from {calendarName}</span>
+          <span className="truncate">
+            {page.detachIsReversible
+              ? `The ${calendarName} calendar is turned off`
+              : `Removed from the ${calendarName} calendar`}
+          </span>
         </div>
       )}
       {locked ? (
+        // Text, not a read-only input. The popover's focus trap lands on the first
+        // focusable thing it finds, and an input that takes focus and selects its
+        // own contents reads as a title about to be typed over — on the one page
+        // whose title cannot be typed over at all.
         <div className="flex items-center gap-2">
-          <input
-            className="min-w-0 flex-1 cursor-default border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
-            placeholder="Untitled"
-            readOnly
-            value={titleValue}
-          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            {titleValue || <span className="text-muted-foreground/40">Untitled</span>}
+          </span>
           <SyncedLockHint />
         </div>
       ) : (
@@ -337,8 +341,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           {onDelete && (
             <TooltipIconButton
               className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
-              icon={<Trash2 size={11} />}
-              label="Delete page"
+              icon={isOccurrence ? <CalendarX size={11} /> : <Trash2 size={11} />}
+              label={isOccurrence ? occurrenceDeleteLabel(locked) : "Delete page"}
               onClick={onDelete}
               shortcut="mod+backspace"
             />

@@ -182,6 +182,7 @@ impl Parse {
 pub(crate) fn parse_report(xml: &str) -> Result<ReportResult, CaldavError> {
     let mut reader = NsReader::from_str(xml);
     let mut p = Parse::new();
+    let mut chars = String::new();
 
     loop {
         let (rr, ev) = reader
@@ -192,28 +193,33 @@ pub(crate) fn parse_report(xml: &str) -> Result<ReportResult, CaldavError> {
             _ => Vec::new(),
         };
         match ev {
-            Event::Start(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.open(&ns, &local);
+            // Gathered and handed over whole at the next structural event, the
+            // same as the discovery parser: an ICS body arrives in as many pieces
+            // as the document splits it into, and an entity arrives as its own
+            // event. CDATA joins it unescaped, its content being literal.
+            Event::Text(t) => chars.push_str(&super::xml::decode_text(&t)?),
+            Event::GeneralRef(r) => chars.push_str(&super::xml::resolve_entity(&r)?),
+            Event::CData(t) => chars.push_str(&String::from_utf8_lossy(t.as_ref())),
+            structural => {
+                if !chars.is_empty() {
+                    p.text(&chars);
+                    chars.clear();
+                }
+                match structural {
+                    Event::Start(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.open(&ns, &local);
+                    }
+                    // calendar-data may arrive as a self-closing empty when absent — no text.
+                    Event::Empty(_) => {}
+                    Event::End(e) => {
+                        let local = e.local_name().as_ref().to_vec();
+                        p.close(&ns, &local);
+                    }
+                    Event::Eof => break,
+                    _ => {}
+                }
             }
-            // calendar-data may arrive as a self-closing empty when absent — no text to capture.
-            Event::Empty(_) => {}
-            Event::Text(t) => {
-                let text = t
-                    .unescape()
-                    .map_err(|e| CaldavError::Protocol(e.to_string()))?;
-                p.text(&text);
-            }
-            Event::CData(t) => {
-                let text = String::from_utf8_lossy(t.as_ref()).into_owned();
-                p.text(&text);
-            }
-            Event::End(e) => {
-                let local = e.local_name().as_ref().to_vec();
-                p.close(&ns, &local);
-            }
-            Event::Eof => break,
-            _ => {}
         }
     }
 
@@ -310,5 +316,26 @@ END:VCALENDAR]]></C:calendar-data>
             entry.calendar_data.as_deref(),
             Some("BEGIN:VCALENDAR\nEND:VCALENDAR")
         );
+    }
+
+    /// An ICS body reaches the parser as text, entity references and CDATA, in
+    /// whatever pieces the document splits it into. A summary carrying `&` or a
+    /// quote is ordinary, and losing one silently rewrites the user's event.
+    #[test]
+    fn an_ics_body_keeps_its_entities_and_its_crlf() {
+        let xml = "<?xml version=\"1.0\"?>\r\n\
+<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\">\r\n\
+  <response><href>/cal/e.ics</href><propstat><prop>\r\n\
+    <C:calendar-data>BEGIN:VCALENDAR\r\nSUMMARY:Tea &amp; cake &#39;n stuff\r\nEND:VCALENDAR</C:calendar-data>\r\n\
+  </prop><status>HTTP/1.1 200 OK</status></propstat></response>\r\n\
+</multistatus>";
+
+        let result = parse_report(xml).unwrap();
+        let body = result.entries[0].calendar_data.as_deref().unwrap();
+
+        assert!(body.contains("SUMMARY:Tea & cake 'n stuff"), "got {body:?}");
+        // RFC 5545 unfolding reads CRLF, so the line endings must survive the XML
+        // layer exactly as the server sent them.
+        assert!(body.contains("\r\n"), "CRLF was normalized away: {body:?}");
     }
 }

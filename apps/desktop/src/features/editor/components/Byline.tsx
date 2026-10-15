@@ -55,7 +55,9 @@ export function Byline({
         node: (
           <span className="inline-flex min-w-0 cursor-default items-center gap-1 text-subtle">
             <CalendarSync aria-hidden="true" className="shrink-0" size={13} />
-            <span className="max-w-[140px] truncate">{calendarName}</span>
+            <span className="max-w-[calc(140px*var(--ui-text-scale,1))] truncate">
+              {calendarName}
+            </span>
           </span>
         ),
       }
@@ -96,7 +98,12 @@ export function Byline({
       };
 
   return (
-    <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
+    // Wraps rather than clips. Every chip used to shrink together inside an
+    // overflow-hidden row, so at a large interface size the labels went and the
+    // folder — the one a person turning the text up most needs — went first. Source
+    // order is the ranking: status, folder and date hold the first line, and tags
+    // are what moves down.
+    <div className="type-ui-sm flex flex-wrap items-center gap-ui-md pt-2 pb-4 text-subtle">
       <PageMetadataChips
         groups={[
           {
@@ -175,7 +182,7 @@ export function Byline({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        aria-label="Save failed — click to retry"
+                        aria-label="Save failed. Click to retry"
                         className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
                         onClick={onErrorClick}
                       >

@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { InterfaceSettingsProvider } from "@/shared/context/InterfaceSettingsContext";
 
 import { usePanelResize } from "./usePanelResize";
 
@@ -26,26 +29,55 @@ function dispatchUp() {
   document.dispatchEvent(new MouseEvent("mouseup"));
 }
 
+/** Seed the persisted interface text scale. Must run before render: the
+ *  provider reads localStorage once on mount. */
+function setTextScale(scale: number) {
+  localStorage.setItem(STORAGE_KEYS.interfaceTextScale, JSON.stringify(scale));
+}
+
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <InterfaceSettingsProvider>{children}</InterfaceSettingsProvider>
+);
+
+function renderPanel(options: Parameters<typeof usePanelResize>[0]) {
+  return renderHook(() => usePanelResize(options), { wrapper });
+}
+
+/** Wide enough that `min` and `max` are what bound the panel. */
+const NO_CEILING = 100_000;
+
 describe("usePanelResize", () => {
   it("returns the default width when no value is stored", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 240, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 240,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     expect(result.current.width).toBe(240);
   });
 
   it("reads an existing persisted width from localStorage", () => {
     localStorage.setItem("pikos:test:width", JSON.stringify(320));
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 240, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 240,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     expect(result.current.width).toBe(320);
   });
 
   it("preventDefault is called on resize start", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     const preventDefault = vi.fn();
     const ev = {
@@ -58,9 +90,13 @@ describe("usePanelResize", () => {
   });
 
   it("sets data-dragging on the handle while resizing and clears on mouseup", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
 
@@ -71,9 +107,13 @@ describe("usePanelResize", () => {
   });
 
   it("updates width as the cursor moves right", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
 
@@ -82,9 +122,13 @@ describe("usePanelResize", () => {
   });
 
   it("updates width as the cursor moves left", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 300, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 300,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 200)));
 
@@ -93,9 +137,13 @@ describe("usePanelResize", () => {
   });
 
   it("clamps width to the configured min", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 150, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 150,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 200)));
 
@@ -105,9 +153,13 @@ describe("usePanelResize", () => {
   });
 
   it("clamps width to the configured max", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 400, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 400,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
 
@@ -117,9 +169,13 @@ describe("usePanelResize", () => {
   });
 
   it("persists the resized width to localStorage", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
     act(() => dispatchMove(180)); // +80 → 280
@@ -129,9 +185,13 @@ describe("usePanelResize", () => {
 
   it("removes mousemove/mouseup listeners on mouseup", () => {
     const removeSpy = vi.spyOn(document, "removeEventListener");
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
     act(() => dispatchUp());
@@ -142,9 +202,13 @@ describe("usePanelResize", () => {
   });
 
   it("does not update width after mouseup (listener removed)", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
     act(() => dispatchMove(150));
@@ -156,10 +220,114 @@ describe("usePanelResize", () => {
     expect(result.current.width).toBe(after);
   });
 
+  it("renders the stored base width at the current scale", () => {
+    setTextScale(2);
+    localStorage.setItem("pikos:test:width", JSON.stringify(150));
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 240,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
+    expect(result.current.width).toBe(300);
+  });
+
+  it("stores a drag in base px, so the width is the same after a round trip", () => {
+    setTextScale(2);
+    const zoomed = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 240,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
+    const handle = document.createElement("div");
+    act(() => zoomed.result.current.onResizeStart(makeMouseDown(handle, 100)));
+    act(() => dispatchMove(200)); // 480 + 100 = 580 on screen → 290 base
+    act(() => dispatchUp());
+    expect(zoomed.result.current.width).toBe(580);
+    zoomed.unmount();
+
+    // Same panel back at 100%: the base width the drag meant, not the px it drew.
+    localStorage.removeItem(STORAGE_KEYS.interfaceTextScale);
+    const plain = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 240,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
+    expect(plain.result.current.width).toBe(290);
+  });
+
+  it("caps growth at the ceiling, but never below min at the current text size", () => {
+    setTextScale(2);
+    const { result } = renderPanel({
+      ceiling: 204,
+      defaultWidth: 300,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
+    expect(result.current.width).toBe(204);
+
+    // A ceiling too low to hold the panel yields to min rather than crushing it.
+    const tiny = renderPanel({
+      ceiling: 10,
+      defaultWidth: 300,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width2",
+    });
+    expect(tiny.result.current.width).toBe(200);
+  });
+
+  it("leaves the real sidebar room to drag at the largest text size", () => {
+    setTextScale(2);
+    // A 1470px window, the calendar's 320 and the page list's 480 taken out.
+    const { result } = renderPanel({
+      ceiling: 670,
+      defaultWidth: 180,
+      max: 320,
+      min: 180,
+      storageKey: "pikos:test:width",
+    });
+    expect(result.current.width).toBe(360);
+
+    const handle = document.createElement("div");
+    act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
+    act(() => dispatchMove(300)); // +200 on screen → 100 base
+    expect(result.current.width).toBe(560);
+  });
+
+  it("clamps a drag to the bounds at the scale it is dragged", () => {
+    setTextScale(2);
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 240,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
+    const handle = document.createElement("div");
+    act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
+
+    act(() => dispatchMove(1100)); // base would be 740; max is 500
+    expect(result.current.width).toBe(1000);
+
+    act(() => dispatchMove(-2000));
+    expect(result.current.width).toBe(200);
+  });
+
   it("subsequent resize uses the latest width as the new baseline", () => {
-    const { result } = renderHook(() =>
-      usePanelResize({ defaultWidth: 200, max: 500, min: 100, storageKey: "pikos:test:width" })
-    );
+    const { result } = renderPanel({
+      ceiling: NO_CEILING,
+      defaultWidth: 200,
+      max: 500,
+      min: 100,
+      storageKey: "pikos:test:width",
+    });
     const handle = document.createElement("div");
 
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));

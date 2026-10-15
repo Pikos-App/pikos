@@ -12,6 +12,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import tippy from "tippy.js";
 import type { Instance as TippyInstance } from "tippy.js";
 
+import { Keyboard } from "@/shared/keyboard/registry";
+
 import { insertImageFromDialog } from "../extensions/PikosImage";
 
 interface SlashCommand {
@@ -259,6 +261,7 @@ function buildSuggestionConfig(): SlashSuggestionOptions {
         onKeyDown(props: SuggestionKeyDownProps) {
           if (props.event.key === "Escape") {
             popup?.[0]?.hide();
+            Keyboard.markUsed(props.event);
             return true;
           }
           return renderer?.ref?.onKeyDown(props) ?? false;

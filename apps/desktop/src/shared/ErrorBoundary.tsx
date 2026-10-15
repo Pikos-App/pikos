@@ -148,7 +148,7 @@ export class ErrorBoundary extends Component<Props, State> {
               Error details
             </button>
             {detailsOpen && (
-              <pre className="max-h-64 overflow-auto border-t border-border px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+              <pre className="max-h-64 overflow-auto border-t border-border px-3 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
                 {this.formatReport()}
               </pre>
             )}

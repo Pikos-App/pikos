@@ -725,6 +725,8 @@ describe("completeRecurringPage", () => {
     expect(result.clone.tags).toEqual(["work"]);
     expect(result.clone.completedAt).toBeDefined();
     expect(result.clone.id).not.toBe(head.id);
+    expect(result.clone.seriesId).toBe(head.id);
+    expect(result.head.seriesId ?? null).toBeNull();
 
     // Head recomputes to the next Monday.
     expect(result.head.id).toBe(head.id);
@@ -2063,6 +2065,90 @@ describe("calendar sync — teardown keeps the user's work", () => {
   });
 });
 
+describe("calendar sync — a staged CalDAV server", () => {
+  const conn = {
+    baseUrl: "https://x",
+    displayName: "me · https://x",
+    password: "pw",
+    username: "me",
+  };
+
+  async function calendarsByName() {
+    const account = await adapter.connectCaldavAccount(conn);
+    return new Map(account.calendars.map((c) => [c.displayName, c]));
+  }
+
+  beforeEach(() => {
+    adapter.stageCaldavCalendars([
+      { displayName: "Personal" },
+      {
+        color: "#E09B4A",
+        displayName: "Team",
+        events: [
+          {
+            location: "Zoom",
+            scheduledEnd: "2026-03-17T12:00:00",
+            scheduledStart: "2026-03-17T11:00:00",
+            timezone: "America/Los_Angeles",
+            title: "Customer call",
+          },
+          { scheduledStart: "2026-03-18T10:00:00", title: "Product sync" },
+        ],
+      },
+    ]);
+  });
+
+  it("discovery offers the staged calendars, with the server's colour", async () => {
+    const calendars = await calendarsByName();
+
+    expect([...calendars.keys()]).toEqual(["Personal", "Team"]);
+    expect(calendars.get("Team")?.color).toBe("#E09B4A");
+    expect(calendars.get("Personal")?.color).toBeNull();
+  });
+
+  it("enabling a calendar lands its events as locked mirrors in its folder", async () => {
+    const team = (await calendarsByName()).get("Team")!;
+
+    const on = await adapter.toggleSyncCalendar(team.id, true, team.color);
+
+    const mirrors = (await adapter.listPages({ folderId: on.folderId! })).sort((a, b) =>
+      a.title.localeCompare(b.title)
+    );
+    expect(mirrors.map((p) => p.title)).toEqual(["Customer call", "Product sync"]);
+    expect(mirrors[0]).toMatchObject({
+      mirrorLocation: "Zoom",
+      scheduledEnd: "2026-03-17T12:00:00",
+      scheduledStart: "2026-03-17T11:00:00",
+      scheduleLocked: true,
+      syncState: "active",
+      timezone: "America/Los_Angeles",
+    });
+  });
+
+  it("a calendar with no events still comes on empty", async () => {
+    const personal = (await calendarsByName()).get("Personal")!;
+
+    const on = await adapter.toggleSyncCalendar(personal.id, true, "#7c9cf0");
+
+    expect(await adapter.listPages({ folderId: on.folderId! })).toHaveLength(0);
+  });
+
+  it("a re-enable restores the bare mirrors and doesn't duplicate a kept one", async () => {
+    const teamId = (await calendarsByName()).get("Team")!.id;
+    const { folderId } = await adapter.toggleSyncCalendar(teamId, true, "#E09B4A");
+    const kept = (await adapter.listPages({ folderId: folderId! })).find(
+      (p) => p.title === "Customer call"
+    )!;
+    await adapter.updatePage(kept.id, { priority: 2 });
+    await adapter.toggleSyncCalendar(teamId, false, null);
+
+    await adapter.toggleSyncCalendar(teamId, true, "#E09B4A");
+
+    const titles = (await adapter.listPages({ folderId: folderId! })).map((p) => p.title).sort();
+    expect(titles).toEqual(["Customer call", "Product sync"]);
+  });
+});
+
 // ─── Focus sessions ──────────────────────────────────────────────────────────
 //
 // The mock is where every UI test sees this write, so its two refusals have to
@@ -2086,7 +2172,7 @@ describe("createFocusSession", () => {
       startedAt: "2026-06-01T14:00:00",
     });
 
-    const stats = await adapter.getUsageStats();
+    const stats = await adapter.getUsageStats(1);
     expect(stats.total_focus_sessions).toBe(2);
     expect(stats.total_focus_minutes).toBe(40); // (1500 + 900) / 60
     expect(stats.has_focus_sessions).toBe(true);
@@ -2097,7 +2183,7 @@ describe("createFocusSession", () => {
   /// for a non-null priority, which every page has, and `has_subtasks` was a
   /// hardcoded false.
   it("derives every adoption flag the writer does", async () => {
-    const plain = await adapter.getUsageStats();
+    const plain = await adapter.getUsageStats(1);
     expect(plain.has_priorities).toBe(false);
     expect(plain.has_subtasks).toBe(false);
     expect(plain.has_reminders).toBe(false);
@@ -2108,7 +2194,7 @@ describe("createFocusSession", () => {
     await adapter.updatePage(child.id, { parentId: parent.id });
     await adapter.createPageReminder({ minutesBefore: 30, pageId: parent.id });
 
-    const used = await adapter.getUsageStats();
+    const used = await adapter.getUsageStats(1);
     expect(used.has_priorities).toBe(true);
     expect(used.has_subtasks).toBe(true);
     expect(used.has_reminders).toBe(true);
@@ -2122,7 +2208,7 @@ describe("createFocusSession", () => {
       pageId: page.id,
       startedAt: "2026-06-01T09:00:00",
     });
-    expect((await adapter.getUsageStats()).total_focus_minutes).toBe(1);
+    expect((await adapter.getUsageStats(1)).total_focus_minutes).toBe(1);
   });
 
   it("refuses a non-positive duration", async () => {
@@ -2162,5 +2248,19 @@ describe("createFocusSession", () => {
     });
     adapter.clear();
     expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+});
+
+describe("the change counter", () => {
+  it("moves when a page is trashed and when it comes back, as the writer's row update does", async () => {
+    const page = await createTestPage({ title: "Doomed" });
+    const before = (await adapter.changeState()).seq;
+
+    await adapter.softDeletePage(page.id);
+    const trashed = (await adapter.changeState()).seq;
+    expect(trashed).toBeGreaterThan(before);
+
+    await adapter.restorePage(page.id);
+    expect((await adapter.changeState()).seq).toBeGreaterThan(trashed);
   });
 });

@@ -22,18 +22,59 @@ export function resolveSyncedInstant(wallClock: string, sourceZone: string): Dat
 }
 
 /**
- * The wall-clock a done clone of a synced occurrence should carry. The clone is
- * a NATIVE (floating) page, so a timed zoned occurrence stores its start as the
- * viewer-local wall-clock — the clone then floats at the same slot the absolute
- * occurrence rendered (a 3pm PT event shown at 6pm ET keeps a 6pm clone).
- * All-day / floating (no zone) occurrences keep the raw wall-clock.
+ * Convert a zoned wall-clock into the viewer's. **The caller must already know
+ * the value is absolute** — this takes the zone on trust and converts whenever
+ * one is present. Surfaces reading a page go through [`viewerStart`] /
+ * [`viewerEnd`], which decide that question; only a path that is synced-only by
+ * construction calls this directly.
  *
- * The completion map's KEY stays the source-zone date — that is what expansion
- * suppresses by — so only the clone's own timestamps come through here.
+ * All-day values are returned untouched: a date has no meaningful zone.
  */
-export function cloneWallClock(wallClock: string, timezone: string | null | undefined): string {
+export function viewerWallClock(wallClock: string, timezone: string | null | undefined): string {
   if (timezone && isTimedIso(wallClock)) {
     return formatLocalISO(resolveSyncedInstant(wallClock, timezone));
   }
   return wallClock;
+}
+
+/** What a page carries for [`viewerStart`] to read. Structural so `Page`,
+ *  `PageSummary` and an expanded occurrence all satisfy it. */
+export interface ViewerScheduled {
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+  timezone?: string | null;
+  /** Required, not optional: omitting it would default a synced page to floating
+   *  and show a meeting at the wrong hour, where the native miss is harmless. */
+  scheduleLocked: boolean;
+}
+
+/**
+ * Whether a page's stored wall-clock is an absolute instant rather than a
+ * floating one.
+ *
+ * **A populated `timezone` does not mean absolute.** Authoring stamps the device
+ * zone on every native schedule as provenance, so `docs/time-handling.md` names
+ * origin as the discriminator. Reading the column alone converted native pages as
+ * if they were meetings, moving "take medication at 9am" whenever the device zone
+ * differed from the one it was written in. Detaching unlocks a page and rewrites
+ * its wall-clock into the device zone, so the gate is `scheduleLocked` rather than
+ * sync provenance — the same gate the calendar grid's `resolveBlockInstant` uses,
+ * and a page's date read two ways while they disagreed.
+ */
+function isAbsolute(page: ViewerScheduled): boolean {
+  return page.scheduleLocked && !!page.timezone;
+}
+
+/** A page's start in the viewer's zone, or null when it has no schedule. */
+export function viewerStart(page: ViewerScheduled): string | null {
+  if (!page.scheduledStart) return null;
+  return isAbsolute(page)
+    ? viewerWallClock(page.scheduledStart, page.timezone)
+    : page.scheduledStart;
+}
+
+/** A page's end in the viewer's zone, or null when it has none. */
+export function viewerEnd(page: ViewerScheduled): string | null {
+  if (!page.scheduledEnd) return null;
+  return isAbsolute(page) ? viewerWallClock(page.scheduledEnd, page.timezone) : page.scheduledEnd;
 }

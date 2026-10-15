@@ -206,10 +206,9 @@ struct EditorScreen: View {
 
     /// Write a picked photo into the workspace and put it in the document.
     ///
-    /// The document stores the file's name relative to the assets directory,
-    /// which is what the scheme handler resolves — never an absolute path,
-    /// which would be wrong after a restore to a new device and is not the
-    /// host's business to know. JPEG, PNG and GIF are stored as they are;
+    /// The document stores `assets/<file>`, the form the desktop stores, so a
+    /// page reads the same in both apps — never an absolute path, which would
+    /// be wrong after a restore to a new device. JPEG, PNG and GIF are stored as they are;
     /// anything else — a HEIC from the camera roll, most often — is re-encoded
     /// as JPEG so it renders here and on the desktop.
     private func insert(photo item: PhotosPickerItem, into assets: URL) async {
@@ -231,7 +230,7 @@ struct EditorScreen: View {
                 bytes = jpeg
             }
             try bytes.write(to: assets.appendingPathComponent(name), options: .atomic)
-            controller.insertImage(assetPath: name)
+            controller.insertImage(assetPath: "assets/\(name)")
         } catch {
             store.errorMessage = String(localized: "The photo could not be added: \(error.localizedDescription)")
         }

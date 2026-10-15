@@ -9,7 +9,10 @@ import { TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
 import { startRunner, stopRunner } from "./invoke";
 
 /** Written against the in-memory mock adapter, so it cannot reach a real file. */
-const MOCK_ONLY: ReadonlySet<string> = new Set<Exclude<SeedName, SeedScenario>>(["marketing"]);
+const MOCK_ONLY: ReadonlySet<string> = new Set<Exclude<SeedName, SeedScenario>>([
+  "marketing",
+  "marketing-sync",
+]);
 
 function isScenario(name: string): name is SeedScenario {
   return name in SEED_LOADERS && !MOCK_ONLY.has(name);

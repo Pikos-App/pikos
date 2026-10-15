@@ -1,33 +1,14 @@
 import { expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
 
-import { mod, quickAdd, test as appTest } from "./fixtures";
-
-async function createFolder(app: Page, name: string) {
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type(name);
-  await app.keyboard.press("Enter");
-}
+import { test as appTest, createFolder, quickAdd } from "./fixtures";
 
 // ─── Create and navigate folders ───────────────────────────────────────────
 
-appTest("create and navigate folders @tier1", async ({ app }) => {
+appTest("create and navigate folders @smoke", async ({ app }) => {
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  const folderBtn = sidebar.getByRole("button", { name: "Projects", exact: true });
+  const folderBtn = sidebar.getByRole("button", { exact: true, name: "Projects" });
 
-  // Click "New Folder" — creates folder, navigates to it, and enters rename mode
-  await app
-    .getByRole("toolbar", { name: "Folder actions" })
-    .getByRole("button", { name: "New Folder" })
-    .click();
-
-  await app.keyboard.press(mod("Mod+a"));
-  await app.keyboard.type("Projects");
-  await app.keyboard.press("Enter");
+  await createFolder(app, "Projects");
 
   await expect(folderBtn).toHaveAttribute("aria-current", "true");
   await expect(app.getByText("No pages")).toBeVisible();
@@ -69,7 +50,7 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
 // rendered position. A regression that ignored the drop event would
 // silently leave the order untouched.
 
-appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ app }) => {
+appTest("drag a folder to reorder its position in the sidebar", async ({ app }) => {
   // Seed three folders. New folders are inserted at the top of the list, so
   // creating in order Alpha → Beta → Gamma yields [Gamma, Beta, Alpha] in
   // the sidebar. Read the actual order before asserting reorder semantics.
@@ -78,7 +59,9 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
   await createFolder(app, "Gamma");
 
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  const folderItems = sidebar.locator('[role="button"][aria-label="Alpha"], [role="button"][aria-label="Beta"], [role="button"][aria-label="Gamma"]');
+  const folderItems = sidebar.locator(
+    '[role="button"][aria-label="Alpha"], [role="button"][aria-label="Beta"], [role="button"][aria-label="Gamma"]'
+  );
   await expect(folderItems).toHaveCount(3);
 
   // Capture initial top→bottom names so we can assert the order changed,
@@ -96,8 +79,8 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
 
   // Drag the LAST folder to the FIRST folder's position. dnd-kit activation
   // is 8 px — nudge before moving onto the target.
-  const lastFolder = sidebar.getByRole("button", { name: initial[2]!, exact: true });
-  const firstFolder = sidebar.getByRole("button", { name: initial[0]!, exact: true });
+  const lastFolder = sidebar.getByRole("button", { exact: true, name: initial[2]! });
+  const firstFolder = sidebar.getByRole("button", { exact: true, name: initial[0]! });
   const lastBox = await lastFolder.boundingBox();
   const firstBox = await firstFolder.boundingBox();
   if (!lastBox || !firstBox) throw new Error("folder box missing");
@@ -105,16 +88,12 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
   await app.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height / 2);
   await app.mouse.down();
   // Move up to cross the activation threshold, then onto the first folder.
-  await app.mouse.move(
-    lastBox.x + lastBox.width / 2,
-    lastBox.y + lastBox.height / 2 - 16,
-    { steps: 4 }
-  );
-  await app.mouse.move(
-    firstBox.x + firstBox.width / 2,
-    firstBox.y + firstBox.height / 2,
-    { steps: 10 }
-  );
+  await app.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height / 2 - 16, {
+    steps: 4,
+  });
+  await app.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2, {
+    steps: 10,
+  });
   await app.mouse.up();
 
   // The reorder is an optimistic update after dragEnd — DOM updates a tick
@@ -132,3 +111,40 @@ appTest("drag a folder to reorder its position in the sidebar @tier2", async ({ 
   expect([...reordered].sort()).toEqual([...initial].sort());
   expect(reordered).not.toEqual(initial);
 });
+
+// ─── Badges ────────────────────────────────────────────────────────────────
+
+appTest(
+  "the sidebar badges follow a page as it's created, moved, completed and deleted",
+  async ({ app }) => {
+    const sidebar = app.getByRole("group", { name: "Views and folders" });
+    // A folder row's name is the folder's alone, so the count is read from its text.
+    const badge = (name: string, count: number) =>
+      expect(sidebar.getByRole("button", { name: new RegExp(`^${name}`) }).first()).toHaveText(
+        new RegExp(`^${name}${count ? `\\s*${count}` : ""}$`)
+      );
+    const row = (title: string) => app.locator("[data-page-list-item]").filter({ hasText: title });
+
+    await createFolder(app, "Errands");
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    await quickAdd(app, "Post the letter");
+    await quickAdd(app, "Call the bank today");
+    await badge("Inbox", 2);
+    await badge("Today", 1);
+
+    await row("Post the letter").click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Move to folder" }).click();
+    await app.getByRole("menuitem", { name: /Errands/ }).click();
+    await badge("Inbox", 1);
+    await badge("Errands", 1);
+
+    await row("Call the bank").getByRole("checkbox", { name: "Mark done" }).click();
+    await badge("Inbox", 0);
+    await badge("Today", 0);
+
+    await sidebar.getByRole("button", { name: /^Errands/ }).click();
+    await row("Post the letter").click({ button: "right" });
+    await app.getByRole("menuitem", { name: "Delete" }).click();
+    await badge("Errands", 0);
+  }
+);

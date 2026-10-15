@@ -341,6 +341,27 @@ END:VEVENT\r\n";
     );
 }
 
+// qa: SYNC-15:2
+#[test]
+fn a_provider_alarm_changes_nothing_pikos_reads() {
+    let event = |alarm: &str| {
+        let body = format!(
+            "BEGIN:VEVENT\r\n\
+UID:alarmed-1\r\n\
+DTSTART;TZID=America/New_York:20260615T090000\r\n\
+DTEND;TZID=America/New_York:20260615T100000\r\n\
+SUMMARY:Dentist\r\n\
+{alarm}END:VEVENT\r\n"
+        );
+        format!(
+            "{:?}",
+            parse_resource("/a.ics", Some("v1"), &ics(&body)).unwrap()
+        )
+    };
+    let alarm = "BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Leave now\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n";
+    assert_eq!(event(alarm), event(""));
+}
+
 // ─── malformed / non-VEVENT ─────────────────────────────────────────────────────
 
 #[test]

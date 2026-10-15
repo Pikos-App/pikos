@@ -82,9 +82,11 @@ run_check() {
   fi
 }
 
-run_check "typecheck-desktop" pnpm --filter @pikos/desktop typecheck &
-run_check "typecheck-core"    pnpm --filter @pikos/core typecheck &
-run_check "typecheck-ui"      pnpm --filter @pikos/ui typecheck &
+# Every package that declares a typecheck, not a hand-listed three. The list used
+# to name desktop, core and ui, which left the parser bridge the CLI ships and the
+# whole marketing site checked by nothing. Turbo hashes content, so the packages
+# that did not change cost nothing to include.
+run_check "typecheck"         pnpm exec turbo typecheck &
 run_check "lint"              pnpm exec turbo lint &
 run_check "depcruise"         pnpm exec depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs &
 # Every Playwright project is grep-scoped by tag, so an untagged test runs in no
@@ -96,35 +98,27 @@ run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
 # old value with every check green. Pure node + string compare, same cheap-guard
 # reasoning as e2e-tags.
 run_check "ui-tokens"         bash scripts/check-ui-tokens.sh &
-
-# Only the specs the working-tree diff can reach. Safe because the workspace
-# resolves `@pikos/core` to its *source* (`exports: "./src/index.ts"`), so
-# vitest's module graph crosses the package boundary — a core edit still selects
-# every desktop spec importing it, rather than silently testing nothing. Specs
-# reached only at runtime (dynamic import, fixture read off disk) are the blind
-# spot, and why the full suite still gates pre-push and CI.
-affected_tests() {
-  pnpm --filter @pikos/desktop exec vitest run --changed --passWithNoTests &&
-    pnpm --filter @pikos/core exec vitest run --changed --passWithNoTests &&
-    pnpm --filter @pikos/ui exec vitest run --changed --passWithNoTests
-}
+# A shipped migration edited in place locks installs out on upgrade; the script says how.
+run_check "migrations"        bash scripts/check-migrations-frozen.sh &
+# The keyboard registry logs a warning for a duplicate combo and registers both
+# anyway, so the winner is whichever component mounted last. Same cheap-guard
+# reasoning again: a text scan over call sites, catching what a runtime check
+# cannot, since the collisions that matter are the ones where two owners rarely
+# mount together.
+run_check "shortcut-conflicts" node scripts/check-shortcut-conflicts.mjs &
 
 # SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
 # runs the same desktop+core suite, with thresholds) is the single test pass.
 #
-# Locally the default is affected-only: the full suite is ~37s and dominates this
-# script's wall clock on every commit, where a typical edit reaches 4 of 91 specs.
-# VERIFY_ALL=1 forces the full run — validate.sh sets it, a release gate being the
-# one place scoping to a diff is wrong.
-tests_mode=""
+# Always the full suite, never `vitest --changed`. Scoping to the diff measured
+# slower and burned six times the CPU: vitest rebuilds the module graph on every
+# invocation and carries nothing between runs, so a branch with a broad working
+# diff selects most of the suite and pays for the selection on top. Turbo hashes
+# content, so an untouched re-run is free and an edit re-runs only the packages
+# that can reach it. Running everything is also what lets one command be the
+# whole gate: a spec reached only at runtime was invisible to `--changed`.
 if [ -z "$SKIP_UNIT_TESTS" ]; then
-  if [ -n "$VERIFY_ALL" ]; then
-    tests_mode="(full)"
-    run_check "tests"         pnpm exec turbo test &
-  else
-    tests_mode="(affected — VERIFY_ALL=1 for the full suite)"
-    run_check "tests"         affected_tests &
-  fi
+  run_check "tests"           pnpm exec turbo test &
 fi
 
 if [ ${#changed[@]} -gt 0 ]; then
@@ -134,11 +128,11 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck-desktop typecheck-core typecheck-ui lint prettier depcruise e2e-tags ui-tokens tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations shortcut-conflicts tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
-    if [ "$name" = "tests" ]; then pass "$name" "$tests_mode"; else pass "$name"; fi
+    pass "$name"
   else
     fail "$name"
     if [ "$name" = "tests" ]; then

@@ -17,6 +17,41 @@ import { useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
+import { stepTextSize, TEXT_SIZES, type TextSize } from "@/shared/context/textSizes";
+/** Event-title sizes in px, ascending. The calendar names a px like the editor
+ *  does rather than a word like the interface does, because both have one body
+ *  size everything else is relative to and the interface has none
+ *  — the vocabulary is per-area, only the control shape is shared.
+ *  13 is `type-body-sm`, what an event title renders at today. */
+export const CALENDAR_TEXT_SIZES = TEXT_SIZES;
+
+export type CalendarTextSize = TextSize;
+
+export const DEFAULT_CALENDAR_TEXT_SIZE: CalendarTextSize = 14;
+
+/** What an event title rendered at before this setting existed (`type-body-sm`),
+ *  and therefore what a chosen px is measured against. Not on the ladder: the
+ *  editor's rungs are, and the two rows offer the same options. */
+const CALENDAR_TEXT_BASE = 13;
+
+/** The multiplier the CSS wants, against what a title rendered at before the
+ *  setting existed. Derived rather than stored, so the stored value stays the
+ *  number the setting shows. */
+export function calendarTextScale(size: CalendarTextSize): number {
+  return size / CALENDAR_TEXT_BASE;
+}
+
+/** How much larger the calendar is than the one a user opens, which is what the
+ *  hour height is multiplied by. Measured against the default size rather than
+ *  the type baseline, so the default calendar is exactly its density and only a
+ *  changed setting moves it. Text grows by this same factor, which is the point:
+ *  the zoomed calendar is the default one drawn larger, and nothing inside a
+ *  block can outgrow the block. */
+export function calendarZoom(size: CalendarTextSize): number {
+  return size / DEFAULT_CALENDAR_TEXT_SIZE;
+}
+
+export const stepCalendarTextSize = stepTextSize;
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 export type { CalendarDayCount, CalendarViewMode };
@@ -32,6 +67,12 @@ export interface CalendarSettingsValue {
   setViewMode: (v: CalendarViewMode) => void;
   density: CalendarDensity;
   setDensity: (v: CalendarDensity) => void;
+  /** Event-title size in px, independent of the interface text size. Raising it
+   *  raises `metrics.hourHeight` when the text would otherwise be taller than
+   *  the block holding it. */
+  textSize: CalendarTextSize;
+  setTextSize: (v: CalendarTextSize) => void;
+  stepTextSize: (direction: 1 | -1) => void;
   /** Derived from density — convenient so callers don't recompute. */
   metrics: CalendarMetrics;
   /** Pixel layout of the collapsible bands at the current hourHeight. */
@@ -62,6 +103,10 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     STORAGE_KEYS.calendarDensity,
     "normal"
   );
+  const [textSize, setTextSize] = useLocalStorage<CalendarTextSize>(
+    STORAGE_KEYS.calendarTextSize,
+    DEFAULT_CALENDAR_TEXT_SIZE
+  );
   const [topCollapsed, setTopCollapsedRaw] = useLocalStorage<boolean>(
     STORAGE_KEYS.calendarTopCollapsed,
     DEFAULT_COLLAPSE_CONFIG.topCollapsed
@@ -79,7 +124,7 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     DEFAULT_COLLAPSE_CONFIG.bottomHour
   );
 
-  const metrics = computeCalendarMetrics(density);
+  const metrics = computeCalendarMetrics(density, calendarZoom(textSize));
   const collapse: CalendarCollapseConfig = {
     bottomCollapsed,
     bottomHour,
@@ -106,9 +151,12 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     setDayCount,
     setDensity,
     setHoveredBand,
+    setTextSize,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
     setViewMode,
+    stepTextSize: (direction) => setTextSize((prev) => stepCalendarTextSize(prev, direction)),
+    textSize,
     viewMode,
   };
 }

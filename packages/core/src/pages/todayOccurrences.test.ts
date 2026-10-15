@@ -9,6 +9,7 @@ const TODAY = "2026-03-25";
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
     isRecurring: false,
@@ -92,5 +93,55 @@ describe("withTodayOccurrences", () => {
     const other = makePage({ id: "other", scheduledStart: `${TODAY}T08:00:00` });
     const rows = withTodayOccurrences([head, other], [head, other], TODAY);
     expect(rows.map((p) => p.scheduledStart)).toEqual([head.scheduledStart, `${TODAY}T08:00:00`]);
+  });
+
+  it("ignores a plain page even when it shares the head's id and sits on today", () => {
+    const head = lapsedSyncedHead();
+    const plain = { ...head, scheduledStart: `${TODAY}T08:00:00` };
+    const [row] = withTodayOccurrences([head], [plain], TODAY);
+    expect(row).toBe(head);
+  });
+});
+
+// C111: the head can be on the far side of today as well as behind it. Moving an
+// occurrence onto today excludes its original date, so the head derives past today
+// and the one day the series is due is the one day it would go unlisted.
+describe("withTodayOccurrences — a head ahead of today", () => {
+  function headAhead(overrides: Partial<PageSummary> = {}): PageSummary {
+    return makePage({
+      id: "standup",
+      isRecurring: true,
+      scheduledStart: "2026-04-02T09:00:00",
+      syncState: "active",
+      title: "Standup",
+      ...overrides,
+    });
+  }
+
+  it("swaps in the occurrence moved onto today", () => {
+    const head = headAhead();
+    const moved = occurrence(head, "2026-04-03", `${TODAY}T15:00:00`);
+
+    const [row] = withTodayOccurrences([head], [moved], TODAY);
+
+    expect(row?.scheduledStart).toBe(`${TODAY}T15:00:00`);
+  });
+
+  it("leaves the head alone when nothing was moved onto today", () => {
+    const head = headAhead();
+    const elsewhere = occurrence(head, "2026-04-03", "2026-04-03T09:00:00");
+
+    const [row] = withTodayOccurrences([head], [elsewhere], TODAY);
+
+    expect(row?.scheduledStart).toBe("2026-04-02T09:00:00");
+  });
+
+  it("leaves a head already sitting on today alone", () => {
+    const head = headAhead({ scheduledStart: `${TODAY}T09:00:00` });
+    const moved = occurrence(head, "2026-04-03", `${TODAY}T15:00:00`);
+
+    const [row] = withTodayOccurrences([head], [moved], TODAY);
+
+    expect(row?.scheduledStart).toBe(`${TODAY}T09:00:00`);
   });
 });

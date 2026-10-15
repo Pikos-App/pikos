@@ -7,6 +7,10 @@
 // wire payload doesn't match the expected shape (rare — usually means a
 // Tauri infrastructure error, not a command failure).
 
+// Every variant of the Rust AppError, and nothing else. A kind missing here is
+// silently downgraded to "Unknown" by the mapper below, which reads to the user
+// as "Something went wrong" — so an offline sync looked identical to a bug for
+// as long as "Network" was absent from this list.
 export type StorageErrorKind =
   | "Db"
   | "NotFound"
@@ -14,6 +18,8 @@ export type StorageErrorKind =
   | "Io"
   | "Serde"
   | "Invalid"
+  | "Network"
+  | "Corrupt"
   | "Internal"
   | "Unknown";
 
@@ -65,6 +71,8 @@ const KIND_SET: ReadonlySet<StorageErrorKind> = new Set<StorageErrorKind>([
   "Io",
   "Serde",
   "Invalid",
+  "Network",
+  "Corrupt",
   "Internal",
   "Unknown",
 ]);
@@ -94,6 +102,10 @@ export function storageErrorUserMessage(err: StorageError, verb = "the operation
       return `Data shape mismatch while ${verb}. The workspace may need a restart.`;
     case "Invalid":
       return `Invalid input for ${verb}.`;
+    case "Network":
+      return `Couldn't reach the network while ${verb}. Check your connection.`;
+    case "Corrupt":
+      return `The workspace file is damaged. Restore a backup from Settings → Data.`;
     case "Internal":
     case "Unknown":
     default:

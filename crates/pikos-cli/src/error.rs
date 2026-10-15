@@ -68,6 +68,15 @@ pub fn classify(err: AppError) -> CliError {
         AppError::Io(_) => CliError::internal("an I/O error occurred"),
         AppError::Serde(_) => CliError::internal("a serialization error occurred"),
         AppError::Network(m) => CliError::new("Network", m, 1),
+        // Its own kind and its own exit code: a script that sees this should
+        // stop rather than retry, and the answer is a restore, not a rerun.
+        // The detail is scrubbed like any foreign message — the app's Data
+        // settings is where the backups are listed.
+        AppError::Corrupt(_) => CliError::new(
+            "Corrupt",
+            "This workspace's database file is damaged. Restore a backup from the Pikos app, under Settings, Data.",
+            9,
+        ),
         AppError::Internal(m) => CliError::internal(m),
     }
 }

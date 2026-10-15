@@ -6,6 +6,7 @@
 //! temp workspace through them.
 
 use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -160,6 +161,7 @@ fn handshake(server: &mut Server) -> Value {
     init
 }
 
+// qa: CLI-04:2
 #[tokio::test]
 async fn initialize_lists_tools_and_round_trips_a_page() {
     let db = unique_db();
@@ -281,6 +283,7 @@ async fn tools_drive_the_page_through_its_whole_life() {
 
 /// A failing tool must not end the session: the agent reads the error and keeps
 /// going, so the same connection has to answer the next call.
+// qa: CLI-04:2
 #[tokio::test]
 async fn a_tool_error_is_reported_in_the_result_and_the_session_survives() {
     let db = unique_db();
@@ -351,6 +354,72 @@ async fn a_workspace_needing_migration_fails_the_tool_not_the_handshake() {
     server.shutdown();
 }
 
+/// Listening TCP sockets held by one pid, lsof's own tabular output. `None` when
+/// lsof isn't installed; lsof exits 1 on no match, so the status is not an error.
+///
+/// `-a` is load-bearing: lsof ORs its selection flags by default, so without it
+/// the answer is every file the process has open and nothing is ever empty.
+fn listening_tcp(pid: u32) -> Option<String> {
+    let out = match Command::new("lsof")
+        .args([
+            "-a",
+            "-p",
+            &pid.to_string(),
+            "-iTCP",
+            "-sTCP:LISTEN",
+            "-n",
+            "-P",
+        ])
+        .output()
+    {
+        Ok(out) => out,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => panic!("lsof is installed but would not run: {e}"),
+    };
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Pikos reaches the network only for a calendar the user connected; `mcp` is a
+/// stdio server and must hold no socket at all, which is otherwise a manual QA row.
+// qa: CLI-05
+#[tokio::test]
+async fn the_server_opens_no_listening_socket() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Alive")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    server.call(2, "list_pages", json!({})); // past the lazy workspace open
+
+    // A listener of this process's own, so an lsof that is broken or blind to the
+    // pid fails here rather than clearing the child on silence.
+    let canary = TcpListener::bind("127.0.0.1:0").unwrap();
+    match listening_tcp(std::process::id()) {
+        Some(own) => {
+            assert!(
+                own.contains("LISTEN"),
+                "lsof found no listener on this test process, which is holding one: {own:?}"
+            );
+            let child = listening_tcp(server.child.id()).expect("lsof ran a moment ago");
+            assert!(
+                child.trim().is_empty(),
+                "pikos mcp is listening on a socket:\n{child}"
+            );
+        }
+        // Not eprintln!: the harness captures the print macros, so a skip written
+        // that way is invisible on a green run — which is how a check goes vacuous.
+        None => {
+            let _ = std::io::stderr().write_all(
+                b"WARNING: pikos mcp listening-socket check SKIPPED, lsof not on PATH\n",
+            );
+        }
+    }
+    drop(canary);
+
+    server.shutdown();
+}
+
 /// `dryRun` is the agent-preview mode: the parse comes back for approval and the
 /// workspace is untouched, so a model can show its work before committing it.
 #[tokio::test]
@@ -380,6 +449,451 @@ async fn create_page_dry_run_returns_the_parse_and_writes_nothing() {
         .as_array()
         .unwrap()
         .is_empty());
+
+    server.shutdown();
+}
+
+fn titles(listed: &Value) -> Vec<String> {
+    listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_search_no_page_matches_in_full_falls_back_to_any_word() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(
+        dbs,
+        vec![
+            base_page("Annual checkup"),
+            base_page("Dentist appointment"),
+        ],
+    )
+    .await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let found = server.call(
+        2,
+        "search_pages",
+        json!({ "query": "checkup dentist visits" }),
+    );
+    assert_eq!(found["anyWord"], true);
+    assert_eq!(found["results"].as_array().unwrap().len(), 2, "{found}");
+
+    let exact = server.call(3, "search_pages", json!({ "query": "annual checkup" }));
+    assert_eq!(exact["anyWord"], false);
+    assert_eq!(exact["results"].as_array().unwrap().len(), 1, "{exact}");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn a_missing_page_says_where_ids_come_from() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let missing = server.call_expecting_error(
+        2,
+        "update_page",
+        json!({ "id": "Trip ideas", "priority": 2 }),
+    );
+    let message = missing["error"]["message"].as_str().unwrap();
+    assert!(message.contains("search_pages"), "{message}");
+    assert!(message.contains("list_pages"), "{message}");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn a_date_range_that_ends_before_it_starts_is_refused() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Overdue")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let refused =
+        server.call_expecting_error(2, "list_pages", json!({ "due": "2026-10-11..2026-10-10" }));
+    assert_eq!(refused["error"]["kind"], "Usage");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn list_pages_selects_by_creation_completion_repeat_and_reminder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let pool = open_pool(dbs).await.unwrap();
+    let page = |title: &str, created: &str, completed: Option<&str>| NewPage {
+        status: if completed.is_some() {
+            "done"
+        } else {
+            "not_started"
+        }
+        .into(),
+        completed_at: completed.map(str::to_string),
+        created_at: Some(created.into()),
+        ..base_page(title)
+    };
+    let mut ids = Vec::new();
+    for p in [
+        page("Learn Spanish", "2024-01-01T12:00:00.000Z", None),
+        page(
+            "Pay electricity",
+            "2026-01-02T12:00:00.000Z",
+            Some("2026-02-03T09:00:00"),
+        ),
+        page("Water the plants", "2026-01-03T12:00:00.000Z", None),
+        page("Dentist", "2026-01-04T12:00:00.000Z", None),
+    ] {
+        ids.push(create_page_impl(&pool, p).await.unwrap().id);
+    }
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[2].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=SU".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-01-04T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    pikos_db::create_page_reminder(&pool, &ids[3], 30)
+        .await
+        .unwrap();
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let oldest = server.call(
+        2,
+        "list_pages",
+        json!({ "oldestFirst": true, "status": "not_started" }),
+    );
+    assert_eq!(titles(&oldest)[0], "Learn Spanish");
+
+    let created = server.call(
+        3,
+        "list_pages",
+        json!({ "created": "2026-01-02..2026-01-03" }),
+    );
+    assert_eq!(titles(&created), ["Pay electricity", "Water the plants"]);
+
+    let completed = server.call(
+        4,
+        "list_pages",
+        json!({ "completed": "2026-02-01..2026-02-28" }),
+    );
+    assert_eq!(titles(&completed), ["Pay electricity"]);
+
+    let repeating = server.call(5, "list_pages", json!({ "repeating": true }));
+    assert_eq!(titles(&repeating), ["Water the plants"]);
+    assert_eq!(repeating[0]["repeats"], "FREQ=WEEKLY;BYDAY=SU");
+
+    let reminded = server.call(6, "list_pages", json!({ "hasReminders": true }));
+    assert_eq!(titles(&reminded), ["Dentist"]);
+    assert_eq!(reminded[0]["reminders"], json!([30]));
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn update_page_refiles_a_page_into_a_folder_and_back_to_the_inbox() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    let projects = pikos_db::create_folder_impl(
+        &pool,
+        pikos_db::NewFolder {
+            name: "Projects".into(),
+            parent_id: None,
+            color: None,
+            icon: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let filed = server.call(
+        2,
+        "update_page",
+        json!({ "id": ids[0], "folder": "Projects" }),
+    );
+    assert_eq!(filed["folderId"], projects.as_str());
+    let unfiled = server.call(3, "update_page", json!({ "id": ids[0], "folder": "inbox" }));
+    assert!(unfiled["folderId"].is_null());
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn update_page_edits_tags_subtitle_and_clears_the_schedule() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut page = base_page("Plan");
+    page.tags = vec!["work".into()];
+    let ids = seed(dbs, vec![page]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let edited = server.call(
+        2,
+        "update_page",
+        json!({
+            "id": ids[0],
+            "addTags": ["errands"],
+            "removeTags": ["work"],
+            "subtitle": "For Monday",
+            "due": "2026-09-01",
+        }),
+    );
+    assert_eq!(edited["tags"], json!(["errands"]));
+    assert_eq!(edited["subtitle"], "For Monday");
+    assert_eq!(edited["scheduledStart"], "2026-09-01");
+
+    let cleared = server.call(
+        3,
+        "update_page",
+        json!({ "id": ids[0], "subtitle": "", "unschedule": true }),
+    );
+    assert_eq!(cleared["subtitle"], "");
+    assert!(cleared["scheduledStart"].is_null());
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn folder_tools_create_rename_trash_and_restore() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Dune")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let made = server.call(2, "create_folder", json!({ "name": "Reading" }));
+    let id = made["id"].as_str().unwrap().to_string();
+    let page = server.call(3, "list_pages", json!({}))[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    server.call(4, "update_page", json!({ "id": page, "folder": id }));
+
+    let renamed = server.call(
+        5,
+        "rename_folder",
+        json!({ "folder": "Reading", "name": "Books" }),
+    );
+    assert_eq!(renamed["name"], "Books");
+
+    let trashed = server.call(6, "delete_folder", json!({ "folder": "Books" }));
+    assert_eq!(trashed["trashed"], true);
+    assert!(server
+        .call(7, "list_pages", json!({}))
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    server.call(8, "restore_folder", json!({ "id": id }));
+    assert_eq!(
+        server.call(9, "list_pages", json!({ "folder": "Books" }))[0]["title"],
+        "Dune"
+    );
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn list_trash_and_list_tags_answer_what_an_agent_cannot_guess() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut page = base_page("Plan");
+    page.tags = vec!["work".into()];
+    let ids = seed(dbs, vec![page, base_page("Gone")]).await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let tags = server.call(2, "list_tags", json!({}));
+    assert_eq!(tags, json!([{ "name": "work", "pageCount": 1 }]));
+
+    server.call(3, "delete_page", json!({ "id": ids[1] }));
+    let trash = server.call(4, "list_trash", json!({}));
+    assert_eq!(trash[0]["id"], ids[1].as_str());
+    assert_eq!(trash[0]["title"], "Gone");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn occurrence_tools_skip_and_move_one_date_of_a_series() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Review")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-01T09:00:00".into(),
+            scheduled_end: Some("2026-06-01T10:00:00".into()),
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let skipped = server.call(
+        2,
+        "skip_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-08" }),
+    );
+    assert_eq!(skipped["skippedOccurrences"], json!(["2026-06-08"]));
+    server.call(
+        3,
+        "unskip_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-08" }),
+    );
+
+    let moved = server.call(
+        4,
+        "move_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-15", "due": "2026-06-16T14:00:00" }),
+    );
+    assert_eq!(moved["clone"]["scheduledEnd"], "2026-06-16T15:00:00");
+
+    let refused = server.call_expecting_error(
+        5,
+        "skip_occurrence",
+        json!({ "id": ids[0], "date": "2026-06-09" }),
+    );
+    assert_eq!(refused["error"]["kind"], "Usage");
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn read_page_hands_back_markdown_that_update_page_takes_unchanged() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let corpus: Value = serde_json::from_str(include_str!(
+        "../../pikos-core/tests/corpus/markdown-import.json"
+    ))
+    .unwrap();
+    let doc = corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "a page an agent edits")
+        .unwrap()["doc"]
+        .clone();
+    let ids = seed(
+        dbs,
+        vec![NewPage {
+            content: doc.to_string(),
+            ..base_page("Trip")
+        }],
+    )
+    .await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let read = server.call(2, "read_page", json!({ "id": ids[0] }));
+    assert!(
+        read.get("content").is_none(),
+        "the editor JSON stays out of an agent's way"
+    );
+    let markdown = read["markdown"].as_str().unwrap().to_string();
+
+    let updated = server.call(
+        3,
+        "update_page",
+        json!({ "id": ids[0], "content": markdown }),
+    );
+    let after: Value = serde_json::from_str(updated["content"].as_str().unwrap()).unwrap();
+    assert_eq!(after, doc);
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn complete_page_ticks_off_a_named_occurrence_of_a_calendar_series() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-10-19T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "Europe/London".into(),
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'caldav', 'Test', 'basic', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
+         VALUES ('ps', ?, 'acct', 'caldav', 'cal', 'href', 'uid', 'active', '2026-01-01T00:00:00Z')",
+    )
+    .bind(&ids[0])
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+
+    let series = server.call(
+        2,
+        "complete_page",
+        json!({ "id": ids[0], "date": "2026-10-26" }),
+    );
+    assert!(
+        series["completedOccurrences"]["2026-10-26"].is_string(),
+        "{series}"
+    );
 
     server.shutdown();
 }

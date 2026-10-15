@@ -1,10 +1,11 @@
 [package]
 name = "pikos"
-version = "0.4.0-beta.3"
+version = "0.4.1"
 description = "Pikos — notes, tasks, and calendar"
 authors = ["Alex King"]
 license = "BUSL-1.1"
 edition = "2021"
+default-run = "pikos"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,6 +15,27 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "pikos_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# The real writer behind localhost HTTP, for the Playwright lane that has no
+# Tauri IPC. Only that lane turns the feature on, so no release carries it. Kept
+# out of src/bin: Tauri's bundler adds every file there to the app, ignoring
+# required-features, and fails on the binary the release never built.
+[[bin]]
+name = "pikos-e2e-bridge"
+path = "bins/e2e_bridge.rs"
+required-features = ["e2e-bridge"]
+
+[features]
+# The in-app benchmark: opens a scratch workspace from the environment, times real interactions
+# and quits. No release carries it.
+bench = []
+e2e-bridge = [
+  "dep:http-body-util",
+  "dep:hyper",
+  "dep:hyper-util",
+  "tokio/net",
+  "tokio/rt-multi-thread",
+]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -28,10 +50,12 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
 pikos-db = { path = "../../../crates/pikos-db" }
+pikos-core = { path = "../../../crates/pikos-core" }
 pikos-calendar-sync = { path = "../../../crates/pikos-calendar-sync" }
 pikos-recurrence = { path = "../../../crates/pikos-recurrence" }
 notify = "6"
@@ -41,12 +65,9 @@ tokio = { version = "1", features = ["sync"] }
 tauri-plugin-log = "2"
 log = "0.4"
 thiserror = "2"
-
-# Single-instance is needed on Linux/Windows so deep-link URLs activated
-# while the app is already running route to the existing instance instead
-# of spawning a new one. macOS handles this natively via NSApplication.
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1", features = ["http1", "server"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
 
 # macOS foreground notifications. tauri-plugin-notification delivers via the
 # deprecated NSUserNotification API, which macOS suppresses while the app is

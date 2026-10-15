@@ -9,9 +9,10 @@
  * cost the other hundred shots.
  */
 
-import type { Locator, Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+import type { Locator, Page } from "@playwright/test";
 
 import { expect, mod, test } from "./fixtures";
 
@@ -21,7 +22,7 @@ const NOW = new Date("2026-09-15T11:20:00");
 const VIEW = "pikos:lastActiveViewId";
 const PANEL = "pikos:rightPanel";
 const TODAY = { "pikos:overdueCollapsed": false, [VIEW]: "today" };
-const CALENDAR = { ...TODAY, "pikos:calendarScrollHour": 7, [PANEL]: "calendar" };
+const CALENDAR = { ...TODAY, [PANEL]: "calendar", "pikos:calendarScrollHour": 7 };
 const MODIFIER = mod("Mod") as "Control" | "Meta";
 
 const WINDOW = { height: 900, width: 1440 };
@@ -215,7 +216,7 @@ test("1 Lists @tour", async ({ page }) => {
     await t.capture(
       9,
       "Page menu: Move to Folder",
-      () => page.getByRole("menuitem", { name: "Move to Folder" }).hover(),
+      () => page.getByRole("menuitem", { name: "Move to folder" }).hover(),
       "keep"
     );
     await t.capture(10, "Rename, in place", async () => {
@@ -445,7 +446,7 @@ test("3 Calendar @tour", async ({ page }) => {
       await row(page, "Water the plants")
         .getByRole("checkbox", { name: /Mark done/ })
         .click();
-      await expect(page.getByText(/earlier days? (are|is) still open/)).toBeVisible();
+      await expect(page.getByText(/other days? (are|is) still open/)).toBeVisible();
     });
     await t.capture(17, "Missed repeat: deleting a past occurrence", async () => {
       await t.launch(CALENDAR);
@@ -455,7 +456,7 @@ test("3 Calendar @tour", async ({ page }) => {
         .first()
         .click();
       await page.getByRole("button", { name: "Delete this occurrence" }).click();
-      await expect(page.getByText(/earlier days? (are|is) still open/)).toBeVisible();
+      await expect(page.getByText(/other days? (are|is) still open/)).toBeVisible();
     });
   });
 });
@@ -601,7 +602,7 @@ test("6 Settings @tour", async ({ page }) => {
     });
     await t.capture(4, "Notifications", () => openSection("Notifications"));
     await further(5, "Notifications, further down");
-    await t.capture(6, "Calendar Sync", () => openSection("Calendar Sync"));
+    await t.capture(6, "Calendar sync", () => openSection("Calendar sync"));
     await t.capture(7, "Add a calendar account", () =>
       settings.getByRole("button", { name: "Add account" }).click()
     );
@@ -612,7 +613,7 @@ test("6 Settings @tour", async ({ page }) => {
         .click()
     );
     await t.capture(9, "A connected account", async () => {
-      await openSection("Calendar Sync");
+      await openSection("Calendar sync");
       await settings.getByRole("button", { name: "Add account" }).click();
       await page
         .getByRole("dialog")
@@ -699,7 +700,7 @@ test("7 Folders and trash @tour", async ({ page }) => {
     );
     await t.capture(10, "Trash: empty the trash", async () => {
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "Empty Trash" }).click();
+      await page.getByRole("button", { name: "Empty trash" }).click();
     });
     await t.capture(11, "Trash, empty", async () => {
       await t.launch(TODAY);
@@ -822,7 +823,7 @@ test("10 A calendar's pages @tour", async ({ page }) => {
     await t.capture(8, "Settings, with the calendar connected", async () => {
       await t.launch(TODAY, origin);
       await page.keyboard.press(`${MODIFIER}+,`);
-      await page.getByRole("button", { exact: true, name: "Calendar Sync" }).click();
+      await page.getByRole("button", { exact: true, name: "Calendar sync" }).click();
       await page.waitForTimeout(500);
     });
   });
@@ -856,5 +857,39 @@ test("11 Text size @tour", async ({ page }) => {
     await t.capture(7, "Calendar text at its smallest, 10px", () =>
       t.launch({ ...CALENDAR, "pikos:calendarTextSize": 10 })
     );
+    // The top of the ladder, and the frame this tour was missing: every other text
+    // shot moves the *interface* scale, which leaves the blocks alone. Raising the
+    // calendar's own size grows the rows inside a block whose height comes from the
+    // event's duration, so this is where a checkbox and a title spill past the
+    // bottom edge — which is what they did until the layout tiers learned to scale.
+    await t.capture(8, "Calendar text at its largest, 28px", () =>
+      t.launch({ ...CALENDAR, "pikos:calendarTextSize": 28 })
+    );
+  });
+});
+
+/** The density × text-size cells, because the two multiply and a cell fails on its own.
+ *  Density sets the hour height and the text size sets a zoom over everything in a block,
+ *  so a block that reads correctly at normal × 14 can still clip at compact × 28: the
+ *  contents grew while the height, which comes from the event's duration, did not grow
+ *  with them. Section 11 moves one axis at a time and cannot see that. */
+const DENSITIES = ["compact", "normal", "spacious"] as const;
+const LADDER = [10, 14, 20, 28] as const;
+
+test("12 Calendar density and zoom @tour", async ({ page }) => {
+  await tour(page, "12 Calendar density and zoom", async (t) => {
+    let order = 0;
+    for (const density of DENSITIES) {
+      for (const size of LADDER) {
+        order += 1;
+        await t.capture(order, `${density} at ${String(size)}px`, () =>
+          t.launch({
+            ...CALENDAR,
+            "pikos:calendarDensity": density,
+            "pikos:calendarTextSize": size,
+          })
+        );
+      }
+    }
   });
 });

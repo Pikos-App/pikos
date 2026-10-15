@@ -219,7 +219,7 @@ const STANDARD_IMAGE_RE = new RegExp(
   "gi"
 );
 
-export function extractImageRefs(body: string): ImageRef[] {
+export function extractImageRefs(body: string, fromDir = ""): ImageRef[] {
   const refs: { index: number; ref: ImageRef }[] = [];
 
   let m;
@@ -235,6 +235,7 @@ export function extractImageRefs(body: string): ImageRef[] {
             .split("/")
             .pop()
             ?.replace(/\.[^.]+$/, "") ?? "",
+        fromDir,
         fullMatch: m[0],
         sourcePath,
         syntax: "wiki",
@@ -259,6 +260,7 @@ export function extractImageRefs(body: string): ImageRef[] {
       index: idx,
       ref: {
         altText: sourcePath.split("/").pop() ?? "",
+        fromDir,
         fullMatch: m[0],
         sourcePath,
         speculative: true,
@@ -275,6 +277,7 @@ export function extractImageRefs(body: string): ImageRef[] {
       index: m.index,
       ref: {
         altText,
+        fromDir,
         fullMatch: m[0],
         sourcePath,
         syntax: "standard",
@@ -283,6 +286,36 @@ export function extractImageRefs(body: string): ImageRef[] {
   }
 
   return refs.sort((a, b) => a.index - b.index).map((r) => r.ref);
+}
+
+/** `rel` read from `dir`, both inside the vault; null when it climbs out of the vault. */
+function joinVaultPath(dir: string, rel: string): string | null {
+  const out: string[] = [];
+  for (const segment of [...dir.split("/"), ...rel.split("/")]) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      if (out.length === 0) return null;
+      out.pop();
+    } else {
+      out.push(segment);
+    }
+  }
+  return out.join("/");
+}
+
+/**
+ * Where a reference's image may be, as paths from the vault root, most likely first.
+ *
+ * A standard link is relative to the file it is written in, which is how CommonMark reads
+ * it and how a Pikos Markdown export writes one from a page in a folder (`../assets/…`).
+ * Obsidian can also write links, and writes embeds, from the vault root, so each kind tries
+ * the other reading second. A path that climbs out of the vault is not a candidate.
+ */
+export function imageRefCandidates(ref: ImageRef): string[] {
+  const fromFile = joinVaultPath(ref.fromDir, ref.sourcePath);
+  const fromRoot = joinVaultPath("", ref.sourcePath);
+  const ordered = ref.syntax === "standard" ? [fromFile, fromRoot] : [fromRoot, fromFile];
+  return [...new Set(ordered.filter((p): p is string => p !== null))];
 }
 
 // ─── Callout transformation ──────────────────────────────────────────────────
@@ -367,7 +400,7 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
     // Extract wikilinks before any content transformation
     const wikilinks = extractWikilinks(body);
 
-    const imageRefs = extractImageRefs(body);
+    const imageRefs = extractImageRefs(body, parts.slice(0, -1).join("/"));
 
     const transformedBody = transformCallouts(body);
 

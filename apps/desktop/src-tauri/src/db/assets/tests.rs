@@ -68,23 +68,75 @@ async fn save_asset_copies_into_assets_dir_with_uuid_name() {
         .await
         .unwrap();
 
-    let saved_path = Path::new(&saved);
-    assert!(
-        saved_path.exists(),
-        "asset file should exist at the returned path"
-    );
-    assert_eq!(
-        saved_path.parent().unwrap(),
-        assets_dir,
-        "must land in the assets dir"
-    );
+    let name = saved
+        .strip_prefix("assets/")
+        .expect("the stored path is relative to the app data dir");
     // Extension is normalized to lowercase; filename is a fresh UUID, not the source name.
-    assert_eq!(saved_path.extension().unwrap(), "png");
-    assert_ne!(saved_path.file_stem().unwrap().to_str().unwrap(), "photo");
+    assert!(is_pikos_asset_name(name), "{name}");
+    assert!(name.ends_with(".png"));
     // Bytes are copied faithfully.
-    assert_eq!(std::fs::read(saved_path).unwrap(), b"\x89PNG fake bytes");
+    assert_eq!(
+        std::fs::read(resolve_asset_path(&assets_dir, &saved)).unwrap(),
+        b"\x89PNG fake bytes"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// qa: PRIV-04:4
+#[tokio::test]
+async fn a_pasted_image_is_stored_without_the_machines_path() {
+    let dir = unique_tmp_dir();
+    let assets_dir = dir.join("assets");
+
+    let saved = save_bytes_into_dir(&assets_dir, b"GIF89a".to_vec(), "GIF")
+        .await
+        .unwrap();
+
+    assert!(
+        saved.starts_with("assets/") && saved.ends_with(".gif"),
+        "{saved}"
+    );
+    assert!(!saved.contains(&*dir.to_string_lossy()));
+    assert_eq!(
+        std::fs::read(resolve_asset_path(&assets_dir, &saved)).unwrap(),
+        b"GIF89a"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// The cross-language fixture directory; `assetPath.conformance.test.ts` reads the same file.
+const ASSET_PATHS: &str =
+    include_str!("../../../../../../crates/pikos-db/tests/fixtures/asset-paths.json");
+
+// qa: PRIV-04:4
+#[test]
+fn every_stored_path_resolves_as_the_shared_table_says() {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct Table {
+        assets_dir: String,
+        cases: Vec<Case>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Case {
+        name: String,
+        stored: String,
+        resolved: String,
+    }
+
+    let table: Table = serde_json::from_str(ASSET_PATHS).expect("parse asset-paths.json");
+    assert!(!table.cases.is_empty());
+    for case in &table.cases {
+        assert_eq!(
+            resolve_asset_path(Path::new(&table.assets_dir), &case.stored),
+            PathBuf::from(&case.resolved),
+            "{}",
+            case.name
+        );
+    }
 }
 
 #[tokio::test]

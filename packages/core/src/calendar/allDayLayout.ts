@@ -72,7 +72,20 @@ export function buildAllDayItems(pages: PageSummary[], day: Date): AllDayItem[] 
  * get pushed to row 1 with a phantom empty row 0 above them.
  */
 export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayItem | null)[][] {
-  const itemsByDay = days.map((d) => buildAllDayItems(pages, d));
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last) return [];
+  // The all-day pages touching these days, found once: each day then scans only them, where it
+  // scanned every page held, most of them timed or dated elsewhere.
+  const from = format(first, "yyyy-MM-dd");
+  const to = format(last, "yyyy-MM-dd");
+  const touching = pages.filter((page) => {
+    const start = page.scheduledStart;
+    if (start == null || !isAllDayPage(start)) return false;
+    const end = page.scheduledEnd && isAllDayPage(page.scheduledEnd) ? page.scheduledEnd : start;
+    return start <= to && end >= from;
+  });
+  const itemsByDay = days.map((d) => buildAllDayItems(touching, d));
 
   interface Span {
     pageId: string;
@@ -360,13 +373,22 @@ export interface AllDayBarPosition {
 /**
  * Keeps the `AllDayBar` component ignorant of column-count math — only the
  * section that owns layout needs to know.
+ *
+ * Row geometry comes in rather than being read as constants, because the strip
+ * zooms with the rest of the calendar; the constants are the unzoomed defaults.
  */
-export function barPositionStyle(bar: AllDayBar, columnCount: number): AllDayBarPosition {
+export function barPositionStyle(
+  bar: AllDayBar,
+  columnCount: number,
+  rows: { rowHeight?: number; topPadding?: number } = {}
+): AllDayBarPosition {
+  const rowHeight = rows.rowHeight ?? ALL_DAY_ROW_HEIGHT;
+  const topPadding = rows.topPadding ?? ALL_DAY_TOP_PADDING;
   const widthPct = (bar.span / columnCount) * 100;
   const leftPct = (bar.startCol / columnCount) * 100;
   return {
     left: `${leftPct}%`,
-    top: ALL_DAY_TOP_PADDING + bar.row * ALL_DAY_ROW_HEIGHT,
+    top: topPadding + bar.row * rowHeight,
     // Terminating bars shrink 2px for a visual gap next to the day boundary.
     // Bars that continue off-view stay flush so they read as "runs off-screen".
     width: bar.continuesRight ? `${widthPct}%` : `calc(${widthPct}% - 2px)`,

@@ -18,6 +18,7 @@ pub mod dates;
 pub mod deep_link;
 pub mod focus;
 pub mod markdown;
+pub mod markdown_import;
 pub mod nlp;
 pub mod overdue;
 pub mod page;
@@ -34,6 +35,7 @@ pub use dates::{
 pub use deep_link::{parse_deep_link, DeepLink, SmartView};
 pub use focus::{elapsed_label, finish_session, session_length, FocusOutcome, MIN_SESSION_S};
 pub use markdown::prosemirror_to_markdown;
+pub use markdown_import::{markdown_to_prosemirror, Refused};
 pub use nlp::{
     parse as parse_dates, parse_first as parse_first_date, DateMatch, Granularity, MatchedDate,
 };

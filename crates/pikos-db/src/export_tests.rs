@@ -89,6 +89,26 @@ async fn set_completed(pool: &SqlitePool, id: &str, completed_at: &str) {
         .unwrap();
 }
 
+/// Writes the denorm alongside the row, as `refresh_schedule_denorm` does.
+async fn insert_schedule(pool: &SqlitePool, id: &str, page_id: &str, start: &str) {
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(start)
+    .bind(crate::now_iso())
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE pages SET scheduled_start = ? WHERE id = ?")
+        .bind(start)
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
 // ── fetch_export_pages ─────────────────────────────────────────────────────────
 
 async fn insert_synced_page(pool: &SqlitePool, id: &str, title: &str, sync_state: &str) {
@@ -107,6 +127,7 @@ async fn export_titles(pool: &SqlitePool, include_synced: bool) -> Vec<String> {
         .collect()
 }
 
+// qa: EXP-08:5
 #[tokio::test]
 async fn export_drops_only_the_mirrors_the_user_never_actioned() {
     let pool = test_pool().await;
@@ -116,17 +137,22 @@ async fn export_drops_only_the_mirrors_the_user_never_actioned() {
     insert_synced_page(&pool, "bare", "Standup", "active").await;
     insert_synced_page(&pool, "done", "Retro", "active").await;
     set_completed(&pool, "done", "2026-05-01T12:00:00Z").await;
+    insert_synced_page(&pool, "edited", "Planning", "active").await;
+    sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE page_id = 'edited'")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_synced_page(&pool, "severed", "Old 1:1", "detached").await;
 
     let kept = export_titles(&pool, false).await;
     assert!(!kept.contains(&"Standup".to_string()));
     assert_eq!(
         kept.len(),
-        3,
-        "native, completed mirror and detached all stay"
+        4,
+        "native, completed mirror, edited mirror and detached all stay"
     );
 
-    assert_eq!(export_titles(&pool, true).await.len(), 4);
+    assert_eq!(export_titles(&pool, true).await.len(), 5);
 }
 
 // ── build_export_csv_impl ──────────────────────────────────────────────────────
@@ -161,6 +187,7 @@ async fn export_csv_header_and_row_basics() {
     assert!(row.contains("\"x, y\""));
 }
 
+// qa: EXP-02:3
 #[tokio::test]
 async fn export_csv_escapes_special_characters() {
     let pool = test_pool().await;
@@ -296,6 +323,33 @@ async fn export_csv_leaves_repeat_and_reminder_empty_for_a_plain_page() {
     // The two empty cells sit between End Date and Created At, so a plain page's
     // row still lines up with the header.
     assert_eq!(csv.lines().nth(1).unwrap().split(',').count(), 13);
+}
+
+// The cross-language fixture; `roundtrip.test.ts` imports the same file.
+const CSV_EXPORT: &str = include_str!("../tests/fixtures/csv-export.csv");
+
+// qa: EXP-06:2
+#[tokio::test]
+async fn export_csv_writes_the_file_the_importer_round_trips() {
+    let pool = test_pool().await;
+    insert_test_folder(&pool, "f1", "Work").await.unwrap();
+    insert_rich_page(&pool, "p1", "Standup", "{}", "", 3, "[\"team\"]").await;
+    insert_schedule(&pool, "s1", "p1", "2026-06-01T09:00:00").await;
+    insert_rule_with_rrule(&pool, "r1", "p1", "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2").await;
+    insert_reminder(&pool, "rem-start", "p1", 0).await;
+    insert_reminder(&pool, "rem-before", "p1", 15).await;
+    insert_rich_page(&pool, "p2", "Plain note", "{}", "", 0, "[]").await;
+    sqlx::query(
+        "UPDATE pages SET folder_id = 'f1', created_at = '2026-05-20T08:00:00',
+         updated_at = '2026-05-21T08:00:00', sort_order = CASE id WHEN 'p1' THEN 0 ELSE 1 END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let csv = build_export_csv(&pool, false).await.unwrap();
+
+    assert_eq!(csv, CSV_EXPORT);
 }
 
 // ── build_frontmatter ──────────────────────────────────────────────────────────

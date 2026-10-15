@@ -97,6 +97,7 @@ function page(
 ): PageSummary {
   return {
     createdAt,
+    detachIsReversible: false,
     folderId: null,
     id,
     isRecurring: false,

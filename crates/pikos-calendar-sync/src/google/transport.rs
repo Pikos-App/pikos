@@ -34,6 +34,7 @@ const API_ROOT: &str = "https://www.googleapis.com/calendar/v3";
 /// mid-sync would race the persist step (see [`super::auth`]).
 pub(crate) struct ReqwestGoogle {
     client: reqwest::Client,
+    root: String,
     access_token: String,
 }
 
@@ -41,6 +42,17 @@ impl ReqwestGoogle {
     pub(crate) fn new(access_token: impl Into<String>) -> Self {
         Self {
             client: http::client(),
+            root: API_ROOT.into(),
+            access_token: access_token.into(),
+        }
+    }
+
+    /// Against another root, as a test's replay server.
+    #[cfg(test)]
+    pub(crate) fn at(root: impl Into<String>, access_token: impl Into<String>) -> Self {
+        Self {
+            client: http::client(),
+            root: root.into(),
             access_token: access_token.into(),
         }
     }
@@ -54,7 +66,7 @@ impl GoogleTransport for ReqwestGoogle {
     ) -> Result<GoogleResponse, GoogleError> {
         let resp = self
             .client
-            .get(format!("{API_ROOT}{path}"))
+            .get(format!("{}{path}", self.root))
             .bearer_auth(&self.access_token)
             .query(query)
             .send()

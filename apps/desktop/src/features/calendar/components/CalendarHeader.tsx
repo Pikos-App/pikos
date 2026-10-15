@@ -1,12 +1,11 @@
 import type { CalendarDayCount, CalendarViewMode } from "@pikos/core";
 import { buildCalendarDays } from "@pikos/core";
-import { addDays, format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
+import { format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
 import { CalendarRange, ChevronLeft, ChevronRight, Grid3x3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
-import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 interface CalendarHeaderProps {
   dayCount: CalendarDayCount;
@@ -39,16 +38,8 @@ export function CalendarHeader({
   // week — otherwise it stays live all month long while today is already on screen.
   const isCurrentPeriod = isMonth
     ? isSameMonth(today, referenceDate)
-    : isWithinInterval(today, { end: addDays(last, 1), start: first });
+    : isWithinInterval(today, { end: last, start: first });
   const unit = isMonth ? "month" : "week";
-
-  useKeyboardShortcut("ArrowLeft", onPrevWeek, { group: "Calendar", label: `Previous ${unit}` });
-  useKeyboardShortcut("ArrowRight", onNextWeek, { group: "Calendar", label: `Next ${unit}` });
-  useKeyboardShortcut("t", onToday, { group: "Calendar", label: "Jump to today" });
-  useKeyboardShortcut("m", () => onViewModeChange(isMonth ? "time" : "month"), {
-    group: "Calendar",
-    label: isMonth ? "Switch to time grid" : "Switch to month view",
-  });
 
   // Time grid shows its visible range ("Mar 16 – 22, 2026" / "Mar 30 – Apr 5,
   // 2026"); month view names the month it is padded around.
@@ -71,7 +62,7 @@ export function CalendarHeader({
         <TooltipTrigger asChild>
           <Button
             aria-label={`Previous ${unit}`}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={onPrevWeek}
             size="icon"
             variant="ghost"
@@ -89,7 +80,7 @@ export function CalendarHeader({
         <TooltipTrigger asChild>
           <Button
             aria-label={`Next ${unit}`}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={onNextWeek}
             size="icon"
             variant="ghost"
@@ -107,7 +98,7 @@ export function CalendarHeader({
         <TooltipTrigger asChild>
           <Button
             aria-label={isMonth ? "Jump to current month" : "Jump to current week"}
-            className="h-7 px-2 text-xs"
+            className="type-ui h-[calc(1.75rem*var(--ui-text-scale,1))] px-2"
             disabled={isCurrentPeriod}
             onClick={onToday}
             size="sm"
@@ -129,7 +120,7 @@ export function CalendarHeader({
           <Button
             aria-label="Time grid view"
             aria-pressed={!isMonth}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={() => onViewModeChange("time")}
             size="icon"
             variant={isMonth ? "ghost" : "secondary"}
@@ -148,7 +139,7 @@ export function CalendarHeader({
           <Button
             aria-label="Month view"
             aria-pressed={isMonth}
-            className="h-7 w-7"
+            className="ui-control"
             onClick={() => onViewModeChange("month")}
             size="icon"
             variant={isMonth ? "secondary" : "ghost"}

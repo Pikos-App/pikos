@@ -79,13 +79,24 @@ export function setIndentForSelection(
   return true; // always swallow Tab in normal text
 }
 
-export const TabIndent = Extension.create({
+export interface TabIndentOptions {
+  /** Called with a key the extension acted on. ProseMirror prevents the default of every
+   *  Escape, so a host's shortcut layer can't tell from the event alone that one was used. */
+  onKeyHandled: ((event: KeyboardEvent) => void) | undefined;
+}
+
+export const TabIndent = Extension.create<TabIndentOptions>({
   addGlobalAttributes() {
     return [PARAGRAPH_INDENT_ATTRIBUTE];
   },
 
+  addOptions() {
+    return { onKeyHandled: undefined };
+  },
+
   addProseMirrorPlugins() {
     const editor = this.editor;
+    const { onKeyHandled } = this.options;
 
     return [
       new Plugin({
@@ -98,6 +109,7 @@ export const TabIndent = Extension.create({
                 dispatch(
                   state.tr.setSelection(Selection.near(state.doc.resolve(state.selection.to)))
                 );
+                onKeyHandled?.(event);
                 return true;
               }
               return false;

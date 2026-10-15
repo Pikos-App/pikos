@@ -5,12 +5,20 @@
 
 import type { Page, Workspace } from "@pikos/core";
 
-export type WorkspaceEvent = "page:created" | "page:updated" | "page:deleted" | "workspace:loaded";
+export type WorkspaceEvent =
+  | "page:created"
+  | "page:updated"
+  | "page:deleted"
+  | "folder:deleted"
+  | "workspace:loaded";
 
 export interface WorkspaceEventPayloadMap {
   "page:created": Page;
   "page:updated": Page;
   "page:deleted": string;
+  /** A folder went to the trash, taking its pages with it. Its own event because
+   *  the adapter soft-deletes those pages itself, so no page write announces them. */
+  "folder:deleted": string;
   "workspace:loaded": Workspace;
 }
 

@@ -28,7 +28,8 @@ export const COMPACT_BLOCK_HEIGHT = HOUR_HEIGHT / 4;
 
 /**
  * Layout threshold (px): below this a block renders as a single-line chip, above
- * this as a stacked title+time block. Density-independent.
+ * this as a stacked title+time block. Density-independent; measured at the
+ * default zoom, and read through `CalendarMetrics.stackedBlockMinHeight`.
  */
 export const CHIP_STACKED_THRESHOLD = 28;
 

@@ -13,9 +13,11 @@ mod cli;
 mod commands;
 mod error;
 mod mcp;
+mod occurrences;
 mod ops;
 mod render;
 mod schedule;
+mod stress;
 mod workspace;
 mod write;
 

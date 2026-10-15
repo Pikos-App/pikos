@@ -1,7 +1,11 @@
 use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 
+#[cfg(feature = "bench")]
+mod bench;
 mod db;
+#[cfg(feature = "e2e-bridge")]
+pub mod e2e_bridge;
 #[path = "error/error.rs"]
 mod error;
 #[path = "logging/logging.rs"]
@@ -11,12 +15,56 @@ mod notifications;
 mod window_state;
 
 pub use db::commands::dispatch as dispatch_db_command;
+#[cfg(debug_assertions)]
 pub use db::dev::{backdate_page_impl, dev_seed_synced_calendar_impl, BackdateParams};
 use db::DbState;
 use notifications::scheduler::{NotificationSettingsState, SchedulerRuntimeState};
 
+/// What the window is being painted with, in the log, for a blank-window report.
+///
+/// A blank window says nothing about which render path produced it, and the answer decides the
+/// next step: the DMABUF override below, compositing, or the session being Wayland. Reading it
+/// out of a user's log beats asking them to reproduce it with three environment variables.
+#[cfg(target_os = "linux")]
+fn log_render_environment() {
+    let read = |name: &str| std::env::var(name).unwrap_or_else(|_| "unset".to_string());
+    log::info!(
+        "linux render environment: session={} gdk_backend={} dmabuf_disabled={} compositing_disabled={}",
+        read("XDG_SESSION_TYPE"),
+        read("GDK_BACKEND"),
+        read("WEBKIT_DISABLE_DMABUF_RENDERER"),
+        read("WEBKIT_DISABLE_COMPOSITING_MODE"),
+    );
+}
+
+/// Refuse a second Pikos against one profile, on every desktop platform.
+///
+/// Two copies is two notification schedulers and two sync loops over one SQLite
+/// file, so a reminder arrives twice; and since both claim the same bundle
+/// identifier, macOS picks freely which one a notification click activates. The
+/// guard was `cfg(linux/windows)` on the grounds that macOS routes deep-link URLs
+/// natively, which is true and says nothing about a second process: two bundles
+/// at different paths are distinct to LaunchServices and both will run.
+///
+/// Goes first in the builder chain so a second launch exits during plugin setup,
+/// before the scheduler and the sync loop start.
+fn single_instance_guard() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // The URL itself arrives through the deep-link plugin's on_open_url
+        // handler registered in setup(), so only the window is handled here.
+        log::info!("second_instance_refused — focused the running window");
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(feature = "bench")]
+    bench::mark_start();
+
     // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
     // GPU/driver stacks. Disabling it forces the stable render path.
     // Set before any GTK/webview init. Respect an existing override so
@@ -28,29 +76,14 @@ pub fn run() {
 
     logging::install_panic_hook();
 
-    // `mut` is needed under cfg(linux/windows) to chain the single-instance
-    // plugin; macOS routes URLs natively and doesn't need it.
-    #[allow(unused_mut)]
-    let mut builder = tauri::Builder::default();
-
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus the existing window. The URL itself is delivered by the
-            // deep-link plugin's on_open_url handler registered in setup().
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }));
-    }
-
     let (sync_trigger_tx, sync_trigger_rx) = db::sync_loop::SyncTriggerSender::new();
 
-    let builder = builder
+    let builder = tauri::Builder::default()
+        .plugin(single_instance_guard())
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())
+        .manage(notifications::click::PendingClicks::default())
         .manage(sync_trigger_tx)
         .plugin(logging::build_plugin())
         .plugin(tauri_plugin_notification::init())
@@ -67,6 +100,8 @@ pub fn run() {
                 env!("CARGO_PKG_VERSION"),
                 std::env::consts::OS
             );
+            #[cfg(target_os = "linux")]
+            log_render_environment();
 
             // macOS: install the foreground-presentation delegate and request
             // notification authorization via the modern UserNotifications
@@ -76,8 +111,12 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             notifications::macos::setup(app.handle());
 
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            // A benchmark launch would deliver the seeded workspace's reminders to whoever is
+            // running it, and the delivery work would land in the timings.
+            if !cfg!(feature = "bench") {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            }
 
             let sync_handle = app.handle().clone();
             tauri::async_runtime::spawn(db::sync_loop::run(sync_handle, sync_trigger_rx));

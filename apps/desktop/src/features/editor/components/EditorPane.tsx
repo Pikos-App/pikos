@@ -8,7 +8,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/shared/components/EmptyState";
 import { EDITOR_ATTRIBUTES, LINE_WIDTH_CLASS } from "@/shared/constants/editor";
@@ -16,8 +16,10 @@ import { MOD_KEY_LABEL } from "@/shared/constants/platform";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
+import { useUI } from "@/shared/context/UIContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { onFlushPending } from "@/shared/pendingWrites";
 import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
@@ -49,6 +51,7 @@ import { TableToolbar } from "./TableToolbar";
 export const editorExtensions = [
   ...createDocumentExtensions({
     image: PikosImage.configure({ allowBase64: false, inline: false }),
+    onKeyHandled: (event) => Keyboard.markUsed(event),
     resolveAssetUrl: assetUrl,
   }),
   Placeholder.configure({
@@ -111,8 +114,9 @@ function appendParagraphs(editor: Editor | null, text: string): void {
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { updatePage } = usePages();
-  const { lineWidth } = useEditorSettings();
+  const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
+  const { takeBodyFocus } = useUI();
 
   const currentPageIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -197,12 +201,16 @@ export function EditorPane() {
 
     if (!editor.isDestroyed) {
       loadPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
+      // Which page the editor holds, for tests and the in-app benchmark to wait on.
+      editor.view.dom.setAttribute("data-page-id", page.id);
     }
     contentJsonRef.current = doc ? page.content : "";
 
+    const focusBody = takeBodyFocus(page.id);
     // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
     requestAnimationFrame(() => {
       scrollContainerRef.current?.scrollTo({ top: 0 });
+      if (focusBody && !editor.isDestroyed) editor.commands.focus("end");
     });
   }, [editor, page, isLoading]);
 
@@ -227,8 +235,20 @@ export function EditorPane() {
     return () => window.removeEventListener("blur", handleBlur);
   }, [flush]);
 
+  // Body text sits behind two debounces: this one, then the write queue's. Both
+  // have to run, in that order, before anything ends the process.
+  useEffect(() => onFlushPending(flush), [flush]);
+
   const [isAddingLink, setIsAddingLink] = useState(false);
 
+  // Only with a selection, which is what a link is made out of. Without one the
+  // registry falls through to the global binding and the command palette opens —
+  // the same split Notion, Linear and Docs give Cmd+K. Before the gate the editor
+  // took the combo outright, so the palette was unreachable from the one place
+  // you are most likely to reach for it, and nothing said why.
+  //
+  // The gate reads `editor.state` at key-press time rather than a rendered value,
+  // because a selection changes without re-rendering this component.
   useKeyboardShortcut(
     "Mod+Shift+K",
     () => {
@@ -236,7 +256,13 @@ export function EditorPane() {
       editor.view.dom.blur();
       setIsAddingLink(true);
     },
-    { allowInInputs: true, group: "Editor", label: "Insert / edit link", scope: "editor" }
+    {
+      allowInInputs: true,
+      group: "Editor",
+      label: "Insert / edit link",
+      scope: "editor",
+      when: () => !!editor && !editor.state.selection.empty,
+    }
   );
 
   if (!page) {
@@ -252,7 +278,7 @@ export function EditorPane() {
         <EmptyState message="Select a page to start editing">
           <p className="type-ui-sm mt-1 text-subtle">
             or press{" "}
-            <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">
+            <kbd className="rounded border border-border px-1 py-0.5 text-3xs">
               {MOD_KEY_LABEL}N
             </kbd>{" "}
             to create a new page
@@ -302,6 +328,7 @@ export function EditorPane() {
               requestAnimationFrame(() => !editor?.isDestroyed && editor?.commands.focus("end"));
             }
           }}
+          style={{ "--editor-font-size": `${fontSize}px` } as CSSProperties}
         >
           <EditorContent editor={editor} />
         </div>

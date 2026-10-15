@@ -6,23 +6,11 @@ import { Info } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
+import { countWords, readingTime } from "../utils/pageStats";
+
 interface PageInfoPopoverProps {
   editor: Editor;
   page: Page;
-}
-
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (trimmed === "") return 0;
-  return trimmed.split(/\s+/).length;
-}
-
-const WORDS_PER_MINUTE = 238;
-
-function readingTime(wordCount: number): string {
-  const minutes = Math.ceil(wordCount / WORDS_PER_MINUTE);
-  if (minutes < 1) return "< 1 min";
-  return `${minutes} min`;
 }
 
 function formatDate(iso: string): string {
@@ -94,19 +82,19 @@ export function PageInfoPopover({ editor, page }: PageInfoPopoverProps) {
 
           <div className="space-y-1.5 text-xs">
             <InfoRow label="Created" value={relativeDate(page.createdAt)} />
-            <div className="text-right text-[10px] text-muted-foreground">
+            <div className="text-right text-3xs text-muted-foreground">
               {formatDate(page.createdAt)}
             </div>
 
             <InfoRow label="Updated" value={relativeDate(page.updatedAt)} />
-            <div className="text-right text-[10px] text-muted-foreground">
+            <div className="text-right text-3xs text-muted-foreground">
               {formatDate(page.updatedAt)}
             </div>
 
             {page.completedAt && (
               <>
                 <InfoRow label="Completed" value={relativeDate(page.completedAt)} />
-                <div className="text-right text-[10px] text-muted-foreground">
+                <div className="text-right text-3xs text-muted-foreground">
                   {formatDate(page.completedAt)}
                 </div>
               </>

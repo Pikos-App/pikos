@@ -4,11 +4,11 @@ import { act, waitFor } from "@testing-library/react";
 import { format } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { usePageList } from "./usePageList";
 
@@ -26,7 +26,7 @@ function setup() {
     const ui = useUI();
     const undo = useUndoDelete();
     const workspace = useWorkspace();
-    const pages = usePages();
+    const pages = usePagesNow();
     const pageList = usePageList();
     return { pageList, pages, ui, undo, workspace };
   });
@@ -86,8 +86,10 @@ describe("usePageList — visible pages", () => {
 
     act(() => hook.result.current.ui.setActiveViewId(workFolder.id));
 
-    const ids = hook.result.current.pageList.visiblePages.map((p) => p.id);
-    expect(ids).toEqual([w.id]);
+    await waitFor(() => {
+      const ids = hook.result.current.pageList.visiblePages.map((p) => p.id);
+      expect(ids).toEqual([w.id]);
+    });
   });
 
   it("today view: skips the sortPages step (visible filter is applied as-is)", async () => {
@@ -117,6 +119,47 @@ describe("usePageList — visible pages", () => {
 
       await waitFor(() => {
         expect(hook.result.current.pageList.visiblePages).toHaveLength(2);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("today view: shows nothing until the series heads are held, then the whole list", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+    try {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked with .call(this) below
+      const real = MockStorageAdapter.prototype.listSeriesHeads;
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(MockStorageAdapter.prototype, "listSeriesHeads").mockImplementation(async function (
+        this: MockStorageAdapter,
+        ...args
+      ) {
+        await held;
+        return real.apply(this, args);
+      });
+      const hook = setup();
+      await init(hook);
+      const a = await makePage(hook, { folderId: null, title: "A" });
+      await act(async () => {
+        await hook.result.current.pages.scheduleOnce(a.id, "2026-06-15");
+      });
+      act(() => hook.result.current.ui.setActiveViewId("today"));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(hook.result.current.pageList.visiblePages).toHaveLength(0);
+
+      await act(async () => {
+        release();
+        await held;
+      });
+      await waitFor(() => {
+        expect(hook.result.current.pageList.visiblePages).toHaveLength(1);
       });
     } finally {
       vi.useRealTimers();

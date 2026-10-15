@@ -8,6 +8,7 @@ import {
   clampTopHour,
   collapsedBandInnerOffset,
   collapsedBandPillHeight,
+  computeCalendarMetrics,
   mapHourToY,
   mapYToDate,
   mapYToHour,
@@ -351,5 +352,42 @@ describe("collapsedBandInnerOffset", () => {
   it("never goes negative — pill height is clamped against the band height", () => {
     expect(collapsedBandInnerOffset(14)).toBeGreaterThanOrEqual(0);
     expect(collapsedBandInnerOffset(40)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("zoom", () => {
+  it("leaves the calendar alone at the default zoom", () => {
+    expect(computeCalendarMetrics("normal").hourHeight).toBe(64);
+    expect(computeCalendarMetrics("compact").hourHeight).toBe(40);
+    expect(computeCalendarMetrics("spacious").hourHeight).toBe(88);
+  });
+
+  // The whole point: the hour grows by the factor the text grows by, so a block's
+  // room for its contents is the same at every zoom. Text used to scale while the
+  // block holding it did not, which is how a short block came to clip its own
+  // checkbox down to two slivers.
+  it("scales the hour by the same factor as the text", () => {
+    for (const density of ["compact", "normal", "spacious"] as const) {
+      const base = computeCalendarMetrics(density).hourHeight;
+      expect(computeCalendarMetrics(density, 2).hourHeight).toBe(base * 2);
+      expect(computeCalendarMetrics(density, 0.5).hourHeight).toBe(base / 2);
+    }
+  });
+
+  it("keeps a block's share of the hour fixed across zoom", () => {
+    for (const zoom of [0.5, 1, 1.5, 2]) {
+      const m = computeCalendarMetrics("normal", zoom);
+      expect(m.timeRowMinHeight / m.hourHeight).toBeCloseTo(40 / 64);
+      expect(m.twoLineTitleMinHeight / m.hourHeight).toBeCloseTo(52 / 64);
+    }
+  });
+
+  it("floors a block at a normal quarter hour, scaled up with zoom but never down", () => {
+    expect(computeCalendarMetrics("normal").compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics("spacious").compactBlockHeight).toBe(22);
+    expect(computeCalendarMetrics("compact").compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics("compact", 2).compactBlockHeight).toBe(32);
+    expect(computeCalendarMetrics("compact", 10 / 14).compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics("normal", 10 / 14).compactBlockHeight).toBe(16);
   });
 });

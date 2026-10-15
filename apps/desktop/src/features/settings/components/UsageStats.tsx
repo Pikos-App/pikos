@@ -61,13 +61,17 @@ function StatCard({
   sub?: string | undefined;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
+    <div
+      aria-label={label}
+      className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3"
+      role="group"
+    >
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <Icon className="h-3.5 w-3.5" />
         <span className="text-xs">{label}</span>
       </div>
       <span className="text-xl font-semibold tracking-tight tabular-nums">{value}</span>
-      {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
+      {sub && <span className="text-2xs text-muted-foreground">{sub}</span>}
     </div>
   );
 }
@@ -107,7 +111,7 @@ function ActivityChart({ weeks }: { weeks: WorkspaceWeekActivity[] }) {
           );
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-3xs text-muted-foreground">
         <span>{weekLabel(weeks, 0)}</span>
         <span>{weekLabel(weeks, weeks.length - 1)}</span>
       </div>
@@ -149,6 +153,7 @@ function FeatureBadge({
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
           : "border-border bg-muted/50 text-muted-foreground/50"
       )}
+      role="group"
     >
       <Icon className="h-3 w-3" />
       {label}

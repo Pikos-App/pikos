@@ -132,7 +132,7 @@ pub fn store(
         .map_err(|e| GoogleError::Protocol(format!("serialize credentials: {e}")))?;
     keychain
         .store(account_id, &blob)
-        .map_err(|e| GoogleError::Network(e.to_string()))
+        .map_err(|e| GoogleError::Network(e.user_message()))
 }
 
 /// A usable bearer token for this account, refreshing in place when the stored

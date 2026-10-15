@@ -34,6 +34,7 @@ afterEach(cleanup);
 function makeOccurrence(over: Partial<VirtualOccurrence>): VirtualOccurrence {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -77,6 +78,7 @@ describe("VirtualPageBlockPopover — schedule lock", () => {
 
   it("renders the synced schedule read-only on a locked series", () => {
     const page = makeOccurrence({
+      detachIsReversible: false,
       scheduleLocked: true,
       syncState: "active",
       timezone: "Europe/Berlin",

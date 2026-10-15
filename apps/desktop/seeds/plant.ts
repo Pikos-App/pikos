@@ -6,6 +6,8 @@ import type { Folder, Page, PagePriority, StorageAdapter } from "@pikos/core";
 import { extractText, formatDateOnly, formatLocalISO, getLocalTimezone } from "@pikos/core";
 import { addDays, addMinutes, startOfDay } from "date-fns";
 
+import { STORAGE_BACKEND } from "@/shared/constants/testMode";
+
 import { doc, EMPTY_DOC, p } from "./doc";
 
 /** `YYYY-MM-DD`, `offset` days from today. */
@@ -182,13 +184,19 @@ export async function backdate(
 
 /** The mock calendar sync: the TS twin in test mode, the Rust seed otherwise. */
 export async function plantSyncedLayer(adapter: StorageAdapter): Promise<void> {
-  if (import.meta.env["VITE_TEST_MODE"] === "true") {
+  // Only the mock needs its own copy of the synced rows. Both other backends
+  // reach the real writer's dev command, which is the point of the bridge
+  // lane: the same seed a person QAs against, planted by the same code.
+  if (STORAGE_BACKEND === "mock") {
     const { seedSyncedCalendar } = await import("./syncedCalendar");
     await seedSyncedCalendar(adapter);
-    return;
+  } else if (STORAGE_BACKEND === "bridge") {
+    const { bridgeInvoke } = await import("@bridge/transport");
+    await bridgeInvoke("dev_seed_synced_calendar");
+  } else {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("dev_seed_synced_calendar");
   }
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("dev_seed_synced_calendar");
 }
 
 /** A small seeded generator, so a scenario plants the same workspace every run. */

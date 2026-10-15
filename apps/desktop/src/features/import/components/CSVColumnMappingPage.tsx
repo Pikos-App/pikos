@@ -141,10 +141,10 @@ export function CSVColumnMappingPage({
           <h2 className="text-lg font-semibold">Map CSV Columns</h2>
           <p className="text-sm text-muted-foreground">
             {initialConfig.detectedSource
-              ? `Auto-detected as ${initialConfig.detectedSource} — `
+              ? `Auto-detected as ${initialConfig.detectedSource}. `
               : ""}
             {mappedCount} of {headers.length} columns mapped
-            {!hasTitleMapped && <span className="ml-2 text-yellow-500">— Title is required</span>}
+            {!hasTitleMapped && <span className="ml-2 text-yellow-500">Title is required</span>}
           </p>
         </div>
       </div>
@@ -195,7 +195,7 @@ export function CSVColumnMappingPage({
                 <div className="w-40 shrink-0">
                   <p className="text-sm font-medium">{cm.csvHeader}</p>
                   {cm.sampleValues.length > 0 && (
-                    <p className="truncate font-mono text-[11px] text-muted-foreground">
+                    <p className="truncate font-mono text-2xs text-muted-foreground">
                       {cm.sampleValues[0]}
                     </p>
                   )}
@@ -205,6 +205,7 @@ export function CSVColumnMappingPage({
 
                 <div className="relative">
                   <select
+                    aria-label={`Map column ${cm.csvHeader}`}
                     className={cn(
                       "appearance-none rounded-md border border-border bg-background px-3 py-1.5 pr-8 text-sm transition-colors hover:bg-accent",
                       cm.pikosField === "skip" && "text-muted-foreground",
@@ -300,6 +301,7 @@ function ValueMappingSection({
             <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
             <div className="relative">
               <select
+                aria-label={`Map ${field} value ${entry.sourceValue}`}
                 className="appearance-none rounded-md border border-border bg-background px-3 py-1.5 pr-8 text-sm transition-colors hover:bg-accent"
                 onChange={(e) => onChange(field, entry.sourceValue, e.target.value)}
                 value={entry.targetValue}

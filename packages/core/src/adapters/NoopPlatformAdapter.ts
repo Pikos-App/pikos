@@ -39,6 +39,11 @@ export class NoopPlatformAdapter implements PlatformAdapter {
     return Promise.resolve();
   }
 
+  openBackupsDir(): Promise<void> {
+    this.record("openBackupsDir");
+    return Promise.resolve();
+  }
+
   openLogFile(): Promise<void> {
     this.record("openLogFile");
     return Promise.resolve();
@@ -62,6 +67,11 @@ export class NoopPlatformAdapter implements PlatformAdapter {
 
   applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void> {
     this.record("applyNotificationSettings", settings);
+    return Promise.resolve();
+  }
+
+  replayPendingNotificationClicks(): Promise<void> {
+    this.record("replayPendingNotificationClicks");
     return Promise.resolve();
   }
 

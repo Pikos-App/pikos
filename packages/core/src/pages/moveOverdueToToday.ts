@@ -55,9 +55,10 @@ function shiftByDays(iso: string, days: number): string {
 /**
  * Plans the move for the pages currently in the Overdue section.
  *
- * A page already dated today — a timed 9:00 read at 14:00 is overdue but not
- * from an earlier day — is neither moved nor counted as kept: there is nowhere
- * for it to go, and reporting it as "left" would read as a refusal.
+ * A page already dated today is neither moved nor counted as kept: there is
+ * nowhere for it to go, and reporting it as "left" would read as a refusal.
+ * Overdue holds only earlier days, so nothing sent from the Today view can hit
+ * that case; it stays for a caller that assembles its own set.
  */
 export function planMoveOverdueToToday(
   pages: PageSummary[],

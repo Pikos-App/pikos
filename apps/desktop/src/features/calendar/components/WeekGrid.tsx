@@ -1,5 +1,5 @@
 import type { CalendarMetrics, CollapseGeometry, PageSummary } from "@pikos/core";
-import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT } from "@pikos/core";
+import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT, timedPagesByDay } from "@pikos/core";
 import { useRef } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -8,7 +8,7 @@ import {
   useCalendarSettings,
 } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { useAllDayCreate } from "../hooks/useAllDayCreate";
 import { useAllDayDrag } from "../hooks/useAllDayDrag";
@@ -39,6 +39,8 @@ interface WeekGridProps {
    * — caller should materialise an override instead of mutating the head schedule. */
   onReschedule: (pageId: string, start: string, end?: string, originalDate?: string) => void;
   pages: PageSummary[];
+  /** The week's pages are still loading for the first time. */
+  loading: boolean;
 }
 
 function disableSelect(cursorClass: "dragging-grab" | "dragging-resize") {
@@ -54,6 +56,7 @@ export function WeekGrid({
   autoOpenPageId,
   days,
   isCurrentWeek,
+  loading,
   onAutoOpenConsumed,
   onCreateAllDay,
   onCreatePage,
@@ -65,8 +68,7 @@ export function WeekGrid({
   const settings = useCalendarSettings();
   const weekGridRef = useRef<HTMLDivElement>(null);
   const dayColumnsRef = useRef<HTMLDivElement>(null);
-  useMinuteTick();
-  const today = new Date();
+  const today = useNow();
 
   // Geometry needs a stable shape before useScrollPersist can map an hour to
   // a pixel, but the final fit-to-viewport geometry depends on the measured
@@ -95,8 +97,12 @@ export function WeekGrid({
   const fillHourHeight = renderedHours > 0 ? (containerHeight - fixedBandTotal) / renderedHours : 0;
   const effectiveHourHeight = Math.max(settings.metrics.hourHeight, fillHourHeight);
   const geometry: CollapseGeometry = buildCollapseGeometry(settings.collapse, effectiveHourHeight);
+  // Only the height-derived values change when the grid stretches to fill its
+  // container. The block layout tiers come from the calendar text size, so they
+  // are carried over rather than recomputed from the stretched hour.
   const metrics: CalendarMetrics = {
-    compactBlockHeight: effectiveHourHeight / 4,
+    ...settings.metrics,
+    compactBlockHeight: Math.max(effectiveHourHeight / 4, settings.metrics.compactBlockHeight),
     gridHeight: geometry.totalHeight,
     hourHeight: effectiveHourHeight,
     minResizeHeight: (15 / 60) * effectiveHourHeight,
@@ -115,6 +121,7 @@ export function WeekGrid({
     setGhostContent,
     showGhost,
   } = useDragGhost({ dayColumnsRef, days, geometry });
+  const pagesByDay = timedPagesByDay(pages, days);
 
   const { handleBlockResizeStart, resizeRenderState } = useTimedResize({
     days,
@@ -212,6 +219,7 @@ export function WeekGrid({
   return (
     <CalendarSettingsContext.Provider value={settingsValue}>
       <div
+        aria-busy={loading}
         aria-label="Week calendar"
         className="flex min-h-0 flex-1 flex-col"
         ref={weekGridRef}
@@ -283,14 +291,17 @@ export function WeekGrid({
                     draggingPageId={timedDraggingPageId}
                     isCurrentWeek={isCurrentWeek}
                     isDropTarget={isDropTarget}
-                    key={day.toISOString()}
+                    // Keyed by slot, not date: a column keeps its measured width across a week
+                    // change. A fresh column renders unmeasured, which lays out every block of a
+                    // busy day before collapsing them into a pill.
+                    key={i}
                     now={today}
                     onAutoOpenConsumed={onAutoOpenConsumed}
                     onBlockDragStart={handleBlockDragStart}
                     onBlockResizeStart={handleBlockResizeStart}
                     onCreatePage={onCreatePage}
                     onPageDoubleClick={onPageDoubleClick}
-                    pages={pages}
+                    pages={pagesByDay[i]!}
                     resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
                   />
                 );

@@ -1,5 +1,5 @@
 import type { AllDayBar as AllDayBarData, VirtualOccurrence } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import { DEFAULT_EVENT_COLOR, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 import type { CSSProperties } from "react";
 
@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
@@ -60,9 +61,14 @@ export function AllDayBar({
 }: AllDayBarProps) {
   const { continuesLeft, continuesRight, page } = bar;
   const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
+  const { metrics } = useCalendarSettings();
+  // The bar's height is the strip's row geometry, so its contents cannot exceed it
+  // — the same ceiling a timed block puts on its own checkbox.
+  const barContentMaxPx = Math.max(metrics.allDayBarHeight - 2, 1);
 
   const {
     handleClick,
+    handleContextMenu,
     handlePopoverOpenChange,
     markDragging,
     popoverOpen,
@@ -153,16 +159,19 @@ export function AllDayBar({
             continuesRight && "rounded-tr-none rounded-br-none"
           )}
           onClick={handleClick}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={handleContextMenu}
           onPointerDown={handlePointerDown}
           style={{ ...chipStyle, ...position }}
         >
           {showsCheckbox ? (
             <TaskCheckbox
               as="span"
+              borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
               checked={done}
-              className="h-3.5 w-3.5 cursor-pointer!"
+              className="cursor-pointer!"
+              maxPx={barContentMaxPx}
               onChange={handleCheckboxClick}
+              size="sm"
             />
           ) : (
             <Repeat2
@@ -194,7 +203,7 @@ export function AllDayBar({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-80 p-3"
+        className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         onClick={(e) => e.stopPropagation()}
         side="bottom"
         sideOffset={4}

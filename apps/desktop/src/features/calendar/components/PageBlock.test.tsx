@@ -20,6 +20,7 @@ afterEach(cleanup);
 function makePage(over: Partial<PageSummary>): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
+    detachIsReversible: false,
     folderId: null,
     id: "p1",
     isRecurring: false,
@@ -62,7 +63,7 @@ function renderBlock(page: PageSummary) {
 describe("PageBlock — detached synced rendering", () => {
   it("shows the broken-sync glyph and is not struck through when not done", () => {
     renderBlock(makePage({ status: "not_started", syncState: "detached" }));
-    expect(screen.getByLabelText("Disconnected from calendar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Not synced with a calendar")).toBeInTheDocument();
     expect(screen.getByText("Standup")).toBeInTheDocument();
     const block = screen.getByRole("button", { name: /Standup/ });
     expect(block.className).not.toContain("opacity-50");

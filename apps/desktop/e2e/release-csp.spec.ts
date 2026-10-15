@@ -28,7 +28,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, test } from "./fixtures";
+import type { Page } from "@playwright/test";
+
+import { expect, mod, quickAdd, test } from "./fixtures";
 
 declare global {
   interface Window {
@@ -57,12 +59,15 @@ function inlineScriptHashes(html: string): string[] {
 
 function withInlineHashes(csp: string, hashes: string[]): string {
   if (hashes.length === 0) return csp;
-  return csp.replace(/script-src ([^;]*)/, (_, sources: string) =>
-    `script-src ${sources} ${hashes.join(" ")}`
+  return csp.replace(
+    /script-src ([^;]*)/,
+    (_, sources: string) => `script-src ${sources} ${hashes.join(" ")}`
   );
 }
 
-test("the packaged CSP boots the app @csp-prod", async ({ page }) => {
+/** Load the production bundle under the shipped policy, and return a check that no violation or
+ *  page error has happened since. */
+async function bootUnderReleaseCsp(page: Page): Promise<() => Promise<void>> {
   const csp = releaseCsp();
 
   await page.route(
@@ -89,7 +94,76 @@ test("the packaged CSP boots the app @csp-prod", async ({ page }) => {
 
   await page.goto("/");
 
-  expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
-  expect(pageErrors).toEqual([]);
+  const expectClean = async () => {
+    expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  };
+  await expectClean();
   await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
-});
+  return expectClean;
+}
+
+test(
+  "the packaged CSP boots the app and runs its main surfaces @csp-prod",
+  { tag: ["@PROD-01", "@PROD-02", "@PROD-04"] },
+  async ({ page }) => {
+    const expectClean = await bootUnderReleaseCsp(page);
+
+    // A policy can also deny what only loads on use: a lazy chunk, a font, a worker.
+    await quickAdd(page, "Under the shipped policy tomorrow at 3pm");
+    await page
+      .locator("[data-page-list-item]")
+      .filter({ hasText: "Under the shipped policy" })
+      .click();
+    const body = page.getByRole("textbox", { name: "Page content" });
+    await body.click();
+    await page.keyboard.type("Written under the release CSP.");
+    await expect(body).toContainText("Written under the release CSP.");
+    await page.getByRole("button", { name: "Calendar view" }).click();
+    await expect(page.getByRole("region", { name: "Week calendar" })).toBeVisible();
+    await page.keyboard.press("m");
+    await page.keyboard.press(mod("Mod+k"));
+    await page.keyboard.type("policy");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.keyboard.press("Escape");
+
+    await expectClean();
+  }
+);
+
+test(
+  "a weekly series renders its repeats under the packaged CSP @csp-prod",
+  { tag: ["@PROD-03"] },
+  async ({ page }) => {
+    const expectClean = await bootUnderReleaseCsp(page);
+
+    await quickAdd(page, "Weekly review every week");
+    await page.getByRole("button", { name: "Calendar view" }).click();
+    await page.getByLabel("Next week", { exact: true }).click();
+    await expect(
+      page
+        .getByRole("region", { name: "Week calendar" })
+        .getByRole("button", { name: /^Weekly review/ })
+        .filter({ has: page.getByLabel("Recurring") })
+    ).toHaveCount(1);
+
+    await expectClean();
+  }
+);
+
+test(
+  "the packaged build's Settings has no Developer panel @csp-prod",
+  { tag: ["@PROD-05"] },
+  async ({ page }) => {
+    const expectClean = await bootUnderReleaseCsp(page);
+
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(page.getByRole("button", { exact: true, name: "General" })).toBeVisible();
+    await expect(page.getByRole("button", { exact: true, name: "Developer" })).toHaveCount(0);
+    await expect(page.getByText("Mock calendar sync")).toHaveCount(0);
+
+    await expectClean();
+  }
+);

@@ -27,7 +27,7 @@ function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-lg font-semibold tracking-tight tabular-nums">{value}</span>
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-2xs text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -77,7 +77,7 @@ export function FocusSummary({ stats }: { stats: WorkspaceUsageStats }) {
               </div>
             ))}
           </div>
-          <div className="flex justify-between text-[10px] text-muted-foreground">
+          <div className="flex justify-between text-3xs text-muted-foreground">
             <span>{weekLabel(weeks, 0)}</span>
             <span>{weekLabel(weeks, weeks.length - 1)}</span>
           </div>

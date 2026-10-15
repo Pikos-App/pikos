@@ -77,6 +77,8 @@ export interface DocumentSchemaOptions {
    * `Markdown` so the attribute survives and only the parsing changes.
    */
   markdown?: Extensions[number];
+  /** See `TabIndentOptions.onKeyHandled`. */
+  onKeyHandled?: (event: KeyboardEvent) => void;
 }
 
 /**
@@ -118,6 +120,6 @@ export function createDocumentExtensions(options: DocumentSchemaOptions): Extens
         transformCopiedText: false,
         transformPastedText: true,
       }),
-    TabIndent,
+    TabIndent.configure({ onKeyHandled: options.onKeyHandled }),
   ];
 }

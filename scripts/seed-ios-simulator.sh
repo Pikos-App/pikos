@@ -61,6 +61,7 @@ fi
   --alias:@tauri-apps/api/core="$DESKTOP/scripts/seed-workspace/invoke.ts" \
   --alias:@/shared/logger="$DESKTOP/scripts/seed-workspace/logger.ts" \
   --alias:@seeds="$DESKTOP/seeds" \
+  --alias:@bridge="$DESKTOP/bridge" \
   --alias:@="$DESKTOP/src" \
   --alias:@pikos/core="$ROOT/packages/core/src/index.ts" \
   '--define:import.meta.env={"DEV":true}' \

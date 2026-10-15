@@ -19,24 +19,24 @@ const VAULT_PATH = "/tmp/pikos-e2e-vault";
 
 const VAULT_FILES = [
   {
-    path: "Inbox Note.md",
     content: `---\ntags: [quick]\n---\nA root-level capture.`,
+    path: "Inbox Note.md",
   },
   {
-    path: "Work/Quarterly Report.md",
     content: `---\nstatus: done\npriority: 2\ntags:\n  - work\n---\n# Q2 Report\n\nCovers all departments.`,
+    path: "Work/Quarterly Report.md",
   },
   {
-    path: "Work/Followups.md",
     content: `---\npriority: high\nscheduled: 2026-06-15\n---\nRing the supplier.`,
+    path: "Work/Followups.md",
   },
   {
-    path: "Personal/Reading List.md",
     content: `---\ntags: [books]\n---\n- The Idiot\n- Stoner`,
+    path: "Personal/Reading List.md",
   },
 ];
 
-appTest("markdown import: folder pick → preview → commit @tier2", async ({ app }) => {
+appTest("markdown import: folder pick → preview → commit", async ({ app }) => {
   const errors: string[] = [];
   app.on("pageerror", (e) => errors.push(e.message));
 
@@ -44,7 +44,7 @@ appTest("markdown import: folder pick → preview → commit @tier2", async ({ a
   // sees it. Settings has to be open first or the import button isn't mounted,
   // but the global is read at click time so order doesn't matter.
   await app.evaluate(
-    ({ path, files }) => {
+    ({ files, path }) => {
       (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
         files,
         path,
@@ -54,7 +54,7 @@ appTest("markdown import: folder pick → preview → commit @tier2", async ({ a
   );
 
   await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: "Data", exact: true }).click();
+  await app.getByRole("button", { exact: true, name: "Data" }).click();
   await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
 
   // Trigger the markdown import. Without the test-mode escape hatch this
@@ -82,7 +82,7 @@ appTest("markdown import: folder pick → preview → commit @tier2", async ({ a
     timeout: 5_000,
   });
   await app.keyboard.press("Escape");
-  await expect(app.getByRole("button", { name: "Data", exact: true })).not.toBeVisible({
+  await expect(app.getByRole("button", { exact: true, name: "Data" })).not.toBeVisible({
     timeout: 5_000,
   });
 
@@ -92,13 +92,13 @@ appTest("markdown import: folder pick → preview → commit @tier2", async ({ a
   // import. The exact-match filter avoids picking up "Work in progress" if
   // an unrelated test artifact ever lands in a default workspace.
   const sidebar = app.getByRole("group", { name: "Views and folders" });
-  await expect(sidebar.getByRole("button", { name: "Work", exact: true })).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: "Personal", exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("button", { exact: true, name: "Work" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { exact: true, name: "Personal" })).toBeVisible();
 
   // Open Work and verify its two pages landed there. Quarterly Report has
   // status=done so it's under the collapsed-by-default Completed section —
   // expand it before asserting.
-  await sidebar.getByRole("button", { name: "Work", exact: true }).click();
+  await sidebar.getByRole("button", { exact: true, name: "Work" }).click();
   const workItems = app.locator("[data-page-list-item]");
   await expect(workItems.getByText("Followups")).toBeVisible();
   await app.getByRole("button", { name: /^Completed/ }).click();
@@ -107,33 +107,36 @@ appTest("markdown import: folder pick → preview → commit @tier2", async ({ a
   expect(errors).toEqual([]);
 });
 
-appTest("markdown import: cancel from preview returns to settings @tier2", async ({ app }) => {
-  await app.evaluate(
-    ({ path, files }) => {
-      (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
-        files,
-        path,
-      };
-    },
-    { files: VAULT_FILES.slice(0, 1), path: VAULT_PATH }
-  );
+appTest(
+  "markdown import: cancel from preview returns to settings",
+  async ({ app }) => {
+    await app.evaluate(
+      ({ files, path }) => {
+        (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
+          files,
+          path,
+        };
+      },
+      { files: VAULT_FILES.slice(0, 1), path: VAULT_PATH }
+    );
 
-  await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: "Data", exact: true }).click();
-  await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
+    await app.getByRole("button", { name: /Select Folder/ }).click();
 
-  await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
+    await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
-  // Cancel via the back arrow returns to the Data settings tab, not all the
-  // way out of settings. The Data tab's Import heading is the proof.
-  await app.getByRole("button", { name: "Cancel import" }).click();
-  await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
-  await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
+    // Cancel via the back arrow returns to the Data settings tab, not all the
+    // way out of settings. The Data tab's Import heading is the proof.
+    await app.getByRole("button", { name: "Cancel import" }).click();
+    await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
+    await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
 
-  // No pages should have been created.
-  await app.keyboard.press("Escape");
-  await expect(app.locator("[data-page-list-item]").getByText("Inbox Note")).not.toBeVisible();
-});
+    // No pages should have been created.
+    await app.keyboard.press("Escape");
+    await expect(app.locator("[data-page-list-item]").getByText("Inbox Note")).not.toBeVisible();
+  }
+);
 
 // ─── Empty vault ────────────────────────────────────────────────────────────
 //
@@ -143,24 +146,27 @@ appTest("markdown import: cancel from preview returns to settings @tier2", async
 // parseMarkdownDir is dropped and the user lands on a preview with nothing
 // to import (or worse, a crash on the empty plan).
 
-appTest("markdown import: empty vault shows error and skips preview @tier2", async ({ app }) => {
-  await app.evaluate(
-    ({ path }) => {
-      (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
-        files: [],
-        path,
-      };
-    },
-    { path: VAULT_PATH }
-  );
+appTest(
+  "markdown import: empty vault shows error and skips preview",
+  async ({ app }) => {
+    await app.evaluate(
+      ({ path }) => {
+        (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
+          files: [],
+          path,
+        };
+      },
+      { path: VAULT_PATH }
+    );
 
-  await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: "Data", exact: true }).click();
-  await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
+    await app.getByRole("button", { name: /Select Folder/ }).click();
 
-  await expect(app.getByText(/No \.md files found/)).toBeVisible();
-  await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
-});
+    await expect(app.getByText(/No \.md files found/)).toBeVisible();
+    await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
+  }
+);
 
 // ─── Skip-completed toggle in preview ──────────────────────────────────────
 //
@@ -171,10 +177,10 @@ appTest("markdown import: empty vault shows error and skips preview @tier2", asy
 // already-done pages flood the workspace on import.
 
 appTest(
-  "markdown import: skip-completed toggle drops done pages from the import @tier2",
+  "markdown import: skip-completed toggle drops done pages from the import",
   async ({ app }) => {
     await app.evaluate(
-      ({ path, files }) => {
+      ({ files, path }) => {
         (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
           files,
           path,
@@ -184,7 +190,7 @@ appTest(
     );
 
     await app.getByRole("button", { name: "Open settings" }).click();
-    await app.getByRole("button", { name: "Data", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
     await app.getByRole("button", { name: /Select Folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
@@ -205,14 +211,14 @@ appTest(
     await app.keyboard.press("Escape");
 
     const sidebar = app.getByRole("group", { name: "Views and folders" });
-    await sidebar.getByRole("button", { name: "Work", exact: true }).click();
+    await sidebar.getByRole("button", { exact: true, name: "Work" }).click();
     const workItems = app.locator("[data-page-list-item]");
     await expect(workItems.filter({ hasText: "Followups" })).toBeVisible();
 
     // The Completed accordion always renders as a header — expand it and
     // assert the section is empty rather than asserting the header is
     // missing. Quarterly Report was the only completed page in the source.
-    await app.getByRole("button", { name: "Completed", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
     await expect(workItems.filter({ hasText: "Quarterly Report" })).toHaveCount(0);
   }
 );
@@ -225,7 +231,7 @@ appTest(
 // parseMarkdownVault's path-join logic would surface immediately.
 
 appTest(
-  "markdown import: nested vault paths flatten to 'A / B' in the preview @tier2",
+  "markdown import: nested vault paths flatten to 'A / B' in the preview",
   async ({ app }) => {
     await app.evaluate(
       ({ path }) => {
@@ -241,7 +247,7 @@ appTest(
     );
 
     await app.getByRole("button", { name: "Open settings" }).click();
-    await app.getByRole("button", { name: "Data", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
     await app.getByRole("button", { name: /Select Folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
@@ -249,12 +255,8 @@ appTest(
 
     // Flattened folder labels surface as clickable folder rows in the preview tree.
     // The exact-name match avoids picking up unrelated text containing the substrings.
-    await expect(
-      app.getByRole("button", { name: "Projects / Work (1)" })
-    ).toBeVisible();
-    await expect(
-      app.getByRole("button", { name: "Personal / Travel (1)" })
-    ).toBeVisible();
+    await expect(app.getByRole("button", { name: "Projects / Work (1)" })).toBeVisible();
+    await expect(app.getByRole("button", { name: "Personal / Travel (1)" })).toBeVisible();
   }
 );
 
@@ -268,7 +270,7 @@ appTest(
 // metadata — silent because the page itself still exists.
 
 appTest(
-  "markdown import: frontmatter priority and schedule surface on the imported page byline @tier2",
+  "markdown import: frontmatter priority and schedule surface on the imported page byline",
   async ({ app }) => {
     await app.evaluate(
       ({ path }) => {
@@ -286,7 +288,7 @@ appTest(
     );
 
     await app.getByRole("button", { name: "Open settings" }).click();
-    await app.getByRole("button", { name: "Data", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
     await app.getByRole("button", { name: /Select Folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
     await app.getByRole("button", { name: /Import 1 page/ }).click();
@@ -319,14 +321,14 @@ Personal,Buy milk,0
 Work,Old task,2`;
 
 appTest(
-  "CSV import: TickTick autodetect → mapping → preview → commit @tier2",
+  "CSV import: TickTick autodetect → mapping → preview → commit",
   async ({ app }) => {
     await app.evaluate((csv) => {
       (window as unknown as Record<string, unknown>)["__PIKOS_TEST_CSV__"] = csv;
     }, TICKTICK_CSV);
 
     await app.getByRole("button", { name: "Open settings" }).click();
-    await app.getByRole("button", { name: "Data", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
     await app.getByRole("button", { name: /Select File/ }).click();
 
     await expect(app.getByRole("heading", { name: "Map CSV Columns" })).toBeVisible();
@@ -349,16 +351,16 @@ appTest(
     await app.keyboard.press("Escape");
 
     const sidebar = app.getByRole("group", { name: "Views and folders" });
-    await expect(sidebar.getByRole("button", { name: "Work", exact: true })).toBeVisible();
-    await expect(sidebar.getByRole("button", { name: "Personal", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("button", { exact: true, name: "Work" })).toBeVisible();
+    await expect(sidebar.getByRole("button", { exact: true, name: "Personal" })).toBeVisible();
 
-    await sidebar.getByRole("button", { name: "Work", exact: true }).click();
+    await sidebar.getByRole("button", { exact: true, name: "Work" }).click();
     const workItems = app.locator("[data-page-list-item]");
     await expect(workItems.filter({ hasText: "Quarterly plan" })).toBeVisible();
 
     // Old task has TickTick Status=2 → mapped to "done", lives under the
     // Completed accordion in the same folder.
-    await app.getByRole("button", { name: "Completed", exact: true }).click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
     await expect(workItems.filter({ hasText: "Old task" })).toBeVisible();
   }
 );
@@ -370,26 +372,29 @@ appTest(
 // workspace. A regression in the reset wiring would either leave the user
 // stranded on the mapping page or silently commit a partial plan.
 
-appTest("CSV import: cancel from mapping page returns to Data settings @tier2", async ({ app }) => {
-  await app.evaluate((csv) => {
-    (window as unknown as Record<string, unknown>)["__PIKOS_TEST_CSV__"] = csv;
-  }, TICKTICK_CSV);
+appTest(
+  "CSV import: cancel from mapping page returns to Data settings",
+  async ({ app }) => {
+    await app.evaluate((csv) => {
+      (window as unknown as Record<string, unknown>)["__PIKOS_TEST_CSV__"] = csv;
+    }, TICKTICK_CSV);
 
-  await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: "Data", exact: true }).click();
-  await app.getByRole("button", { name: /Select File/ }).click();
-  await expect(app.getByRole("heading", { name: "Map CSV Columns" })).toBeVisible();
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { exact: true, name: "Data" }).click();
+    await app.getByRole("button", { name: /Select File/ }).click();
+    await expect(app.getByRole("heading", { name: "Map CSV Columns" })).toBeVisible();
 
-  // Footer Cancel button (exact match avoids the back-arrow's "Cancel import" name).
-  await app.getByRole("button", { name: "Cancel", exact: true }).click();
+    // Footer Cancel button (exact match avoids the back-arrow's "Cancel import" name).
+    await app.getByRole("button", { exact: true, name: "Cancel" }).click();
 
-  // Back to the Data tab — Import heading proves it; mapping page is gone.
-  await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
-  await expect(app.getByRole("heading", { name: "Map CSV Columns" })).not.toBeVisible();
+    // Back to the Data tab — Import heading proves it; mapping page is gone.
+    await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
+    await expect(app.getByRole("heading", { name: "Map CSV Columns" })).not.toBeVisible();
 
-  // No pages should have been created.
-  await app.keyboard.press("Escape");
-  await expect(
-    app.locator("[data-page-list-item]").filter({ hasText: "Quarterly plan" })
-  ).not.toBeVisible();
-});
+    // No pages should have been created.
+    await app.keyboard.press("Escape");
+    await expect(
+      app.locator("[data-page-list-item]").filter({ hasText: "Quarterly plan" })
+    ).not.toBeVisible();
+  }
+);

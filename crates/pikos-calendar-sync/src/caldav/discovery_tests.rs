@@ -1,7 +1,8 @@
 //! Layer-1 discovery tests. Most run over recorded Radicale fixtures (captured
-//! 2026-06-19 from radicale 3.3.3 with htpasswd basic auth); `04_*` is
-//! hand-authored to mimic an iCloud-style cross-host calendar-home redirect,
-//! which a single local server can't produce. No network.
+//! 2026-06-19 from radicale 3.3.3 with htpasswd basic auth); `04_*` and `05_*` are
+//! hand-authored, for an iCloud-style cross-host calendar-home redirect and the
+//! Cyrus/Fastmail enumeration shape, neither of which a local radicale produces.
+//! No network.
 
 use super::super::error::CaldavError;
 use super::super::transport::{DavResponse, DavTransport};
@@ -15,6 +16,8 @@ const ENUM: &str = include_str!("../../tests/fixtures/caldav/discovery/03_enumer
 const HOME_REMOTE: &str =
     include_str!("../../tests/fixtures/caldav/discovery/04_calendar_home_set_remote.xml");
 const UNAUTH: &str = include_str!("../../tests/fixtures/caldav/discovery/00_unauthorized.txt");
+const ENUM_CYRUS: &str =
+    include_str!("../../tests/fixtures/caldav/discovery/05_enumerate_calendars_cyrus.xml");
 
 #[derive(Debug)]
 enum Mode {
@@ -28,6 +31,9 @@ enum Mode {
     CrossHostHome,
     /// A server that advertises no component set at all on its calendars.
     NoComponentSet,
+    /// Cyrus/Fastmail shape: prefixed `D:` namespace, opaque UUID collection
+    /// names, and the props split across a 200 and a 404 propstat.
+    CyrusShape,
 }
 
 /// An enumerate whose calendar declares no `supported-calendar-component-set`.
@@ -63,6 +69,7 @@ impl DavTransport for FixtureTransport {
             (Mode::CrossHostHome, "p42-caldav.icloud.com", _, "1") => ok(ENUM),
             (_, _, "/testuser/", "0") => ok(HOME),
             (Mode::NoComponentSet, _, "/testuser/", "1") => ok(ENUM_NO_COMPONENTS),
+            (Mode::CyrusShape, _, "/testuser/", "1") => ok(ENUM_CYRUS),
             (_, _, "/testuser/", "1") => ok(ENUM),
             other => panic!("unexpected discovery request: {other:?}"),
         };
@@ -142,6 +149,72 @@ async fn a_calendar_with_no_declared_components_is_kept() {
 
     assert_eq!(calendars.len(), 1, "got: {calendars:?}");
     assert_eq!(calendars[0].display_name, "Plain");
+}
+
+/// Hand-authored to Cyrus's documented shape, not recorded: a Fastmail account
+/// lists every calendar under an opaque UUID, so the URL-segment fallback is the
+/// visible symptom of a name that never arrived. Pins that the shape itself parses,
+/// which is what says the name is missing upstream rather than dropped here.
+#[tokio::test]
+async fn a_uuid_named_collection_still_takes_its_displayname() {
+    let calendars = discover(Mode::CyrusShape).await.unwrap();
+
+    assert_eq!(calendars.len(), 1, "got: {calendars:?}");
+    assert_eq!(calendars[0].display_name, "Personal");
+}
+
+/// An empty `<displayname/>` and an absent one both parse to `None`, so the
+/// element having appeared is tracked separately. Without it the diagnostic
+/// cannot say which of the two a server did, and they need different fixes.
+#[test]
+fn an_empty_displayname_is_distinguishable_from_an_absent_one() {
+    let with_empty = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/c/</D:href><D:propstat><D:prop>
+    <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
+    <D:displayname/>
+  </D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+</D:multistatus>"#;
+    let without = with_empty.replace("<D:displayname/>", "");
+
+    let seen = super::super::xml::parse_calendars(with_empty).unwrap();
+    let absent = super::super::xml::parse_calendars(&without).unwrap();
+
+    assert!(seen[0].display_name.is_none() && absent[0].display_name.is_none());
+    assert!(seen[0].display_name_seen, "an empty element still appeared");
+    assert!(!absent[0].display_name_seen, "nothing appeared");
+}
+
+/// A name wrapped in CDATA is a name. Dropping the event made it indistinguishable
+/// from an empty element, which reads as "the server sent nothing" when the server
+/// in fact sent the answer.
+#[test]
+fn a_cdata_wrapped_displayname_is_read() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/c/</D:href><D:propstat><D:prop>
+    <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
+    <D:displayname><![CDATA[Personal & Work]]></D:displayname>
+  </D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+</D:multistatus>"#;
+    let cals = super::super::xml::parse_calendars(xml).unwrap();
+    assert_eq!(cals[0].display_name.as_deref(), Some("Personal & Work"));
+}
+
+/// Entity-escaped text is the other way a name can arrive in pieces. The text
+/// handler trims every fragment it sees, so a name split across fragments would
+/// silently lose the spaces around the entity.
+#[test]
+fn an_escaped_ampersand_keeps_the_spaces_around_it() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/c/</D:href><D:propstat><D:prop>
+    <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
+    <D:displayname>Work &amp; Life</D:displayname>
+  </D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+</D:multistatus>"#;
+    let cals = super::super::xml::parse_calendars(xml).unwrap();
+    assert_eq!(cals[0].display_name.as_deref(), Some("Work & Life"));
 }
 
 #[tokio::test]
@@ -225,6 +298,114 @@ async fn a_redirect_loop_stops_after_the_cap() {
     match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
         Err(CaldavError::Protocol(m)) => assert!(m.contains("too many redirects"), "got: {m}"),
         _ => panic!("expected a too-many-redirects Protocol error"),
+    }
+}
+
+/// The credential leak: every PROPFIND carries the account's Basic auth, so a server that answers
+/// discovery with a redirect elsewhere is handed the username and password for wherever it points.
+#[tokio::test]
+async fn a_redirect_off_the_account_s_domain_is_refused() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    let t = FixedResponse {
+        status: 302,
+        location: Some("https://harvester.example.net/caldav/".into()),
+    };
+    match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
+        Err(CaldavError::Protocol(m)) => {
+            assert!(m.contains("harvester.example.net"), "got: {m}");
+        }
+        _ => panic!("expected the redirect to be refused"),
+    }
+}
+
+/// And the case that has to keep working: iCloud answers with its own partition host.
+#[tokio::test]
+async fn a_redirect_to_a_partition_of_the_same_domain_is_followed() {
+    let base = Url::parse("https://caldav.icloud.com/").unwrap();
+    let t = RedirectThen207 {
+        location: "https://p42-caldav.icloud.com/123/principal/".into(),
+        hits: std::sync::Mutex::new(0),
+    };
+
+    let followed = propfind_follow(&t, &base, base.clone(), "0", "<b/>")
+        .await
+        .unwrap()
+        .expect("a 207 after the hop");
+
+    assert_eq!(followed.final_url.host_str(), Some("p42-caldav.icloud.com"));
+}
+
+/// Every hop is checked, not just the first.
+///
+/// One legitimate same-domain hop followed by one that leaves: a loop that vetted only the first
+/// `Location` would hand the account's Basic auth to the second.
+#[tokio::test]
+async fn a_redirect_that_leaves_the_domain_on_a_later_hop_is_refused() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    let t = TwoHops {
+        first: "https://p42-caldav.example.com/principal/".into(),
+        second: "https://harvester.example.net/caldav/".into(),
+        hits: std::sync::Mutex::new(0),
+    };
+
+    match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
+        Err(CaldavError::Protocol(m)) => {
+            assert!(m.contains("harvester.example.net"), "got: {m}");
+        }
+        _ => panic!("expected the second hop to be refused"),
+    }
+    assert_eq!(*t.hits.lock().unwrap(), 2, "the first hop must be followed");
+}
+
+/// 301 to `first`, then 301 to `second`.
+struct TwoHops {
+    first: String,
+    second: String,
+    hits: std::sync::Mutex<u32>,
+}
+impl DavTransport for TwoHops {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        let mut n = self.hits.lock().unwrap();
+        *n += 1;
+        Ok(DavResponse {
+            status: 301,
+            location: Some(if *n == 1 {
+                self.first.clone()
+            } else {
+                self.second.clone()
+            }),
+            body: String::new(),
+        })
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("discovery never issues a REPORT");
+    }
+}
+
+/// 301 to `location` on the first hit, 207 thereafter.
+struct RedirectThen207 {
+    location: String,
+    hits: std::sync::Mutex<u32>,
+}
+impl DavTransport for RedirectThen207 {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        let mut n = self.hits.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            return Ok(DavResponse {
+                status: 301,
+                location: Some(self.location.clone()),
+                body: String::new(),
+            });
+        }
+        Ok(DavResponse {
+            status: 207,
+            location: None,
+            body: "<multistatus xmlns=\"DAV:\"/>".into(),
+        })
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("discovery never issues a REPORT");
     }
 }
 

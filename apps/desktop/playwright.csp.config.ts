@@ -14,11 +14,13 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [["list"]],
+  // `timeout` is not a `use` option; it belongs at the top level. It was
+  // ignored here, so this suite has always run on the 30s default.
+  timeout: 30_000,
   use: {
     baseURL: "http://localhost:4174",
     trace: "off",
     screenshot: "only-on-failure",
-    timeout: 15_000,
   },
   expect: {
     timeout: 5_000,

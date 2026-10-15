@@ -54,12 +54,21 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
             json!({ "includeCompleted": false, "query": "x" }),
         ),
         ("reorder_folders", json!({ "orderedIds": [] })),
+        (
+            "list_range",
+            json!({ "end": "2026-06-22T04:00:00Z", "openOnly": true, "start": null, "zone": "UTC" }),
+        ),
+        (
+            "list_series_heads",
+            json!({ "openOnly": true, "since": null }),
+        ),
         ("list_page_schedules", json!({ "pageId": "p1" })),
         ("list_page_schedules_for_rules", json!({ "ruleIds": [] })),
         ("get_recurrence_rule", json!({ "pageId": "p1" })),
         ("list_page_reminders", json!({ "pageId": "p1" })),
         ("delete_page_reminders", json!({ "pageId": "p1" })),
         ("list_sync_calendars", json!({ "accountId": "a1" })),
+        ("get_usage_stats", json!({ "weekStart": 1 })),
         (
             "set_sync_calendar_color",
             json!({ "color": "#ffffff", "syncCalendarId": "c1" }),
@@ -118,6 +127,11 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
     ("resync_sync_account", "polls the provider"),
     ("disconnect_sync_account", "opens the login keychain"),
     ("save_asset", "copies a file into the app data dir"),
+    (
+        "restore_backup",
+        "replaces the workspace file and re-execs the process — driving it would \
+         end the test run, and pikos_db::backups covers the swap directly",
+    ),
 ];
 
 /// Bodies for the read commands `wire_cases` does not already carry. Split that
@@ -144,7 +158,30 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ("list_notification_history", json!({ "limit": 50 })),
         ("get_sync_status", json!({})),
         ("google_sync_available", json!({})),
-        ("get_usage_stats", json!({})),
+        (
+            "list_view",
+            json!({ "after": null, "limit": 50, "key": { "scope": { "kind": "inbox" }, "sort": "date", "zone": "UTC" } }),
+        ),
+        (
+            "list_view_ids",
+            json!({ "after": null, "through": null, "key": { "scope": { "kind": "folder", "folderId": PROBE_FOLDER }, "sort": "title", "zone": "UTC" } }),
+        ),
+        (
+            "list_completed_window",
+            json!({ "after": null, "limit": 10, "scope": null, "since": null }),
+        ),
+        (
+            "count_views",
+            json!({ "today": "2026-06-15", "zone": "UTC" }),
+        ),
+        ("get_pages", json!({ "ids": [PROBE_PAGE] })),
+        (
+            "get_page_if_newer",
+            json!({ "id": PROBE_PAGE, "known": null }),
+        ),
+        ("list_recent_pages", json!({ "exclude": null, "limit": 10 })),
+        ("list_tags", json!({})),
+        ("change_state", json!({})),
     ]
 }
 
@@ -170,6 +207,11 @@ const NOT_PROBED: &[(&str, &str)] = &[
         "backup_db",
         "copies the workspace file into the app data dir — it reads no rows, but \
          driving it writes to the machine running the test",
+    ),
+    (
+        "list_backups",
+        "reads the backups directory rather than any table, so the row probe has \
+         nothing to measure — pikos_db::backups covers what it returns",
     ),
     ("backup_db_before_import", "same copy, on the import path"),
     (
@@ -230,6 +272,17 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::search::search_pages,
             super::focus::create_focus_session,
             super::folders::reorder_folders,
+            super::windows::list_range,
+            super::windows::list_series_heads,
+            super::windows::list_view,
+            super::windows::list_view_ids,
+            super::windows::list_completed_window,
+            super::windows::count_views,
+            super::windows::get_pages,
+            super::windows::get_page_if_newer,
+            super::windows::list_recent_pages,
+            super::windows::list_tags,
+            super::windows::change_state,
             super::schedules::list_page_schedules,
             super::schedules::list_page_schedules_for_rules,
             super::schedules::get_recurrence_rule,

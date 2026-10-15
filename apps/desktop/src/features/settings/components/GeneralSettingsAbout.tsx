@@ -19,7 +19,7 @@ export function GeneralSettingsAbout() {
             <p className="text-sm font-medium">Pikos</p>
             <p className="text-xs text-muted-foreground">
               Version {__APP_VERSION__}
-              {import.meta.env.DEV && " — dev"}
+              {import.meta.env.DEV && " (dev)"}
             </p>
             {updater.status.state === "checking" ? (
               <div className="mt-1.5 flex items-center gap-1.5">

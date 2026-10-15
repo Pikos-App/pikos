@@ -8,6 +8,12 @@
 // chunk import the class from "@pikos/core/testing" instead.
 export type { MockStorageAdapter } from "./adapters/MockStorageAdapter";
 export * from "./adapters/NoopPlatformAdapter";
+export { evict } from "./cache/eviction";
+export type { Evicted, Pinned } from "./cache/eviction";
+export { PageStore, summaryBytes } from "./cache/pageStore";
+export type { WriteOutcome } from "./cache/pageStore";
+export { ViewCache, viewName } from "./cache/viewCache";
+export type { FetchToken, ViewEntry } from "./cache/viewCache";
 // ── Calendar math: row/block layout, hour↔pixel geometry, grid constants ──
 export {
   assignAllDayRows,
@@ -59,6 +65,7 @@ export {
   collapsedBandPillHeight,
   computeCalendarMetrics,
   DEFAULT_METRICS,
+  fallsShortOf,
   mapDateToY,
   mapHourToY,
   mapYToDate,
@@ -74,6 +81,9 @@ export {
 export type { CalendarMetrics, CollapseGeometry } from "./calendar/calendarGeometry";
 export {
   buildDayBlocks,
+  timedPagesByDay,
+  warmBlockInstants,
+  timedPagesInRange,
   collapseUnderWidth,
   remapBlocksForCollapse,
 } from "./calendar/calendarLayout";
@@ -98,13 +108,13 @@ export { defaultColorForProvider, PALETTE_COLORS } from "./constants/colors";
 export type { PaletteColor } from "./constants/colors";
 export { NLP_PRIORITY_MAP, PRIORITY_COLORS, PRIORITY_LABELS } from "./constants/priorities";
 export * from "./errors";
+export { caldavAccountIdentity, caldavBaseUrl } from "./format/caldavIdentity";
 // ── Date/time formatting for chips, labels and pickers ──
 export {
   computeEndTimeLabel,
   DAYS_PRESETS,
   DURATION_PRESETS,
   formatDurationLabel,
-  formatTimeOfDay,
   formatTriggerLabel,
   parseCustomDurationStr,
   parseCustomTimeStr,
@@ -115,7 +125,7 @@ export {
 export type { TimeSlot } from "./format/dateTimePicker";
 export { formatElapsed, formatSessionLength, MIN_SESSION_S } from "./format/focusDuration";
 export { formatDateRange } from "./format/formatDateRange";
-export { formatTime12h, formatTime12hParts } from "./format/formatTime";
+export { formatClockTime, formatTime12h, formatTime12hParts } from "./format/formatTime";
 export {
   formatCompactTime,
   formatLongDate,
@@ -138,6 +148,7 @@ export {
 export type { PreparedCSV, SuggestedMappings } from "./import/csv";
 export {
   extractImageRefs,
+  imageRefCandidates,
   extractWikilinks,
   parseFrontmatter,
   parseMarkdownVault,
@@ -173,6 +184,9 @@ export type {
   BuildPageListRowsInput,
   BuildPageListRowsResult,
   PageListDaySection,
+  ListSection,
+  ListSlot,
+  SlotRef,
   VirtualRow,
 } from "./layout/buildPageListRows";
 export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
@@ -180,7 +194,6 @@ export type { ParseResult, ParsedInput } from "./nlp/parser";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
-export { folderMoveTargets } from "./pages/folderMoveTargets";
 export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
 export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
 export {
@@ -203,15 +216,24 @@ export { computeScheduleTransition, normalizeEndInput } from "./pages/schedule";
 export { withTodayOccurrences } from "./pages/todayOccurrences";
 export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";
-export { groupUpcomingPages } from "./pages/upcoming";
+export { groupUpcomingPages, upcomingDayLabel } from "./pages/upcoming";
 export type { UpcomingDaySection } from "./pages/upcoming";
+export {
+  folderIdForNewPage,
+  folderIdForRestoredPage,
+  writableFolders,
+} from "./pages/writableFolders";
 // ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";
+export { STORAGE_READS, watchWrites } from "./storageReads";
+export type { WriteWatcher } from "./storageReads";
+export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/accountLabel";
 // ── Calendar sync health, derived from the read model ──
 export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";
 export type { AccountConnectionState, SyncDotMeta, SyncDotState } from "./sync/syncStatus";
 export * from "./types";
+export { ASSET_DIR, resolveAssetPath } from "./utils/assetPath";
 export {
   dateKey,
   formatDateOnly,
@@ -260,8 +282,10 @@ export { anchorMoveUpdate, applyAnchorMove, resolveAnchorMove } from "./utils/sc
 export type { AnchorMove } from "./utils/scheduleAnchor";
 export { ftsTokens } from "./utils/search";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
-export { cloneWallClock, resolveSyncedInstant } from "./utils/syncedTime";
+export type { ViewerScheduled } from "./utils/syncedTime";
+export { resolveSyncedInstant, viewerEnd, viewerStart, viewerWallClock } from "./utils/syncedTime";
 export {
+  utcInstant,
   expandRecurrenceInZone,
   normalizeUntilToZone,
   utcToWallClock,

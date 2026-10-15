@@ -16,30 +16,12 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 
+import { RestoreSection } from "./RestoreSection";
+import { SettingsSection } from "./SettingsSection";
 import { UsageStats } from "./UsageStats";
 import type { UsageStatsData } from "./UsageStats";
 
 const log = createLogger("DataSettings");
-
-// ─── Shared layout ────────────────────────────────────────────────────────
-
-function SettingsSection({
-  children,
-  description,
-  title,
-}: {
-  children: React.ReactNode;
-  description?: string;
-  title: string;
-}) {
-  return (
-    <section className="mb-8">
-      <h2 className="mb-1 text-base font-semibold">{title}</h2>
-      {description && <p className="mb-4 text-sm text-muted-foreground">{description}</p>}
-      {children}
-    </section>
-  );
-}
 
 // ─── Export helpers ────────────────────────────────────────────────────────
 
@@ -181,7 +163,7 @@ export function DataSettings({
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-settings">
       {/* ── Usage stats ────────────────────────────────────────────────── */}
       <SettingsSection
         description="Your data is stored locally and never leaves your device."
@@ -201,7 +183,7 @@ export function DataSettings({
                 {lastImportResult.folderCount > 0 &&
                   ` into ${lastImportResult.folderCount} folder${lastImportResult.folderCount !== 1 ? "s" : ""}`}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-2xs text-muted-foreground">
                 via {lastImportResult.source === "markdown" ? "Markdown" : "CSV"} ·{" "}
                 {formatTimeAgo(lastImportResult.importedAt)}
               </p>
@@ -229,6 +211,9 @@ export function DataSettings({
           state={importState}
         />
       </SettingsSection>
+
+      {/* ── Restore — renders nothing until there is a backup to put back ── */}
+      <RestoreSection />
 
       {/* ── Export ─────────────────────────────────────────────────────── */}
       <SettingsSection description="Download your data in different formats." title="Export">

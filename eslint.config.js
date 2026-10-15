@@ -29,9 +29,11 @@ export default tseslint.config(
           "./apps/desktop/tsconfig.app.json",
           "./apps/desktop/tsconfig.node.json",
           "./apps/desktop/tsconfig.scripts.json",
+          "./apps/desktop/tsconfig.e2e.json",
           "./packages/core/tsconfig.json",
           "./packages/editor-schema/tsconfig.json",
           "./packages/editor-mobile/tsconfig.json",
+          "./packages/pikos-bridge/tsconfig.json",
           "./packages/ui/tsconfig.json",
         ],
         tsconfigRootDir: import.meta.dirname,
@@ -165,6 +167,15 @@ export default tseslint.config(
     files: ["**/test/**/*.{ts,tsx}", "**/*.test.{ts,tsx}"],
     rules: {
       "react-refresh/only-export-components": "off",
+    },
+  },
+  // Playwright specs run in node and render no React. The hooks rule fires on
+  // them anyway, because a fixture receives a callback named `use` and the rule
+  // matches hooks by name — `await use(page)` is Playwright's API, not React's.
+  {
+    files: ["**/e2e/**/*.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
     },
   },
 );

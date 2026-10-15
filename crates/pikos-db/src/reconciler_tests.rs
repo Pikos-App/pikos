@@ -36,6 +36,7 @@ fn ctx_for(calendar_id: &str) -> ReconcileContext {
         calendar_id: calendar_id.into(),
         provider: "caldav".into(),
         folder_id: "f1".into(),
+        window_start: chrono::NaiveDate::MIN,
     }
 }
 
@@ -691,19 +692,8 @@ async fn completed_single_gaining_an_rrule_unmarks_done() {
     assert!(completed_at.is_none());
 }
 
-/// The provider cancels the very occurrence the head is parked on. The Cancel arm
-/// merges the EXDATE and stops there — no recompute — so the denorm still points at
-/// a date the rule no longer yields until something heals it; the foreground load
-/// recompute is what does, and after it the head sits on the next open day.
-///
-/// **Characterization, deliberately.** Whether the reconciler should recompute in
-/// step or leave it to the heal is an open call: healing later means a session left
-/// open shows a cancelled occurrence until the next load, recomputing in step means
-/// a poll writes `pages` on every cancellation. This pins the chain as it behaves
-/// today so a change to either half is visible; re-point the first assertion if the
-/// ruling goes the other way.
 #[tokio::test]
-async fn cancelling_the_heads_own_occurrence_leaves_the_denorm_to_the_heal() {
+async fn cancelling_the_heads_own_occurrence_moves_the_head_in_step() {
     let pool = setup().await;
     reconcile(
         &pool,
@@ -739,21 +729,11 @@ async fn cancelling_the_heads_own_occurrence_leaves_the_denorm_to_the_heal() {
         .await
         .unwrap();
 
-    assert_eq!(
-        head(&pool).await.as_deref(),
-        Some(parked.as_str()),
-        "the cancel merges the exdate and leaves the denorm alone"
-    );
     assert_eq!(rule_exdates(&pool, &page_id).await, vec![parked.clone()]);
-
-    crate::recurrence_derive::recompute_recurring_schedule_pool(&pool, &page_id)
-        .await
-        .unwrap();
-
-    let healed = head(&pool).await.expect("still a head");
-    assert_ne!(healed, parked, "the heal walks it off the cancelled day");
+    let moved = head(&pool).await.expect("still a head");
+    assert_ne!(moved, parked, "the cancel walks it off the cancelled day");
     assert!(
-        !rule_exdates(&pool, &page_id).await.contains(&healed),
+        !rule_exdates(&pool, &page_id).await.contains(&moved),
         "and lands on a day the rule still yields"
     );
 }
@@ -1532,6 +1512,78 @@ async fn reapplying_a_series_does_not_accumulate_rows() {
 }
 
 #[tokio::test]
+async fn a_provider_copy_of_an_instance_left_at_its_slot_stores_no_override() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![series(
+            "v1",
+            vec![],
+            vec![
+                ov("2026-06-08T09:00:00", "2026-06-08T09:00:00"),
+                ov("2026-06-15T09:00:00", "2026-06-15T11:00:00"),
+            ],
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        override_count(&pool).await,
+        1,
+        "only the moved one is a move"
+    );
+    assert!(override_row(&pool, &page_id, "2026-06-08T09:00:00")
+        .await
+        .is_none());
+}
+
+// qa: SYNC-30
+#[tokio::test]
+async fn copies_of_upcoming_instances_leave_the_next_meeting_where_it_is() {
+    let pool = setup().await;
+    let copies = (0..3).map(|w| ov(&week_occ(w), &week_occ(w))).collect();
+    let UpsertItem::Event(mut ev) = weekly_from_today("v1", &weekly_until(2)) else {
+        unreachable!()
+    };
+    ev.recurrence.as_mut().unwrap().overrides = copies;
+    reconcile(&pool, &ctx(), &delta(vec![UpsertItem::Event(ev)]))
+        .await
+        .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(override_count(&pool).await, 0);
+    assert_eq!(page_denorm(&pool, &page_id).await.0, Some(week_occ(0)));
+}
+
+#[tokio::test]
+async fn an_instance_moved_back_to_its_slot_drops_its_override() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![series(
+            "v1",
+            vec![],
+            vec![ov("2026-06-08T09:00:00", "2026-06-08T14:00:00")],
+        )]),
+    )
+    .await
+    .unwrap();
+    let back = UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: "2026-06-08T09:00:00".into(),
+        kind: OccurrenceKind::Modify(timed("2026-06-08T09:00:00", None, "UTC")),
+    });
+    reconcile(&pool, &ctx(), &delta(vec![back])).await.unwrap();
+
+    assert_eq!(override_count(&pool).await, 0);
+}
+
+#[tokio::test]
 async fn series_update_drops_a_stale_override() {
     let pool = setup().await;
     reconcile(
@@ -2104,6 +2156,7 @@ async fn deleted_at_of(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String>
         .unwrap()
 }
 
+// qa: SYNC-21:4
 #[tokio::test]
 async fn removal_of_bare_mirror_hard_deletes() {
     let pool = setup().await;
@@ -2122,6 +2175,7 @@ async fn removal_of_bare_mirror_hard_deletes() {
     );
 }
 
+// qa: SYNC-21:4
 #[tokio::test]
 async fn removal_of_completed_page_detaches() {
     let pool = setup().await;
@@ -2192,6 +2246,7 @@ async fn removal_of_skipped_occurrence_series_detaches() {
     assert_eq!(sync_state(&pool, &page_id).await, "detached");
 }
 
+// qa: SYNC-21:4
 #[tokio::test]
 async fn removal_of_user_modified_page_detaches() {
     let pool = setup().await;
@@ -2434,6 +2489,7 @@ async fn removal_is_idempotent() {
     assert_eq!(page_count(&pool).await, 1);
 }
 
+// qa: SYNC-22:5
 #[tokio::test]
 async fn tombstoned_external_id_skipped_on_upsert() {
     let pool = setup().await;
@@ -2743,6 +2799,7 @@ async fn teardown_re_drains_a_link_inserted_below_the_cursor() {
     )
     .await
     .unwrap();
+    // sql-ok: ACCOUNT is a test-local constant
     sqlx::query(&format!(
         "CREATE TRIGGER late_link AFTER UPDATE OF sync_state ON page_sync
          WHEN NOT EXISTS (SELECT 1 FROM page_sync WHERE id = 'aaa-late')
@@ -3427,8 +3484,8 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
     );
 }
 
-/// A finite series exhausted by exclusion recomputes to `done`; the provider
-/// extending it (a later UNTIL) must un-mark the head both times the recompute runs.
+/// A mirror ticked through to its end completes, and the provider extending it (a later
+/// UNTIL) un-marks it — over the reconcile path, not just a bare recompute.
 #[tokio::test]
 async fn provider_re_extension_unmarks_exhausted_head() {
     let pool = setup().await;
@@ -3459,7 +3516,7 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     .await
     .unwrap();
     let (_, status, completed_at) = page_denorm(&pool, &page_id).await;
-    assert_eq!(status, "done", "exhausted series marks the head done");
+    assert_eq!(status, "done", "its only occurrence was ticked");
     assert!(completed_at.is_some());
 
     // Provider extends the series → the next occurrence opens → head un-marked.
@@ -4230,4 +4287,531 @@ async fn a_re_enumerate_does_not_drag_an_advanced_head_backwards() {
         advanced,
         "re-enumerate leaves the advanced head where completion put it"
     );
+}
+
+/// Every page's stored sort inputs agree with what `page_order_inputs` computes now.
+async fn assert_order_inputs_current(pool: &sqlx::SqlitePool) {
+    let stale: Vec<String> = sqlx::query_scalar(
+        "SELECT p.id FROM pages p JOIN page_order_inputs v ON v.id = p.id
+         WHERE p.is_absolute IS NOT v.is_absolute OR p.abs_start_utc IS NOT v.abs_start_utc",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    assert!(stale.is_empty(), "stale sort inputs on {stale:?}");
+}
+
+async fn order_inputs(pool: &sqlx::SqlitePool, page_id: &str) -> (bool, Option<String>) {
+    sqlx::query_as("SELECT is_absolute, abs_start_utc FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn sync_one(pool: &sqlx::SqlitePool, etag: &str, schedule: EventSchedule) -> String {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/ev.ics", "uid-1", etag, "Meeting"),
+            schedule,
+        )]),
+    )
+    .await
+    .unwrap();
+    sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-1'")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A synced timed event, checked absolute, for the tests of what makes one float again.
+async fn absolute_page(pool: &sqlx::SqlitePool) -> String {
+    let page = sync_one(
+        pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    assert!(
+        order_inputs(pool, &page).await.0,
+        "the page starts absolute"
+    );
+    page
+}
+
+#[tokio::test]
+async fn a_synced_timed_event_sorts_by_its_instant() {
+    let pool = setup().await;
+    let page = sync_one(
+        &pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-06-15T13:00:00Z".into()))
+    );
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_synced_all_day_event_floats() {
+    let pool = setup().await;
+    let page = sync_one(&pool, "v1", all_day("2026-06-15", None)).await;
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn moving_a_synced_event_moves_its_instant() {
+    let pool = setup().await;
+    sync_one(
+        &pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    let page = sync_one(
+        &pool,
+        "v2",
+        timed("2026-06-16T10:30:00", None, "America/New_York"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-06-16T14:30:00Z".into()))
+    );
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn changing_a_synced_events_zone_moves_its_instant() {
+    let pool = setup().await;
+    sync_one(
+        &pool,
+        "v1",
+        timed("2026-06-15T09:00:00", None, "America/New_York"),
+    )
+    .await;
+    let page = sync_one(
+        &pool,
+        "v2",
+        timed("2026-06-15T09:00:00", None, "Europe/Paris"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-06-15T07:00:00Z".into()))
+    );
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_synced_event_in_the_spring_forward_gap_takes_the_zoned_policy() {
+    let pool = setup().await;
+    let page = sync_one(
+        &pool,
+        "v1",
+        timed("2026-03-08T02:30:00", None, "America/New_York"),
+    )
+    .await;
+    assert_eq!(
+        order_inputs(&pool, &page).await,
+        (true, Some("2026-03-08T07:30:00Z".into()))
+    );
+}
+
+#[tokio::test]
+async fn a_detached_event_floats_again() {
+    let pool = setup().await;
+    let page = absolute_page(&pool).await;
+    mark_completed(&pool, &page).await;
+
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    assert_eq!(sync_state(&pool, &page).await, "detached");
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_relinked_event_sorts_by_its_instant_again() {
+    let pool = setup().await;
+    let page = absolute_page(&pool).await;
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
+        .bind(&page)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+
+    sqlx::query("UPDATE page_sync SET sync_state = 'active' WHERE page_id = ?")
+        .bind(&page)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(order_inputs(&pool, &page).await.0);
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn removing_the_sync_row_by_raw_sql_still_floats_the_page() {
+    let pool = setup().await;
+    let page = absolute_page(&pool).await;
+    sqlx::query("DELETE FROM page_sync WHERE page_id = ?")
+        .bind(&page)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(order_inputs(&pool, &page).await, (false, None));
+    assert_order_inputs_current(&pool).await;
+}
+
+#[tokio::test]
+async fn a_synced_series_sorts_by_its_rules_zone() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![UpsertItem::Event(EventUpsert {
+            core: core("/series.ics", "uid-s", "v1", "Standup"),
+            schedule: timed("2026-06-15T09:00:00", None, "Europe/Paris"),
+            recurrence: Some(Recurrence {
+                fidelity: OccurrenceFidelity::Complete,
+                rrule: "FREQ=WEEKLY".into(),
+                exdates: vec![],
+                overrides: vec![],
+            }),
+        })]),
+    )
+    .await
+    .unwrap();
+    let page: String = sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-s'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(order_inputs(&pool, &page).await.0);
+    assert_order_inputs_current(&pool).await;
+}
+
+// ─── series that ended before the backfill window ─────────────────────────────
+
+fn ctx_now() -> ReconcileContext {
+    ReconcileContext {
+        window_start: backfill_window_start(),
+        ..ctx()
+    }
+}
+
+/// A weekly series from ten weeks ago on today's weekday, under `rrule`.
+fn weekly_from_ten_weeks_ago(etag: &str, rrule: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed(&week_occ(-10), None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+/// `FREQ=WEEKLY` ending `days` from today, as a floating `UNTIL`.
+fn weekly_until_days(days: i64) -> String {
+    format!(
+        "FREQ=WEEKLY;UNTIL={}",
+        (chrono::Local::now() + chrono::Duration::days(days)).format("%Y%m%dT235959")
+    )
+}
+
+// qa: SYNC-31:3
+#[tokio::test]
+async fn a_series_that_ended_before_the_window_gets_no_page() {
+    let pool = setup().await;
+    for (etag, rrule) in [
+        ("v1", weekly_until(-3)),
+        ("v2", "FREQ=WEEKLY;COUNT=3".to_string()),
+    ] {
+        let outcome = reconcile(
+            &pool,
+            &ctx_now(),
+            &delta(vec![weekly_from_ten_weeks_ago(etag, &rrule)]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(outcome.applied, 0, "{rrule}");
+    }
+    assert_eq!(page_count(&pool).await, 0);
+}
+
+// qa: SYNC-31:3
+#[tokio::test]
+async fn a_stored_series_cut_short_before_the_window_goes_as_if_deleted_upstream() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 1);
+
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v2", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 0, "a bare mirror goes");
+}
+
+#[tokio::test]
+async fn a_cut_short_series_you_ticked_is_kept_and_detached() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(week_day(-5))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v2", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    assert!(page_exists(&pool, &page_id).await);
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+#[tokio::test]
+async fn a_series_whose_last_meeting_opens_the_window_still_syncs() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago(
+            "v1",
+            &weekly_until_days(-1),
+        )]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "its last meeting was a week ago today"
+    );
+}
+
+// qa: SYNC-31:3
+#[tokio::test]
+async fn ended_series_stored_by_an_earlier_build_go_on_the_next_pass() {
+    let pool = setup().await;
+    let ended = UpsertItem::Event(EventUpsert {
+        core: core("/ended.ics", "uid-ended", "v1", "Ended"),
+        ..match weekly_from_ten_weeks_ago("v1", &weekly_until(-3)) {
+            UpsertItem::Event(ev) => ev,
+            UpsertItem::Occurrence(_) => unreachable!(),
+        }
+    });
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![ended, weekly_from_ten_weeks_ago("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 2);
+
+    assert_eq!(remove_ended_series(&pool, &ctx_now()).await.unwrap(), 1);
+    assert!(!page_exists_by_uid(&pool, "uid-ended").await);
+    assert!(page_exists_by_uid(&pool, "uid-series").await);
+    assert_eq!(remove_ended_series(&pool, &ctx_now()).await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn an_ended_series_an_earlier_build_left_open_reads_as_done_once_kept() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(week_day(-4))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
+        .bind(&page_id)
+        .bind(week_day(-3))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET status = 'not_started', completed_at = NULL WHERE id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    remove_ended_series(&pool, &ctx_now()).await.unwrap();
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+    assert_eq!(page_status(&pool, &page_id).await.0, "done");
+}
+
+#[tokio::test]
+async fn a_trashed_ended_series_is_not_mirrored_again_whatever_its_link_says() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_from_ten_weeks_ago("v1", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx_now(),
+        &delta(vec![weekly_from_ten_weeks_ago("v2", &weekly_until(-3))]),
+    )
+    .await
+    .unwrap();
+    let live: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(live, 0);
+    assert!(
+        page_exists(&pool, &page_id).await,
+        "the trashed copy stays in the trash"
+    );
+}
+
+const INVITE: &str = "Join with Google Meet (https://meet.google.com/abc-defg-hij)\nNotes: https://docs.example.com/notes. See https://en.wikipedia.org/wiki/Foo_(bar) too";
+
+fn hrefs(content: &str) -> Vec<String> {
+    fn walk(node: &serde_json::Value, out: &mut Vec<String>) {
+        for mark in node["marks"].as_array().into_iter().flatten() {
+            if mark["type"] == "link" {
+                out.push(mark["attrs"]["href"].as_str().unwrap().to_string());
+            }
+        }
+        for child in node["content"].as_array().into_iter().flatten() {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(&serde_json::from_str(content).unwrap(), &mut out);
+    out
+}
+
+async fn seed_invite(pool: &sqlx::SqlitePool) -> String {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![single_full(
+            "/ev.ics",
+            "uid-1",
+            "v1",
+            "Sync",
+            Some(INVITE),
+            None,
+            &[],
+        )]),
+    )
+    .await
+    .unwrap();
+    only_page_sync(pool).await.0
+}
+
+#[tokio::test]
+async fn a_seeded_description_links_its_addresses_and_keeps_its_text() {
+    let pool = setup().await;
+    let page_id = seed_invite(&pool).await;
+
+    assert_eq!(
+        hrefs(&page_content(&pool, &page_id).await),
+        [
+            "https://meet.google.com/abc-defg-hij",
+            "https://docs.example.com/notes",
+            "https://en.wikipedia.org/wiki/Foo_(bar)",
+        ]
+    );
+    assert_eq!(page_content_text(&pool, &page_id).await, INVITE);
+}
+
+#[tokio::test]
+async fn upgrading_links_the_addresses_in_a_seed_left_as_written() {
+    let pool = setup().await;
+    let untouched = seed_invite(&pool).await;
+    let unlinked = serde_json::json!({ "type": "doc", "content": INVITE.split('\n').map(|line| {
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+    }).collect::<Vec<_>>() })
+    .to_string();
+    sqlx::query("UPDATE pages SET content = ?, updated_at = '2026-01-01T00:00:00Z' WHERE id = ?")
+        .bind(&unlinked)
+        .bind(&untouched)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    assert_eq!(hrefs(&page_content(&pool, &untouched).await).len(), 3);
+    assert_eq!(page_content_text(&pool, &untouched).await, INVITE);
+    let updated: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = ?")
+        .bind(&untouched)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(updated, "2026-01-01T00:00:00Z");
+}
+
+#[tokio::test]
+async fn upgrading_leaves_a_body_the_person_edited_as_it_is() {
+    let pool = setup().await;
+    let page_id = seed_invite(&pool).await;
+    let edited = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Mine: https://example.com/plan"}]}]}"#;
+    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
+        .bind(edited)
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    simulate_user_body_edit(&pool, &page_id, "Mine: https://example.com/plan").await;
+
+    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    assert_eq!(page_content(&pool, &page_id).await, edited);
 }

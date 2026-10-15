@@ -4,18 +4,36 @@
 // and anything recurring (useRecurringWrites) — those defer to a queue or to a
 // backend recompute in ways plain page CRUD does not.
 
-import type { Page, PageStatus, PageSummary, StorageAdapter } from "@pikos/core";
-import { toPageSummary } from "@pikos/core";
+import type {
+  Folder,
+  Page,
+  PagePriority,
+  PageStatus,
+  PageSummary,
+  StorageAdapter,
+} from "@pikos/core";
+import { folderIdForRestoredPage, toPageSummary } from "@pikos/core";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 
 import type { OptimisticWrite } from "./usePageWriteQueue";
 
+/** What a page can be created with, so a caller that knows its tags, priority or body writes them
+ *  with the page rather than in a second write that lands after it is already on screen. */
+export interface NewPageFields {
+  title?: string;
+  folderId?: string | null;
+  tags?: string[];
+  priority?: PagePriority;
+  content?: string;
+  contentText?: string;
+}
+
 export interface PageWrites {
   /** Resolve the "calendar description changed" notice — see the adapter method. */
   clearPendingDescription: (id: string) => Promise<void>;
-  createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
+  createPage: (opts: NewPageFields) => Promise<Page>;
   /** Hard delete. Soft-delete (recoverable) is softDeletePage. */
   deletePage: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
@@ -27,26 +45,37 @@ export interface PageWrites {
 export function usePageWrites({
   adapter,
   cancelPendingWrite,
+  defaultFolderId,
   emit,
+  foldersRef,
   optimistic,
   pagesRef,
   setPages,
 }: {
   adapter: StorageAdapter;
   cancelPendingWrite: (id: string) => void;
+  defaultFolderId: string | null;
   emit: WorkspaceEventBus["emit"];
+  foldersRef: RefObject<Folder[]>;
   optimistic: <T>(spec: OptimisticWrite<T>) => Promise<T | undefined>;
   pagesRef: RefObject<PageSummary[]>;
   setPages: Dispatch<SetStateAction<PageSummary[]>>;
 }): PageWrites {
-  async function createPage({ folderId, title }: { title?: string; folderId?: string | null }) {
+  async function createPage({
+    content,
+    contentText,
+    folderId,
+    priority,
+    tags,
+    title,
+  }: NewPageFields) {
     const page = await adapter.createPage({
-      content: "",
-      contentText: "",
+      content: content ?? "",
+      contentText: contentText ?? "",
       folderId: folderId ?? null,
-      priority: 0,
+      priority: priority ?? 0,
       status: "not_started",
-      tags: [],
+      tags: tags ?? [],
       title: title ?? "",
     });
     setPages((prev) => [...prev, toPageSummary(page)]);
@@ -78,6 +107,7 @@ export function usePageWrites({
         setPages((prev) => prev.filter((p) => p.id !== id));
       },
       label: `softDeletePage(${id})`,
+      notice: "deleting this page",
       rollback: () => {
         if (snapshot) {
           setPages((prev) => (prev.some((p) => p.id === id) ? prev : [...prev, snapshot]));
@@ -92,8 +122,16 @@ export function usePageWrites({
 
   async function restorePage(id: string) {
     await adapter.restorePage(id);
-    const page = await adapter.getPage(id);
+    let page = await adapter.getPage(id);
     if (page) {
+      // A page deleted with its folder remembers a folder that may no longer exist,
+      // and came back pointing at nothing. Reparent before it reaches the store, so
+      // the list never holds a page whose folder cannot be found.
+      const home = folderIdForRestoredPage(page.folderId, foldersRef.current, defaultFolderId);
+      if (home !== page.folderId) {
+        await adapter.updatePage(id, { folderId: home });
+        page = (await adapter.getPage(id)) ?? page;
+      }
       const summary = toPageSummary(page);
       // Dedupe: never blind-append. If a copy is somehow still present
       // (delete/undo race), replace it rather than create a duplicate.
@@ -114,6 +152,7 @@ export function usePageWrites({
         );
       },
       label: "reorderPages",
+      notice: "reordering pages",
       rollback: () => setPages(snapshot),
       write: () => adapter.reorderPages(folderId, orderedIds),
     });
@@ -133,6 +172,7 @@ export function usePageWrites({
         setPages((prev) => prev.map((p) => (idSet.has(p.id) ? { ...p, completedAt, status } : p))),
       errorIds: ids,
       label: `setPagesStatus for ${ids.length} pages`,
+      notice: "updating status",
       rollback: () => {
         const byId = new Map(snapshot.map((p) => [p.id, p]));
         setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));

@@ -1,9 +1,15 @@
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setMockStorageFactory } from "@/shared/adapters/mockStorageChunk";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
+import { useCalendarDate } from "./CalendarDateContext";
+import { usePages } from "./PagesContext";
 import { useUI } from "./UIContext";
+import { useWorkspace } from "./WorkspaceContext";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,6 +22,96 @@ beforeEach(() => {
 });
 afterEach(() => {
   localStorage.clear();
+});
+
+describe("once the workspace loads", () => {
+  async function loadWith(viewId: string, pageId: string | null) {
+    localStorage.setItem(STORAGE_KEYS.lastActiveViewId, JSON.stringify(viewId));
+    localStorage.setItem(STORAGE_KEYS.lastActivePageId, JSON.stringify(pageId));
+    const hook = renderHookWithProviders(() => ({ ui: useUI(), workspace: useWorkspace() }));
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    return hook.result.current.ui;
+  }
+
+  it("drops a remembered folder and page the workspace no longer has", async () => {
+    const ui = await loadWith("deleted-folder", "deleted-page");
+    expect(ui.activeViewId).toBe("inbox");
+    expect(ui.activePageId).toBeNull();
+  });
+
+  it("keeps a remembered view that still exists", async () => {
+    const ui = await loadWith("today", null);
+    expect(ui.activeViewId).toBe("today");
+  });
+});
+
+describe("once a workspace with folders and pages loads", () => {
+  afterEach(() => {
+    setMockStorageFactory(() => new MockStorageAdapter());
+  });
+
+  async function relaunch(
+    remember: (ids: { folder: string; page: string }) => {
+      view: string;
+      page: string;
+      editorPage: string;
+    }
+  ) {
+    const storage = new MockStorageAdapter();
+    setMockStorageFactory(() => storage);
+    const load = async () => {
+      const hook = renderHookWithProviders(() => ({
+        pages: usePages(),
+        ui: useUI(),
+        workspace: useWorkspace(),
+      }));
+      await act(async () => {
+        await hook.result.current.workspace.selectWorkspace();
+      });
+      return hook;
+    };
+
+    const first = await load();
+    let folder!: string;
+    let page!: string;
+    await act(async () => {
+      folder = (await first.result.current.pages.createFolder({ name: "Work" })).id;
+      page = (await first.result.current.pages.createPage({ folderId: folder, title: "Plan" })).id;
+      await first.result.current.pages.createPage({ title: "Other" });
+    });
+    first.unmount();
+
+    const saved = remember({ folder, page });
+    localStorage.setItem(STORAGE_KEYS.lastActiveViewId, JSON.stringify(saved.view));
+    localStorage.setItem(STORAGE_KEYS.lastActivePageId, JSON.stringify(saved.page));
+    localStorage.setItem(STORAGE_KEYS.lastEditorPageId, JSON.stringify(saved.editorPage));
+    const second = await load();
+    return { folder, page, ui: second.result.current.ui };
+  }
+
+  it("reopens the folder and page you left, and the last page the editor showed", async () => {
+    const { folder, page, ui } = await relaunch((ids) => ({
+      editorPage: ids.page,
+      page: ids.page,
+      view: ids.folder,
+    }));
+    expect(ui.activeViewId).toBe(folder);
+    expect(ui.activePageId).toBe(page);
+    expect(ui.lastEditorPageId).toBe(page);
+  });
+
+  it("drops a remembered folder and pages that are gone, though others remain", async () => {
+    const { ui } = await relaunch(() => ({
+      editorPage: "deleted-page",
+      page: "deleted-page",
+      view: "deleted-folder",
+    }));
+    expect(ui.activeViewId).toBe("inbox");
+    expect(ui.activePageId).toBeNull();
+    expect(ui.lastEditorPageId).toBeNull();
+  });
 });
 
 // ─── setActivePage ──────────────────────────────────────────────────────────
@@ -177,6 +273,8 @@ describe("openDialog", () => {
 // ─── referenceDate ──────────────────────────────────────────────────────────
 
 describe("referenceDate", () => {
+  const setup = () => renderHookWithProviders(() => useCalendarDate());
+
   it("returns a valid Date", () => {
     const { result } = setup();
     expect(result.current.referenceDate).toBeInstanceOf(Date);

@@ -10,7 +10,10 @@
 //! the shape the export → re-import round-trip tests assert against, and the
 //! place to start from if a JSON export is ever offered again.
 
+use std::path::Path;
+
 use sqlx::{Column, Row};
+use tauri::Manager;
 
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
@@ -96,13 +99,16 @@ pub(crate) async fn build_export_json_impl(
     }))
 }
 
-/// Collect absolute asset paths from image nodes in ProseMirror JSON.
-/// `~/Downloads/pikos-<suffix>`, with the timestamp every export shares.
-fn download_path(suffix: &str) -> AppResult<(String, String)> {
-    let home =
-        std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    Ok((format!("{home}/Downloads/pikos-{suffix}-{timestamp}"), home))
+/// `<stem>-<UTC timestamp>.<ext>`, the name a one-file export is saved under.
+pub(crate) fn stamped_file_name(stem: &str, ext: &str) -> String {
+    format!(
+        "{stem}-{}.{ext}",
+        chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S")
+    )
+}
+
+fn home_dir() -> AppResult<String> {
+    std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))
 }
 
 /// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
@@ -110,49 +116,78 @@ fn download_path(suffix: &str) -> AppResult<(String, String)> {
 /// tags, scheduled dates). Folder structure is preserved as subdirectories.
 /// Images are copied into an assets/ subdirectory with references rewritten.
 #[tauri::command]
-pub async fn export_markdown(
+pub async fn export_markdown<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, DbState>,
     include_synced: bool,
 ) -> AppResult<String> {
     let pool = state.get_pool().await?;
-    let plan = pikos_db::export::plan_markdown_export(&pool, include_synced).await?;
+    let assets_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?
+        .join(crate::db::assets::ASSET_DIR);
 
-    let (base_dir, home) = download_path("markdown")?;
-    std::fs::create_dir_all(&base_dir)?;
+    let home = home_dir()?;
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+    let base_dir = format!("{home}/Downloads/pikos-markdown-{timestamp}");
 
-    // Absolute source → path relative to the export root, for assets that
-    // actually arrived. A page whose asset did not copy keeps its original
-    // reference rather than pointing at a file that is not there.
+    let (pages, assets) =
+        write_markdown_export(&pool, Path::new(&base_dir), &assets_dir, include_synced).await?;
+
+    log::info!(
+        "export_markdown pages={pages} assets={assets} dest={}",
+        base_dir.replacen(&home, "~", 1)
+    );
+    Ok(base_dir)
+}
+
+/// The Markdown export into `base_dir`, reading images from `assets_dir`, split from
+/// [`export_markdown`] so it runs against a temp directory. Returns how many pages
+/// and image files it wrote.
+pub(crate) async fn write_markdown_export(
+    pool: &sqlx::SqlitePool,
+    base_dir: &Path,
+    assets_dir: &Path,
+    include_synced: bool,
+) -> AppResult<(usize, usize)> {
+    let plan = pikos_db::export::plan_markdown_export(pool, include_synced).await?;
+    std::fs::create_dir_all(base_dir)?;
+
+    // Stored path → path relative to the export root, for assets that actually
+    // arrived. A page whose asset did not copy keeps its stored reference rather
+    // than pointing at a file that is not there.
     let mut copied: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut assets_dir_created = false;
 
     for page in &plan {
-        for source_path in &page.assets {
-            if copied.contains_key(source_path) {
+        for stored in &page.assets {
+            if copied.contains_key(stored) {
                 continue;
             }
-            let source = std::path::Path::new(source_path);
+            let source = crate::db::assets::resolve_asset_path(assets_dir, stored);
             if !source.exists() {
                 continue;
             }
             if !assets_dir_created {
-                std::fs::create_dir_all(format!("{base_dir}/assets"))?;
+                std::fs::create_dir_all(base_dir.join("assets"))?;
                 assets_dir_created = true;
             }
             let filename = source
                 .file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("asset.bin");
-            if let Err(e) = std::fs::copy(source, format!("{base_dir}/assets/{filename}")) {
-                // source_path is a user asset path — log only the io::ErrorKind, not the path.
+                .unwrap_or("asset.bin")
+                .to_string();
+            if let Err(e) = std::fs::copy(&source, base_dir.join("assets").join(&filename)) {
+                // The source is a user asset path — log only the io::ErrorKind, not the path.
                 log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
                 continue;
             }
-            copied.insert(source_path.clone(), format!("assets/{filename}"));
+            copied.insert(stored.clone(), format!("assets/{filename}"));
         }
 
-        let destination = format!("{base_dir}/{}", page.path);
-        if let Some(parent) = std::path::Path::new(&destination).parent() {
+        let destination = base_dir.join(&page.path);
+        if let Some(parent) = destination.parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(
@@ -161,13 +196,7 @@ pub async fn export_markdown(
         )?;
     }
 
-    log::info!(
-        "export_markdown pages={} assets={} dest={}",
-        plan.len(),
-        copied.len(),
-        base_dir.replacen(&home, "~", 1)
-    );
-    Ok(base_dir)
+    Ok((plan.len(), copied.len()))
 }
 
 /// Export all pages as a CSV file to ~/Downloads/.
@@ -179,19 +208,32 @@ pub async fn export_csv(
     include_synced: bool,
 ) -> AppResult<String> {
     let pool = state.get_pool().await?;
-    let out = pikos_db::export::build_export_csv(&pool, include_synced).await?;
+    let home = home_dir()?;
 
-    let (base, home) = download_path("export")?;
-    let dest = format!("{base}.csv");
-    let row_count = out.lines().count().saturating_sub(1);
-    std::fs::write(&dest, out)?;
+    let (dest, row_count) =
+        write_csv_export(&pool, &Path::new(&home).join("Downloads"), include_synced).await?;
 
+    let dest = dest.to_string_lossy().to_string();
     log::info!(
         "export_csv pages={} dest={}",
         row_count,
         dest.replacen(&home, "~", 1)
     );
     Ok(dest)
+}
+
+/// The CSV export written into `dir`, split from [`export_csv`] so it runs against a
+/// temp directory. Returns the file and how many pages it holds.
+pub(crate) async fn write_csv_export(
+    pool: &sqlx::SqlitePool,
+    dir: &Path,
+    include_synced: bool,
+) -> AppResult<(std::path::PathBuf, usize)> {
+    let out = pikos_db::export::build_export_csv(pool, include_synced).await?;
+    let dest = dir.join(stamped_file_name("pikos-export", "csv"));
+    let row_count = out.lines().count().saturating_sub(1);
+    std::fs::write(&dest, out)?;
+    Ok((dest, row_count))
 }
 
 /// Export every scheduled page as one `.ics` file in ~/Downloads. Same
@@ -205,11 +247,14 @@ pub async fn export_ics(
     let pool = state.get_pool().await?;
     let out = pikos_db::export_ics::build_export_ics(&pool, include_synced).await?;
 
-    let (base, home) = download_path("export")?;
-    let dest = format!("{base}.ics");
+    let home = home_dir()?;
+    let dest = Path::new(&home)
+        .join("Downloads")
+        .join(stamped_file_name("pikos-export", "ics"));
     let event_count = out.matches("BEGIN:VEVENT").count();
     std::fs::write(&dest, out)?;
 
+    let dest = dest.to_string_lossy().to_string();
     log::info!(
         "export_ics events={} dest={}",
         event_count,

@@ -31,7 +31,7 @@ import { deletedAgoLabel } from "../utils/deletedAgo";
 /** Why a mirror cannot be destroyed from here, in the words the CLI's
  *  `delete --hard` already uses for the same refusal. */
 const SYNCED_CANNOT_DESTROY =
-  "This event comes from a connected calendar — delete it there, or disconnect the calendar first.";
+  "This event comes from a connected calendar. Delete it there, or disconnect the calendar first.";
 
 function TrashRow({
   entry,
@@ -123,7 +123,7 @@ export function TrashPanel({
           size="xs"
           variant="destructive"
         >
-          Empty Trash
+          Empty trash
         </Button>
       </div>
 
@@ -195,11 +195,11 @@ export function TrashPanel({
 
       <TypedConfirmDialog
         busy={busy}
-        confirmLabel="Empty Trash"
+        confirmLabel="Empty trash"
         confirmPhrase="delete"
         description={
           entries.some((e) => e.isSynced)
-            ? "Every page in the trash will be gone for good, except the ones a connected calendar still owns — those stay so the calendar can't put them back."
+            ? "Every page in the trash will be gone for good, except the ones a connected calendar still owns. Those stay so the calendar can't put them back."
             : "Every page in the trash will be gone for good. This cannot be undone."
         }
         onConfirm={() => void run(emptyTrash, () => setEmptyOpen(false))}

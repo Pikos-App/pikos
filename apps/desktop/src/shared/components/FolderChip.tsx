@@ -1,4 +1,5 @@
 import type { Folder } from "@pikos/core";
+import { writableFolders } from "@pikos/core";
 import { Check, FolderOpen, Plus } from "lucide-react";
 import { useState } from "react";
 
@@ -20,9 +21,7 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
   const [open, setOpen] = useState(false);
   const activeFolder = folders.find((folder) => folder.id === value) ?? null;
   const label = activeFolder?.name ?? "Inbox";
-  // External-calendar folders are system-managed and placement-locked — a native
-  // page can't be created or moved into one, so they never appear as choices.
-  const selectableFolders = folders.filter((f) => !f.isExternalCalendar);
+  const selectableFolders = writableFolders(folders);
 
   async function handleCreate(name: string) {
     const trimmed = name.trim();
@@ -50,10 +49,10 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
       trigger={
         <button
           aria-label={`Folder: ${label}`}
-          className="inline-flex min-w-0 items-center gap-1 rounded text-sm text-subtle transition-colors hover:text-muted-foreground focus:outline-none"
+          className="inline-flex min-w-0 items-center gap-ui-xs rounded text-sm text-subtle transition-colors hover:text-muted-foreground focus:outline-none"
         >
           <FolderOpen aria-hidden="true" className="shrink-0" size={13} />
-          <span className="max-w-[100px] truncate">{label}</span>
+          <span className="max-w-[calc(100px*var(--ui-text-scale,1))] truncate">{label}</span>
         </button>
       }
     >
