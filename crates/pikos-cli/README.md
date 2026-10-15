@@ -7,13 +7,13 @@ The Pikos command-line interface, in Rust, over the shared `pikos-db` writer.
 - **DB**: all reads/writes go through `pikos-db` — the _same_ Rust writer the
   desktop app uses (schema, FTS triggers, transactions, sort_order, pragmas).
   One writer, one source of truth; no reimplementation.
-- **Parser + recurrence**: `add` and recurring `done` need the TS core's
-  `parseInput` / `nextOccurrenceAfter` / `computeNextEnd`. Rather than port that
-  rrule/chrono logic to Rust (which would re-create drift), the CLI shells to a
-  one-shot Node subprocess — the `@pikos/bridge` bundle (`bridge.mjs`). So NLP +
-  recurrence stay single-sourced in TS, the writer stays single-sourced in Rust,
-  and nothing is duplicated across languages.
-- Read/`status`/`delete`/non-recurring `done` are pure Rust and need no Node.
+- **Parser**: `add` needs the TS core's `parseInput`. Rather than port the
+  natural-language grammar to Rust (which would re-create drift), the CLI shells
+  to a one-shot Node subprocess — the `@pikos/bridge` bundle (`bridge.mjs`). So
+  the grammar stays single-sourced in TS and the writer in Rust.
+- **Recurrence** is the shared `pikos-recurrence` engine the app runs as wasm, so
+  recurring `done` and the `occurrence` commands are pure Rust like everything
+  else but `add`.
 - **Layout**: `cli.rs` (clap surface) → `commands.rs` (dispatch) → `ops.rs` (the
   operations, in pikos-db terms) → `render.rs` (plain text). `workspace.rs`
   resolves and gates the DB file, `bridge.rs` runs the parser subprocess,
@@ -39,25 +39,29 @@ pikos add "Email Sam tomorrow 2pm #work !high"
 A released build needs none of that: the tarball puts the bundle where the binary
 already looks, and the Homebrew formula pins the variable anyway.
 
-Requires Node on PATH for `add` (including `--dry-run`) and recurring `done`
-only.
+Requires Node on PATH for `add` (including `--dry-run`) only.
 
 ## Commands
 
 `search`, `read`, `list`, `today`, `add`, `update`, `done`, `status`, `delete`,
-`restore`, `trash`, `tags`, `folders`, `reminders`, `mcp`. Run `pikos <command> --help` for each
-surface. Global flags: `--json`, `--db <path>`, `--yes`, `--migrate`.
+`restore`, `trash`, `tags`, `folders`, `occurrence`, `reminders`, `mcp`, `stress`.
+Run `pikos <command> --help` for each surface. Global flags: `--json`,
+`--db <path>`, `--yes`, `--migrate`.
 
 `search` ranks matches the way the app does and shows `--limit` of them (default 20). When
 there are more it prints a cursor, and `--after <cursor>` shows the next page. Each page ranks
 the newest 2,000 matches past the cursor, so a word in most of a large workspace still answers in
-milliseconds.
+milliseconds. A page must hold every word; when none does, the search falls back to any of
+them and says so, and `--any` asks for that up front. Done pages are left out unless
+`--include-completed`.
 
 `list` takes the whole page filter: `--status`, `--priority 0..4`, `--tag`
 (repeatable, all must match), `--due <day>` or `--due <from>..<to>`,
 `--folder <name-or-id>` (fuzzy, like `add ~folder`; `inbox` means unfiled when no
 folder is named for it), `--query <text>` over titles and bodies,
-`--has-schedule`, plus `--modified` and `--limit`.
+`--has-schedule`, `--created` and `--completed` (a day or a `<from>..<to>` range),
+`--repeating` and `--has-reminders` (each also prints the rule or the lead), plus
+`--modified` or `--oldest-first` to sort and `--limit`.
 
 `add` reads the same grammar Quick Add does, reminders and bodies included:
 `remind 30m before` / `remind me 2 hours before` / `!r30`, `!r1h`, `!r1d` set the
@@ -99,11 +103,11 @@ restore <id>` brings the folder back with the pages that went with it. A folder
 that mirrors a calendar refuses both. Folders don't nest in Pikos, so nothing here
 sets a parent.
 
-`done` on a repeating page ticks off its oldest open occurrence; `done --date
+`done` on a repeating page marks its oldest open occurrence done; `done --date
 <YYYY-MM-DD>` names one. On a series from a connected calendar that can be any
 open occurrence since the calendar was connected, recorded at the time the app
-shows it. A series made in Pikos ticks through its oldest open occurrence, so
-there `--date` may only name that one.
+shows it. A series made in Pikos is always completed from its oldest open
+occurrence, so there `--date` may only name that one.
 
 `occurrence skip <page-id> <date>` and `occurrence unskip` dismiss one
 occurrence of a repeating page and bring it back. `occurrence move <page-id>
@@ -111,7 +115,7 @@ occurrence of a repeating page and bring it back. `occurrence move <page-id>
 `update` does against that occurrence's own time, so it keeps its length; in a
 series made in Pikos the moved occurrence becomes a page of its own, as a drag
 on the calendar makes it. The date must be one the rule gives. `status <id>
-not_started` on the done page a ticked-off occurrence left gives the date back
+not_started` on the done page a completed occurrence left gives the date back
 to its series, as unchecking it in the app does.
 
 `reminders list <page-id>`, `reminders add <page-id> --minutes <n>` and
@@ -137,6 +141,10 @@ stores them: lowercase, with Quick Add's `#` dropped. `--subtitle` sets the line
 under the title, and `--subtitle ""` clears it. `--unschedule` removes the date
 and time, and `--no-end` drops the end and keeps the start; both refuse on a
 recurring or synced page, like the three schedule flags.
+
+`stress seed` fills a scratch workspace with generated pages, and `stress bench`
+times the operations that decide whether Pikos feels instant against it. Neither
+touches your real workspace.
 
 ## Exit codes
 
@@ -191,7 +199,8 @@ Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 
 Two things the protocol deliberately does not offer. **Hard delete**:
 `delete_page` only trashes, and `restore_page` undoes it, so nothing an agent
-does is unrecoverable. **Migration**: `pikos mcp --migrate` is refused outright,
+does over MCP is unrecoverable. `delete --hard` stays a terminal-only command,
+and an agent with shell access can still run it. **Migration**: `pikos mcp --migrate` is refused outright,
 and a workspace behind this build fails the _tool call_ with a
 `MigrationRequired` error rather than the handshake — the client stays connected
 and reads why. Upgrading the schema is one-way and locks the installed app out
@@ -202,12 +211,7 @@ The protocol is hand-rolled rather than taken from an SDK: a stdio server needs
 newline-delimited JSON-RPC 2.0, which is less code than the shim around a crate
 would be, and it keeps the CLI's dependencies to what it already had.
 
-## Status
+## Not exposed
 
-Verified end-to-end here (all commands, `--json`, recurring clone-and-advance,
-skew guard, and an MCP client driving a temp workspace over stdio). Both the
-desktop app and this CLI now link `pikos-db` directly — see `.agent/decisions.md`
-("`pikos-db` is the single writer").
-
-Not exposed on purpose: export lives in the desktop crate, sync needs credentials
+Left out on purpose: export lives in the desktop crate, sync needs credentials
 and the keyring, and editing a recurrence rule is a larger design than a flag.
