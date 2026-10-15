@@ -15,6 +15,7 @@ Fast at any size. Pikos now loads only what's on screen, so opening a page, sear
 ### Fixed
 
 - **The current-time line moves.** It used to stay where it was when you opened the calendar.
+- **Changes from the CLI show up on their own.** Add or edit a page with `pikos` and the open app picks it up, without losing your place in the list.
 - **Old repeating meetings stay gone.** Calendar sync no longer brings in series that ended before you connected, and ones already synced are cleared.
 - **Each meeting shows once.** A repeating meeting no longer shows twice, and one you've ticked through to its end stays done.
 - **Google descriptions read as text**, not HTML, when they were written in Google Calendar on the web.
