@@ -58,7 +58,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm vite preview --port 4319 --strictPort",
+    command: "pnpm vite preview --host 127.0.0.1 --port 4319 --strictPort",
     url: "http://127.0.0.1:4319",
     reuseExistingServer: !process.env["CI"],
     timeout: 60_000,

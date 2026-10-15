@@ -313,7 +313,7 @@ test.describe("document fidelity", () => {
       // Type and undo, so a save is triggered without the document changing.
       await page.locator(".ProseMirror").click();
       await page.keyboard.type("x");
-      await page.keyboard.press("Control+z");
+      await page.keyboard.press("ControlOrMeta+z");
       await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
 
       const changes = await messagesOfType(page, "docChanged");
