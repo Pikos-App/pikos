@@ -184,6 +184,32 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertLessThan(gamma.frame.minY, alpha.frame.minY, "the dragged row stays above the one it was dropped on")
     }
 
+    func testFoldersRearrangedOnThePhoneKeepTheirOrderAfterARelaunch() {
+        app.buttons["Switch view"].firstMatch.tap()
+        let edit = app.buttons["Edit"].firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: Self.timeout))
+        edit.tap()
+        let field = app.textFields["New folder"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+        field.tap()
+        field.typeText("Alpha\n")
+        field.typeText("Beta\n")
+
+        let handle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Reorder' AND label CONTAINS 'Beta'")).firstMatch
+        XCTAssertTrue(handle.waitForExistence(timeout: Self.timeout), "the folder manager shows reorder handles")
+        handle.press(forDuration: 0.6, thenDragTo: app.textFields["Alpha"].firstMatch, withVelocity: .slow, thenHoldForDuration: 0.5)
+        app.navigationBars["Folders"].buttons["Done"].tap()
+
+        app.terminate()
+        app.launch()
+        app.buttons["Switch view"].firstMatch.tap()
+        let folder = { (name: String) in
+            self.app.buttons.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, "\(name), ")).firstMatch
+        }
+        XCTAssertTrue(folder("Beta").waitForExistence(timeout: Self.timeout))
+        XCTAssertLessThan(folder("Beta").frame.minY, folder("Alpha").frame.minY, "the order was saved, not just drawn")
+    }
+
     /// The one flow that crosses into the webview, so it proves the editor bundle shipped.
     func testOpeningAPageShowsTheEditor() {
         quickAdd("Trip notes today")

@@ -55,6 +55,11 @@ struct FolderManagerSheet: View {
                                 ForEach(ownFolders, id: \.id) { folder in
                                     row(folder)
                                 }
+                                .onMove { from, to in
+                                    var ids = ownFolders.map(\.id)
+                                    ids.move(fromOffsets: from, toOffset: to)
+                                    Task { await store.reorderFolders(ids) }
+                                }
                             }
                         }
                         ForEach(calendarGroups) { group in
@@ -68,6 +73,9 @@ struct FolderManagerSheet: View {
                 }
                 .pikosFormRows()
             }
+            // Always arranging: this sheet is where folders are changed, and a handle per row costs
+            // less than an Edit button in front of every move.
+            .environment(\.editMode, .constant(.active))
             .navigationTitle("Folders")
             .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)

@@ -1339,6 +1339,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func renameFolder(id: String, name: String) async throws  -> Folder
     
     /**
+     * Put folders in the order given, which is the order both apps list them in.
+     */
+    func reorderFolders(orderedIds: [String]) async throws 
+    
+    /**
      * Hand-arrange a folder, or the Inbox when `folder_id` is `None`, in the order given.
      *
      * An id from anywhere else is passed over rather than moved in. Arranging never claims a
@@ -2715,6 +2720,25 @@ open func renameFolder(id: String, name: String)async throws  -> Folder  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFolder_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Put folders in the order given, which is the order both apps list them in.
+     */
+open func reorderFolders(orderedIds: [String])async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_reorder_folders(
+                        self.uniffiCloneHandle(),FfiConverterSequenceString.lower(orderedIds)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -8801,6 +8825,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_rename_folder() != 17853) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_reorder_folders() != 14135) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_reorder_pages() != 54361) {

@@ -671,6 +671,20 @@ public final class WorkspaceStore {
         await refresh()
     }
 
+    /// Put the folders in `orderedIds` order, applied before the write as `reorderPages` is.
+    public func reorderFolders(_ orderedIds: [String]) async {
+        let position = Dictionary(
+            orderedIds.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        folders.sort { (position[$0.id] ?? Int.max) < (position[$1.id] ?? Int.max) }
+        guard let workspace else { return }
+        do {
+            try await workspace.reorderFolders(orderedIds: orderedIds)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await refresh()
+    }
+
     public func reminders(pageId: String) async -> PageReminders {
         guard let workspace,
             let rows = try? await workspace.listPageReminders(pageId: pageId)

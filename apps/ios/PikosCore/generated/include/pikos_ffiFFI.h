@@ -498,6 +498,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_remove_page_repeat(uint64_t ptr, R
 uint64_t uniffi_pikos_ffi_fn_method_workspace_rename_folder(uint64_t ptr, RustBuffer id, RustBuffer name
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REORDER_FOLDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REORDER_FOLDERS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_reorder_folders(uint64_t ptr, RustBuffer ordered_ids
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REORDER_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REORDER_PAGES
 uint64_t uniffi_pikos_ffi_fn_method_workspace_reorder_pages(uint64_t ptr, RustBuffer folder_id, RustBuffer ordered_ids
@@ -1299,6 +1304,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RENAME_FOLDER
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RENAME_FOLDER
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_rename_folder(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_REORDER_FOLDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_REORDER_FOLDERS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_reorder_folders(void
     
 );
 #endif

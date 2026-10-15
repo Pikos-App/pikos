@@ -2793,6 +2793,12 @@ impl Workspace {
         Ok(folder_of(folder))
     }
 
+    /// Put folders in the order given, which is the order both apps list them in.
+    pub async fn reorder_folders(&self, ordered_ids: Vec<String>) -> Result<(), WorkspaceError> {
+        pikos_db::reorder_folders_impl(&self.pool, &ordered_ids).await?;
+        Ok(())
+    }
+
     /// Move a folder to the trash, taking its pages with it.
     ///
     /// Soft, and cascading: the folder and every page filed in it are marked

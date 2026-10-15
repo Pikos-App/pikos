@@ -4551,6 +4551,28 @@ async fn a_calendars_folder_can_still_be_recoloured() {
     assert!(ws.trash_folder(folder.id).await.is_err());
 }
 
+#[tokio::test]
+async fn folders_list_in_the_order_they_were_arranged() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let mut ids = Vec::new();
+    for name in ["Work", "Home", "Reading"] {
+        ids.push(ws.create_folder(name.to_string(), None).await.unwrap().id);
+    }
+    ids.rotate_left(1);
+
+    ws.reorder_folders(ids.clone()).await.unwrap();
+
+    let listed: Vec<String> = ws
+        .list_folders()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|f| f.id)
+        .collect();
+    assert_eq!(listed, ids);
+}
+
 /// Flags a folder the way the reconciler does, which is the only writer of this
 /// column — there is no iOS-side way to create one.
 async fn mark_as_calendar_folder(path: &str, folder_id: &str) {
