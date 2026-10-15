@@ -1,156 +1,62 @@
-// Calendar edge-case seed — targeted regression fixtures for the calendar
-// refinement pass. Unlike the realistic Mon→Sun ramp in `calendar.ts` /
-// `calendarColors.ts`, this seed is NOT meant to look like a believable week.
-// It's a labeled testbed: each day-cluster exercises one specific layout
-// behavior so visual diffs and screenshot tests can target it directly.
+// Labeled regression fixtures for calendar layout, deliberately not a
+// believable week: each day-cluster exercises one layout behavior, so a visual
+// diff or screenshot can target it by its `[FIXTURE]` title.
 //
-// Layout (anchored at Monday of the current week):
-//   Week 1 (M+0…Su+6) — INTENTIONALLY EMPTY. The realistic baseline lives in
-//                       the `calendar` and `calendar-colors` seeds.
-//   Week 2 (M+7…Su+13)  — Cross-midnight events (single midnight, stay timed)
-//   Week 3 (M+14…Su+20) — Multi-midnight timed segments + true all-day events
-//   Week 4 (M+21…Su+27) — Containment edge cases (sections 5/6)
-//   Week 5 (M+28…Su+34) — Density + multi-folder color muting + clipping
-//
-// Every event title is prefixed `[FIXTURE]` for easy grep / screenshot
-// targeting. Folder assignment defaults to `work`; the multi-folder muting
-// fixtures in week 5 deliberately use distinct folders to verify color
-// decisions per nesting level.
+// Anchored at Monday of the current week, which `calendarWeek` fills:
+//   Week 2 (M+7…Su+13)  — cross-midnight events (one midnight, stay timed)
+//   Week 3 (M+14…Su+20) — multi-midnight timed segments beside true all-day events
+//   Week 4 (M+21…Su+27) — containment: adjacent, overlapping, nested, shared edges
+//   Week 5 (M+28…Su+34) — density, nesting across folders, column clipping
 
 import type { StorageAdapter } from "@pikos/core";
-import { addDays, format, startOfWeek } from "date-fns";
 
-const MARKER = "Calendar edge cases seed marker";
+import { type CalendarFolderKey, calendarFolders, mondayOffset } from "./calendarWeek";
+import { doc, p } from "./doc";
+import { at, day, plantPage } from "./plant";
 
-async function alreadySeeded(adapter: StorageAdapter): Promise<boolean> {
-  const { results } = await adapter.searchPages(MARKER);
-  return results.some((r) => r.title.includes(MARKER));
-}
-
-type FolderKey = "work" | "personal" | "health" | "family" | "errands";
-
-const FOLDER_NAMES: Record<FolderKey, string> = {
-  errands: "Errands",
-  family: "Family",
-  health: "Health",
-  personal: "Personal",
-  work: "Work",
-};
-
-const FOLDER_COLORS: Record<FolderKey, string> = {
-  errands: "#f59e0b",
-  family: "#10b981",
-  health: "#8b5cf6",
-  personal: "#3b82f6",
-  work: "#ef4444",
-};
-
-export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<void> {
-  if (await alreadySeeded(adapter)) return;
-
-  const monday = startOfWeek(new Date(), { weekStartsOn: 1 });
-
-  function dayN(n: number): Date {
-    return addDays(monday, n);
-  }
-
-  function dateStr(d: Date): string {
-    return format(d, "yyyy-MM-dd");
-  }
-
-  function timed(d: Date, hour: number, minute = 0): string {
-    return `${dateStr(d)}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
-  }
-
-  const folderIds = {} as Record<FolderKey, string>;
-  for (const key of Object.keys(FOLDER_NAMES) as FolderKey[]) {
-    const folder = await adapter.createFolder({
-      color: FOLDER_COLORS[key],
-      name: FOLDER_NAMES[key],
-      parentId: null,
-    });
-    folderIds[key] = folder.id;
-  }
-
-  await adapter.createPage({
-    content: doc(
-      p("Calendar edge cases seed marker."),
-      p("Targeted regression fixtures for calendar layout. Layout by week:"),
-      bullets(
-        "Week 1 (current Mon–Sun) — empty. Realistic baseline lives in `calendar` / `calendar-colors` seeds.",
-        "Week 2 — cross-midnight events (single midnight, stay timed)",
-        "Week 3 — multi-midnight timed segments + true all-day (intentionally co-located)",
-        "Week 4 — containment edge cases (adjacent / overlap / marginal / nested)",
-        "Week 5 — density + multi-folder color muting + column clipping"
-      ),
-      p("Every event title is prefixed [FIXTURE] for grep / screenshot targeting."),
-      p("Delete this marker page to re-seed.")
-    ),
-    folderId: folderIds.work,
-    priority: 0,
-    status: "done",
-    subtitle: "Delete this page to re-seed",
-    tags: [],
-    title: MARKER,
-  });
+export async function plantCalendarEdges(adapter: StorageAdapter): Promise<void> {
+  const folderIds = await calendarFolders(adapter);
+  const monday = mondayOffset();
+  const dayN = (n: number): number => monday + n;
 
   type TimedSpec = {
     title: string;
-    folder?: FolderKey;
-    startDay: Date;
+    folder?: CalendarFolderKey;
+    startDay: number;
     startHour: number;
     startMinute?: number;
-    endDay?: Date;
+    endDay?: number;
     endHour: number;
     endMinute?: number;
   };
 
   async function addTimed(spec: TimedSpec): Promise<void> {
-    const folder = spec.folder ?? "work";
-    const start = timed(spec.startDay, spec.startHour, spec.startMinute ?? 0);
-    const end = timed(spec.endDay ?? spec.startDay, spec.endHour, spec.endMinute ?? 0);
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(p(spec.title), p("Calendar edge-case fixture.")),
-      folderId: folderIds[folder],
-      priority: 0,
-      status: "not_started",
-      subtitle: null,
+      end: at(spec.endDay ?? spec.startDay, spec.endHour, spec.endMinute ?? 0),
+      folderId: folderIds[spec.folder ?? "work"],
+      start: at(spec.startDay, spec.startHour, spec.startMinute ?? 0),
       tags: ["calendar-fixture"],
       title: spec.title,
-    });
-    await adapter.createPageSchedule({
-      pageId: page.id,
-      scheduledEnd: end,
-      scheduledStart: start,
-      timezone: "America/Los_Angeles",
     });
   }
 
   type AllDaySpec = {
     title: string;
-    folder?: FolderKey;
-    startDay: Date;
-    endDay?: Date;
+    folder?: CalendarFolderKey;
+    startDay: number;
+    endDay?: number;
   };
 
   async function addAllDay(spec: AllDaySpec): Promise<void> {
-    const folder = spec.folder ?? "work";
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(p(spec.title), p("Calendar edge-case fixture (all-day).")),
-      folderId: folderIds[folder],
-      priority: 0,
-      status: "not_started",
-      subtitle: null,
+      folderId: folderIds[spec.folder ?? "work"],
+      start: day(spec.startDay),
       tags: ["calendar-fixture"],
       title: spec.title,
+      ...(spec.endDay !== undefined && { end: day(spec.endDay) }),
     });
-    // All-day = date-only ISO string (no 'T'). Timezone omitted.
-    const baseInput: { pageId: string; scheduledStart: string; scheduledEnd?: string } = {
-      pageId: page.id,
-      scheduledStart: dateStr(spec.startDay),
-    };
-    if (spec.endDay) baseInput.scheduledEnd = dateStr(spec.endDay);
-    await adapter.createPageSchedule(baseInput);
   }
 
   // ── Week 2 — Cross-midnight (single midnight, stay in timed grid) ────────
@@ -262,7 +168,7 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] All-day Conference (overlaps Trip)",
   });
 
-  // ── Week 4 — Containment edge cases (sections 5/6) ───────────────────────
+  // ── Week 4 — Containment ────────────────────────────────────────────────────
   // One fixture cluster per day, all in afternoon for easy scan.
 
   // Mon+21: Adjacent peers — touching boundary, no overlap. Must NOT nest.
@@ -297,10 +203,7 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] Overlap-not-contained B (2:30–4)",
   });
 
-  // Wed+23: Marginal at 75% threshold.
-  // A=1–3PM (120m), B=1:15–2:45PM (90m). Ratio = 90/120 = 75%.
-  // Chosen behavior: 75% is the threshold — equal-to threshold is ambiguous.
-  // Document whatever buildDayBlocks decides here as the canonical answer.
+  // Wed+23 and Thu+24: a child covering 75% and 62.5% of its parent's length.
   await addTimed({
     endHour: 15,
     startDay: dayN(23),
@@ -316,8 +219,6 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] Marginal-75 child (1:15–2:45, 90m, ratio=75%)",
   });
 
-  // Thu+24: Just below threshold — 62.5%, should nest.
-  // A=1–3PM (120m), B=1:15–2:30PM (75m). Ratio = 75/120 = 62.5%.
   await addTimed({
     endHour: 15,
     startDay: dayN(24),
@@ -376,7 +277,6 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
   });
 
   // Sun+27: 3-deep nesting (morning) + false-cascade regression (afternoon).
-  // 3-deep: A=180m, B=150m (83% of A → nests), C=90m (60% of B → nests).
   await addTimed({
     endHour: 12,
     startDay: dayN(27),
@@ -419,7 +319,7 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] False-cascade 3 (3–4)",
   });
 
-  // ── Week 5 — Density + multi-folder color muting + column clipping ───────
+  // ── Week 5 — Density, nesting across folders, column clipping ───────────────
 
   // Mon+28: Mild density — 4 overlapping peers in 1-hr window.
   // Same duration, staggered start → all peers (none contains another).
@@ -473,8 +373,8 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     });
   }
 
-  // Thu+31: Same-folder nest (parent + child both `work`).
-  // Child should render with full fill (NO muting).
+  // Thu+31 to Sun+34 morning: nests whose levels share or differ in folder
+  // color, so adjacent levels of one colour stay distinguishable.
   await addTimed({
     endHour: 16,
     folder: "work",
@@ -491,8 +391,6 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] Same-folder child (work, 1:30–3)",
   });
 
-  // Fri+32: Different-folder nest. Parent=work, child=personal.
-  // Child should render MUTED with personal-color left border.
   await addTimed({
     endHour: 16,
     folder: "work",
@@ -509,10 +407,6 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] Diff-folder child (personal, 1:30–3)",
   });
 
-  // Sat+33: 3-deep mixed-folder. Each level's muting decision is based on
-  // its DIRECT containment parent, not the root.
-  //   work (grandparent) → personal (middle) → health (innermost)
-  // Both inner levels should be muted (each differs from its direct parent).
   await addTimed({
     endHour: 16,
     folder: "work",
@@ -538,9 +432,6 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] 3-deep innermost (health, 1:30–3)",
   });
 
-  // Sun+34 morning: same-folder nest INSIDE different-folder parent.
-  //   work (GP) → personal (P) → personal (C)
-  // Innermost matches its DIRECT parent (personal), so it must NOT be muted.
   await addTimed({
     endHour: 12,
     folder: "work",
@@ -563,14 +454,12 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     startDay: dayN(34),
     startHour: 9,
     startMinute: 30,
-    title: "[FIXTURE] Same-as-parent innermost (personal, 9:30–11, NOT muted)",
+    title: "[FIXTURE] Same-as-parent innermost (personal, 9:30–11)",
   });
 
   // Sun+34 afternoon: column clipping stress. 6 identical 2-hr peers in the
   // same window. Width pressure could otherwise bleed past the column edge —
   // verify nothing renders outside its day boundary.
-  // (Note: the realistic dense-day regression fixture is W1 Sun in `calendar.ts`
-  // — keep that as the canonical "real life dense" shape.)
   for (let i = 0; i < 6; i++) {
     await addTimed({
       endHour: 15,
@@ -579,26 +468,4 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
       title: `[FIXTURE] Clipping ${i + 1} of 6 (1–3)`,
     });
   }
-}
-
-// ── Tiptap JSON helpers ──────────────────────────────────────────────────────
-
-type Node = Record<string, unknown>;
-
-function doc(...nodes: Node[]): string {
-  return JSON.stringify({ content: nodes, type: "doc" });
-}
-
-function p(text: string): Node {
-  return { content: [{ text, type: "text" }], type: "paragraph" };
-}
-
-function bullets(...items: string[]): Node {
-  return {
-    content: items.map((text) => ({
-      content: [p(text)],
-      type: "listItem",
-    })),
-    type: "bulletList",
-  };
 }

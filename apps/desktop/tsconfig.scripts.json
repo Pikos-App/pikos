@@ -6,8 +6,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@pikos/core": ["../../packages/core/src/index.ts"],
-      "@pikos/core/*": ["../../packages/core/src/*"]
+      "@pikos/core/*": ["../../packages/core/src/*"],
+      "@seeds/*": ["./seeds/*"]
     }
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts", "src/vite-env.d.ts"]
 }

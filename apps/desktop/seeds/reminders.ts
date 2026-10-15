@@ -1,4 +1,4 @@
-// Notifications seed — fixtures for manually testing the reminder scheduler.
+// Fixtures for manually testing the reminder scheduler.
 //
 // Everything is anchored to `new Date()` at seed time, so it's useful whenever
 // you run it. The scheduler fires a per-page reminder when
@@ -18,82 +18,49 @@
 // per-event notifications.
 
 import type { StorageAdapter } from "@pikos/core";
-import { isTimedIso } from "@pikos/core";
-import { addDays, addHours, addMinutes, format, set } from "date-fns";
+import { formatDateOnly, formatLocalISO } from "@pikos/core";
+import { addDays, addHours, addMinutes, format, set, startOfMinute } from "date-fns";
 
-const MARKER = "Notifications seed marker";
+import { doc, p } from "./doc";
+import { ensureFolder, plantPage } from "./plant";
 
-async function alreadySeeded(adapter: StorageAdapter): Promise<boolean> {
-  const { results } = await adapter.searchPages(MARKER);
-  return results.some((r) => r.title.includes(MARKER));
-}
+export async function plantReminders(adapter: StorageAdapter): Promise<void> {
+  const now = startOfMinute(new Date());
 
-export async function seedNotifications(adapter: StorageAdapter): Promise<void> {
-  if (await alreadySeeded(adapter)) return;
-
-  const now = new Date();
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  const dateStr = (d: Date): string => format(d, "yyyy-MM-dd");
-  const timedStr = (d: Date): string => format(d, "yyyy-MM-dd'T'HH:mm:ss");
+  const dateStr = formatDateOnly;
+  const timedStr = formatLocalISO;
   const clock = (d: Date): string => format(d, "HH:mm");
   const minsFromNow = (n: number): Date => addMinutes(now, n);
 
-  const folder = await adapter.createFolder({
-    color: "#f59e0b",
-    name: "🔔 Notification Test",
-    parentId: null,
-  });
+  const folder = await ensureFolder(adapter, "🔔 Reminders", { color: "#f59e0b" });
 
   type Spec = {
     title: string;
     note: string;
     status: "not_started" | "done";
-    /** scheduledStart — timed ISO (with 'T') or date-only for all-day. Omit for unscheduled. */
+    /** Timed (with 'T') or date-only for all-day. Omit for unscheduled. */
     start?: string;
     end?: string;
-    /** Explicit page_reminders lead times. Omit → global default. [-1] → disabled sentinel. */
+    /** Explicit lead times. Omit for the global default; [-1] is the disabled sentinel. */
     reminders?: number[];
     priority?: 0 | 1 | 2 | 3 | 4;
     folderId?: string | null;
   };
 
   async function create(spec: Spec): Promise<void> {
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(p(spec.note)),
+      done: spec.status === "done",
       folderId: spec.folderId === undefined ? folder.id : spec.folderId,
       priority: spec.priority ?? 0,
-      status: spec.status,
       subtitle: spec.note,
       tags: ["notif-test"],
       title: spec.title,
+      ...(spec.start !== undefined && { start: spec.start }),
+      ...(spec.end !== undefined && { end: spec.end }),
+      ...(spec.reminders !== undefined && { reminders: spec.reminders }),
     });
-    if (spec.start) {
-      const timed = isTimedIso(spec.start);
-      await adapter.createPageSchedule({
-        pageId: page.id,
-        ...(spec.end !== undefined && { scheduledEnd: spec.end }),
-        scheduledStart: spec.start,
-        ...(timed && { timezone: tz }),
-      });
-    }
-    if (spec.reminders) {
-      for (const minutesBefore of spec.reminders) {
-        await adapter.createPageReminder({ minutesBefore, pageId: page.id });
-      }
-    }
   }
-
-  // ── Marker (delete to allow a non-reset re-seed) ────────────────────────────
-  await adapter.createPage({
-    content: doc(p(MARKER)),
-    folderId: folder.id,
-    priority: 0,
-    status: "done",
-    subtitle: "Delete this page to re-seed without a full reset.",
-    tags: ["notif-test"],
-    title: MARKER,
-  });
 
   // ── A. Imminent — watch these fire, staggered over ~5 min ───────────────────
   // fireTime = start − lead. start = now + offset + lead → fires at now + offset.
@@ -275,16 +242,4 @@ export async function seedNotifications(adapter: StorageAdapter): Promise<void> 
     status: "not_started",
     title: "Unscheduled page (no schedule)",
   });
-}
-
-// ── Tiptap JSON helpers ───────────────────────────────────────────────────────
-
-type Node = Record<string, unknown>;
-
-function doc(...nodes: Node[]): string {
-  return JSON.stringify({ content: nodes, type: "doc" });
-}
-
-function p(text: string): Node {
-  return { content: [{ text, type: "text" }], type: "paragraph" };
 }

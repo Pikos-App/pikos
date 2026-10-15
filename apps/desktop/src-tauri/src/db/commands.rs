@@ -113,7 +113,60 @@ macro_rules! db_commands {
                 $($( $crate::db::$module::$name, )*)*
             ])
         }
+
+        /// Answer one declared command against a pool, with no Tauri runtime:
+        /// the args object is exactly what `invoke` sends. `None` for a name
+        /// this list does not declare, which includes every `extras` command.
+        ///
+        /// Exists for `examples/seed_workspace.rs`, which plants the desktop
+        /// seeds into a file for the iOS simulator. Generated here so the
+        /// runner answers whatever the adapter can call, without a second list.
+        pub async fn dispatch(
+            pool: &sqlx::SqlitePool,
+            command: &str,
+            args: &serde_json::Value,
+        ) -> Option<pikos_db::AppResult<serde_json::Value>> {
+            #[allow(unused_imports)]
+            use prelude::*;
+
+            match command {
+                $($(
+                    stringify!($name) => Some(
+                        async {
+                            $( let $arg: $arg_ty = dispatch_arg(args, stringify!($arg))?; )*
+                            let value = $($writer)::+(pool, $($call),*).await?;
+                            Ok(serde_json::to_value(value)?)
+                        }
+                        .await,
+                    ),
+                )*)*
+                _ => None,
+            }
+        }
     };
+}
+
+/// One command argument out of an `invoke` args object, which Tauri keys by
+/// the camelCase of the Rust parameter name. A missing key reads as null, so an
+/// `Option` parameter the caller left out is `None`, as it is over IPC.
+fn dispatch_arg<T: serde::de::DeserializeOwned>(
+    args: &serde_json::Value,
+    param: &str,
+) -> pikos_db::AppResult<T> {
+    let mut key = String::with_capacity(param.len());
+    let mut upper = false;
+    for c in param.chars() {
+        if c == '_' {
+            upper = true;
+        } else if upper {
+            key.push(c.to_ascii_uppercase());
+            upper = false;
+        } else {
+            key.push(c);
+        }
+    }
+    let value = args.get(&key).cloned().unwrap_or(serde_json::Value::Null);
+    Ok(serde_json::from_value(value)?)
 }
 
 db_commands! {
@@ -290,5 +343,47 @@ db_commands! {
         refresh_sync_account(account_id: String) -> Vec<CalendarSyncResult>
             = refresh_account_auto(Keychain::system(), &account_id);
         get_sync_status() -> Vec<AccountWithCalendars> = get_sync_status_impl();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::dispatch;
+
+    #[tokio::test]
+    async fn dispatch_reads_args_by_their_camel_case_ipc_keys() {
+        let pool = pikos_db::test_pool().await;
+        let created = dispatch(
+            &pool,
+            "create_folder",
+            &json!({ "data": { "name": "Seeded", "parentId": null } }),
+        )
+        .await
+        .expect("create_folder is declared")
+        .expect("folder created");
+        assert_eq!(created["name"], "Seeded");
+
+        let reordered = dispatch(
+            &pool,
+            "reorder_folders",
+            &json!({ "orderedIds": [created["id"]] }),
+        )
+        .await
+        .expect("reorder_folders is declared");
+        assert!(
+            reordered.is_ok(),
+            "orderedIds must reach ordered_ids: {reordered:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_declines_commands_it_does_not_declare() {
+        let pool = pikos_db::test_pool().await;
+        assert!(dispatch(&pool, "backdate_page", &json!({})).await.is_none());
+        assert!(dispatch(&pool, "no_such_command", &json!({}))
+            .await
+            .is_none());
     }
 }

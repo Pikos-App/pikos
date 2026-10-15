@@ -271,7 +271,7 @@ pub async fn dev_seed_synced_calendar(state: tauri::State<'_, DbState>) -> AppRe
     dev_seed_synced_calendar_impl(&pool).await
 }
 
-pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
+pub async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let now = pikos_db::now_iso();
     let today = chrono::Local::now().date_naive();
     let day = |offset: i64| {

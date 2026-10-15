@@ -20,36 +20,28 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
     label: "Tutorial",
   },
   {
-    description: "Believable day-to-day life: work, personal, reading.",
-    id: "realistic",
-    label: "Realistic",
-  },
-  {
-    description: "Heavy load: many folders, pages, and schedules.",
-    id: "stress",
-    label: "Stress",
+    description:
+      "Every node and mark, long documents, RTL/CJK/emoji and very long titles, search probes, a dated journal.",
+    id: "editor",
+    label: "Editor",
   },
   {
     description:
-      "~22 pages anchored to now for testing reminders: imminent, overdue, all-day, completed, disabled, and various lead times.",
-    id: "notifications",
-    label: "Notifications",
-  },
-  {
-    description: "7 days of progressively denser overlap patterns for layout testing.",
+      "This week's overlap ramp, four weeks of layout fixtures, repeating pages in every rule shape with done, skipped and moved occurrences, and reminders that fire over the next few minutes.",
     id: "calendar",
-    label: "Calendar layout",
-  },
-  {
-    description: "Same as Calendar layout, split across 5 color-coded folders.",
-    id: "calendar-colors",
-    label: "Calendar (multi-color)",
+    label: "Calendar",
   },
   {
     description:
-      "Targeted regression fixtures across 4 weeks (cross-midnight, containment, density, color muting).",
-    id: "calendar-edges",
-    label: "Calendar edge cases",
+      "One of everything: a realistic week with mock calendar sync, nested folders, subpages, trash, focus sessions, completion history and reminders.",
+    id: "wide",
+    label: "Wide",
+  },
+  {
+    description:
+      "Two years of use: ~2,400 pages, nested folders, series with hundreds of completions, focus history, a full trash. Takes a while.",
+    id: "deep",
+    label: "Deep",
   },
   {
     description:

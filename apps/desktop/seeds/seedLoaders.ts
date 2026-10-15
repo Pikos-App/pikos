@@ -1,7 +1,7 @@
-// Registry of dev/test seed scenarios, shared by the two paths that plant one:
-// the launch flag (`VITE_SEED=…`, read once on mount) and the developer menu's
-// reset-and-seed. Each seed module is imported lazily so none of this reaches a
-// user build's main chunk.
+// Registry of dev/test seed scenarios, shared by the paths that plant one:
+// the launch flag (`VITE_SEED=…`, read once on mount), the developer menu's
+// reset-and-seed, and scripts/seed-ios-simulator.sh. Each seed module is
+// imported lazily so none of this reaches a user build's main chunk.
 //
 // This directory sits beside `src/`, not inside it, and the app reaches it
 // through the `@seeds` alias (vite.config.ts, vitest.config.ts,
@@ -12,15 +12,7 @@
 import type { StorageAdapter } from "@pikos/core";
 
 /** Scenarios the developer menu offers (see DeveloperSettings). */
-export type SeedScenario =
-  | "calendar"
-  | "calendar-colors"
-  | "calendar-edges"
-  | "notifications"
-  | "realistic"
-  | "stress"
-  | "synced"
-  | "tutorial";
+export type SeedScenario = "calendar" | "deep" | "editor" | "synced" | "tutorial" | "wide";
 
 /** Every scenario that exists. `demo` and `marketing` are launch-only — see LAUNCH_SEEDS. */
 export type SeedName = SeedScenario | "demo" | "marketing";
@@ -37,25 +29,24 @@ export interface SeedContext {
 export type SeedLoader = (ctx: SeedContext) => Promise<void>;
 
 // The dev-only loaders live behind a static `import.meta.env.DEV` so Rollup
-// drops their `import()` calls — and therefore their chunks (stress alone
-// carries faker at ~400 KB) — from a user build. They are unreachable there
-// anyway: launchSeedLoader refuses dev-only names in a non-dev build, and the
-// only other caller is the developer menu, which is itself DEV-gated
-// (SettingsNav/SettingsPage). The stubs below keep every key present so
-// `isSeedName`'s `in` check stays truthful in both builds.
+// drops their `import()` calls — and therefore their chunks — from a user
+// build. They are unreachable there anyway: launchSeedLoader refuses dev-only
+// names in a non-dev build, and the only other caller is the developer menu,
+// which is itself DEV-gated (SettingsNav/SettingsPage). The stubs below keep
+// every key present so `isSeedName`'s `in` check stays truthful in both builds.
 const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.meta.env.DEV
   ? {
       calendar: async ({ adapter }) => {
         const { seedCalendar } = await import("./calendar");
         await seedCalendar(adapter);
       },
-      "calendar-colors": async ({ adapter }) => {
-        const { seedCalendarColors } = await import("./calendarColors");
-        await seedCalendarColors(adapter);
+      deep: async ({ adapter }) => {
+        const { seedDeep } = await import("./deep");
+        await seedDeep(adapter);
       },
-      "calendar-edges": async ({ adapter }) => {
-        const { seedCalendarEdgeCases } = await import("./calendarEdgeCases");
-        await seedCalendarEdgeCases(adapter);
+      editor: async ({ adapter }) => {
+        const { seedEditor } = await import("./editor");
+        await seedEditor(adapter);
       },
       demo: async ({ adapter }) => {
         const { seedDemo } = await import("./demo");
@@ -65,17 +56,9 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedMarketing } = await import("./marketing");
         await seedMarketing(adapter);
       },
-      notifications: async ({ adapter }) => {
-        const { seedNotifications } = await import("./notifications");
-        await seedNotifications(adapter);
-      },
-      realistic: async ({ adapter }) => {
-        const { seedRealistic } = await import("./realistic");
-        await seedRealistic(adapter);
-      },
-      stress: async ({ adapter }) => {
-        const { seedStress } = await import("./stress");
-        await seedStress(adapter);
+      wide: async ({ adapter }) => {
+        const { seedWide } = await import("./wide");
+        await seedWide(adapter);
       },
     }
   : undefined;
@@ -86,32 +69,19 @@ const unavailable: SeedLoader = async () => {
 
 export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   calendar: DEV_LOADERS?.calendar ?? unavailable,
-  "calendar-colors": DEV_LOADERS?.["calendar-colors"] ?? unavailable,
-  "calendar-edges": DEV_LOADERS?.["calendar-edges"] ?? unavailable,
+  deep: DEV_LOADERS?.deep ?? unavailable,
   demo: DEV_LOADERS?.demo ?? unavailable,
+  editor: DEV_LOADERS?.editor ?? unavailable,
   marketing: DEV_LOADERS?.marketing ?? unavailable,
-  notifications: DEV_LOADERS?.notifications ?? unavailable,
-  realistic: DEV_LOADERS?.realistic ?? unavailable,
-  stress: DEV_LOADERS?.stress ?? unavailable,
   synced: async ({ adapter, phase }) => {
-    // Believable native data + a mock external-calendar sync on top, so the
-    // synced treatment can be spot-checked alongside normal pages. Only the
-    // reset path lays the native data down; the launch flag seeds the mirrors
-    // alone, which is what the synced-calendar e2e fixtures expect.
+    // Only reset lays the realistic week under the mirrors; the launch flag
+    // plants the mirrors alone, which the synced-calendar e2e fixtures expect.
     if (phase === "reset") {
-      const { seedRealistic } = await import("./realistic");
-      await seedRealistic(adapter);
+      const { plantRealistic } = await import("./realistic");
+      await plantRealistic(adapter);
     }
-    // The mock adapter seeds synced rows directly; the real app routes through
-    // the dev Tauri command (no network/keychain). The launch path only ever
-    // runs under VITE_TEST_MODE, so it always takes the mock branch.
-    if (import.meta.env["VITE_TEST_MODE"] === "true") {
-      const { seedSyncedCalendar } = await import("./syncedCalendar");
-      await seedSyncedCalendar(adapter);
-    } else {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("dev_seed_synced_calendar");
-    }
+    const { plantSyncedLayer } = await import("./plant");
+    await plantSyncedLayer(adapter);
   },
   tutorial: async ({ adapter, setPendingNavigation }) => {
     const { seedTutorial } = await import("./tutorial");
@@ -120,32 +90,27 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
       setPendingNavigation({ folderId: result.folderId, pageId: result.welcomePageId });
     }
   },
+  wide: DEV_LOADERS?.wide ?? unavailable,
 };
 
 /**
  * Scenarios `VITE_SEED=` accepts at launch, and the build each one needs.
  *
- * The two paths are deliberately not the same set. `marketing` and `demo` only
- * ever arrive through the launch flag — scripts/record-hero.sh and
- * playwright.tour.config.ts set them, and the developer menu doesn't list them.
- * `notifications` is the mirror image: its
- * fixtures are anchored to the moment they're planted and you watch them fire
- * over the following minutes, which is a menu action, so it has no launch
- * entry here.
+ * `marketing` and `demo` only ever arrive through the launch flag — scripts/record-hero.sh
+ * and playwright.tour.config.ts set them, and the developer menu doesn't list them.
  *
- * "any-build" scenarios must also work with import.meta.env.DEV false: the
- * Playwright perf project serves a production `vite preview` build.
+ * "any-build" scenarios must also work with import.meta.env.DEV false, since a
+ * production `vite preview` build can be launched with one.
  */
 const LAUNCH_SEEDS: Partial<Record<SeedName, "any-build" | "dev-only">> = {
   calendar: "dev-only",
-  "calendar-colors": "dev-only",
-  "calendar-edges": "dev-only",
+  deep: "dev-only",
   demo: "dev-only",
+  editor: "dev-only",
   marketing: "dev-only",
-  realistic: "dev-only",
-  stress: "dev-only",
   synced: "any-build",
   tutorial: "any-build",
+  wide: "dev-only",
 };
 
 function isSeedName(name: string): name is SeedName {

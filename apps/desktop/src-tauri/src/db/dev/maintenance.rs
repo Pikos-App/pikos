@@ -180,10 +180,7 @@ pub async fn backdate_page(
     backdate_page_impl(&pool, params).await
 }
 
-pub(crate) async fn backdate_page_impl(
-    pool: &sqlx::SqlitePool,
-    params: BackdateParams,
-) -> AppResult<()> {
+pub async fn backdate_page_impl(pool: &sqlx::SqlitePool, params: BackdateParams) -> AppResult<()> {
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
     let mut sep = builder.separated(", ");
     let mut has_updates = false;
