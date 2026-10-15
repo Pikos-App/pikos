@@ -8,6 +8,10 @@
 // CSV path: CSV string → prepareCSVRows + applyMappings → verify metadata fields
 //           → build CSV from output → re-parse → verify round-trip
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { CSVMappingConfig, ImportPage, VaultFile } from "@pikos/core";
 import {
   applyMappings,
@@ -29,9 +33,33 @@ import TaskList from "@tiptap/extension-task-list";
 import Underline from "@tiptap/extension-underline";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { convertMarkdownToTiptap } from "./hooks/useImport";
+import { convertMarkdownToTiptap, resolveImportImages } from "./hooks/useImport";
+
+// Saves only a file that is really there, as the real command does.
+vi.mock("@/shared/platform", () => ({
+  getPlatform: () => ({
+    saveAsset: (path: string) =>
+      existsSync(path)
+        ? Promise.resolve(`assets/${basename(path)}`)
+        : Promise.reject(new Error("not found")),
+  }),
+}));
+
+const FIXTURES = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../../crates/pikos-db/tests/fixtures"
+);
+
+function readVault(root: string): VaultFile[] {
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => {
+      const path = join(entry.parentPath, entry.name);
+      return { content: readFileSync(path, "utf8"), path: relative(root, path) };
+    });
+}
 function createTestEditor(): Editor {
   return new Editor({
     content: "",
@@ -116,6 +144,30 @@ const RICH_CSV = `Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,
 "High Priority Bug","Fix the login flow","Work",not_started,4,"bugs, urgent",2026-04-16T09:00:00,2026-04-16T12:00:00,2026-04-03T08:00:00,2026-04-03T08:00:00,
 "Empty Task","","",not_started,0,"",,,2026-04-04T11:00:00,2026-04-04T11:00:00,
 `;
+
+describe("Markdown export re-import", () => {
+  // qa: EXP-05:2
+  it("brings back a real export's pages, folders and every image", async () => {
+    const vault = join(FIXTURES, "markdown-vault");
+
+    const plan = parseMarkdownVault(readVault(vault));
+
+    const paris = plan.pages.find((p) => p.title === "Paris")!;
+    const packing = plan.pages.find((p) => p.title === "Packing")!;
+    expect(paris.folderKey).toBe("Trips");
+    expect(paris.tags).toEqual(["travel"]);
+    expect(paris.priority).toBe(2);
+    expect(packing.folderKey).toBeNull();
+    for (const page of [paris, packing]) {
+      const { body, warnings } = await resolveImportImages(page.body, page.imageRefs, vault);
+      expect(warnings).toEqual([]);
+      expect(body).toContain("Day one");
+      for (const name of readdirSync(join(vault, "assets"))) {
+        expect(body).toContain(`(<assets/${name}>)`);
+      }
+    }
+  });
+});
 
 describe("Markdown round-trip", () => {
   it("preserves metadata through import → export → re-import", () => {
@@ -326,6 +378,24 @@ describe("CSV round-trip", () => {
     }
     return csv;
   }
+
+  // qa: EXP-06:2
+  it("re-imports a real CSV export with its repeat and reminders", () => {
+    const exported = readFileSync(join(FIXTURES, "csv-export.csv"), "utf8");
+
+    const plan = parseCSVToPlan(exported);
+
+    const standup = plan.pages.find((p) => p.title === "Standup")!;
+    expect(standup.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2");
+    expect(standup.scheduledStart).toBe("2026-06-01T09:00:00");
+    expect(standup.reminderMinutes).toEqual([0, 15]);
+    expect(standup.priority).toBe(3);
+    expect(standup.tags).toEqual(["team"]);
+    const plain = plan.pages.find((p) => p.title === "Plain note")!;
+    expect(plain.rrule).toBeNull();
+    expect(plain.reminderMinutes).toEqual([]);
+    expect(plan.warnings).toEqual([]);
+  });
 
   it("preserves page metadata through import → export → re-import", () => {
     const plan1 = parseCSVToPlan(RICH_CSV);

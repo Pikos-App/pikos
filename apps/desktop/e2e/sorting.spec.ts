@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, quickAdd } from "./fixtures";
+import { test as appTest, dayFrom, expect, quickAdd } from "./fixtures";
 
 async function setSort(app: Page, mode: "Date" | "Title" | "Priority" | "Manual") {
   await app.getByRole("button", { name: /^Sort:/ }).click();
@@ -31,7 +31,7 @@ async function visibleTitles(app: Page): Promise<string[]> {
 
 // ─── Sort by Title actually orders alphabetically ──────────────────────────
 
-appTest("sort by Title orders the page list alphabetically @tier2", async ({ app }) => {
+appTest("sort by Title orders the page list alphabetically", async ({ app }) => {
   // Seed pages out of alphabetical order so a no-op (manual) sort would
   // leave them in insertion order. Each title leads with a unique letter
   // we can match against.
@@ -58,7 +58,7 @@ appTest("sort by Title orders the page list alphabetically @tier2", async ({ app
 
 // ─── Sort by Date orders by scheduledStart ─────────────────────────────────
 
-appTest("sort by Date orders the page list by schedule @tier2", async ({ app }) => {
+appTest("sort by Date orders the page list by schedule", async ({ app }) => {
   // Use NLP patterns mirrored from quick-add.spec.ts that are known to
   // produce the expected schedule. Bare day-of-week words ("morning",
   // "evening") and ambiguous nouns ("lunch", "run") can confuse chrono
@@ -73,10 +73,8 @@ appTest("sort by Date orders the page list by schedule @tier2", async ({ app }) 
   // The chip shows absolute "MMM d" dates by default (relative "Today" is
   // opt-in via the chip toggle), so derive the expected labels from the run
   // date to stay correct on any day.
-  const monthDay = (d: Date) => d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
-  const now = new Date();
-  const today = monthDay(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
-  const tomorrow = monthDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  const { monthDay: today } = await dayFrom(app, 0);
+  const { monthDay: tomorrow } = await dayFrom(app, 1);
   const list = app.locator("[data-page-list-item]");
   await expect(list.filter({ hasText: "alpha" })).toContainText(today);
   await expect(list.filter({ hasText: "bravo" })).toContainText(tomorrow);
@@ -95,7 +93,7 @@ appTest("sort by Date orders the page list by schedule @tier2", async ({ app }) 
 
 // ─── Sort by Priority orders Urgent → Low ──────────────────────────────────
 
-appTest("sort by Priority orders the page list Urgent first @tier2", async ({ app }) => {
+appTest("sort by Priority orders the page list Urgent first", async ({ app }) => {
   // Three pages with explicit priorities. !1=Urgent, !2=High, !low=Low.
   // Pick titles that don't start with priority labels so we can assert via
   // the leading text.

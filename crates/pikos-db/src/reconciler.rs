@@ -53,6 +53,14 @@ pub struct ReconcileContext {
     pub calendar_id: String,
     pub provider: String,
     pub folder_id: String,
+    /// The first day this sync reaches back to, [`backfill_window_start`] for a real
+    /// sync. A series that ended before it is not mirrored (see [`ended_before_window`]).
+    pub window_start: chrono::NaiveDate,
+}
+
+/// The first day a sync reaches back to: [`crate::sync::BACKFILL_DAYS`] before today.
+pub fn backfill_window_start() -> chrono::NaiveDate {
+    chrono::Local::now().date_naive() - chrono::Days::new(crate::sync::BACKFILL_DAYS as u64)
 }
 
 /// What a reconcile surfaced for the engine to act on: orphan masters needing a
@@ -153,6 +161,16 @@ async fn apply_event(
         existing = None;
     }
 
+    if ended_before_window(ev, ctx.window_start) {
+        return match existing {
+            Some((page_sync_id, page_id, _, state, _)) if state == "active" => {
+                detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        };
+    }
+
     let now = now_iso();
     let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
@@ -166,8 +184,8 @@ async fn apply_event(
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
         sqlx::query(
-            "UPDATE page_sync SET etag = ?, sync_state = 'active', mirror_location = ?,
-             mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
+            "UPDATE page_sync SET etag = ?, sync_state = 'active', detached_by = NULL,
+             mirror_location = ?, mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
         )
         .bind(&ev.core.etag)
         .bind(&mirror_location)
@@ -181,7 +199,8 @@ async fn apply_event(
         // Same UID, new/absent href → re-link this calendar's dormant page, no dup.
         sqlx::query(
             "UPDATE page_sync SET external_id = ?, etag = ?, sync_state = 'active',
-             mirror_location = ?, mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
+             detached_by = NULL, mirror_location = ?, mirror_attendees = ?, last_synced_at = ?
+             WHERE id = ?",
         )
         .bind(&ev.core.external_id)
         .bind(&ev.core.etag)
@@ -216,6 +235,84 @@ async fn apply_event(
     write_schedule(tx, &page_id, ev, &now).await?;
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
     Ok(true)
+}
+
+/// Whether a series ran out before `window`, the first day the sync reaches: no occurrence
+/// on or after it, and no instance moved into it.
+///
+/// Google's `events.list` with `singleEvents=false` returns a recurring master whole, so a
+/// series a "this and following" edit cut short a year ago still arrives, and stored it
+/// sits in the list at its last date as an open page nothing can tick. CalDAV's time-range
+/// query leaves such a series out, but neither provider's incremental cursor is windowed,
+/// so the check lives here, for every path. Only a bounded rule can end; one the engine
+/// can't read is kept.
+fn ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> bool {
+    let Some(rec) = &ev.recurrence else {
+        return false;
+    };
+    if !rec.rrule.contains("UNTIL=") && !rec.rrule.contains("COUNT=") {
+        return false;
+    }
+    let window_key = window.format("%Y%m%d").to_string();
+    let moved_in = rec
+        .overrides
+        .iter()
+        .any(|ov| date_key(&ov.schedule.start) >= window_key);
+    let tz = ev.schedule.timezone.as_deref().unwrap_or(SENTINEL_TZ);
+    !moved_in && rule_ended(&rec.rrule, &ev.schedule.start, tz, window)
+}
+
+/// Whether a rule yields nothing on or after `window`. A rule the engine can't read
+/// counts as still running.
+fn rule_ended(rrule: &str, start: &str, tz: &str, window: chrono::NaiveDate) -> bool {
+    let Some(day_before) = window.checked_sub_days(chrono::Days::new(1)) else {
+        return false;
+    };
+    let rrule = rewrite_until_to_wall_clock(rrule, tz);
+    let day_before = day_before.format("%Y-%m-%dT00:00:00").to_string();
+    matches!(
+        pikos_recurrence::next_occurrence_after(&rrule, start, &day_before, &[]),
+        Ok(None)
+    )
+}
+
+/// Remove this calendar's stored live series that ended before `ctx.window_start`, as an
+/// upstream deletion would: detached if owned, deleted if not. Runs on every pass, since
+/// an incremental cursor never re-sends a series that didn't change, so one stored before
+/// [`ended_before_window`] existed would otherwise stay. Its own retried transaction;
+/// returns how many it removed.
+pub async fn remove_ended_series(
+    pool: &sqlx::SqlitePool,
+    ctx: &ReconcileContext,
+) -> AppResult<usize> {
+    let window = ctx.window_start.format("%Y-%m-%d").to_string();
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, bool)>(
+            "SELECT ps.id, ps.page_id, r.rrule, r.scheduled_start, r.timezone,
+                    EXISTS(SELECT 1 FROM page_schedules o
+                            WHERE o.rule_id = r.id AND o.original_date IS NOT NULL
+                              AND substr(o.scheduled_start, 1, 10) >= ?)
+             FROM page_sync ps JOIN page_recurrence_rules r ON r.page_id = ps.page_id
+             WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.sync_state = 'active'
+               AND (r.rrule LIKE '%UNTIL=%' OR r.rrule LIKE '%COUNT=%')",
+        )
+        .bind(&window)
+        .bind(&ctx.account_id)
+        .bind(&ctx.calendar_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let mut removed = 0;
+        for (page_sync_id, page_id, rrule, start, tz, moved_in) in rows {
+            if !moved_in && rule_ended(&rrule, &start, &tz, ctx.window_start) {
+                detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                removed += 1;
+            }
+        }
+        tx.commit().await?;
+        Ok(removed)
+    })
+    .await
 }
 
 /// Move a reactivated page back into its calendar folder. A detached page is
@@ -344,12 +441,26 @@ async fn write_schedule(
         .execute(&mut **tx)
         .await?;
 
+        let base = Occurrence {
+            start: &ev.schedule.start,
+            end: base_end.as_deref(),
+            timezone: tz,
+        };
         for ov in &rec.overrides {
+            let end = InclusiveEnd::from_provider(&ov.schedule.end);
+            if base.unmoved(
+                &ov.original_date,
+                &ov.schedule.start,
+                end.as_deref(),
+                ov.schedule.timezone.as_deref(),
+            ) {
+                continue;
+            }
             insert_schedule_row(
                 tx,
                 page_id,
                 &ov.schedule.start,
-                &InclusiveEnd::from_provider(&ov.schedule.end),
+                &end,
                 ov.schedule.timezone.as_deref(),
                 Some(&rule_id),
                 Some(&ov.original_date),
@@ -363,6 +474,7 @@ async fn write_schedule(
                 .overrides
                 .iter()
                 .any(|ov| &ov.original_date == original_date)
+                || base.unmoved(original_date, start, end.as_deref(), timezone.as_deref())
             {
                 continue;
             }
@@ -479,8 +591,9 @@ async fn apply_occurrence(
     ctx: &ReconcileContext,
     occ: &OccurrenceDelta,
 ) -> AppResult<OccurrenceResult> {
-    let rule = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT r.id, r.page_id, ps.sync_state FROM page_recurrence_rules r
+    let rule = sqlx::query_as::<_, (String, String, String, String, Option<String>, String)>(
+        "SELECT r.id, r.page_id, ps.sync_state, r.scheduled_start, r.scheduled_end, r.timezone
+         FROM page_recurrence_rules r
          JOIN page_sync ps ON ps.page_id = r.page_id
          WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.ical_uid = ?",
     )
@@ -490,7 +603,7 @@ async fn apply_occurrence(
     .fetch_optional(&mut **tx)
     .await?;
 
-    let Some((rule_id, page_id, state)) = rule else {
+    let Some((rule_id, page_id, state, base_start, base_end, base_tz)) = rule else {
         return Ok(OccurrenceResult::Missing(MissingMaster {
             ical_uid: occ.ical_uid.clone(),
             series_ref: occ.series_ref.clone(),
@@ -513,25 +626,41 @@ async fn apply_occurrence(
             .await?;
         }
         OccurrenceKind::Modify(schedule) => {
-            // One override per original_date — replace any prior one.
+            // One override per original_date — replace any prior one, and an instance
+            // back at its own slot needs none.
             sqlx::query("DELETE FROM page_schedules WHERE rule_id = ? AND original_date = ?")
                 .bind(&rule_id)
                 .bind(&occ.original_date)
                 .execute(&mut **tx)
                 .await?;
-            insert_schedule_row(
-                tx,
-                &page_id,
+            let end = InclusiveEnd::from_provider(&schedule.end);
+            let base = Occurrence {
+                start: &base_start,
+                end: base_end.as_deref(),
+                timezone: &base_tz,
+            };
+            if !base.unmoved(
+                &occ.original_date,
                 &schedule.start,
-                &InclusiveEnd::from_provider(&schedule.end),
+                end.as_deref(),
                 schedule.timezone.as_deref(),
-                Some(&rule_id),
-                Some(&occ.original_date),
-                &now_iso(),
-            )
-            .await?;
+            ) {
+                insert_schedule_row(
+                    tx,
+                    &page_id,
+                    &schedule.start,
+                    &end,
+                    schedule.timezone.as_deref(),
+                    Some(&rule_id),
+                    Some(&occ.original_date),
+                    &now_iso(),
+                )
+                .await?;
+            }
         }
     }
+    // Either change can cover or uncover the head's date.
+    crate::recurrence_derive::recompute_recurring_schedule(tx, &page_id).await?;
     Ok(OccurrenceResult::Applied)
 }
 
@@ -569,8 +698,25 @@ async fn apply_removal(
     if state != "active" {
         return Ok(false);
     }
-    detach_or_delete(tx, &page_sync_id, &page_id).await?;
+    detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
     Ok(true)
+}
+
+/// Why a link was severed, recorded on the row as `detached_by`: only a turn-off's
+/// pages come back when the calendar is turned on again.
+#[derive(Clone, Copy)]
+enum Severed {
+    TurnOff,
+    Upstream,
+}
+
+impl Severed {
+    fn as_str(self) -> &'static str {
+        match self {
+            Severed::TurnOff => "turn_off",
+            Severed::Upstream => "upstream",
+        }
+    }
 }
 
 /// The own-vs-delete decision, shared by an explicit removal, teardown, and the
@@ -580,9 +726,10 @@ async fn detach_or_delete(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
     page_id: &str,
+    by: Severed,
 ) -> AppResult<()> {
     if is_owned(tx, page_id).await? {
-        detach_sync(tx, page_sync_id, page_id).await?;
+        detach_sync(tx, page_sync_id, page_id, by).await?;
     } else {
         hard_delete_page(tx, page_id).await?;
     }
@@ -646,7 +793,7 @@ pub async fn sweep_absent(
         ) {
             continue;
         }
-        detach_or_delete(&mut tx, &page_sync_id, &page_id).await?;
+        detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
         removed += 1;
     }
 
@@ -786,7 +933,7 @@ async fn teardown_page_batch(
             }
             // Already severed by a prior upstream removal — keep its dormant identity.
             "detached" => {}
-            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id).await?,
+            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff).await?,
         }
     }
 
@@ -849,8 +996,10 @@ async fn detach_sync(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
     page_id: &str,
+    by: Severed,
 ) -> AppResult<()> {
-    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE id = ?")
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached', detached_by = ? WHERE id = ?")
+        .bind(by.as_str())
         .bind(page_sync_id)
         .execute(&mut **tx)
         .await?;
@@ -1174,6 +1323,46 @@ async fn update_page_title(
     Ok(())
 }
 
+/// A series' own occurrence shape: where its base starts and ends, and the zone it
+/// keeps, against which a provider's per-instance copy is judged.
+struct Occurrence<'a> {
+    start: &'a str,
+    end: Option<&'a str>,
+    timezone: &'a str,
+}
+
+impl Occurrence<'_> {
+    /// Whether an override puts its occurrence exactly where the rule already does: same
+    /// start, same length, same zone. Google sends an instance as its own resource
+    /// whenever anything about it differs (attendees, a call link, a description), and
+    /// none of that is stored on an override row. Stored, such a copy reads as a moved
+    /// occurrence: it is excluded from the head and drawn as its own block, which on a
+    /// series with nothing else open left the head on the copy's date, drawn twice.
+    fn unmoved(
+        &self,
+        original_date: &str,
+        start: &str,
+        end: Option<&str>,
+        timezone: Option<&str>,
+    ) -> bool {
+        start == original_date
+            && timezone.is_none_or(|tz| tz == self.timezone)
+            && span(start, end) == span(self.start, self.end)
+    }
+}
+
+/// An occurrence's length: whole days for an all-day one, seconds for a timed one,
+/// `None` when it has no end.
+fn span(start: &str, end: Option<&str>) -> Option<i64> {
+    let start = WallClock::parse(start)?;
+    let end = WallClock::parse(end?)?;
+    if start.is_all_day() {
+        Some((end.date - start.date).num_days())
+    } else {
+        Some((end.as_datetime() - start.as_datetime()).num_seconds())
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn insert_schedule_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -1276,6 +1465,38 @@ async fn apply_seeded_description(
             .execute(&mut **tx)
             .await?;
     }
+    Ok(())
+}
+
+/// Link the web addresses in seeded bodies written before seeds carried links. Only a body still as
+/// seeded, its text hashing to the stored seed, since any other is the person's. Links are marks, so
+/// the text, and with it search and the seed hash, is unchanged, and `updated_at` stays put.
+pub(crate) async fn link_addresses_in_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT p.id, p.content, p.content_text, ps.seeded_description_hash
+         FROM pages p JOIN page_sync ps ON ps.page_id = p.id
+         WHERE ps.seeded_description_hash_version = ? AND p.content LIKE '%http%'",
+    )
+    .bind(CONTENT_TEXT_PROJECTION_VERSION)
+    .fetch_all(pool)
+    .await?;
+    let mut tx = pool.begin().await?;
+    for (id, content, text, hash) in rows {
+        if fnv_hex(&text) != hash {
+            continue;
+        }
+        let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&content) else {
+            continue;
+        };
+        if crate::pool::link_addresses(&mut doc) {
+            sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
+                .bind(doc.to_string())
+                .bind(&id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    tx.commit().await?;
     Ok(())
 }
 

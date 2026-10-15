@@ -10,32 +10,41 @@
 #![allow(clippy::drop_non_drop)]
 
 pub mod backups;
+pub mod changes;
 pub mod error;
 pub mod focus;
 pub mod folders;
+pub mod moves;
 pub mod notification_log;
 pub mod pages;
 mod pool;
+pub mod reads;
 pub mod reconciler;
 pub mod recurrence_derive;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
+pub mod sql_functions;
 pub mod sync;
 pub mod sync_commands;
 pub mod sync_delta;
 pub mod tags;
+pub mod title_key;
 pub mod tx;
+pub mod views;
 
-pub use backups::{list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind};
+pub use backups::{
+    backups_dir, list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind,
+};
 pub use error::{AppError, AppResult};
 pub use focus::*;
 pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
 pub use pool::{
-    build_tiptap_doc, device_zone, extract_text_from_tiptap, migration_versions, now_iso,
-    now_local_iso, open_pool, today_local,
+    build_tiptap_doc, checkpoint_once, device_zone, extract_text_from_tiptap, gather_statistics,
+    migration_versions, now_iso, now_local_iso, open_pool, open_pool_checkpointing, today_local,
+    CheckpointHooks, Checkpoints,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{
@@ -79,3 +88,7 @@ mod folder_matching_conformance_tests;
 #[cfg(test)]
 #[path = "schedule_snap_conformance_tests.rs"]
 mod schedule_snap_conformance_tests;
+
+#[cfg(test)]
+#[path = "views_differential_tests.rs"]
+mod views_differential_tests;

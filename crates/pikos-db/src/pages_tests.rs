@@ -804,8 +804,9 @@ async fn create_page_persists_fields_and_assigns_sort_order() {
     assert_ne!(first.id, second.id, "ids must be unique");
     assert_eq!(first.sort_order, 0);
     assert_eq!(
-        second.sort_order, 1,
-        "sort_order auto-increments per folder"
+        second.sort_order,
+        crate::moves::ORDER_SPACING,
+        "each new page lands a full gap after the last, leaving room to move pages between"
     );
     assert_eq!(count_pages(&pool).await, 2);
 }
@@ -1031,6 +1032,146 @@ async fn list_pages_filters_by_status_and_folder() {
     .await
     .unwrap();
     assert_eq!(inbox.len(), 2);
+}
+
+#[tokio::test]
+async fn a_bounded_list_returns_the_first_rows_in_the_order_asked_for() {
+    let pool = test_pool().await;
+    // (id, sort_order, updated_at, tags): manual order runs c, a, b, d; edit order runs b, d, c, a.
+    let pages = [
+        ("a", 1, "2026-01-01T00:00:00Z", r#"["work"]"#),
+        ("b", 2, "2026-01-04T00:00:00Z", "[]"),
+        ("c", 0, "2026-01-02T00:00:00Z", "[]"),
+        ("d", 3, "2026-01-03T00:00:00Z", r#"["work"]"#),
+    ];
+    for (id, sort_order, updated_at, tags) in pages {
+        insert_test_page(
+            &pool,
+            TestPage {
+                tags_json: tags,
+                ..TestPage::new(id, id)
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ?")
+            .bind(sort_order)
+            .bind(updated_at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
+
+    let none = ListExtras::default();
+    let manual = list_pages_window(&pool, None, &none, PageOrder::SortOrder, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(ids(manual), ["c", "a"]);
+
+    let recent = list_pages_window(&pool, None, &none, PageOrder::RecentlyUpdated, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(ids(recent), ["b", "d"]);
+
+    let tagged = list_pages_window(
+        &pool,
+        Some(PageFilter {
+            tags: Some(vec!["work".into()]),
+            ..Default::default()
+        }),
+        &none,
+        PageOrder::RecentlyUpdated,
+        Some(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ids(tagged),
+        ["d"],
+        "the limit counts only pages that carry the tag"
+    );
+}
+
+#[tokio::test]
+async fn the_cli_filters_select_by_creation_completion_repeat_and_reminder() {
+    let pool = test_pool().await;
+    // (id, created_at in UTC, completed_at in local wall-clock)
+    let pages = [
+        ("a", "2026-01-01T10:00:00.000Z", None),
+        ("b", "2026-01-02T10:00:00.000Z", Some("2026-02-03T09:00:00")),
+        ("c", "2026-01-03T10:00:00.000Z", Some("2026-03-01T09:00:00")),
+        ("d", "2025-12-31T10:00:00.000Z", None),
+    ];
+    for (id, created_at, completed_at) in pages {
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE pages SET created_at = ?, completed_at = ? WHERE id = ?")
+            .bind(created_at)
+            .bind(completed_at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    crate::schedules::create_recurrence_rule_impl(
+        &pool,
+        crate::schedules::NewRecurrenceRule {
+            page_id: "c".into(),
+            rrule: "FREQ=WEEKLY;BYDAY=SU".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-01-04T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::reminders::create_page_reminder(&pool, "d", 30)
+        .await
+        .unwrap();
+    crate::reminders::create_page_reminder(&pool, "b", -1)
+        .await
+        .unwrap();
+    let ids = |rows: Vec<PageSummary>| rows.into_iter().map(|p| p.id).collect::<Vec<_>>();
+    let list = |extras: ListExtras| {
+        let pool = pool.clone();
+        async move {
+            list_pages_window(&pool, None, &extras, PageOrder::Created, None)
+                .await
+                .unwrap()
+        }
+    };
+
+    assert_eq!(ids(list(ListExtras::default()).await), ["d", "a", "b", "c"]);
+    let created_on_the_2nd = ListExtras {
+        created_from_utc: Some("2026-01-02T00:00:00.000Z".into()),
+        created_until_utc: Some("2026-01-03T00:00:00.000Z".into()),
+        ..Default::default()
+    };
+    assert_eq!(ids(list(created_on_the_2nd).await), ["b"]);
+    let completed_in_february = ListExtras {
+        completed_from: Some("2026-02-01".into()),
+        completed_to: Some("2026-02-28".into()),
+        ..Default::default()
+    };
+    assert_eq!(ids(list(completed_in_february).await), ["b"]);
+    let repeating = ListExtras {
+        recurring: true,
+        ..Default::default()
+    };
+    assert_eq!(ids(list(repeating).await), ["c"]);
+    let reminded = ListExtras {
+        has_reminders: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        ids(list(reminded).await),
+        ["d"],
+        "the no-reminders sentinel is not a reminder"
+    );
 }
 
 #[tokio::test]
@@ -2868,6 +3009,7 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
     assert!(matches!(err, AppError::Conflict(_)));
 }
 
+// qa: SYNC-22:5
 #[tokio::test]
 async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     let pool = test_pool().await;
@@ -2888,6 +3030,49 @@ async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     // Restore resumes syncing.
     restore_page_impl(&pool, "p").await.unwrap();
     assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("active"));
+}
+
+// qa: SYNC-22:5
+#[tokio::test]
+async fn restoring_a_trashed_mirror_drops_only_its_own_calendars_cursor() {
+    let pool = test_pool().await;
+    for (title, synced) in [("mirror", true), ("native", false)] {
+        insert_test_page(&pool, TestPage::new(title, title))
+            .await
+            .unwrap();
+        if synced {
+            mark_synced(&pool, title, "active").await;
+        }
+    }
+    for (id, calendar) in [("cal-row", "cal"), ("other-row", "other")] {
+        sqlx::query(
+            "INSERT INTO sync_calendar (id, account_id, calendar_id, display_name, enabled, sync_token, ctag, created_at, updated_at)
+             VALUES (?, 'test-acct', ?, ?, 1, 'tok', 'ctag', '', '')",
+        )
+        .bind(id)
+        .bind(calendar)
+        .bind(calendar)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let cursors = || async {
+        sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT sync_token, ctag FROM sync_calendar ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let kept = (Some("tok".to_string()), Some("ctag".to_string()));
+
+    soft_delete_page_impl(&pool, "native").await.unwrap();
+    restore_page_impl(&pool, "native").await.unwrap();
+    delete_page_impl(&pool, "mirror").await.unwrap();
+    assert_eq!(cursors().await, [kept.clone(), kept.clone()]);
+
+    restore_page_impl(&pool, "mirror").await.unwrap();
+    assert_eq!(cursors().await, [(None, None), kept]);
 }
 
 #[tokio::test]

@@ -24,7 +24,7 @@ export interface UpcomingDaySection {
 }
 
 /** Locale is left to the system, the way every other date surface here reads. */
-function dayLabel(date: string, todayStr: string): string {
+export function upcomingDayLabel(date: string, todayStr: string): string {
   if (date === todayStr) return "Today";
   // addDays, not +86_400_000: a DST boundary inside the window would otherwise
   // land "tomorrow" on today or the day after.
@@ -59,7 +59,7 @@ export function groupUpcomingPages(
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([date, dayPages]) => ({
       date,
-      label: dayLabel(date, todayStr),
+      label: upcomingDayLabel(date, todayStr),
       pages: dayPages.sort(compareByScheduledStart),
     }));
 }

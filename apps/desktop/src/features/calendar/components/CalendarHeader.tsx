@@ -1,12 +1,11 @@
 import type { CalendarDayCount, CalendarViewMode } from "@pikos/core";
 import { buildCalendarDays } from "@pikos/core";
-import { addDays, format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
+import { format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
 import { CalendarRange, ChevronLeft, ChevronRight, Grid3x3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
-import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 interface CalendarHeaderProps {
   dayCount: CalendarDayCount;
@@ -39,16 +38,8 @@ export function CalendarHeader({
   // week — otherwise it stays live all month long while today is already on screen.
   const isCurrentPeriod = isMonth
     ? isSameMonth(today, referenceDate)
-    : isWithinInterval(today, { end: addDays(last, 1), start: first });
+    : isWithinInterval(today, { end: last, start: first });
   const unit = isMonth ? "month" : "week";
-
-  useKeyboardShortcut("ArrowLeft", onPrevWeek, { group: "Calendar", label: `Previous ${unit}` });
-  useKeyboardShortcut("ArrowRight", onNextWeek, { group: "Calendar", label: `Next ${unit}` });
-  useKeyboardShortcut("t", onToday, { group: "Calendar", label: "Jump to today" });
-  useKeyboardShortcut("m", () => onViewModeChange(isMonth ? "time" : "month"), {
-    group: "Calendar",
-    label: isMonth ? "Switch to time grid" : "Switch to month view",
-  });
 
   // Time grid shows its visible range ("Mar 16 – 22, 2026" / "Mar 30 – Apr 5,
   // 2026"); month view names the month it is padded around.

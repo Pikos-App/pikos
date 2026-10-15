@@ -64,7 +64,7 @@ const CAL_COLS: &str = "id, account_id, calendar_id, display_name, color, enable
      (SELECT COUNT(*) FROM page_sync ps \
         WHERE ps.account_id = sync_calendar.account_id \
           AND ps.calendar_id = sync_calendar.calendar_id \
-          AND ps.sync_state = 'detached') AS detached_pages";
+          AND ps.sync_state = 'detached' AND ps.detached_by = 'turn_off') AS detached_pages";
 
 // ─── accounts ───────────────────────────────────────────────────────────────────
 

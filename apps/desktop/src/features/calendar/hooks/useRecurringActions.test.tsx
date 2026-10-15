@@ -11,10 +11,10 @@ import { act } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { useRecurringActions } from "./useRecurringActions";
 
@@ -53,7 +53,7 @@ function setup() {
     const [target, setTarget] = useState<PageSummary>(TARGET_INITIAL);
     setTargetPage = setTarget;
     const workspace = useWorkspace();
-    const pages = usePages();
+    const pages = usePagesNow();
     const undo = useUndoDelete();
     const actions = useRecurringActions(target);
     return {

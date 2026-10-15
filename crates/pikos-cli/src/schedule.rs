@@ -11,22 +11,28 @@ use crate::error::CliError;
 /// Parse `list --due`: a single day, or a `YYYY-MM-DD..YYYY-MM-DD` range, into
 /// the `(scheduled_after, scheduled_before)` bounds a `PageFilter` takes.
 pub fn parse_due(due: &str) -> Result<(String, String), CliError> {
+    let (from, to) = parse_day_range("due", due)?;
+    Ok((from, format!("{to}T23:59:59")))
+}
+
+/// A day or an inclusive range of days, `YYYY-MM-DD[..YYYY-MM-DD]`, as the first and last day.
+///
+/// A range that ends before it starts is refused rather than matching nothing: an assistant
+/// that wrote one read the empty result as "there are none".
+pub fn parse_day_range(name: &str, value: &str) -> Result<(String, String), CliError> {
     let is_date = |s: &str| shape_of(s) == Some(Shape::AllDay);
-    let end_of = |d: &str| format!("{d}T23:59:59");
-    if let Some((a, b)) = due.split_once("..") {
-        if !is_date(a) || !is_date(b) {
-            return Err(CliError::usage(format!(
-                "--due range must be YYYY-MM-DD..YYYY-MM-DD (got \"{due}\")"
-            )));
-        }
-        return Ok((a.to_string(), end_of(b)));
-    }
-    if !is_date(due) {
+    let (from, to) = value.split_once("..").unwrap_or((value, value));
+    if !is_date(from) || !is_date(to) {
         return Err(CliError::usage(format!(
-            "--due must be YYYY-MM-DD or YYYY-MM-DD..YYYY-MM-DD (got \"{due}\")"
+            "{name} must be YYYY-MM-DD or YYYY-MM-DD..YYYY-MM-DD (got \"{value}\")"
         )));
     }
-    Ok((due.to_string(), end_of(due)))
+    if from > to {
+        return Err(CliError::usage(format!(
+            "{name} ends before it starts: \"{value}\" — put the earlier day first"
+        )));
+    }
+    Ok((from.to_string(), to.to_string()))
 }
 
 /// All-day or timed, the distinction the whole schedule model turns on — a

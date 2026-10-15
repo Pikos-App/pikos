@@ -2,10 +2,12 @@
 //! indistinguishable from one the desktop app wrote.
 
 use pikos_db::{
-    build_tiptap_doc, fuzzy_match_folder, list_folders_impl, list_page_schedules_impl,
+    extract_text_from_tiptap, fuzzy_match_folder, list_folders_impl, list_page_schedules_impl,
     update_page_impl, update_page_schedule_impl, AppError, NewPage, NewPageSchedule, PageUpdate,
 };
 use serde_json::Value;
+
+use crate::error::CliError;
 use sqlx::SqlitePool;
 
 pub fn local_tz() -> String {
@@ -35,14 +37,18 @@ pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
 
 /// [`base_page`] with a parsed `//` body already in it, so the page is written
 /// once rather than created empty and immediately patched.
-pub fn page_with_body(folder_id: Option<String>, title: String, body: Option<&String>) -> NewPage {
+pub fn page_with_body(
+    folder_id: Option<String>,
+    title: String,
+    body: Option<&String>,
+) -> Result<NewPage, CliError> {
     let mut page = base_page(folder_id, title);
     if let Some(text) = body.filter(|t| !t.is_empty()) {
-        let (doc, plain) = text_to_tiptap(text);
+        let (doc, plain) = markdown_to_tiptap(text)?;
         page.content = doc;
         page.content_text = Some(plain);
     }
-    page
+    Ok(page)
 }
 
 /// Write a parsed page's reminder rows. The values arrive already resolved
@@ -147,12 +153,14 @@ pub async fn schedule_once(
     Ok(())
 }
 
-/// `--content` text → the (Tiptap doc, `content_text`) pair a page write takes.
-/// The doc itself comes from [`pikos_db::build_tiptap_doc`], the same builder the
-/// reconciler seeds descriptions with, so a CLI-written body is byte-identical to
-/// one the app wrote.
-pub fn text_to_tiptap(text: &str) -> (String, String) {
-    (build_tiptap_doc(text), text.to_string())
+/// A markdown body → the (Tiptap doc, `content_text`) pair a page write takes, read
+/// as the app's markdown import reads it (see [`pikos_core::markdown_import`]).
+pub fn markdown_to_tiptap(markdown: &str) -> Result<(String, String), CliError> {
+    let doc = pikos_core::markdown_to_prosemirror(markdown)
+        .map_err(|pikos_core::Refused(why)| CliError::usage(why))?
+        .to_string();
+    let plain = extract_text_from_tiptap(&doc);
+    Ok((doc, plain))
 }
 
 #[cfg(test)]
@@ -170,12 +178,17 @@ mod tests {
     }
 
     #[test]
-    fn text_to_tiptap_wraps_lines_and_keeps_plaintext() {
-        let (content, text) = text_to_tiptap("hello\nworld");
-        assert_eq!(text, "hello\nworld");
+    fn markdown_to_tiptap_keeps_structure_and_derives_the_plain_text() {
+        let (content, text) = markdown_to_tiptap("# Plan\n\n- [ ] **call** Sam").unwrap();
+        assert!(text.starts_with("Plan\ncall"), "{text}");
         let doc: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert_eq!(doc["type"], "doc");
-        assert_eq!(doc["content"][0]["content"][0]["text"], "hello");
-        assert_eq!(doc["content"][1]["content"][0]["text"], "world");
+        assert_eq!(doc["content"][0]["type"], "heading");
+        assert_eq!(doc["content"][2]["type"], "taskList");
+    }
+
+    #[test]
+    fn markdown_to_tiptap_refuses_what_the_editor_cannot_hold() {
+        let err = markdown_to_tiptap("a <b>bold</b> word").unwrap_err();
+        assert_eq!(err.kind, "Usage");
     }
 }

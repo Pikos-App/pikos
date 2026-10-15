@@ -137,6 +137,7 @@ export function PageBlock({
 
   const {
     handleClick,
+    handleContextMenu,
     handlePopoverOpenChange,
     markDragging,
     popoverOpen,
@@ -182,7 +183,7 @@ export function PageBlock({
    * event can only be rescheduled from its start segment.
    */
   function handleBlockPointerDown(e: React.PointerEvent) {
-    if (!e.isPrimary || e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
+    if (!e.isPrimary || e.button !== 0) return;
     // No stopPropagation: DayColumn filters presses that land on a block by
     // target instead, because pointerdown is what Radix listens on to dismiss
     // an open popover from outside — see the note on its handler.
@@ -310,6 +311,7 @@ export function PageBlock({
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}
+            onContextMenu={handleContextMenu}
             onMouseEnter={() => applyHoverLink(true)}
             onMouseLeave={() => applyHoverLink(false)}
             onPointerDown={handleBlockPointerDown}
@@ -344,6 +346,7 @@ export function PageBlock({
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}
+            onContextMenu={handleContextMenu}
             onMouseEnter={() => applyHoverLink(true)}
             onMouseLeave={() => applyHoverLink(false)}
             onPointerDown={handleBlockPointerDown}

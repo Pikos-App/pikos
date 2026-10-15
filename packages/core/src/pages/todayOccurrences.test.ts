@@ -94,6 +94,13 @@ describe("withTodayOccurrences", () => {
     const rows = withTodayOccurrences([head, other], [head, other], TODAY);
     expect(rows.map((p) => p.scheduledStart)).toEqual([head.scheduledStart, `${TODAY}T08:00:00`]);
   });
+
+  it("ignores a plain page even when it shares the head's id and sits on today", () => {
+    const head = lapsedSyncedHead();
+    const plain = { ...head, scheduledStart: `${TODAY}T08:00:00` };
+    const [row] = withTodayOccurrences([head], [plain], TODAY);
+    expect(row).toBe(head);
+  });
 });
 
 // C111: the head can be on the far side of today as well as behind it. Moving an

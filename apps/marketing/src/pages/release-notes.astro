@@ -18,6 +18,40 @@ import Footer from "../components/Footer.astro";
 
     <div class="mt-12 space-y-16">
 
+      <!-- ── 0.4.1 ─────────────────────────────────────────────────────── -->
+      <article>
+        <div class="flex items-center gap-3">
+          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.4.1</h2>
+        </div>
+        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-10-14">October 14, 2026</time>
+
+        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+          <p>
+            Fast at any size. Pikos now loads only what's on screen, so opening a page, searching, and switching views take the same time with fifty pages or half a million. The numbers, and how to check them on your own machine, are on <a href="/speed" class="text-primary-500 hover:underline dark:text-primary-400">the speed page</a>.
+          </p>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Fixed</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li><strong>The current-time line moves.</strong> It used to stay where it was when you opened the calendar.</li>
+            <li><strong>Old repeating meetings stay gone.</strong> Calendar sync no longer brings in series that ended before you connected, and each meeting shows once.</li>
+            <li><strong>Changes from the CLI show up on their own.</strong> Add or edit a page with <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">pikos</code> and the open app picks it up, without losing your place in the list.</li>
+            <li><strong>Meeting links are links.</strong> A Google Meet or Zoom link in a synced event's description is clickable.</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">CLI and MCP</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li><strong>Pages read and write as Markdown.</strong> Editing a page from the CLI or MCP keeps its formatting.</li>
+            <li><strong>More to change.</strong> Move pages between folders, edit tags, manage folders and the trash, and skip, move or reopen one occurrence of a repeating page.</li>
+          </ul>
+
+          <p>
+            Plus right-click and <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Esc</code> shortcuts on the calendar, and a couple dozen smaller fixes to sync, search, Quick Add, and export.
+          </p>
+
+        </div>
+      </article>
+
       <!-- ── 0.4.0 ─────────────────────────────────────────────────────── -->
       <article>
         <div class="flex items-center gap-3">

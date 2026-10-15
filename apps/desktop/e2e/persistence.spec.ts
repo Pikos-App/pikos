@@ -10,7 +10,8 @@ import { test as appTest, expect, mod } from "./fixtures";
 // ─── Right panel mode (editor ↔ calendar) ───────────────────────────────────
 
 appTest(
-  "right panel calendar mode persists across reload @tier1",
+  "right panel calendar mode persists across reload @smoke",
+  { tag: ["@LIST-14:2"] },
   async ({ app }) => {
     await app.keyboard.press(mod("Mod+Shift+c"));
     await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
@@ -36,7 +37,7 @@ appTest(
 
 // ─── Sidebar collapsed state ────────────────────────────────────────────────
 
-appTest("sidebar collapsed state persists across reload @tier2", async ({ app }) => {
+appTest("sidebar collapsed state persists across reload", async ({ app }) => {
   // Sidebar visible by default — "Collapse sidebar" button is the proof.
   const collapseBtn = app.getByRole("button", { name: "Collapse sidebar" });
   await expect(collapseBtn).toBeVisible();
@@ -58,7 +59,7 @@ appTest("sidebar collapsed state persists across reload @tier2", async ({ app })
 // re-render — otherwise users land on "today" each time and have to re-page
 // back to whatever week they were planning.
 
-appTest("calendar reference week persists across reload @tier2", async ({ app }) => {
+appTest("calendar reference week persists across reload", async ({ app }) => {
   const calendarBtn = app.getByRole("button", { name: "Calendar view" });
   await calendarBtn.click();
   await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
@@ -84,9 +85,7 @@ appTest("calendar reference week persists across reload @tier2", async ({ app })
   // Reload also restores the calendar panel mode; assert region is back.
   await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
 
-  const restoredLabel = await app
-    .getByRole("heading", { name: "Visible week" })
-    .textContent();
+  const restoredLabel = await app.getByRole("heading", { name: "Visible week" }).textContent();
   expect(restoredLabel).toBe(movedLabel);
 });
 
@@ -98,7 +97,7 @@ appTest("calendar reference week persists across reload @tier2", async ({ app })
 // chip's accessible name carries the current mode so we can assert without
 // inspecting the actual order.
 
-appTest("per-view sort mode persists across reload @tier2", async ({ app }) => {
+appTest("per-view sort mode persists across reload", async ({ app }) => {
   // Inbox is the default active view; the sort menu is visible there
   // (Today suppresses it).
   const sortBtn = app.getByRole("button", { name: /^Sort:/ });

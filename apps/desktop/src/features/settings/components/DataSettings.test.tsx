@@ -2,10 +2,12 @@
 // MockStorageAdapter the provider tree builds. Spying on the prototype reads
 // the arguments each Export button sends without stubbing the whole context.
 
+import { NoopPlatformAdapter } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setPlatform } from "@/shared/platform";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
@@ -16,6 +18,7 @@ const exportWorkspace = vi.spyOn(MockStorageAdapter.prototype, "exportWorkspace"
 afterEach(() => {
   cleanup();
   exportWorkspace.mockClear();
+  setPlatform(null);
 });
 
 function renderDataSettings(withSyncPanel = false) {
@@ -50,12 +53,14 @@ async function connectAndEnableCalendar() {
 }
 
 describe("DataSettings export", () => {
+  // qa: EXP-08:5
   it("leaves the calendar toggle out until a calendar is synced", async () => {
     renderDataSettings();
     expect(await screen.findByRole("button", { name: "Export as CSV" })).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: /Include synced calendar events/ })).toBeNull();
   });
 
+  // qa: EXP-08:5
   it("exports without the synced calendar's events by default", async () => {
     renderDataSettings();
     fireEvent.click(await screen.findByRole("button", { name: "Export as CSV" }));
@@ -74,6 +79,7 @@ describe("DataSettings export", () => {
     );
   });
 
+  // qa: EXP-08:5
   it("includes them in every page export once the toggle is on", async () => {
     renderDataSettings(true);
     await connectAndEnableCalendar();
@@ -88,5 +94,25 @@ describe("DataSettings export", () => {
       expect(exportWorkspace).toHaveBeenCalledWith("markdown", { includeSynced: true });
       expect(exportWorkspace).toHaveBeenCalledWith("ics", { includeSynced: true });
     });
+  });
+});
+
+describe("DataSettings export rows", () => {
+  // qa: EXP-01:2, EXP-02:3
+  it("an SQLite or CSV export says where it saved and shows the file in Finder", async () => {
+    const platform = new NoopPlatformAdapter();
+    setPlatform(platform);
+    renderDataSettings();
+
+    for (const [label, path] of [
+      ["Export as SQLite", "/mock/pikos-backup.sqlite"],
+      ["Export as CSV", "/mock/pikos-export.csv"],
+    ] as const) {
+      fireEvent.click(await screen.findByRole("button", { name: label }));
+      const row = (await screen.findByText(label)).parentElement!.parentElement!;
+      expect(await within(row).findByText("Saved to Downloads")).toBeInTheDocument();
+      fireEvent.click(within(row).getByRole("button", { name: "Show in Finder" }));
+      expect(platform.calls).toContainEqual({ args: [path], method: "revealInDir" });
+    }
   });
 });

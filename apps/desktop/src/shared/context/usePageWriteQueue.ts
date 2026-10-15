@@ -1,7 +1,7 @@
 // usePageWriteQueue — the write half of PagesContext: the per-page mutation
-// queue, the 800ms debounce that batches editor typing into one DB write, the
-// snapshots those writes roll back to, and the `pageErrors` map the UI reads
-// when one fails.
+// queue, the 800ms debounce that batches editor typing into one DB write, and
+// the `pageErrors` map the UI reads when one fails. Every edit is a pending
+// write on the view cache's store until its write lands or fails.
 //
 // It also owns the ONE optimistic-write shape every mutation in the context
 // uses — patch state now, write, and on failure put the state back and surface
@@ -9,21 +9,15 @@
 // out by hand at every call site, which is how the same rollback could be
 // subtly wrong in three of them at once.
 
-import type { PageSummary, PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
+import type { PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
 import { storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
-import {
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { postNotice } from "@/shared/events/noticeBus";
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
 import { onDrainPending } from "@/shared/pendingWrites";
+import type { WriteMirror } from "@/shared/viewCache/writeMirror";
 
 const log = createLogger("PageWriteQueue");
 
@@ -62,6 +56,10 @@ export interface OptimisticWrite<T> {
   queueOn?: string;
   /** Re-throw after rolling back — for callers that await and branch on failure. */
   rethrow?: boolean;
+  /** Edits made before this write, by the debounce, that it carries to the database. */
+  carries?: number[];
+  /** Hold the carried edits on screen if the write fails: typing the editor still shows. */
+  keepOnFailure?: boolean;
   /** Puts back exactly what `apply` displaced. */
   rollback: () => void;
   write: () => Promise<T>;
@@ -88,21 +86,24 @@ export interface PageWriteQueue {
 export function usePageWriteQueue({
   adapter,
   emit,
-  pagesRef,
-  setPages,
+  mirror,
 }: {
   adapter: StorageAdapter;
   emit: WorkspaceEventBus["emit"];
-  pagesRef: RefObject<PageSummary[]>;
-  setPages: Dispatch<SetStateAction<PageSummary[]>>;
+  mirror: WriteMirror;
 }): PageWriteQueue {
   const pendingPatches = useRef<Map<string, PageUpdate>>(new Map());
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const snapshotsRef = useRef<Map<string, PageSummary>>(new Map());
   const mutationQueues = useRef<Map<string, Promise<unknown>>>(new Map());
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
+  /** Each page's debounced edits, as the mirror recorded them, for the write that carries them. */
+  const debouncedWrites = useRef<Map<string, number[]>>(new Map());
 
   function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
+    // A patch still in its debounce was made first, so it is written first. Left
+    // to its timer it landed after this write and put back what this one replaced:
+    // a head moved within 800ms of its quick add snapped back to its old date.
+    commitPendingPatch(pageId);
     const prev = mutationQueues.current.get(pageId) ?? Promise.resolve();
     // Pass fn as both fulfilment and rejection handler so the queue never stalls
     // on a previous error.
@@ -129,7 +130,9 @@ export function usePageWriteQueue({
 
   function optimistic<T>({
     apply,
+    carries = [],
     errorIds,
+    keepOnFailure,
     label,
     notice,
     queueOn,
@@ -137,12 +140,15 @@ export function usePageWriteQueue({
     rollback,
     write,
   }: OptimisticWrite<T>): Promise<T | undefined> {
-    apply();
+    const writes = [...carries, ...mirror.capture(apply)];
     async function run(): Promise<T | undefined> {
       try {
-        return await write();
+        const result = await write();
+        void mirror.confirm(writes);
+        return result;
       } catch (err: unknown) {
         log.error(`${label} failed; rolling back`, err);
+        mirror.fail(writes, keepOnFailure);
         rollback();
         const storageError = toStorageError(err);
         if (errorIds && errorIds.length > 0) recordPageErrors(errorIds, storageError);
@@ -156,52 +162,52 @@ export function usePageWriteQueue({
     return queueOn === undefined ? run() : enqueue(queueOn, run);
   }
 
-  /** Capture a page's current state as the rollback target for the patch about
-   *  to be applied to it. Only the FIRST capture in a debounce window sticks —
-   *  a rollback has to reach the last state the DB agreed with, not the last
-   *  optimistic one. */
-  function snapshotPage(id: string): void {
-    if (pendingPatches.current.has(id)) return;
-    const current = pagesRef.current.find((p) => p.id === id);
-    if (current) snapshotsRef.current.set(id, current);
-  }
-
   function cancelPendingWrite(id: string): void {
-    const timer = debounceTimers.current.get(id);
-    if (timer !== undefined) clearTimeout(timer);
-    debounceTimers.current.delete(id);
-    pendingPatches.current.delete(id);
+    takePendingPatch(id);
+    // Never written, so its edits mustn't stay on screen.
+    mirror.fail(debouncedWrites.current.get(id) ?? []);
+    debouncedWrites.current.delete(id);
   }
 
   /** The write both the debounce timer and flushPage land in. The optimistic
    *  patch is already on screen by the time this runs — only the DB write and
-   *  its rollback happen here. */
-  function commitPatch(id: string, patch: PageUpdate, rethrow: boolean): Promise<void> {
+   *  its rollback happen here. `adoptEcho` false is for a patch committed ahead
+   *  of another write: its echo predates that write, and adopting it would put
+   *  back on screen what the later write's optimistic patch replaced. */
+  function commitPatch(
+    id: string,
+    patch: PageUpdate,
+    rethrow: boolean,
+    adoptEcho = true
+  ): Promise<void> {
+    const carries = debouncedWrites.current.get(id) ?? [];
+    debouncedWrites.current.delete(id);
     return optimistic({
       apply: () => {},
+      carries,
       errorIds: [id],
+      keepOnFailure: "content" in patch,
       label: `page write for ${id}`,
       queueOn: id,
       rethrow,
-      rollback: () => {
-        const snapshot = snapshotsRef.current.get(id);
-        snapshotsRef.current.delete(id);
-        if (snapshot) setPages((prev) => prev.map((p) => (p.id === id ? snapshot : p)));
-      },
+      // Failing the carried edits takes them off the store, which is the rollback.
+      rollback: () => {},
       write: async () => {
         const updated = await adapter.updatePage(id, patch);
-        snapshotsRef.current.delete(id);
-        const summary = toPageSummary(updated);
-        setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+        if (adoptEcho) {
+          const summary = toPageSummary(updated);
+          mirror.confirmRow(summary);
+        }
         emit("page:updated", updated);
       },
     }).then(() => undefined);
   }
 
   function updatePage(id: string, patch: PageUpdate): void {
-    snapshotPage(id);
-
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    // The store holds the edit as a pending write, so no list is rebuilt: a rename sends every
+    // keystroke through here.
+    const edits = mirror.capture(() => mirror.patch(id, patch));
+    debouncedWrites.current.set(id, [...(debouncedWrites.current.get(id) ?? []), ...edits]);
 
     const existing = pendingPatches.current.get(id) ?? {};
     pendingPatches.current.set(id, { ...existing, ...patch });
@@ -237,15 +243,25 @@ export function usePageWriteQueue({
     debounceTimers.current.set(id, timer);
   }
 
-  async function flushPage(id: string): Promise<void> {
+  /** Take a page's debounced patch off its timer, or undefined when none waits. */
+  function takePendingPatch(id: string): PageUpdate | undefined {
     const timer = debounceTimers.current.get(id);
     if (timer !== undefined) clearTimeout(timer);
     debounceTimers.current.delete(id);
-
     const accumulated = pendingPatches.current.get(id);
-    if (!accumulated) return;
     pendingPatches.current.delete(id);
+    return accumulated;
+  }
 
+  /** Queue a waiting patch now, reporting a failure the way its timer would have. */
+  function commitPendingPatch(id: string): void {
+    const accumulated = takePendingPatch(id);
+    if (accumulated) void commitPatch(id, accumulated, false, false);
+  }
+
+  async function flushPage(id: string): Promise<void> {
+    const accumulated = takePendingPatch(id);
+    if (!accumulated) return;
     return commitPatch(id, accumulated, true);
   }
 

@@ -1,9 +1,10 @@
 //! Human-readable rendering. `--json` bypasses all of this and prints the
 //! pikos-db types verbatim, so these are the plain-text surface only.
 
-use pikos_db::{Page, PageReminder, PageSummary, SearchResponse};
+use pikos_db::reads::TagCount;
+use pikos_db::{Page, PageReminder, PageSummary, SearchPage, TrashedPage};
 
-use crate::ops::FolderEntry;
+use crate::ops::{FolderEntry, ListEntry, PageRead};
 
 pub fn priority_label(p: i64) -> &'static str {
     match p {
@@ -64,7 +65,37 @@ pub fn render_summary_list(pages: &[PageSummary], empty: &str) -> String {
         .join("\n")
 }
 
+pub fn render_entry_list(entries: &[ListEntry], empty: &str) -> String {
+    if entries.is_empty() {
+        return empty.to_string();
+    }
+    entries
+        .iter()
+        .map(|e| {
+            let mut line = render_summary(&e.page);
+            if let Some(rule) = &e.repeats {
+                line.push_str(&format!("\n    repeats {rule}"));
+            }
+            if let Some(minutes) = &e.reminders {
+                let leads: Vec<String> = minutes.iter().map(|m| format!("{m}m")).collect();
+                line.push_str(&format!("\n    reminders {}", leads.join(", ")));
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn render_page(page: &Page) -> String {
+    with_body(page, page.content_text.as_deref().unwrap_or(""))
+}
+
+/// `read`'s page, with the body as markdown so its structure shows.
+pub fn render_read(read: &PageRead) -> String {
+    with_body(&read.page, &read.markdown)
+}
+
+fn with_body(page: &Page, body: &str) -> String {
     let title = if page.title.is_empty() {
         "(untitled)"
     } else {
@@ -93,22 +124,26 @@ pub fn render_page(page: &Page) -> String {
         "created:{}  updated:{}",
         page.created_at, page.updated_at
     ));
-    if let Some(body) = page.content_text.as_deref() {
-        let body = body.trim();
-        if !body.is_empty() {
-            lines.push(String::new());
-            lines.push(body.to_string());
-        }
+    let body = body.trim();
+    if !body.is_empty() {
+        lines.push(String::new());
+        lines.push(body.to_string());
     }
     lines.join("\n")
 }
 
-pub fn render_search(resp: &SearchResponse) -> String {
+/// The completed count, with a `+` when search scanned fewer matches than there were.
+fn completed_label(resp: &SearchPage) -> String {
+    let plus = if resp.completed_count_capped { "+" } else { "" };
+    format!("{}{plus}", resp.completed_count)
+}
+
+pub fn render_search(resp: &SearchPage) -> String {
     if resp.results.is_empty() {
         let note = if resp.completed_count > 0 {
             format!(
                 " ({} completed hidden — use --include-completed)",
-                resp.completed_count
+                completed_label(resp)
             )
         } else {
             String::new()
@@ -145,8 +180,11 @@ pub fn render_search(resp: &SearchResponse) -> String {
     if resp.completed_count > 0 {
         lines.push(format!(
             "\n{} completed hidden — use --include-completed to show.",
-            resp.completed_count
+            completed_label(resp)
         ));
+    }
+    if let Some(next) = &resp.next {
+        lines.push(format!("\nMore: add --after {next} for the next page."));
     }
     lines.join("\n")
 }
@@ -186,6 +224,39 @@ pub fn render_reminders(reminders: &[PageReminder]) -> String {
             0 => format!("at the start   id:{}", r.id),
             m => format!("{m} min before   id:{}", r.id),
         })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_trash(pages: &[TrashedPage]) -> String {
+    if pages.is_empty() {
+        return "The trash is empty.".to_string();
+    }
+    pages
+        .iter()
+        .map(|p| {
+            let title = if p.title.is_empty() {
+                "(untitled)"
+            } else {
+                &p.title
+            };
+            let from = p
+                .folder_name
+                .as_deref()
+                .map(|f| format!("  from {f}"))
+                .unwrap_or_default();
+            format!("{title}{from}  trashed {}   id:{}", p.deleted_at, p.id)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_tags(tags: &[TagCount]) -> String {
+    if tags.is_empty() {
+        return "No open page has a tag.".to_string();
+    }
+    tags.iter()
+        .map(|t| format!("#{}  {} page(s)", t.name, t.page_count))
         .collect::<Vec<_>>()
         .join("\n")
 }

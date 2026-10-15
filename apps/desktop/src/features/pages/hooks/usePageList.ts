@@ -1,13 +1,16 @@
 import type { PagePriority, PageRecurrenceRule, PageStatus, PageSummary } from "@pikos/core";
-import { getVisiblePages, isDateGroupedView, sortPages, withTodayOccurrences } from "@pikos/core";
 import { useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
+import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
+import { buildCachedList } from "@/shared/viewCache/cachedList";
+import { useCachedViews } from "@/shared/viewCache/useCachedView";
+import { usePageLookup, useSeriesHeads } from "@/shared/viewCache/useHeldPages";
 
 import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
@@ -15,6 +18,7 @@ import { useCompletedPages } from "./useCompletedPages";
 export const UNDO_TOAST_DURATION_MS = 8000;
 
 const NO_RULES: PageRecurrenceRule[] = [];
+const NO_PAGES: PageSummary[] = [];
 
 export function usePageList() {
   const {
@@ -22,7 +26,6 @@ export function usePageList() {
     folders,
     listOverridesForRules,
     overridesVersion,
-    pages,
     recurrenceRules,
     updatePage,
   } = usePages();
@@ -31,35 +34,42 @@ export function usePageList() {
   const sortMode = useActiveSortMode();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
+  const { selectedPageIds } = useSelection();
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const cachedViews = useCachedViews(activeViewId, sortMode, [
+    ...(activePage ? [activePage.id] : []),
+    ...selectedPageIds,
+  ]);
 
   const completed = useCompletedPages(activeViewId);
   const isTodayView = activeViewId === "today";
 
   // The same expansion the calendar grid renders, so the two can't disagree
-  // about today. No rules outside Today keeps other views off the round-trip.
+  // about today. It needs only the series heads, not every held page, and no
+  // rules outside Today keeps other views off the round-trip.
+  const source = useSeriesHeads(isTodayView) ?? NO_PAGES;
+  const lookup = usePageLookup();
   const expanded = useRecurrenceExpansion({
     days: [new Date()],
     expandRecurrenceRange,
     listOverridesForRules,
     overridesVersion,
-    pages,
+    pages: source,
     recurrenceRules: isTodayView ? recurrenceRules : NO_RULES,
   });
 
-  // Swap occurrences in before the view filter runs: the filter judges a page by
-  // its head, and a series with an occurrence today is exactly the case where the
-  // head is on some other day.
-  const candidates = isTodayView ? withTodayOccurrences(pages, expanded) : pages;
-  const withOccurrences = getVisiblePages(candidates, activeViewId).filter(
-    (p) => !hiddenIds.has(p.id)
-  );
-  // Today and Upcoming are ordered by their sections (overdue/today, then day
-  // groups), so running sortPages here would only churn an order the section
-  // builders are about to replace.
-  const visiblePages = isDateGroupedView(activeViewId)
-    ? withOccurrences
-    : sortPages(withOccurrences, sortMode);
+  const cached =
+    cachedViews &&
+    buildCachedList({
+      hiddenIds,
+      occurrences: expanded,
+      pages: source,
+      today: cachedViews.today,
+      viewId: activeViewId,
+      views: cachedViews.views,
+      waiting: isTodayView && !cachedViews.headsReady,
+    });
+  const visiblePages = cached?.pages ?? NO_PAGES;
 
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 
@@ -88,10 +98,10 @@ export function usePageList() {
     const nextStatus: PageStatus = currentStatus === "done" ? "not_started" : "done";
     // The rendered row first: on Today it can be an occurrence standing in for
     // its series, and the tick has to land on the date shown. Then the series
-    // itself (in `pages`), then a done clone (in completedPages).
+    // itself (held), then a done clone (in completedPages).
     const page =
       visiblePages.find((p) => p.id === pageId) ??
-      pages.find((p) => p.id === pageId) ??
+      lookup(pageId) ??
       completed.completedPages.find((p) => p.id === pageId);
     if (page) togglePageStatus(page, nextStatus);
   }
@@ -102,6 +112,8 @@ export function usePageList() {
 
   return {
     activePage,
+    /** The view's lists loaded a window at a time, when the view cache serves it. */
+    cached,
     completedHasMore: completed.hasMore,
     completedPages,
     folders,

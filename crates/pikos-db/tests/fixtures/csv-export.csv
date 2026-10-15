@@ -1,0 +1,3 @@
+Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At
+Standup,,Work,not_started,3,team,2026-06-01T09:00:00,,"FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2",PT0S;-PT15M,2026-05-20T08:00:00,2026-05-21T08:00:00,
+Plain note,,Work,not_started,0,,,,,,2026-05-20T08:00:00,2026-05-21T08:00:00,

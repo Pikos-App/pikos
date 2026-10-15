@@ -20,9 +20,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The debounced page write (800ms) has to land before content assertions. */
-const WRITE_TIMEOUT = 4000;
-
 function Harness() {
   const { setOpenDialog } = useUI();
   return (
@@ -97,37 +94,35 @@ describe("QuickAddDialog — parsed reminders", () => {
 });
 
 describe("QuickAddDialog — body separator", () => {
-  it("writes the text after // as the page body", async () => {
-    const updatePage = vi.spyOn(MockStorageAdapter.prototype, "updatePage");
+  it("creates the page with the text after // as its body", async () => {
+    const createPage = vi.spyOn(MockStorageAdapter.prototype, "createPage");
     await quickAdd("Buy a gift // she likes the blue one");
 
-    await waitFor(
-      () => {
-        const patch = updatePage.mock.calls.map((c) => c[1]).find((p) => p.contentText != null);
-        expect(patch?.contentText).toBe("she likes the blue one");
-        expect(JSON.parse(patch!.content!)).toEqual({
-          content: [
-            { content: [{ text: "she likes the blue one", type: "text" }], type: "paragraph" },
-          ],
-          type: "doc",
-        });
-      },
-      { timeout: WRITE_TIMEOUT }
-    );
+    await waitFor(() => expect(createPage).toHaveBeenCalledOnce());
+    const created = createPage.mock.calls[0]![0];
+    expect(created.contentText).toBe("she likes the blue one");
+    expect(JSON.parse(created.content)).toEqual({
+      content: [{ content: [{ text: "she likes the blue one", type: "text" }], type: "paragraph" }],
+      type: "doc",
+    });
   });
 
   it("keeps the body verbatim — a #word in it is not a tag", async () => {
-    const updatePage = vi.spyOn(MockStorageAdapter.prototype, "updatePage");
+    const createPage = vi.spyOn(MockStorageAdapter.prototype, "createPage");
     await quickAdd("Buy a gift // remember the #blue one");
 
-    await waitFor(
-      () => {
-        const patch = updatePage.mock.calls.map((c) => c[1]).find((p) => p.contentText != null);
-        expect(patch?.contentText).toBe("remember the #blue one");
-        expect(patch?.tags).toBeUndefined();
-      },
-      { timeout: WRITE_TIMEOUT }
-    );
+    await waitFor(() => expect(createPage).toHaveBeenCalledOnce());
+    const created = createPage.mock.calls[0]![0];
+    expect(created.contentText).toBe("remember the #blue one");
+    expect(created.tags).toEqual([]);
+  });
+
+  it("creates the page with its tags, not in a write after it", async () => {
+    const createPage = vi.spyOn(MockStorageAdapter.prototype, "createPage");
+    await quickAdd("second #work");
+
+    await waitFor(() => expect(createPage).toHaveBeenCalledOnce());
+    expect(createPage.mock.calls[0]![0].tags).toEqual(["work"]);
   });
 
   it("titles the page from the left of the separator and still parses it", async () => {

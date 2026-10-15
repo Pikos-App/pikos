@@ -25,8 +25,8 @@ async function uploadFromBytes(data: Uint8Array, ext: string): Promise<string> {
   return getPlatform().saveAssetBytes(data, ext);
 }
 
-function assetUrl(absolutePath: string): string {
-  return getPlatform().assetUrl(absolutePath);
+function assetUrl(storedPath: string): string {
+  return getPlatform().assetUrl(storedPath);
 }
 
 async function handleFiles(files: File[], view: EditorView, pos?: number): Promise<boolean> {
@@ -40,14 +40,12 @@ async function handleFiles(files: File[], view: EditorView, pos?: number): Promi
 
     try {
       const savedPath = await uploadFromBytes(bytes, ext);
-      const src = assetUrl(savedPath);
 
       const { schema } = view.state;
       const node = schema.nodes["image"]?.create({
         alt: file.name.replace(/\.[^.]+$/, ""),
-        // Store the absolute path as data attribute for export
         "data-asset-path": savedPath,
-        src,
+        src: savedPath,
       });
 
       if (node) {
@@ -192,14 +190,13 @@ export async function insertImageFromDialog(view: EditorView): Promise<void> {
 
   try {
     const savedPath = await uploadFromPath(filePath);
-    const src = assetUrl(savedPath);
     const filename = filePath.split("/").pop() ?? "image";
 
     const { schema } = view.state;
     const node = schema.nodes["image"]?.create({
       alt: filename.replace(/\.[^.]+$/, ""),
       "data-asset-path": savedPath,
-      src,
+      src: savedPath,
     });
 
     if (node) {

@@ -54,6 +54,7 @@ export function ExternalCalendarItem({
           prefix={
             <CalendarSync
               className="mt-0.5 shrink-0"
+              data-testid="calendar-color"
               size={13}
               style={{ color: folder.color ?? "var(--text-tertiary)" }}
             />

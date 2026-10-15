@@ -15,6 +15,16 @@ describe("parseDeepLink", () => {
     expect(parseDeepLink("pikos://page/not-a-uuid")).toBeNull();
   });
 
+  it("reads the staging build's scheme the same way", () => {
+    expect(parseDeepLink("pikos-staging://today")).toEqual({ type: "view", viewId: "today" });
+    expect(parseDeepLink(`pikos-staging://page/${UUID}`)).toEqual({ pageId: UUID, type: "page" });
+  });
+
+  it("rejects any other scheme", () => {
+    expect(parseDeepLink("pikosx://today")).toBeNull();
+    expect(parseDeepLink("https://today")).toBeNull();
+  });
+
   it("parses smart views", () => {
     expect(parseDeepLink("pikos://today")).toEqual({ type: "view", viewId: "today" });
     expect(parseDeepLink("pikos://upcoming")).toEqual({ type: "view", viewId: "upcoming" });

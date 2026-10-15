@@ -213,6 +213,72 @@ async fn an_exhausted_active_mirror_stays_open_at_its_last_occurrence() {
     );
 }
 
+/// A two-day mirror, connected before its first day, so both occurrences are the person's.
+async fn seed_short_mirror(pool: &sqlx::SqlitePool) -> String {
+    let rule_id = seed_series(
+        pool,
+        "head",
+        "FREQ=DAILY;COUNT=2",
+        &day_at(-2, "09:00:00"),
+        None,
+    )
+    .await;
+    crate::pool::insert_test_page_sync_connected_at(pool, "head", "active", &connected_days_ago(3))
+        .await
+        .unwrap();
+    rule_id
+}
+
+// qa: SYNC-29
+#[tokio::test]
+async fn a_mirror_ticked_through_to_its_end_completes_like_a_native_series() {
+    let pool = test_pool().await;
+    seed_short_mirror(&pool).await;
+
+    complete_via_set(&pool, "head", &day_str(-2)).await;
+    complete_via_set(&pool, "head", &day_str(-1)).await;
+    recompute(&pool, "head").await;
+    assert_eq!(head(&pool, "head").await.1, "done");
+
+    sqlx::query("DELETE FROM completed_set WHERE page_id = 'head' AND occurrence_date = ?")
+        .bind(day_str(-1))
+        .execute(&pool)
+        .await
+        .unwrap();
+    recompute(&pool, "head").await;
+    assert_eq!(
+        head(&pool, "head").await,
+        (Some(day_at(-1, "09:00:00")), "not_started".to_string()),
+        "unticking the last one reopens it"
+    );
+}
+
+#[tokio::test]
+async fn a_mirror_with_a_moved_occurrence_still_open_does_not_complete() {
+    let pool = test_pool().await;
+    let rule_id = seed_short_mirror(&pool).await;
+    complete_via_set(&pool, "head", &day_str(-2)).await;
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+         VALUES ('moved', 'head', ?, NULL, NULL, ?, ?, 'not_started', ?)",
+    )
+    .bind(day_at(0, "14:00:00"))
+    .bind(&rule_id)
+    .bind(day_at(-1, "09:00:00"))
+    .bind(now_iso())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    recompute(&pool, "head").await;
+    assert_eq!(
+        head(&pool, "head").await.1,
+        "not_started",
+        "the moved meeting is still to come"
+    );
+}
+
 /// Detaching hands the page to the user outright, so native terminal behavior
 /// comes back with it.
 #[tokio::test]
@@ -716,16 +782,21 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
     .await
     .unwrap();
 
+    // Inside the retry, as the sync engine runs a reconcile: a deferred batch that loses the
+    // write lock to the completion fails its upgrade at once, and a bare one failed the test.
     let batch = tokio::spawn({
         let pool = pool.clone();
         async move {
-            let mut tx = pool.begin().await.unwrap();
-            for i in 0..200 {
-                recompute_recurring_schedule(&mut tx, &format!("r{i}"))
-                    .await
-                    .unwrap();
-            }
-            tx.commit().await.unwrap();
+            crate::tx::retry_on_busy(|| async {
+                let mut tx = pool.begin().await?;
+                for i in 0..200 {
+                    recompute_recurring_schedule(&mut tx, &format!("r{i}")).await?;
+                }
+                tx.commit().await?;
+                Ok(())
+            })
+            .await
+            .unwrap();
         }
     });
     let completion = tokio::spawn({

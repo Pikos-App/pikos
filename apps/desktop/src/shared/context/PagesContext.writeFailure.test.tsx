@@ -10,14 +10,14 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { subscribeNotices } from "@/shared/events/noticeBus";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 async function setup() {
   const hook = renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {

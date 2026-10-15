@@ -539,22 +539,26 @@ pub async fn daily_summary_fired_on(pool: &SqlitePool, date: &str) -> Result<boo
 /// override's original date is in the exclusion union. Its stale pre-rule anchor
 /// row (`rule_id IS NULL`) counts for neither.
 pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64, sqlx::Error> {
-    let mut pages: HashSet<String> = sqlx::query_scalar(
-        "SELECT ps.page_id
+    // A day either side, then the viewer's day decides, as `list_pages_today` reads it.
+    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ps.page_id, ps.scheduled_start, ps.timezone
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
          WHERE p.status != 'done'
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
-           AND date(ps.scheduled_start) = ?
+           AND date(ps.scheduled_start) BETWEEN date(?1, '-1 day') AND date(?1, '+1 day')
            AND (ps.rule_id IS NOT NULL
                 OR NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id))",
     )
     .bind(date)
     .fetch_all(pool)
-    .await?
-    .into_iter()
-    .collect();
+    .await?;
+    let mut pages: HashSet<String> = rows
+        .into_iter()
+        .filter(|(_, start, zone)| crate::sync::viewer_day_of(start, zone.as_deref()) == date)
+        .map(|(page_id, _, _)| page_id)
+        .collect();
 
     pages.extend(
         crate::recurrence_derive::recurring_pages_in_window(
@@ -568,6 +572,17 @@ pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64,
         .map_err(derivation_error)?,
     );
     Ok(pages.len() as i64)
+}
+
+/// `YYYY-MM-DDTHH:MM:SS`, so two wall-clock values compare as their instants do whether they
+/// were written with a space or a `T`, or without seconds.
+fn to_the_second(wall: &str) -> String {
+    let wall = wall.replacen(' ', "T", 1);
+    if wall.len() == 16 {
+        format!("{wall}:00")
+    } else {
+        wall.chars().take(19).collect()
+    }
 }
 
 /// A page created this recently reads as part of an import batch rather than the
@@ -600,8 +615,9 @@ pub async fn overdue_count(
     let recent_cutoff = (now_utc - chrono::Duration::minutes(IMPORT_SKIP_MINUTES))
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
         .to_string();
-    let mut pages: HashSet<String> = sqlx::query_scalar(
-        "SELECT ps.page_id
+    // A day either side, then each start on the viewer's clock decides.
+    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ps.page_id, ps.scheduled_start, ps.timezone
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
          WHERE p.status != 'done'
@@ -609,8 +625,8 @@ pub async fn overdue_count(
            AND datetime(p.created_at) < datetime(?1)
            AND ps.status != 'done'
            AND ps.scheduled_start LIKE '%T%'
-           AND datetime(ps.scheduled_start) < datetime(?2)
-           AND datetime(ps.scheduled_start) >= datetime(?3)
+           AND datetime(ps.scheduled_start) < datetime(?2, '+1 day')
+           AND datetime(ps.scheduled_start) >= datetime(?3, '-1 day')
            AND (ps.rule_id IS NOT NULL
                 OR NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id))",
     )
@@ -618,9 +634,16 @@ pub async fn overdue_count(
     .bind(now_ts)
     .bind(stale_cutoff)
     .fetch_all(pool)
-    .await?
-    .into_iter()
-    .collect();
+    .await?;
+    let (now, stale) = (to_the_second(now_ts), to_the_second(stale_cutoff));
+    let mut pages: HashSet<String> = rows
+        .into_iter()
+        .filter(|(_, start, zone)| {
+            let local = to_the_second(&crate::sync::viewer_wall_clock(start, zone.as_deref()));
+            local < now && local >= stale
+        })
+        .map(|(page_id, _, _)| page_id)
+        .collect();
 
     // The scheduler passes SQLite's space-separated form; the engine parses ISO `T`.
     pages.extend(

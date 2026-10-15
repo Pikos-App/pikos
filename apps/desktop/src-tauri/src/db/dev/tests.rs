@@ -759,6 +759,7 @@ async fn export_titles(pool: &SqlitePool, include_synced: bool) -> Vec<String> {
         .collect()
 }
 
+// qa: EXP-08:5
 #[tokio::test]
 async fn export_drops_only_the_mirrors_the_user_never_actioned() {
     let pool = test_pool().await;
@@ -768,17 +769,22 @@ async fn export_drops_only_the_mirrors_the_user_never_actioned() {
     insert_synced_page(&pool, "bare", "Standup", "active").await;
     insert_synced_page(&pool, "done", "Retro", "active").await;
     set_completed(&pool, "done", "2026-05-01T12:00:00Z").await;
+    insert_synced_page(&pool, "edited", "Planning", "active").await;
+    sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE page_id = 'edited'")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_synced_page(&pool, "severed", "Old 1:1", "detached").await;
 
     let kept = export_titles(&pool, false).await;
     assert!(!kept.contains(&"Standup".to_string()));
     assert_eq!(
         kept.len(),
-        3,
-        "native, completed mirror and detached all stay"
+        4,
+        "native, completed mirror, edited mirror and detached all stay"
     );
 
-    assert_eq!(export_titles(&pool, true).await.len(), 4);
+    assert_eq!(export_titles(&pool, true).await.len(), 5);
 }
 
 // ── build_export_csv_impl ──────────────────────────────────────────────────────
@@ -813,6 +819,7 @@ async fn export_csv_header_and_row_basics() {
     assert!(row.contains("\"x, y\""));
 }
 
+// qa: EXP-02:3
 #[tokio::test]
 async fn export_csv_escapes_special_characters() {
     let pool = test_pool().await;
@@ -948,6 +955,226 @@ async fn export_csv_leaves_repeat_and_reminder_empty_for_a_plain_page() {
     // The two empty cells sit between End Date and Created At, so a plain page's
     // row still lines up with the header.
     assert_eq!(csv.lines().nth(1).unwrap().split(',').count(), 13);
+}
+
+// The cross-language fixture directory; `roundtrip.test.ts` imports the same file.
+const CSV_EXPORT: &str =
+    include_str!("../../../../../../crates/pikos-db/tests/fixtures/csv-export.csv");
+
+// qa: EXP-06:2
+#[tokio::test]
+async fn export_csv_writes_the_file_the_importer_round_trips() {
+    let pool = test_pool().await;
+    insert_test_folder(&pool, "f1", "Work").await.unwrap();
+    insert_rich_page(&pool, "p1", "Standup", "{}", "", 3, "[\"team\"]").await;
+    insert_schedule(&pool, "s1", "p1", "2026-06-01T09:00:00").await;
+    insert_rule_with_rrule(&pool, "r1", "p1", "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2").await;
+    insert_reminder(&pool, "rem-start", "p1", 0).await;
+    insert_reminder(&pool, "rem-before", "p1", 15).await;
+    insert_rich_page(&pool, "p2", "Plain note", "{}", "", 0, "[]").await;
+    sqlx::query(
+        "UPDATE pages SET folder_id = 'f1', created_at = '2026-05-20T08:00:00',
+         updated_at = '2026-05-21T08:00:00', sort_order = CASE id WHEN 'p1' THEN 0 ELSE 1 END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+
+    assert_eq!(csv, CSV_EXPORT);
+}
+
+// ── write_markdown_export ──────────────────────────────────────────────────────
+
+const NEW_IMAGE: &str = "3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png";
+const OLD_IMAGE: &str = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.jpg";
+const IMPORTED_IMAGE: &str = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d.gif";
+
+/// One image node per way a page has stored its file: the stored path the editor
+/// writes now, a full path saved on another machine, and an import's bare `src`.
+fn page_with_images() -> String {
+    serde_json::json!({
+        "type": "doc",
+        "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": "Day one" }] },
+            { "type": "image", "attrs": {
+                "src": format!("assets/{NEW_IMAGE}"),
+                "data-asset-path": format!("assets/{NEW_IMAGE}"),
+                "alt": "new" } },
+            { "type": "image", "attrs": {
+                "src": "asset://localhost/elsewhere",
+                "data-asset-path": format!(
+                    "/Volumes/Old Mac/Pikos/assets/{OLD_IMAGE}"
+                ),
+                "alt": "old" } },
+            { "type": "image", "attrs": {
+                "src": format!(
+                    "/Volumes/Old Mac/Pikos/assets/{IMPORTED_IMAGE}"
+                ),
+                "alt": "imported" } }
+        ]
+    })
+    .to_string()
+}
+
+// The export this test writes, committed; `roundtrip.test.ts` imports it back.
+const MARKDOWN_VAULT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../crates/pikos-db/tests/fixtures/markdown-vault"
+);
+
+// qa: EXP-03
+// qa: EXP-05:2
+// qa: PRIV-04:4
+#[tokio::test]
+async fn a_markdown_export_writes_the_tree_and_carries_every_image_from_a_moved_workspace() {
+    let pool = test_pool().await;
+    let root = std::env::temp_dir().join(format!("pkos_md_export_{}", uuid::Uuid::new_v4()));
+    let assets_dir = root.join("workspace").join("assets");
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        std::fs::write(assets_dir.join(name), name.as_bytes()).unwrap();
+    }
+    insert_test_folder(&pool, "f1", "Trips").await.unwrap();
+    insert_rich_page(
+        &pool,
+        "p1",
+        "Paris",
+        &page_with_images(),
+        "Day one",
+        2,
+        "[\"travel\"]",
+    )
+    .await;
+    sqlx::query("UPDATE pages SET folder_id = 'f1' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    insert_rich_page(
+        &pool,
+        "p2",
+        "Packing",
+        &page_with_images(),
+        "Day one",
+        0,
+        "[]",
+    )
+    .await;
+    sqlx::query(
+        "UPDATE pages SET created_at = '2026-05-20T08:00:00', updated_at = '2026-05-21T08:00:00'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let out = root.join("export");
+
+    let (pages, images) = write_markdown_export(&pool, &out, &assets_dir, false)
+        .await
+        .unwrap();
+
+    assert_eq!((pages, images), (2, 3));
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        assert_eq!(
+            std::fs::read(out.join("assets").join(name)).unwrap(),
+            name.as_bytes()
+        );
+    }
+    let in_folder = std::fs::read_to_string(out.join("Trips").join("Paris.md")).unwrap();
+    assert!(in_folder.starts_with("---\n"), "{in_folder}");
+    assert!(in_folder.contains("title: \"Paris\""), "{in_folder}");
+    assert!(in_folder.contains("Day one"), "{in_folder}");
+    let at_root = std::fs::read_to_string(out.join("Packing.md")).unwrap();
+    assert!(!at_root.contains("scheduled_start"), "{at_root}");
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        assert!(
+            in_folder.contains(&format!("](../assets/{name})")),
+            "{in_folder}"
+        );
+        assert!(at_root.contains(&format!("](assets/{name})")), "{at_root}");
+    }
+    assert!(!in_folder.contains("/Volumes/Old Mac"), "{in_folder}");
+
+    let vault = std::path::Path::new(MARKDOWN_VAULT);
+    assert_eq!(
+        in_folder,
+        std::fs::read_to_string(vault.join("Trips").join("Paris.md")).unwrap()
+    );
+    assert_eq!(
+        at_root,
+        std::fs::read_to_string(vault.join("Packing.md")).unwrap()
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The UTC stamp inside `<stem>-<stamp>.<ext>`, or a panic naming the file.
+fn stamp_of(file: &std::path::Path, stem: &str, ext: &str) -> chrono::NaiveDateTime {
+    let name = file.file_name().unwrap().to_string_lossy();
+    let stamp = name
+        .strip_prefix(&format!("{stem}-"))
+        .and_then(|rest| rest.strip_suffix(&format!(".{ext}")))
+        .unwrap_or_else(|| panic!("{name} is not {stem}-<stamp>.{ext}"));
+    chrono::NaiveDateTime::parse_from_str(stamp, "%Y-%m-%dT%H-%M-%S")
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+fn export_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("pkos_export_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+// qa: EXP-02:3
+#[tokio::test]
+async fn a_csv_export_is_one_stamped_file_holding_completed_pages_too() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Open", "{}", "", 0, "[]").await;
+    insert_rich_page(&pool, "p2", "Finished", "{}", "", 0, "[]").await;
+    set_completed(&pool, "p2", "2026-05-01T12:00:00Z").await;
+    let dir = export_dir();
+
+    let (file, rows) = write_csv_export(&pool, &dir, false).await.unwrap();
+
+    assert_eq!(file.parent().unwrap(), dir);
+    stamp_of(&file, "pikos-export", "csv");
+    assert_eq!(rows, 2);
+    let csv = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        csv.contains("Finished") && csv.contains("2026-05-01T12:00:00Z"),
+        "{csv}"
+    );
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// qa: EXP-01:2
+#[tokio::test]
+async fn a_sqlite_export_is_one_stamped_database_that_opens_whole() {
+    let dir = export_dir();
+    let source = file_pool(&dir.join("live.sqlite").to_string_lossy()).await;
+    insert_rich_page(&source, "p1", "Kept", "{}", "", 0, "[]").await;
+    let out = dir.join("out");
+    std::fs::create_dir_all(&out).unwrap();
+
+    let file = write_sqlite_export(&source, &out).await.unwrap();
+
+    assert_eq!(file.parent().unwrap(), out);
+    stamp_of(&file, "pikos-backup", "sqlite");
+    let names: Vec<_> = std::fs::read_dir(&out)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(names.len(), 1, "no -wal or -shm beside it: {names:?}");
+    let copy = open_existing(&file.to_string_lossy()).await;
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&copy)
+        .await
+        .unwrap();
+    assert_eq!(integrity, "ok");
+    assert_eq!(count(&copy, "pages").await, 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ── build_frontmatter ──────────────────────────────────────────────────────────

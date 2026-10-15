@@ -40,6 +40,21 @@ pub fn suppress_end(tail: Duration) {
     SUPPRESS_DEPTH.fetch_sub(1, Ordering::Relaxed);
 }
 
+/// Covers the watcher's debounce tail after a bracket's last write (the bracket itself is what
+/// suppresses the writes inside it).
+pub const TRAILING_COVER: Duration = Duration::from_secs(2);
+
+/// The bracket around the app's own background checkpoints, which write the database file as
+/// any commit does.
+pub const OWN_CHECKPOINTS: pikos_db::CheckpointHooks = pikos_db::CheckpointHooks {
+    before: suppress_begin,
+    after: end_own_checkpoint,
+};
+
+fn end_own_checkpoint() {
+    suppress_end(TRAILING_COVER);
+}
+
 fn suppressed() -> bool {
     SUPPRESS_DEPTH.load(Ordering::Relaxed) > 0
         || now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::Relaxed)
@@ -181,6 +196,47 @@ mod tests {
 
     fn drain(tx: Sender<notify::Result<Event>>) {
         drop(tx);
+    }
+
+    #[tokio::test]
+    async fn the_apps_own_background_checkpoint_is_not_an_outside_change() {
+        let dir = tempdir_for("checkpoint");
+        let path = dir.join("workspace.sqlite");
+        let pool = crate::db::open_pool(path.to_str().unwrap()).await.unwrap();
+        sqlx::query("CREATE TABLE notes (body TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for _ in 0..200 {
+            sqlx::query("INSERT INTO notes VALUES (randomblob(1000))")
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let (tx, rx) = channel::<notify::Result<Event>>();
+        let mut watcher = RecommendedWatcher::new(tx, Config::default()).unwrap();
+        watcher.watch(&dir, RecursiveMode::NonRecursive).unwrap();
+        let outside = Arc::new(Mutex::new(0u32));
+        let counted = outside.clone();
+        thread::spawn(move || {
+            pump(&rx, "workspace.sqlite", DEBOUNCE, || {
+                if !suppressed() {
+                    *counted.lock().unwrap() += 1;
+                }
+            });
+        });
+
+        let crate::db::Checkpoints::Background(hooks) = crate::db::APP_CHECKPOINTS else {
+            panic!("the app checkpoints in the background");
+        };
+        pikos_db::checkpoint_once(&pool, hooks).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+
+        assert_eq!(*outside.lock().unwrap(), 0);
+        drop(watcher);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

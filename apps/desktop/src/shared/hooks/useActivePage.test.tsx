@@ -86,8 +86,9 @@ describe("useActivePage", () => {
       hook.result.current.ui.setActivePage(page.id);
     });
 
-    act(() => {
+    await act(async () => {
       hook.result.current.pages.updatePage(page.id, { title: "Fresh" });
+      await Promise.resolve();
     });
 
     expect(hook.result.current.activePage?.title).toBe("Fresh");

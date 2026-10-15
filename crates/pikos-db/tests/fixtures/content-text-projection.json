@@ -161,6 +161,23 @@
       "name": "an empty document projects to nothing",
       "doc": {},
       "text": ""
+    },
+    {
+      "name": "a line break inside a paragraph splits the line",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              { "type": "text", "text": "one" },
+              { "type": "hardBreak" },
+              { "type": "text", "text": "ask" }
+            ]
+          }
+        ]
+      },
+      "text": "one\nask"
     }
   ]
 }

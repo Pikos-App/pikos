@@ -21,7 +21,7 @@ mod watch;
 // names the rest of the app (and the IPC tests) know them by. `schedules` and
 // `sync` are not in this list because they also hold hand-written commands —
 // those modules pull their generated half in themselves.
-pub use commands::{focus, folders, notifications, pages, search, tags};
+pub use commands::{focus, folders, notifications, pages, search, tags, windows};
 
 /// Shared database state. None until connect_db is called.
 ///
@@ -155,11 +155,16 @@ pub async fn connect_db(
     Ok(())
 }
 
+pub(crate) use pikos_db::Checkpoints;
+
+/// In the background, telling the outside-change watcher each one is the app's own.
+pub(crate) const APP_CHECKPOINTS: Checkpoints = Checkpoints::Background(watch::OWN_CHECKPOINTS);
+
 /// The one place a pool is opened: pikos-db handles schema, migrations,
 /// pragmas, content_text backfill and the FTS rebuild, then this runs the
 /// app-only housekeeping on top.
-async fn open_pool(path: &str) -> AppResult<SqlitePool> {
-    let pool = pikos_db::open_pool(path).await?;
+pub(crate) async fn open_pool(path: &str) -> AppResult<SqlitePool> {
+    let pool = pikos_db::open_pool_checkpointing(path, APP_CHECKPOINTS).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
     // The trash's other half. Soft-delete keeps a page forever on its own, so
     // without a sweep the file only ever grows with work the user deleted — and

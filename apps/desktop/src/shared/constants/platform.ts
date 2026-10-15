@@ -1,5 +1,7 @@
+import { IS_TEST_MODE } from "@/shared/constants/testMode";
+
 /** True when running inside a Tauri shell (not in test/browser-only mode). */
-export const IS_TAURI = import.meta.env["VITE_TEST_MODE"] !== "true";
+export const IS_TAURI = !IS_TEST_MODE;
 
 /** True on macOS (for platform-specific UI like traffic lights). */
 export const IS_MACOS = /Mac/.test(navigator.platform);

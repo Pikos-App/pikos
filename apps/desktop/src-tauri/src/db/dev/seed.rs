@@ -7,7 +7,6 @@
 
 use chrono::Datelike;
 
-use crate::db::DbState;
 use crate::error::AppResult;
 
 // A doc node requires at least one block child (ProseMirror `block+`); an empty
@@ -265,8 +264,11 @@ async fn insert_synced_recurring(
     Ok(())
 }
 
+#[cfg(debug_assertions)]
 #[tauri::command]
-pub async fn dev_seed_synced_calendar(state: tauri::State<'_, DbState>) -> AppResult<()> {
+pub async fn dev_seed_synced_calendar(
+    state: tauri::State<'_, crate::db::DbState>,
+) -> AppResult<()> {
     let pool = state.get_pool().await?;
     dev_seed_synced_calendar_impl(&pool).await
 }
@@ -303,8 +305,8 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
 
     let mut folder_ids = Vec::new();
     for (i, (name, color, cal_id)) in [
-        ("Personal (synced)", "#7c9cf0", "mock-personal"),
-        ("Work (synced)", "#f0a37c", "mock-work"),
+        ("Personal", "#7c9cf0", "mock-personal"),
+        ("Work", "#f0a37c", "mock-work"),
     ]
     .into_iter()
     .enumerate()

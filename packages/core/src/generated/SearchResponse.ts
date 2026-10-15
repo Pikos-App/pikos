@@ -7,4 +7,9 @@ export type SearchResponse = {
    * Number of completed pages matching the query (always counted, even when excluded).
    */
   completedCount: number;
+  /**
+   * The query matched more pages than the search scanned, so `completed_count` counts only the
+   * scanned ones and the real number may be higher.
+   */
+  completedCountCapped: boolean;
 };

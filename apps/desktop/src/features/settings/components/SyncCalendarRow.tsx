@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
-import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { SyncStatusDot } from "./SyncStatusDot";
 
@@ -27,8 +27,8 @@ export function SyncCalendarRow({
   const [confirmOffOpen, setConfirmOffOpen] = useState(false);
   // Re-render each minute so "synced N ago" and the stale dot stay current
   // without a user interaction, since both derive from the wall clock.
-  useMinuteTick();
-  const dot = calendarSyncDot(calendar, lastResult);
+  const now = useNow();
+  const dot = calendarSyncDot(calendar, lastResult, now);
   const swatch = calendar.color ?? "var(--text-tertiary)";
   const kept = calendar.detachedPages;
 

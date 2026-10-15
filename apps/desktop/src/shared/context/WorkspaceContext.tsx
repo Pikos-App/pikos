@@ -5,6 +5,7 @@
 // data load via a registered loader callback.
 
 import type { StorageAdapter, Workspace } from "@pikos/core";
+import { watchWrites } from "@pikos/core";
 import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@seeds/seedLoaders";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
@@ -12,6 +13,7 @@ import { createContext, type ReactNode, useContext, useEffect, useRef, useState 
 
 import { requireMockStorage } from "@/shared/adapters/mockStorageChunk";
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
+import { STORAGE_BACKEND } from "@/shared/constants/testMode";
 import {
   createWorkspaceEventBus,
   type WorkspaceEvent,
@@ -20,6 +22,8 @@ import {
 } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
+import { VIEW_CACHE } from "@/shared/viewCache/config";
+import { ViewCacheController } from "@/shared/viewCache/controller";
 
 const log = createLogger("WorkspaceContext");
 
@@ -52,6 +56,8 @@ export interface WorkspaceContextValue {
 interface WorkspaceInternalValue extends WorkspaceContextValue {
   /** Always-defined adapter (use storage publicly to gate on workspace readiness). */
   adapter: StorageAdapter;
+  /** Lists loaded a window at a time; null while the full in-memory list is the only path. */
+  viewCache: ViewCacheController;
   eventBus: WorkspaceEventBus;
   /** Register a data loader called during init/reload/resetAndSeed. Pass null to unregister. */
   registerDataLoader: (loader: DataLoader | null) => void;
@@ -60,12 +66,22 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceInternalValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  // Test mode reads the in-memory adapter out of its own chunk — see
+  // The in-memory adapter comes out of its own chunk — see
   // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
-  // time this runs, and what it throws if it isn't.
-  const [adapter] = useState<StorageAdapter>(() =>
-    import.meta.env["VITE_TEST_MODE"] === "true" ? requireMockStorage() : new TauriSQLiteAdapter()
-  );
+  // time this runs, and what it throws if it isn't. The bridge lane uses the
+  // real adapter with its transport already repointed in main.tsx.
+  const [{ adapter, viewCache }] = useState(() => {
+    const raw: StorageAdapter =
+      STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter();
+    // The controller needs the adapter, and the adapter reports to the controller.
+    const ref: { controller: ViewCacheController | null } = { controller: null };
+    const watched = watchWrites(raw, {
+      settled: (method, args) => ref.controller?.writeSettled(method, args),
+      started: () => ref.controller?.writeStarted(),
+    });
+    ref.controller = new ViewCacheController(watched, VIEW_CACHE);
+    return { adapter: watched, viewCache: ref.controller };
+  });
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   // Start true so we don't flash the welcome screen before init completes
@@ -110,8 +126,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     void initPromiseRef.current;
 
     async function runInit(): Promise<void> {
-      if (import.meta.env["VITE_TEST_MODE"] === "true") {
-        // The workspace identity below keys off the raw flag, not off whether a
+      if (STORAGE_BACKEND === "mock") {
+        // The workspace identity below keys off the backend, not off whether a
         // seed actually ran — an unrecognised VITE_SEED still names a seed
         // workspace, as it always has.
         const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
@@ -125,6 +141,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           name: seedScenario ? "Seed Workspace" : "Test Workspace",
         });
         setIsLoading(false);
+        return;
+      }
+
+      // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch
+      if (STORAGE_BACKEND === "bridge") {
+        await initBridgeWorkspace();
+        return;
+      }
+
+      // Stryker disable next-line ConditionalExpression: only the bench build takes this branch
+      if (__PIKOS_BENCH__) {
+        await initBenchWorkspace();
         return;
       }
 
@@ -175,6 +203,84 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // Creates the default workspace on first launch. Called by initWorkspace when no workspaces exist.
   // Safe to call concurrently — re-entrant callers share the in-flight promise.
 
+  /**
+   * Open the real writer from a browser, for the e2e bridge lane.
+   *
+   * None of the path resolution in `selectWorkspaceImpl` can be reused here:
+   * `appDataDir()` and the workspaces store are Tauri APIs, and the bridge lane
+   * has no Tauri. What it does share is the half worth testing, which is
+   * `connect_db` against a real file with real migrations behind it, so the
+   * per-spec token stands in for the resolved path and the rest of the sequence
+   * runs unchanged.
+   */
+  // Stryker disable all: the e2e lane's own start-up, which no other build runs
+  async function initBridgeWorkspace(): Promise<void> {
+    const transport = await import("@bridge/transport");
+    const token = transport.bridgeDbToken();
+    await connectDb(token);
+    if (transport.bridgeFirstRun()) await prepareFirstWorkspace();
+    const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
+    await launchSeedLoader(seedScenario)?.({ adapter, phase: "launch", setPendingNavigation });
+    await dataLoaderRef.current();
+    setWorkspace({
+      createdAt: new Date().toISOString(),
+      dbPath: token,
+      id: "bridge",
+      lastOpenedAt: new Date().toISOString(),
+      name: "Bridge Workspace",
+    });
+    setIsLoading(false);
+  }
+  // Stryker restore all
+
+  /** Open the scratch workspace the bench build was launched with, never the user's. */
+  // Stryker disable all: the in-app benchmark's own start-up, which no other build runs
+  async function initBenchWorkspace(): Promise<void> {
+    const bench = await import("@/bench/session");
+    const { db } = await bench.startLaunch();
+    await connectDb(db);
+    bench.markStage("connected");
+    await dataLoaderRef.current();
+    bench.markStage("loaded");
+    setWorkspace({
+      createdAt: new Date().toISOString(),
+      dbPath: db,
+      id: "bench",
+      lastOpenedAt: new Date().toISOString(),
+      name: "Bench Workspace",
+    });
+    setIsLoading(false);
+  }
+  // Stryker restore all
+
+  /**
+   * What a first launch adds to a freshly connected database: the assets directory
+   * beside it, and the tutorial, opened on its welcome page. The seed is idempotent.
+   * A seed failure must not block workspace creation: an empty workspace is
+   * recoverable for the user, but a hard error screen here would lock them out of
+   * an otherwise-working DB. Log and continue.
+   */
+  async function prepareFirstWorkspace(): Promise<void> {
+    await getPlatform().ensureAssetsDir();
+    try {
+      const { seedTutorial } = await import("@seeds/tutorial");
+      const seedResult = await seedTutorial(adapter);
+      // Stryker disable next-line ConditionalExpression: the seed returns nothing only for a seeded workspace, never on a first launch
+      if (seedResult) {
+        // Stryker disable next-line StringLiteral: log text
+        log.info("Tutorial seed planted");
+        pendingNavigationRef.current = {
+          folderId: seedResult.folderId,
+          pageId: seedResult.welcomePageId,
+        };
+      }
+      // Stryker disable next-line BlockStatement: an empty catch still continues with an empty workspace
+    } catch (seedError) {
+      // Stryker disable next-line StringLiteral: log text
+      log.error("Tutorial seed failed — continuing with empty workspace", seedError);
+    }
+  }
+
   function selectWorkspace(): Promise<void> {
     return (initPromiseRef.current ??= selectWorkspaceImpl());
   }
@@ -210,27 +316,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
 
       await connectDb(dbPath);
-
-      // Ensure the workspace assets directory exists alongside the DB
-      await getPlatform().ensureAssetsDir();
-
-      // Seed tutorial data for first-time users (idempotent — skips if already seeded).
-      // A seed failure must not block workspace creation: an empty workspace is
-      // recoverable for the user, but a hard error screen here would lock them
-      // out of an otherwise-working DB. Log and continue.
-      try {
-        const { seedTutorial } = await import("@seeds/tutorial");
-        const seedResult = await seedTutorial(adapter);
-        if (seedResult) {
-          log.info("Tutorial seed planted");
-          pendingNavigationRef.current = {
-            folderId: seedResult.folderId,
-            pageId: seedResult.welcomePageId,
-          };
-        }
-      } catch (seedError) {
-        log.error("Tutorial seed failed — continuing with empty workspace", seedError);
-      }
+      await prepareFirstWorkspace();
 
       const store = await load("workspaces.json", { autoSave: false, defaults: {} });
       const existing = (await store.get<Workspace[]>("workspaces")) ?? [];
@@ -272,6 +358,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     resetAndSeed,
     selectWorkspace,
     storage: workspace ? adapter : null,
+    viewCache,
     workspace,
   };
 
@@ -284,6 +371,12 @@ export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
   if (!ctx) throw new Error("useWorkspace must be used within <WorkspaceProvider>");
   return ctx;
+}
+
+/** The view cache; null outside a workspace, as in a component test rendered on its own. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useViewCacheController(): ViewCacheController | null {
+  return useContext(WorkspaceContext)?.viewCache ?? null;
 }
 
 /**

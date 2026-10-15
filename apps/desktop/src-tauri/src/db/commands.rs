@@ -10,6 +10,7 @@
 //! from that single list — the `#[tauri::command]` functions *and* the
 //! [`register`] call that puts them on the builder. Declaring a command is
 //! therefore the same act as registering it; there is no second list to forget.
+//! The e2e bridge's dispatcher comes off the same list, for the same reason.
 //!
 //! Commands with a real body stay hand-written where they live and are named in
 //! the `extras:` block, so they register through the same entry point. See
@@ -35,6 +36,12 @@ mod prelude {
     pub use pikos_calendar_sync::{
         connect_caldav, disconnect_account, reconnect_caldav, refresh_account_auto,
         release_all_credentials, resync_account_auto, CalendarSyncResult, Keychain,
+    };
+    pub use pikos_db::changes::ChangeState;
+    pub use pikos_db::moves::{MoveOutcome, Placement};
+    pub use pikos_db::reads::{PageIfNewer, TagCount, ViewCounts};
+    pub use pikos_db::views::{
+        CompletedCursor, CompletedWindow, ViewCursor, ViewKey, ViewScope, ViewWindow,
     };
     pub use pikos_db::*;
 
@@ -67,9 +74,22 @@ mod prelude {
 /// invoke surface, so a hand-written command reaches the frontend the same way a
 /// declared one does, and dropping it from that block is a compile error at its
 /// own call sites rather than a dead button.
+/// Put the invoke handler on the builder, with the in-app benchmark's commands in front of it in a
+/// `bench` build.
+fn install<F>(builder: tauri::Builder<tauri::Wry>, handler: F) -> tauri::Builder<tauri::Wry>
+where
+    F: Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static,
+{
+    #[cfg(feature = "bench")]
+    return builder.invoke_handler(crate::bench::wrap(handler));
+    #[cfg(not(feature = "bench"))]
+    builder.invoke_handler(handler)
+}
+
 macro_rules! db_commands {
     (
         extras: [ $($extra:path),* $(,)? ];
+        dev_extras: [ $($dev_extra:path),* $(,)? ];
         $(
             $(#[$mod_attr:meta])*
             mod $module:ident {
@@ -108,10 +128,61 @@ macro_rules! db_commands {
         /// nothing itself, so there is no registration list to fall out of sync
         /// with the commands that exist.
         pub fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
-            builder.invoke_handler(tauri::generate_handler![
+            #[cfg(debug_assertions)]
+            return install(builder, tauri::generate_handler![
+                $($extra,)*
+                $($dev_extra,)*
+                $($( $crate::db::$module::$name, )*)*
+            ]);
+            #[cfg(not(debug_assertions))]
+            return install(builder, tauri::generate_handler![
                 $($extra,)*
                 $($( $crate::db::$module::$name, )*)*
-            ])
+            ]);
+        }
+
+        /// The hand-written commands every build registers, debug or release.
+        #[cfg(test)]
+        pub const EXTRA_COMMANDS: &[&str] = &[$(stringify!($extra)),*];
+
+        /// The declared commands again, reached by name over the e2e bridge
+        /// instead of over IPC. Generated from the same list as [`register`], so
+        /// a command cannot reach one transport and miss the other. The
+        /// `extras:` are not here: the bridge handles the few it needs itself.
+        #[cfg(feature = "e2e-bridge")]
+        pub mod bridge {
+            #[allow(unused_imports)]
+            use super::prelude::*;
+            use crate::e2e_bridge::{arg, reply, Args, Reply};
+            use serde_json::Value;
+
+            /// `None` when `command` is not one `db_commands!` declares.
+            ///
+            /// A command whose call builds the OS keychain is refused: it touches
+            /// the machine's real credentials, and most such commands also call a
+            /// provider's server. Matching on the declaration rather than a list
+            /// means a new such command is refused unasked.
+            pub async fn dispatch(
+                pool: &sqlx::SqlitePool,
+                command: &str,
+                mut args: Args,
+            ) -> Option<Reply> {
+                Some(match command {
+                    $($(
+                        stringify!($name) => async {
+                            if stringify!($($call),*).contains("Keychain") {
+                                return Err(Value::String(format!(
+                                    "{} reaches the OS keychain, which the e2e bridge refuses",
+                                    stringify!($name),
+                                )));
+                            }
+                            $( let $arg: $arg_ty = arg(&mut args, stringify!($arg))?; )*
+                            reply($($writer)::+(pool, $($call),*).await)
+                        }.await,
+                    )*)*
+                    _ => return None,
+                })
+            }
         }
     };
 }
@@ -141,7 +212,6 @@ db_commands! {
         crate::notifications::scheduler::request_notification_permission,
         crate::notifications::scheduler::check_notification_permission,
         crate::notifications::click::replay_pending_notification_clicks,
-        crate::db::dev::backdate_page,
         crate::db::dev::backup_db,
         crate::db::dev::backup_db_before_import,
         crate::db::dev::list_backups,
@@ -150,9 +220,14 @@ db_commands! {
         crate::db::dev::export_ics,
         crate::db::dev::export_markdown,
         crate::db::dev::get_usage_stats,
+        crate::db::dev::wipe_app_data,
+    ];
+    // Debug builds only. Each deletes or rewrites data on one call, for the developer
+    // menu and the seed scripts, and a release has no business answering it.
+    dev_extras: [
+        crate::db::dev::backdate_page,
         crate::db::dev::reset_db,
         crate::db::dev::dev_seed_synced_calendar,
-        crate::db::dev::wipe_app_data,
     ];
 
     mod pages {
@@ -190,6 +265,39 @@ db_commands! {
         skip_occurrence(data: SkipOccurrenceInput) -> () = skip_occurrence_impl(data);
         undo_skip_occurrence(data: SkipOccurrenceInput) -> () = undo_skip_occurrence_impl(data);
         recompute_recurring_schedules() -> Vec<PageSummary> = recompute_recurring_schedules_impl();
+    }
+
+    /// Lists a window at a time and the other reads that replace holding every page, plus
+    /// moves and the change counter.
+    mod windows {
+        list_view(key: ViewKey, after: Option<ViewCursor>, limit: u32) -> ViewWindow
+            = views::list_view(&key, after.as_ref(), limit as usize);
+        list_view_ids(key: ViewKey, after: Option<ViewCursor>, through: Option<ViewCursor>)
+            -> Vec<String>
+            = views::list_view_ids(&key, after.as_ref(), through.as_ref());
+        list_completed_window(
+            scope: Option<ViewScope>,
+            since: Option<String>,
+            after: Option<CompletedCursor>,
+            limit: u32,
+        ) -> CompletedWindow
+            = views::list_completed(scope.as_ref(), since.as_deref(), after.as_ref(), limit as usize);
+        list_range(start: Option<String>, end: String, zone: String, open_only: bool)
+            -> Vec<PageSummary>
+            = reads::list_range(start.as_deref(), &end, &zone, open_only);
+        list_series_heads(open_only: bool, since: Option<i64>) -> Vec<PageSummary>
+            = reads::list_series_heads(open_only, since);
+        count_views(zone: String, today: chrono::NaiveDate) -> ViewCounts
+            = reads::count_views(&zone, today);
+        get_pages(ids: Vec<String>) -> Vec<PageSummary> = reads::get_pages(&ids);
+        get_page_if_newer(id: String, known: Option<i64>) -> PageIfNewer
+            = reads::get_page_if_newer(&id, known);
+        list_recent_pages(exclude: Option<String>, limit: u32) -> Vec<PageSummary>
+            = reads::list_recent_pages(exclude.as_deref(), limit as usize);
+        list_tags() -> Vec<TagCount> = reads::list_tags();
+        move_pages(ids: Vec<String>, place: Placement) -> MoveOutcome
+            = moves::move_pages(&ids, &place);
+        change_state() -> ChangeState = changes::change_state();
     }
 
     mod folders {
@@ -293,5 +401,23 @@ db_commands! {
         refresh_sync_account(account_id: String) -> Vec<CalendarSyncResult>
             = refresh_account_auto(Keychain::system(), &account_id);
         get_sync_status() -> Vec<AccountWithCalendars> = get_sync_status_impl();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The developer commands that delete or rewrite data on one call. Every build registers
+    /// `EXTRA_COMMANDS`, so none of these may be in it.
+    const DEV_ONLY: &[&str] = &["backdate_page", "reset_db", "dev_seed_synced_calendar"];
+
+    #[test]
+    fn a_release_build_registers_no_developer_command() {
+        for path in super::EXTRA_COMMANDS {
+            let name = path.rsplit("::").next().unwrap().trim();
+            assert!(
+                !DEV_ONLY.contains(&name),
+                "{path} is registered in release builds"
+            );
+        }
     }
 }

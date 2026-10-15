@@ -195,6 +195,29 @@ describe("AddAccountDialog", () => {
     );
   });
 
+  // qa: SYNC-03:3
+  it("connects a bare host and the host in capitals as one account", async () => {
+    const onConnect = vi.fn().mockResolvedValue(undefined);
+    for (const [i, typed] of ["caldav.fastmail.com", "CALDAV.FASTMAIL.COM"].entries()) {
+      render({ onConnect });
+      fireEvent.click(screen.getByText("CalDAV"));
+      fireEvent.change(screen.getByLabelText("Server URL"), { target: { value: typed } });
+      fireEvent.change(screen.getByLabelText("Username"), { target: { value: "me@example.com" } });
+      fireEvent.change(screen.getByLabelText("App password"), { target: { value: "app-pw" } });
+      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(onConnect).toHaveBeenCalledTimes(i + 1));
+      cleanup();
+    }
+
+    const identities = onConnect.mock.calls.map(
+      ([args]) => (args as { displayName: string }).displayName
+    );
+    expect(identities).toEqual([
+      "me@example.com · https://caldav.fastmail.com/",
+      "me@example.com · https://caldav.fastmail.com/",
+    ]);
+  });
+
   it("shows the error and stays open when the connection fails", async () => {
     const onConnect = vi.fn().mockRejectedValue(new Error("401 Unauthorized"));
     const onOpenChange = vi.fn();

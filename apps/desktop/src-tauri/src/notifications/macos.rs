@@ -14,14 +14,14 @@
 //! foreground. We deliver reminders through it so they fire regardless of focus.
 //!
 //! Bundling requirement: `UNUserNotificationCenter currentNotificationCenter`
-//! raises an Objective-C exception in a process without a bundle identifier —
-//! i.e. the unbundled binary produced by `tauri dev`. That exception is thrown
+//! raises an Objective-C exception in a process not running from an app bundle —
+//! the unbundled binary of `tauri dev` or a `--no-bundle` build. That exception is thrown
 //! inside the framework's `dispatch_once` initialization, where libdispatch's
 //! `_dispatch_client_callout` calls `std::terminate` before it can propagate —
 //! so `objc2::exception::catch` around the call cannot save us. We must avoid
 //! the call entirely when unbundled: every entry point first checks
 //! `is_bundled()` and returns `false` (caller falls back to the plugin path)
-//! when there's no bundle identifier. The `catch` wrappers remain as a
+//! when unbundled. The `catch` wrappers remain as a
 //! belt-and-suspenders guard for any other Objective-C exception.
 
 #![allow(non_snake_case)]
@@ -123,13 +123,20 @@ impl PikosNotificationDelegate {
     }
 }
 
-/// Whether this process is running inside a real app bundle (has a bundle
-/// identifier). `UNUserNotificationCenter currentNotificationCenter` throws an
-/// uncatchable exception when this is false, so callers must check it before
-/// touching the UserNotifications framework. `tauri dev` runs the bare binary
-/// from `target/debug/`, where `bundleIdentifier` is nil.
+/// Whether this process is running inside a real app bundle.
+/// `UNUserNotificationCenter currentNotificationCenter` throws an uncatchable
+/// exception when this is false, so callers must check it before touching the
+/// UserNotifications framework.
+///
+/// Read from where the process runs, not from `bundleIdentifier`: the plugin
+/// fallback gives an unbundled process an identifier when it delivers its first
+/// notification, so an identifier check passes from then on and the second
+/// notification aborts the app.
 fn is_bundled() -> bool {
-    NSBundle::mainBundle().bundleIdentifier().is_some()
+    NSBundle::mainBundle()
+        .bundlePath()
+        .to_string()
+        .ends_with(".app")
 }
 
 /// Human-readable name for a `UNAuthorizationStatus`, for diagnostics.

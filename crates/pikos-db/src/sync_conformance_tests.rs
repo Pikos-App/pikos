@@ -278,6 +278,7 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
                 calendar_id: cal.calendar_id.clone(),
                 provider: PROVIDER.into(),
                 folder_id: cal.folder_id.clone().expect("enable it before syncing"),
+                window_start: chrono::NaiveDate::MIN,
             };
             let delta = event_delta(uid, title, location.as_deref(), attendees.as_deref());
             reconcile(pool, &ctx, &delta).await.unwrap();

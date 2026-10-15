@@ -94,17 +94,20 @@ export function ShortcutsSettings() {
             <p className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               {group.label}
             </p>
-            <div className="divide-y divide-border rounded-lg border border-border bg-card">
+            <ul
+              aria-label={group.label}
+              className="divide-y divide-border rounded-lg border border-border bg-card"
+            >
               {group.items.map((item) => (
-                <div
+                <li
                   className="flex items-center justify-between gap-4 px-4 py-2.5"
                   key={`${item.group}-${item.label}`}
                 >
                   <span className="text-sm">{item.label}</span>
                   <ComboDisplay combo={item.combo} />
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         ))}
       </div>

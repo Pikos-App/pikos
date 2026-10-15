@@ -64,6 +64,7 @@ describe("RestoreSection", () => {
     expect(screen.getByText(/Everything you have now is kept/)).toBeInTheDocument();
   });
 
+  // qa: EXP-09:3
   it("restores the chosen snapshot once confirmed", async () => {
     const restore = vi
       .spyOn(MockStorageAdapter.prototype, "restoreBackup")
@@ -103,6 +104,7 @@ describe("RestoreSection", () => {
   // The heading goes with the contents. An empty state here could not tell you how to
   // fill it — you do not take a backup, Pikos does — so it was a section explaining
   // something you cannot act on, in the panel people open when they are already worried.
+  // qa: EXP-09:3
   it("shows nothing at all when no snapshot has been needed yet", async () => {
     vi.spyOn(MockStorageAdapter.prototype, "listBackups").mockResolvedValue([]);
     await render();

@@ -53,6 +53,7 @@ describe("ReconnectAccountDialog", () => {
     expect(screen.getByRole("button", { name: "Reconnect" })).toBeDisabled();
   });
 
+  // qa: SYNC-08:4
   it("stays open and shows the failure when the password is rejected", async () => {
     const onOpenChange = vi.fn();
     render({

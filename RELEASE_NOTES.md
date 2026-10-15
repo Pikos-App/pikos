@@ -1,10 +1,30 @@
-Your real calendar, inside Pikos. Connect the calendar you already use and the meeting you're walking into becomes a page you can write notes on.
+Fast at any size. Pikos now loads only what's on screen, so opening a page, searching, and switching views take the same time with fifty pages or half a million. The numbers, and how to check them on your own machine, are on the speed page at pikos.app/speed.
+
+### Faster
+
+- **Large workspaces.** Opening a page, searching, switching views, completing a task, and paging through the calendar each take under a tenth of a second, from fifty pages to half a million.
+- **No more stalled saves.** Now and then a save used to take ten to twenty times longer than usual. That work now happens in the background.
+- **Clicks and searches respond at once.** A page you click opens straight away, and a search runs as soon as you pause typing.
 
 ### New
 
-- **Calendar sync.** Connect Google Calendar, iCloud, or any CalDAV server. Your events arrive as real pages you can write on, tag, and search. It's read-only and opt-in, so nothing you do in Pikos is ever sent back out.
-- **Focus timer.** Start a session from any page and Pikos drops to just that page until you're done. It charts your focus time by week.
-- **Text size.** The interface, the editor, and the calendar each scale on their own. Set them in settings, or press `Cmd +` and `Cmd -` (`Ctrl` on Linux), which size whichever panel you're looking at.
-- **MCP server.** The command-line tool can hand your workspace to an AI agent over MCP, so an assistant can read and write pages with no Pikos account or server in the middle.
+- **Right-click a calendar block** to open its details.
+- **Esc goes to the calendar** from any page.
+- **Meeting links are links.** A Google Meet or Zoom link in a synced event's description is clickable.
 
-0.4.0 upgrades your workspace and 0.3.1 can't open it afterwards. Pikos backs up the old one before it does, so nothing is lost either way.
+### Fixed
+
+- **The current-time line moves.** It used to stay where it was when you opened the calendar.
+- **Changes from the CLI show up on their own.** Add or edit a page with `pikos` and the open app picks it up, without losing your place in the list.
+- **Old repeating meetings stay gone.** Calendar sync no longer brings in series that ended before you connected, and ones already synced are cleared.
+- **Each meeting shows once.** A repeating meeting no longer shows twice, and one you've ticked through to its end stays done.
+- **Google descriptions read as text**, not HTML, when they were written in Google Calendar on the web.
+
+### CLI and MCP
+
+An assistant pointed at `pikos mcp` can now get through a normal day's work.
+
+- **Pages read and write as Markdown.** Editing a page from the CLI or MCP keeps its formatting.
+- **More to change.** Move a page to another folder, edit its tags and subtitle, clear its schedule, and rename, trash or restore folders.
+- **Repeating pages.** Tick off a calendar series, and skip, move or reopen one occurrence.
+- **Better answers.** List pages by when they were created or completed, see tags and the trash, and search falls back to any matching word.

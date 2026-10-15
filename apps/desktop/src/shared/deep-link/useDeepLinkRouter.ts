@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getHours, getMinutes } from "date-fns";
 import { useEffect, useRef } from "react";
 
+import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useUI } from "@/shared/context/UIContext";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
@@ -16,7 +17,7 @@ const log = createLogger("deep-link");
 const DEEP_LINK_EVENT = "pikos://open-url";
 
 export function useDeepLinkRouter() {
-  const ui = useUI();
+  const ui: Targets = { ...useUI(), ...useCalendarDate() };
 
   // Latest ui is stashed in a ref so the listener subscription stays
   // mounted for the whole app lifetime instead of being torn down each render.
@@ -67,7 +68,9 @@ export function useDeepLinkRouter() {
   }, []);
 }
 
-function dispatch(ui: ReturnType<typeof useUI>, action: DeepLinkAction) {
+type Targets = ReturnType<typeof useUI> & ReturnType<typeof useCalendarDate>;
+
+function dispatch(ui: Targets, action: DeepLinkAction) {
   switch (action.type) {
     case "page":
       ui.openPage(action.pageId);

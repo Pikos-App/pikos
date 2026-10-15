@@ -18,6 +18,14 @@ pub mod scheduler;
 #[path = "test_support.rs"]
 mod test_support;
 
+#[cfg(test)]
+#[path = "replay.rs"]
+mod replay;
+
+#[cfg(test)]
+#[path = "replay_tests.rs"]
+mod replay_tests;
+
 pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
 pub use commands::{
     connect_caldav, connect_google, disconnect_account, disconnect_all_accounts, reconnect_caldav,

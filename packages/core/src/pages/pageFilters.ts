@@ -172,11 +172,14 @@ export function getCompletedViewPages(pages: PageSummary[], activeViewId: string
  * what needs rescheduling. It also split a timed page from an all-day one on the same
  * date, which no one chose.
  */
-export function groupTodayPages(pages: PageSummary[]): {
+export function groupTodayPages(
+  pages: PageSummary[],
+  now: Date = new Date()
+): {
   overdue: PageSummary[];
   today: PageSummary[];
 } {
-  const todayStr = localToday();
+  const todayStr = formatDateOnly(now);
 
   function isOverdue(p: PageSummary): boolean {
     const start = viewerStart(p);

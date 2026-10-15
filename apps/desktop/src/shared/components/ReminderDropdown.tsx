@@ -100,11 +100,13 @@ export function ReminderDropdown({ allDay = false, iconSize = 14, pageId }: Remi
         )}
 
         <DropdownMenuItem
+          aria-checked={isNone}
           className={cn(
             "justify-between",
             isNone ? "font-medium text-foreground" : "text-muted-foreground"
           )}
           onClick={() => void (isNone ? resetToDefault() : setNone())}
+          role="menuitemcheckbox"
         >
           <span className="flex items-center gap-2">
             <BellOff className="h-3.5 w-3.5 shrink-0" />
@@ -125,12 +127,14 @@ export function ReminderDropdown({ allDay = false, iconSize = 14, pageId }: Remi
           const isActive = isExplicit || isDefault;
           return (
             <DropdownMenuItem
+              aria-checked={isActive}
               className={cn(
                 "justify-between",
                 isActive ? "font-medium text-foreground" : "text-muted-foreground"
               )}
               key={opt.id}
               onClick={() => handleToggle(opt.id)}
+              role="menuitemcheckbox"
             >
               <span className="flex items-center gap-2">
                 <Bell className="h-3.5 w-3.5 shrink-0" />

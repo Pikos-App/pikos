@@ -45,11 +45,23 @@ app_rust_src_files() {
   rust_src_files | grep -v '^crates/pikos-cli/'
 }
 
+# `docs/` ships, so a pointer into a gitignored record is as dead there as in
+# source, and check-doc-footnotes.py only counts footnote markers. Kept out of
+# src_files because every other check in this script is about code.
+published_docs() {
+  git ls-files -- 'docs/**' | grep -E '\.md$'
+}
+
 # Every outbound request clones the shared client built here, so this is the one
 # file where a client may be constructed and the only place TLS, timeouts and the
 # user-agent are set.
 HTTP_CHOKEPOINT='crates/pikos-calendar-sync/src/http.rs'
 SYNC_CRATE='crates/pikos-calendar-sync/'
+
+# The browser test lane's writer: a server on localhost that answers the test page
+# and sends nothing out. It and its server-only, optional `hyper` compile only under
+# the `e2e-bridge` feature, which CI's test job enables and no release build does.
+E2E_BRIDGE='apps/desktop/src-tauri/src/e2e_bridge.rs'
 
 # ── 1. Secrets (gitleaks) ──────────────────────────────────────────────────────
 if command -v gitleaks &>/dev/null; then
@@ -91,7 +103,7 @@ fi
 # a backlog id or a path into them is a dead end for anyone reading the published
 # source. State the fact inline instead; the record is where the reasoning lives,
 # not where a reader of this file can go.
-hits=$(src_files \
+hits=$({ src_files; published_docs; } \
   | xargs grep -nE '(PKOS-[0-9]{4}|GAR-[0-9]{4}|SOLO-[0-9]{4}|\.agent/|\.claude/|`[A-Z][0-9]{1,3}`)' 2>/dev/null \
   | grep -v 'node_modules' || true)
 
@@ -133,6 +145,7 @@ hits=$(ts_src_files \
 
 rust_hits=$(rust_src_files \
   | grep -v "^$SYNC_CRATE" \
+  | grep -v "^$E2E_BRIDGE$" \
   | xargs grep -nE '\b(reqwest::|hyper::|ureq::|surf::|attohttpc::|isahc::|Client::new|HttpClient)' 2>/dev/null \
   | grep -v 'tauri.plugin' || true)
 
@@ -143,7 +156,8 @@ build_hits=$(rust_src_files \
 
 dep_hits=$(git ls-files -- 'Cargo.toml' '*/Cargo.toml' \
   | grep -v "^${SYNC_CRATE}Cargo.toml$" \
-  | xargs grep -nE '^[[:space:]]*(reqwest|hyper|ureq|surf|attohttpc|isahc)[[:space:]]*=' 2>/dev/null || true)
+  | xargs grep -nE '^[[:space:]]*(reqwest|hyper|ureq|surf|attohttpc|isahc)[[:space:]]*=' 2>/dev/null \
+  | grep -vE '^apps/desktop/src-tauri/Cargo\.toml:[0-9]+:hyper = \{ version = "1", features = \["http1", "server"\], optional = true \}$' || true)
 
 all_network="$hits$rust_hits"
 if [ -n "$all_network" ]; then

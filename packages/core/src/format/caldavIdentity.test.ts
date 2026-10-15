@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { caldavAccountIdentity, caldavBaseUrl } from "./caldavIdentity";
 
 describe("caldavBaseUrl", () => {
+  // qa: SYNC-03:3
   it("reads one server spelled four ways as one URL", () => {
     const spellings = [
       "Caldav.fastmail.com",

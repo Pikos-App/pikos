@@ -1,0 +1,8377 @@
+{
+  "folders": [
+    "f1",
+    "f2",
+    "f3"
+  ],
+  "pages": [
+    {
+      "completedAt": "2026-06-12T10:00:00",
+      "createdAt": "2026-06-01T09:01:00",
+      "folderId": null,
+      "id": "p00",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 5242880,
+      "status": "done",
+      "syncedIn": null,
+      "tags": [],
+      "title": "Same"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f1",
+      "id": "p01",
+      "lastOpenedAt": null,
+      "priority": 1,
+      "scheduledEnd": "2026-06-16T06:00:00",
+      "scheduledStart": "2026-06-16T05:00:00",
+      "sortOrder": 5242880,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later",
+        "work"
+      ],
+      "title": "Zebra"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f2",
+      "id": "p02",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": "2026-06-23T09:00:00",
+      "scheduledStart": "2026-06-23T08:00:00",
+      "sortOrder": 6291456,
+      "status": "not_started",
+      "syncedIn": "America/Los_Angeles",
+      "tags": [
+        "urgent"
+      ],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f2",
+      "id": "p03",
+      "lastOpenedAt": null,
+      "priority": 2,
+      "scheduledEnd": "2026-06-16",
+      "scheduledStart": "2026-06-14",
+      "sortOrder": 4194304,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f1",
+      "id": "p04",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": null,
+      "scheduledStart": "2026-06-06T06:30",
+      "sortOrder": 7340032,
+      "status": "not_started",
+      "syncedIn": "America/Los_Angeles",
+      "tags": [
+        "home"
+      ],
+      "title": "party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:01:00",
+      "folderId": "f1",
+      "id": "p05",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": "2026-06-21T18:00:00",
+      "scheduledStart": "2026-06-21T17:00:00",
+      "sortOrder": 2097152,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later"
+      ],
+      "title": "Item 10"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": null,
+      "id": "p06",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": "2026-06-20T04:00:00",
+      "scheduledStart": "2026-06-20T03:00:00",
+      "sortOrder": 1048576,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [],
+      "title": "Zebra"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f2",
+      "id": "p07",
+      "lastOpenedAt": null,
+      "priority": 3,
+      "scheduledEnd": "2026-06-07",
+      "scheduledStart": "2026-06-05",
+      "sortOrder": 0,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "home",
+        "later"
+      ],
+      "title": "Budget review"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": null,
+      "id": "p08",
+      "lastOpenedAt": null,
+      "priority": 1,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 4194304,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "work",
+        "urgent"
+      ],
+      "title": "plan"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": null,
+      "id": "p09",
+      "lastOpenedAt": "2026-06-14T11:00:00",
+      "priority": 1,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 3145728,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [],
+      "title": "Same"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f2",
+      "id": "p10",
+      "lastOpenedAt": null,
+      "priority": 1,
+      "scheduledEnd": null,
+      "scheduledStart": "2026-06-11",
+      "sortOrder": 6291456,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "home"
+      ],
+      "title": "Item 2"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f1",
+      "id": "p11",
+      "lastOpenedAt": "2026-06-14T17:00:00",
+      "priority": 2,
+      "scheduledEnd": null,
+      "scheduledStart": "2026-06-22T08:30",
+      "sortOrder": 4194304,
+      "status": "not_started",
+      "syncedIn": "America/Los_Angeles",
+      "tags": [
+        "urgent"
+      ],
+      "title": "Plan"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:01:00",
+      "folderId": null,
+      "id": "p12",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 6291456,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "urgent",
+        "later"
+      ],
+      "title": "Item 2"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f2",
+      "id": "p13",
+      "lastOpenedAt": null,
+      "priority": 4,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 2097152,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "work"
+      ],
+      "title": "Budget review"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f2",
+      "id": "p14",
+      "lastOpenedAt": null,
+      "priority": 2,
+      "scheduledEnd": null,
+      "scheduledStart": "2026-06-25",
+      "sortOrder": 4194304,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later"
+      ],
+      "title": "plan"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:01:00",
+      "folderId": "f1",
+      "id": "p15",
+      "lastOpenedAt": null,
+      "priority": 3,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 5242880,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later",
+        "home"
+      ],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": "2026-06-13T11:00:00",
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f2",
+      "id": "p16",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": "2026-06-13T14:00:00",
+      "scheduledStart": "2026-06-13T13:00:00",
+      "sortOrder": 6291456,
+      "status": "done",
+      "syncedIn": null,
+      "tags": [
+        "work",
+        "home"
+      ],
+      "title": "apple"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f2",
+      "id": "p17",
+      "lastOpenedAt": null,
+      "priority": 2,
+      "scheduledEnd": "2026-06-23T23:00:00",
+      "scheduledStart": "2026-06-23T22:00:00",
+      "sortOrder": 1048576,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "work"
+      ],
+      "title": "Item 10"
+    },
+    {
+      "completedAt": "2026-06-15T11:00:00",
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f1",
+      "id": "p18",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": "2026-06-17T23:00:00",
+      "scheduledStart": "2026-06-17T22:00:00",
+      "sortOrder": 5242880,
+      "status": "done",
+      "syncedIn": null,
+      "tags": [
+        "later"
+      ],
+      "title": "Same"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": null,
+      "id": "p19",
+      "lastOpenedAt": null,
+      "priority": 2,
+      "scheduledEnd": "2026-06-12",
+      "scheduledStart": "2026-06-10",
+      "sortOrder": 0,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "home"
+      ],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f1",
+      "id": "p20",
+      "lastOpenedAt": null,
+      "priority": 4,
+      "scheduledEnd": "2026-06-17T02:00:00",
+      "scheduledStart": "2026-06-17T01:00:00",
+      "sortOrder": 3145728,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [],
+      "title": "plan"
+    },
+    {
+      "completedAt": "2026-06-12T10:00:00",
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f3",
+      "id": "p21",
+      "lastOpenedAt": null,
+      "priority": 4,
+      "scheduledEnd": "2026-06-12T14:00:00",
+      "scheduledStart": "2026-06-12T13:00:00",
+      "sortOrder": 1048576,
+      "status": "done",
+      "syncedIn": null,
+      "tags": [],
+      "title": "Same"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": null,
+      "id": "p22",
+      "lastOpenedAt": "2026-06-14T21:00:00",
+      "priority": 1,
+      "scheduledEnd": "2026-06-20T01:00:00",
+      "scheduledStart": "2026-06-20T00:00:00",
+      "sortOrder": 6291456,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later"
+      ],
+      "title": "Plan"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": null,
+      "id": "p23",
+      "lastOpenedAt": "2026-06-14T15:00:00",
+      "priority": 1,
+      "scheduledEnd": "2026-06-05T06:00:00",
+      "scheduledStart": "2026-06-05T05:00:00",
+      "sortOrder": 1048576,
+      "status": "not_started",
+      "syncedIn": "Europe/Paris",
+      "tags": [
+        "urgent"
+      ],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:01:00",
+      "folderId": null,
+      "id": "p24",
+      "lastOpenedAt": null,
+      "priority": 2,
+      "scheduledEnd": null,
+      "scheduledStart": "2026-06-18",
+      "sortOrder": 7340032,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later"
+      ],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f2",
+      "id": "p25",
+      "lastOpenedAt": null,
+      "priority": 1,
+      "scheduledEnd": null,
+      "scheduledStart": null,
+      "sortOrder": 2097152,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "urgent"
+      ],
+      "title": "plan"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:01:00",
+      "folderId": null,
+      "id": "p26",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": null,
+      "scheduledStart": "2026-06-09",
+      "sortOrder": 2097152,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "work",
+        "urgent"
+      ],
+      "title": "plan"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": "f2",
+      "id": "p27",
+      "lastOpenedAt": "2026-06-14T11:00:00",
+      "priority": 1,
+      "scheduledEnd": "2026-06-23",
+      "scheduledStart": "2026-06-21",
+      "sortOrder": 7340032,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [],
+      "title": "🎉 Party"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:02:00",
+      "folderId": "f3",
+      "id": "p28",
+      "lastOpenedAt": null,
+      "priority": 4,
+      "scheduledEnd": "2026-06-18T06:00:00",
+      "scheduledStart": "2026-06-18T05:00:00",
+      "sortOrder": 5242880,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [],
+      "title": "Item 10"
+    },
+    {
+      "completedAt": null,
+      "createdAt": "2026-06-01T09:00:00",
+      "folderId": null,
+      "id": "p29",
+      "lastOpenedAt": null,
+      "priority": 0,
+      "scheduledEnd": "2026-06-07T14:00:00",
+      "scheduledStart": "2026-06-07T13:00:00",
+      "sortOrder": 0,
+      "status": "not_started",
+      "syncedIn": null,
+      "tags": [
+        "later"
+      ],
+      "title": "Item 2"
+    }
+  ],
+  "steps": [
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p04",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p04",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p27",
+            "p25",
+            "p14"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p27",
+            "p25",
+            "p14"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p29",
+            "p26",
+            "p06",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p29",
+            "p26",
+            "p06",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": null
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p27",
+            "p25",
+            "p14"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p27",
+            "p25",
+            "p14"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p29",
+            "p26",
+            "p06",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p29",
+            "p26",
+            "p06",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": {
+        "id": "p04",
+        "op": "update",
+        "updates": {
+          "priority": 4,
+          "tags": [
+            "home"
+          ]
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p29",
+            "p26",
+            "p06",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p29",
+            "p26",
+            "p06",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": {
+        "id": "p27",
+        "op": "update",
+        "updates": {
+          "title": "Same 1"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            10
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": {
+        "id": "p06",
+        "op": "update",
+        "updates": {
+          "priority": 2,
+          "tags": [
+            "later"
+          ]
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            10
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": {
+        "id": "p19",
+        "op": "update",
+        "updates": {
+          "completedAt": null,
+          "status": "not_started"
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p17",
+            "p13",
+            "p25",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            10
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": {
+        "after": "p26",
+        "before": "p22",
+        "ids": [
+          "p09"
+        ],
+        "op": "move"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            10
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            5
+          ]
+        ]
+      },
+      "write": {
+        "after": "p25",
+        "before": "p14",
+        "ids": [
+          "p17"
+        ],
+        "op": "move"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 9,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p02",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p02",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p02",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13",
+            "p02"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p02",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            7
+          ],
+          [
+            "home",
+            6
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p01",
+        "op": "update",
+        "updates": {
+          "priority": 1,
+          "tags": [
+            "home"
+          ]
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p24",
+            "p28",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "home",
+            6
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p02",
+        "op": "trash"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p29",
+            "p26",
+            "p19",
+            "p10",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p29",
+            "p26",
+            "p19",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p29",
+            "p26",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "home",
+            6
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p28",
+        "op": "update",
+        "updates": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-06-17T20:00:00"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p08",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "home",
+            6
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p29",
+        "op": "update",
+        "updates": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-06-11T02:00:00"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 6,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 8,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p04",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p04",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p04",
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01",
+            "p04"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p04",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p04",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "home",
+            6
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p08",
+        "op": "update",
+        "updates": {
+          "title": "Item 9 10"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 7,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 7,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p10",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p04",
+        "op": "trash"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 7,
+            "upcoming": 8
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 8,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 7,
+            "upcoming": 8
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p27",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p27",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10",
+            "p27"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p27",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10",
+            "p27"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10",
+            "p27"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09",
+          "p27"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p10",
+        "op": "update",
+        "updates": {
+          "title": "plan 12"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 7,
+            "upcoming": 7
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 10,
+            "today": 7,
+            "upcoming": 7
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p24",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p24",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12",
+            "p24"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p24",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p24",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p24",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            9
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p27",
+        "op": "update",
+        "updates": {
+          "completedAt": "2026-06-15T14:00:00",
+          "status": "done"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            8
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p24",
+        "op": "trash"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p17",
+            "p03",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            8
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "after": null,
+        "before": "p13",
+        "ids": [
+          "p07"
+        ],
+        "op": "move"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            8
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p03",
+        "op": "update",
+        "updates": {
+          "title": "Budget review 16"
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 7,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 7,
+            "upcoming": 6
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p10",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p10",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03",
+            "p10"
+          ],
+          "f2/priority/America/New_York": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p10",
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p25",
+            "p14",
+            "p10"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            8
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            5
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "after": "p11",
+        "before": "p15",
+        "ids": [
+          "p18"
+        ],
+        "op": "move"
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p10",
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 6,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 6,
+            "upcoming": 6
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 6,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 6,
+            "upcoming": 6
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03"
+          ],
+          "f2/priority/America/New_York": [
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p25",
+            "p14"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p25",
+            "p14"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            8
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            4
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p10",
+        "op": "update",
+        "updates": {
+          "completedAt": "2026-06-15T17:00:00",
+          "status": "done"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "expect": {
+        "completed": {
+          "everywhere": [
+            "p10",
+            "p27",
+            "p18",
+            "p16",
+            "p21",
+            "p00"
+          ],
+          "f1": [
+            "p18"
+          ],
+          "inbox": [
+            "p00"
+          ]
+        },
+        "counts": {
+          "America/New_York": {
+            "folders": {
+              "f1": 5,
+              "f2": 6,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 6,
+            "upcoming": 6
+          },
+          "Asia/Tokyo": {
+            "folders": {
+              "f1": 5,
+              "f2": 6,
+              "f3": 1
+            },
+            "inbox": 9,
+            "today": 6,
+            "upcoming": 6
+          }
+        },
+        "lists": {
+          "everywhere/overdue/America/New_York": [
+            "p23",
+            "p07",
+            "p26",
+            "p19",
+            "p29",
+            "p03"
+          ],
+          "everywhere/overdue/Asia/Tokyo": [
+            "p07",
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p03"
+          ],
+          "everywhere/today/America/New_York": [],
+          "everywhere/today/Asia/Tokyo": [],
+          "everywhere/upcoming/America/New_York": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "everywhere/upcoming/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p28",
+            "p22",
+            "p06",
+            "p05"
+          ],
+          "f1/date/America/New_York": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/date/Asia/Tokyo": [
+            "p01",
+            "p20",
+            "p05",
+            "p11",
+            "p15"
+          ],
+          "f1/manual/America/New_York": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/manual/Asia/Tokyo": [
+            "p05",
+            "p20",
+            "p11",
+            "p15",
+            "p01"
+          ],
+          "f1/priority/America/New_York": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/priority/Asia/Tokyo": [
+            "p01",
+            "p11",
+            "p15",
+            "p20",
+            "p05"
+          ],
+          "f1/title/America/New_York": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f1/title/Asia/Tokyo": [
+            "p05",
+            "p15",
+            "p20",
+            "p11",
+            "p01"
+          ],
+          "f2/date/America/New_York": [
+            "p07",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/date/Asia/Tokyo": [
+            "p07",
+            "p03",
+            "p17",
+            "p14",
+            "p13",
+            "p25"
+          ],
+          "f2/manual/America/New_York": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03"
+          ],
+          "f2/manual/Asia/Tokyo": [
+            "p07",
+            "p13",
+            "p25",
+            "p17",
+            "p14",
+            "p03"
+          ],
+          "f2/priority/America/New_York": [
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/priority/Asia/Tokyo": [
+            "p25",
+            "p03",
+            "p17",
+            "p14",
+            "p07",
+            "p13"
+          ],
+          "f2/title/America/New_York": [
+            "p25",
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p14"
+          ],
+          "f2/title/Asia/Tokyo": [
+            "p25",
+            "p07",
+            "p13",
+            "p03",
+            "p17",
+            "p14"
+          ],
+          "inbox/date/America/New_York": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/date/Asia/Tokyo": [
+            "p23",
+            "p26",
+            "p19",
+            "p29",
+            "p22",
+            "p06",
+            "p09",
+            "p08",
+            "p12"
+          ],
+          "inbox/manual/America/New_York": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/manual/Asia/Tokyo": [
+            "p29",
+            "p19",
+            "p06",
+            "p23",
+            "p26",
+            "p09",
+            "p08",
+            "p22",
+            "p12"
+          ],
+          "inbox/priority/America/New_York": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/priority/Asia/Tokyo": [
+            "p23",
+            "p22",
+            "p09",
+            "p08",
+            "p19",
+            "p06",
+            "p26",
+            "p29",
+            "p12"
+          ],
+          "inbox/title/America/New_York": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ],
+          "inbox/title/Asia/Tokyo": [
+            "p29",
+            "p12",
+            "p08",
+            "p19",
+            "p23",
+            "p26",
+            "p22",
+            "p09",
+            "p06"
+          ]
+        },
+        "ranges": {
+          "America/New_York": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ],
+          "Asia/Tokyo": [
+            "p01",
+            "p03",
+            "p05",
+            "p06",
+            "p18",
+            "p20",
+            "p22",
+            "p27",
+            "p28"
+          ]
+        },
+        "recents": [
+          "p22",
+          "p11",
+          "p23",
+          "p09"
+        ],
+        "tags": [
+          [
+            "later",
+            8
+          ],
+          [
+            "urgent",
+            6
+          ],
+          [
+            "home",
+            4
+          ],
+          [
+            "work",
+            4
+          ]
+        ]
+      },
+      "write": {
+        "id": "p25",
+        "op": "update",
+        "updates": {
+          "title": "apple 19"
+        }
+      }
+    }
+  ],
+  "today": "2026-06-15",
+  "zones": [
+    "America/New_York",
+    "Asia/Tokyo"
+  ]
+}

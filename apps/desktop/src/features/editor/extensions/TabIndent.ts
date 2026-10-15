@@ -4,6 +4,8 @@ import { Plugin, PluginKey, Selection } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
+import { Keyboard } from "@/shared/keyboard/registry";
+
 const TAB = "    "; // 4 spaces for inline insertion in normal text
 const CODE_TAB = "  "; // 2 spaces for code blocks (preserves alignment)
 const INDENT_SIZE = 2; // rem units per indent level
@@ -94,6 +96,7 @@ export const TabIndent = Extension.create({
                 dispatch(
                   state.tr.setSelection(Selection.near(state.doc.resolve(state.selection.to)))
                 );
+                Keyboard.markUsed(event);
                 return true;
               }
               return false;

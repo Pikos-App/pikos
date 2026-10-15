@@ -7,9 +7,9 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -20,7 +20,7 @@ afterEach(() => {
 
 async function setupRecurringPage() {
   const hook = renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {
@@ -67,6 +67,26 @@ describe("completeRecurringPage idempotency", () => {
     expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
     const doneStandups = pages.filter((p) => p.title === "Standup" && p.status === "done");
     expect(doneStandups).toHaveLength(1);
+  });
+
+  it("keeps one copy of the clone when a fetch lands it before the completion returns", async () => {
+    const { hook, pageId } = await setupRecurringPage();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked with .call(this, …) inside the mock below
+    const origComplete = MockStorageAdapter.prototype.completeRecurringPage;
+    vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage").mockImplementation(
+      async function (this: MockStorageAdapter, data) {
+        const result = await origComplete.call(this, data);
+        hook.result.current.pages.mergePages([result.clone]);
+        return result;
+      }
+    );
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId);
+    });
+
+    const pages = hook.result.current.pages.pages;
+    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
   });
 
   it("clears the guard on settle so a later genuine completion still runs", async () => {
@@ -425,7 +445,7 @@ async function setupSyncedRecurring(
   scheduledEnd?: string
 ): Promise<{ hook: Hook; pageId: string }> {
   const hook = renderHookWithProviders(() => ({
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {
@@ -653,7 +673,7 @@ describe("viewerWallClock", () => {
 describe("scheduleOnce head-drag snapping (U6-F1)", () => {
   async function setupWeeklyMWF() {
     const hook = renderHookWithProviders(() => ({
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {
@@ -717,7 +737,7 @@ describe("scheduleOnce head-drag snapping (U6-F1)", () => {
 describe("scheduleOnce head-drag realign fidelity", () => {
   async function setupWeeklyRule(rrule: string) {
     const hook = renderHookWithProviders(() => ({
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {
@@ -758,7 +778,7 @@ describe("scheduleOnce head-drag realign fidelity", () => {
 describe("uncompleteRecurringHead (U6-F2)", () => {
   async function setupFiniteSeries() {
     const hook = renderHookWithProviders(() => ({
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {

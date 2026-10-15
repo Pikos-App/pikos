@@ -1,5 +1,5 @@
 import type { AccountWithCalendars, SyncCalendar } from "@pikos/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SyncAccountCard } from "./SyncAccountCard";
@@ -70,6 +70,7 @@ describe("SyncAccountCard", () => {
     expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();
   });
 
+  // qa: SYNC-08:4
   it("shows Reconnect needed from the stored flag, with no resync result in hand", () => {
     render_({ account: account([cal()], { reconnectNeeded: true }) });
     expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
@@ -88,6 +89,7 @@ describe("SyncAccountCard", () => {
     expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();
   });
 
+  // qa: SYNC-09:5
   it("offers a full refresh alongside the incremental resync", async () => {
     const onRefresh = vi.fn();
     const onResync = vi.fn();
@@ -101,6 +103,24 @@ describe("SyncAccountCard", () => {
 
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(onResync).not.toHaveBeenCalled();
+  });
+
+  // qa: SYNC-10:4
+  it("asks before disconnecting, naming the account, and disconnects only on confirm", async () => {
+    const onDisconnect = vi.fn(() => Promise.resolve());
+    render_({ onDisconnect });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Account actions for me@example.com" }),
+      { button: 0, ctrlKey: false }
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Disconnect me@example.com?");
+    expect(onDisconnect).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+    expect(onDisconnect).toHaveBeenCalledOnce();
   });
 
   it("handles an account with no discovered calendars", () => {

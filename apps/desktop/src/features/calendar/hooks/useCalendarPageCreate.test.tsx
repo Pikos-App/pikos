@@ -6,11 +6,11 @@ import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
-import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { useCalendarPageCreate } from "./useCalendarPageCreate";
 
@@ -30,7 +30,7 @@ function setup() {
     const create = useCalendarPageCreate((id) => created.push(id));
     return {
       create,
-      pages: usePages(),
+      pages: usePagesNow(),
       settings: useAppSettings(),
       ui: useUI(),
       undo: useUndoDelete(),

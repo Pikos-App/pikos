@@ -103,6 +103,11 @@ function offsetAt(zone: string, utcMs: number): number {
  * Converts a wall-clock ISO string in `zone` to its UTC instant, applying the
  * DST edge policy documented above. Date-only input is treated as midnight.
  */
+/** An instant as the database stores one: UTC to the second, `YYYY-MM-DDTHH:MM:SSZ`. */
+export function utcInstant(date: Date): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export function wallClockToUtc(zone: string, wallClockIso: string): Date {
   const wall = wallIsoToMs(wallClockIso);
 
@@ -227,7 +232,7 @@ export function expandRecurrenceInZone(opts: {
         ? utcToWallClock(viewerZone, wallClockToUtc(eventZone, occ.scheduledEnd))
         : null,
       scheduledStart: utcToWallClock(viewerZone, utcStart),
-      utcStart: utcStart.toISOString().replace(/\.\d{3}Z$/, "Z"),
+      utcStart: utcInstant(utcStart),
     };
   });
 }

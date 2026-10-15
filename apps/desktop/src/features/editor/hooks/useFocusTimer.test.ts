@@ -200,11 +200,13 @@ describe("end-of-session notice", () => {
     });
   }
 
+  // qa: EDIT-20:4
   it("reports a recorded session in whole minutes", async () => {
     await runSession(25 * 60);
     expect(notices).toEqual(["Focused for 25 minutes"]);
   });
 
+  // qa: EDIT-20:4
   it("says so when a session was too short to record", async () => {
     await runSession(MIN_SESSION_S - 1);
     expect(notices).toEqual([`Under ${MIN_SESSION_S} seconds — not recorded`]);

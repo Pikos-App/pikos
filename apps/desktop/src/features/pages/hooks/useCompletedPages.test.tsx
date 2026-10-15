@@ -68,7 +68,7 @@ describe("useCompletedPages — calendar isolation", () => {
     // must NOT surface it in the Inbox Completed section.
     const hook = await setup("inbox");
 
-    act(() => {
+    await act(async () => {
       hook.result.current.pages.mergePages([
         fixtureDonePage({
           completedAt: "2025-06-01T10:00:00",
@@ -76,6 +76,7 @@ describe("useCompletedPages — calendar isolation", () => {
           id: "calendar-loaded",
         }),
       ]);
+      await Promise.resolve();
     });
 
     expect(hook.result.current.completed.completedPages).toHaveLength(0);
@@ -93,11 +94,12 @@ describe("useCompletedPages — session gate", () => {
       page = await hook.result.current.pages.createPage({ title: "Quick win" });
     });
 
-    act(() => {
+    await act(async () => {
       hook.result.current.pages.updatePage(page.id, {
         completedAt: nowLocalISO(),
         status: "done",
       });
+      await Promise.resolve();
     });
 
     const result = hook.result.current.completed.completedPages;
@@ -166,11 +168,12 @@ describe("useCompletedPages — per-view isolation", () => {
       });
     });
 
-    act(() => {
+    await act(async () => {
       hook.result.current.pages.updatePage(pageInA.id, {
         completedAt: nowLocalISO(),
         status: "done",
       });
+      await Promise.resolve();
     });
 
     // Folder A sees it via the session gate.

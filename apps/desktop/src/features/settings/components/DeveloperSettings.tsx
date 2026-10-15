@@ -25,11 +25,6 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
     label: "Realistic",
   },
   {
-    description: "Heavy load: many folders, pages, and schedules.",
-    id: "stress",
-    label: "Stress",
-  },
-  {
     description:
       "~22 pages anchored to now for testing reminders: imminent, overdue, all-day, completed, disabled, and various lead times.",
     id: "notifications",

@@ -13,10 +13,10 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useRecurringGapDialog } from "@/shared/context/RecurringGapDialogContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 // Head 2099-01-05 on a daily rule, "today" 2099-01-10 → 06..09 are the backlog
 // behind a head tick.
@@ -35,7 +35,7 @@ afterEach(() => {
 async function setup(opts: { synced?: boolean } = {}) {
   const hook = renderHookWithProviders(() => ({
     dialog: useRecurringGapDialog(),
-    pages: usePages(),
+    pages: usePagesNow(),
     workspace: useWorkspace(),
   }));
   await act(async () => {
@@ -150,7 +150,7 @@ describe("when the dialog opens", () => {
   it("a mirror connected today has no backlog — nothing below the floor was ever the user's", async () => {
     const hook = renderHookWithProviders(() => ({
       dialog: useRecurringGapDialog(),
-      pages: usePages(),
+      pages: usePagesNow(),
       workspace: useWorkspace(),
     }));
     await act(async () => {

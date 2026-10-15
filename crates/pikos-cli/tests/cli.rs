@@ -61,6 +61,11 @@ async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
 /// Link a page to a synced calendar, creating a throwaway account on first use.
 /// `sync_state` ∈ active | detached | tombstoned.
 async fn mark_synced(db: &str, page_id: &str, sync_state: &str) {
+    mark_synced_at(db, page_id, sync_state, "2026-01-01T00:00:00Z").await;
+}
+
+/// [`mark_synced`], connected at `connected` (UTC), which sets the page's synced-since day.
+async fn mark_synced_at(db: &str, page_id: &str, sync_state: &str, connected: &str) {
     let pool = open_pool(db).await.unwrap();
     sqlx::query(
         "INSERT OR IGNORE INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
@@ -72,13 +77,14 @@ async fn mark_synced(db: &str, page_id: &str, sync_state: &str) {
     sqlx::query(
         "INSERT INTO page_sync
          (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
-         VALUES (?, ?, 'acct', 'caldav', 'cal', ?, ?, ?, '2026-01-01T00:00:00Z')",
+         VALUES (?, ?, 'acct', 'caldav', 'cal', ?, ?, ?, ?)",
     )
     .bind(format!("ps-{page_id}"))
     .bind(page_id)
     .bind(format!("href-{page_id}"))
     .bind(format!("uid-{page_id}"))
     .bind(sync_state)
+    .bind(connected)
     .execute(&pool)
     .await
     .unwrap();
@@ -221,6 +227,68 @@ async fn list_rejects_bad_status_exit_2() {
 }
 
 #[tokio::test]
+async fn a_write_from_another_process_counts_as_someone_elses() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Groceries")]).await;
+    let pool = open_pool(dbs).await.unwrap();
+    let before = pikos_db::changes::change_state(&pool).await.unwrap();
+
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--title",
+            "Groceries, Saturday",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let after = pikos_db::changes::change_state(&pool).await.unwrap();
+    assert!(after.seq > before.seq);
+    assert_eq!(after.own_changes, before.own_changes);
+}
+
+#[tokio::test]
+async fn stress_seed_writes_bodies_the_editor_can_open() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let out = cli(
+        dbs,
+        &[
+            "stress",
+            "seed",
+            "--pages",
+            "30",
+            "--large-pages",
+            "1",
+            "--large-words",
+            "20",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let not_documents: i64 = scalar(
+        dbs,
+        "SELECT COUNT(*) FROM pages \
+         WHERE NOT json_valid(content) OR json_extract(content, '$.type') <> 'doc' \
+         OR content_text LIKE '{%'",
+    )
+    .await;
+    assert_eq!(not_documents, 0);
+}
+
+#[tokio::test]
 async fn search_finds_body_text() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
@@ -230,6 +298,52 @@ async fn search_finds_body_text() {
     let out = cli(dbs, &["search", "avocado", "--json"]);
     assert!(out.status.success());
     assert_eq!(json(&out)["results"][0]["title"], "Groceries");
+}
+
+// qa: CLI-07:2
+#[tokio::test]
+async fn search_pages_through_every_match_with_its_cursor() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let pages = (0..5)
+        .map(|i| {
+            let mut p = base_page(&format!("Note {i}"));
+            p.content_text = Some("remember the avocado".into());
+            p
+        })
+        .collect();
+    let ids = seed(dbs, pages).await;
+
+    let mut seen = Vec::new();
+    let mut after: Option<String> = None;
+    for _ in 0..ids.len() {
+        let mut args = vec!["search", "avocado", "--limit", "2", "--json"];
+        if let Some(cursor) = &after {
+            args.extend(["--after", cursor]);
+        }
+        let page = json(&cli(dbs, &args));
+        for r in page["results"].as_array().unwrap() {
+            seen.push(r["id"].as_str().unwrap().to_string());
+        }
+        match page["next"].as_str() {
+            Some(next) => after = Some(next.to_string()),
+            None => break,
+        }
+    }
+    seen.sort();
+    let mut expected = ids.clone();
+    expected.sort();
+    assert_eq!(seen, expected);
+}
+
+// qa: CLI-07:2
+#[tokio::test]
+async fn search_refuses_a_cursor_it_never_printed() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Groceries")]).await;
+    let out = cli(dbs, &["search", "avocado", "--after", "soon", "--json"]);
+    assert_eq!(code(&out), 2);
 }
 
 #[tokio::test]
@@ -504,6 +618,7 @@ async fn update_moves_a_timed_page_and_keeps_its_length() {
     );
 }
 
+// qa: CLI-03
 #[tokio::test]
 async fn update_refuses_a_bare_date_against_a_timed_page() {
     let db = unique_db();
@@ -607,20 +722,54 @@ async fn update_due_rejects_freeform_without_touching_the_row() {
     }
 }
 
+/// Each flag that moves a schedule, with a value that would move it.
+const SCHEDULE_FLAGS: [[&str; 2]; 3] = [
+    ["--due", "2026-09-02T10:00:00"],
+    ["--all-day", "2026-09-02"],
+    ["--end", "2026-09-01T18:00:00"],
+];
+
+/// The flags that change a schedule without taking a value.
+const BARE_SCHEDULE_FLAGS: [&str; 2] = ["--unschedule", "--no-end"];
+
+// qa: CLI-10:6
 #[tokio::test]
-async fn update_due_refuses_on_a_synced_page() {
+async fn schedule_flags_refuse_on_a_synced_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let ids = seed(dbs, vec![base_page("Standup")]).await;
+    // A schedule to hold still: --end on an unscheduled page fails validation, not the lock.
+    assert!(cli(
+        dbs,
+        &["update", &ids[0], "--due", "2026-09-01T14:00:00", "--json"]
+    )
+    .status
+    .success());
     mark_synced(dbs, &ids[0], "active").await;
 
-    let out = cli(dbs, &["update", &ids[0], "--due", "2026-09-01", "--json"]);
-    assert_eq!(code(&out), 4);
-    assert_eq!(scheduled_start(dbs, &ids[0]).await, None);
+    for [flag, value] in SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &ids[0], flag, value, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &ids[0]).await.as_deref(),
+            Some("2026-09-01T14:00:00"),
+            "{flag} moved the start"
+        );
+        assert_eq!(scheduled_end(dbs, &ids[0]).await, None, "{flag} set an end");
+    }
+    for flag in BARE_SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &ids[0], flag, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &ids[0]).await.as_deref(),
+            Some("2026-09-01T14:00:00"),
+            "{flag} touched the start"
+        );
+    }
 }
 
 #[tokio::test]
-async fn update_due_refuses_on_a_recurring_page() {
+async fn schedule_flags_refuse_on_a_recurring_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
@@ -637,18 +786,157 @@ async fn update_due_refuses_on_a_recurring_page() {
     )
     .await;
 
-    let out = cli(dbs, &["update", &id, "--due", "2026-09-01", "--json"]);
-    assert_eq!(code(&out), 4);
-    assert_eq!(scheduled_start(dbs, &id).await, head, "head unmoved");
+    let end = scheduled_end(dbs, &id).await;
+
+    for [flag, value] in SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &id, flag, value, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &id).await,
+            head,
+            "{flag} moved the head"
+        );
+        assert_eq!(
+            scheduled_end(dbs, &id).await,
+            end,
+            "{flag} moved the head's end"
+        );
+        assert_eq!(
+            scalar::<String>(
+                dbs,
+                &format!(
+                    "SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'"
+                )
+            )
+            .await,
+            rule_base,
+            "{flag} moved the rule's base"
+        );
+    }
+    for flag in BARE_SCHEDULE_FLAGS {
+        let out = cli(dbs, &["update", &id, flag, "--json"]);
+        assert_eq!(code(&out), 4, "{flag} should refuse");
+        assert_eq!(
+            scheduled_start(dbs, &id).await,
+            head,
+            "{flag} moved the head"
+        );
+        assert_eq!(
+            scheduled_end(dbs, &id).await,
+            end,
+            "{flag} moved the head's end"
+        );
+    }
+}
+
+// qa: CLI-10:6
+#[tokio::test]
+async fn update_unschedule_removes_the_date_and_no_end_keeps_the_start() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+
+    let trimmed = cli(dbs, &["update", &id, "--no-end", "--json"]);
+    assert!(trimmed.status.success());
     assert_eq!(
-        scalar::<String>(
-            dbs,
-            &format!("SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'")
-        )
-        .await,
-        rule_base,
-        "rule base unmoved"
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-01T14:00:00")
     );
+    assert_eq!(scheduled_end(dbs, &id).await, None);
+
+    let cleared = cli(dbs, &["update", &id, "--unschedule", "--json"]);
+    assert!(cleared.status.success());
+    assert!(json(&cleared)["scheduledStart"].is_null());
+    let rows: i64 = scalar(
+        dbs,
+        &format!("SELECT COUNT(*) FROM page_schedules WHERE page_id = '{id}'"),
+    )
+    .await;
+    assert_eq!(rows, 0);
+
+    let again = cli(dbs, &["update", &id, "--unschedule", "--json"]);
+    assert!(again.status.success(), "unscheduling twice is harmless");
+    let nothing_to_trim = cli(dbs, &["update", &id, "--no-end", "--json"]);
+    assert_eq!(code(&nothing_to_trim), 2);
+}
+
+#[tokio::test]
+async fn update_unschedule_refuses_a_flag_that_would_reschedule() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &id,
+            "--unschedule",
+            "--due",
+            "2026-09-03",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-01T14:00:00")
+    );
+}
+
+// qa: CLI-10:6
+#[tokio::test]
+async fn update_tags_add_and_remove_as_the_writer_stores_them() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut page = base_page("Plan");
+    page.tags = vec!["work".into(), "q3".into()];
+    let ids = seed(dbs, vec![page]).await;
+
+    let out = cli(
+        dbs,
+        &[
+            "update", &ids[0], "--tag", "#Errands", "--tag", "work", "--untag", "Q3", "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(json(&out)["tags"], serde_json::json!(["work", "errands"]));
+
+    let tagged = json(&cli(dbs, &["list", "--tag", "errands", "--json"]));
+    assert_eq!(
+        tagged.as_array().unwrap().len(),
+        1,
+        "the tag index follows the edit"
+    );
+    let dropped = json(&cli(dbs, &["list", "--tag", "q3", "--json"]));
+    assert!(dropped.as_array().unwrap().is_empty());
+
+    let both = cli(
+        dbs,
+        &["update", &ids[0], "--tag", "x", "--untag", "X", "--json"],
+    );
+    assert_eq!(code(&both), 2);
+    let blank = cli(dbs, &["update", &ids[0], "--tag", "#", "--json"]);
+    assert_eq!(code(&blank), 2);
+}
+
+// qa: CLI-10:6
+#[tokio::test]
+async fn update_subtitle_sets_and_clears_the_line_under_the_title() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan")]).await;
+
+    let set = cli(
+        dbs,
+        &["update", &ids[0], "--subtitle", "For Monday", "--json"],
+    );
+    assert_eq!(json(&set)["subtitle"], "For Monday");
+    let cleared = cli(dbs, &["update", &ids[0], "--subtitle", "", "--json"]);
+    assert_eq!(json(&cleared)["subtitle"], "");
 }
 
 // ─── workspace targeting + migration consent ─────────────────────────────────
@@ -766,6 +1054,51 @@ async fn add_single_parses_via_bridge() {
     assert_eq!(v["created"][0]["priority"], 2); // !high
     assert_eq!(v["created"][0]["tags"][0], "errands");
     assert!(v["created"][0]["scheduledStart"].is_string()); // "tomorrow" parsed
+}
+
+// qa: CLI-02
+#[tokio::test]
+async fn add_creates_the_page_with_its_note_and_reminder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(out) = cli_bridge(
+        dbs,
+        &[
+            "add",
+            "Dentist tomorrow 3pm remind 30m before // ask about the crown",
+            "--json",
+        ],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built (pnpm --filter @pikos/bridge build)");
+        return;
+    };
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let created = &json(&out)["created"][0];
+    assert_eq!(created["title"], "Dentist");
+    let id = created["id"].as_str().unwrap().to_string();
+
+    let start = scheduled_start(dbs, &id).await.unwrap();
+    assert!(start.ends_with("T15:00:00"), "not at 3pm: {start}");
+    let lead: i64 = scalar(
+        dbs,
+        &format!("SELECT minutes_before FROM page_reminders WHERE page_id = '{id}'"),
+    )
+    .await;
+    assert_eq!(lead, 30);
+    let body: String = scalar(
+        dbs,
+        &format!("SELECT content_text FROM pages WHERE id = '{id}'"),
+    )
+    .await;
+    assert!(
+        body.contains("ask about the crown"),
+        "note missing: {body:?}"
+    );
 }
 
 #[tokio::test]
@@ -942,42 +1275,323 @@ async fn mark_recurring(db: &str, page_id: &str, start: &str) {
     .unwrap();
 }
 
-/// The CLI has no expansion engine, so it can't name which occurrence a tick means
-/// — for a live mirror it refuses and says where to do it. The refusal is on the
-/// *pair* (synced **and** recurring): a synced one-off has exactly one occurrence,
-/// so completing it needs no engine and must still work. Guard the placement from
-/// both sides, since widening it to all synced pages would quietly make `pikos done`
-/// useless against a calendar, and narrowing it would complete the wrong week.
+/// A weekly Monday 9am in London from 2026-10-19, mirrored from a connected calendar.
+/// London leaves summer time on 25 October and the US a week later, so the two
+/// Mondays sit on different offsets for any viewer outside London.
+async fn seed_london_standup(db: &str, connected: &str) -> String {
+    let ids = seed(db, vec![base_page("Standup")]).await;
+    let pool = open_pool(db).await.unwrap();
+    // The rule goes on before the mirror locks — the order the reconciler writes in.
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: Vec::new(),
+            scheduled_start: "2026-10-19T09:00:00".into(),
+            scheduled_end: Some("2026-10-19T09:15:00".into()),
+            timezone: "Europe/London".into(),
+        },
+    )
+    .await
+    .unwrap();
+    mark_synced_at(db, &ids[0], "active", connected).await;
+    ids.into_iter().next().unwrap()
+}
+
+/// London wall-clock → this machine's, computed apart from the code under test.
+fn on_this_machine(london: &str) -> String {
+    let wall = chrono::NaiveDateTime::parse_from_str(london, "%Y-%m-%dT%H:%M:%S").unwrap();
+    let utc = pikos_recurrence::zoned::wall_clock_to_utc("Europe/London", wall).unwrap();
+    pikos_recurrence::zoned::utc_to_wall_clock(pikos_db::device_zone().name(), utc)
+        .unwrap()
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+async fn ticked_clone_start(db: &str, series: &str, day: &str) -> String {
+    let page = json(&cli(db, &["read", series, "--json"]));
+    let clone = page["completedOccurrences"][day]
+        .as_str()
+        .unwrap_or_else(|| panic!("{day} was ticked off: {page}"))
+        .to_string();
+    json(&cli(db, &["read", &clone, "--json"]))["scheduledStart"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+// qa: CLI-15
 #[tokio::test]
-async fn done_refuses_a_synced_series_but_not_a_synced_one_off() {
+async fn done_ticks_off_a_calendar_series_at_the_time_the_app_shows() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
-    let ids = seed(dbs, vec![base_page("Standup"), base_page("Review")]).await;
-    // The rule goes on before the mirror locks — the order the reconciler writes in.
-    mark_recurring(dbs, &ids[0], "2026-06-01T09:00:00").await;
+    let id = seed_london_standup(dbs, "2026-01-01T00:00:00Z").await;
+
+    let oldest = cli(dbs, &["done", &id, "--json"]);
+    assert!(
+        oldest.status.success(),
+        "{}",
+        String::from_utf8_lossy(&oldest.stderr)
+    );
+    assert_eq!(
+        ticked_clone_start(dbs, &id, "2026-10-19").await,
+        on_this_machine("2026-10-19T09:00:00")
+    );
+
+    let named = cli(dbs, &["done", &id, "--date", "2026-10-26", "--json"]);
+    assert!(
+        named.status.success(),
+        "{}",
+        String::from_utf8_lossy(&named.stderr)
+    );
+    assert_eq!(
+        ticked_clone_start(dbs, &id, "2026-10-26").await,
+        on_this_machine("2026-10-26T09:00:00"),
+        "the week London's clocks changed converts at London's new offset"
+    );
+
+    let again = cli(dbs, &["done", &id, "--date", "2026-10-26", "--json"]);
+    assert!(again.status.success(), "ticking it twice is harmless");
+}
+
+#[tokio::test]
+async fn done_with_a_date_refuses_what_the_calendar_series_cannot_tick() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_london_standup(dbs, "2026-10-20T12:00:00Z").await;
+
+    let tuesday = cli(dbs, &["done", &id, "--date", "2026-10-27", "--json"]);
+    assert_eq!(code(&tuesday), 2, "the rule never gives a Tuesday");
+    let before = cli(dbs, &["done", &id, "--date", "2026-10-19", "--json"]);
+    assert_eq!(code(&before), 4, "before the calendar was connected");
+
+    assert!(
+        cli(dbs, &["occurrence", "skip", &id, "2026-11-02", "--json"])
+            .status
+            .success()
+    );
+    let skipped = cli(dbs, &["done", &id, "--date", "2026-11-02", "--json"]);
+    assert_eq!(code(&skipped), 4);
+}
+
+#[tokio::test]
+async fn done_with_a_date_takes_only_the_head_of_a_native_series_and_no_one_off() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+    let once = seed(dbs, vec![base_page("Once")]).await;
+
+    let later = cli(dbs, &["done", &id, "--date", "2026-06-08", "--json"]);
+    assert_eq!(code(&later), 4);
+    let head = cli(dbs, &["done", &id, "--date", "2026-06-01", "--json"]);
+    assert!(
+        head.status.success(),
+        "{}",
+        String::from_utf8_lossy(&head.stderr)
+    );
+    let one_off = cli(dbs, &["done", &once[0], "--date", "2026-06-01", "--json"]);
+    assert_eq!(code(&one_off), 2);
+}
+
+#[tokio::test]
+async fn done_still_completes_a_synced_one_off() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Review")]).await;
     mark_synced(dbs, &ids[0], "active").await;
-    mark_synced(dbs, &ids[1], "active").await;
+    let out = cli(dbs, &["done", &ids[0], "--json"]);
+    assert_eq!(json(&out)["status"], "done");
+}
 
-    let refused = cli(dbs, &["done", &ids[0], "--json"]);
-    assert_eq!(code(&refused), 4);
-    // Errors are JSON-on-stderr; stdout is reserved for successful payloads.
-    let body: Value = serde_json::from_slice(&refused.stderr).expect("stderr JSON");
-    let msg = body["error"]["message"]
+// ─── one occurrence of a series ──────────────────────────────────────────────
+
+/// A weekly hour-long meeting on Mondays from 2026-06-01, so every listed date is past.
+async fn seed_weekly_meeting(db: &str) -> String {
+    let ids = seed(db, vec![base_page("Review")]).await;
+    let pool = open_pool(db).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: ids[0].clone(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: Vec::new(),
+            scheduled_start: "2026-06-01T09:00:00".into(),
+            scheduled_end: Some("2026-06-01T10:00:00".into()),
+            timezone: "America/New_York".into(),
+        },
+    )
+    .await
+    .unwrap();
+    ids.into_iter().next().unwrap()
+}
+
+// qa: CLI-13:3
+#[tokio::test]
+async fn occurrence_skip_and_unskip_round_trip_on_a_date_the_rule_gives() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+
+    let skipped = cli(dbs, &["occurrence", "skip", &id, "2026-06-08", "--json"]);
+    assert!(
+        skipped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&skipped.stderr)
+    );
+    assert_eq!(
+        json(&skipped)["skippedOccurrences"],
+        serde_json::json!(["2026-06-08"])
+    );
+
+    let tuesday = cli(dbs, &["occurrence", "skip", &id, "2026-06-09", "--json"]);
+    assert_eq!(code(&tuesday), 2, "the rule never gives a Tuesday");
+    let shapeless = cli(dbs, &["occurrence", "skip", &id, "next monday", "--json"]);
+    assert_eq!(code(&shapeless), 2);
+
+    let back = cli(dbs, &["occurrence", "unskip", &id, "2026-06-08", "--json"]);
+    assert!(json(&back)["skippedOccurrences"]
+        .as_array()
+        .is_none_or(Vec::is_empty));
+    let again = cli(dbs, &["occurrence", "unskip", &id, "2026-06-08", "--json"]);
+    assert_eq!(code(&again), 2);
+}
+
+// qa: CLI-13:3
+#[tokio::test]
+async fn occurrence_move_gives_it_its_own_page_and_keeps_its_length() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+
+    let moved = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &id,
+            "2026-06-15",
+            "--due",
+            "2026-06-16T14:00:00",
+            "--json",
+        ],
+    );
+    assert!(
+        moved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&moved.stderr)
+    );
+    let out = json(&moved);
+    assert_eq!(out["clone"]["scheduledStart"], "2026-06-16T14:00:00");
+    assert_eq!(
+        out["clone"]["scheduledEnd"], "2026-06-16T15:00:00",
+        "still an hour"
+    );
+    assert_eq!(
+        out["ruleExdates"],
+        serde_json::json!(["2026-06-15"]),
+        "only that date left"
+    );
+
+    let twice = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &id,
+            "2026-06-15",
+            "--due",
+            "2026-06-17T14:00:00",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&twice), 2, "a moved date is no longer the series'");
+    let bare = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &id,
+            "2026-06-22",
+            "--due",
+            "2026-06-23",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&bare), 2, "a bare date can't silently drop the time");
+}
+
+#[tokio::test]
+async fn occurrence_writes_refuse_a_page_that_does_not_repeat_and_a_synced_move() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Once")]).await;
+    let one_off = cli(
+        dbs,
+        &["occurrence", "skip", &ids[0], "2026-06-08", "--json"],
+    );
+    assert_eq!(code(&one_off), 4);
+
+    let series = seed_weekly_meeting(dbs).await;
+    mark_synced(dbs, &series, "active").await;
+    let synced = cli(
+        dbs,
+        &[
+            "occurrence",
+            "move",
+            &series,
+            "2026-06-15",
+            "--due",
+            "2026-06-16T14:00:00",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&synced), 4);
+    let skip = cli(
+        dbs,
+        &["occurrence", "skip", &series, "2026-06-15", "--json"],
+    );
+    assert!(
+        skip.status.success(),
+        "a synced skip stays local, as in the app"
+    );
+}
+
+// qa: CLI-13:3
+#[tokio::test]
+async fn status_not_started_on_a_ticked_off_occurrence_gives_the_date_back_to_the_series() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_weekly_meeting(dbs).await;
+
+    assert!(cli(dbs, &["done", &id, "--json"]).status.success());
+    let series = json(&cli(dbs, &["read", &id, "--json"]));
+    let clone = series["completedOccurrences"]["2026-06-01"]
         .as_str()
-        .unwrap_or("")
-        .to_lowercase();
+        .expect("the first Monday was ticked off")
+        .to_string();
+    assert_eq!(series["scheduledStart"], "2026-06-08T09:00:00");
+
+    let reopened = cli(dbs, &["status", &clone, "not_started", "--json"]);
     assert!(
-        msg.contains("pikos app"),
-        "message points at the app: {msg}"
+        reopened.status.success(),
+        "{}",
+        String::from_utf8_lossy(&reopened.stderr)
+    );
+    let series = json(&reopened);
+    assert_eq!(series["id"], id.as_str());
+    assert_eq!(
+        series["scheduledStart"], "2026-06-01T09:00:00",
+        "the series has it back"
+    );
+    assert_eq!(
+        code(&cli(dbs, &["read", &clone, "--json"])),
+        3,
+        "the done copy is gone"
     );
 
-    let allowed = cli(dbs, &["done", &ids[1], "--json"]);
-    assert!(
-        allowed.status.success(),
-        "a synced one-off completes: {}",
-        String::from_utf8_lossy(&allowed.stderr)
-    );
-    assert_eq!(json(&allowed)["status"], "done");
+    let skip = cli(dbs, &["occurrence", "skip", &id, "2026-06-01", "--json"]);
+    assert!(skip.status.success(), "a reopened date can be skipped");
 }
 
 // ─── list: the rest of the PageFilter ────────────────────────────────────────
@@ -1006,6 +1620,66 @@ async fn list_filters_by_folder_name_id_and_inbox() {
     let inbox = json(&cli(dbs, &["list", "--folder", "inbox", "--json"]));
     assert_eq!(inbox.as_array().unwrap().len(), 1);
     assert_eq!(inbox[0]["title"], "Unfiled");
+}
+
+async fn make_calendar_folder(db: &str, name: &str) -> String {
+    let id = make_folder(db, name).await;
+    let pool = open_pool(db).await.unwrap();
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    id
+}
+
+// qa: CLI-10:6
+#[tokio::test]
+async fn update_folder_moves_a_page_between_folders_and_the_inbox() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan")]).await;
+    let projects = make_folder(dbs, "Projects").await;
+    let archive = make_folder(dbs, "Archive").await;
+
+    let by_name = cli(dbs, &["update", &ids[0], "--folder", "proj", "--json"]);
+    assert!(by_name.status.success());
+    assert_eq!(json(&by_name)["folderId"], projects.as_str());
+
+    let by_id = cli(dbs, &["update", &ids[0], "--folder", &archive, "--json"]);
+    assert_eq!(json(&by_id)["folderId"], archive.as_str());
+
+    let unfiled = cli(dbs, &["update", &ids[0], "--folder", "inbox", "--json"]);
+    assert!(json(&unfiled)["folderId"].is_null());
+}
+
+// qa: CLI-10:6
+#[tokio::test]
+async fn update_folder_refuses_a_calendar_folder_and_a_synced_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plan"), base_page("Standup")]).await;
+    let calendar = make_calendar_folder(dbs, "Work calendar").await;
+    let projects = make_folder(dbs, "Projects").await;
+    mark_synced(dbs, &ids[1], "active").await;
+
+    let into_calendar = cli(dbs, &["update", &ids[0], "--folder", &calendar, "--json"]);
+    assert_eq!(code(&into_calendar), 4);
+    let by_name = cli(dbs, &["update", &ids[0], "--folder", "work", "--json"]);
+    assert_eq!(
+        code(&by_name),
+        3,
+        "a calendar folder is no candidate by name"
+    );
+
+    let synced_out = cli(dbs, &["update", &ids[1], "--folder", &projects, "--json"]);
+    assert_eq!(code(&synced_out), 4);
+
+    let pool = open_pool(dbs).await.unwrap();
+    for id in &ids {
+        let page = pikos_db::get_page(&pool, id).await.unwrap().unwrap();
+        assert!(page.folder_id.is_none(), "{} stayed put", page.title);
+    }
 }
 
 #[tokio::test]
@@ -1215,6 +1889,107 @@ async fn folders_create_makes_a_folder_list_can_filter_on() {
     assert_eq!(json(&cli(dbs, &["folders", "list", "--json"]))[0]["id"], id);
 }
 
+// qa: CLI-11:3
+#[tokio::test]
+async fn folders_rename_takes_a_whole_name_or_an_id() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let id = make_folder(dbs, "Projects").await;
+
+    let prefix = cli(dbs, &["folders", "rename", "proj", "Work", "--json"]);
+    assert_eq!(code(&prefix), 3, "a prefix renames nothing");
+
+    let by_name = cli(
+        dbs,
+        &[
+            "folders", "rename", "projects", "Side", "projects", "--json",
+        ],
+    );
+    assert_eq!(json(&by_name)["name"], "Side projects");
+    let by_id = cli(dbs, &["folders", "rename", &id, "Work", "--json"]);
+    assert_eq!(json(&by_id)["name"], "Work");
+}
+
+#[tokio::test]
+async fn folders_rename_refuses_a_name_two_folders_share() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    make_folder(dbs, "Notes").await;
+    make_folder(dbs, "notes").await;
+    let out = cli(dbs, &["folders", "rename", "Notes", "Journal", "--json"]);
+    assert_eq!(code(&out), 4);
+}
+
+// qa: CLI-11:3
+#[tokio::test]
+async fn folders_delete_trashes_its_pages_and_restore_brings_them_back() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let reading = make_folder(dbs, "Reading").await;
+    let mut book = base_page("Dune");
+    book.folder_id = Some(reading.clone());
+    seed(dbs, vec![book, base_page("Loose")]).await;
+
+    let unconfirmed = cli(dbs, &["folders", "delete", "Reading", "--json"]);
+    assert_eq!(code(&unconfirmed), 2);
+    assert_eq!(
+        json(&cli(dbs, &["list", "--json"]))
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let trashed = cli(dbs, &["folders", "delete", "Reading", "--yes", "--json"]);
+    assert_eq!(json(&trashed)["id"], reading.as_str());
+    assert_eq!(titles(&cli(dbs, &["list", "--json"])), ["Loose"]);
+    assert!(json(&cli(dbs, &["folders", "list", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let restored = cli(dbs, &["folders", "restore", &reading, "--json"]);
+    assert_eq!(json(&restored)["name"], "Reading");
+    let back = json(&cli(dbs, &["list", "--folder", "Reading", "--json"]));
+    assert_eq!(back[0]["title"], "Dune");
+}
+
+// qa: CLI-11:3
+#[tokio::test]
+async fn folders_rename_and_delete_refuse_a_calendar_folder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    make_calendar_folder(dbs, "Work calendar").await;
+
+    let renamed = cli(
+        dbs,
+        &["folders", "rename", "Work calendar", "Work", "--json"],
+    );
+    assert_eq!(code(&renamed), 4);
+    let deleted = cli(
+        dbs,
+        &["folders", "delete", "Work calendar", "--yes", "--json"],
+    );
+    assert_eq!(code(&deleted), 4);
+    assert_eq!(
+        json(&cli(dbs, &["folders", "list", "--json"]))[0]["name"],
+        "Work calendar"
+    );
+}
+
+#[tokio::test]
+async fn folders_restore_of_an_unknown_id_exits_3() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let out = cli(dbs, &["folders", "restore", "nope", "--json"]);
+    assert_eq!(code(&out), 3);
+}
+
 // ─── reminders ───────────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -1301,6 +2076,61 @@ async fn restore_brings_a_trashed_page_back_into_the_listing() {
             .unwrap()
             .len(),
         1
+    );
+}
+
+// qa: CLI-12:2
+#[tokio::test]
+async fn trash_lists_what_restore_can_bring_back() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task"), base_page("Keep")]).await;
+
+    let empty = cli(dbs, &["trash"]);
+    assert!(String::from_utf8_lossy(&empty.stdout).contains("The trash is empty."));
+
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    let trashed = json(&cli(dbs, &["trash", "--json"]));
+    assert_eq!(trashed.as_array().unwrap().len(), 1);
+    assert_eq!(trashed[0]["title"], "Task");
+
+    let id = trashed[0]["id"].as_str().unwrap();
+    assert!(cli(dbs, &["restore", id, "--json"]).status.success());
+    assert!(json(&cli(dbs, &["trash", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+// qa: CLI-12:2
+#[tokio::test]
+async fn tags_lists_open_pages_tags_most_used_first() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let tagged = |title: &str, tags: &[&str]| NewPage {
+        tags: tags.iter().map(|t| t.to_string()).collect(),
+        ..base_page(title)
+    };
+    let done = NewPage {
+        status: "done".into(),
+        ..tagged("Old", &["archive"])
+    };
+    seed(
+        dbs,
+        vec![tagged("A", &["work", "home"]), tagged("B", &["work"]), done],
+    )
+    .await;
+
+    let tags = json(&cli(dbs, &["tags", "--json"]));
+    assert_eq!(tags[0]["name"], "work");
+    assert_eq!(tags[0]["pageCount"], 2);
+    assert_eq!(tags[1]["name"], "home");
+    assert_eq!(
+        tags.as_array().unwrap().len(),
+        2,
+        "a done page's tag isn't listed"
     );
 }
 
@@ -1446,7 +2276,7 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
     );
     let v = json(&add);
     assert_eq!(v["created"][0]["title"], "Buy a gift");
-    // The body is verbatim — the "#blue" in it never became a tag.
+    // The body is markdown, never Quick Add — the "#blue" in it never became a tag.
     assert!(v["created"][0]["tags"].as_array().unwrap().is_empty());
     let id = v["created"][0]["id"].as_str().unwrap().to_string();
 
@@ -1456,12 +2286,10 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
         "she likes the #blue one\nask her sister"
     );
     let doc: Value = serde_json::from_str(page["content"].as_str().unwrap()).unwrap();
-    assert_eq!(doc["type"], "doc");
-    assert_eq!(
-        doc["content"][0]["content"][0]["text"],
-        "she likes the #blue one"
-    );
-    assert_eq!(doc["content"][1]["content"][0]["text"], "ask her sister");
+    let line = &doc["content"][0]["content"];
+    assert_eq!(line[0]["text"], "she likes the #blue one");
+    assert_eq!(line[1]["type"], "hardBreak");
+    assert_eq!(line[2]["text"], "ask her sister");
 }
 
 #[tokio::test]
@@ -1494,4 +2322,80 @@ async fn add_dry_run_previews_the_reminder_and_the_body() {
             .is_empty(),
         "a dry run must not write"
     );
+}
+
+// ─── markdown bodies ─────────────────────────────────────────────────────────
+
+/// The app's own document for a page with a heading, marks, a link, a nested list,
+/// tasks and a quote, from the corpus the desktop suite generates.
+fn agent_edit_page() -> NewPage {
+    let corpus: Value = serde_json::from_str(include_str!(
+        "../../pikos-core/tests/corpus/markdown-import.json"
+    ))
+    .unwrap();
+    let doc = corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "a page an agent edits")
+        .expect("the corpus has the agent's page")["doc"]
+        .to_string();
+    NewPage {
+        content: doc,
+        ..base_page("Trip")
+    }
+}
+
+// qa: CLI-14:2
+#[tokio::test]
+async fn reading_a_page_and_writing_it_back_keeps_its_structure() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let page = agent_edit_page();
+    let before: Value = serde_json::from_str(&page.content).unwrap();
+    let ids = seed(dbs, vec![page]).await;
+
+    let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
+    let markdown = read["markdown"].as_str().unwrap().to_string();
+    assert!(markdown.starts_with("# Trip\n"), "{markdown}");
+    assert!(markdown.contains("* [x] passport"), "{markdown}");
+
+    let out = cli(dbs, &["update", &ids[0], "--content", &markdown, "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let after: Value = serde_json::from_str(json(&out)["content"].as_str().unwrap()).unwrap();
+    assert_eq!(after, before);
+
+    let human = String::from_utf8_lossy(&cli(dbs, &["read", &ids[0]]).stdout).to_string();
+    assert!(human.contains("- Day one\n  - Museum"), "{human}");
+}
+
+// qa: CLI-14:2
+#[tokio::test]
+async fn update_content_refuses_markdown_the_editor_cannot_hold_and_writes_nothing() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let page = agent_edit_page();
+    let before = page.content.clone();
+    let ids = seed(dbs, vec![page]).await;
+
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--content",
+            "a <b>bold</b> word",
+            "--title",
+            "X",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
+    assert_eq!(read["content"], before.as_str());
+    assert_eq!(read["title"], "Trip");
 }

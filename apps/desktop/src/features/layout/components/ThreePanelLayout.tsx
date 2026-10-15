@@ -113,7 +113,11 @@ export function ThreePanelLayout() {
           (activePageData ?? activeFolderData) && "select-none"
         )}
         onMouseDown={(e) => {
-          if (selectedPageIds.size > 0 && !(e.target as HTMLElement).closest("[data-page-item]")) {
+          // React bubbles a press in a portaled menu up to here, so a page's own
+          // context menu read as an outside click and dropped the selection it acts on.
+          const target = e.target as HTMLElement;
+          if (!e.currentTarget.contains(target)) return;
+          if (selectedPageIds.size > 0 && !target.closest("[data-page-item]")) {
             clearSelection();
           }
         }}

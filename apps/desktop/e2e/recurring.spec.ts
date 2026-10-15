@@ -8,20 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, mod } from "./fixtures";
-
-async function openCalendarMode(app: Page) {
-  // Click the right-panel header's "Calendar view" button rather than firing
-  // Mod+Shift+C — the keypress can be dropped if the keyboard registry hasn't
-  // mounted yet (e.g. immediately after page.reload()). The button is part
-  // of the layout shell, so its visibility doubles as a "shell ready" signal.
-  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
-  await calendarBtn.waitFor({ state: "visible" });
-  if ((await calendarBtn.getAttribute("aria-pressed")) !== "true") {
-    await calendarBtn.click();
-  }
-  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-}
+import { test as appTest, expect, mod, openCalendarMode } from "./fixtures";
 
 /** The last visible all-day column — within the current week so denorms hold. */
 function lastAllDayColumn(app: Page) {
@@ -48,7 +35,7 @@ async function advanceCalendarOneWeek(app: Page) {
 // via the byline's RecurrencePopover. Even with no date pre-set, MetadataHeader
 // auto-anchors to today so the rule has a concrete first occurrence.
 
-appTest("add recurrence later via the page editor byline @tier2", async ({ app }) => {
+appTest("add recurrence later via the page editor byline", async ({ app }) => {
   // Create a plain page (no schedule, no recurrence). Avoid words like
   // "weekly" / "daily" / "monthly" in the title — the QuickAdd parser strips
   // them as recurrence keywords, so "Weekly review" would land as "review"
@@ -88,7 +75,7 @@ appTest("add recurrence later via the page editor byline @tier2", async ({ app }
 //
 // Uses the raw `page` fixture (not `app`) because page.clock.install must run
 // before the first app script reads Date, i.e. before page.goto.
-appTest("attaching a rule that excludes today snaps the head forward @tier2", async ({ page }) => {
+appTest("attaching a rule that excludes today snaps the head forward @mock-only", async ({ page }) => {
   // Pin "now" to Sunday 2026-06-07 09:00 before any app code reads the clock.
   await page.clock.install({ time: new Date("2026-06-07T09:00:00") });
   await page.clock.resume();
@@ -130,35 +117,34 @@ appTest("attaching a rule that excludes today snaps the head forward @tier2", as
 // here. Verifies that opening the popover on a scheduled page and picking a
 // preset attaches the rule.
 
-appTest("calendar popover lets users add recurrence to a scheduled page @tier2", async ({
-  app,
-}) => {
-  await openCalendarMode(app);
+appTest(
+  "calendar popover lets users add recurrence to a scheduled page",
+  async ({ app }) => {
+    await openCalendarMode(app);
 
-  await lastAllDayColumn(app).click();
-  const titleInput = app.getByPlaceholder("Untitled");
-  await titleInput.fill("Standup");
-  await app.keyboard.press("Enter");
+    await lastAllDayColumn(app).click();
+    const titleInput = app.getByPlaceholder("Untitled");
+    await titleInput.fill("Standup");
+    await app.keyboard.press("Enter");
 
-  const chip = calendarRegion(app).getByRole("button", { name: "Standup" });
-  await expect(chip).toHaveCount(1);
+    const chip = calendarRegion(app).getByRole("button", { name: "Standup" });
+    await expect(chip).toHaveCount(1);
 
-  // Re-open the popover by clicking the chip — the calendar popover routes
-  // through PageBlockPopover (real page, not virtual) for non-recurring pages.
-  await chip.click();
+    // Re-open the popover by clicking the chip — the calendar popover routes
+    // through PageBlockPopover (real page, not virtual) for non-recurring pages.
+    await chip.click();
 
-  // The PageBlockPopover's metadata row hosts the "Repeats" recurrence chip.
-  // With no rule yet, aria-label is "Set recurrence" — click to open.
-  await app.getByRole("button", { name: "Set recurrence" }).click();
-  await app.getByRole("button", { name: /^Daily/ }).click();
+    // The PageBlockPopover's metadata row hosts the "Repeats" recurrence chip.
+    // With no rule yet, aria-label is "Set recurrence" — click to open.
+    await app.getByRole("button", { name: "Set recurrence" }).click();
+    await app.getByRole("button", { name: /^Daily/ }).click();
 
-  // The chip's accessible name flips to "Recurrence: every day" once a rule
-  // is set (icon variant in editor or label variant in popover both follow
-  // this aria-label pattern).
-  await expect(
-    app.getByRole("button", { name: /Recurrence: every day/i }).first()
-  ).toBeVisible();
-});
+    // The chip's accessible name flips to "Recurrence: every day" once a rule
+    // is set (icon variant in editor or label variant in popover both follow
+    // this aria-label pattern).
+    await expect(app.getByRole("button", { name: /Recurrence: every day/i }).first()).toBeVisible();
+  }
+);
 
 // ─── Complete a head page advances and stamps a done clone ─────────────────
 //
@@ -167,35 +153,36 @@ appTest("calendar popover lets users add recurrence to a scheduled page @tier2",
 // A done clone replaces the original date, the head advances to the next
 // occurrence, and the recurrence chip stays attached.
 
-appTest("completing a head page creates a done clone and advances head @tier2", async ({ app }) => {
-  // Seed a daily recurring page so today and tomorrow are both occurrences.
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "completing a head page creates a done clone and advances head",
+  async ({ app }) => {
+    // Seed a daily recurring page so today and tomorrow are both occurrences.
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  // Open the editor and toggle the status. The head has a recurrence rule, so
-  // toggling routes through completeRecurringPage instead of a plain status
-  // write — the head advances and a done clone appears.
-  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
-  await expect(listItem).toHaveCount(1);
-  await listItem.click();
+    // Open the editor and toggle the status. The head has a recurrence rule, so
+    // toggling routes through completeRecurringPage instead of a plain status
+    // write — the head advances and a done clone appears.
+    const listItem = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+    await expect(listItem).toHaveCount(1);
+    await listItem.click();
 
-  const statusButton = app.getByRole("button", { name: "Mark done" });
-  await expect(statusButton).toBeVisible();
-  await statusButton.click();
+    const statusButton = app.getByRole("button", { name: "Mark done" });
+    await expect(statusButton).toBeVisible();
+    await statusButton.click();
 
-  // After completion the head advances (status back to open) and keeps its
-  // rule — the recurrence chip must survive completeRecurringPage.
-  await expect(
-    app.getByRole("button", { name: /^Recurrence: every day/i })
-  ).toBeVisible();
-});
+    // After completion the head advances (status back to open) and keeps its
+    // rule — the recurrence chip must survive completeRecurringPage.
+    await expect(app.getByRole("button", { name: /^Recurrence: every day/i })).toBeVisible();
+  }
+);
 
 // ─── Page-list checkbox completion surfaces a done clone in Completed ──────
 //
@@ -208,45 +195,51 @@ appTest("completing a head page creates a done clone and advances head @tier2", 
 // (UTC date ≠ local date) it was filtered out — the row vanished with nothing
 // in Completed, reading as "the click did nothing".
 
-appTest("page-list checkbox completes a recurring page into Completed @tier1", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  // All-day daily recurrence (no "at 9am"): the head anchors to today's *date*
-  // so it always lands in Today. A timed input rolls to tomorrow's 9am once
-  // today's 9am has passed (parser uses chrono forwardDate), which dropped the
-  // head out of Today and failed this test whenever it ran after 09:00.
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "page-list checkbox completes a recurring page into Completed @smoke",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    // All-day daily recurrence (no "at 9am"): the head anchors to today's *date*
+    // so it always lands in Today. A timed input rolls to tomorrow's 9am once
+    // today's 9am has passed (parser uses chrono forwardDate), which dropped the
+    // head out of Today and failed this test whenever it ran after 09:00.
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day");
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  // Today view: the head is scheduled today, so it shows here.
-  await app.getByRole("button", { name: /Today/ }).click();
-  const items = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
-  await expect(items).toHaveCount(1);
+    // Today view: the head is scheduled today, so it shows here.
+    await app.getByRole("button", { name: /Today/ }).click();
+    const items = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+    await expect(items).toHaveCount(1);
 
-  // One click on the page-list checkbox. Today has no missed-day gap, so this
-  // completes immediately (no dialog): the head advances to tomorrow and a
-  // done clone is stamped.
-  await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
+    // One click on the page-list checkbox. Today has no missed-day gap, so this
+    // completes immediately (no dialog): the head advances to tomorrow and a
+    // done clone is stamped.
+    await items
+      .first()
+      .getByRole("checkbox", { name: /Mark done/i })
+      .click();
 
-  // The head advanced to tomorrow → it leaves the Today main list. The only
-  // remaining standup is the done clone, reachable once Completed is expanded.
-  await app.getByRole("button", { exact: true, name: "Completed" }).click();
-  // Regression guard for the head-revert race: quick-add writes the recurring
-  // head's denorm scheduledStart through the 800ms debounce, and completing
-  // before it flushes let the stale write land *after* the advance and snap the
-  // head back into Today (the advanced head + the done clone = two rows). Wait
-  // past the debounce window so a re-introduced revert would surface here rather
-  // than passing by luck on a fast machine. completeRecurringPage flushes the
-  // pending write first, so the head stays advanced and only the clone remains.
-  await app.waitForTimeout(1000);
-  await expect(items).toHaveCount(1);
-  await expect(items.first().getByRole("checkbox", { name: /Mark not done/i })).toBeVisible();
-});
+    // The head advanced to tomorrow → it leaves the Today main list. The only
+    // remaining standup is the done clone, reachable once Completed is expanded.
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
+    // Regression guard for the head-revert race: quick-add writes the recurring
+    // head's denorm scheduledStart through the 800ms debounce, and completing
+    // before it flushes let the stale write land *after* the advance and snap the
+    // head back into Today (the advanced head + the done clone = two rows). Wait
+    // past the debounce window so a re-introduced revert would surface here rather
+    // than passing by luck on a fast machine. completeRecurringPage flushes the
+    // pending write first, so the head stays advanced and only the clone remains.
+    await app.waitForTimeout(1000);
+    await expect(items).toHaveCount(1);
+    await expect(items.first().getByRole("checkbox", { name: /Mark not done/i })).toBeVisible();
+  }
+);
 
 // ─── Uncomplete a native recurring occurrence ──────────────────────────────
 //
@@ -255,39 +248,47 @@ appTest("page-list checkbox completes a recurring page into Completed @tier1", a
 // open. A revert of the uncomplete routing leaves the flipped clone AND the
 // advanced head both open (two rows), which this catches.
 
-appTest("unchecking a done recurring clone restores the occurrence onto the head @tier2", async ({
-  app,
-}) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  // All-day daily so the head anchors to today's date and always lands in Today.
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "unchecking a done recurring clone restores the occurrence onto the head",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    // All-day daily so the head anchors to today's date and always lands in Today.
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day");
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  await app.getByRole("button", { name: /Today/ }).click();
-  const items = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
-  await expect(items).toHaveCount(1);
-  await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
+    await app.getByRole("button", { name: /Today/ }).click();
+    const items = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+    await expect(items).toHaveCount(1);
+    await items
+      .first()
+      .getByRole("checkbox", { name: /Mark done/i })
+      .click();
 
-  // The head advanced out of Today; the done clone is in Completed.
-  await app.getByRole("button", { exact: true, name: "Completed" }).click();
-  // Past the quick-add denorm debounce, so a re-introduced head-revert race would
-  // surface here rather than passing by luck (see the completion test above).
-  await app.waitForTimeout(1000);
-  const clone = items.filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) });
-  await expect(clone).toHaveCount(1);
+    // The head advanced out of Today; the done clone is in Completed.
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
+    // Past the quick-add denorm debounce, so a re-introduced head-revert race would
+    // surface here rather than passing by luck (see the completion test above).
+    await app.waitForTimeout(1000);
+    const clone = items.filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) });
+    await expect(clone).toHaveCount(1);
 
-  // The occurrence rewinds onto the head (back in Today, open) and the clone is
-  // gone. A plain-flip regression would leave two open rows.
-  await clone.getByRole("checkbox", { name: /Mark not done/i }).click();
-  await expect(items.filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })).toHaveCount(0);
-  await expect(items.filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })).toHaveCount(1);
-});
+    // The occurrence rewinds onto the head (back in Today, open) and the clone is
+    // gone. A plain-flip regression would leave two open rows.
+    await clone.getByRole("checkbox", { name: /Mark not done/i }).click();
+    await expect(
+      items.filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })
+    ).toHaveCount(0);
+    await expect(
+      items.filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+    ).toHaveCount(1);
+  }
+);
 
 // ─── Virtual occurrences render on the calendar ───────────────────────────
 //
@@ -298,41 +299,42 @@ appTest("unchecking a done recurring clone restores the occurrence onto the head
 // not a real page". Clicking a virtual opens VirtualPageBlockPopover with
 // a Skip action.
 
-appTest("daily recurring page renders virtual occurrences on the calendar @tier1", async ({
-  app,
-}) => {
-  // Seed a daily recurring page with an explicit time so the head lands in
-  // the timed grid. All-day rules expand correctly too, but the parser
-  // strips so many words from the title (daily, morning, weekly, etc.) that
-  // an all-day input is hard to keep stable; using a timed input + time
-  // keeps the parsed title legible.
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "daily recurring page renders virtual occurrences on the calendar @smoke",
+  async ({ app }) => {
+    // Seed a daily recurring page with an explicit time so the head lands in
+    // the timed grid. All-day rules expand correctly too, but the parser
+    // strips so many words from the title (daily, morning, weekly, etc.) that
+    // an all-day input is hard to keep stable; using a timed input + time
+    // keeps the parsed title legible.
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  await openCalendarMode(app);
-  // Advance one week so the visible window is wholly after the head — every
-  // day in view is a virtual. Avoids the late-in-week / past-anchor-time race
-  // where the head lands on the last visible day and virtuals fall into the
-  // next week, leaving the current week with zero "Recurring" icons.
-  await advanceCalendarOneWeek(app);
-  const calendar = calendarRegion(app);
+    await openCalendarMode(app);
+    // Advance one week so the visible window is wholly after the head — every
+    // day in view is a virtual. Avoids the late-in-week / past-anchor-time race
+    // where the head lands on the last visible day and virtuals fall into the
+    // next week, leaving the current week with zero "Recurring" icons.
+    await advanceCalendarOneWeek(app);
+    const calendar = calendarRegion(app);
 
-  // Wait for at least one Recurring icon (virtual) before counting — it
-  // proves expansion has finished and avoids racing the post-navigation render.
-  await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
-  const chips = calendar.getByRole("button", { name: /^standup/i });
-  const count = await chips.count();
-  // A full week of daily virtuals = 7 chips. Assert ≥2 to leave slack for
-  // any future change to recurrence-expansion window or week start day.
-  expect(count).toBeGreaterThanOrEqual(2);
-});
+    // Wait for at least one Recurring icon (virtual) before counting — it
+    // proves expansion has finished and avoids racing the post-navigation render.
+    await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
+    const chips = calendar.getByRole("button", { name: /^standup/i });
+    const count = await chips.count();
+    // A full week of daily virtuals = 7 chips. Assert ≥2 to leave slack for
+    // any future change to recurrence-expansion window or week start day.
+    expect(count).toBeGreaterThanOrEqual(2);
+  }
+);
 
 // ─── Skip a virtual occurrence, then undo the skip ─────────────────────────
 //
@@ -342,38 +344,44 @@ appTest("daily recurring page renders virtual occurrences on the calendar @tier1
 // reappears. Nothing here is overdue, so the scope dialog stays out of the way.
 // Distinct from rescheduling a virtual (drag → materialise), covered separately.
 
-appTest("deleting a future virtual hides it with no dialog; undo restores it @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "deleting a future virtual hides it with no dialog; undo restores it",
+  { tag: ["@TRASH-02:3"] },
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  await openCalendarMode(app);
-  await advanceCalendarOneWeek(app);
-  const calendar = calendarRegion(app);
-  await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5000 });
-  const virtualsBefore = await calendar.getByLabel("Recurring").count();
-  expect(virtualsBefore).toBeGreaterThanOrEqual(2);
+    await openCalendarMode(app);
+    await advanceCalendarOneWeek(app);
+    const calendar = calendarRegion(app);
+    await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5000 });
+    const virtualsBefore = await calendar.getByLabel("Recurring").count();
+    expect(virtualsBefore).toBeGreaterThanOrEqual(2);
 
-  const firstVirtual = calendar
-    .getByRole("button", { name: /^standup/i })
-    .filter({ has: app.getByLabel("Recurring") })
-    .first();
-  await firstVirtual.scrollIntoViewIfNeeded();
-  await firstVirtual.click();
-  await app.getByRole("button", { name: "Delete this occurrence" }).click();
+    const firstVirtual = calendar
+      .getByRole("button", { name: /^standup/i })
+      .filter({ has: app.getByLabel("Recurring") })
+      .first();
+    await firstVirtual.scrollIntoViewIfNeeded();
+    await firstVirtual.click();
+    await app.getByRole("button", { name: "Delete this occurrence" }).click();
 
-  await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore - 1);
+    await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore - 1);
 
-  // Cmd+Z fires the most recent undoable toast.
-  await app.keyboard.press(mod("Mod+z"));
-  await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore);
-});
+    // Cmd+Z fires the most recent undoable toast, which exists only once the delete
+    // has been written; the occurrence leaves the calendar before that.
+    await expect(app.getByRole("alert", { name: /Deleted one day of/ })).toBeVisible();
+    await app.keyboard.press(mod("Mod+z"));
+    await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore);
+  }
+);
 
 // ─── All-day daily recurrence renders one chip per day (not one eternal bar) ─
 //
@@ -384,32 +392,33 @@ appTest("deleting a future virtual hides it with no dialog; undo restores it @ti
 // occurrence is a separate single-day chip and must render as such. Uses an
 // all-day rule ("every day", no time) so the chips live in the all-day row —
 // the timed test above can't reach buildAllDayBars.
-appTest("all-day daily recurrence renders separate chips, not one eternal bar @tier2", async ({
-  app,
-}) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  // No time → all-day. "every day" is stripped to the title "Standup".
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("Standup every day");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "all-day daily recurrence renders separate chips, not one eternal bar",
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    // No time → all-day. "every day" is stripped to the title "Standup".
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("Standup every day");
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  await openCalendarMode(app);
-  // Advance a week so the whole visible window is after the head — every day
-  // is an all-day virtual, giving a gap-free run (the bug's trigger).
-  await advanceCalendarOneWeek(app);
-  const calendar = calendarRegion(app);
+    await openCalendarMode(app);
+    // Advance a week so the whole visible window is after the head — every day
+    // is an all-day virtual, giving a gap-free run (the bug's trigger).
+    await advanceCalendarOneWeek(app);
+    const calendar = calendarRegion(app);
 
-  await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
-  // Pre-fix: the gap-free series collapsed into ONE bar (count === 1). Each day
-  // must be its own chip, so ≥2 distinct all-day bars prove they didn't merge.
-  const chips = calendar.getByRole("button", { name: /^Standup/ });
-  expect(await chips.count()).toBeGreaterThanOrEqual(2);
-});
+    await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
+    // Pre-fix: the gap-free series collapsed into ONE bar (count === 1). Each day
+    // must be its own chip, so ≥2 distinct all-day bars prove they didn't merge.
+    const chips = calendar.getByRole("button", { name: /^Standup/ });
+    expect(await chips.count()).toBeGreaterThanOrEqual(2);
+  }
+);
 
 // ─── Drag-virtual → materialised page; head completion skips it ───────────
 //
@@ -430,7 +439,7 @@ appTest("all-day daily recurrence renders separate chips, not one eternal bar @t
 // because nextOccurrenceAfter wasn't honouring exdates.
 
 appTest(
-  "drag virtual reschedules to a real page; head advance skips the materialised date @tier2",
+  "drag virtual reschedules to a real page; head advance skips the materialised date",
   async ({ app }) => {
     // Seed: daily recurring page with a definite time so virtuals appear in
     // the timed grid (easier to drag than all-day chips).
@@ -438,9 +447,9 @@ appTest(
     const dialog = app.getByRole("dialog", { name: "Quick add" });
     await expect(dialog).toBeVisible();
     await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
-    await expect(
-      dialog.getByRole("button", { name: /Recurrence: every day/i })
-    ).toBeVisible({ timeout: 2000 });
+    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+      timeout: 2000,
+    });
     await app.keyboard.press("Enter");
     await expect(dialog).not.toBeVisible();
 
@@ -455,9 +464,7 @@ appTest(
     // all carrying the "Recurring" aria-label.
     await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5000 });
     const virtualsBefore = await calendar.getByLabel("Recurring").count();
-    const totalChipsBefore = await calendar
-      .getByRole("button", { name: /^standup/i })
-      .count();
+    const totalChipsBefore = await calendar.getByRole("button", { name: /^standup/i }).count();
     // Sanity: at least one virtual to drag, and total chip count covers it.
     expect(virtualsBefore).toBeGreaterThanOrEqual(1);
     expect(totalChipsBefore).toBeGreaterThanOrEqual(2);
@@ -553,9 +560,9 @@ async function seedOverdueDailyRecurring(page: import("@playwright/test").Page) 
   const dialog = page.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
   await page.getByRole("textbox", { name: "Quick add input" }).fill("standup every day");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every day/i })
-  ).toBeVisible({ timeout: 2000 });
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+    timeout: 2000,
+  });
   await page.keyboard.press("Enter");
   await expect(dialog).not.toBeVisible();
 
@@ -566,44 +573,58 @@ async function seedOverdueDailyRecurring(page: import("@playwright/test").Page) 
   return page.locator("[data-page-list-item]").filter({ hasText: "standup" });
 }
 
-appTest("overdue tick → just this one keeps the gap and drops one clone @tier2", async ({ page }) => {
-  const items = await seedOverdueDailyRecurring(page);
-  await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
+appTest(
+  "overdue tick → just this one keeps the gap and drops one clone @mock-only",
+  async ({ page }) => {
+    const items = await seedOverdueDailyRecurring(page);
+    await items
+      .first()
+      .getByRole("checkbox", { name: /Mark done/i })
+      .click();
 
-  await expect(page.getByText(/2 other days are still open/)).toBeVisible();
-  // It names the page it is about to act on, and calls them days the way the body
-  // does — it used to say "Mark complete" over a list of three days it never named.
-  await expect(page.getByRole("dialog")).toContainText(/Mark .*standup.* done\?/);
-  await expect(page.getByRole("dialog")).not.toContainText(/occurrence/i);
-  await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /This and everything before today/ })).toBeVisible();
+    await expect(page.getByText(/2 other days are still open/)).toBeVisible();
+    // It names the page it is about to act on, and calls them days the way the body
+    // does — it used to say "Mark complete" over a list of three days it never named.
+    await expect(page.getByRole("dialog")).toContainText(/Mark .*standup.* done\?/);
+    await expect(page.getByRole("dialog")).not.toContainText(/occurrence/i);
+    await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /This and everything before today/ })
+    ).toBeVisible();
 
-  await page.getByRole("button", { name: /Just this one/ }).click();
-  await expect(page.getByText(/2 other days are still open/)).not.toBeVisible();
+    await page.getByRole("button", { name: /Just this one/ }).click();
+    await expect(page.getByText(/2 other days are still open/)).not.toBeVisible();
 
-  await page.getByRole("button", { exact: true, name: "Completed" }).click();
-  await expect(
-    items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
-  ).toHaveCount(1);
-});
+    await page.getByRole("button", { exact: true, name: "Completed" }).click();
+    await expect(
+      items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
+    ).toHaveCount(1);
+  }
+);
 
-appTest("overdue tick → everything before today clones one done page per day @tier2", async ({ page }) => {
-  const items = await seedOverdueDailyRecurring(page);
-  await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
+appTest(
+  "overdue tick → everything before today clones one done page per day @mock-only",
+  async ({ page }) => {
+    const items = await seedOverdueDailyRecurring(page);
+    await items
+      .first()
+      .getByRole("checkbox", { name: /Mark done/i })
+      .click();
 
-  await expect(page.getByText(/2 other days are still open/)).toBeVisible();
-  await page.getByRole("button", { name: /This and everything before today/ }).click();
-  await expect(page.getByText(/2 other days are still open/)).not.toBeVisible();
+    await expect(page.getByText(/2 other days are still open/)).toBeVisible();
+    await page.getByRole("button", { name: /This and everything before today/ }).click();
+    await expect(page.getByText(/2 other days are still open/)).not.toBeVisible();
 
-  // Mon, Tue and Wed each land as their own done page; the head moves to today.
-  await page.getByRole("button", { exact: true, name: "Completed" }).click();
-  await expect(
-    items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
-  ).toHaveCount(3);
-  await expect(
-    items.filter({ has: page.getByRole("checkbox", { name: /Mark done/i }) })
-  ).toHaveCount(1);
-});
+    // Mon, Tue and Wed each land as their own done page; the head moves to today.
+    await page.getByRole("button", { exact: true, name: "Completed" }).click();
+    await expect(
+      items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
+    ).toHaveCount(3);
+    await expect(
+      items.filter({ has: page.getByRole("checkbox", { name: /Mark done/i }) })
+    ).toHaveCount(1);
+  }
+);
 
 // ─── The same scope question on an occurrence delete ────────────────────────
 //
@@ -640,39 +661,43 @@ async function expectNothingCompleted(
   items: ReturnType<import("@playwright/test").Page["locator"]>
 ) {
   await page.getByRole("button", { exact: true, name: "Completed" }).click();
-  await expect(items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })).toHaveCount(0);
+  await expect(
+    items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
+  ).toHaveCount(0);
 }
 
-appTest("deleting a past occurrence → everything before today clears the gap @tier2", async ({
-  page,
-}) => {
-  const items = await seedOverdueDailyRecurring(page);
-  const { before, calendar } = await deleteFirstOverdueVirtual(page);
+appTest(
+  "deleting a past occurrence → everything before today clears the gap @mock-only",
+  async ({ page }) => {
+    const items = await seedOverdueDailyRecurring(page);
+    const { before, calendar } = await deleteFirstOverdueVirtual(page);
 
-  await page.getByRole("button", { name: /This and everything before today/ }).click();
+    await page.getByRole("button", { name: /This and everything before today/ }).click();
 
-  // Tue and Wed are dismissed, and today's occurrence stops being a virtual — the
-  // head advanced onto it once Mon went to the skip-set.
-  await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 3);
-  await expectNothingCompleted(page, items);
-});
+    // Tue and Wed are dismissed, and today's occurrence stops being a virtual — the
+    // head advanced onto it once Mon went to the skip-set.
+    await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 3);
+    await expectNothingCompleted(page, items);
+  }
+);
 
-appTest("deleting a past occurrence → just this one leaves the rest of the gap open @tier2", async ({
-  page,
-}) => {
-  const items = await seedOverdueDailyRecurring(page);
-  const { before, calendar } = await deleteFirstOverdueVirtual(page);
+appTest(
+  "deleting a past occurrence → just this one leaves the rest of the gap open @mock-only",
+  async ({ page }) => {
+    const items = await seedOverdueDailyRecurring(page);
+    const { before, calendar } = await deleteFirstOverdueVirtual(page);
 
-  await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
-  await page.getByRole("button", { name: /Just this one/ }).click();
+    await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
+    await page.getByRole("button", { name: /Just this one/ }).click();
 
-  // Only the day that was clicked goes. The head's own Monday and the Wednesday
-  // after it stay open — the backlog surviving is the whole difference from the
-  // arm above, and the head cannot advance while its own day is neither ticked
-  // nor dismissed.
-  await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 1);
-  await expectNothingCompleted(page, items);
-});
+    // Only the day that was clicked goes. The head's own Monday and the Wednesday
+    // after it stay open — the backlog surviving is the whole difference from the
+    // arm above, and the head cannot advance while its own day is neither ticked
+    // nor dismissed.
+    await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 1);
+    await expectNothingCompleted(page, items);
+  }
+);
 
 // ─── Stop repeating removes the rule ───────────────────────────────────────
 //
@@ -680,28 +705,30 @@ appTest("deleting a past occurrence → just this one leaves the rest of the gap
 // The page stays scheduled (its denorm date doesn't change) but the byline
 // chip flips back to "Set recurrence".
 
-appTest("Stop repeating removes the recurrence rule @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  const dialog = app.getByRole("dialog", { name: "Quick add" });
-  await expect(dialog).toBeVisible();
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("yoga every monday at 7am");
-  await expect(
-    dialog.getByRole("button", { name: /Recurrence: every week on Monday/i })
-  ).toBeVisible({ timeout: 2000 });
-  await app.keyboard.press("Enter");
-  await expect(dialog).not.toBeVisible();
+appTest(
+  "Stop repeating removes the recurrence rule",
+  { tag: ["@RECUR-11"] },
+  async ({ app }) => {
+    await app.keyboard.press(mod("Mod+n"));
+    const dialog = app.getByRole("dialog", { name: "Quick add" });
+    await expect(dialog).toBeVisible();
+    await app.getByRole("textbox", { name: "Quick add input" }).fill("yoga every monday at 7am");
+    await expect(
+      dialog.getByRole("button", { name: /Recurrence: every week on Monday/i })
+    ).toBeVisible({ timeout: 2000 });
+    await app.keyboard.press("Enter");
+    await expect(dialog).not.toBeVisible();
 
-  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "yoga" });
-  await listItem.click();
+    const listItem = app.locator("[data-page-list-item]").filter({ hasText: "yoga" });
+    await listItem.click();
 
-  // Open the byline's recurrence popover — its trigger carries the cadence in
-  // its accessible name in the editor's icon variant.
-  await app
-    .getByRole("button", { name: /Recurrence: every week on Monday/i })
-    .click();
+    // Open the byline's recurrence popover — its trigger carries the cadence in
+    // its accessible name in the editor's icon variant.
+    await app.getByRole("button", { name: /Recurrence: every week on Monday/i }).click();
 
-  await app.getByRole("button", { name: "Stop repeating" }).click();
+    await app.getByRole("button", { name: "Stop repeating" }).click();
 
-  // The chip's accessible name flips back to the empty state.
-  await expect(app.getByRole("button", { name: "Set recurrence" })).toBeVisible();
-});
+    // The chip's accessible name flips back to the empty state.
+    await expect(app.getByRole("button", { name: "Set recurrence" })).toBeVisible();
+  }
+);

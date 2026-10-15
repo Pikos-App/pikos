@@ -275,6 +275,30 @@ async fn leaves_un_actioned_mirrors_out_unless_asked() {
     assert!(with_synced.contains("SUMMARY:Standup"));
 }
 
+// qa: EXP-08:5
+#[tokio::test]
+async fn a_synced_series_goes_out_once_as_its_head_with_its_rule() {
+    let pool = test_pool().await;
+    add_page(&pool, "p1", "Standup", Some("2026-08-10T09:00:00"), None).await;
+    add_rule(
+        &pool,
+        "r1",
+        "p1",
+        "FREQ=WEEKLY;BYDAY=MO",
+        "2026-06-01T09:00:00",
+        Some("2026-06-01T09:15:00"),
+        NY,
+    )
+    .await;
+    insert_test_page_sync(&pool, "p1", "active").await.unwrap();
+
+    let ics = build_export_ics_impl(&pool, true).await.unwrap();
+
+    let events = vevents(&ics);
+    assert_eq!(events.len(), 1, "{ics}");
+    assert_eq!(prop(&events[0], "RRULE:"), "RRULE:FREQ=WEEKLY;BYDAY=MO");
+}
+
 #[tokio::test]
 async fn leaves_soft_deleted_pages_out() {
     let pool = test_pool().await;

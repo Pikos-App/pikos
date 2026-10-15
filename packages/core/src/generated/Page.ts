@@ -113,4 +113,14 @@ export type Page = {
    * Whether this page repeats, without having to load its rule.
    */
   isRecurring: boolean;
+  /**
+   * The change counter's value at this row's last change, its own or a child row's. A copy
+   * held elsewhere is current while its number is at least this. Always set when read.
+   */
+  rowSeq?: number | null;
+  /**
+   * For a done clone of a recurring page's occurrence, the series it was done from, so
+   * unticking it finds the series without searching every one.
+   */
+  seriesId?: string | null;
 };

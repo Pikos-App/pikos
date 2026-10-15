@@ -88,6 +88,7 @@ export function FolderItem({
           prefix={
             <span
               className="color-dot mt-0.75 h-2 w-2 shrink-0 rounded-sm"
+              data-testid="folder-color"
               style={{ backgroundColor: folder.color ?? "var(--text-tertiary)" }}
             />
           }

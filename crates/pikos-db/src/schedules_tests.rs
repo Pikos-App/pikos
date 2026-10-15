@@ -1107,3 +1107,75 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
         "delete recurrence locked"
     );
 }
+
+async fn order_start(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT order_start FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn order_start_reads_every_stored_start_as_a_full_wall_clock() {
+    let pool = test_pool().await;
+    for (id, start) in [
+        ("all-day", Some("2026-06-15")),
+        ("minutes", Some("2026-06-15T09:30")),
+        ("seconds", Some("2026-06-15T09:30:15")),
+        ("midnight", Some("2026-06-15T00:00:00")),
+        ("none", None),
+    ] {
+        let mut page = TestPage::new(id, id);
+        page.scheduled_start = start;
+        insert_test_page(&pool, page).await.unwrap();
+    }
+    assert_eq!(
+        order_start(&pool, "all-day").await.as_deref(),
+        Some("2026-06-15T00:00:00")
+    );
+    assert_eq!(
+        order_start(&pool, "minutes").await.as_deref(),
+        Some("2026-06-15T09:30:00")
+    );
+    assert_eq!(
+        order_start(&pool, "seconds").await.as_deref(),
+        Some("2026-06-15T09:30:15")
+    );
+    assert_eq!(
+        order_start(&pool, "midnight").await.as_deref(),
+        Some("2026-06-15T00:00:00")
+    );
+    assert_eq!(order_start(&pool, "none").await, None);
+}
+
+#[tokio::test]
+async fn a_native_page_with_a_zone_on_its_schedule_floats() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Take medication"))
+        .await
+        .unwrap();
+    create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p1".into(),
+            scheduled_start: "2026-06-15T09:00:00".into(),
+            scheduled_end: None,
+            timezone: Some("America/New_York".into()),
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    let (absolute, instant): (bool, Option<String>) =
+        sqlx::query_as("SELECT is_absolute, abs_start_utc FROM pages WHERE id = 'p1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((absolute, instant), (false, None));
+    assert_eq!(
+        order_start(&pool, "p1").await.as_deref(),
+        Some("2026-06-15T09:00:00")
+    );
+}

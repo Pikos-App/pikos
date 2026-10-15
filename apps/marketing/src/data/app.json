@@ -1,0 +1,1283 @@
+{
+  "measured": "2026-10-14",
+  "machine": {
+    "model": "MacBook Air",
+    "chip": "Apple M2",
+    "memory": "16 GB",
+    "os": "macOS 26.6.2"
+  },
+  "build": {
+    "version": "Pikos 0.4.1",
+    "commit": "ea943650",
+    "dirty": false,
+    "profile": "release"
+  },
+  "launches": 7,
+  "warmUps": 1,
+  "sizes": [
+    {
+      "seeded": 50,
+      "openPages": 46,
+      "launch": {
+        "ms": 540.912417,
+        "p99": 561.268416,
+        "max": 561.268416,
+        "runs": 7
+      },
+      "captureCommit": {
+        "ms": 41,
+        "p99": 47.99999999999272,
+        "max": 49,
+        "runs": 70
+      },
+      "captureOpen": {
+        "ms": 32.999999999992724,
+        "p99": 45.99999999999272,
+        "max": 46.99999999999272,
+        "runs": 70
+      },
+      "complete": {
+        "ms": 9,
+        "p99": 13,
+        "max": 13,
+        "runs": 7
+      },
+      "ipcHop": {
+        "ms": 0,
+        "p99": 2,
+        "max": 2,
+        "runs": 210
+      },
+      "ipcWindow": {
+        "ms": 1,
+        "p99": 2,
+        "max": 3,
+        "runs": 210
+      },
+      "openDirect": {
+        "ms": 47,
+        "p99": 62,
+        "max": 64,
+        "runs": 140
+      },
+      "openPage": {
+        "ms": 49,
+        "p99": 65,
+        "max": 67.00000000000182,
+        "runs": 140
+      },
+      "rename": {
+        "ms": 6,
+        "p99": 15,
+        "max": 19,
+        "runs": 70
+      },
+      "scroll": null,
+      "search": {
+        "ms": 27.99999999999636,
+        "p99": 32,
+        "max": 33,
+        "runs": 140
+      },
+      "switchCold": {
+        "ms": 23,
+        "p99": 32,
+        "max": 32,
+        "runs": 70
+      },
+      "switchSmartCold": {
+        "ms": 38.000000000000455,
+        "p99": 44,
+        "max": 44,
+        "runs": 14
+      },
+      "switchSmartWarm": {
+        "ms": 17,
+        "p99": 23,
+        "max": 23,
+        "runs": 28
+      },
+      "switchView": {
+        "ms": 20,
+        "p99": 32,
+        "max": 32,
+        "runs": 224
+      },
+      "switchWarm": {
+        "ms": 18,
+        "p99": 29,
+        "max": 30,
+        "runs": 154
+      },
+      "weekCold": {
+        "ms": 13,
+        "p99": 19,
+        "max": 20,
+        "runs": 70
+      },
+      "weekWarm": {
+        "ms": 11,
+        "p99": 15.999999999992724,
+        "max": 17,
+        "runs": 70
+      },
+      "launchStages": {
+        "connected": 419.658792,
+        "documentReady": 399.658792,
+        "firstRow": 540.912417,
+        "loaded": 424.658792,
+        "shellReady": 477.91241699999995,
+        "webviewStart": 266.658792,
+        "workspaceRequested": 415.658792
+      },
+      "memory": {
+        "windowBytes": 512034112,
+        "windowPeakBytes": 512066880,
+        "appBytes": 36537448
+      },
+      "vsReference": {
+        "launch": {
+          "ratio": 1.0061866015729786,
+          "low": 0.9485983457916356,
+          "high": 1.03075181194376,
+          "allowed": 1.5,
+          "passes": true
+        },
+        "captureCommit": {
+          "ratio": 0.6721311475409836,
+          "low": 0.6612903225806451,
+          "high": 0.6721311475409836,
+          "allowed": 1.5464480874316942,
+          "passes": true
+        },
+        "captureOpen": {
+          "ratio": 0.8461538461538461,
+          "low": 0.8205128205128205,
+          "high": 0.868421052631579,
+          "allowed": 1.854700854700855,
+          "passes": true
+        },
+        "complete": {
+          "ratio": 0.4090909090909091,
+          "low": 0.30434782608695654,
+          "high": 0.42857142857142855,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "ipcHop": {
+          "ratio": null,
+          "low": null,
+          "high": 0,
+          "allowed": null,
+          "passes": true
+        },
+        "ipcWindow": {
+          "ratio": 0.5,
+          "low": 0.5,
+          "high": 1,
+          "allowed": 17.666666666666668,
+          "passes": true
+        },
+        "openDirect": {
+          "ratio": 0.75,
+          "low": 0.7230769230768826,
+          "high": 0.7741935483870968,
+          "allowed": 1.5208333333333335,
+          "passes": true
+        },
+        "openPage": {
+          "ratio": 0.8596491228070494,
+          "low": 0.8032786885245902,
+          "high": 0.8928571428571429,
+          "allowed": 1.584795321637427,
+          "passes": true
+        },
+        "rename": {
+          "ratio": 0.25,
+          "low": 0.20000000000005821,
+          "high": 0.3157894736842105,
+          "allowed": 2.388888888888889,
+          "passes": true
+        },
+        "scroll": null,
+        "search": {
+          "ratio": 0.9655172413793104,
+          "low": 0.9310344827586207,
+          "high": 0.965517241379436,
+          "allowed": 2.1494252873563218,
+          "passes": true
+        },
+        "switchCold": {
+          "ratio": 0.4528301886792453,
+          "low": 0.4074074074074158,
+          "high": 0.5208333333333334,
+          "allowed": 1.628930817610063,
+          "passes": true
+        },
+        "switchSmartCold": {
+          "ratio": 1.024390243902439,
+          "low": 0.9111111111111111,
+          "high": 1.1025641025640898,
+          "allowed": 1.813008130081301,
+          "passes": true
+        },
+        "switchSmartWarm": {
+          "ratio": 0.8181818181818182,
+          "low": 0.68,
+          "high": 0.9090909090912097,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "switchView": {
+          "ratio": 0.5263157894734928,
+          "low": 0.5,
+          "high": 0.5405405405405406,
+          "allowed": 1.8771929824561406,
+          "passes": true
+        },
+        "switchWarm": {
+          "ratio": 0.5294117647058824,
+          "low": 0.5142857142855064,
+          "high": 0.5757575757573553,
+          "allowed": 1.9803921568627454,
+          "passes": true
+        },
+        "weekCold": {
+          "ratio": 0.41935483870967744,
+          "low": 0.375,
+          "high": 0.45161290322580644,
+          "allowed": 2.0752688172043015,
+          "passes": true
+        },
+        "weekWarm": {
+          "ratio": 0.5238095238093423,
+          "low": 0.5,
+          "high": 0.5714285714285714,
+          "allowed": 2.5873015873010377,
+          "passes": true
+        }
+      },
+      "errors": []
+    },
+    {
+      "seeded": 2000,
+      "openPages": 1606,
+      "launch": {
+        "ms": 537.586583,
+        "p99": 578.048791,
+        "max": 578.048791,
+        "runs": 7
+      },
+      "captureCommit": {
+        "ms": 61,
+        "p99": 73,
+        "max": 75,
+        "runs": 70
+      },
+      "captureOpen": {
+        "ms": 39,
+        "p99": 54,
+        "max": 55.00000000000728,
+        "runs": 70
+      },
+      "complete": {
+        "ms": 22,
+        "p99": 40,
+        "max": 41,
+        "runs": 70
+      },
+      "ipcHop": {
+        "ms": 0,
+        "p99": 2,
+        "max": 2,
+        "runs": 210
+      },
+      "ipcWindow": {
+        "ms": 2,
+        "p99": 2.000000000007276,
+        "max": 3.000000000007276,
+        "runs": 210
+      },
+      "openDirect": {
+        "ms": 64,
+        "p99": 79.00000000000364,
+        "max": 80,
+        "runs": 140
+      },
+      "openPage": {
+        "ms": 57.99999999999818,
+        "p99": 77,
+        "max": 78,
+        "runs": 140
+      },
+      "rename": {
+        "ms": 21,
+        "p99": 39,
+        "max": 40,
+        "runs": 70
+      },
+      "scroll": {
+        "ms": 17,
+        "p99": 22,
+        "max": 23,
+        "runs": 140
+      },
+      "search": {
+        "ms": 29,
+        "p99": 31,
+        "max": 31,
+        "runs": 140
+      },
+      "switchCold": {
+        "ms": 50,
+        "p99": 65,
+        "max": 66.00000000000011,
+        "runs": 70
+      },
+      "switchSmartCold": {
+        "ms": 39,
+        "p99": 45.999999999999545,
+        "max": 45.999999999999545,
+        "runs": 14
+      },
+      "switchSmartWarm": {
+        "ms": 21.999999999992724,
+        "p99": 30,
+        "max": 30,
+        "runs": 28
+      },
+      "switchView": {
+        "ms": 37,
+        "p99": 64,
+        "max": 66.00000000000011,
+        "runs": 224
+      },
+      "switchWarm": {
+        "ms": 34.000000000007276,
+        "p99": 45,
+        "max": 50,
+        "runs": 154
+      },
+      "weekCold": {
+        "ms": 31,
+        "p99": 37,
+        "max": 41,
+        "runs": 70
+      },
+      "weekWarm": {
+        "ms": 21,
+        "p99": 27,
+        "max": 29,
+        "runs": 70
+      },
+      "launchStages": {
+        "connected": 406.2272909999999,
+        "documentReady": 387.2272909999999,
+        "firstRow": 537.586583,
+        "loaded": 412.586583,
+        "shellReady": 462.586583,
+        "webviewStart": 259.864875,
+        "workspaceRequested": 402.2272909999999
+      },
+      "memory": {
+        "windowBytes": 492537200,
+        "windowPeakBytes": 610305440,
+        "appBytes": 36045880
+      },
+      "vsReference": {
+        "launch": {
+          "ratio": 1,
+          "low": 0.9500343279139447,
+          "high": 1.0525935438520082,
+          "allowed": 1.5,
+          "passes": true
+        },
+        "captureCommit": {
+          "ratio": 1,
+          "low": 0.9838709677419355,
+          "high": 1.0163934426229508,
+          "allowed": 1.5464480874316942,
+          "passes": true
+        },
+        "captureOpen": {
+          "ratio": 1,
+          "low": 0.9512195121951219,
+          "high": 1.0512820512820513,
+          "allowed": 1.854700854700855,
+          "passes": true
+        },
+        "complete": {
+          "ratio": 1,
+          "low": 0.9130434782608695,
+          "high": 1.0952380952380953,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "ipcHop": {
+          "ratio": null,
+          "low": 0,
+          "high": null,
+          "allowed": null,
+          "passes": false
+        },
+        "ipcWindow": {
+          "ratio": 1,
+          "low": 0.5,
+          "high": 2,
+          "allowed": 17.666666666666668,
+          "passes": true
+        },
+        "openDirect": {
+          "ratio": 1,
+          "low": 0.9538461538461005,
+          "high": 1.0483870967742521,
+          "allowed": 1.5208333333333335,
+          "passes": true
+        },
+        "openPage": {
+          "ratio": 1,
+          "low": 0.9180327868852459,
+          "high": 1.0892857142857142,
+          "allowed": 1.584795321637427,
+          "passes": true
+        },
+        "rename": {
+          "ratio": 1,
+          "low": 0.8400000000002444,
+          "high": 1.2083333333330302,
+          "allowed": 2.388888888888889,
+          "passes": true
+        },
+        "scroll": {
+          "ratio": 1,
+          "low": 0.999999999999572,
+          "high": 1.000000000000428,
+          "allowed": 2.9607843137254903,
+          "passes": true
+        },
+        "search": {
+          "ratio": 1,
+          "low": 1,
+          "high": 1,
+          "allowed": 2.1494252873563218,
+          "passes": true
+        },
+        "switchCold": {
+          "ratio": 1,
+          "low": 0.9056603773584906,
+          "high": 1.1041666666666667,
+          "allowed": 1.628930817610063,
+          "passes": true
+        },
+        "switchSmartCold": {
+          "ratio": 1,
+          "low": 0.8666666666666768,
+          "high": 1.1538461538461404,
+          "allowed": 1.813008130081301,
+          "passes": true
+        },
+        "switchSmartWarm": {
+          "ratio": 1,
+          "low": 0.88,
+          "high": 1.1363636363636365,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "switchView": {
+          "ratio": 1,
+          "low": 0.9736842105263158,
+          "high": 1.027027027027027,
+          "allowed": 1.8771929824561406,
+          "passes": true
+        },
+        "switchWarm": {
+          "ratio": 1,
+          "low": 0.9705882352941176,
+          "high": 1.0303030303030303,
+          "allowed": 1.9803921568627454,
+          "passes": true
+        },
+        "weekCold": {
+          "ratio": 1,
+          "low": 0.9375,
+          "high": 1.0666666666666667,
+          "allowed": 2.0752688172043015,
+          "passes": true
+        },
+        "weekWarm": {
+          "ratio": 1,
+          "low": 0.9545454545457702,
+          "high": 1.047619047618701,
+          "allowed": 2.5873015873010377,
+          "passes": true
+        }
+      },
+      "errors": []
+    },
+    {
+      "seeded": 20000,
+      "openPages": 16125,
+      "launch": {
+        "ms": 533.6789170000001,
+        "p99": 546.1802500000001,
+        "max": 546.1802500000001,
+        "runs": 7
+      },
+      "captureCommit": {
+        "ms": 62,
+        "p99": 82,
+        "max": 84,
+        "runs": 70
+      },
+      "captureOpen": {
+        "ms": 38,
+        "p99": 55,
+        "max": 59,
+        "runs": 70
+      },
+      "complete": {
+        "ms": 21,
+        "p99": 35,
+        "max": 35,
+        "runs": 70
+      },
+      "ipcHop": {
+        "ms": 0,
+        "p99": 3,
+        "max": 3,
+        "runs": 210
+      },
+      "ipcWindow": {
+        "ms": 2,
+        "p99": 3,
+        "max": 3,
+        "runs": 210
+      },
+      "openDirect": {
+        "ms": 66,
+        "p99": 79,
+        "max": 81,
+        "runs": 140
+      },
+      "openPage": {
+        "ms": 59.99999999999909,
+        "p99": 74,
+        "max": 77,
+        "runs": 140
+      },
+      "rename": {
+        "ms": 25,
+        "p99": 36.000000000007276,
+        "max": 38.00000000000728,
+        "runs": 70
+      },
+      "scroll": {
+        "ms": 17,
+        "p99": 25,
+        "max": 26,
+        "runs": 140
+      },
+      "search": {
+        "ms": 29,
+        "p99": 37,
+        "max": 38,
+        "runs": 140
+      },
+      "switchCold": {
+        "ms": 41.00000000000023,
+        "p99": 64.00000000000011,
+        "max": 65,
+        "runs": 70
+      },
+      "switchSmartCold": {
+        "ms": 47,
+        "p99": 72,
+        "max": 72,
+        "runs": 14
+      },
+      "switchSmartWarm": {
+        "ms": 32,
+        "p99": 50,
+        "max": 50,
+        "runs": 28
+      },
+      "switchView": {
+        "ms": 36,
+        "p99": 63,
+        "max": 65,
+        "runs": 224
+      },
+      "switchWarm": {
+        "ms": 35,
+        "p99": 47,
+        "max": 54,
+        "runs": 154
+      },
+      "weekCold": {
+        "ms": 54.00000000000728,
+        "p99": 62.00000000000728,
+        "max": 63,
+        "runs": 70
+      },
+      "weekWarm": {
+        "ms": 46,
+        "p99": 59,
+        "max": 61,
+        "runs": 70
+      },
+      "launchStages": {
+        "connected": 396.678917,
+        "documentReady": 376.678917,
+        "firstRow": 533.6789170000001,
+        "loaded": 406.678917,
+        "shellReady": 456.678917,
+        "webviewStart": 246.678917,
+        "workspaceRequested": 390.67891700000007
+      },
+      "memory": {
+        "windowBytes": 587367816,
+        "windowPeakBytes": 700761480,
+        "appBytes": 37782776
+      },
+      "vsReference": {
+        "launch": {
+          "ratio": 0.9927310946300162,
+          "low": 0.9444931145557254,
+          "high": 1.0130974730135724,
+          "allowed": 1.5,
+          "passes": true
+        },
+        "captureCommit": {
+          "ratio": 1.0327868852459017,
+          "low": 1,
+          "high": 1.0655737704918034,
+          "allowed": 1.5464480874316942,
+          "passes": true
+        },
+        "captureOpen": {
+          "ratio": 0.9999999999998133,
+          "low": 0.9500000000001729,
+          "high": 1.0263157894736843,
+          "allowed": 1.854700854700855,
+          "passes": true
+        },
+        "complete": {
+          "ratio": 1,
+          "low": 0.8695652173913043,
+          "high": 1.0476190476190477,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "ipcHop": {
+          "ratio": null,
+          "low": null,
+          "high": null,
+          "allowed": null,
+          "passes": false
+        },
+        "ipcWindow": {
+          "ratio": 1,
+          "low": 0.999999999996362,
+          "high": 2,
+          "allowed": 17.666666666666668,
+          "passes": true
+        },
+        "openDirect": {
+          "ratio": 1.0312499999999432,
+          "low": 0.9846153846153295,
+          "high": 1.112903225806393,
+          "allowed": 1.5208333333333335,
+          "passes": true
+        },
+        "openPage": {
+          "ratio": 1.0526315789473684,
+          "low": 0.9836065573770492,
+          "high": 1.0714285714286038,
+          "allowed": 1.584795321637427,
+          "passes": true
+        },
+        "rename": {
+          "ratio": 1.0833333333333333,
+          "low": 0.9259259259259259,
+          "high": 1.2380952380952381,
+          "allowed": 2.388888888888889,
+          "passes": true
+        },
+        "scroll": {
+          "ratio": 1,
+          "low": 1,
+          "high": 1.000000000000428,
+          "allowed": 2.9607843137254903,
+          "passes": true
+        },
+        "search": {
+          "ratio": 1,
+          "low": 0.9655172413793104,
+          "high": 1,
+          "allowed": 2.1494252873563218,
+          "passes": true
+        },
+        "switchCold": {
+          "ratio": 0.8113207547169768,
+          "low": 0.7735849056603774,
+          "high": 0.9799999999999911,
+          "allowed": 1.628930817610063,
+          "passes": true
+        },
+        "switchSmartCold": {
+          "ratio": 1.3414634146341575,
+          "low": 1.0444444444444647,
+          "high": 1.6500000000000115,
+          "allowed": 1.813008130081301,
+          "passes": true
+        },
+        "switchSmartWarm": {
+          "ratio": 1.7727272727272727,
+          "low": 1.3846153846153846,
+          "high": 2.090909090909091,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "switchView": {
+          "ratio": 0.9473684210526315,
+          "low": 0.9210526315789473,
+          "high": 0.9999999999998032,
+          "allowed": 1.8771929824561406,
+          "passes": true
+        },
+        "switchWarm": {
+          "ratio": 1.0294117647058822,
+          "low": 0.9999999999998961,
+          "high": 1.088235294117647,
+          "allowed": 1.9803921568627454,
+          "passes": true
+        },
+        "weekCold": {
+          "ratio": 1.7741935483870968,
+          "low": 1.6875,
+          "high": 1.8387096774191198,
+          "allowed": 2.0752688172043015,
+          "passes": true
+        },
+        "weekWarm": {
+          "ratio": 2.238095238094116,
+          "low": 2.0909090909097823,
+          "high": 2.2857142857142856,
+          "allowed": 2.5873015873010377,
+          "passes": true
+        }
+      },
+      "errors": []
+    },
+    {
+      "seeded": 200000,
+      "openPages": 160596,
+      "launch": {
+        "ms": 572.3209999999999,
+        "p99": 604.1123339999999,
+        "max": 604.1123339999999,
+        "runs": 7
+      },
+      "captureCommit": {
+        "ms": 78,
+        "p99": 103,
+        "max": 103,
+        "runs": 70
+      },
+      "captureOpen": {
+        "ms": 40.99999999999272,
+        "p99": 55,
+        "max": 56,
+        "runs": 70
+      },
+      "complete": {
+        "ms": 22.000000000007276,
+        "p99": 40,
+        "max": 47,
+        "runs": 70
+      },
+      "ipcHop": {
+        "ms": 0,
+        "p99": 5,
+        "max": 6,
+        "runs": 210
+      },
+      "ipcWindow": {
+        "ms": 2,
+        "p99": 6,
+        "max": 15,
+        "runs": 210
+      },
+      "openDirect": {
+        "ms": 65,
+        "p99": 78,
+        "max": 81,
+        "runs": 140
+      },
+      "openPage": {
+        "ms": 61.99999999999909,
+        "p99": 73.00000000000091,
+        "max": 76.00000000000182,
+        "runs": 140
+      },
+      "rename": {
+        "ms": 22,
+        "p99": 35,
+        "max": 39,
+        "runs": 70
+      },
+      "scroll": {
+        "ms": 17,
+        "p99": 22.000000000007276,
+        "max": 23,
+        "runs": 140
+      },
+      "search": {
+        "ms": 28,
+        "p99": 34,
+        "max": 35,
+        "runs": 140
+      },
+      "switchCold": {
+        "ms": 46,
+        "p99": 65,
+        "max": 67,
+        "runs": 70
+      },
+      "switchSmartCold": {
+        "ms": 70.00000000000091,
+        "p99": 87,
+        "max": 87,
+        "runs": 14
+      },
+      "switchSmartWarm": {
+        "ms": 44,
+        "p99": 58,
+        "max": 58,
+        "runs": 28
+      },
+      "switchView": {
+        "ms": 37.99999999999272,
+        "p99": 60.00000000000023,
+        "max": 67,
+        "runs": 224
+      },
+      "switchWarm": {
+        "ms": 35.99999999999636,
+        "p99": 46,
+        "max": 48,
+        "runs": 154
+      },
+      "weekCold": {
+        "ms": 37,
+        "p99": 41,
+        "max": 42.00000000000728,
+        "runs": 70
+      },
+      "weekWarm": {
+        "ms": 35,
+        "p99": 44,
+        "max": 46,
+        "runs": 70
+      },
+      "launchStages": {
+        "connected": 403.675458,
+        "documentReady": 384.561167,
+        "firstRow": 572.3209999999999,
+        "loaded": 436.321,
+        "shellReady": 487.56116700000007,
+        "webviewStart": 252.38925,
+        "workspaceRequested": 399.561167
+      },
+      "memory": {
+        "windowBytes": 622855944,
+        "windowPeakBytes": 965002872,
+        "appBytes": 54790088
+      },
+      "vsReference": {
+        "launch": {
+          "ratio": 1.0646117631994545,
+          "low": 1.0109773354152958,
+          "high": 1.0799589821300757,
+          "allowed": 1.5,
+          "passes": true
+        },
+        "captureCommit": {
+          "ratio": 1.2786885245902833,
+          "low": 1.2580645161291497,
+          "high": 1.3114754098360655,
+          "allowed": 1.5464480874316942,
+          "passes": true
+        },
+        "captureOpen": {
+          "ratio": 1.0512820512820513,
+          "low": 1.0250000000000046,
+          "high": 1.0789473684210527,
+          "allowed": 1.854700854700855,
+          "passes": true
+        },
+        "complete": {
+          "ratio": 1.0909090909090908,
+          "low": 0.9565217391304348,
+          "high": 1.1904761904761905,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "ipcHop": {
+          "ratio": null,
+          "low": null,
+          "high": null,
+          "allowed": null,
+          "passes": false
+        },
+        "ipcWindow": {
+          "ratio": 1,
+          "low": 1,
+          "high": 2,
+          "allowed": 17.666666666666668,
+          "passes": true
+        },
+        "openDirect": {
+          "ratio": 1.03125,
+          "low": 0.9999999999998881,
+          "high": 1.0806451612903814,
+          "allowed": 1.5208333333333335,
+          "passes": true
+        },
+        "openPage": {
+          "ratio": 1.087719298245614,
+          "low": 1.016393442622921,
+          "high": 1.1071428571428896,
+          "allowed": 1.584795321637427,
+          "passes": true
+        },
+        "rename": {
+          "ratio": 1.0833333333333333,
+          "low": 0.8000000000005238,
+          "high": 1.2857142857139392,
+          "allowed": 2.388888888888889,
+          "passes": true
+        },
+        "scroll": {
+          "ratio": 1,
+          "low": 1,
+          "high": 1.000000000000428,
+          "allowed": 2.9607843137254903,
+          "passes": true
+        },
+        "search": {
+          "ratio": 0.9655172413793104,
+          "low": 0.9655172413793104,
+          "high": 1,
+          "allowed": 2.1494252873563218,
+          "passes": true
+        },
+        "switchCold": {
+          "ratio": 0.8867924528301887,
+          "low": 0.7924528301886793,
+          "high": 1.0833333333333333,
+          "allowed": 1.628930817610063,
+          "passes": true
+        },
+        "switchSmartCold": {
+          "ratio": 1.7560975609755987,
+          "low": 1.488888888888889,
+          "high": 2.1,
+          "allowed": 1.813008130081301,
+          "passes": false
+        },
+        "switchSmartWarm": {
+          "ratio": 2.090909090909091,
+          "low": 1.84,
+          "high": 2.1363636363636362,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "switchView": {
+          "ratio": 1,
+          "low": 0.9473684210526315,
+          "high": 1.0526315789473684,
+          "allowed": 1.8771929824561406,
+          "passes": true
+        },
+        "switchWarm": {
+          "ratio": 1.0588235294117647,
+          "low": 1.0000000000002078,
+          "high": 1.0909090909092012,
+          "allowed": 1.9803921568627454,
+          "passes": true
+        },
+        "weekCold": {
+          "ratio": 1.1935483870970092,
+          "low": 1.15625,
+          "high": 1.2666666666666666,
+          "allowed": 2.0752688172043015,
+          "passes": true
+        },
+        "weekWarm": {
+          "ratio": 1.6666666666660892,
+          "low": 1.5454545454550566,
+          "high": 1.7142857142857142,
+          "allowed": 2.5873015873010377,
+          "passes": true
+        }
+      },
+      "errors": []
+    },
+    {
+      "seeded": 500000,
+      "openPages": 400900,
+      "launch": {
+        "ms": 636.897833,
+        "p99": 643.4983750000001,
+        "max": 643.4983750000001,
+        "runs": 7
+      },
+      "captureCommit": {
+        "ms": 97.00000000000728,
+        "p99": 123,
+        "max": 125,
+        "runs": 70
+      },
+      "captureOpen": {
+        "ms": 43,
+        "p99": 58,
+        "max": 59,
+        "runs": 70
+      },
+      "complete": {
+        "ms": 23,
+        "p99": 46,
+        "max": 56.99999999999272,
+        "runs": 70
+      },
+      "ipcHop": {
+        "ms": 0,
+        "p99": 6,
+        "max": 11,
+        "runs": 210
+      },
+      "ipcWindow": {
+        "ms": 2,
+        "p99": 6.000000000007276,
+        "max": 12,
+        "runs": 210
+      },
+      "openDirect": {
+        "ms": 66,
+        "p99": 82.99999999999636,
+        "max": 83.99999999999636,
+        "runs": 140
+      },
+      "openPage": {
+        "ms": 61,
+        "p99": 77,
+        "max": 82,
+        "runs": 140
+      },
+      "rename": {
+        "ms": 26.000000000007276,
+        "p99": 41,
+        "max": 50.00000000000728,
+        "runs": 70
+      },
+      "scroll": {
+        "ms": 17,
+        "p99": 23,
+        "max": 24,
+        "runs": 140
+      },
+      "search": {
+        "ms": 28,
+        "p99": 34,
+        "max": 43.00000000000364,
+        "runs": 140
+      },
+      "switchCold": {
+        "ms": 42.999999999999545,
+        "p99": 65,
+        "max": 66.99999999999977,
+        "runs": 70
+      },
+      "switchSmartCold": {
+        "ms": 83,
+        "p99": 103,
+        "max": 103,
+        "runs": 14
+      },
+      "switchSmartWarm": {
+        "ms": 52,
+        "p99": 67,
+        "max": 67,
+        "runs": 28
+      },
+      "switchView": {
+        "ms": 39,
+        "p99": 64,
+        "max": 66.99999999999977,
+        "runs": 224
+      },
+      "switchWarm": {
+        "ms": 37.99999999999272,
+        "p99": 47,
+        "max": 50,
+        "runs": 154
+      },
+      "weekCold": {
+        "ms": 51,
+        "p99": 158,
+        "max": 167.00000000000728,
+        "runs": 70
+      },
+      "weekWarm": {
+        "ms": 48,
+        "p99": 53,
+        "max": 53.99999999999272,
+        "runs": 70
+      },
+      "launchStages": {
+        "connected": 434.101959,
+        "documentReady": 413.101959,
+        "firstRow": 636.897833,
+        "loaded": 484.899708,
+        "shellReady": 537.897833,
+        "webviewStart": 273.897833,
+        "workspaceRequested": 428.101959
+      },
+      "memory": {
+        "windowBytes": 646514656,
+        "windowPeakBytes": 868140832,
+        "appBytes": 61425656
+      },
+      "vsReference": {
+        "launch": {
+          "ratio": 1.1847353582483289,
+          "low": 1.1273129620279299,
+          "high": 1.201539067259558,
+          "allowed": 1.5,
+          "passes": true
+        },
+        "captureCommit": {
+          "ratio": 1.6065573770491803,
+          "low": 1.5645161290323755,
+          "high": 1.6065573770492996,
+          "allowed": 1.5464480874316942,
+          "passes": false
+        },
+        "captureOpen": {
+          "ratio": 1.1282051282051282,
+          "low": 1.076923076923278,
+          "high": 1.1578947368421053,
+          "allowed": 1.854700854700855,
+          "passes": true
+        },
+        "complete": {
+          "ratio": 1.0909090909090908,
+          "low": 1,
+          "high": 1.1904761904761905,
+          "allowed": 2.515151515151515,
+          "passes": true
+        },
+        "ipcHop": {
+          "ratio": null,
+          "low": null,
+          "high": null,
+          "allowed": null,
+          "passes": false
+        },
+        "ipcWindow": {
+          "ratio": 1,
+          "low": 1,
+          "high": 2,
+          "allowed": 17.666666666666668,
+          "passes": true
+        },
+        "openDirect": {
+          "ratio": 1.046875,
+          "low": 1.0153846153845585,
+          "high": 1.096774193548387,
+          "allowed": 1.5208333333333335,
+          "passes": true
+        },
+        "openPage": {
+          "ratio": 1.0701754385965072,
+          "low": 1,
+          "high": 1.125,
+          "allowed": 1.584795321637427,
+          "passes": true
+        },
+        "rename": {
+          "ratio": 1.125,
+          "low": 0.9629629629632325,
+          "high": 1.3333333333333333,
+          "allowed": 2.388888888888889,
+          "passes": true
+        },
+        "scroll": {
+          "ratio": 1,
+          "low": 1,
+          "high": 1.000000000000428,
+          "allowed": 2.9607843137254903,
+          "passes": true
+        },
+        "search": {
+          "ratio": 0.9655172413793104,
+          "low": 0.9655172413793104,
+          "high": 0.9655172413793104,
+          "allowed": 2.1494252873563218,
+          "passes": true
+        },
+        "switchCold": {
+          "ratio": 0.8867924528301887,
+          "low": 0.7777777777777736,
+          "high": 1.0599999999999812,
+          "allowed": 1.628930817610063,
+          "passes": true
+        },
+        "switchSmartCold": {
+          "ratio": 2.1463414634146454,
+          "low": 1.6888888888888687,
+          "high": 2.4,
+          "allowed": 1.813008130081301,
+          "passes": false
+        },
+        "switchSmartWarm": {
+          "ratio": 2.3636363636363638,
+          "low": 2.0399999999997087,
+          "high": 2.590909090909091,
+          "allowed": 2.515151515151515,
+          "passes": false
+        },
+        "switchView": {
+          "ratio": 1.0263157894736843,
+          "low": 1,
+          "high": 1.0810810810810811,
+          "allowed": 1.8771929824561406,
+          "passes": true
+        },
+        "switchWarm": {
+          "ratio": 1.1176470588234224,
+          "low": 1.0571428571428572,
+          "high": 1.1515151515151516,
+          "allowed": 1.9803921568627454,
+          "passes": true
+        },
+        "weekCold": {
+          "ratio": 1.6451612903223458,
+          "low": 1.5625,
+          "high": 1.7,
+          "allowed": 2.0752688172043015,
+          "passes": true
+        },
+        "weekWarm": {
+          "ratio": 2.2857142857134938,
+          "low": 2.1818181818189033,
+          "high": 2.3333333333333335,
+          "allowed": 2.5873015873010377,
+          "passes": true
+        }
+      },
+      "errors": []
+    }
+  ]
+}

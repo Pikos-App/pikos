@@ -2,10 +2,10 @@ import type { Page } from "@pikos/core";
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
+import { usePagesNow } from "@/test/usePagesNow";
 
 import { useMoveOverdueToToday } from "./useMoveOverdueToToday";
 
@@ -26,7 +26,7 @@ afterEach(() => {
 
 function setup() {
   return renderHookWithProviders(() => {
-    const pages = usePages();
+    const pages = usePagesNow();
     const undo = useUndoDelete();
     const workspace = useWorkspace();
     const move = useMoveOverdueToToday();

@@ -65,6 +65,11 @@ jobs:
         with:
           targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
 
+      # Why: scripts/no-build-paths-check.sh. Set before the cache step so its key sees the same
+      # flags as the build.
+      - name: Remap build paths out of the binaries
+        run: echo "RUSTFLAGS=--remap-path-prefix=$HOME=~ --remap-path-prefix=$GITHUB_WORKSPACE=/pikos" >> "$GITHUB_ENV"
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri -> target
@@ -189,6 +194,16 @@ jobs:
           bash scripts/macos-signing-check.sh \
             "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
 
+      - name: The binaries name no build-machine paths
+        run: |
+          if [ "${{ matrix.platform }}" = "macos-latest" ]; then
+            bash scripts/no-build-paths-check.sh \
+              apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app/Contents/MacOS/*
+          else
+            bash scripts/no-build-paths-check.sh \
+              apps/desktop/src-tauri/target/${{ matrix.target }}/release/pikos
+          fi
+
       # The keychain is a runtime link, so a missing dependency here is a package that installs
       # and then cannot store a password.
       - name: The .deb depends on libdbus
@@ -268,6 +283,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # The same remap as the app build's.
+      - name: Remap build paths out of the binaries
+        run: echo "RUSTFLAGS=--remap-path-prefix=$HOME=~ --remap-path-prefix=$GITHUB_WORKSPACE=/pikos" >> "$GITHUB_ENV"
+
       - uses: Swatinem/rust-cache@v2
         with:
           key: cli-${{ matrix.target }}
@@ -294,6 +313,9 @@ jobs:
 
       - name: Build the CLI
         run: cargo build -p pikos-cli --release --target ${{ matrix.target }}
+
+      - name: The binary names no build-machine paths
+        run: bash scripts/no-build-paths-check.sh target/${{ matrix.target }}/release/pikos
 
       # Layout matches what the binary looks for: `../bridge/bridge.mjs` relative
       # to itself. The Homebrew formula also pins PIKOS_BRIDGE_JS, so an install
