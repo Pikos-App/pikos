@@ -499,7 +499,7 @@ naturally: write in the head before completing, and the clone captures them.
 | Create | ✅ | 🚫 sync enable path only | ✅ `folders create` | ✅ folder manager |
 | Rename | ✅ | 🚫 sync-owned, follows the calendar ⁴⁶ | ✅ `folders rename`, refused on a calendar folder | ✅ folder manager |
 | Recolor | ✅ | ✅ Pikos palette, user pick wins ⁴⁷ | — | ✅ folder manager ⁴⁷ |
-| Reparent / nest | ✅ | 🚫 both directions ⁴⁸ | — | ✅ Move into… ⁴⁸ |
+| Reparent / nest | ✅ | 🚫 both directions ⁴⁸ | — | — folders don't nest, as on the desktop |
 | Delete | ✅ | 🚫 disconnect in settings ⁴⁸ | ✅ `folders delete` to the trash, `folders restore` | ✅ regular folders only |
 | Enable / disable (per-calendar) | — | ⚠️ sync teardown, not hide ⁴⁹ | — | ✅ Settings → Calendars |
 | Default page-list sort | ✅ manual | ⚠️ date ⁵⁰ | — | ✅ same defaults, per view ⁵⁰ |

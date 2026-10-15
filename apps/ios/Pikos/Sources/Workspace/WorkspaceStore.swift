@@ -839,17 +839,6 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Nest a folder inside another, or pass `nil` to bring it back to the top.
-    public func setFolderParent(id: String, to parent: String?) async {
-        guard let workspace else { return }
-        do {
-            _ = try await workspace.setFolderParent(id: id, parent: parent)
-            await refresh()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     /// Move a folder to the trash, taking its pages with it.
     ///
     /// If the deleted folder was the one being shown, the scope falls back to

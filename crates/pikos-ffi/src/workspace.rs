@@ -282,12 +282,6 @@ pub struct Folder {
     pub name: String,
     pub color: Option<String>,
     pub sort_order: i64,
-    /// The folder this one is nested inside, if any.
-    ///
-    /// Needed to draw the tree and to keep a "move into" picker honest: without
-    /// it the only way to know a folder is already somebody's child is to guess,
-    /// and a picker that offers a folder its own descendant would build a cycle.
-    pub parent_id: Option<String>,
     /// True for a folder that mirrors a synced calendar.
     ///
     /// Pikos manages it, and the data layer enforces that: it cannot be deleted
@@ -2560,14 +2554,7 @@ impl Workspace {
             },
         )
         .await?;
-        Ok(Folder {
-            id: folder.id,
-            name: folder.name,
-            color: folder.color,
-            sort_order: folder.sort_order,
-            parent_id: folder.parent_id,
-            is_external_calendar: folder.is_external_calendar,
-        })
+        Ok(folder_of(folder))
     }
 
     /// Rename a folder.
@@ -2592,14 +2579,7 @@ impl Workspace {
             },
         )
         .await?;
-        Ok(Folder {
-            id: folder.id,
-            name: folder.name,
-            color: folder.color,
-            sort_order: folder.sort_order,
-            parent_id: folder.parent_id,
-            is_external_calendar: folder.is_external_calendar,
-        })
+        Ok(folder_of(folder))
     }
 
     /// Record a finished focus session against a page.
@@ -2813,53 +2793,6 @@ impl Workspace {
         Ok(folder_of(folder))
     }
 
-    /// Nest a folder inside another, or move it back to the top level.
-    ///
-    /// Refused in both directions for a folder a calendar owns — it cannot be
-    /// moved, and nothing can be filed under it. The data layer enforces that
-    /// and says so in the message; a picker that leaves external folders out is
-    /// the belt to this braces.
-    ///
-    /// `parent` of `None` means the top level.
-    pub async fn set_folder_parent(
-        &self,
-        id: String,
-        parent: Option<String>,
-    ) -> Result<Folder, WorkspaceError> {
-        if parent.as_deref() == Some(id.as_str()) {
-            return Err(WorkspaceError::InvalidInput {
-                message: "a folder cannot be inside itself".to_string(),
-            });
-        }
-        if let Some(parent_id) = parent.as_deref() {
-            if descendants_of(&self.pool, &id)
-                .await?
-                .contains(&parent_id.to_string())
-            {
-                // The cycle the data layer does not check for. Nesting a folder
-                // under its own child detaches the pair from the tree entirely:
-                // both rows still exist, and neither is reachable from the top
-                // level, so they vanish from the sidebar with no error.
-                return Err(WorkspaceError::InvalidInput {
-                    message: "a folder cannot be moved inside one of its own folders".to_string(),
-                });
-            }
-        }
-        let folder = pikos_db::update_folder_impl(
-            &self.pool,
-            id,
-            pikos_db::FolderUpdate {
-                parent_id: Some(match parent {
-                    Some(value) => serde_json::Value::String(value),
-                    None => serde_json::Value::Null,
-                }),
-                ..Default::default()
-            },
-        )
-        .await?;
-        Ok(folder_of(folder))
-    }
-
     /// Move a folder to the trash, taking its pages with it.
     ///
     /// Soft, and cascading: the folder and every page filed in it are marked
@@ -2883,17 +2816,7 @@ impl Workspace {
 
     pub async fn list_folders(&self) -> Result<Vec<Folder>, WorkspaceError> {
         let folders = pikos_db::list_folders_impl(&self.pool).await?;
-        Ok(folders
-            .into_iter()
-            .map(|f| Folder {
-                id: f.id,
-                name: f.name,
-                color: f.color,
-                sort_order: f.sort_order,
-                parent_id: f.parent_id,
-                is_external_calendar: f.is_external_calendar,
-            })
-            .collect())
+        Ok(folders.into_iter().map(folder_of).collect())
     }
 
     /// Everything to draw for a visible range, in one call.
@@ -3013,17 +2936,7 @@ impl ReadOnlyWorkspace {
     /// case where a *query*, rather than an intent run, needed the database.
     pub async fn list_folders(&self) -> Result<Vec<Folder>, WorkspaceError> {
         let folders = pikos_db::list_folders_impl(&self.pool).await?;
-        Ok(folders
-            .into_iter()
-            .map(|f| Folder {
-                id: f.id,
-                name: f.name,
-                color: f.color,
-                sort_order: f.sort_order,
-                parent_id: f.parent_id,
-                is_external_calendar: f.is_external_calendar,
-            })
-            .collect())
+        Ok(folders.into_iter().map(folder_of).collect())
     }
 }
 
@@ -3286,31 +3199,6 @@ async fn filtered_search(
     Ok(rows)
 }
 
-/// Every folder beneath `id`, at any depth.
-///
-/// A free function, not a method: everything in `impl Workspace` is exported,
-/// and a helper on the Swift surface is a helper somebody calls.
-///
-/// Walks the whole list in memory rather than issuing a recursive query.
-/// Folder counts are in the tens, the list is one cheap read, and the
-/// `!contains` guard means a parent cycle already in the database terminates
-/// here instead of spinning.
-async fn descendants_of(pool: &sqlx::SqlitePool, id: &str) -> Result<Vec<String>, WorkspaceError> {
-    let folders = pikos_db::list_folders_impl(pool).await?;
-    let mut found: Vec<String> = Vec::new();
-    let mut frontier = vec![id.to_string()];
-    while let Some(current) = frontier.pop() {
-        for folder in &folders {
-            if folder.parent_id.as_deref() == Some(current.as_str()) && !found.contains(&folder.id)
-            {
-                found.push(folder.id.clone());
-                frontier.push(folder.id.clone());
-            }
-        }
-    }
-    Ok(found)
-}
-
 /// The data layer's folder as the one that crosses the boundary.
 fn folder_of(folder: pikos_db::Folder) -> Folder {
     Folder {
@@ -3318,7 +3206,6 @@ fn folder_of(folder: pikos_db::Folder) -> Folder {
         name: folder.name,
         color: folder.color,
         sort_order: folder.sort_order,
-        parent_id: folder.parent_id,
         is_external_calendar: folder.is_external_calendar,
     }
 }

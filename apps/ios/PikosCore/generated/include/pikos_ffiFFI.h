@@ -538,11 +538,6 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_set_calendar_enabled(uint64_t ptr,
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_folder_color(uint64_t ptr, RustBuffer id, RustBuffer color
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_FOLDER_PARENT
-#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_FOLDER_PARENT
-uint64_t uniffi_pikos_ffi_fn_method_workspace_set_folder_parent(uint64_t ptr, RustBuffer id, RustBuffer parent
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_REPEAT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_REPEAT
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_page_repeat(uint64_t ptr, RustBuffer page_id, RustBuffer pattern
@@ -1352,12 +1347,6 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_COLOR
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_COLOR
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_folder_color(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_PARENT
-#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_PARENT
-uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_folder_parent(void
     
 );
 #endif

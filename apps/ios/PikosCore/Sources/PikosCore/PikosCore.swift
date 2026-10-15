@@ -1408,18 +1408,6 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func setFolderColor(id: String, color: String?) async throws  -> Folder
     
     /**
-     * Nest a folder inside another, or move it back to the top level.
-     *
-     * Refused in both directions for a folder a calendar owns — it cannot be
-     * moved, and nothing can be filed under it. The data layer enforces that
-     * and says so in the message; a picker that leaves external folders out is
-     * the belt to this braces.
-     *
-     * `parent` of `None` means the top level.
-     */
-    func setFolderParent(id: String, parent: String?) async throws  -> Folder
-    
-    /**
      * Make a page repeat, or change how it already does.
      *
      * Creates the rule when there is none and rewrites it when there is, so a
@@ -2913,32 +2901,6 @@ open func setFolderColor(id: String, color: String?)async throws  -> Folder  {
 }
     
     /**
-     * Nest a folder inside another, or move it back to the top level.
-     *
-     * Refused in both directions for a folder a calendar owns — it cannot be
-     * moved, and nothing can be filed under it. The data layer enforces that
-     * and says so in the message; a picker that leaves external folders out is
-     * the belt to this braces.
-     *
-     * `parent` of `None` means the top level.
-     */
-open func setFolderParent(id: String, parent: String?)async throws  -> Folder  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_pikos_ffi_fn_method_workspace_set_folder_parent(
-                        self.uniffiCloneHandle(),FfiConverterString.lower(id),FfiConverterOptionString.lower(parent)
-                )
-            },
-            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
-            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
-            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFolder_lift,
-            errorHandler: FfiConverterTypeWorkspaceError_lift
-        )
-}
-    
-    /**
      * Make a page repeat, or change how it already does.
      *
      * Creates the rule when there is none and rewrites it when there is, so a
@@ -3968,14 +3930,6 @@ public struct Folder: Equatable, Hashable {
     public var color: String?
     public var sortOrder: Int64
     /**
-     * The folder this one is nested inside, if any.
-     *
-     * Needed to draw the tree and to keep a "move into" picker honest: without
-     * it the only way to know a folder is already somebody's child is to guess,
-     * and a picker that offers a folder its own descendant would build a cycle.
-     */
-    public var parentId: String?
-    /**
      * True for a folder that mirrors a synced calendar.
      *
      * Pikos manages it, and the data layer enforces that: it cannot be deleted
@@ -3989,13 +3943,6 @@ public struct Folder: Equatable, Hashable {
     // declare one manually.
     public init(id: String, name: String, color: String?, sortOrder: Int64, 
         /**
-         * The folder this one is nested inside, if any.
-         *
-         * Needed to draw the tree and to keep a "move into" picker honest: without
-         * it the only way to know a folder is already somebody's child is to guess,
-         * and a picker that offers a folder its own descendant would build a cycle.
-         */parentId: String?, 
-        /**
          * True for a folder that mirrors a synced calendar.
          *
          * Pikos manages it, and the data layer enforces that: it cannot be deleted
@@ -4007,7 +3954,6 @@ public struct Folder: Equatable, Hashable {
         self.name = name
         self.color = color
         self.sortOrder = sortOrder
-        self.parentId = parentId
         self.isExternalCalendar = isExternalCalendar
     }
 
@@ -4031,7 +3977,6 @@ public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf), 
                 color: FfiConverterOptionString.read(from: &buf), 
                 sortOrder: FfiConverterInt64.read(from: &buf), 
-                parentId: FfiConverterOptionString.read(from: &buf), 
                 isExternalCalendar: FfiConverterBool.read(from: &buf)
         )
     }
@@ -4041,7 +3986,6 @@ public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterOptionString.write(value.color, into: &buf)
         FfiConverterInt64.write(value.sortOrder, into: &buf)
-        FfiConverterOptionString.write(value.parentId, into: &buf)
         FfiConverterBool.write(value.isExternalCalendar, into: &buf)
     }
 }
@@ -8881,9 +8825,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_folder_color() != 15940) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_pikos_ffi_checksum_method_workspace_set_folder_parent() != 57680) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_repeat() != 26372) {

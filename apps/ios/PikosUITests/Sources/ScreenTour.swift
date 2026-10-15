@@ -329,9 +329,6 @@ final class ScreenTour: PikosUITestCase {
         relaunch(["PIKOS_DEMO_SWITCHER": "1"])
         if tap(button("Edit"), "edit folders"), tap(button("More for Work"), "folder menu") {
             shot(section, 3, "Folder menu")
-            if tap(app.buttons["Move into…"].firstMatch, "move into") {
-                shot(section, 4, "Folder menu: Move into")
-            }
         }
         relaunch(["PIKOS_DEMO_SWITCHER": "1"])
         if tap(button("Edit"), "edit folders"), tap(button("More for Work"), "folder menu") {

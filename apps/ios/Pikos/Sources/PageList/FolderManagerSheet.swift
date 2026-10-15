@@ -2,7 +2,7 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// Create, rename, recolour, nest and delete folders.
+/// Create, rename, recolour and delete folders.
 ///
 /// Its own sheet rather than actions buried in the view switcher, because those
 /// are two different jobs: the switcher answers "show me that", and this
@@ -104,7 +104,6 @@ struct FolderManagerSheet: View {
                 .focused($focusedFolder, equals: folder.id)
                 .submitLabel(.done)
                 .onSubmit { Task { await commitRename(folder) } }
-                .padding(.leading, indent(of: folder))
                 .accessibilityLabel(accessibleLabel(folder))
                 // A hold on the name selects its text, so the folder's menu also has a button.
                 Menu {
@@ -186,21 +185,6 @@ struct FolderManagerSheet: View {
                 Label("Rename", systemImage: "pencil")
             }
 
-            Menu {
-                if folder.parentId != nil {
-                    Button("Top level") {
-                        Task { await store.setFolderParent(id: folder.id, to: nil) }
-                    }
-                }
-                ForEach(possibleParents(of: folder), id: \.id) { parent in
-                    Button(parent.name) {
-                        Task { await store.setFolderParent(id: folder.id, to: parent.id) }
-                    }
-                }
-            } label: {
-                Label("Move into…", systemImage: "folder")
-            }
-
             Divider()
 
             Button(role: .destructive) {
@@ -213,32 +197,8 @@ struct FolderManagerSheet: View {
 
     // MARK: - Grouping
 
-    /// Folders the user made, in tree order — a parent immediately followed by
-    /// its children.
-    ///
-    /// Flattened rather than drawn as nested `DisclosureGroup`s. A phone-width
-    /// list of folders two deep does not need to be collapsible, and a
-    /// disclosure arrow on every row competes with the tap that renames.
     private var ownFolders: [Folder] {
-        let own = store.folders.filter { !$0.isExternalCalendar }
-        var ordered: [Folder] = []
-        func append(children of: String?) {
-            for folder in own where folder.parentId == of {
-                ordered.append(folder)
-                append(children: folder.id)
-            }
-        }
-        append(children: nil)
-        // Anything whose parent is missing or unreachable still has to appear,
-        // or a folder becomes invisible without being deleted.
-        for folder in own where !ordered.contains(where: { $0.id == folder.id }) {
-            ordered.append(folder)
-        }
-        return ordered
-    }
-
-    private func indent(of folder: Folder) -> CGFloat {
-        folder.parentId == nil ? 0 : 14
+        store.folders.filter { !$0.isExternalCalendar }
     }
 
     /// One heading per calendar account, and no heading at all when there is
@@ -283,31 +243,11 @@ struct FolderManagerSheet: View {
         return grouped
     }
 
-    private func possibleParents(of folder: Folder) -> [Folder] {
-        let forbidden = descendants(of: folder.id).union([folder.id])
-        return store.folders.filter { !$0.isExternalCalendar && !forbidden.contains($0.id) }
-    }
-
-    /// Every folder under `id`, so the picker cannot offer a move that builds a
-    /// cycle. The workspace refuses one anyway; this is what stops the choice
-    /// being shown.
-    private func descendants(of id: String) -> Set<String> {
-        var found: Set<String> = []
-        var frontier = [id]
-        while let current = frontier.popLast() {
-            for folder in store.folders where folder.parentId == current {
-                if found.insert(folder.id).inserted { frontier.append(folder.id) }
-            }
-        }
-        return found
-    }
-
     private func accessibleLabel(_ folder: Folder) -> String {
         var parts = [folder.name]
         if let colour = store.paletteColors.first(where: { $0.value == folder.color }) {
             parts.append(colour.label)
         }
-        if folder.parentId != nil { parts.append("nested") }
         if folder.isExternalCalendar { parts.append("managed by a calendar") }
         return parts.joined(separator: ", ")
     }

@@ -51,8 +51,8 @@ struct ScopeSwitcher: View {
                             .disabled(newFolderName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
-                ForEach(ownFolders, id: \.folder.id) { item in
-                    folderRow(item.folder, depth: item.depth)
+                ForEach(ownFolders, id: \.id) { folder in
+                    folderRow(folder)
                 }
                 if !isNamingFolder {
                     Button {
@@ -76,7 +76,7 @@ struct ScopeSwitcher: View {
                 if !calendarFolders.isEmpty {
                     sectionLabel("Calendars") { EmptyView() }
                     ForEach(calendarFolders, id: \.id) { folder in
-                        folderRow(folder, depth: 0)
+                        folderRow(folder)
                     }
                 }
             }
@@ -159,7 +159,7 @@ struct ScopeSwitcher: View {
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
-    private func folderRow(_ folder: Folder, depth: Int) -> some View {
+    private func folderRow(_ folder: Folder) -> some View {
         let scope = WorkspaceStore.Scope.folder(id: folder.id, name: folder.name)
         let isActive = store.scope == scope
         return Button {
@@ -174,7 +174,6 @@ struct ScopeSwitcher: View {
             } trailing: {
                 countLabel(counts.folders[folder.id] ?? 0)
             }
-            .padding(.leading, CGFloat(depth) * 16)
         }
         .buttonStyle(SwitcherRowStyle(isActive: isActive))
         .accessibilityAddTraits(isActive ? .isSelected : [])
@@ -225,23 +224,10 @@ struct ScopeSwitcher: View {
         route.isSwitcherPresented = false
     }
 
-    // MARK: - Folders in tree order
+    // MARK: - Folders
 
-    private var ownFolders: [(folder: Folder, depth: Int)] {
-        let own = store.folders.filter { !$0.isExternalCalendar }
-        var ordered: [(Folder, Int)] = []
-        func append(childrenOf parent: String?, depth: Int) {
-            for folder in own where folder.parentId == parent {
-                ordered.append((folder, depth))
-                append(childrenOf: folder.id, depth: depth + 1)
-            }
-        }
-        append(childrenOf: nil, depth: 0)
-        // A folder whose parent is missing still has to appear, or it vanishes without being deleted.
-        for folder in own where !ordered.contains(where: { $0.0.id == folder.id }) {
-            ordered.append((folder, 0))
-        }
-        return ordered.map { (folder: $0.0, depth: $0.1) }
+    private var ownFolders: [Folder] {
+        store.folders.filter { !$0.isExternalCalendar }
     }
 
     private var calendarFolders: [Folder] {

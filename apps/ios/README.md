@@ -194,9 +194,9 @@ suite.
   a destructive control sitting next to a restore button on a phone is the same
   mis-tap the screen exists to undo. Worth revisiting only alongside a
   confirmation step.
-- **Folder icons.** Colour and nesting are wired — the dot on each row is the
-  colour picker, and "Move into…" is on the context menu. The `icon` column is
-  not: the desktop does not offer it either, so there is no behaviour to match.
+- **Folder icons and nesting.** Colour is wired — the dot on each row is the
+  colour picker. The `icon` column is not, and folders don't nest: the desktop
+  offers neither, so there is no behaviour to match.
 - **Images from anywhere but the photo library.** The formatting bar's photo
   button opens a `PhotosPicker`, writes the picture into the workspace's
   assets directory and inserts it. Anything not JPEG, PNG or GIF is
