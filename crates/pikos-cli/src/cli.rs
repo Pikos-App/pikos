@@ -156,7 +156,7 @@ pub enum CliCommand {
         id: String,
         #[arg(
             long,
-            help = "On a repeating page, the occurrence to tick off (YYYY-MM-DD); default the oldest open one"
+            help = "On a repeating page, the occurrence to mark done (YYYY-MM-DD); default the oldest open one"
         )]
         date: Option<String>,
     },
