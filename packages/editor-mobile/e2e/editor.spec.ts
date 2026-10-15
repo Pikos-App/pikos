@@ -368,10 +368,11 @@ test.describe("host commands", () => {
     await sendToEditor(page, "insertImage", { assetPath: "assets/inserted.png" });
 
     await expect(page.locator(".ProseMirror img")).toHaveCount(1);
-    // Resolved for display through the custom scheme the host serves.
+    // Resolved for display through the custom scheme the host serves, which is rooted at the
+    // assets folder.
     await expect(page.locator(".ProseMirror img")).toHaveAttribute(
       "src",
-      /pikos-asset:\/\/asset\/assets\/inserted\.png/
+      /pikos-asset:\/\/asset\/inserted\.png/
     );
   });
 
