@@ -46,11 +46,11 @@ It shares the origin columns' behaviour wherever it does anything at all: the gu
 `pikos-db`, so a mirror is as locked on the phone as in the app. What differs is how much of
 the surface exists, and five facts explain nearly every `○`:
 
-- **Nothing is moved by hand.** Date, priority, tags, folder and repeat are all editable,
-  each from the long-press menu, and several rows at once from select mode. What stays `○`
-  in §1 and §2 is the gestural half: dragging a page onto a folder, reordering a list by
-  dragging its rows. A list can be _sorted_ — manual, date, title, priority, per view like
-  the desktop — but a manual order cannot be changed from the phone.
+- **Holding a row lifts it to schedule, so arranging is a mode.** Date, priority, tags,
+  folder and repeat are all editable, each from the long-press menu, and several rows at once
+  from select mode. Select mode is also where a hand-sorted list is rearranged, by its rows'
+  handles, because a held row is already carrying its page to the day. That same held page,
+  kept over the title, opens the switcher, and a folder in it takes the drop.
 - **Reminders are planned, not polled.** The desktop fires them from a task that wakes every
   clock minute, and iOS suspends that within seconds of backgrounding, so the model inverts:
   the workspace is asked what will fire over the next fourteen days and each answer becomes a
@@ -102,8 +102,8 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ✅ long press |
 | Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status` | ✅ |
 | Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ✅ long press → Move |
-| Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ○ |
-| Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ○ |
+| Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ✅ held over the title, onto the switcher |
+| Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ✅ select mode's handles |
 | Delete page | ✅ soft → trash | ⚠️ soft + tombstone ⁷ | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹ | ✅ swipe / long press |
 | Restore from trash | ✅ | ✅ resumes sync ⁷ | ✅ stays detached ⁸ | ✅ `restore` | ✅ |
 
@@ -541,8 +541,7 @@ one.
 ⁵⁰ An external folder's page list defaults to date order (`useActiveSortMode`). A calendar
 mirror is chronology, not a hand-arranged list. A stored per-view sort choice always wins, and
 native folders keep manual. iOS keeps the same per-view choice in the App Group's defaults and
-orders with the same four rules, ported to `PikosSupport.PageSort` and tested on the host; what
-it cannot do is _change_ a manual order, since nothing crosses the FFI to rewrite `sort_order`.
+orders with the same four rules, ported to `PikosSupport.PageSort` and tested on the host.
 ⁵¹ With calendars from more than one account, the sidebar groups them under per-account
 headings (`useCalendarAccountGroups`); a single account renders headingless, and the heading
 disappears again when a disconnect leaves one. Same-named calendars on different accounts stay

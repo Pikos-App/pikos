@@ -896,16 +896,34 @@ public final class WorkspaceStore {
     /// here means the Inbox rather than "leave it alone" — `PageEdit.folder`
     /// draws that distinction with an enum precisely so a caller cannot lose it
     /// to an optional.
-    public func movePage(id: String, toFolder folderId: String?) async {
-        guard let workspace else { return }
+    @discardableResult
+    public func movePage(id: String, toFolder folderId: String?) async -> Bool {
+        guard let workspace else { return false }
         do {
             let assignment: FolderAssignment =
                 folderId.map { .folder(id: $0) } ?? .inbox
             _ = try await workspace.updatePage(id: id, edit: PageEdit(folder: assignment))
             await refresh()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
+    }
+
+    /// A page carried onto a folder: filed there, with the folder it came from offered back.
+    func file(_ page: PageFacts, toFolder folderId: String?) async {
+        guard !page.scheduleLocked, page.folderId != folderId,
+            await movePage(id: page.id, toFolder: folderId)
+        else { return }
+        let destination =
+            folderId.flatMap { id in folders.first { $0.id == id }?.name } ?? String(localized: "Inbox")
+        let origin = page.folderId
+        notice = Notice(
+            String(localized: "Moved to \(destination)"),
+            action: Notice.Action(title: String(localized: "Undo")) { [weak self] in
+                await self?.movePage(id: page.id, toFolder: origin)
+            })
     }
 
     /// Move a page to a date, or give one to a page that had none.

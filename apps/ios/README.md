@@ -230,11 +230,6 @@ suite.
   gestures with no affordance get one tip each, a day apart, until dismissed:
   a card at the top of the list for swiping and dragging a row, and a popover
   on the title for switching views.
-- **Reordering rows by drag.** `sort_order` is on the summary and nothing
-  crosses the FFI to change it. A folder can be _sorted_ — manual, date, title,
-  priority, from the header's sort menu, remembered per view like the desktop — and
-  select mode covers moving several pages at once; a hand-arranged order waits
-  on a reorder call.
 - **Liquid Glass everywhere.** The bottom bar, the select-mode verbs and the
   notice bar are glass on iOS 26 and system materials before it. Nothing in the content layer is glass, on purpose,
   and every iOS 26 symbol sits behind `#if compiler(>=6.2)` so the tree still

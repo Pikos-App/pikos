@@ -122,6 +122,11 @@ Cheap, and each one has caught something on other apps:
 - In a folder, ··· → Sort by → Priority: urgent rows first, undated rows of a
   tier after dated ones, "none" last. Switch to another folder and back: the
   choice should hold; Today should offer no Sort at all.
+- In the Inbox, hold a row until it lifts and carry it onto the title. After
+  a moment the switcher should open under the finger's path; a folder should
+  light as the page passes over it, and letting go there should file the page
+  with a notice offering Undo. The day at the bottom should still take a drop
+  while the switcher is closed.
 - Quick add: the Priority chip should show "Priority" until the line says
   `!high` or the chip is used, and the chip's choice should win over the
   line's.

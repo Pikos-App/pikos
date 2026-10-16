@@ -54,6 +54,21 @@ final class PageDragSession {
         }
     #endif
 
+    /// Ends the drag and hands over its page, but only a page this app lifted: the carried text has
+    /// to name the page the session holds.
+    func land(_ info: DropInfo, then deliver: @escaping @MainActor (PageFacts) -> Void) -> Bool {
+        guard let page, let provider = info.itemProviders(for: [.text]).first else { return false }
+        end()
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            let text = (object as? NSString).map(String.init) ?? ""
+            Task { @MainActor in
+                guard text == Self.prefix + page.id else { return }
+                deliver(page)
+            }
+        }
+        return true
+    }
+
     /// The drag is over: dropped, or let go somewhere else after it moved.
     func end() {
         candidate = nil

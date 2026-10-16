@@ -52,6 +52,7 @@ struct ScopeSwitcher: View {
                 row(.today, title: "Today", systemImage: "sun.max", count: counts.today)
                 row(.upcoming, title: "Upcoming", systemImage: "calendar", count: counts.upcoming)
                 row(.inbox, title: "Inbox", systemImage: "tray", count: counts.inbox)
+                    .modifier(TakesDroppedPage(folderId: nil))
 
                 sectionLabel("Folders") {
                     Button {
@@ -83,6 +84,7 @@ struct ScopeSwitcher: View {
                 }
                 ForEach(ownFolders, id: \.id) { folder in
                     folderRow(folder)
+                        .modifier(TakesDroppedPage(folderId: folder.id))
                 }
                 if !isNamingFolder {
                     Button {
@@ -251,6 +253,70 @@ struct ScopeSwitcher: View {
 
     private var calendarFolders: [Folder] {
         store.folders.filter(\.isExternalCalendar)
+    }
+}
+
+/// A row a lifted page can be dropped on, which files the page there. A calendar's folder takes
+/// none: the workspace refuses a page filed into one.
+private struct TakesDroppedPage: ViewModifier {
+    let folderId: String?
+
+    @Environment(WorkspaceStore.self) private var store
+    @Environment(Route.self) private var route
+    @Environment(PageDragSession.self) private var drag
+    @State private var isTargeted = false
+    @State private var drops = 0
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isTargeted ? Color.surfaceHover : Color.clear))
+            .onDrop(
+                of: [.text],
+                delegate: FolderDropDelegate(drag: drag, folderId: folderId, isTargeted: $isTargeted) { page in
+                    drops += 1
+                    route.isSwitcherPresented = false
+                    Task { await store.file(page, toFolder: folderId) }
+                })
+            .sensoryFeedback(.success, trigger: drops)
+    }
+}
+
+private struct FolderDropDelegate: DropDelegate {
+    let drag: PageDragSession
+    let folderId: String?
+    @Binding var isTargeted: Bool
+    let onDrop: @MainActor (PageFacts) -> Void
+
+    /// A page already in this folder, or one a calendar owns, has nowhere to go.
+    private var accepts: Bool {
+        guard let page = drag.page else { return false }
+        return page.folderId != folderId && !page.scheduleLocked
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        drag.candidate != nil && info.hasItemsConforming(to: [.text])
+    }
+
+    func dropEntered(info: DropInfo) {
+        isTargeted = accepts
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        drag.beat()
+        if isTargeted != accepts { isTargeted = accepts }
+        return DropProposal(operation: accepts ? .move : .forbidden)
+    }
+
+    func dropExited(info: DropInfo) {
+        isTargeted = false
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        guard accepts else { return false }
+        return drag.land(info, then: onDrop)
     }
 }
 

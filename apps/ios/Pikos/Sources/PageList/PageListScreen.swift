@@ -121,9 +121,10 @@ struct PageListScreen: View {
         }
     }
 
+    /// Spring-loaded, so a page carried onto the title and held there opens the folders to drop it on.
     private var switcherButton: some View {
         Button {
-            route.isSwitcherPresented.toggle()
+            route.isSwitcherPresented = drag.page != nil || !route.isSwitcherPresented
         } label: {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
@@ -144,6 +145,7 @@ struct PageListScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .springLoadingBehavior(.enabled)
         .accessibilityLabel("Switch view")
         .accessibilityValue(store.scope.title)
         .popoverTip(SwitchViewTip(), arrowEdge: .top)

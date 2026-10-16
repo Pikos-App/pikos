@@ -423,20 +423,9 @@ private struct PeekDropDelegate: DropDelegate {
         drag.hoverMinute = nil
     }
 
-    /// Only a page this app lifted is scheduled: the carried text has to name the page the session holds.
     func performDrop(info: DropInfo) -> Bool {
-        guard let page = drag.page, let minute = drag.hoverMinute,
-            let provider = info.itemProviders(for: [.text]).first
-        else { return false }
-        drag.end()
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            let text = (object as? NSString).map(String.init) ?? ""
-            Task { @MainActor in
-                guard text == PageDragSession.prefix + page.id else { return }
-                onDrop(page, minute)
-            }
-        }
-        return true
+        guard let minute = drag.hoverMinute else { return false }
+        return drag.land(info) { page in onDrop(page, minute) }
     }
 
     /// Over the header or below the last hour is not a time, so it clears the hover.

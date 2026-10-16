@@ -194,7 +194,7 @@ final class TierOneTests: PikosUITestCase {
             app.otherElements["Week"].waitForExistence(timeout: Self.timeout), "and tapping it lands on the day view")
     }
 
-    func testRowsInAManuallySortedInboxCanBeRearranged() {
+    func testAnInboxRearrangedByHandKeepsItsOrderAfterARelaunch() {
         showView("Inbox")
         for title in ["Alpha errand", "Beta errand", "Gamma errand"] {
             quickAdd(title)
@@ -211,6 +211,43 @@ final class TierOneTests: PikosUITestCase {
         let gamma = app.staticTexts["Gamma errand"].firstMatch
         XCTAssertTrue(gamma.waitForExistence(timeout: Self.timeout))
         XCTAssertLessThan(gamma.frame.minY, alpha.frame.minY, "the dragged row stays above the one it was dropped on")
+
+        app.terminate()
+        app.launch()
+        showView("Inbox")
+        XCTAssertTrue(gamma.waitForExistence(timeout: Self.timeout))
+        XCTAssertLessThan(gamma.frame.minY, alpha.frame.minY, "the order was saved, not just drawn")
+    }
+
+    /// The switcher is spring-loaded: a page held over the title opens it, and a folder in it takes the drop.
+    func testAPageCarriedOntoAFolderInTheSwitcherMovesThere() {
+        app.buttons["Switch view"].firstMatch.tap()
+        let newFolder = app.buttons["New folder"].firstMatch
+        XCTAssertTrue(newFolder.waitForExistence(timeout: Self.timeout))
+        newFolder.tap()
+        app.typeText("Errands\n")
+        showView("Inbox")
+        quickAdd("Buy stamps")
+        let page = app.staticTexts["Buy stamps"].firstMatch
+        XCTAssertTrue(page.waitForExistence(timeout: Self.timeout))
+
+        let switcher = app.buttons["Switch view"].firstMatch
+        switcher.tap()
+        let folder = app.buttons.matching(NSPredicate(format: "label == 'Errands' OR label BEGINSWITH 'Errands, '")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: Self.timeout))
+        let folderPoint = CGPoint(x: folder.frame.midX, y: folder.frame.midY)
+        switcher.tap()
+        XCTAssertTrue(waitForDisappearance(of: folder), "the switcher closes before the drag")
+
+        TouchPath(stops: [
+            .init(point: CGPoint(x: page.frame.midX, y: page.frame.midY), hold: 1.2),
+            .init(point: CGPoint(x: switcher.frame.midX, y: switcher.frame.midY), hold: 1.6),
+            .init(point: folderPoint, hold: 0.8),
+        ]).perform()
+
+        XCTAssertTrue(
+            app.staticTexts["Moved to Errands"].waitForExistence(timeout: 5), "the drop files the page and says where")
+        XCTAssertTrue(waitForDisappearance(of: page), "and it leaves the Inbox")
     }
 
     func testFoldersRearrangedOnThePhoneKeepTheirOrderAfterARelaunch() {

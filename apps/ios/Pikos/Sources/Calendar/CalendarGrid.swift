@@ -616,20 +616,9 @@ private struct GridDropDelegate: DropDelegate {
         if hover?.day == day { hover = nil }
     }
 
-    /// Only a page this app lifted moves: the carried text has to name the page the session holds.
     func performDrop(info: DropInfo) -> Bool {
-        guard let page = drag.page, let minute = hover?.minute,
-            let provider = info.itemProviders(for: [.text]).first
-        else { return false }
+        guard let minute = hover?.minute else { return false }
         hover = nil
-        drag.end()
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            let text = (object as? NSString).map(String.init) ?? ""
-            Task { @MainActor in
-                guard text == PageDragSession.prefix + page.id else { return }
-                onDrop(page, minute)
-            }
-        }
-        return true
+        return drag.land(info) { page in onDrop(page, minute) }
     }
 }
