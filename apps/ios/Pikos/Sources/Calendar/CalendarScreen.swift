@@ -12,7 +12,7 @@ struct CalendarScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
     @Environment(SettingsStore.self) private var settings
-    @Environment(\.horizontalSizeClass) private var widthClass
+    @Environment(\.shellLayout) private var layout
 
     @State private var anchor = Date()
     @State private var span: CalendarSpan?
@@ -44,9 +44,8 @@ struct CalendarScreen: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private var effectiveSpan: CalendarSpan {
-        let compact = widthClass == .compact
-        guard let span, CalendarSpan.offered(isCompactWidth: compact).contains(span) else {
-            return .default(isCompactWidth: compact)
+        guard let span, CalendarSpan.offered(in: layout).contains(span) else {
+            return .default(in: layout)
         }
         return span
     }
@@ -76,8 +75,12 @@ struct CalendarScreen: View {
         VStack(spacing: 0) {
             header
             if isJumping {
-                jumpPanel
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                // Scrolls where the month is taller than the pane, as on a phone on its side.
+                ViewThatFits(in: .vertical) {
+                    jumpPanel
+                    ScrollView { jumpPanel }
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
             } else if effectiveSpan == .day, !stripDayStrings.isEmpty {
                 WeekStrip(
                     days: stripDayStrings,
@@ -90,7 +93,9 @@ struct CalendarScreen: View {
                     anchor = chosen
                 }
             }
-            if !hasLoaded {
+            if isJumping && layout == .sideBySide {
+                // Below the header a phone on its side has about the height of the month alone.
+            } else if !hasLoaded {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if effectiveSpan == .month {
                 MonthGrid(
@@ -430,7 +435,7 @@ struct CalendarScreen: View {
     private var jumpPanel: some View {
         VStack(spacing: 8) {
             Picker("Show", selection: spanBinding) {
-                ForEach(CalendarSpan.offered(isCompactWidth: widthClass == .compact)) { option in
+                ForEach(CalendarSpan.offered(in: layout)) { option in
                     Text(option.label).tag(option)
                 }
             }

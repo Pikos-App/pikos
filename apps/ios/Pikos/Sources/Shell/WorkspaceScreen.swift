@@ -1,39 +1,62 @@
 import SwiftUI
 
-/// The root of the app: the list pane or the week pane, and the bar that moves between them.
+/// The root of the app on a phone: the list pane or the week pane and the bar that moves between
+/// them, or with the phone sideways the two side by side, as the desktop sets them.
 ///
 /// Both panes stay alive underneath so each keeps its scroll position and loaded range; only
-/// the one on screen takes touches or is read out.
+/// the one on screen takes touches or is read out. The arrangement is an `AnyLayout` rather than
+/// a branch, so turning the phone moves the same two panes instead of building new ones.
 struct WorkspaceScreen: View {
     @Environment(Route.self) private var route
     @Environment(WorkspaceStore.self) private var store
+    @Environment(\.shellLayout) private var layout
+    @Environment(\.displayScale) private var displayScale
     @State private var drag = PageDragSession()
+
+    /// The desktop's list column is about this wide; past it the calendar gets the room.
+    private static let maxListWidth: CGFloat = 400
 
     var body: some View {
         @Bindable var route = route
+        let isSideBySide = layout == .sideBySide
 
-        ZStack {
-            PageListScreen()
-                .paneVisible(route.pane == .list)
-            CalendarScreen()
-                .paneVisible(route.pane == .week)
-        }
-        .background(.surfacePrimary)
-        .bottomChrome {
-            if !route.isSelectingPages {
-                ShellBar(
-                    pane: $route.pane,
-                    onSearch: {
-                        route.isSwitcherPresented = false
-                        route.path.append(.search)
-                    },
-                    onCapture: {
-                        route.isSwitcherPresented = false
-                        route.presentQuickAdd(from: store)
-                    })
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+        GeometryReader { geometry in
+            let listWidth = min(geometry.size.width * 0.45, Self.maxListWidth)
+            let arrangement = isSideBySide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(ZStackLayout())
+
+            arrangement {
+                PageListScreen()
+                    .frame(width: isSideBySide ? listWidth : nil)
+                    .overlay(alignment: .trailing) {
+                        if isSideBySide {
+                            Rectangle().fill(.borderSecondary).frame(width: 1 / displayScale)
+                        }
+                    }
+                    .paneVisible(isSideBySide || route.pane == .list)
+                CalendarScreen()
+                    .paneVisible(isSideBySide || route.pane == .week)
+            }
+            .bottomChrome {
+                if !route.isSelectingPages {
+                    ShellBar(
+                        pane: isSideBySide ? nil : $route.pane,
+                        onSearch: {
+                            route.isSwitcherPresented = false
+                            route.path.append(.search)
+                        },
+                        onCapture: {
+                            route.isSwitcherPresented = false
+                            route.presentQuickAdd(from: store, under: isSideBySide ? .list : route.pane)
+                        }
+                    )
+                    // Under the list it serves, not across the line between the two panes.
+                    .frame(width: isSideBySide ? listWidth - 32 : nil)
+                    .frame(maxWidth: .infinity, alignment: isSideBySide ? .leading : .center)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
+        .background(.surfacePrimary)
         .toolbar(.hidden, for: .navigationBar)
         .onDrop(of: [.text], delegate: PageDragWatch(drag: drag))
         .environment(drag)

@@ -7,7 +7,8 @@ import SwiftUI
 /// pushing it. Search and capture share the bar so both are in reach from either pane and
 /// nothing else floats over the content.
 struct ShellBar: View {
-    @Binding var pane: Route.Pane
+    /// Nil when the list and the calendar are both on screen, which leaves search and capture.
+    let pane: Binding<Route.Pane>?
     let onSearch: () -> Void
     let onCapture: () -> Void
 
@@ -20,8 +21,10 @@ struct ShellBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            segment(.list, title: "List", systemImage: "list.bullet")
-            segment(.week, title: "Calendar", systemImage: "calendar")
+            if let pane {
+                segment(.list, title: "List", systemImage: "list.bullet", pane: pane)
+                segment(.week, title: "Calendar", systemImage: "calendar", pane: pane)
+            }
             searchButton
                 .padding(.leading, 2)
             captureButton
@@ -30,15 +33,15 @@ struct ShellBar: View {
         .padding(6)
         .frame(height: Self.height)
         .floatingSurface(in: Capsule())
-        .sensoryFeedback(.selection, trigger: pane)
+        .sensoryFeedback(.selection, trigger: pane?.wrappedValue)
     }
 
-    private func segment(_ value: Route.Pane, title: LocalizedStringKey, systemImage: String)
-        -> some View
-    {
-        let isSelected = pane == value
+    private func segment(
+        _ value: Route.Pane, title: LocalizedStringKey, systemImage: String, pane: Binding<Route.Pane>
+    ) -> some View {
+        let isSelected = pane.wrappedValue == value
         return Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { pane = value }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { pane.wrappedValue = value }
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)

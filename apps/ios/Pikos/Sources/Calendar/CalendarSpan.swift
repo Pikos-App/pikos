@@ -3,9 +3,11 @@ import PikosSupport
 
 /// How many days the calendar shows at once, and which days those are.
 ///
-/// The same grid draws one day or seven. A seven-column grid is not offered at compact width: on
-/// a phone each column is a few points wide and titles wrap a letter to a line, so it showed only
-/// colour, which the month already shows better, and Upcoming answers "what is this week".
+/// The same grid draws one day or seven. A seven-column grid is offered only in the three-panel
+/// split: on a phone each column is a few points wide and titles wrap a letter to a line, so it
+/// showed only colour, which the month already shows better, and Upcoming answers "what is this
+/// week". A phone turned sideways has the width but about 400 points of height, and its calendar
+/// is half the screen beside the list.
 ///
 /// Pure value logic, kept apart from the views so the date arithmetic — which
 /// is the part that can be wrong across a month boundary or a DST weekend — can
@@ -29,12 +31,12 @@ enum CalendarSpan: String, CaseIterable, Identifiable, Hashable {
 
     /// One day on a phone, where three columns leave a title a few characters wide, and a week
     /// where there is room for one.
-    static func `default`(isCompactWidth: Bool) -> CalendarSpan {
-        isCompactWidth ? .day : .week
+    static func `default`(in layout: ShellLayout) -> CalendarSpan {
+        layout == .split ? .week : .day
     }
 
-    static func offered(isCompactWidth: Bool) -> [CalendarSpan] {
-        isCompactWidth ? [.day, .threeDays, .month] : allCases
+    static func offered(in layout: ShellLayout) -> [CalendarSpan] {
+        layout == .split ? allCases : [.day, .threeDays, .month]
     }
 
     /// The days to show, given the day the user is anchored on.

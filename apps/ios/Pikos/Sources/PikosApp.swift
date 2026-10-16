@@ -142,6 +142,8 @@ struct RootView: View {
     @Environment(ReminderScheduler.self) private var reminders
     @Environment(CalendarSyncStore.self) private var calendars
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var widthClass
+    @Environment(\.verticalSizeClass) private var heightClass
 
     /// The page that was open when the app was last put away, and when.
     ///
@@ -164,6 +166,7 @@ struct RootView: View {
                     }
                 }
         }
+        .environment(\.shellLayout, ShellLayout(horizontal: widthClass, vertical: heightClass))
         .tint(.textAction)
         // One sheet for quick add, wherever it was asked for. The toolbar
         // button, the empty state and a `pikos://quick-add` link all set the
