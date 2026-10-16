@@ -489,6 +489,13 @@ pub struct Repeat {
     /// start's date, and for every other frequency.
     pub month_week: Option<i32>,
     pub ends: RepeatEnds,
+    /// True when the rule says which days in a way these fields can't: a day of the month, a
+    /// month, a position spelled with BYSETPOS, weekdays they can't name, or a week start.
+    /// `weekdays` and `month_week` are then empty, and a write with this set keeps the stored
+    /// rule's own terms for those while the frequency stays the same, as the desktop's editor does
+    /// on an interval or end change. A new frequency, or a rule being created, ignores it.
+    #[uniffi(default = false)]
+    pub keeps_pattern: bool,
 }
 
 /// When a repeat stops.
@@ -1846,7 +1853,7 @@ impl Workspace {
             }
         };
 
-        let rrule = pikos_recurrence::build_rrule(&pikos_recurrence::RecurrenceOptions {
+        let mut options = pikos_recurrence::RecurrenceOptions {
             freq: Some(match pattern.freq {
                 RepeatFreq::Daily => pikos_recurrence::Freq::Daily,
                 RepeatFreq::Weekly => pikos_recurrence::Freq::Weekly,
@@ -1874,27 +1881,29 @@ impl Workspace {
             count,
             until,
             ..Default::default()
-        });
+        };
 
         match pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await? {
             Some(existing) => {
-                // The same envelope the read applies, not the wider one.
-                // `rrule_edit_would_degrade` alone would let "the last
-                // Friday of the month" through here — it round-trips
-                // fine — and this write would save it back as "every
-                // month on a Friday". The read and the write have to
-                // refuse the same set, or the UI calls a rule uneditable
-                // while the workspace edits it for anyone who asks
-                // directly.
-                let representable = pikos_recurrence::parse_rrule(&existing.rrule)
-                    .and_then(repeat_from)
-                    .is_some();
-                if !representable {
+                // The read's test, so a stale row can't edit what the sheet showed as locked.
+                let stored = pikos_recurrence::parse_rrule(&existing.rrule)
+                    .filter(|_| !pikos_recurrence::rrule_edit_would_degrade(&existing.rrule))
+                    .filter(|stored| repeat_from(stored.clone()).is_some());
+                let Some(stored) = stored else {
                     return Err(WorkspaceError::Refused {
                         message: "This repeat is more detailed than Pikos can edit here. Change it on the desktop."
                             .to_string(),
                     });
+                };
+                if pattern.keeps_pattern && stored.freq == options.freq {
+                    options.byweekday = stored.byweekday;
+                    options.byweekday_ordinals = stored.byweekday_ordinals;
+                    options.bysetpos = stored.bysetpos;
+                    options.bymonthday = stored.bymonthday;
+                    options.bymonth = stored.bymonth;
+                    options.wkst = stored.wkst;
                 }
+                let rrule = pikos_recurrence::build_rrule(&options);
                 // The anchor moves with the rule: a weekly repeat switched to
                 // Wednesdays has to sit on a Wednesday, or the derivation drags
                 // the head back on the next recompute.
@@ -1921,7 +1930,7 @@ impl Workspace {
             None => {
                 self.set_recurrence(
                     page_id,
-                    rrule,
+                    pikos_recurrence::build_rrule(&options),
                     anchor,
                     page.scheduled_end.clone(),
                     pikos_db::device_zone().to_string(),
@@ -3243,65 +3252,77 @@ fn summary_as_hit(page: pikos_db::PageSummary) -> pikos_db::SearchResult {
     }
 }
 
-/// A parsed rule as a [`Repeat`], or `None` when the picker cannot hold it.
+/// A parsed rule as a [`Repeat`], or `None` when it has no frequency the shape names.
 ///
-/// A second, narrower envelope than `rrule_edit_would_degrade`, and the two
-/// answer different questions. That guard asks whether a *full* editor could
-/// round-trip the rule; this asks whether *this* picker can: frequency,
-/// interval, weekdays, one week of the month, and an end, and nothing else.
-///
-/// The distinction is not academic, and a test caught it being missed.
-/// `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` — "the last Friday of the month" —
-/// round-trips perfectly, so the guard passes it; a picker with nowhere to put
-/// `BYSETPOS` would then have offered it for editing and saved back "every
-/// month on a Friday". Every term below is one this shape would silently drop.
+/// Every rule `rrule_edit_would_degrade` passes comes back, so the phone locks what the desktop
+/// locks. One whose days [`days_of`] can't express comes back with `keeps_pattern` instead of
+/// a guess: `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1`, "the last Friday", read as weekdays alone would
+/// save back as "every month on a Friday".
 fn repeat_from(options: pikos_recurrence::RecurrenceOptions) -> Option<Repeat> {
-    let freq = match options.freq? {
-        pikos_recurrence::Freq::Daily => RepeatFreq::Daily,
-        pikos_recurrence::Freq::Weekly => RepeatFreq::Weekly,
-        pikos_recurrence::Freq::Monthly => RepeatFreq::Monthly,
-        pikos_recurrence::Freq::Yearly => RepeatFreq::Yearly,
-    };
-
-    // "The last Friday" spelled with BYSETPOS, "the 15th", "every March", and a
-    // non-default week start. A picker with no control for any of them must not
-    // claim to be editing the rule.
-    let unrepresentable = options.bysetpos.is_some_and(|v| !v.is_empty())
-        || options.bymonthday.is_some_and(|v| !v.is_empty())
-        || options.bymonth.is_some_and(|v| !v.is_empty())
-        || options.wkst.is_some()
-        || options.count == Some(0);
-    if unrepresentable {
+    let freq = repeat_freq(options.freq?);
+    if options.count == Some(0) {
         return None;
     }
-
-    let weekdays = options.byweekday.unwrap_or_default();
-    let ordinals = options.byweekday_ordinals.unwrap_or_default();
-    let month_week = match (freq, weekdays.as_slice(), ordinals.as_slice()) {
-        (_, _, []) => None,
-        (RepeatFreq::Monthly, [_], [Some(week)]) if MONTH_WEEKS.contains(week) => Some(*week),
-        // A fifth weekday, several, or an ordinal on a weekly or yearly rule.
-        _ => return None,
-    };
-    // Bare weekdays on anything but a weekly rule say something this shape
-    // cannot, and would be dropped on the way back out.
-    if !weekdays.is_empty() && freq != RepeatFreq::Weekly && month_week.is_none() {
-        return None;
-    }
-
-    let ends = match (options.count, options.until) {
+    let ends = match (options.count, options.until.clone()) {
         (Some(count), _) => RepeatEnds::AfterCount { count },
         (None, Some(day)) => RepeatEnds::OnDay { day },
         (None, None) => RepeatEnds::Never,
     };
-
-    Some(Repeat {
-        freq,
-        interval: options.interval.max(1),
-        weekdays: weekdays.into_iter().map(u32::from).collect(),
-        month_week,
-        ends,
+    let interval = options.interval.max(1);
+    Some(match days_of(freq, &options) {
+        Some((weekdays, month_week)) => Repeat {
+            freq,
+            interval,
+            weekdays,
+            month_week,
+            ends,
+            keeps_pattern: false,
+        },
+        None => Repeat {
+            freq,
+            interval,
+            weekdays: Vec::new(),
+            month_week: None,
+            ends,
+            keeps_pattern: true,
+        },
     })
+}
+
+fn repeat_freq(freq: pikos_recurrence::Freq) -> RepeatFreq {
+    match freq {
+        pikos_recurrence::Freq::Daily => RepeatFreq::Daily,
+        pikos_recurrence::Freq::Weekly => RepeatFreq::Weekly,
+        pikos_recurrence::Freq::Monthly => RepeatFreq::Monthly,
+        pikos_recurrence::Freq::Yearly => RepeatFreq::Yearly,
+    }
+}
+
+/// The weekdays and week of the month a rule falls on, or `None` when a term [`Repeat`] has no
+/// field for says which days: a day of the month, a month, BYSETPOS, a week start, a fifth or a
+/// second weekday, an ordinal on a weekly or yearly rule, or bare weekdays outside a weekly one.
+fn days_of(
+    freq: RepeatFreq,
+    options: &pikos_recurrence::RecurrenceOptions,
+) -> Option<(Vec<u32>, Option<i32>)> {
+    let more = options.bysetpos.as_ref().is_some_and(|v| !v.is_empty())
+        || options.bymonthday.as_ref().is_some_and(|v| !v.is_empty())
+        || options.bymonth.as_ref().is_some_and(|v| !v.is_empty())
+        || options.wkst.is_some();
+    if more {
+        return None;
+    }
+    let weekdays = options.byweekday.clone().unwrap_or_default();
+    let ordinals = options.byweekday_ordinals.clone().unwrap_or_default();
+    let month_week = match (freq, weekdays.as_slice(), ordinals.as_slice()) {
+        (_, _, []) => None,
+        (RepeatFreq::Monthly, [_], [Some(week)]) if MONTH_WEEKS.contains(week) => Some(*week),
+        _ => return None,
+    };
+    if !weekdays.is_empty() && freq != RepeatFreq::Weekly && month_week.is_none() {
+        return None;
+    }
+    Some((weekdays.into_iter().map(u32::from).collect(), month_week))
 }
 
 /// The weeks of the month a monthly repeat can name: the desktop's presets

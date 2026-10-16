@@ -160,13 +160,11 @@ suite.
   from the phone's own surfaces, but not yet pointer hover, keyboard shortcuts
   or a second window, and its type is the phone's 1.15× scale rather than the
   desktop's. Each waits on living with the split view.
-- **Repeats richer than a picker can hold.** Everything the desktop's presets
-  make is editable: every other Tuesday, the last Friday of the month, and one
-  that stops after ten runs or on a day. "Every 15 March", the fifth Friday and
-  a rule spelled with `BYSETPOS` are shown and left alone. The workspace decides
-  which is which: `repeat_from` is a narrower envelope than
-  `rrule_edit_would_degrade`, and the difference is exactly the rule that
-  round-trips fine but has nowhere to go in the form.
+- **Controls for every part of a repeat.** The phone locks the rules the
+  desktop locks and edits the rest, but its form has nothing for "every 15
+  March", the fifth Friday or a rule spelled with `BYSETPOS`. Such a rule shows
+  its pattern as a label and keeps it while the interval or the end changes;
+  choosing a new frequency replaces it.
 - **Google calendars.** CalDAV accounts can be added, repaired, toggled and
   synced from the phone. Google cannot: its grant waits on a loopback TCP
   listener inside the app process, and leaving for the browser is what starts

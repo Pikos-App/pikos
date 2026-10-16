@@ -5,11 +5,11 @@ import SwiftUI
 /// How often a page repeats: the desktop's presets by name, one tap each, Custom for the rest,
 /// and when it stops.
 ///
-/// As wide as the desktop's presets and no wider. Frequency, how many of them between runs,
-/// which weekdays, a week of the month, and an end: anything richer, such as "every 15 March"
-/// or the fifth Friday, is shown and left alone, because a picker with nowhere to put those terms
-/// would save the rule back without them. The workspace decides which is which and says so
-/// through `PageRepeat`; this screen only draws the answer.
+/// Frequency, how many of them between runs, which weekdays, a week of the month, and an end. A
+/// rule that says more, such as "every 15 March" or the fifth Friday, keeps that part as it is
+/// while its interval or end changes, and a new frequency replaces it, as on the desktop. The
+/// workspace decides what can be edited and says so through `PageRepeat`; this screen only draws
+/// the answer.
 struct RepeatSheet: View {
     let page: PageFacts
 
@@ -25,6 +25,9 @@ struct RepeatSheet: View {
     @State private var repeats = false
     @State private var isCustom = false
     @State private var isSaving = false
+    /// The rule's own pattern when it says more than these controls hold, and the frequency it
+    /// belongs to.
+    @State private var kept: (freq: RepeatFreq, label: String)?
     /// An end being nudged, saved once the stepper or picker has been still for a moment.
     @State private var pendingEndsSave: Task<Void, Never>?
 
@@ -127,15 +130,21 @@ struct RepeatSheet: View {
                 }
                 Stepper(
                     intervalLabel, value: $interval, in: 1...99)
-                if freq == .monthly {
+                if let keptLabel {
+                    LabeledContent("Pattern", value: keptLabel)
+                } else if freq == .monthly {
                     Picker("On", selection: $monthlyByWeekday) {
                         Text(anchor.dayOfMonthLabel).tag(false)
                         Text(anchor.weekOfMonthLabel).tag(true)
                     }
                 }
+            } footer: {
+                if keptLabel != nil {
+                    Text("Choosing another frequency replaces this pattern.")
+                }
             }
 
-            if freq == .weekly {
+            if freq == .weekly && keptLabel == nil {
                 Section {
                     ForEach(Self.weekdayNames, id: \.number) { day in
                         Button {
@@ -250,9 +259,8 @@ struct RepeatSheet: View {
 
     private func saveEnds() {
         guard case .editable(let value, let label) = current else { return }
-        let rule = Repeat(
-            freq: value.freq, interval: value.interval, weekdays: value.weekdays, monthWeek: value.monthWeek,
-            ends: ends)
+        var rule = value
+        rule.ends = ends
         guard rule != value else { return }
         current = .editable(repeat: rule, label: label)
         let pageId = page.id
@@ -264,6 +272,12 @@ struct RepeatSheet: View {
         case .fixed, .none: return false
         case .never, .editable: return true
         }
+    }
+
+    /// Shown while the frequency is still the one the pattern belongs to.
+    private var keptLabel: String? {
+        guard let kept, kept.freq == freq else { return nil }
+        return kept.label
     }
 
     private var intervalLabel: String {
@@ -301,13 +315,14 @@ struct RepeatSheet: View {
     private func load() async {
         let answer = await store.pageRepeat(for: page.id) ?? .never
         current = answer
-        if case .editable(let value, _) = answer {
+        if case .editable(let value, let label) = answer {
             repeats = true
             freq = value.freq
             interval = Int(value.interval)
             weekdays = value.monthWeek == nil ? Set(value.weekdays) : []
             monthlyByWeekday = value.monthWeek != nil
             ends = value.ends
+            kept = value.keepsPattern ? (value.freq, label) : nil
             isCustom = !presets.contains { $0.matches(answer) }
         }
     }
@@ -326,7 +341,7 @@ struct RepeatSheet: View {
             case .never: return rule == nil
             case .fixed: return false
             case .editable(let value, _):
-                guard let rule else { return false }
+                guard let rule, !value.keepsPattern else { return false }
                 return value.freq == rule.freq && value.interval == rule.interval
                     && Set(value.weekdays) == Set(rule.weekdays) && value.monthWeek == rule.monthWeek
             }
@@ -388,7 +403,8 @@ struct RepeatSheet: View {
     /// A custom rule is kept when the sheet closes, however it closes.
     private func saveCustom() {
         let anchor = anchor
-        let onWeekday = freq == .monthly && monthlyByWeekday
+        let keepsPattern = keptLabel != nil
+        let onWeekday = freq == .monthly && monthlyByWeekday && !keepsPattern
         let rule = Repeat(
             freq: freq,
             interval: UInt32(interval),
@@ -396,9 +412,10 @@ struct RepeatSheet: View {
             // string. A set has no order, and an unordered rule would
             // make every save look like a change to anything diffing
             // the rrule.
-            weekdays: freq == .weekly ? weekdays.sorted() : (onWeekday ? [anchor.weekday] : []),
+            weekdays: keepsPattern ? [] : (freq == .weekly ? weekdays.sorted() : (onWeekday ? [anchor.weekday] : [])),
             monthWeek: onWeekday ? anchor.weekOfMonth : nil,
-            ends: ends)
+            ends: ends,
+            keepsPattern: keepsPattern)
         if case .editable(let value, _) = current, value == rule { return }
         let pageId = page.id
         Task { await store.setRepeat(pageId: pageId, to: rule) }

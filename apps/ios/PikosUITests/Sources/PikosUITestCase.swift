@@ -21,7 +21,7 @@ import XCTest
 @MainActor
 class PikosUITestCase: XCTestCase {
     private(set) var app: XCUIApplication!
-    private var workspace: URL!
+    private var workspaceDirectory: URL!
 
     /// Long enough for a first launch that runs migrations on a cold simulator,
     /// short enough that a hang fails the job rather than occupying it.
@@ -40,26 +40,26 @@ class PikosUITestCase: XCTestCase {
         // the fifth symptom of the first problem.
         continueAfterFailure = false
 
-        workspace = FileManager.default.temporaryDirectory
+        workspaceDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("pikos-uitests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
-            at: workspace, withIntermediateDirectories: true)
+            at: workspaceDirectory, withIntermediateDirectories: true)
 
         app = XCUIApplication()
-        app.launchEnvironment["PIKOS_WORKSPACE_DIRECTORY"] = workspace.path
+        app.launchEnvironment["PIKOS_WORKSPACE_DIRECTORY"] = workspaceDirectory.path
         for (key, value) in Self.launchEnvironment { app.launchEnvironment[key] = value }
         app.launch()
     }
 
     override func tearDown() async throws {
         app = nil
-        if let workspace {
+        if let workspaceDirectory {
             // Best-effort: a simulator that will not give the directory up must
             // not fail a test that already passed.
-            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: workspaceDirectory)
         }
-        workspace = nil
+        workspaceDirectory = nil
         try await super.tearDown()
     }
 
@@ -122,7 +122,7 @@ class PikosUITestCase: XCTestCase {
     /// A page's id, read from the test's own workspace file, for tests that open a link to it.
     func pageId(titled title: String) -> String? {
         var db: OpaquePointer?
-        let path = workspace.appendingPathComponent("pikos.sqlite").path
+        let path = workspaceDirectory.appendingPathComponent("pikos.sqlite").path
         guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_close(db) }
         var statement: OpaquePointer?

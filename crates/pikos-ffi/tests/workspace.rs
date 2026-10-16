@@ -2650,6 +2650,7 @@ async fn a_repeat_survives_being_read_back_and_changed() {
             weekdays: vec![0, 2],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -2675,6 +2676,7 @@ async fn a_repeat_survives_being_read_back_and_changed() {
             weekdays: vec![],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -2712,6 +2714,7 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
             weekdays: vec![0],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -2735,6 +2738,7 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
             weekdays: vec![2],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -2791,6 +2795,7 @@ async fn switching_away_from_weekly_drops_the_weekdays() {
             weekdays: vec![0, 2, 4],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -2828,6 +2833,7 @@ async fn removing_a_repeat_keeps_the_page_and_its_date() {
             weekdays: vec![0],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -2880,6 +2886,7 @@ async fn a_page_with_no_date_cannot_be_made_to_repeat() {
                 weekdays: vec![],
                 month_week: None,
                 ends: RepeatEnds::Never,
+                keeps_pattern: false,
             },
         )
         .await
@@ -2895,15 +2902,119 @@ async fn a_page_with_no_date_cannot_be_made_to_repeat() {
     ));
 }
 
-/// A rule the picker cannot represent is shown, never offered for editing.
+/// The phone locks exactly what the desktop locks, and saves what it doesn't lock back
+/// unchanged.
 ///
-/// This is the whole point of the degrade guard reaching the FFI: a "last
-/// Friday of the month" rule has no place in a frequency-and-weekdays picker,
-/// and rebuilding it through one would quietly turn it into "every Friday".
+/// Graded over the corpus the desktop's own guard is graded on, plus the shapes the phone's
+/// fields can't name, which come back with `keeps_pattern` rather than flattened.
 #[tokio::test]
-async fn a_rule_beyond_the_picker_is_shown_but_locked() {
+async fn every_rule_the_desktop_edits_opens_and_saves_unchanged_on_the_phone() {
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+
+    let corpus: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../pikos-core/tests/corpus/recurrence.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut cases: Vec<(String, bool)> = corpus["degradeCases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            (
+                case["rrule"].as_str().unwrap().to_string(),
+                case["degrades"]["value"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    for rrule in [
+        "FREQ=MONTHLY;BYDAY=5FR",
+        "FREQ=MONTHLY;BYDAY=1MO,3MO",
+        "FREQ=WEEKLY;BYDAY=2TU",
+        "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1;COUNT=8",
+    ] {
+        cases.push((rrule.to_string(), false));
+    }
+
+    let mut locked_seen = 0;
+    for (rrule, degrades) in cases {
+        let page = ws
+            .create_page(NewPage {
+                scheduled_start: Some("2026-01-05T09:00:00".to_string()),
+                ..new_page(&rrule)
+            })
+            .await
+            .unwrap();
+        let written = ws
+            .set_recurrence(
+                page.id.clone(),
+                rrule.clone(),
+                "2026-01-05T09:00:00".to_string(),
+                None,
+                "UTC".to_string(),
+            )
+            .await;
+        if degrades {
+            if written.is_err() {
+                continue;
+            }
+            locked_seen += 1;
+            match ws.page_repeat(page.id.clone()).await.unwrap() {
+                PageRepeat::Fixed { .. } => {}
+                other => panic!("{rrule} locks on the desktop, so on the phone too, got {other:?}"),
+            }
+            let daily = Repeat {
+                freq: RepeatFreq::Daily,
+                interval: 1,
+                weekdays: vec![],
+                month_week: None,
+                ends: RepeatEnds::Never,
+                keeps_pattern: false,
+            };
+            assert!(
+                matches!(
+                    ws.set_page_repeat(page.id.clone(), daily).await,
+                    Err(WorkspaceError::Refused { .. })
+                ),
+                "{rrule} refuses a write from a stale sheet"
+            );
+            continue;
+        }
+
+        written.unwrap_or_else(|e| panic!("{rrule} should be accepted: {e:?}"));
+        let repeat = match ws.page_repeat(page.id.clone()).await.unwrap() {
+            PageRepeat::Editable { repeat, .. } => repeat,
+            other => {
+                panic!("{rrule} is editable on the desktop, so on the phone too, got {other:?}")
+            }
+        };
+        ws.set_page_repeat(page.id.clone(), repeat).await.unwrap();
+        let saved = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
+            .await
+            .unwrap()
+            .expect("the rule is still there");
+        assert_eq!(
+            pikos_recurrence::parse_rrule(&saved.rrule),
+            pikos_recurrence::parse_rrule(&rrule),
+            "{rrule} saved back as {}",
+            saved.rrule
+        );
+    }
+    assert!(locked_seen > 0, "the corpus exercised the lock");
+}
+
+/// A pattern the phone's fields can't name survives an interval change, and a new frequency
+/// replaces it, as on the desktop.
+#[tokio::test]
+async fn a_richer_rule_keeps_its_pattern_until_its_frequency_changes() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
     let page = ws
         .create_page(NewPage {
             scheduled_start: Some("2099-03-27T09:00:00".to_string()),
@@ -2921,88 +3032,51 @@ async fn a_rule_beyond_the_picker_is_shown_but_locked() {
     .await
     .unwrap();
 
-    match ws.page_repeat(page.id.clone()).await.unwrap() {
-        PageRepeat::Fixed { label } => assert!(!label.is_empty(), "still described"),
-        other => panic!("expected Fixed, got {other:?}"),
-    }
+    let mut repeat = match ws.page_repeat(page.id.clone()).await.unwrap() {
+        PageRepeat::Editable { repeat, label } => {
+            assert!(
+                !label.is_empty(),
+                "the pattern is described, since no field shows it"
+            );
+            repeat
+        }
+        other => panic!("expected an editable repeat, got {other:?}"),
+    };
+    assert!(repeat.keeps_pattern);
+    assert!(repeat.weekdays.is_empty(), "not passed off as every Friday");
 
-    // And the write refuses too, for a caller holding a stale row.
-    match ws
-        .set_page_repeat(
-            page.id.clone(),
-            Repeat {
-                freq: RepeatFreq::Weekly,
-                interval: 1,
-                weekdays: vec![4],
-                month_week: None,
-                ends: RepeatEnds::Never,
-            },
-        )
-        .await
-    {
-        Err(WorkspaceError::Refused { .. }) => {}
-        other => panic!("expected Refused, got {other:?}"),
-    }
-}
-
-/// Every term the picker has no control for locks the rule, not just the ones
-/// that happen to carry a weekday.
-///
-/// Written after a mutation survived: deleting the envelope check left the
-/// suite green, because the one locked rule it had also tripped the separate
-/// "weekdays on a non-weekly rule" guard. These carry none, so only the
-/// envelope can catch them — and each would be silently dropped by a save.
-#[tokio::test]
-async fn a_rule_with_terms_the_picker_lacks_controls_for_is_locked() {
-    let tmp = TempWorkspace::new();
-    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
-
-    for (rrule, what) in [
-        ("FREQ=MONTHLY;BYMONTHDAY=15", "on the 15th"),
-        ("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15", "every 15 March"),
-        ("FREQ=MONTHLY;BYDAY=5FR", "the fifth Friday"),
-        ("FREQ=MONTHLY;BYDAY=1MO,3MO", "the first and third Monday"),
-        ("FREQ=WEEKLY;BYDAY=2TU", "an ordinal on a weekly rule"),
-        ("FREQ=WEEKLY;BYDAY=MO;WKST=SU", "a different week start"),
-    ] {
-        let page = ws
-            .create_page(NewPage {
-                scheduled_start: Some("2099-03-16T09:00:00".to_string()),
-                ..new_page(what)
-            })
-            .await
-            .unwrap();
-        ws.set_recurrence(
-            page.id.clone(),
-            rrule.to_string(),
-            "2099-03-16T09:00:00".to_string(),
-            None,
-            "UTC".to_string(),
-        )
+    repeat.interval = 2;
+    repeat.ends = RepeatEnds::AfterCount { count: 6 };
+    ws.set_page_repeat(page.id.clone(), repeat.clone())
         .await
         .unwrap();
+    let rule = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let saved = pikos_recurrence::parse_rrule(&rule.rrule).unwrap();
+    assert_eq!(saved.interval, 2);
+    assert_eq!(saved.count, Some(6));
+    assert_eq!(
+        saved.bysetpos,
+        Some(vec![-1]),
+        "still the last one: {}",
+        rule.rrule
+    );
+    assert_eq!(
+        saved.byweekday,
+        Some(vec![4]),
+        "still a Friday: {}",
+        rule.rrule
+    );
 
-        match ws.page_repeat(page.id.clone()).await.unwrap() {
-            PageRepeat::Fixed { .. } => {}
-            other => panic!("{rrule} ({what}) should be locked, got {other:?}"),
-        }
-        match ws
-            .set_page_repeat(
-                page.id.clone(),
-                Repeat {
-                    freq: RepeatFreq::Daily,
-                    interval: 1,
-                    weekdays: vec![],
-                    month_week: None,
-                    ends: RepeatEnds::Never,
-                },
-            )
-            .await
-        {
-            Err(WorkspaceError::Refused { .. }) => {}
-            other => panic!("{rrule} ({what}) should refuse the write, got {other:?}"),
-        }
-    }
+    repeat.freq = RepeatFreq::Weekly;
+    ws.set_page_repeat(page.id.clone(), repeat).await.unwrap();
+    let rule = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!rule.rrule.contains("BYSETPOS"), "{}", rule.rrule);
 }
 
 /// The desktop's richer presets survive the round-trip: a week of the month,
@@ -3025,6 +3099,7 @@ async fn a_week_of_the_month_and_an_end_survive_being_read_back() {
                 weekdays: vec![1],
                 month_week: Some(3),
                 ends: RepeatEnds::Never,
+                keeps_pattern: false,
             },
             "BYDAY=3TU",
         ),
@@ -3035,6 +3110,7 @@ async fn a_week_of_the_month_and_an_end_survive_being_read_back() {
                 weekdays: vec![1],
                 month_week: Some(-1),
                 ends: RepeatEnds::AfterCount { count: 6 },
+                keeps_pattern: false,
             },
             "COUNT=6",
         ),
@@ -3047,6 +3123,7 @@ async fn a_week_of_the_month_and_an_end_survive_being_read_back() {
                 ends: RepeatEnds::OnDay {
                     day: "2099-06-30".to_string(),
                 },
+                keeps_pattern: false,
             },
             "UNTIL=20990630",
         ),
@@ -3098,6 +3175,7 @@ async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
                 weekdays: vec![1],
                 month_week: Some(3),
                 ends: RepeatEnds::Never,
+                keeps_pattern: false,
             },
             "a week of the month on a weekly repeat",
         ),
@@ -3108,6 +3186,7 @@ async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
                 weekdays: vec![1, 3],
                 month_week: Some(3),
                 ends: RepeatEnds::Never,
+                keeps_pattern: false,
             },
             "two weekdays for one week of the month",
         ),
@@ -3118,6 +3197,7 @@ async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
                 weekdays: vec![1],
                 month_week: Some(5),
                 ends: RepeatEnds::Never,
+                keeps_pattern: false,
             },
             "a fifth week",
         ),
@@ -3128,6 +3208,7 @@ async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
                 weekdays: vec![],
                 month_week: None,
                 ends: RepeatEnds::AfterCount { count: 0 },
+                keeps_pattern: false,
             },
             "no occurrences at all",
         ),
@@ -3140,6 +3221,7 @@ async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
                 ends: RepeatEnds::OnDay {
                     day: "June 30".to_string(),
                 },
+                keeps_pattern: false,
             },
             "an end day that is not a date",
         ),
@@ -3204,6 +3286,7 @@ async fn an_interval_of_zero_is_refused() {
             weekdays: vec![],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
         Repeat {
             freq: RepeatFreq::Weekly,
@@ -3211,6 +3294,7 @@ async fn an_interval_of_zero_is_refused() {
             weekdays: vec![9],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     ] {
         match ws.set_page_repeat(page.id.clone(), bad).await {
@@ -3385,6 +3469,7 @@ async fn skipping_a_date_outside_the_series_changes_nothing() {
             weekdays: vec![0],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await
@@ -4721,6 +4806,7 @@ async fn deleting_all_data_leaves_nothing_behind_and_the_workspace_usable() {
             weekdays: vec![],
             month_week: None,
             ends: RepeatEnds::Never,
+            keeps_pattern: false,
         },
     )
     .await

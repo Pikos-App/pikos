@@ -302,7 +302,7 @@ elapsed minutes a timed span uses.
 | Functionality                         | Native                   | Synced                                 | Detached         | CLI            | iOS                    |
 | ------------------------------------- | ------------------------ | -------------------------------------- | ---------------- | -------------- | ---------------------- |
 | Add a recurrence rule                 | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | ✅ `add` NL ²⁸ | ✅ long press → Repeat |
-| Edit cadence (freq/interval/weekdays) | ✅                       | 🚫 ²⁷ read-only label                  | ⚠️ ²⁹            | —              | ⚠️ simple rules only   |
+| Edit cadence (freq/interval/weekdays) | ✅                       | 🚫 ²⁷ read-only label                  | ⚠️ ²⁹            | —              | ✅ same lock ²⁹        |
 | Remove the rule                       | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | —              | ✅ Repeat → off        |
 | Rule source of truth                  | user                     | provider (wholesale rewrite each sync) | frozen at detach | user           | user                   |
 | Head derivation                       | `oldest_open_occurrence` | `oldest_open_occurrence` ³⁰            | same             | same           | same                   |
@@ -334,7 +334,10 @@ Locked or not, provider rules still *expand\* correctly. A **freq change** still
 new freq can't carry, by `optionsForFreq`'s whitelist. Including the BYDAY ordinal and BYMONTH,
 which no frequency the editor offers can carry meaningfully. The head-drag realign
 (`alignWeeklyRuleToAnchor`) consults the same lock and skips a locked rule rather than rebuild
-it.
+it. iOS locks the same set, through the same guard. Its form has no controls for a day of the
+month, a month, BYSETPOS or a week start, so a rule carrying any of them shows its pattern as a
+label and keeps those terms through an interval or end change; a new frequency drops the whole
+pattern rather than applying the whitelist.
 ³⁰ Both kinds run the same `recompute_recurring_schedule`. For synced, the reconciler writes
 the provider base as a **floor** then recomputes, so the head lands on oldest-open rather than
 the raw base. The completed/skip sets survive a wholesale rule rewrite and push it forward.

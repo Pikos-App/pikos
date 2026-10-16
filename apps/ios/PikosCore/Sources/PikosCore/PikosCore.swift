@@ -5339,6 +5339,14 @@ public struct Repeat: Equatable, Hashable {
      */
     public var monthWeek: Int32?
     public var ends: RepeatEnds
+    /**
+     * True when the rule says which days in a way these fields can't: a day of the month, a
+     * month, a position spelled with BYSETPOS, weekdays they can't name, or a week start.
+     * `weekdays` and `month_week` are then empty, and a write with this set keeps the stored
+     * rule's own terms for those while the frequency stays the same, as the desktop's editor does
+     * on an interval or end change. A new frequency, or a rule being created, ignores it.
+     */
+    public var keepsPattern: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5360,12 +5368,20 @@ public struct Repeat: Equatable, Hashable {
          * Which of the month's weekdays a monthly repeat falls on: 1 to 4 for the
          * first through fourth, -1 for the last. `None` for a monthly repeat on the
          * start's date, and for every other frequency.
-         */monthWeek: Int32?, ends: RepeatEnds) {
+         */monthWeek: Int32?, ends: RepeatEnds, 
+        /**
+         * True when the rule says which days in a way these fields can't: a day of the month, a
+         * month, a position spelled with BYSETPOS, weekdays they can't name, or a week start.
+         * `weekdays` and `month_week` are then empty, and a write with this set keeps the stored
+         * rule's own terms for those while the frequency stays the same, as the desktop's editor does
+         * on an interval or end change. A new frequency, or a rule being created, ignores it.
+         */keepsPattern: Bool = false) {
         self.freq = freq
         self.interval = interval
         self.weekdays = weekdays
         self.monthWeek = monthWeek
         self.ends = ends
+        self.keepsPattern = keepsPattern
     }
 
     
@@ -5388,7 +5404,8 @@ public struct FfiConverterTypeRepeat: FfiConverterRustBuffer {
                 interval: FfiConverterUInt32.read(from: &buf), 
                 weekdays: FfiConverterSequenceUInt32.read(from: &buf), 
                 monthWeek: FfiConverterOptionInt32.read(from: &buf), 
-                ends: FfiConverterTypeRepeatEnds.read(from: &buf)
+                ends: FfiConverterTypeRepeatEnds.read(from: &buf), 
+                keepsPattern: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -5398,6 +5415,7 @@ public struct FfiConverterTypeRepeat: FfiConverterRustBuffer {
         FfiConverterSequenceUInt32.write(value.weekdays, into: &buf)
         FfiConverterOptionInt32.write(value.monthWeek, into: &buf)
         FfiConverterTypeRepeatEnds.write(value.ends, into: &buf)
+        FfiConverterBool.write(value.keepsPattern, into: &buf)
     }
 }
 

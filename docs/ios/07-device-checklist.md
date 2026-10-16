@@ -127,6 +127,10 @@ Cheap, and each one has caught something on other apps:
   light as the page passes over it, and letting go there should file the page
   with a notice offering Undo. The day at the bottom should still take a drop
   while the switcher is closed.
+- On the desktop, make a page repeat monthly on the 15th, then open its Repeat
+  on the phone. It should show Custom with the pattern as a label. Change it
+  to every 2 months and close: the desktop should read every 2 months on the
+  15th.
 - Quick add: the Priority chip should show "Priority" until the line says
   `!high` or the chip is used, and the chip's choice should win over the
   line's.
