@@ -46,6 +46,33 @@ extension TierOneTests {
         XCTAssertFalse(app.buttons["Week"].exists)
     }
 
+    func testTheIPadShowsTheSidebarTheListAndTheCalendarAsThreePanels() throws {
+        try requirePad()
+        rotate(to: .landscapeLeft)
+
+        let inbox = app.buttons.matching(NSPredicate(format: "label == 'Inbox' OR label BEGINSWITH 'Inbox, '")).firstMatch
+        let switcher = app.buttons["Switch view"].firstMatch
+        XCTAssertTrue(inbox.waitForHittable(), "every view and folder is a sidebar")
+        XCTAssertTrue(switcher.isHittable, "beside the list")
+        XCTAssertTrue(visibleDays.isHittable, "beside the calendar")
+        XCTAssertLessThan(inbox.frame.maxX, switcher.frame.minX)
+        XCTAssertLessThan(switcher.frame.maxX, visibleDays.frame.minX, "in the Mac's order")
+        XCTAssertFalse(app.buttons["Calendar"].exists, "with no pane to switch to")
+
+        inbox.tap()
+        XCTAssertEqual(switcher.value as? String, "Inbox", "the sidebar chooses what the list shows")
+
+        visibleDays.tap()
+        XCTAssertTrue(app.buttons["Week"].firstMatch.waitForExistence(timeout: Self.timeout), "a week has the room here")
+        visibleDays.tap()
+
+        quickAdd("Trip notes")
+        assertRowExists("Trip notes")
+        app.staticTexts["Trip notes"].firstMatch.tap()
+        XCTAssertTrue(textInput("Title").waitForExistence(timeout: Self.timeout), "a page opens in place of the calendar")
+        XCTAssertTrue(switcher.isHittable, "and the list stays beside it")
+    }
+
     private var visibleDays: XCUIElement {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Visible days'")).firstMatch
     }

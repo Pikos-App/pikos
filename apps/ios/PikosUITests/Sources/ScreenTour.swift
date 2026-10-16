@@ -395,7 +395,7 @@ final class ScreenTour: PikosUITestCase {
         relaunch(["PIKOS_DEMO_SWITCHER": "1"])
         shot(section, 4, "Sideways: the view switcher")
         relaunch()
-        if tap(app.staticTexts["Order FlexiSpot E7 frame"].firstMatch, "row") {
+        if tap(app.collectionViews.staticTexts["Order FlexiSpot E7 frame"].firstMatch, "row") {
             settle(1.5)
             shot(section, 5, "Sideways: a page open")
         }

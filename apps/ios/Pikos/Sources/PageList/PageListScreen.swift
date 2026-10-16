@@ -33,7 +33,7 @@ struct PageListScreen: View {
             VStack(spacing: 0) {
                 content
                     .frame(maxHeight: .infinity)
-                if isSelecting || layout == .sideBySide {
+                if isSelecting || layout != .single {
                     Color.clear.frame(height: ShellBar.clearance)
                 } else {
                     DayPeek()
@@ -274,15 +274,12 @@ struct PageListScreen: View {
                 .padding(.leading, isSelecting ? 4 : 0)
         }
         .contentShape(Rectangle())
-        .background {
-            if !isSelecting {
-                NavigationLink(value: Route.Destination.page(page.id)) { EmptyView() }.opacity(0)
-            }
-        }
+        .modifier(OpensPage(id: page.id, isEnabled: !isSelecting))
         .tag(page.id)
         .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 16))
         .listRowBackground(
-            drag.page?.id == page.id ? Color.surfaceSelected : Color.surfacePrimary)
+            drag.page?.id == page.id || (layout == .split && route.openPageId == page.id)
+                ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
         .alignmentGuide(.listRowSeparatorLeading) { _ in isSelecting ? 0 : 44 }
         .swipeActions(edge: .trailing) {
@@ -687,6 +684,28 @@ struct PageListScreen: View {
 private struct SelectedPages: Identifiable {
     let id = UUID()
     let pages: [PageSummary]
+}
+
+/// A tap on a row opens its page: pushed over the list on a phone, and in the three panels put in
+/// place of whatever the detail column holds, which a link in the list's column cannot reach.
+private struct OpensPage: ViewModifier {
+    let id: String
+    let isEnabled: Bool
+
+    @Environment(Route.self) private var route
+    @Environment(\.shellLayout) private var layout
+
+    func body(content: Content) -> some View {
+        if !isEnabled {
+            content
+        } else if layout == .split {
+            content.onTapGesture { route.path = [.page(id)] }
+        } else {
+            content.background {
+                NavigationLink(value: Route.Destination.page(id)) { EmptyView() }.opacity(0)
+            }
+        }
+    }
 }
 
 /// Lifting a row carries the page to the day under the list.

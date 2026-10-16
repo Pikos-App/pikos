@@ -60,9 +60,6 @@ struct WorkspaceScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .onDrop(of: [.text], delegate: PageDragWatch(drag: drag))
         .environment(drag)
-        .sheet(isPresented: $route.isSettingsPresented) { SettingsScreen() }
-        .sheet(isPresented: $route.isTrashPresented) { TrashSheet() }
-        .sheet(isPresented: $route.isFolderManagerPresented) { FolderManagerSheet() }
         .onChange(of: route.pane) { _, _ in route.isSwitcherPresented = false }
         #if DEBUG
             .task(id: store.isLoading) {

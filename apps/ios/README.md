@@ -156,9 +156,10 @@ suite.
   a block's edge to change its length is not wired: on a phone it competes with
   scrolling the grid. A length is set in the When sheet, and one occurrence of
   a series moves through "Move this one…".
-- **The iPad UI.** Ships in the same universal binary and today runs the phone
-  shell at a larger size. The intended layout is a split view of the same
-  surfaces, closer to the desktop's three panels; not started.
+- **The rest of the iPad.** A full-screen iPad gets the desktop's three panels
+  from the phone's own surfaces, but not yet pointer hover, keyboard shortcuts
+  or a second window, and its type is the phone's 1.15× scale rather than the
+  desktop's. Each waits on living with the split view.
 - **Repeats richer than a picker can hold.** Everything the desktop's presets
   make is editable: every other Tuesday, the last Friday of the month, and one
   that stops after ten runs or on a day. "Every 15 March", the fifth Friday and

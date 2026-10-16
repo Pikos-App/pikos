@@ -6,8 +6,16 @@ import SwiftUI
 /// switcher the desktop already shows when its window is too narrow for one.
 ///
 /// It also carries what the corner buttons used to hide — the trash and Settings — so the top of
-/// the screen is a name and two tools, and nothing else.
+/// the screen is a name and two tools, and nothing else. Where the window has room for three
+/// panels it is the sidebar itself, unfolded.
 struct ScopeSwitcher: View {
+    enum Style {
+        case dropdown
+        case sidebar
+    }
+
+    var style: Style = .dropdown
+
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
 
@@ -17,6 +25,28 @@ struct ScopeSwitcher: View {
     @FocusState private var isNameFocused: Bool
 
     var body: some View {
+        switch style {
+        case .dropdown:
+            rows
+                .background(ground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(.borderSecondary, lineWidth: 1))
+                .shadow(color: .black.opacity(0.14), radius: 24, y: 10)
+                .accessibilityAddTraits(.isModal)
+        case .sidebar:
+            rows
+                .background(ground)
+        }
+    }
+
+    /// A raised card over the list, or the desktop sidebar's tone beside it.
+    private var ground: Color {
+        style == .sidebar ? .surfaceTertiary : .surfaceElevated
+    }
+
+    private var rows: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 row(.today, title: "Today", systemImage: "sun.max", count: counts.today)
@@ -84,14 +114,8 @@ struct ScopeSwitcher: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
-        .background(.surfaceElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.borderSecondary, lineWidth: 1))
-        .shadow(color: .black.opacity(0.14), radius: 24, y: 10)
-        .task { counts = await store.viewCounts() }
-        .accessibilityAddTraits(.isModal)
+        // Keyed on the workspace's version so a sidebar, which never closes, keeps its counts true.
+        .task(id: store.dataVersion) { counts = await store.viewCounts() }
     }
 
     /// Named in the row it was asked for, then opened: a new folder is almost always wanted next.
@@ -114,7 +138,7 @@ struct ScopeSwitcher: View {
             }
         }
         .frame(height: 48)
-        .background(.surfaceElevated)
+        .background(ground)
         .overlay(alignment: .top) { Rectangle().fill(.borderSecondary).frame(height: 1) }
     }
 
