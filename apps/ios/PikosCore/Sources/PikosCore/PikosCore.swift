@@ -7491,6 +7491,17 @@ enum WorkspaceError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
      */
     case Network(message: String
     )
+    /**
+     * The workspace applied a migration under a number this build gives to a different one.
+     * A released migration never changes, so only a workspace an unreleased build made can be
+     * in this state, and no build can open it as it stands.
+     */
+    case MadeByAnotherBuild(message: String
+    )
+    /**
+     * The workspace has migrations this build doesn't know: it was opened by a newer Pikos.
+     */
+    case TooNew
 
     
 
@@ -7540,6 +7551,10 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
         case 7: return .Network(
             message: try FfiConverterString.read(from: &buf)
             )
+        case 8: return .MadeByAnotherBuild(
+            message: try FfiConverterString.read(from: &buf)
+            )
+        case 9: return .TooNew
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -7586,6 +7601,15 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
             FfiConverterString.write(message, into: &buf)
             
+        
+        case let .MadeByAnotherBuild(message):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case .TooNew:
+            writeInt(&buf, Int32(9))
+        
         }
     }
 }

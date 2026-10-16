@@ -113,6 +113,27 @@ public enum WorkspaceLocation {
         }
     }
 
+    /// Move the database and its sidecars out of the way, into the app's Documents where the Files
+    /// app shows them, and return the folder they went to.
+    ///
+    /// Moved rather than deleted: a workspace no build can open still holds whatever was written
+    /// in it, and the write-ahead log goes with it because it can hold the newest of that.
+    public static func setAside(now: Date = Date()) throws -> URL {
+        let database = try databaseURL()
+        let documents = try FileManager.default.url(
+            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let folder = documents.appendingPathComponent("Set aside", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let stamp = now.formatted(.iso8601.year().month().day().dateSeparator(.dash).time(includingFractionalSeconds: false).timeSeparator(.omitted))
+        for suffix in ["", "-wal", "-shm"] {
+            let source = URL(fileURLWithPath: database.path + suffix)
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            try FileManager.default.moveItem(
+                at: source, to: folder.appendingPathComponent("pikos-\(stamp).sqlite\(suffix)"))
+        }
+        return folder
+    }
+
     /// Directory holding page images, beside the database in the same container.
     ///
     /// Created on demand: the editor's scheme handler refuses to serve anything

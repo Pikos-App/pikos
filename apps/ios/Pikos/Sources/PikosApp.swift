@@ -172,7 +172,14 @@ struct RootView: View {
         let layout = ShellLayout(horizontal: widthClass, vertical: heightClass)
 
         Group {
-            if layout == .split {
+            if let failure = store.openFailure {
+                ContentUnavailableView {
+                    Label("Pikos couldn't open its workspace", systemImage: "externaldrive.badge.exclamationmark")
+                } description: {
+                    Text(failure)
+                        .textSelection(.enabled)
+                }
+            } else if layout == .split {
                 WorkspaceSplitView()
             } else {
                 // The path lives on the router so a `pikos://page/<id>` link can push from outside.
@@ -215,6 +222,15 @@ struct RootView: View {
             ),
             actions: { Button("OK", role: .cancel) {} },
             message: { Text(store.errorMessage ?? "") }
+        )
+        .alert(
+            "Started a new workspace",
+            isPresented: Binding(
+                get: { store.startupNote != nil },
+                set: { if !$0 { store.startupNote = nil } }
+            ),
+            actions: { Button("OK", role: .cancel) {} },
+            message: { Text(store.startupNote ?? "") }
         )
         // Coming back to the foreground re-reads the workspace. A page added
         // by Siri, a widget or a Shortcut lands while the app is suspended,

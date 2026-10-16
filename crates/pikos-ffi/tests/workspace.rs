@@ -61,6 +61,40 @@ fn new_page(title: &str) -> NewPage {
     }
 }
 
+/// The two ways a workspace's migrations can disagree with the build are told apart, because the
+/// app answers them differently: one can never be opened as it stands, the other wants an update.
+#[tokio::test]
+async fn a_workspace_from_another_build_says_so_rather_than_failing_to_open() {
+    let tmp = TempWorkspace::new();
+    drop(Workspace::open(tmp.path.clone()).await.unwrap());
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = x'00' WHERE version = 13")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+    assert!(matches!(
+        Workspace::open(tmp.path.clone()).await,
+        Err(WorkspaceError::MadeByAnotherBuild { .. })
+    ));
+
+    let newer = TempWorkspace::new();
+    drop(Workspace::open(newer.path.clone()).await.unwrap());
+    let pool = pikos_db::open_pool(&newer.path).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+    assert!(matches!(
+        Workspace::open(newer.path.clone()).await,
+        Err(WorkspaceError::TooNew)
+    ));
+}
+
 #[tokio::test]
 async fn opens_creates_and_reads_back_a_page() {
     let tmp = TempWorkspace::new();

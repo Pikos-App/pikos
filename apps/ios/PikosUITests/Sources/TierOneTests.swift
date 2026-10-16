@@ -45,6 +45,20 @@ final class TierOneTests: PikosUITestCase {
             "the widget's Focus button opens the page already timing")
     }
 
+    /// A workspace a test build made under a migration number that now means something else.
+    func testAWorkspaceFromAnotherBuildIsSetAsideAndANewOneWorks() {
+        assertRowExists("Nothing here yet")
+        app.terminate()
+        alterWorkspace("UPDATE _sqlx_migrations SET checksum = x'00' WHERE version = 13")
+        app.launch()
+
+        let note = app.alerts["Started a new workspace"]
+        XCTAssertTrue(note.waitForExistence(timeout: Self.timeout), "the reader is told, once")
+        note.buttons["OK"].tap()
+        quickAdd("Buy milk today")
+        assertRowExists("Buy milk", "and capture writes to the new workspace")
+    }
+
     func testQuickAddCreatesAPageThatAppearsInTheList() {
         quickAdd("Buy milk today")
         assertRowExists("Buy milk", "the parsed title, not the raw line")

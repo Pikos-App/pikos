@@ -134,6 +134,15 @@ class PikosUITestCase: XCTestCase {
         return String(cString: text)
     }
 
+    /// Run one statement against the test's workspace file while the app is not running.
+    func alterWorkspace(_ sql: String) {
+        var db: OpaquePointer?
+        let path = workspaceDirectory.appendingPathComponent("pikos.sqlite").path
+        XCTAssertEqual(sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, nil), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK, String(cString: sqlite3_errmsg(db)))
+    }
+
     /// The field or text view a vertical-axis `TextField` became, by its label.
     func textInput(_ label: String) -> XCUIElement {
         let view = app.textViews[label].firstMatch

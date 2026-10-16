@@ -88,6 +88,35 @@ pub enum WorkspaceError {
     /// is broken.
     #[error("{message}")]
     Network { message: String },
+
+    /// The workspace applied a migration under a number this build gives to a different one.
+    /// A released migration never changes, so only a workspace an unreleased build made can be
+    /// in this state, and no build can open it as it stands.
+    #[error("this workspace was made by another build of Pikos: {message}")]
+    MadeByAnotherBuild { message: String },
+
+    /// The workspace has migrations this build doesn't know: it was opened by a newer Pikos.
+    #[error("this workspace was made by a newer version of Pikos")]
+    TooNew,
+}
+
+impl WorkspaceError {
+    fn opening(error: AppError) -> Self {
+        if let AppError::Db(sqlx::Error::Migrate(ref migrate)) = error {
+            match **migrate {
+                sqlx::migrate::MigrateError::VersionMismatch(_) => {
+                    return WorkspaceError::MadeByAnotherBuild {
+                        message: error.to_string(),
+                    }
+                }
+                sqlx::migrate::MigrateError::VersionMissing(_) => return WorkspaceError::TooNew,
+                _ => {}
+            }
+        }
+        WorkspaceError::Open {
+            message: error.to_string(),
+        }
+    }
 }
 
 impl From<AppError> for WorkspaceError {
@@ -893,9 +922,7 @@ impl Workspace {
     pub async fn open(path: String) -> Result<Arc<Self>, WorkspaceError> {
         let pool = pikos_db::open_pool(&path)
             .await
-            .map_err(|e| WorkspaceError::Open {
-                message: e.to_string(),
-            })?;
+            .map_err(WorkspaceError::opening)?;
         Ok(Arc::new(Workspace { pool }))
     }
 

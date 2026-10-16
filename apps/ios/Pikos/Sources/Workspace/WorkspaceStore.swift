@@ -142,6 +142,14 @@ public final class WorkspaceStore {
 
     public var notice: Notice?
 
+    /// Something about opening the workspace that the reader has to be told once, and that a
+    /// notice would let slip by.
+    public var startupNote: String?
+
+    /// Set when the workspace couldn't be opened at all, so the app shows that instead of a list
+    /// whose every action would do nothing.
+    public private(set) var openFailure: String?
+
     /// True until the first load completes, so the list can distinguish "still
     /// loading" from "genuinely empty" — an empty list shown during startup
     /// reads as data loss.
@@ -226,8 +234,16 @@ public final class WorkspaceStore {
             // preference: a preference would survive "Delete all data" and a
             // reinstall would forget it, and both are exactly the moments a
             // fresh workspace should be recognised as one.
-            let isNewWorkspace = !FileManager.default.fileExists(atPath: url.path)
-            workspace = try await Workspace.open(path: url.path)
+            var isNewWorkspace = !FileManager.default.fileExists(atPath: url.path)
+            do {
+                workspace = try await Workspace.open(path: url.path)
+            } catch WorkspaceError.MadeByAnotherBuild {
+                _ = try WorkspaceLocation.setAside()
+                isNewWorkspace = true
+                workspace = try await Workspace.open(path: url.path)
+                startupNote = String(
+                    localized: "This phone's workspace was made by a test build of Pikos that this one can't read, so Pikos started a new one. The old one is in Files, under Pikos › Set aside.")
+            }
             // After the open, so the sidecar files SQLite creates get the class
             // too. The app is the only writer, so this is the one place it can
             // be applied without racing anyone.
@@ -246,7 +262,18 @@ public final class WorkspaceStore {
             await refresh()
         } catch {
             isLoading = false
-            errorMessage = error.localizedDescription
+            openFailure = Self.describe(error)
+        }
+    }
+
+    private static func describe(_ error: Error) -> String {
+        switch error {
+        case WorkspaceError.TooNew:
+            return String(localized: "This workspace was saved by a newer version of Pikos. Update Pikos to open it.")
+        case WorkspaceError.Open(let message), WorkspaceError.Database(let message):
+            return message
+        default:
+            return error.localizedDescription
         }
     }
 
