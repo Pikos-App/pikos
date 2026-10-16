@@ -15,6 +15,22 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Calendar"].firstMatch.exists, "and the way to the calendar")
     }
 
+    func testScrollingTheCalendarDownShrinksTheBarAndTappingBringsItBack() {
+        app.buttons["Calendar"].firstMatch.tap()
+        let grid = app.scrollViews.firstMatch
+        XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
+        grid.swipeUp()
+
+        let show = app.buttons["Show the bar"]
+        XCTAssertTrue(show.waitForExistence(timeout: 5), "scrolling down shrinks the bar to one button")
+        XCTAssertFalse(app.buttons["Search"].isHittable, "and the rest of it is out of the way")
+        XCTAssertTrue(app.buttons["New page"].isHittable, "except capture")
+
+        show.tap()
+        XCTAssertTrue(app.buttons["Search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Search"].isHittable, "one tap brings the bar back")
+    }
+
     func testQuickAddCreatesAPageThatAppearsInTheList() {
         quickAdd("Buy milk today")
         assertRowExists("Buy milk", "the parsed title, not the raw line")

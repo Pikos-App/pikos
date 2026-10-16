@@ -83,6 +83,8 @@ final class Route {
 
     /// Select mode hands the bottom of the screen to the list's verbs, so the shell's bar steps aside.
     var isSelectingPages = false
+    /// Scrolling down shrinks the shell's bar to one button, and scrolling up or tapping it brings it back.
+    var isBarMinimized = false
 
     var isSwitcherPresented = false
     var isSettingsPresented = false

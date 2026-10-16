@@ -64,6 +64,7 @@ struct CalendarGrid: View {
                     timedSection
                         .padding(.top, 8)
                 }
+                .minimizesShellBar()
                 .onAppear {
                     proxy.scrollTo(Self.hourAnchor(openingHour), anchor: .top)
                 }

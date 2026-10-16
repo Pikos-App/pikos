@@ -8,8 +8,10 @@ import SwiftUI
 /// nothing else floats over the content.
 struct ShellBar: View {
     @Binding var pane: Route.Pane
+    let isMinimized: Bool
     let onSearch: () -> Void
     let onCapture: () -> Void
+    let onExpand: () -> Void
 
     @Namespace private var selection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,10 +22,14 @@ struct ShellBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            segment(.list, title: "List", systemImage: "list.bullet")
-            segment(.week, title: "Calendar", systemImage: "calendar")
-            searchButton
-                .padding(.leading, 2)
+            if isMinimized {
+                expandButton
+            } else {
+                segment(.list, title: "List", systemImage: "list.bullet")
+                segment(.week, title: "Calendar", systemImage: "calendar")
+                searchButton
+                    .padding(.leading, 2)
+            }
             captureButton
                 .padding(.leading, 2)
         }
@@ -60,6 +66,19 @@ struct ShellBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// The pane on screen, standing in for the whole bar while it is out of the way.
+    private var expandButton: some View {
+        Button(action: onExpand) {
+            Image(systemName: pane == .list ? "list.bullet" : "calendar")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.textAction)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(CaptureButtonStyle())
+        .accessibilityLabel("Show the bar")
     }
 
     private var searchButton: some View {

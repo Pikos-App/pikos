@@ -246,6 +246,7 @@ struct PageListScreen: View {
             completedSection
         }
         .listStyle(.plain)
+        .minimizesShellBar()
         .scrollContentBackground(.hidden)
         .background(.surfacePrimary)
         .environment(\.defaultMinListRowHeight, 44)

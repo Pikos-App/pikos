@@ -23,6 +23,7 @@ struct WorkspaceScreen: View {
             if !route.isSelectingPages {
                 ShellBar(
                     pane: $route.pane,
+                    isMinimized: route.isBarMinimized,
                     onSearch: {
                         route.isSwitcherPresented = false
                         route.path.append(.search)
@@ -30,6 +31,9 @@ struct WorkspaceScreen: View {
                     onCapture: {
                         route.isSwitcherPresented = false
                         route.presentQuickAdd(from: store)
+                    },
+                    onExpand: {
+                        withAnimation(.snappy(duration: 0.28)) { route.isBarMinimized = false }
                     })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -40,7 +44,10 @@ struct WorkspaceScreen: View {
         .sheet(isPresented: $route.isSettingsPresented) { SettingsScreen() }
         .sheet(isPresented: $route.isTrashPresented) { TrashSheet() }
         .sheet(isPresented: $route.isFolderManagerPresented) { FolderManagerSheet() }
-        .onChange(of: route.pane) { _, _ in route.isSwitcherPresented = false }
+        .onChange(of: route.pane) { _, _ in
+            route.isSwitcherPresented = false
+            route.isBarMinimized = false
+        }
         #if DEBUG
             .task(id: store.isLoading) {
                 guard !store.isLoading else { return }
