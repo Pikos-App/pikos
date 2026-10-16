@@ -102,11 +102,18 @@ struct PageListScreen: View {
                 if !store.scope.isDateGrouped {
                     sortMenu
                 }
-                Button("Select") { enterSelection() }
-                    .font(.pkUI)
-                    .foregroundStyle(.textAction)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
+                if canSelect {
+                    Button("Select") { enterSelection() }
+                        .font(.pkUI)
+                        .foregroundStyle(.textAction)
+                        .frame(minWidth: 44, minHeight: 44)
+                } else {
+                    // Its room is kept, so the tools beside it stay put when the first page arrives.
+                    Text("Select")
+                        .font(.pkUI)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .hidden()
+                }
                 Button {
                     route.isSettingsPresented = true
                 } label: {
@@ -646,6 +653,10 @@ struct PageListScreen: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+    }
+
+    private var canSelect: Bool {
+        !store.pages.isEmpty || store.completedTotal > 0
     }
 
     private var selectable: [PageSummary] {

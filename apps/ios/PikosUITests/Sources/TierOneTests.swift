@@ -15,6 +15,15 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Calendar"].firstMatch.exists, "and the way to the calendar")
     }
 
+    func testSelectIsOfferedOnlyWhenThereIsAPageToSelect() {
+        XCTAssertTrue(app.staticTexts["Nothing here yet"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["Select"].exists, "an empty Today has nothing to select")
+
+        quickAdd("Buy milk today")
+        assertRowExists("Buy milk")
+        XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 5), "a page to select brings it back")
+    }
+
     func testScrollingTheCalendarDownShrinksTheBarAndTappingBringsItBack() {
         app.buttons["Calendar"].firstMatch.tap()
         let grid = app.scrollViews.firstMatch
