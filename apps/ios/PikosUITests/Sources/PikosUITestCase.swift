@@ -83,6 +83,12 @@ class PikosUITestCase: XCTestCase {
             input.waitForExistence(timeout: Self.timeout), "quick add's field should be there")
         input.tap()
         input.typeText(line)
+        // The first typing of a fresh simulator session can drop keystrokes, which titled the
+        // first test's page wrongly in about half of full runs.
+        if let typed = input.value as? String, typed != line {
+            input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count) + line)
+        }
+        XCTAssertEqual(input.value as? String, line, "quick add holds the line as typed")
 
         app.buttons["Add"].firstMatch.tap()
     }
