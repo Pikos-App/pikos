@@ -89,7 +89,7 @@ struct NormalizeCase {
 
 fn matches(expected: &ExpectedAction, actual: &DeepLink) -> bool {
     match (expected, actual) {
-        (ExpectedAction::Page { page_id }, DeepLink::Page { page_id: a }) => page_id == a,
+        (ExpectedAction::Page { page_id }, DeepLink::Page { page_id: a, .. }) => page_id == a,
         (ExpectedAction::View { view_id }, DeepLink::View { view_id: a }) => view_id == a.as_str(),
         (ExpectedAction::Calendar, DeepLink::Calendar) => true,
         (ExpectedAction::QuickAdd { prefill }, DeepLink::QuickAdd { prefill: a }) => prefill == a,
@@ -131,6 +131,27 @@ fn deep_links_match_typescript() {
 /// Query values arrive percent-encoded from the OS. Decoding them differently
 /// from desktop would silently mangle a quick-add prefill containing a space or
 /// a `#tag`, which is exactly what quick-add links carry.
+#[test]
+fn a_page_link_can_ask_for_the_focus_timer() {
+    let id = "0b9f6d1e-1c2a-4d3b-9e8f-7a6b5c4d3e2f";
+    let plain = parse_deep_link(&format!("pikos://page/{id}"));
+    let focused = parse_deep_link(&format!("pikos://page/{id}?focus=1"));
+    assert_eq!(
+        plain,
+        Some(DeepLink::Page {
+            page_id: id.to_string(),
+            focus: false
+        })
+    );
+    assert_eq!(
+        focused,
+        Some(DeepLink::Page {
+            page_id: id.to_string(),
+            focus: true
+        })
+    );
+}
+
 #[test]
 fn deep_link_query_values_are_percent_decoded() {
     let link = parse_deep_link("pikos://quick-add?text=tomorrow%20at%203pm%20%23work")

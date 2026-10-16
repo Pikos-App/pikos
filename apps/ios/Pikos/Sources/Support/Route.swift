@@ -81,6 +81,9 @@ final class Route {
     /// Text to open search with, from a `pikos://search` link. The search screen takes it when it appears.
     var searchPrefill = ""
 
+    /// The page a `?focus=1` link opened, whose timer starts when its editor appears.
+    var focusPageId: String?
+
     /// Select mode hands the bottom of the screen to the list's verbs, so the shell's bar steps aside.
     var isSelectingPages = false
     /// Scrolling down shrinks the shell's bar to one button, and scrolling up or tapping it brings it back.
@@ -175,9 +178,10 @@ final class Route {
             store.scope = scope
             pendingScope = scope
 
-        case .page(let pageId):
+        case .page(let pageId, let focus):
             // A jump, not a step: appending would build a back stack nobody walked.
             path = [.page(pageId)]
+            focusPageId = focus ? pageId : nil
 
         case .calendar:
             path = []

@@ -8,7 +8,7 @@ import WidgetKit
 /// draws a page, and how it names a time.
 ///
 /// One file rather than a copy per widget, for the reason the app's
-/// `PageRow` is one view: five widgets each drawing their own row is how the
+/// `PageRow` is one view: widgets each drawing their own row is how the
 /// ring ends up a different size on the lock screen than on the home screen,
 /// and a reader who has learned one is wrong-footed by the next.
 
@@ -159,29 +159,6 @@ struct WidgetPageRow: View {
             }
             Spacer(minLength: 0)
         }
-    }
-}
-
-/// A widget's heading: a name and, when there is one, a count.
-struct WidgetHeader: View {
-    let title: LocalizedStringKey
-    var systemImage: String? = nil
-    var count: Int? = nil
-
-    var body: some View {
-        HStack(spacing: 4) {
-            if let systemImage {
-                Image(systemName: systemImage)
-            }
-            Text(title)
-            Spacer()
-            if let count, count > 0 {
-                Text("\(count)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .font(.caption.weight(.semibold))
     }
 }
 

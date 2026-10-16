@@ -33,6 +33,18 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Search"].isHittable, "one tap brings the bar back")
     }
 
+    func testAFocusLinkOpensThePageWithTheTimerRunning() throws {
+        quickAdd("Write the report today")
+        assertRowExists("Write the report")
+        let id = try XCTUnwrap(pageId(titled: "Write the report"))
+
+        app.open(try XCTUnwrap(URL(string: "pikos://page/\(id)?focus=1")))
+
+        XCTAssertTrue(
+            app.buttons["Stop timing"].waitForExistence(timeout: Self.timeout),
+            "the widget's Focus button opens the page already timing")
+    }
+
     func testQuickAddCreatesAPageThatAppearsInTheList() {
         quickAdd("Buy milk today")
         assertRowExists("Buy milk", "the parsed title, not the raw line")

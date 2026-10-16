@@ -34,11 +34,12 @@ final class BridgeMappingTests: XCTestCase {
     // MARK: - Enums with payloads
 
     func testDeepLinkCasesCarryTheirPayloads() {
-        guard case .page(let pageId)? =
-                parseDeepLink(url: "pikos://page/3f2504e0-4f89-41d3-9a0c-0305e82c3301") else {
+        guard case .page(let pageId, let focus)? =
+                parseDeepLink(url: "pikos://page/3f2504e0-4f89-41d3-9a0c-0305e82c3301?focus=1") else {
             return XCTFail("expected a page link")
         }
         XCTAssertEqual(pageId, "3f2504e0-4f89-41d3-9a0c-0305e82c3301")
+        XCTAssertTrue(focus)
 
         guard case .view(let view)? = parseDeepLink(url: "pikos://today") else {
             return XCTFail("expected a view link")

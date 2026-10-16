@@ -47,7 +47,7 @@ every open; whether iOS honoured it has never been observed.
    should read "until first unlock ✓". A row reading "complete" is the bug the
    class exists to prevent; "absent" for `-wal` or `-shm` is normal before the
    first write.
-2. Add the Today widget to the home screen. Lock the phone. Wait past the next
+2. Add the List widget, set to Today, to the home screen. Lock the phone. Wait past the next
    hour boundary, or just leave it ten minutes.
 3. Unlock. The widget should show today's pages, not "Can't read your notes".
    Then re-open Settings: the rows should be unchanged.
@@ -69,20 +69,24 @@ Cheap, and each one has caught something on other apps:
 - Type `Dentist tomorrow at 3pm remind 30m before // bring the card` into quick
   add. The chips should show the time, the reminder and a note; the page's
   document should hold the note.
-- Add the Today widget at the medium size with a page due today, then tap its
+- Add the List widget at the medium size with a page due today, then tap its
   ring from the home screen. The ring should fill without the app opening, and
   the row should be under Completed when the app is next opened. This is the
   one write the widget process makes (`PikosWidgets/CompletePageIntent.swift`);
   if it fails, the symptom is a ring that dims and springs back.
-- Add "Today" to the lock screen in the rectangular slot. It should show the
+- Add List to the lock screen in the rectangular slot. It should show the
   next two open pages with their times; the circular one the open count.
-- Add the other four widgets: Next Up should count down to the next timed page
-  and tick over by itself as the minutes pass; Inbox (small) should show a
-  number; Upcoming (large) should have a heading per day starting tomorrow;
-  New Page should open quick add on tap and, at medium, its three tiles should
-  land on Today, Inbox and the calendar. Tick a ring on the app's list, then
-  go back to the home screen: every widget showing that page should have
-  updated within a second or two, not at the next hour.
+  Switch it to a folder in its settings: the heading should change to the
+  folder's name. The arrow beside a row should move it to tomorrow.
+- Add Now at every size. With a timed page in progress it should count down
+  to the end; in a gap it should say how long the gap is and offer a page with
+  the reason it picked it. Its Focus button should open that page with the
+  timer already running. At the large size, tapping an empty hour should open
+  quick add holding "today at" that hour.
+- Add New Page and Start Focus to Control Center. New Page set to `#home`
+  should open quick add holding it. Tick a ring on the app's list, then go
+  back to the home screen: every widget showing that page should have updated
+  within a second or two, not at the next hour.
 - Settings › Your data › Back up to Files, then open the Files app: On My
   iPhone › Pikos › Backups should hold a dated folder with `pikos.sqlite` and,
   if a photo was inserted, `assets`. The "Last backup" line should say Today.

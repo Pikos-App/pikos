@@ -134,7 +134,7 @@ struct SettingsScreen: View {
                             Text("Diagnostics (debug build)")
                         } footer: {
                             Text(
-                                "Lock the phone, wait for the Today widget to refresh, then come back: every file above should still read “until first unlock”."
+                                "Lock the phone, wait for a widget to refresh, then come back: every file above should still read “until first unlock”."
                             )
                         }
                     #endif

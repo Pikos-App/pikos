@@ -209,7 +209,7 @@ pub struct ScheduleTransition {
 /// A parsed `pikos://` link.
 #[derive(uniffi::Enum)]
 pub enum DeepLink {
-    Page { page_id: String },
+    Page { page_id: String, focus: bool },
     View { view_id: SmartView },
     Calendar,
     QuickAdd { prefill: String },
@@ -243,7 +243,7 @@ pub fn extract_text(doc_json: String) -> String {
 #[uniffi::export]
 pub fn parse_deep_link(url: String) -> Option<DeepLink> {
     core_parse_deep_link(&url).map(|link| match link {
-        CoreDeepLink::Page { page_id } => DeepLink::Page { page_id },
+        CoreDeepLink::Page { page_id, focus } => DeepLink::Page { page_id, focus },
         CoreDeepLink::View { view_id } => DeepLink::View {
             view_id: match view_id {
                 pikos_core::deep_link::SmartView::Today => SmartView::Today,

@@ -32,6 +32,7 @@ struct FocusTimer: View {
     let title: String
 
     @Environment(WorkspaceStore.self) private var store
+    @Environment(Route.self) private var route
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var startedAt: Date?
@@ -82,6 +83,11 @@ struct FocusTimer: View {
                 elapsed = Int(Date().timeIntervalSince(startedAt))
                 try? await Task.sleep(for: .seconds(1))
             }
+        }
+        .onAppear {
+            guard route.focusPageId == pageId else { return }
+            route.focusPageId = nil
+            if startedAt == nil { start() }
         }
         .onChange(of: scenePhase) { _, phase in
             // Coming back from the background: the ticks stopped, the clock did

@@ -211,16 +211,17 @@ suite.
   agree on before it lands.
 - **Share extension.** M4. Capturing a URL or a selection into a new page. The
   App Group and the read-only workspace it needs are in place; what is missing
-  is the target itself. The capture surfaces that _are_ here: five widgets
-  (`PikosWidgets/`), and Siri takes "Add a page to Pikos". The widgets are
-  Today (small, medium, large, and the three lock-screen sizes), Next Up (the
-  next scheduled page with a live countdown; small and medium), Inbox (a count
-  in small, the pages in medium and large), Upcoming (the week ahead by day;
-  medium and large) and New Page (a one-tap way into quick add, with Today,
-  Inbox and Calendar beside it in medium). Every ring on every widget is a
-  button that finishes the page in place. They share one row, one header and
-  one way of opening the workspace (`WidgetSupport.swift`), so a change to how
-  a page is drawn is one change.
+  is the target itself. The capture surfaces that _are_ here: two widgets and
+  two Control Center buttons (`PikosWidgets/`), and Siri takes "Add a page to
+  Pikos". Now shows what's happening, how long until the next thing and the
+  page to do in the gap, with a Focus button; its large size is the rest of
+  today by the hour, where an empty hour opens quick add at that time. List
+  shows Today, Upcoming, the Inbox or a folder, chosen in its settings, with a
+  plus that adds to that list and a button that moves a page to tomorrow. The
+  controls are New Page, which can start with words like `#home`, and Start
+  Focus. Every ring on every widget is a button that finishes the page in
+  place. They share one row and one way of opening the workspace
+  (`WidgetSupport.swift`), so a change to how a page is drawn is one change.
 - **Onboarding.** Deliberately. Nothing to sign up for means nothing to ask. A
   brand-new workspace starts with the desktop's Start here folder, three
   undated pages that say where the data lives and what to type; each empty view offers a
@@ -246,7 +247,7 @@ suite.
   answer becomes a local notification, re-planned on every write, on the way
   to the background, and by a background refresh (`Notifications/`). What is
   not here is the desktop's daily overdue summary and its quiet hours — the
-  first is what the Today widget is for, and the second is a Focus mode on
+  first is what the Now and List widgets are for, and the second is a Focus mode on
   iOS. Two limits worth knowing: the OS keeps sixty-four pending
   notifications, so the phone plans sixty soonest-first; and background
   refresh is a request the system grants on its own schedule, which is why the

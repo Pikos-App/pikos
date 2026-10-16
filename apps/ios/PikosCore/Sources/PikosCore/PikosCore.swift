@@ -6455,7 +6455,7 @@ public func FfiConverterTypeCompletedScope_lower(_ value: CompletedScope) -> Rus
 
 public enum DeepLink: Equatable, Hashable {
     
-    case page(pageId: String
+    case page(pageId: String, focus: Bool
     )
     case view(viewId: SmartView
     )
@@ -6485,7 +6485,7 @@ public struct FfiConverterTypeDeepLink: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .page(pageId: try FfiConverterString.read(from: &buf)
+        case 1: return .page(pageId: try FfiConverterString.read(from: &buf), focus: try FfiConverterBool.read(from: &buf)
         )
         
         case 2: return .view(viewId: try FfiConverterTypeSmartView.read(from: &buf)
@@ -6507,9 +6507,10 @@ public struct FfiConverterTypeDeepLink: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .page(pageId):
+        case let .page(pageId,focus):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(pageId, into: &buf)
+            FfiConverterBool.write(focus, into: &buf)
             
         
         case let .view(viewId):

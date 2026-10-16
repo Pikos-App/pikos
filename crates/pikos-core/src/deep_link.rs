@@ -12,8 +12,9 @@ use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeepLink {
-    /// `pikos://page/<uuid>`
-    Page { page_id: String },
+    /// `pikos://page/<uuid>`, or `pikos://page/<uuid>?focus=1` to open it with the focus timer
+    /// running. The desktop has no focus link yet and opens the page either way.
+    Page { page_id: String, focus: bool },
     /// `pikos://today` or `pikos://inbox`
     View { view_id: SmartView },
     /// `pikos://calendar` — used by notification taps.
@@ -86,6 +87,7 @@ pub fn parse_deep_link(raw: &str) -> Option<DeepLink> {
             }
             Some(DeepLink::Page {
                 page_id: (*id).to_string(),
+                focus: query_param(&url, "focus") == "1",
             })
         }
         // Matched by name rather than by an if/else on one of them. The first

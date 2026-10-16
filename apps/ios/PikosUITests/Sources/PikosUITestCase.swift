@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 
 /// Shared setup for every UI test: a freshly launched app over an empty
@@ -116,6 +117,21 @@ class PikosUITestCase: XCTestCase {
         let row = app.buttons.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, "\(name), ")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout), "the switcher lists \(name)")
         row.tap()
+    }
+
+    /// A page's id, read from the test's own workspace file, for tests that open a link to it.
+    func pageId(titled title: String) -> String? {
+        var db: OpaquePointer?
+        let path = workspace.appendingPathComponent("pikos.sqlite").path
+        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT id FROM pages WHERE title = ?1 LIMIT 1", -1, &statement, nil) == SQLITE_OK
+        else { return nil }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, title, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        guard sqlite3_step(statement) == SQLITE_ROW, let text = sqlite3_column_text(statement, 0) else { return nil }
+        return String(cString: text)
     }
 
     /// The field or text view a vertical-axis `TextField` became, by its label.
