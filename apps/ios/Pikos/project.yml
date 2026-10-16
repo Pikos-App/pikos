@@ -79,10 +79,9 @@ targets:
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # iPhone and iPad from one binary — a universal purchase, which is the
         # intent and not merely Xcode's default. Stated explicitly so it is not
-        # narrowed to "1" by someone reasoning from the UI, which is currently
-        # phone-shaped: iPad ships later with a NavigationSplitView shell
-        # closer to the desktop app, and narrowing this would make that a new
-        # SKU rather than an update.
+        # narrowed to "1": the iPad gets its own split-view shell from this
+        # binary, and taking it out later would make putting it back a new SKU
+        # rather than an update.
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_ENTITLEMENTS: Pikos.entitlements
     info:

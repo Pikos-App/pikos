@@ -4,6 +4,7 @@ import SwiftUI
 import TipKit
 
 /// The list pane: the view being shown, the rest of today under it, and every verb a row has.
+/// The day under it is left out wherever the calendar is on screen beside it.
 ///
 /// The title is the switcher, as it is on the desktop when the sidebar is hidden; the sort/select
 /// menu is the header's one tool. Search lives in the bottom bar, in reach from either pane.
@@ -24,6 +25,7 @@ struct PageListScreen: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.shellLayout) private var layout
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +33,7 @@ struct PageListScreen: View {
             VStack(spacing: 0) {
                 content
                     .frame(maxHeight: .infinity)
-                if isSelecting {
+                if isSelecting || layout != .single {
                     Color.clear.frame(height: ShellBar.clearance)
                 } else {
                     DayPeek()
@@ -178,22 +180,26 @@ struct PageListScreen: View {
         .accessibilityLabel("Sort")
     }
 
+    /// Capped by the pane as well as by 560 points: a phone on its side has about 300 under the
+    /// header, and the trash at the switcher's foot has to stay above the bar.
     private var switcherLayer: some View {
-        ZStack(alignment: .top) {
-            Color.black.opacity(colorScheme == .dark ? 0.5 : 0.16)
-                .ignoresSafeArea(edges: .bottom)
-                .onTapGesture { route.isSwitcherPresented = false }
-                .accessibilityHidden(true)
-                .transition(.opacity)
-            ScopeSwitcher()
-                .frame(maxHeight: 560)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10)
-                .padding(.top, 6)
-                .transition(
-                    .scale(scale: 0.96, anchor: .topLeading)
-                        .combined(with: .opacity)
-                        .combined(with: .offset(y: -6)))
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                Color.black.opacity(colorScheme == .dark ? 0.5 : 0.16)
+                    .ignoresSafeArea(edges: .bottom)
+                    .onTapGesture { route.isSwitcherPresented = false }
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+                ScopeSwitcher()
+                    .frame(maxHeight: min(560, geometry.size.height - ShellBar.clearance))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 6)
+                    .transition(
+                        .scale(scale: 0.96, anchor: .topLeading)
+                            .combined(with: .opacity)
+                            .combined(with: .offset(y: -6)))
+            }
         }
     }
 
@@ -269,15 +275,12 @@ struct PageListScreen: View {
                 .padding(.leading, isSelecting ? 4 : 0)
         }
         .contentShape(Rectangle())
-        .background {
-            if !isSelecting {
-                NavigationLink(value: Route.Destination.page(page.id)) { EmptyView() }.opacity(0)
-            }
-        }
+        .modifier(OpensPage(id: page.id, isEnabled: !isSelecting))
         .tag(page.id)
         .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 16))
         .listRowBackground(
-            drag.page?.id == page.id ? Color.surfaceSelected : Color.surfacePrimary)
+            drag.page?.id == page.id || (layout == .split && route.openPageId == page.id)
+                ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
         .alignmentGuide(.listRowSeparatorLeading) { _ in isSelecting ? 0 : 44 }
         .swipeActions(edge: .trailing) {
@@ -682,6 +685,28 @@ struct PageListScreen: View {
 private struct SelectedPages: Identifiable {
     let id = UUID()
     let pages: [PageSummary]
+}
+
+/// A tap on a row opens its page: pushed over the list on a phone, and in the three panels put in
+/// place of whatever the detail column holds, which a link in the list's column cannot reach.
+private struct OpensPage: ViewModifier {
+    let id: String
+    let isEnabled: Bool
+
+    @Environment(Route.self) private var route
+    @Environment(\.shellLayout) private var layout
+
+    func body(content: Content) -> some View {
+        if !isEnabled {
+            content
+        } else if layout == .split {
+            content.onTapGesture { route.path = [.page(id)] }
+        } else {
+            content.background {
+                NavigationLink(value: Route.Destination.page(id)) { EmptyView() }.opacity(0)
+            }
+        }
+    }
 }
 
 /// Lifting a row carries the page to the day under the list.

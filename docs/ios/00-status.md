@@ -978,6 +978,56 @@ still teaches capture.
 **The tour.** `PIKOS_TOUR_TEXT_SIZE` and `PIKOS_TOUR_CONTRAST` run it at a large text size or with
 Increase Contrast. Reduce Transparency has no simulator switch.
 
+## Wide windows (2026-10-15)
+
+The phone shell is now one of three arrangements, chosen in `Shell/ShellLayout.swift`.
+
+**Height decides, not width.** A Max-sized iPhone on its side reports regular
+width exactly as an iPad does, with about 400 points of height. Width alone was
+already wrong in one place: the calendar offered a seven-column week to a
+sideways Max and defaulted to it. Compact height is true of every phone in
+landscape and of no iPad, so it picks the two-pane layout, and regular in both
+picks the split view. The week is offered only in the split.
+
+**A phone on its side gets two panes, not three.** The list beside the
+calendar, as the desktop sets them; the switcher stays behind the list's title
+and the bar keeps only search and capture. Three panels plus a time grid want
+vertical room the phone does not have. The day under the list is dropped
+wherever the calendar is beside it, since it would repeat it.
+
+**Turning the phone keeps both panes.** The arrangement is an `AnyLayout`
+switching between a stack and a row, not a branch between two view trees, so the
+list keeps its scroll position and the calendar its day and span. A branch would
+rebuild both on every rotation.
+
+**The iPad is a `NavigationSplitView` of the same surfaces.** The switcher's
+contents are the sidebar, the list is the content column, and the detail column
+is a stack on `Route.path` with the calendar at its root, so a page or search
+opens over the week and Back returns to it. A list row in the split puts its
+page in the detail column rather than pushing: a link in the content column
+cannot reach a stack in the detail column, and a jump is what the Mac does
+anyway. Sheets moved above the shell so one stays up when the window changes
+shape.
+
+**The iPhone Duo is these three, chosen by the same rule.** Apple's developer
+pages give its outer display an iPhone's size classes (compact width; compact
+height on its side) and its inner display regular in both, report it as an
+iPhone rather than a new idiom, and describe folding as the app being resized.
+So folded it is the phone, folded and sideways it is two panes, and unfolded it
+is the split view, with no code that names the device.
+
+Unfolding swaps the stack for the split view, which rebuilds the views under
+it, so what a fold must keep lives above them. The open page is `Route.path`,
+the calendar's day and span moved onto `Route`, and quick add's sheet hangs
+above the shell; a tier-1 test drags an iPad's window across the same
+size-class line and checks all three. What does not survive is scroll: the list
+and the open page come back at the top, since the webview reloads. Turning the
+phone loses nothing, because that change is a layout, not a new tree.
+
+Not verified: the Duo itself. Its simulator ships with Xcode 27.1 and this was
+built with 27.0, so the inner display's real size, its 50/50 split, and whether
+a fold arrives as one resize or several are all unseen.
+
 ## Needs a Mac
 
 Nothing here is blocked on design — only on hardware.
@@ -1112,6 +1162,9 @@ What is explicitly **not** being done now: size-class branching, a split-view
 shell, multi-window (`UISceneConfiguration`), keyboard shortcuts, pointer and
 hover, `.systemExtraLarge` widgets, or Stage Manager. Adding any of them early
 would be guessing at a design nobody has drawn.
+
+The split view and the size-class branching have since been built; *Wide
+windows* below says how.
 
 ## Next, in order
 

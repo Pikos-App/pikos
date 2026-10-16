@@ -7,9 +7,11 @@ extension View {
     }
 }
 
-/// iOS 17 has no scroll geometry to read, so there the bar stays as it is.
+/// iOS 17 has no scroll geometry to read, so there the bar stays as it is. Only the single-pane
+/// layout shrinks it; side by side and in the split there's nothing to reclaim.
 private struct MinimizesShellBar: ViewModifier {
     @Environment(Route.self) private var route
+    @Environment(\.shellLayout) private var layout
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Only a scroll the person is making moves the bar: coming back from a page shifts the list's
     /// offset too, and that shrank the bar with nobody scrolling.
@@ -28,7 +30,7 @@ private struct MinimizesShellBar: ViewModifier {
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 geometry.contentOffset.y + geometry.contentInsets.top
             } action: { old, new in
-                guard isScrolling else { return }
+                guard isScrolling, layout == .single else { return }
                 if new < Self.nearTop {
                     minimize(false)
                 } else if new > old {

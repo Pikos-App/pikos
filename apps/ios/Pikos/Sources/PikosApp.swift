@@ -133,6 +133,18 @@ struct PikosApp: App {
     }
 }
 
+extension View {
+    /// Where each `Route.Destination` leads, in whichever stack holds `Route.path`.
+    func routeDestinations() -> some View {
+        navigationDestination(for: Route.Destination.self) { destination in
+            switch destination {
+            case .page(let id): EditorScreen(pageId: id)
+            case .search: SearchScreen()
+            }
+        }
+    }
+}
+
 struct RootView: View {
     let spotlight: SpotlightIndexer
 
@@ -142,6 +154,8 @@ struct RootView: View {
     @Environment(ReminderScheduler.self) private var reminders
     @Environment(CalendarSyncStore.self) private var calendars
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var widthClass
+    @Environment(\.verticalSizeClass) private var heightClass
 
     /// The page that was open when the app was last put away, and when.
     ///
@@ -154,17 +168,25 @@ struct RootView: View {
     var body: some View {
         @Bindable var route = route
 
-        // The path lives on the router so a `pikos://page/<id>` link can push from outside.
-        NavigationStack(path: $route.path) {
-            WorkspaceScreen()
-                .navigationDestination(for: Route.Destination.self) { destination in
-                    switch destination {
-                    case .page(let id): EditorScreen(pageId: id)
-                    case .search: SearchScreen()
-                    }
+        let layout = ShellLayout(horizontal: widthClass, vertical: heightClass)
+
+        Group {
+            if layout == .split {
+                WorkspaceSplitView()
+            } else {
+                // The path lives on the router so a `pikos://page/<id>` link can push from outside.
+                NavigationStack(path: $route.path) {
+                    WorkspaceScreen()
+                        .routeDestinations()
                 }
+            }
         }
+        .environment(\.shellLayout, layout)
         .tint(.textAction)
+        // Above the shell rather than in it, so a sheet stays up when the window changes shape.
+        .sheet(isPresented: $route.isSettingsPresented) { SettingsScreen() }
+        .sheet(isPresented: $route.isTrashPresented) { TrashSheet() }
+        .sheet(isPresented: $route.isFolderManagerPresented) { FolderManagerSheet() }
         // One sheet for quick add, wherever it was asked for. The toolbar
         // button, the empty state and a `pikos://quick-add` link all set the
         // same flag, so there is one place the prefill is read and one place

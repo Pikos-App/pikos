@@ -378,6 +378,32 @@ final class ScreenTour: PikosUITestCase {
         shot(section, 5, "Tips")
     }
 
+    // MARK: - Wide
+
+    /// The sideways phone on a phone, the three panels on an iPad, each turned both ways.
+    func test9Wide() {
+        let section = "9 Wide"
+        XCUIDevice.shared.orientation = .landscapeLeft
+        addTeardownBlock { @MainActor in XCUIDevice.shared.orientation = .portrait }
+        relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
+        shot(section, 1, "Sideways: the Inbox")
+        relaunch()
+        shot(section, 2, "Sideways: Today")
+        if tap(buttonStarting("Visible days"), "calendar title") {
+            shot(section, 3, "Sideways: the span choice")
+        }
+        relaunch(["PIKOS_DEMO_SWITCHER": "1"])
+        shot(section, 4, "Sideways: the view switcher")
+        relaunch()
+        if tap(app.collectionViews.staticTexts["Order FlexiSpot E7 frame"].firstMatch, "row") {
+            settle(1.5)
+            shot(section, 5, "Sideways: a page open")
+        }
+        XCUIDevice.shared.orientation = .portrait
+        relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
+        shot(section, 6, "Upright: the Inbox")
+    }
+
     // MARK: - Helpers
 
     private func shot(_ section: String, _ order: Int, _ title: String) {

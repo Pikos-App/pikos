@@ -7,11 +7,13 @@ import SwiftUI
 /// pushing it. Search and capture share the bar so both are in reach from either pane and
 /// nothing else floats over the content.
 struct ShellBar: View {
-    @Binding var pane: Route.Pane
-    let isMinimized: Bool
+    /// Nil when the list and the calendar are both on screen, which leaves search and capture.
+    let pane: Binding<Route.Pane>?
+    /// Only while the panes take turns: side by side, the bar already holds just search and capture.
+    var isMinimized = false
     let onSearch: () -> Void
     let onCapture: () -> Void
-    let onExpand: () -> Void
+    var onExpand: () -> Void = {}
 
     @Namespace private var selection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,11 +24,13 @@ struct ShellBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if isMinimized {
-                expandButton
+            if isMinimized, let pane {
+                expandButton(pane.wrappedValue)
             } else {
-                segment(.list, title: "List", systemImage: "list.bullet")
-                segment(.week, title: "Calendar", systemImage: "calendar")
+                if let pane {
+                    segment(.list, title: "List", systemImage: "list.bullet", pane: pane)
+                    segment(.week, title: "Calendar", systemImage: "calendar", pane: pane)
+                }
                 searchButton
                     .padding(.leading, 2)
             }
@@ -36,15 +40,15 @@ struct ShellBar: View {
         .padding(6)
         .frame(height: Self.height)
         .floatingSurface(in: Capsule())
-        .sensoryFeedback(.selection, trigger: pane)
+        .sensoryFeedback(.selection, trigger: pane?.wrappedValue)
     }
 
-    private func segment(_ value: Route.Pane, title: LocalizedStringKey, systemImage: String)
-        -> some View
-    {
-        let isSelected = pane == value
+    private func segment(
+        _ value: Route.Pane, title: LocalizedStringKey, systemImage: String, pane: Binding<Route.Pane>
+    ) -> some View {
+        let isSelected = pane.wrappedValue == value
         return Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { pane = value }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { pane.wrappedValue = value }
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)
@@ -69,7 +73,7 @@ struct ShellBar: View {
     }
 
     /// The pane on screen, standing in for the whole bar while it is out of the way.
-    private var expandButton: some View {
+    private func expandButton(_ pane: Route.Pane) -> some View {
         Button(action: onExpand) {
             Image(systemName: pane == .list ? "list.bullet" : "calendar")
                 .font(.system(size: 17, weight: .medium))
