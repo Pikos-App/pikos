@@ -19,6 +19,8 @@ final class TierOneTests: PikosUITestCase {
         app.buttons["Calendar"].firstMatch.tap()
         let grid = app.scrollViews.firstMatch
         XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
+        // The grid opens at the current hour, which in the evening is its end, with no room to scroll down.
+        grid.swipeDown()
         grid.swipeUp()
 
         let show = app.buttons["Show the bar"]
