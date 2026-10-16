@@ -225,6 +225,18 @@ final class TierOneTests: PikosUITestCase {
     }
 
     /// The desktop's signature move on a phone: lift a page, drop it on an hour of today.
+    /// One press, two outcomes: still opens the menu, moving carries the page (the drag tests below).
+    func testHoldingARowStillOpensItsMenu() {
+        quickAdd("Plan the offsite today")
+        let title = app.staticTexts["Plan the offsite"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+
+        title.press(forDuration: 1.2)
+
+        XCTAssertTrue(app.buttons["Tomorrow"].waitForExistence(timeout: 5), "the page menu is open")
+        XCTAssertFalse(app.buttons["Undo"].exists, "and nothing was moved")
+    }
+
     func testDraggingAPageOntoTheDayGivesItATime() {
         quickAdd("Plan the offsite today")
         let title = app.staticTexts["Plan the offsite"].firstMatch

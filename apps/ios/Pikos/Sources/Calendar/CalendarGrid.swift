@@ -389,7 +389,7 @@ struct CalendarGrid: View {
     /// A press held on one spot, reported with where it was. Inside a scroll view the scroll still
     /// wins the moment the finger moves: a person dragging past 3pm was scrolling.
     private func slotPress(perform: @escaping (CGPoint) -> Void) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.45)
+        LongPressGesture()
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
             .onEnded { value in
                 if case .second(true, let drag?) = value {
