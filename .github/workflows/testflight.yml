@@ -1,0 +1,138 @@
+name: TestFlight
+
+# The iPhone app, archived, signed and uploaded to TestFlight, so a phone with automatic updates
+# on picks it up without the laptop building anything.
+#
+# Started by hand, from the Actions tab or `gh workflow run testflight.yml --ref <branch>`. On
+# every push it would be a build nobody installs for most commits, at about half an hour of
+# runner time each.
+#
+# Signing is Apple's cloud signing: with an App Store Connect API key, `-allowProvisioningUpdates`
+# creates and renews the distribution certificate and profiles itself, so no certificate is kept
+# in the repo's secrets. The key needs the Admin role for that. The Developer role that
+# notarizing the Mac app needs is not enough.
+
+on:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 24
+  PNPM_VERSION: 10.30.3
+
+jobs:
+  upload:
+    name: Archive and upload
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Require the signing settings
+        env:
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          KEY: ${{ secrets.APPLE_API_KEY }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          missing=""
+          [ -n "$TEAM_ID" ] || missing="$missing APPLE_TEAM_ID (variable)"
+          [ -n "$KEY" ] || missing="$missing APPLE_API_KEY"
+          [ -n "$KEY_ID" ] || missing="$missing APPLE_API_KEY_ID"
+          [ -n "$ISSUER_ID" ] || missing="$missing APPLE_API_ISSUER_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing:$missing"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ios-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ios-cargo-
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install the build tools
+        run: brew install xcodegen xcbeautify
+
+      - name: Build the editor bundle
+        run: bash scripts/build-editor-bundle.sh
+
+      - name: Build PikosFFI.xcframework
+        run: bash scripts/build-ios-framework.sh
+
+      - name: Generate the Xcode project
+        run: cd apps/ios/Pikos && xcodegen generate
+
+      - name: Write the API key
+        env:
+          KEY: ${{ secrets.APPLE_API_KEY }}
+        run: printf '%s' "$KEY" > "$RUNNER_TEMP/api-key.p8"
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project apps/ios/Pikos/Pikos.xcodeproj \
+            -scheme Pikos \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Pikos.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/api-key.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            | xcbeautify
+
+      - name: Upload to TestFlight
+        env:
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict>
+          </plist>
+          PLIST
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Pikos.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/api-key.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            | xcbeautify
+
+      - name: Remove the API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/api-key.p8"
