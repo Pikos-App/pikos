@@ -1009,6 +1009,25 @@ cannot reach a stack in the detail column, and a jump is what the Mac does
 anyway. Sheets moved above the shell so one stays up when the window changes
 shape.
 
+**The iPhone Duo is these three, chosen by the same rule.** Apple's developer
+pages give its outer display an iPhone's size classes (compact width; compact
+height on its side) and its inner display regular in both, report it as an
+iPhone rather than a new idiom, and describe folding as the app being resized.
+So folded it is the phone, folded and sideways it is two panes, and unfolded it
+is the split view, with no code that names the device.
+
+Unfolding swaps the stack for the split view, which rebuilds the views under
+it, so what a fold must keep lives above them. The open page is `Route.path`,
+the calendar's day and span moved onto `Route`, and quick add's sheet hangs
+above the shell; a tier-1 test drags an iPad's window across the same
+size-class line and checks all three. What does not survive is scroll: the list
+and the open page come back at the top, since the webview reloads. Turning the
+phone loses nothing, because that change is a layout, not a new tree.
+
+Not verified: the Duo itself. Its simulator ships with Xcode 27.1 and this was
+built with 27.0, so the inner display's real size, its 50/50 split, and whether
+a fold arrives as one resize or several are all unseen.
+
 ## Needs a Mac
 
 Nothing here is blocked on design — only on hardware.

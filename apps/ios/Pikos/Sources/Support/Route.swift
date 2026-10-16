@@ -93,8 +93,14 @@ final class Route {
     /// The day the week pane should show next time it appears, when something outside it asked.
     var weekFocus: Date?
 
+    /// The day the calendar is anchored on, and the span it shows from there. Held here rather
+    /// than by the calendar, so a shell rebuilt around it, as when an iPhone Duo unfolds, opens on
+    /// what it was showing.
+    var calendarAnchor = Date()
+    var calendarSpan: CalendarSpan?
+
     /// The `YYYY-MM-DD` the calendar pane is on, so a page added from there lands on that day.
-    var calendarDay: String?
+    var calendarDay: String { WallClockDay.string(from: calendarAnchor) }
 
     /// The page open on top of the workspace, if any.
     var openPageId: String? {

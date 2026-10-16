@@ -14,8 +14,6 @@ struct CalendarScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.shellLayout) private var layout
 
-    @State private var anchor = Date()
-    @State private var span: CalendarSpan?
     @State private var entries: [CalendarEntry] = []
     /// False until the first range has arrived. Only that first wait shows a
     /// spinner; every later one keeps the grid up while the next range loads,
@@ -42,6 +40,16 @@ struct CalendarScreen: View {
     /// matters — coming back to a line an hour out of date — where a ticking
     /// timer would spend battery all day to fix a line nobody is looking at.
     @Environment(\.scenePhase) private var scenePhase
+
+    private var anchor: Date {
+        get { route.calendarAnchor }
+        nonmutating set { route.calendarAnchor = newValue }
+    }
+
+    private var span: CalendarSpan? {
+        get { route.calendarSpan }
+        nonmutating set { route.calendarSpan = newValue }
+    }
 
     private var effectiveSpan: CalendarSpan {
         guard let span, CalendarSpan.offered(in: layout).contains(span) else {
@@ -174,9 +182,6 @@ struct CalendarScreen: View {
         }
         .pageActionSheets($actions)
         .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: isJumping)
-        .onChange(of: WallClockDay.string(from: anchor), initial: true) { _, day in
-            route.calendarDay = day
-        }
         .onChange(of: route.weekFocus) { _, focus in
             guard let focus else { return }
             steppedForward = focus > anchor

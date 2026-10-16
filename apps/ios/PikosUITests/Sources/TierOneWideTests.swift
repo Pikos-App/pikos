@@ -67,8 +67,9 @@ extension TierOneTests {
         visibleDays.tap()
 
         quickAdd("Trip notes")
-        assertRowExists("Trip notes")
-        app.staticTexts["Trip notes"].firstMatch.tap()
+        let row = app.collectionViews.staticTexts["Trip notes"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        row.tap()
         XCTAssertTrue(textInput("Title").waitForExistence(timeout: Self.timeout), "a page opens in place of the calendar")
         XCTAssertTrue(switcher.isHittable, "and the list stays beside it")
     }
