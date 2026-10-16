@@ -74,11 +74,12 @@ struct PikosApp: App {
         // in a background launch, so it is opened on demand. The order is the
         // point: a meeting that landed in the sync gets its reminder planned
         // in the same wake.
+        // The main queue: the handler is main-actor code, and on the scheduler's own queue the
+        // isolation check stopped the app every time a refresh ran.
         BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: ReminderScheduler.refreshTaskIdentifier, using: nil
+            forTaskWithIdentifier: ReminderScheduler.refreshTaskIdentifier, using: .main
         ) { task in
-            // The task object is handed over on the scheduler's queue and is
-            // not Sendable; it crosses into the main actor in a box, is
+            // The task object is not Sendable; it crosses into the main actor in a box, is
             // completed exactly once there, and is never shared beyond that.
             let handle = BackgroundTaskHandle(task: task)
             let work = Task { @MainActor in
