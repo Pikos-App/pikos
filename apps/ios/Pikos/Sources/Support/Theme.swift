@@ -53,6 +53,12 @@ extension Font {
     static let pkScreenTitle = Font.system(.title2, weight: .semibold)
 }
 
+extension Animation {
+    /// The one length for motion: short enough that nobody waits on it. A move worth showing says
+    /// what it means in this time, and one that needs longer is there for its own sake.
+    static let pkQuick = Animation.snappy(duration: 0.2)
+}
+
 extension View {
     /// The desktop's small-caps section label: "FOLDERS", "MON 14", "OVERDUE".
     func sectionLabelStyle(_ color: Color = .textTertiary) -> some View {
@@ -108,6 +114,6 @@ struct TaskCheckboxMark: View {
                 }
             }
             .frame(width: size, height: size)
-            .animation(.snappy(duration: 0.2), value: isDone)
+            .animation(.pkQuick, value: isDone)
     }
 }

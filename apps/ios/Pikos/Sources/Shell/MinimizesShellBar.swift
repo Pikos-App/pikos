@@ -46,6 +46,6 @@ private struct MinimizesShellBar: ViewModifier {
 
     private func minimize(_ minimized: Bool) {
         guard route.isBarMinimized != minimized else { return }
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { route.isBarMinimized = minimized }
+        withAnimation(reduceMotion ? nil : .pkQuick) { route.isBarMinimized = minimized }
     }
 }

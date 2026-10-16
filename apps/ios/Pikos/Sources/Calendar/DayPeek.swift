@@ -74,7 +74,7 @@ struct DayPeek: View {
                         grid(day: day, firstHour: firstHour, hours: hours)
                     }
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(.move(edge: .bottom))
             }
             Color.clear.frame(height: ShellBar.clearance)
         }
@@ -88,7 +88,7 @@ struct DayPeek: View {
                     .ignoresSafeArea(edges: .bottom)
             }
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.32), value: isDropping)
+        .animation(reduceMotion ? nil : .pkQuick, value: isDropping)
     }
 
     // MARK: - Header

@@ -36,6 +36,7 @@ struct QuickAddSheet: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.dismiss) private var dismiss
     @Environment(Route.self) private var route
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Added or cancelled. A sheet swiped away without either keeps its line as a draft for the next
     /// open, so a sentence is never lost to a stray swipe.
@@ -184,8 +185,8 @@ struct QuickAddSheet: View {
                 .padding(.bottom, 12)
         }
         .background(.surfaceElevated)
-        .animation(.snappy(duration: 0.22), value: parsed?.hasAnything)
-        .animation(.snappy(duration: 0.22), value: isPickingDate)
+        .animation(reduceMotion ? nil : .pkQuick, value: parsed?.hasAnything)
+        .animation(reduceMotion ? nil : .pkQuick, value: isPickingDate)
         .onChange(of: schedule) { _, new in
             if new != appliedSchedule { scheduleIsManual = true }
         }

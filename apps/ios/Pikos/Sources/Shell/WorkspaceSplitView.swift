@@ -30,7 +30,7 @@ struct WorkspaceSplitView: View {
                                 route.presentQuickAdd(from: store, under: .list)
                             }
                         )
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(.opacity)
                     }
                 }
                 .toolbar(.hidden, for: .navigationBar)

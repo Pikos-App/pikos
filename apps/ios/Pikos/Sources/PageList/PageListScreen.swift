@@ -37,7 +37,7 @@ struct PageListScreen: View {
                     Color.clear.frame(height: ShellBar.clearance)
                 } else {
                     DayPeek()
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(.move(edge: .bottom))
                 }
             }
             // An overlay, so the switcher's height never sets the pane's: as a stacked sibling, a
@@ -52,7 +52,7 @@ struct PageListScreen: View {
         .overlay(alignment: .bottom) {
             if isSelecting {
                 selectionBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.opacity)
             }
         }
         .environment(\.editMode, .constant(isSelecting ? .active : .inactive))
@@ -60,8 +60,8 @@ struct PageListScreen: View {
         .sheet(item: $datingSelection) { batch in
             SchedulePageSheet(pages: batch.pages) { leaveSelection() }
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.3), value: isSelecting)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: route.isSwitcherPresented)
+        .animation(reduceMotion ? nil : .pkQuick, value: isSelecting)
+        .animation(reduceMotion ? nil : .pkQuick, value: route.isSwitcherPresented)
         .onChange(of: store.scope) { _, _ in leaveSelection() }
         .onChange(of: isSelecting) { _, selecting in route.isSelectingPages = selecting }
         .task {
@@ -204,10 +204,7 @@ struct PageListScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 10)
                     .padding(.top, 6)
-                    .transition(
-                        .scale(scale: 0.96, anchor: .topLeading)
-                            .combined(with: .opacity)
-                            .combined(with: .offset(y: -6)))
+                    .transition(.opacity)
             }
         }
     }
@@ -266,7 +263,7 @@ struct PageListScreen: View {
         .background(.surfacePrimary)
         .environment(\.defaultMinListRowHeight, 44)
         .environment(\.defaultMinListHeaderHeight, 0)
-        .animation(reduceMotion ? nil : .default, value: store.sections)
+        .animation(reduceMotion ? nil : .pkQuick, value: store.sections)
         .refreshable { await store.refresh() }
     }
 
@@ -385,7 +382,7 @@ struct PageListScreen: View {
     @ViewBuilder
     private var completedSection: some View {
         Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { store.toggleCompleted() }
+            withAnimation(reduceMotion ? nil : .pkQuick) { store.toggleCompleted() }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")

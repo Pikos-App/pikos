@@ -48,7 +48,7 @@ struct ShellBar: View {
     ) -> some View {
         let isSelected = pane.wrappedValue == value
         return Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { pane.wrappedValue = value }
+            withAnimation(reduceMotion ? nil : .pkQuick) { pane.wrappedValue = value }
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)

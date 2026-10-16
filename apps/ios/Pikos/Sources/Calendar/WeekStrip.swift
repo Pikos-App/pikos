@@ -75,7 +75,7 @@ struct WeekStrip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .animation(reduceMotion ? nil : .snappy, value: selected)
+        .animation(reduceMotion ? nil : .pkQuick, value: selected)
         .accessibilityLabel(Self.accessibleLabel(day, count: colors.count, isToday: isToday))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

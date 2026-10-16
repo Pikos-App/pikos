@@ -11,6 +11,7 @@ struct WorkspaceScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(\.shellLayout) private var layout
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drag = PageDragSession()
 
     /// The desktop's list column is about this wide; past it the calendar gets the room.
@@ -47,13 +48,13 @@ struct WorkspaceScreen: View {
                             route.presentQuickAdd(from: store, under: isSideBySide ? .list : route.pane)
                         },
                         onExpand: {
-                            withAnimation(.snappy(duration: 0.28)) { route.isBarMinimized = false }
+                            withAnimation(reduceMotion ? nil : .pkQuick) { route.isBarMinimized = false }
                         }
                     )
                     // Under the list it serves, not across the line between the two panes.
                     .frame(width: isSideBySide ? listWidth - 32 : nil)
                     .frame(maxWidth: .infinity, alignment: isSideBySide ? .leading : .center)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.opacity)
                 }
             }
         }
