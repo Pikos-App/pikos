@@ -117,12 +117,24 @@ final class TierOneTests: PikosUITestCase {
         app.buttons["Search"].firstMatch.tap()
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
-        field.tap()
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: field)
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [focused], timeout: 2), .completed,
+            "the field has the keyboard as search opens, without a tap of its own")
         field.typeText("quarterly")
 
-        XCTAssertTrue(
-            app.buttons["Quarterly review"].waitForExistence(timeout: Self.timeout),
-            "full-text search should find it")
+        let result = app.buttons["Quarterly review"]
+        XCTAssertTrue(result.waitForExistence(timeout: Self.timeout), "full-text search should find it")
+
+        result.tap()
+        XCTAssertTrue(textInput("Title").waitForExistence(timeout: Self.timeout), "a result opens its page")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(result.waitForExistence(timeout: Self.timeout), "and Back returns to the results")
+
+        app.navigationBars.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: field), "Back closes search")
+        XCTAssertTrue(app.buttons["Switch view"].firstMatch.isHittable, "onto the list it was opened from")
     }
 
     func testSearchSuggestsThePageLastOpenedBeforeAnythingIsTyped() {

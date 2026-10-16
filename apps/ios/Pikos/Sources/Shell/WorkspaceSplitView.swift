@@ -24,10 +24,7 @@ struct WorkspaceSplitView: View {
                     if !route.isSelectingPages {
                         ShellBar(
                             pane: nil,
-                            onSearch: {
-                                route.isSwitcherPresented = false
-                                route.path = [.search]
-                            },
+                            onSearch: { route.openSearch(replacing: true) },
                             onCapture: {
                                 route.isSwitcherPresented = false
                                 route.presentQuickAdd(from: store, under: .list)

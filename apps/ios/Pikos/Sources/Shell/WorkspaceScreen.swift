@@ -41,10 +41,7 @@ struct WorkspaceScreen: View {
                     ShellBar(
                         pane: isSideBySide ? nil : $route.pane,
                         isMinimized: !isSideBySide && route.isBarMinimized,
-                        onSearch: {
-                            route.isSwitcherPresented = false
-                            route.path.append(.search)
-                        },
+                        onSearch: { route.openSearch() },
                         onCapture: {
                             route.isSwitcherPresented = false
                             route.presentQuickAdd(from: store, under: isSideBySide ? .list : route.pane)
