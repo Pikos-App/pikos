@@ -30,6 +30,9 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEVELOPMENT_TEAM: "" # set locally; deliberately not committed
+    MARKETING_VERSION: "1.0"
+    # The TestFlight workflow raises this to its run number, since every upload needs a higher one.
+    CURRENT_PROJECT_VERSION: "1"
 
 packages:
   PikosCore:
@@ -86,6 +89,8 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Pikos
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
         # settings: those are synthesised only when Xcode generates the
         # Info.plist, and this target supplies one. As settings they were
@@ -170,6 +175,8 @@ targets:
       path: ../PikosWidgets/Info.plist
       properties:
         CFBundleDisplayName: Pikos
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
         # settings: those are synthesised only when Xcode generates the
         # Info.plist, and this target supplies one. As settings they were
