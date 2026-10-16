@@ -305,6 +305,28 @@ final class TierOneTests: PikosUITestCase {
             "and the editor webview loads — a missing bundle fails here")
     }
 
+    /// Leaving the app mid-title keeps the title, though focus never left the field.
+    func testATitleTypedJustBeforeLeavingTheAppIsKept() {
+        quickAdd("Trip notes today")
+        assertRowExists("Trip notes")
+        app.staticTexts["Trip notes"].firstMatch.tap()
+        let title = textInput("Title")
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        title.typeText(" for Lisbon")
+        XCTAssertEqual(title.value as? String, "Trip notes for Lisbon")
+
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+        app.launch()
+
+        // Relaunching may land back on the page, where the title is a field's value, or on the list.
+        let kept = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR value == %@", "Trip notes for Lisbon", "Trip notes for Lisbon"))
+            .firstMatch
+        XCTAssertTrue(kept.waitForExistence(timeout: Self.timeout), "the edit was saved on the way out")
+    }
+
     /// The desktop's signature move on a phone: lift a page, drop it on an hour of today.
     /// One press, two outcomes: still opens the menu, moving carries the page (the drag tests below).
     func testHoldingARowStillOpensItsMenu() {

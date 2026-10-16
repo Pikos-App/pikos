@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PikosCore
 import PikosSupport
+import UIKit
 
 /// The app's single connection to the workspace, and the state the UI observes.
 ///
@@ -636,12 +637,22 @@ public final class WorkspaceStore {
     /// refreshes when the editor closes.
     public func saveDocument(pageId: String, json: String, plainText: String) async {
         guard let workspace else { return }
-        do {
-            _ = try await workspace.updatePage(
-                id: pageId, edit: PageEdit(content: json, contentText: plainText))
-        } catch {
-            errorMessage = error.localizedDescription
+        await untilWritten {
+            do {
+                _ = try await workspace.updatePage(
+                    id: pageId, edit: PageEdit(content: json, contentText: plainText))
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
+    }
+
+    /// Asks iOS for time to finish the write if the app is put away while it runs. The editor and
+    /// the header save as the app leaves, which is when iOS suspends it within a second or two.
+    private func untilWritten(_ write: () async -> Void) async {
+        let task = UIApplication.shared.beginBackgroundTask(withName: "Save")
+        await write()
+        if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
     }
 
     @discardableResult
@@ -909,11 +920,13 @@ public final class WorkspaceStore {
         guard let workspace else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        do {
-            _ = try await workspace.updatePage(id: id, edit: PageEdit(title: trimmed))
-            await refresh()
-        } catch {
-            errorMessage = error.localizedDescription
+        await untilWritten {
+            do {
+                _ = try await workspace.updatePage(id: id, edit: PageEdit(title: trimmed))
+                await refresh()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -1023,11 +1036,13 @@ public final class WorkspaceStore {
     /// The one-sentence line under a title. An empty string takes it away.
     public func setSubtitle(pageId: String, to subtitle: String) async {
         guard let workspace else { return }
-        do {
-            _ = try await workspace.updatePage(id: pageId, edit: PageEdit(subtitle: subtitle))
-            await refresh()
-        } catch {
-            errorMessage = error.localizedDescription
+        await untilWritten {
+            do {
+                _ = try await workspace.updatePage(id: pageId, edit: PageEdit(subtitle: subtitle))
+                await refresh()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
