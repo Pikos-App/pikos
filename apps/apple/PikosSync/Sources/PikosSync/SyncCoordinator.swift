@@ -1,10 +1,12 @@
 import CloudKit
+import os
 
 /// What the CloudKit transport does with each thing Apple's sync engine hands it, kept apart from
 /// the engine so it runs in tests without an iCloud account.
 public actor SyncCoordinator {
     private let store: ReplicaStore
     public nonisolated let zone: CKRecordZone.ID
+    private static let log = Logger(subsystem: "app.pikos", category: "sync")
 
     /// Each pending record's name, by the name CloudKit stores it under.
     private var names: [String: String] = [:]
@@ -101,6 +103,7 @@ public actor SyncCoordinator {
                 metadata.append((sync.name, RecordCodec.systemFields(of: record)))
             }
         }
+        Self.log.info("fetched \(records.count) records, \(decoded.count) readable")
         if !decoded.isEmpty {
             do {
                 try await store.applyRecords(decoded)
@@ -108,6 +111,7 @@ public actor SyncCoordinator {
                 fetchUnapplied = true
                 throw error
             }
+            Self.log.info("applied \(decoded.count) records")
             try await store.saveSystemFields(metadata)
         }
     }

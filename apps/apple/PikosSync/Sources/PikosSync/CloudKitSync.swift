@@ -89,7 +89,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             let ids = try await coordinator.pending()
             engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
         } catch {
-            Self.log.error("queueing changes failed: \(error.localizedDescription)")
+            Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -101,7 +101,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             let ids = try await coordinator.expired()
             engine.state.add(pendingRecordZoneChanges: ids.map { .deleteRecord($0) })
         } catch {
-            Self.log.error("expiring tombstones failed: \(error.localizedDescription)")
+            Self.log.error("expiring tombstones failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -116,6 +116,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     }
 
     public func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
+        Self.log.info("event: \(String(describing: event), privacy: .public)")
+        defer { Self.log.info("event handled") }
         do {
             switch event {
             case .stateUpdate(let update):
@@ -138,7 +140,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 break
             }
         } catch {
-            Self.log.error("sync event failed: \(error.localizedDescription)")
+            Self.log.error("sync event failed: \(error.localizedDescription, privacy: .public)")
             onStatus(.failed(error.localizedDescription))
         }
     }
@@ -156,7 +158,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             do {
                 return try await coordinator.record(for: id)
             } catch {
-                Self.log.error("building \(id.recordName) failed: \(error.localizedDescription)")
+                Self.log.error("building \(id.recordName) failed: \(error.localizedDescription, privacy: .public)")
                 return nil
             }
         }
