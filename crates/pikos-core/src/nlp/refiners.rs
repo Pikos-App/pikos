@@ -117,11 +117,12 @@ impl MergingRefiner for MergeDateTimeRefiner {
         current: &ParsingResult,
         next: &ParsingResult,
     ) -> bool {
+        // Case-sensitive on purpose: the reference's pattern has no `i` flag, so "NOON ON apr 10" stays two matches.
         let one_of_each = (current.start.is_only_date() && next.start.is_only_time())
             || (next.start.is_only_date() && current.start.is_only_time());
         one_of_each
             && matches(
-                "(?i)^\\s*(T|at|after|before|on|of|,|-|\\.|∙|:)?\\s*$",
+                "^\\s*(T|at|after|before|on|of|,|-|\\.|∙|:)?\\s*$",
                 text_between,
             )
     }
