@@ -7,6 +7,7 @@ pub mod apply;
 pub mod build;
 pub mod capture;
 pub mod manifest;
+pub mod schema;
 pub mod state;
 
 use pikos_replica::Hlc;

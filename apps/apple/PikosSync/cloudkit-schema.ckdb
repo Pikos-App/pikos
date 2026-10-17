@@ -1,0 +1,272 @@
+DEFINE SCHEMA
+
+    RECORD TYPE Users (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        roles           LIST<INT64>,
+        GRANT WRITE TO "_creator",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "page" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "title_at" ENCRYPTED STRING,
+        "title_0" ENCRYPTED STRING,
+        "subtitle_at" ENCRYPTED STRING,
+        "subtitle_0" ENCRYPTED STRING,
+        "folder_id_at" ENCRYPTED STRING,
+        "folder_id_0" ENCRYPTED STRING,
+        "parent_id_at" ENCRYPTED STRING,
+        "parent_id_0" ENCRYPTED STRING,
+        "priority_at" ENCRYPTED STRING,
+        "priority_0" ENCRYPTED INT64,
+        "sort_order_at" ENCRYPTED STRING,
+        "sort_order_0" ENCRYPTED INT64,
+        "links_at" ENCRYPTED STRING,
+        "links_0" ENCRYPTED STRING,
+        "deleted_at_at" ENCRYPTED STRING,
+        "deleted_at_0" ENCRYPTED STRING,
+        "created_at_at" ENCRYPTED STRING,
+        "created_at_0" ENCRYPTED STRING,
+        "status_at" ENCRYPTED STRING,
+        "status_0" ENCRYPTED STRING,
+        "status_1" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "body" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "content_at" ENCRYPTED STRING,
+        "content_0" ENCRYPTED STRING,
+        "content_1" ENCRYPTED INT64,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "folder" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "name_at" ENCRYPTED STRING,
+        "name_0" ENCRYPTED STRING,
+        "color_at" ENCRYPTED STRING,
+        "color_0" ENCRYPTED STRING,
+        "icon_at" ENCRYPTED STRING,
+        "icon_0" ENCRYPTED STRING,
+        "sort_order_at" ENCRYPTED STRING,
+        "sort_order_0" ENCRYPTED INT64,
+        "deleted_at_at" ENCRYPTED STRING,
+        "deleted_at_0" ENCRYPTED STRING,
+        "created_at_at" ENCRYPTED STRING,
+        "created_at_0" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "tag" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "pagetag" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "rule" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "rule_at" ENCRYPTED STRING,
+        "rule_0" ENCRYPTED STRING,
+        "rule_1" ENCRYPTED STRING,
+        "rule_2" ENCRYPTED STRING,
+        "rule_3" ENCRYPTED STRING,
+        "rule_4" ENCRYPTED STRING,
+        "rule_5" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "sched" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "block_at" ENCRYPTED STRING,
+        "block_0" ENCRYPTED STRING,
+        "block_1" ENCRYPTED STRING,
+        "block_2" ENCRYPTED STRING,
+        "block_3" ENCRYPTED STRING,
+        "block_4" ENCRYPTED STRING,
+        "block_5" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "override" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "override_at" ENCRYPTED STRING,
+        "override_0" ENCRYPTED STRING,
+        "override_1" ENCRYPTED STRING,
+        "override_2" ENCRYPTED STRING,
+        "override_3" ENCRYPTED STRING,
+        "override_4" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "done" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "clone_id_at" ENCRYPTED STRING,
+        "clone_id_0" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "skip" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "remind" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "reminder_at" ENCRYPTED STRING,
+        "reminder_0" ENCRYPTED STRING,
+        "reminder_1" ENCRYPTED INT64,
+        "reminder_2" ENCRYPTED STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "focus" (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        "fmt" ENCRYPTED INT64,
+        "born" ENCRYPTED STRING,
+        "tomb" ENCRYPTED STRING,
+        "record" ENCRYPTED STRING,
+        "session_at" ENCRYPTED STRING,
+        "session_0" ENCRYPTED STRING,
+        "session_1" ENCRYPTED STRING,
+        "session_2" ENCRYPTED STRING,
+        "session_3" ENCRYPTED INT64,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
