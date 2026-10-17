@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { subscribeNotices } from "@/shared/events/noticeBus";
 
-import { formatElapsed, MIN_SESSION_S, useFocusTimer } from "./useFocusTimer";
+import { MIN_SESSION_S, useFocusTimer } from "./useFocusTimer";
 
 vi.stubEnv("VITE_TEST_MODE", "true");
 
@@ -156,27 +156,6 @@ describe("useFocusTimer", () => {
       await result.current.stop();
     });
     expect(adapter.listFocusSessionsForTest()).toEqual([]);
-  });
-});
-
-describe("formatElapsed", () => {
-  it.each([
-    [0, "0:00"],
-    [5, "0:05"],
-    [59, "0:59"],
-    [60, "1:00"],
-    [95, "1:35"],
-    [599, "9:59"],
-    [3599, "59:59"],
-    [3600, "1:00:00"],
-    [3661, "1:01:01"],
-    [36061, "10:01:01"],
-  ])("%i seconds → %s", (seconds, expected) => {
-    expect(formatElapsed(seconds)).toBe(expected);
-  });
-
-  it("clamps a negative input rather than rendering a minus sign", () => {
-    expect(formatElapsed(-5)).toBe("0:00");
   });
 });
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { currentPaletteColor, defaultColorForProvider, PALETTE_COLORS } from "./colors";
+import {
+  currentPaletteColor,
+  defaultColorForProvider,
+  PALETTE_COLORS,
+  withCurrentColor,
+} from "./colors";
 
 describe("currentPaletteColor", () => {
   it("draws a folder stored with the old red as the palette's red, in either case", () => {
@@ -12,6 +17,22 @@ describe("currentPaletteColor", () => {
   it("leaves every current palette colour and an empty colour as they are", () => {
     for (const { value } of PALETTE_COLORS) expect(currentPaletteColor(value)).toBe(value);
     expect(currentPaletteColor(null)).toBeNull();
+  });
+});
+
+describe("withCurrentColor", () => {
+  it("returns a copy carrying the current colour when the stored one has moved", () => {
+    const folder = { color: "#E5534B", id: "f1" };
+    const drawn = withCurrentColor(folder);
+    expect(drawn).toEqual({ color: "#D9577A", id: "f1" });
+    expect(folder.color).toBe("#E5534B");
+  });
+
+  it("returns the same object when nothing moved, so a list of them keeps its identity", () => {
+    const current = { color: "#D9577A", id: "f1" };
+    const uncoloured = { color: null, id: "f2" };
+    expect(withCurrentColor(current)).toBe(current);
+    expect(withCurrentColor(uncoloured)).toBe(uncoloured);
   });
 });
 
