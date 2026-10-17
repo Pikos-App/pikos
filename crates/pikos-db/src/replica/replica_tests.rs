@@ -466,3 +466,35 @@ async fn with_sync_off_every_body_save_goes_through() {
 
     assert_eq!(saved, super::BodySave::Saved { clock: None });
 }
+
+#[tokio::test]
+async fn starting_gives_a_page_timed_only_in_its_cache_a_schedule_row_to_sync() {
+    let pool = test_pool().await;
+    let page = crate::create_page_impl(
+        &pool,
+        crate::NewPage {
+            scheduled_start: Some("2030-01-01T09:00:00".into()),
+            scheduled_end: Some("2030-01-01T09:30:00".into()),
+            ..crate::pages::pages_tests::new_page("Standup, done")
+        },
+    )
+    .await
+    .unwrap();
+
+    start(&pool).await.unwrap();
+
+    let rows: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT scheduled_start, scheduled_end FROM page_schedules WHERE page_id = ?",
+    )
+    .bind(&page.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        vec![(
+            "2030-01-01T09:00:00".into(),
+            Some("2030-01-01T09:30:00".into())
+        )]
+    );
+}

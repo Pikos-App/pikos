@@ -69,6 +69,7 @@ pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
             sqlx::query("UPDATE replica_meta SET base_clock = hlc WHERE id = 1")
                 .execute(&mut *tx)
                 .await?;
+            schedule_rows_for_cached_times(&mut tx).await?;
             queue_everything(&mut tx).await?;
         }
         tx.commit().await?;
@@ -77,6 +78,44 @@ pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
     .await?;
 
     meta(pool).await
+}
+
+/// Gives a schedule row to every page whose time lives only in its cached schedule, as done copies
+/// of ticked occurrences did before they got rows. Sync carries rows, not the cache, so without
+/// one the page arrives unscheduled everywhere else. Repeating and calendar pages are left alone:
+/// their cache is derived from the rule or the calendar.
+async fn schedule_rows_for_cached_times(tx: &mut Transaction<'_, Sqlite>) -> AppResult<()> {
+    let cached: Vec<(String, String, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, scheduled_start, scheduled_end, status FROM pages AS p
+         WHERE scheduled_start IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM page_schedules WHERE page_id = p.id)
+           AND NOT EXISTS (SELECT 1 FROM page_recurrence_rules WHERE page_id = p.id)
+           AND NOT EXISTS (SELECT 1 FROM page_sync WHERE page_id = p.id)",
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let now = crate::now_iso();
+    for (page, start, end, status) in cached {
+        let status = if status == "done" {
+            "done"
+        } else {
+            "not_started"
+        };
+        sqlx::query(
+            "INSERT INTO page_schedules
+             (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+             VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&page)
+        .bind(&start)
+        .bind(&end)
+        .bind(status)
+        .bind(&now)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Queues every synced row to send, once, when sync starts: the first upload, or this device's
