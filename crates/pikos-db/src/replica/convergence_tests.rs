@@ -5,7 +5,10 @@
 //! and, like CloudKit refusing a save over a newer server copy, merges what it's sent into what it
 //! has; each device fetches what changed since its last fetch. The shared-folder stand-in merges
 //! nothing: each device appends to its own log, and the others read every log, seeing new entries
-//! only after a listing delay, as a synced folder does. Every device reads one clock the run moves forward by zero to two milliseconds a
+//! only after a listing delay, as a synced folder does. A third run is closer to CloudKit itself:
+//! devices start alone, each in a zone of its own, and settle into one through `join` as they
+//! relaunch; a save over a newer copy is refused and sent again; and a fetch that fails to apply
+//! leaves the saved state behind it. Every device reads one clock the run moves forward by zero to two milliseconds a
 //! step, so writes on different devices often share a millisecond and a seed replays exactly. A
 //! failure prints its seed; `PIKOS_CONVERGENCE_SEED=<n>` replays one, and
 //! `PIKOS_CONVERGENCE_SEEDS=<n>` runs more.
@@ -19,7 +22,7 @@ use pikos_replica::RecordName;
 use sqlx::SqlitePool;
 
 use super::apply::{apply, shape};
-use super::build::{build, pending, sent};
+use super::build::{build, pending, save_system_fields, sent};
 use super::manifest::entity as entity_map;
 use super::{start, state};
 use crate::sql_functions::Clock;
@@ -676,6 +679,264 @@ async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
     }
 }
 
+/// CloudKit as the transport meets it: zones a device makes for itself and may later leave, a
+/// change tag on every record so a save over a newer copy is refused, and changes fetched per
+/// zone since a device's last fetch.
+#[derive(Default)]
+struct CloudKit {
+    zones: BTreeMap<String, Zone>,
+}
+
+#[derive(Default)]
+struct Zone {
+    records: BTreeMap<String, (RecordName, FieldMap, u64)>,
+    seq: u64,
+}
+
+enum Saved {
+    Stored(u64),
+    /// The server holds a newer copy, handed back with its tag.
+    Refused(FieldMap, u64),
+    NoZone,
+}
+
+impl CloudKit {
+    fn save(&mut self, zone: &str, name: RecordName, fields: FieldMap, tag: Option<u64>) -> Saved {
+        let Some(zone) = self.zones.get_mut(zone) else {
+            return Saved::NoZone;
+        };
+        if let Some((_, server, current)) = zone.records.get(&name.to_string()) {
+            if tag != Some(*current) {
+                return Saved::Refused(server.clone(), *current);
+            }
+        }
+        zone.seq += 1;
+        zone.records
+            .insert(name.to_string(), (name, fields, zone.seq));
+        Saved::Stored(zone.seq)
+    }
+
+    /// What changed in `zone` since `cursor`, shuffled, or None once the zone is gone.
+    fn changed_since(
+        &self,
+        zone: &str,
+        cursor: u64,
+        rng: &mut Rng,
+    ) -> Option<(Vec<(RecordName, FieldMap, u64)>, u64)> {
+        let zone = self.zones.get(zone)?;
+        let mut changed: Vec<_> = zone
+            .records
+            .values()
+            .filter(|(_, _, seq)| *seq > cursor)
+            .cloned()
+            .collect();
+        for i in (1..changed.len()).rev() {
+            changed.swap(i, rng.below(i + 1));
+        }
+        Some((changed, zone.seq))
+    }
+}
+
+fn tag_bytes(tag: u64) -> Vec<u8> {
+    tag.to_le_bytes().to_vec()
+}
+
+fn tag_of(bytes: &[u8]) -> Option<u64> {
+    Some(u64::from_le_bytes(bytes.try_into().ok()?))
+}
+
+/// A device on the CloudKit stand-in. Its change tags and its fetch position live where the app
+/// keeps CloudKit's metadata and its sync engine's state, so joining a zone clears them for real.
+struct Phone {
+    pool: SqlitePool,
+    /// None until it first connects.
+    zone: Option<String>,
+    /// Where this launch's fetching has got to; what's saved can be behind it.
+    cursor: u64,
+    /// Fetched records failed to apply this launch, so no state is saved until the next.
+    unapplied: bool,
+}
+
+impl Phone {
+    async fn saved_cursor(&self) -> u64 {
+        super::engine_state(&self.pool)
+            .await
+            .unwrap()
+            .and_then(|bytes| tag_of(&bytes))
+            .unwrap_or(0)
+    }
+
+    /// A launch: settle the zone among those the account holds, deleting this device's own when
+    /// another wins, and pick fetching up from the saved state.
+    async fn launch(&mut self, cloud: &mut CloudKit) {
+        let own = pikos_replica::zone::zone_name(&super::meta(&self.pool).await.unwrap().workspace_id);
+        let zones: Vec<String> = cloud.zones.keys().cloned().collect();
+        let joined = super::join(&self.pool, &zones).await.unwrap();
+        if joined != own {
+            cloud.zones.remove(&own);
+        }
+        cloud.zones.entry(joined.clone()).or_default();
+        self.zone = Some(joined);
+        self.cursor = self.saved_cursor().await;
+        self.unapplied = false;
+    }
+
+    async fn upload(&mut self, cloud: &mut CloudKit, rng: &mut Rng) {
+        let Some(zone) = self.zone.clone() else {
+            return;
+        };
+        let names = pending(&self.pool, 100_000).await.unwrap();
+        let built = build(&self.pool, &names).await.unwrap();
+        let mut acked = Vec::new();
+        let mut tags = Vec::new();
+        for record in built {
+            if !rng.chance(85) {
+                continue;
+            }
+            let tag = record.system_fields.as_deref().and_then(tag_of);
+            match cloud.save(&zone, record.name.clone(), record.fields, tag) {
+                Saved::Stored(tag) => {
+                    tags.push((record.name.clone(), tag_bytes(tag)));
+                    acked.push((record.name, record.clock));
+                }
+                Saved::Refused(server, tag) => {
+                    apply(&self.pool, &[(record.name.clone(), server)])
+                        .await
+                        .unwrap();
+                    tags.push((record.name, tag_bytes(tag)));
+                }
+                Saved::NoZone => {
+                    cloud.zones.entry(zone.clone()).or_default();
+                }
+            }
+        }
+        save_system_fields(&self.pool, &tags).await.unwrap();
+        sent(&self.pool, &acked).await.unwrap();
+    }
+
+    async fn fetch(&mut self, cloud: &CloudKit, rng: &mut Rng, may_fail: bool) {
+        let Some(zone) = self.zone.clone() else {
+            return;
+        };
+        let Some((changed, seq)) = cloud.changed_since(&zone, self.cursor, rng) else {
+            return;
+        };
+        self.cursor = seq;
+        if may_fail && rng.chance(10) {
+            self.unapplied = true;
+            return;
+        }
+
+        let records: Vec<_> = changed
+            .iter()
+            .map(|(name, fields, _)| (name.clone(), fields.clone()))
+            .collect();
+        apply(&self.pool, &records).await.unwrap();
+        let tags: Vec<_> = changed
+            .into_iter()
+            .map(|(name, _, tag)| (name, tag_bytes(tag)))
+            .collect();
+        save_system_fields(&self.pool, &tags).await.unwrap();
+        if !self.unapplied {
+            super::set_engine_state(&self.pool, &tag_bytes(self.cursor))
+                .await
+                .unwrap();
+        }
+    }
+}
+
+async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
+    eprintln!("seed {seed}");
+    let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
+    let world: &'static AtomicU64 = Box::leak(Box::new(AtomicU64::new(1_800_000_000_000)));
+    let mut cloud = CloudKit::default();
+    let mut fleet = Vec::new();
+    for _ in 0..devices {
+        let pool = test_pool_on(Clock::Manual(world)).await;
+        // From the seed, since the order of the zones they name decides which one every device
+        // joins, and a failure has to replay.
+        sqlx::query("UPDATE replica_meta SET workspace_id = ? WHERE id = 1")
+            .bind(format!("{:016x}", rng.next()))
+            .execute(&pool)
+            .await
+            .unwrap();
+        for n in 0..rng.below(3) {
+            random_edit(&pool, &mut rng, 10_000 + n).await;
+        }
+        start(&pool).await.unwrap();
+        fleet.push(Phone {
+            pool,
+            zone: None,
+            cursor: 0,
+            unapplied: false,
+        });
+    }
+
+    for n in 0..steps {
+        world.fetch_add(rng.below(3) as u64, Ordering::SeqCst);
+        let device = &mut fleet[rng.below(devices)];
+        match rng.below(12) {
+            0..=5 => random_edit(&device.pool, &mut rng, n).await,
+            6 | 7 => device.upload(&mut cloud, &mut rng).await,
+            8 | 9 => device.fetch(&cloud, &mut rng, true).await,
+            _ => device.launch(&mut cloud).await,
+        }
+    }
+
+    // Quiet: every device relaunches until all settle in one zone, then sends and fetches
+    // everything.
+    for _ in 0..8 {
+        for device in &mut fleet {
+            device.launch(&mut cloud).await;
+            let mut sure = Rng(1);
+            for attempt in 0.. {
+                if pending(&device.pool, 1).await.unwrap().is_empty() {
+                    break;
+                }
+                assert!(attempt < 50, "seed {seed}: a record never leaves the queue");
+                device.upload(&mut cloud, &mut sure).await;
+            }
+        }
+        for device in &mut fleet {
+            device.cursor = 0;
+            device.fetch(&cloud, &mut Rng(1), false).await;
+        }
+    }
+
+    let zones: Vec<_> = fleet.iter().map(|d| d.zone.clone()).collect();
+    assert!(
+        zones.windows(2).all(|w| w[0] == w[1]),
+        "seed {seed}: devices ended in different zones {zones:?}"
+    );
+    assert_eq!(
+        cloud.zones.len(),
+        1,
+        "seed {seed}: zones left behind {:?}",
+        cloud.zones.keys()
+    );
+    let first = synced(&fleet[0].pool).await;
+    for (i, device) in fleet.iter().enumerate().skip(1) {
+        assert_eq!(
+            synced(&device.pool).await,
+            first,
+            "seed {seed}: device {i} differs from device 0"
+        );
+    }
+    for (i, device) in fleet.iter().enumerate() {
+        let broken = broken_foreign_keys(&device.pool).await;
+        assert!(broken.is_empty(), "seed {seed}: device {i}: {broken:?}");
+        assert!(
+            !search_is_stale(&device.pool).await,
+            "seed {seed}: device {i}'s search index doesn't match its pages"
+        );
+        let stale = stale_schedules(&device.pool).await;
+        assert!(
+            stale.is_empty(),
+            "seed {seed}: device {i}'s schedule caches: {stale:#?}"
+        );
+    }
+}
+
 fn seeds() -> Vec<u64> {
     if let Ok(seed) = std::env::var("PIKOS_CONVERGENCE_SEED") {
         return vec![seed.parse().expect("a seed")];
@@ -691,6 +952,13 @@ fn seeds() -> Vec<u64> {
 async fn devices_editing_at_random_through_cloudkit_end_up_the_same() {
     for seed in seeds() {
         run(Store::Cloud(Cloud::default()), seed, 3, 120).await;
+    }
+}
+
+#[tokio::test]
+async fn devices_that_start_alone_settle_in_one_zone_through_refusals_and_failed_applies() {
+    for seed in seeds() {
+        run_cloudkit(seed, 3, 160).await;
     }
 }
 
