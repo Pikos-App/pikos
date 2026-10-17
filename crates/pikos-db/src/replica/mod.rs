@@ -57,8 +57,7 @@ pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
         let mut tx = pool.begin().await?;
         let starting = sqlx::query(
             "UPDATE replica_meta
-             SET started = 1, paused = 0, device_id = ?,
-                 hlc = pikos_hlc_next(hlc, pikos_now_ms()), base_clock = pikos_hlc_next(hlc, pikos_now_ms())
+             SET started = 1, paused = 0, device_id = ?, hlc = pikos_hlc_next(hlc, pikos_now_ms())
              WHERE id = 1 AND started = 0",
         )
         .bind(uuid::Uuid::new_v4().to_string())
@@ -67,6 +66,9 @@ pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
         .rows_affected()
             == 1;
         if starting {
+            sqlx::query("UPDATE replica_meta SET base_clock = hlc WHERE id = 1")
+                .execute(&mut *tx)
+                .await?;
             queue_everything(&mut tx).await?;
         }
         tx.commit().await?;
@@ -301,8 +303,10 @@ pub async fn claim_device(pool: &SqlitePool, outside: Option<&str>) -> AppResult
 pub const RETENTION_DAYS: i64 = 90;
 
 /// Forgets tombstones of rows long gone and records long held for a purged parent, by wall time so
-/// a clock running far ahead can't keep them.
-pub async fn expire(pool: &SqlitePool) -> AppResult<()> {
+/// a clock running far ahead can't keep them. Returns the records whose tombstones went, for the
+/// transport to delete from its store too; a link still pointing at one of them now points at
+/// nothing, as it will on every device.
+pub async fn expire(pool: &SqlitePool) -> AppResult<Vec<pikos_replica::RecordName>> {
     let cutoff_ms = chrono::Utc::now().timestamp_millis() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
     let cutoff = Hlc::new(cutoff_ms.max(0) as u64, 0).to_string();
     let mut tx = pool.begin().await?;
@@ -310,22 +314,36 @@ pub async fn expire(pool: &SqlitePool) -> AppResult<()> {
         .bind(&cutoff)
         .execute(&mut *tx)
         .await?;
+    let mut forgotten = Vec::new();
     for entity in manifest::ENTITIES {
         let covers = entity.covers.unwrap_or("1");
         let sql = format!(
             "DELETE FROM replica_clocks WHERE entity = ? AND tomb < ? AND NOT EXISTS
-               (SELECT 1 FROM {} AS t WHERE ({covers}) AND {} = replica_clocks.key)",
+               (SELECT 1 FROM {} AS t WHERE ({covers}) AND {} = replica_clocks.key)
+             RETURNING key",
             entity.table, entity.key
         )
         .replace("{row}", "t");
-        sqlx::query(&sql)
+        let keys: Vec<String> = sqlx::query_scalar(&sql)
             .bind(entity.entity.prefix())
             .bind(&cutoff)
-            .execute(&mut *tx)
+            .fetch_all(&mut *tx)
             .await?;
+        if capture::is_purge_target(entity) {
+            for key in &keys {
+                sqlx::query("DELETE FROM replica_detached WHERE target = ?")
+                    .bind(key)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+        forgotten.extend(
+            keys.into_iter()
+                .map(|key| pikos_replica::RecordName::live(entity.entity, key)),
+        );
     }
     tx.commit().await?;
-    Ok(())
+    Ok(forgotten)
 }
 
 /// What turning sync on does when the account already holds a workspace.

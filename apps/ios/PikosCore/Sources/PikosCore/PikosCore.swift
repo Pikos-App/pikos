@@ -942,9 +942,10 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func engineState() async throws  -> Data?
     
     /**
-     * Forgets tombstones and holds past retention. Run now and then, such as on launch.
+     * Forgets tombstones and holds past retention. Run now and then, such as on launch. Returns the
+     * records whose tombstones went, to delete from CloudKit as well.
      */
-    func expireSync() async throws 
+    func expireSync() async throws  -> [RecordAddress]
     
     /**
      * Forget sync on this device: it joins again as a new one.
@@ -2008,9 +2009,10 @@ open func engineState()async throws  -> Data?  {
 }
     
     /**
-     * Forgets tombstones and holds past retention. Run now and then, such as on launch.
+     * Forgets tombstones and holds past retention. Run now and then, such as on launch. Returns the
+     * records whose tombstones went, to delete from CloudKit as well.
      */
-open func expireSync()async throws   {
+open func expireSync()async throws  -> [RecordAddress]  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2018,10 +2020,10 @@ open func expireSync()async throws   {
                         self.uniffiCloneHandle()
                 )
             },
-            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
-            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
-            freeFunc: ffi_pikos_ffi_rust_future_free_void,
-            liftFunc: { $0 },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRecordAddress.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -10829,7 +10831,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_engine_state() != 14582) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_expire_sync() != 25889) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_expire_sync() != 39385) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_forget_sync() != 48135) {

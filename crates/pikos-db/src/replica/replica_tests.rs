@@ -337,7 +337,7 @@ async fn tombstones_and_holds_past_retention_are_forgotten_and_newer_ones_kept()
         .unwrap();
     }
 
-    super::expire(&pool).await.unwrap();
+    let forgotten = super::expire(&pool).await.unwrap();
 
     let clocks: Vec<String> = sqlx::query_scalar("SELECT key FROM replica_clocks ORDER BY key")
         .fetch_all(&pool)
@@ -349,6 +349,14 @@ async fn tombstones_and_holds_past_retention_are_forgotten_and_newer_ones_kept()
         .unwrap();
     assert_eq!(clocks, vec!["gone-recently"]);
     assert_eq!(held, vec!["remind:recent"]);
+    assert_eq!(
+        forgotten,
+        vec![pikos_replica::RecordName::live(
+            pikos_replica::Entity::Page,
+            "gone-long-ago"
+        )],
+        "the transport deletes the forgotten tombstone from its store too"
+    );
 }
 
 #[tokio::test]

@@ -319,9 +319,17 @@ impl Workspace {
         })
     }
 
-    /// Forgets tombstones and holds past retention. Run now and then, such as on launch.
-    pub async fn expire_sync(&self) -> Result<(), WorkspaceError> {
-        Ok(pikos_db::replica::expire(&self.pool).await?)
+    /// Forgets tombstones and holds past retention. Run now and then, such as on launch. Returns the
+    /// records whose tombstones went, to delete from CloudKit as well.
+    pub async fn expire_sync(&self) -> Result<Vec<RecordAddress>, WorkspaceError> {
+        let forgotten = pikos_db::replica::expire(&self.pool).await?;
+        Ok(forgotten
+            .into_iter()
+            .map(|name| RecordAddress {
+                store_name: name.store_name(),
+                name: name.to_string(),
+            })
+            .collect())
     }
 }
 
