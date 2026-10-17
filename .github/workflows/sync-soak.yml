@@ -1,0 +1,43 @@
+name: Sync soak
+
+# The randomized sync runs, over far more seeds than a push can afford and from a different first
+# seed each night, so a rare order of events gets its chance. A failure prints its seed;
+# `PIKOS_CONVERGENCE_SEED=<n> cargo test -p pikos-db --lib -- convergence_tests` replays it.
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: Seeds each run tries
+        default: '2000'
+
+concurrency:
+  group: sync-soak
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    name: Randomized sync runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run them
+        env:
+          PIKOS_CONVERGENCE_SEEDS: ${{ inputs.seeds || '2000' }}
+        run: |
+          export PIKOS_CONVERGENCE_FROM=$(( $(date +%s) / 86400 * 10000 ))
+          echo "seeds $PIKOS_CONVERGENCE_FROM onward, $PIKOS_CONVERGENCE_SEEDS of them"
+          cargo test --release -p pikos-db --lib -- replica::convergence_tests

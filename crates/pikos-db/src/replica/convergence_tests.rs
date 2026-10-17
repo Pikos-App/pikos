@@ -10,8 +10,9 @@
 //! relaunch; a save over a newer copy is refused and sent again; and a fetch that fails to apply
 //! leaves the saved state behind it. Every device reads one clock the run moves forward by zero to two milliseconds a
 //! step, so writes on different devices often share a millisecond and a seed replays exactly. A
-//! failure prints its seed; `PIKOS_CONVERGENCE_SEED=<n>` replays one, and
-//! `PIKOS_CONVERGENCE_SEEDS=<n>` runs more.
+//! failure prints its seed; `PIKOS_CONVERGENCE_SEED=<n>` replays one, `PIKOS_CONVERGENCE_SEEDS=<n>`
+//! runs more, and `PIKOS_CONVERGENCE_FROM=<n>` starts them somewhere other than 1, as the nightly
+//! soak does.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -940,11 +941,15 @@ fn seeds() -> Vec<u64> {
     if let Ok(seed) = std::env::var("PIKOS_CONVERGENCE_SEED") {
         return vec![seed.parse().expect("a seed")];
     }
-    let count = std::env::var("PIKOS_CONVERGENCE_SEEDS")
+    let count: u64 = std::env::var("PIKOS_CONVERGENCE_SEEDS")
         .ok()
         .and_then(|n| n.parse().ok())
         .unwrap_or(12);
-    (1..=count).collect()
+    let from: u64 = std::env::var("PIKOS_CONVERGENCE_FROM")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(1);
+    (from..from + count).collect()
 }
 
 #[tokio::test]
