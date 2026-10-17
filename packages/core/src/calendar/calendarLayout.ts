@@ -20,7 +20,9 @@ import {
   VISIBLE_HOURS,
 } from "./calendarConstants";
 import {
+  addClockMinutes,
   type CalendarMetrics,
+  clockMinutesBetween,
   collapsedBandInnerOffset,
   type CollapseGeometry,
   DEFAULT_METRICS,
@@ -697,7 +699,7 @@ function buildRawBlock(
   const hasExplicitEnd = !!page.scheduledEnd;
   const realEnd = hasExplicitEnd ? resolveBlockInstant(page, page.scheduledEnd!) : realStart;
 
-  const durationMinutes = hasExplicitEnd ? (realEnd.getTime() - realStart.getTime()) / 60_000 : 0;
+  const durationMinutes = hasExplicitEnd ? clockMinutesBetween(realStart, realEnd) : 0;
 
   const isContinuationBefore = realStart < dayStart;
   const isContinuationAfter = hasExplicitEnd && durationMinutes > 0 && realEnd >= dayEnd;
@@ -732,9 +734,7 @@ function buildRawBlock(
   // Overlap is decided in time, so a floored block claims the minutes its height
   // covers — or a 9:00 reminder drawn 24 minutes tall would sit on a 9:15 event.
   const overlapMin = Math.max(visualDurationMin, (height / metrics.hourHeight) * 60);
-  const overlapEnd = isContinuationAfter
-    ? visualEnd
-    : new Date(visualStart.getTime() + overlapMin * 60_000);
+  const overlapEnd = isContinuationAfter ? visualEnd : addClockMinutes(visualStart, overlapMin);
 
   return {
     endDate: realEnd,

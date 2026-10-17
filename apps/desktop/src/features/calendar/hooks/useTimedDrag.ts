@@ -1,5 +1,11 @@
 import type { CalendarBlock, CalendarMetrics, CollapseGeometry, PageSummary } from "@pikos/core";
-import { isDone, mapYToDate, snapYCollapse } from "@pikos/core";
+import {
+  addClockMinutes,
+  clockMinutesBetween,
+  isDone,
+  mapYToDate,
+  snapYCollapse,
+} from "@pikos/core";
 import { format } from "date-fns";
 import { useRef, useState } from "react";
 
@@ -237,8 +243,8 @@ export function useTimedDrag({
       // `!isCompact` check conflated "rendered as chip" with "no explicit
       // end", which dropped the duration of short-but-timed events (e.g.
       // 30m at compact density) on drag.
-      const durationMs = state.block.endDate.getTime() - state.block.startDate.getTime();
-      const newEnd = durationMs > 0 ? fmt(new Date(newStart.getTime() + durationMs)) : undefined;
+      const duration = clockMinutesBetween(state.block.startDate, state.block.endDate);
+      const newEnd = duration > 0 ? fmt(addClockMinutes(newStart, duration)) : undefined;
 
       onReschedule(state.pageId, fmt(newStart), newEnd, state.originalDate);
     }
