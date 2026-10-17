@@ -1,10 +1,11 @@
 //! Several devices make random edits through the real writers and sync in random order through a
-//! stand-in for CloudKit's private database; once everything has been delivered, every device
-//! holds the same synced state.
+//! stand-in store; once everything has been delivered, every device holds the same synced state.
 //!
-//! The stand-in keeps one copy of each record and, like CloudKit refusing a save over a newer
-//! server copy, merges what it's sent into what it has. Each device fetches what changed since its
-//! last fetch. Every device reads one clock the run moves forward by zero to two milliseconds a
+//! Two stores, the two shapes a transport takes. The CloudKit stand-in keeps one copy of each record
+//! and, like CloudKit refusing a save over a newer server copy, merges what it's sent into what it
+//! has; each device fetches what changed since its last fetch. The shared-folder stand-in merges
+//! nothing: each device appends to its own log, and the others read every log, seeing new entries
+//! only after a listing delay, as a synced folder does. Every device reads one clock the run moves forward by zero to two milliseconds a
 //! step, so writes on different devices often share a millisecond and a seed replays exactly. A
 //! failure prints its seed; `PIKOS_CONVERGENCE_SEED=<n>` replays one, and
 //! `PIKOS_CONVERGENCE_SEEDS=<n>` runs more.
@@ -95,9 +96,66 @@ impl Cloud {
     }
 }
 
+/// A folder each device appends its own log to, which nothing on the far side merges or tracks.
+#[derive(Default)]
+struct Folder {
+    /// Each writer's entries, oldest first, with the step from which a listing shows them.
+    logs: BTreeMap<usize, Vec<(u64, RecordName, FieldMap)>>,
+    step: u64,
+}
+
+impl Folder {
+    fn append(&mut self, writer: usize, name: RecordName, fields: FieldMap, rng: &mut Rng) {
+        let visible_from = self.step + rng.below(4) as u64;
+        self.logs
+            .entry(writer)
+            .or_default()
+            .push((visible_from, name, fields));
+    }
+
+    /// Entries from the other devices' logs past `cursors`. A log is read in order and stops at the
+    /// first entry a listing doesn't show yet.
+    fn read(
+        &self,
+        reader: usize,
+        cursors: &mut BTreeMap<usize, u64>,
+    ) -> Vec<(RecordName, FieldMap)> {
+        let mut read = Vec::new();
+        for (writer, log) in &self.logs {
+            if *writer == reader {
+                continue;
+            }
+            let cursor = cursors.entry(*writer).or_default();
+            for (visible_from, name, fields) in log.iter().skip(*cursor as usize) {
+                if *visible_from > self.step {
+                    break;
+                }
+                read.push((name.clone(), fields.clone()));
+                *cursor += 1;
+            }
+        }
+        read
+    }
+}
+
+enum Store {
+    Cloud(Cloud),
+    Folder(Folder),
+}
+
+impl Store {
+    fn tick(&mut self, by: u64) {
+        if let Store::Folder(folder) = self {
+            folder.step += by;
+        }
+    }
+}
+
 struct Device {
     pool: SqlitePool,
-    cursor: u64,
+    /// How far this device has read: the CloudKit stand-in's change sequence, or each other
+    /// device's log.
+    cursors: BTreeMap<usize, u64>,
     index: usize,
 }
 
@@ -119,7 +177,7 @@ fn trace_records<'a>(
 }
 
 impl Device {
-    async fn upload(&mut self, cloud: &mut Cloud, rng: &mut Rng) {
+    async fn upload(&mut self, store: &mut Store, rng: &mut Rng) {
         let names = pending(&self.pool, 100_000).await.unwrap();
         let built = build(&self.pool, &names).await.unwrap();
         trace_records(
@@ -131,18 +189,43 @@ impl Device {
         for record in built {
             // A send can fail part-way; what wasn't acknowledged stays pending.
             if rng.chance(85) {
-                cloud.save(record.name.clone(), record.fields);
+                match store {
+                    Store::Cloud(cloud) => cloud.save(record.name.clone(), record.fields),
+                    Store::Folder(folder) => {
+                        folder.append(self.index, record.name.clone(), record.fields, rng)
+                    }
+                }
                 acked.push((record.name, record.clock));
             }
         }
         sent(&self.pool, &acked).await.unwrap();
     }
 
-    async fn fetch(&mut self, cloud: &Cloud, rng: &mut Rng) {
-        let (changed, seq) = cloud.changed_since(self.cursor, rng);
+    async fn fetch(&mut self, store: &Store, rng: &mut Rng) {
+        let changed = match store {
+            Store::Cloud(cloud) => {
+                let cursor = self.cursors.entry(usize::MAX).or_default();
+                let (changed, seq) = cloud.changed_since(*cursor, rng);
+                *cursor = seq;
+                changed
+            }
+            Store::Folder(folder) => folder.read(self.index, &mut self.cursors),
+        };
         trace_records("gets", self.index, changed.iter().map(|(n, f)| (n, f)));
-        apply(&self.pool, &changed).await.unwrap();
-        self.cursor = seq;
+        let applied = apply(&self.pool, &changed).await.unwrap();
+        if tracing() {
+            let pages = ids(&self.pool, "SELECT id FROM pages ORDER BY rowid").await;
+            let reminders = ids(
+                &self.pool,
+                "SELECT id || '>' || page_id FROM page_reminders",
+            )
+            .await;
+            let held = ids(&self.pool, "SELECT name || ' ' || reason FROM replica_pen").await;
+            eprintln!(
+                "  d{} applied {applied:?}\n    pages {pages:?}\n    reminders {reminders:?}\n    held {held:?}",
+                self.index
+            );
+        }
     }
 }
 
@@ -357,9 +440,8 @@ async fn derived_mismatches(pool: &SqlitePool) -> Vec<String> {
     .await
 }
 
-async fn run(seed: u64, devices: usize, steps: usize) {
+async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
     let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
-    let mut cloud = Cloud::default();
     let world: &'static AtomicU64 = Box::leak(Box::new(AtomicU64::new(1_800_000_000_000)));
     let mut fleet = Vec::new();
     for _ in 0..devices {
@@ -368,21 +450,22 @@ async fn run(seed: u64, devices: usize, steps: usize) {
         let index = fleet.len();
         fleet.push(Device {
             pool,
-            cursor: 0,
+            cursors: BTreeMap::new(),
             index,
         });
     }
 
     for n in 0..steps {
         world.fetch_add(rng.below(3) as u64, Ordering::SeqCst);
+        store.tick(1);
         let d = rng.below(devices);
         if tracing() {
             eprintln!("step {n} d{d} at {}", world.load(Ordering::SeqCst));
         }
         match rng.below(10) {
             0..=5 => random_edit(&fleet[d].pool, &mut rng, n).await,
-            6 | 7 => fleet[d].upload(&mut cloud, &mut rng).await,
-            _ => fleet[d].fetch(&cloud, &mut rng).await,
+            6 | 7 => fleet[d].upload(&mut store, &mut rng).await,
+            _ => fleet[d].fetch(&store, &mut rng).await,
         }
     }
 
@@ -395,11 +478,12 @@ async fn run(seed: u64, devices: usize, steps: usize) {
                     break;
                 }
                 assert!(attempt < 50, "seed {seed}: a record never leaves the queue");
-                device.upload(&mut cloud, &mut sure).await;
+                device.upload(&mut store, &mut sure).await;
             }
         }
+        store.tick(10);
         for device in &mut fleet {
-            device.fetch(&cloud, &mut rng).await;
+            device.fetch(&store, &mut rng).await;
         }
     }
 
@@ -438,8 +522,15 @@ fn seeds() -> Vec<u64> {
 }
 
 #[tokio::test]
-async fn devices_editing_at_random_end_up_the_same() {
+async fn devices_editing_at_random_through_cloudkit_end_up_the_same() {
     for seed in seeds() {
-        run(seed, 3, 120).await;
+        run(Store::Cloud(Cloud::default()), seed, 3, 120).await;
+    }
+}
+
+#[tokio::test]
+async fn devices_editing_at_random_through_a_shared_folder_end_up_the_same() {
+    for seed in seeds() {
+        run(Store::Folder(Folder::default()), seed, 3, 120).await;
     }
 }

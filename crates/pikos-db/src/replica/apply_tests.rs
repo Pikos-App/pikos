@@ -519,3 +519,64 @@ async fn a_completed_occurrence_travels_with_its_done_copy() {
         "the head moved on both"
     );
 }
+
+async fn link_state(pool: &SqlitePool, page: &str, state: &str) {
+    sqlx::query("UPDATE page_sync SET sync_state = ? WHERE page_id = ?")
+        .bind(state)
+        .bind(page)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_calendar_page_stays_local_until_it_detaches_then_leaves_again_when_it_relinks() {
+    let (mac, phone) = (device().await, device().await);
+    insert_test_page(&mac, TestPage::new("event", "Dentist"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&mac, "event", "active")
+        .await
+        .unwrap();
+    create_page_reminder(&mac, "event", 15).await.unwrap();
+
+    send(&mac, &phone).await;
+    assert!(get_page(&phone, "event").await.unwrap().is_none());
+
+    link_state(&mac, "event", "detached").await;
+    send(&mac, &phone).await;
+    let arrived = get_page(&phone, "event").await.unwrap();
+    let reminders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_reminders")
+        .fetch_one(&phone)
+        .await
+        .unwrap();
+    assert_eq!(arrived.map(|p| p.title).as_deref(), Some("Dentist"));
+    assert_eq!(reminders, 1, "it arrives with what hangs off it");
+
+    link_state(&mac, "event", "active").await;
+    send(&mac, &phone).await;
+    assert!(
+        get_page(&phone, "event").await.unwrap().is_none(),
+        "every device mirrors the event itself again"
+    );
+    assert!(get_page(&mac, "event").await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_page_that_left_scope_and_came_back_arrives_again() {
+    let (mac, phone) = (device().await, device().await);
+    insert_test_page(&mac, TestPage::new("event", "Dentist"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&mac, "event", "detached")
+        .await
+        .unwrap();
+    send(&mac, &phone).await;
+    link_state(&mac, "event", "active").await;
+    send(&mac, &phone).await;
+
+    link_state(&mac, "event", "detached").await;
+    send(&mac, &phone).await;
+
+    assert!(get_page(&phone, "event").await.unwrap().is_some());
+}

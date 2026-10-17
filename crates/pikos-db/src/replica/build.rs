@@ -46,20 +46,24 @@ pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Bui
         let Some(entity) = entity_map(name.entity) else {
             continue;
         };
-        let op: Option<String> =
-            sqlx::query_scalar("SELECT clock FROM replica_ops WHERE entity = ? AND key = ?")
+        let op: Option<(String, bool)> =
+            sqlx::query_as("SELECT clock, deleted FROM replica_ops WHERE entity = ? AND key = ?")
                 .bind(name.entity.prefix())
                 .bind(&name.key)
                 .fetch_optional(pool)
                 .await?;
-        let Some(op_clock) = op else {
+        let Some((op_clock, deleted)) = op else {
             continue;
         };
         let op_clock: Hlc = op_clock
             .parse()
             .map_err(|e| AppError::Invalid(format!("op clock: {e}")))?;
 
-        match read(pool, entity, &name.key).await? {
+        let read = {
+            let mut conn = pool.acquire().await?;
+            read(&mut conn, entity, &name.key, deleted).await?
+        };
+        match read {
             Read::OutOfScope | Read::Missing => {
                 drop_op(pool, name).await?;
             }
@@ -79,13 +83,20 @@ pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Bui
     Ok(built)
 }
 
-enum Read {
+pub(crate) enum Read {
     Row(RowState),
     OutOfScope,
     Missing,
 }
 
-async fn read(pool: &SqlitePool, entity: &EntityMap, key: &str) -> AppResult<Read> {
+/// `deleted` says the op-log recorded a removal. A row still here but out of scope with a removal
+/// recorded has left scope, and builds its tombstone.
+pub(crate) async fn read(
+    conn: &mut sqlx::SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+    deleted: bool,
+) -> AppResult<Read> {
     let columns: String = entity
         .fields
         .iter()
@@ -100,12 +111,17 @@ async fn read(pool: &SqlitePool, entity: &EntityMap, key: &str) -> AppResult<Rea
         entity.key
     )
     .replace("{row}", "t");
-    let row = sqlx::query(&sql).bind(key).fetch_optional(pool).await?;
+    let row = sqlx::query(&sql)
+        .bind(key)
+        .fetch_optional(&mut *conn)
+        .await?;
+    let left_scope = row.as_ref().is_some_and(|r| !r.get::<bool, _>(0)) && deleted;
+    let row = if left_scope { None } else { row };
     let clocks: Option<(String, Option<String>)> =
         sqlx::query_as("SELECT clocks, tomb FROM replica_clocks WHERE entity = ? AND key = ?")
             .bind(entity.entity.prefix())
             .bind(key)
-            .fetch_optional(pool)
+            .fetch_optional(&mut *conn)
             .await?;
     let (packed, tomb) = match (clocks, &row) {
         (Some(clocks), _) => clocks,
@@ -114,7 +130,7 @@ async fn read(pool: &SqlitePool, entity: &EntityMap, key: &str) -> AppResult<Rea
         (None, Some(_)) => {
             let base: Option<String> =
                 sqlx::query_scalar("SELECT base_clock FROM replica_meta WHERE id = 1")
-                    .fetch_one(pool)
+                    .fetch_one(&mut *conn)
                     .await?;
             (
                 base.unwrap_or_default().repeat(entity.fields.len() + 1),

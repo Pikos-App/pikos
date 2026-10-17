@@ -101,18 +101,28 @@ async fn apply_in(
     tx: &mut Uncaptured<'_>,
     incoming: &[(RecordName, FieldMap)],
 ) -> AppResult<Applied> {
-    let mut batch: Vec<(RecordName, FieldMap)> = held(tx.conn()).await?;
-    batch.extend(incoming.iter().cloned());
+    // Each record with whether it was held here, sorted parents first.
+    let mut batch: Vec<(RecordName, FieldMap, bool)> = held(tx.conn())
+        .await?
+        .into_iter()
+        .map(|(name, map)| (name, map, true))
+        .chain(
+            incoming
+                .iter()
+                .cloned()
+                .map(|(name, map)| (name, map, false)),
+        )
+        .collect();
     sqlx::query("DELETE FROM replica_pen")
         .execute(tx.conn())
         .await?;
-    batch.sort_by_key(|(name, _)| APPLY_ORDER.iter().position(|e| *e == name.entity));
+    batch.sort_by_key(|(name, _, _)| APPLY_ORDER.iter().position(|e| *e == name.entity));
 
     let mut applied = Applied::default();
     let mut touched = Touched::default();
     let mut newest = Hlc::ZERO;
 
-    for (name, map) in &batch {
+    for (name, map, was_held) in &batch {
         let Some(entity) = entity_map(name.entity) else {
             continue;
         };
@@ -137,6 +147,12 @@ async fn apply_in(
             }
         };
         match outcome {
+            // A held record can be this device's own, never sent: a child written just before a
+            // purge arrived from elsewhere. Applied once its parent is back, it's sent too.
+            Outcome::Changed if *was_held => {
+                applied.changed += 1;
+                queue_whole(tx.conn(), name).await?;
+            }
             Outcome::Changed => applied.changed += 1,
             Outcome::Held(hold) => {
                 hold_record(tx.conn(), name, map, hold).await?;
@@ -450,7 +466,27 @@ async fn stamp_purge_nulls(
                     }
                 };
                 let detached = slots[field] <= tomb;
-                slots[field] = slots[field].max(tomb);
+                // A reference newer than the purge, which the cascade is about to set NULL here: the
+                // purge didn't detach it, so the NULL is this device's own edit, sent at now.
+                let newer_nulled = !detached && !survives;
+                slots[field] = if newer_nulled {
+                    let now = advance_clock(conn).await?;
+                    sqlx::query(
+                        "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+                         VALUES (?, ?, ?, 0, ?)
+                         ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields,
+                           clock = excluded.clock",
+                    )
+                    .bind(entity.entity.prefix())
+                    .bind(&key)
+                    .bind(1i64 << field)
+                    .bind(now.to_string())
+                    .execute(&mut *conn)
+                    .await?;
+                    now
+                } else {
+                    slots[field].max(tomb)
+                };
                 write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
                 if survives && detached {
                     let sql = format!(
@@ -477,6 +513,12 @@ async fn apply_record(
 ) -> AppResult<Outcome> {
     let mut remote = record.row.clone();
 
+    // A calendar page here, and what hangs off it, is this device's own; its synced copy elsewhere
+    // is a different row that left scope.
+    if out_of_scope_here(tx.conn(), entity, &record.name.key).await? {
+        return Ok(Outcome::Dropped);
+    }
+
     if remote.is_live() {
         let needs_page = !matches!(
             record.name.entity,
@@ -487,6 +529,11 @@ async fn apply_record(
                 return Ok(Outcome::Dropped);
             };
             match known(tx.conn(), "pages", Entity::Page, &page).await? {
+                // Written before the page's purge, which removed it everywhere; a page brought back
+                // since re-sent what it still had, at new clocks.
+                Known::Present(Some(tomb)) if remote.newest() <= tomb => {
+                    return Ok(Outcome::Dropped)
+                }
                 Known::Present(_) => {}
                 Known::Tombstoned(_) => return Ok(Outcome::Held(Hold::DeletedParent)),
                 Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
@@ -592,6 +639,9 @@ async fn apply_record(
     } else if was_live && !now_live {
         if let (true, Some(tomb)) = (super::capture::is_purge_target(entity), merged.row.tomb) {
             stamp_purge_nulls(tx.conn(), entity, &record.name.key, tomb, false).await?;
+            if entity.entity == Entity::Page {
+                hold_newer_children(tx.conn(), &record.name.key, tomb).await?;
+            }
         }
         delete_row(tx.conn(), entity, &record.name.key).await?;
     }
@@ -603,6 +653,14 @@ async fn apply_record(
         purge_news,
     ) {
         stamp_purge_nulls(tx.conn(), entity, &record.name.key, tomb, true).await?;
+        // Unless the write that outlived the purge was this device's own: then its children are
+        // what it sends again, re-stamped.
+        let died_here = local.as_ref().is_some_and(|l| l.newest() <= tomb);
+        if entity.entity == Entity::Page && died_here {
+            prune_purged_children(tx.conn(), &record.name.key, tomb).await?;
+            touched.tags.insert(record.name.key.clone());
+            touched.schedules.insert(record.name.key.clone());
+        }
     }
     write_clocks(tx.conn(), entity, &record.name.key, &merged.row).await?;
 
@@ -693,6 +751,138 @@ async fn unstamp_parts(
         .await?;
     }
     Ok(())
+}
+
+/// A purge this device hears of only once a later write elsewhere has brought the page back still
+/// removed what hung off the page then, everywhere: the rows here written no later than the purge
+/// go, as the cascade took them on the devices that purged it.
+async fn prune_purged_children(
+    conn: &mut SqliteConnection,
+    page: &str,
+    tomb: Hlc,
+) -> AppResult<()> {
+    for entity in super::manifest::ENTITIES {
+        let (super::manifest::Scope::Page(column), Some(_)) = (entity.scope, &entity.parent) else {
+            continue;
+        };
+        let covers = entity.covers.unwrap_or("1");
+        let sql = format!(
+            "SELECT {} FROM {} AS t WHERE ({covers}) AND t.{column} = ?",
+            entity.key, entity.table
+        )
+        .replace("{row}", "t");
+        let keys: Vec<String> = sqlx::query_scalar(&sql)
+            .bind(page)
+            .fetch_all(&mut *conn)
+            .await?;
+        for key in keys {
+            let super::build::Read::Row(row) =
+                super::build::read(conn, entity, &key, false).await?
+            else {
+                continue;
+            };
+            if row.newest() <= tomb {
+                delete_row(conn, entity, &key).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Queues a record to send whole with the clocks it has.
+async fn queue_whole(conn: &mut SqliteConnection, name: &RecordName) -> AppResult<()> {
+    let Some(entity) = entity_map(name.entity) else {
+        return Ok(());
+    };
+    sqlx::query(
+        "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+         SELECT ?, ?, ?, 0, hlc FROM replica_meta WHERE id = 1
+         ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0",
+    )
+    .bind(name.entity.prefix())
+    .bind(&name.key)
+    .bind((1i64 << entity.fields.len()) - 1)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Moves this device's clock on for a write the apply makes as its own, and returns it.
+async fn advance_clock(conn: &mut SqliteConnection) -> AppResult<Hlc> {
+    sqlx::query("UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1")
+        .execute(&mut *conn)
+        .await?;
+    let clock: String = sqlx::query_scalar("SELECT hlc FROM replica_meta WHERE id = 1")
+        .fetch_one(&mut *conn)
+        .await?;
+    clock
+        .parse()
+        .map_err(|e| AppError::Invalid(format!("replica clock: {e}")))
+}
+
+/// Before a page goes in a purge another device made, keeps what hung off it that was written after
+/// the purge. The purge didn't remove those, and if a later write elsewhere brings the page back,
+/// they come back with it; the cascade would otherwise lose them for good here.
+async fn hold_newer_children(conn: &mut SqliteConnection, page: &str, tomb: Hlc) -> AppResult<()> {
+    for entity in super::manifest::ENTITIES {
+        let super::manifest::Scope::Page(column) = entity.scope else {
+            continue;
+        };
+        // Only what the cascade deletes: a row whose reference is set NULL stays, and its NULL is
+        // handled with the other purge NULLs.
+        let deleted_with_page = entity.parent.is_some() || entity.lifecycle == Lifecycle::Part;
+        if entity.entity == Entity::Page || !deleted_with_page {
+            continue;
+        }
+        let covers = entity.covers.unwrap_or("1");
+        let sql = format!(
+            "SELECT {} FROM {} AS t WHERE ({covers}) AND t.{column} = ?",
+            entity.key, entity.table
+        )
+        .replace("{row}", "t");
+        let keys: Vec<String> = sqlx::query_scalar(&sql)
+            .bind(page)
+            .fetch_all(&mut *conn)
+            .await?;
+        for key in keys {
+            let super::build::Read::Row(row) =
+                super::build::read(conn, entity, &key, false).await?
+            else {
+                continue;
+            };
+            if row.newest() <= tomb {
+                continue;
+            }
+            let name = RecordName::live(entity.entity, key);
+            let record = Record {
+                name: name.clone(),
+                row,
+            };
+            let map = codec::encode(&record, &shape(entity));
+            hold_record(conn, &name, &map, Hold::DeletedParent).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn out_of_scope_here(
+    conn: &mut SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+) -> AppResult<bool> {
+    let covers = entity.covers.unwrap_or("1");
+    let sql = format!(
+        "SELECT NOT ({}) FROM {} AS t WHERE ({covers}) AND {} = ?",
+        entity.scope.sql(),
+        entity.table,
+        entity.key
+    )
+    .replace("{row}", "t");
+    let out: Option<bool> = sqlx::query_scalar(&sql)
+        .bind(key)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(out.unwrap_or(false))
 }
 
 /// The local row's synced values by field, or None when this device doesn't have it.
@@ -975,12 +1165,7 @@ async fn delete_row(conn: &mut SqliteConnection, entity: &EntityMap, key: &str) 
 /// clock. Sent with their old clocks, the outcome would depend on the order the devices heard of the
 /// purge, the revival and each other's older edits; re-stamped, every device takes this copy whole.
 async fn revive(conn: &mut SqliteConnection, name: &RecordName) -> AppResult<()> {
-    sqlx::query("UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1")
-        .execute(&mut *conn)
-        .await?;
-    let clock: String = sqlx::query_scalar("SELECT hlc FROM replica_meta WHERE id = 1")
-        .fetch_one(&mut *conn)
-        .await?;
+    let clock = advance_clock(conn).await?.to_string();
 
     let reviving_page = name.entity == Entity::Page;
     for entity in super::manifest::ENTITIES {

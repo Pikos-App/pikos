@@ -634,3 +634,105 @@ BEGIN
       || substr(clocks, 201, 20)
   WHERE entity = 'page' AND key IN (SELECT c.id FROM pages AS c WHERE c.folder_id = OLD.id);
 END;
+
+CREATE TRIGGER replica_scope_enter AFTER UPDATE OF sync_state ON page_sync
+WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+  AND NOT EXISTS (SELECT 1 FROM replica_applying)
+  AND OLD.sync_state <> 'detached' AND NEW.sync_state = 'detached'
+BEGIN
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'page', t.id, 1023, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM pages AS t WHERE (1) AND (t.id = NEW.page_id OR t.id IN (SELECT clone_id FROM completed_set WHERE page_id = NEW.page_id))
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'page', t.id, replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc || replica_meta.hlc FROM pages AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.id = NEW.page_id OR t.id IN (SELECT clone_id FROM completed_set WHERE page_id = NEW.page_id))
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'body', t.id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM pages AS t WHERE (1) AND (t.id = NEW.page_id OR t.id IN (SELECT clone_id FROM completed_set WHERE page_id = NEW.page_id))
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'body', t.id, replica_meta.hlc || replica_meta.hlc FROM pages AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.id = NEW.page_id OR t.id IN (SELECT clone_id FROM completed_set WHERE page_id = NEW.page_id))
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'pagetag', t.page_id || '/' || (SELECT name FROM tags WHERE id = t.tag_id), 0, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM page_tags AS t WHERE (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'pagetag', t.page_id || '/' || (SELECT name FROM tags WHERE id = t.tag_id), replica_meta.hlc FROM page_tags AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'rule', t.page_id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM page_recurrence_rules AS t WHERE (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'rule', t.page_id, replica_meta.hlc || replica_meta.hlc FROM page_recurrence_rules AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'sched', t.id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM page_schedules AS t WHERE (t.rule_id IS NULL) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'sched', t.id, replica_meta.hlc || replica_meta.hlc FROM page_schedules AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (t.rule_id IS NULL) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'override', t.page_id || '/' || t.original_date, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM page_schedules AS t WHERE (t.rule_id IS NOT NULL) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'override', t.page_id || '/' || t.original_date, replica_meta.hlc || replica_meta.hlc FROM page_schedules AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (t.rule_id IS NOT NULL) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'done', t.page_id || '/' || t.occurrence_date, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM completed_set AS t WHERE (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'done', t.page_id || '/' || t.occurrence_date, replica_meta.hlc || replica_meta.hlc FROM completed_set AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'skip', t.page_id || '/' || t.occurrence_date, 0, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM skip_set AS t WHERE (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'skip', t.page_id || '/' || t.occurrence_date, replica_meta.hlc FROM skip_set AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'remind', t.id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM page_reminders AS t WHERE (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'remind', t.id, replica_meta.hlc || replica_meta.hlc FROM page_reminders AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'focus', t.id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM focus_sessions AS t WHERE (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'focus', t.id, replica_meta.hlc || replica_meta.hlc FROM focus_sessions AS t, replica_meta
+  WHERE replica_meta.id = 1 AND (1) AND (t.page_id = NEW.page_id)
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+END;
+
+CREATE TRIGGER replica_scope_leave AFTER UPDATE OF sync_state ON page_sync
+WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+  AND NOT EXISTS (SELECT 1 FROM replica_applying)
+  AND OLD.sync_state = 'detached' AND NEW.sync_state <> 'detached'
+BEGIN
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'page', NEW.page_id, 0, 1, hlc FROM replica_meta WHERE id = 1
+  ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks, tomb)
+  SELECT 'page', NEW.page_id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
+END;

@@ -19,7 +19,7 @@
 //! replica` rewrites it, and a test fails when the database's triggers differ from what the
 //! manifest generates.
 
-use super::manifest::{EntityMap, Lifecycle, ENTITIES, PURGE_NULLED};
+use super::manifest::{EntityMap, Lifecycle, Scope, ENTITIES, PURGE_NULLED};
 
 /// Where the generated triggers are checked in, relative to the crate.
 pub const MIGRATION: &str = "migrations/028_replica_capture.sql";
@@ -68,7 +68,79 @@ pub fn triggers() -> Vec<(String, String)> {
         .iter()
         .filter(|e| is_purge_target(e))
         .map(|e| (purge_trigger_name(e), create_purge_trigger(e)));
-    captures.chain(purges).collect()
+    let scope = [
+        ("replica_scope_enter".to_owned(), scope_enter_trigger()),
+        ("replica_scope_leave".to_owned(), scope_leave_trigger()),
+    ];
+    captures.chain(purges).chain(scope).collect()
+}
+
+/// A calendar page detaching from its calendar enters scope: it, everything hanging off it and the
+/// done copies made by ticking its occurrences are sent whole as a fresh write, re-stamped at now.
+/// Re-stamped because a page that left scope before carries the tombstone that removed its copy
+/// elsewhere, and its older clocks would read as gone.
+fn scope_enter_trigger() -> String {
+    let mut statements = vec![ADVANCE_CLOCK.to_owned()];
+    for entity in ENTITIES {
+        let Scope::Page(column) = entity.scope else {
+            continue;
+        };
+        let mut rows = format!("t.{column} = NEW.page_id");
+        if column == "id" {
+            rows.push_str(
+                " OR t.id IN (SELECT clone_id FROM completed_set WHERE page_id = NEW.page_id)",
+            );
+        }
+        let covers = entity.covers.map_or("1".to_owned(), |c| on_row(c, "t"));
+        statements.push(format!(
+            "INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
+             SELECT '{}', {}, {}, 0, (SELECT hlc FROM replica_meta WHERE id = 1)\n  \
+             FROM {} AS t WHERE ({covers}) AND ({rows})\n  \
+             ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, \
+             clock = excluded.clock;",
+            entity.entity.prefix(),
+            on_row(entity.key, "t"),
+            (1u64 << entity.fields.len()) - 1,
+            entity.table
+        ));
+        statements.push(format!(
+            "INSERT INTO replica_clocks (entity, key, clocks)\n  \
+             SELECT '{}', {}, {} FROM {} AS t, replica_meta\n  \
+             WHERE replica_meta.id = 1 AND ({covers}) AND ({rows})\n  \
+             ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;",
+            entity.entity.prefix(),
+            on_row(entity.key, "t"),
+            every_slot(entity, "replica_meta.hlc"),
+            entity.table
+        ));
+    }
+    format!(
+        "CREATE TRIGGER replica_scope_enter AFTER UPDATE OF sync_state ON page_sync\n\
+         WHEN {GATE}\n  AND OLD.sync_state <> 'detached' AND NEW.sync_state = 'detached'\n\
+         BEGIN\n  {}\nEND",
+        statements.join("\n  ")
+    )
+}
+
+/// A detached page re-linking to its calendar leaves scope: every other device mirrors that event
+/// itself, so the synced copy is removed there with a tombstone.
+fn scope_leave_trigger() -> String {
+    let page = ENTITIES
+        .iter()
+        .find(|e| e.entity == pikos_replica::Entity::Page)
+        .expect("pages are synced");
+    format!(
+        "CREATE TRIGGER replica_scope_leave AFTER UPDATE OF sync_state ON page_sync\n\
+         WHEN {GATE}\n  AND OLD.sync_state = 'detached' AND NEW.sync_state <> 'detached'\n\
+         BEGIN\n  {ADVANCE_CLOCK}\n  \
+         INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
+         SELECT 'page', NEW.page_id, 0, 1, hlc FROM replica_meta WHERE id = 1\n  \
+         ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;\n  \
+         INSERT INTO replica_clocks (entity, key, clocks, tomb)\n  \
+         SELECT 'page', NEW.page_id, {}, hlc FROM replica_meta WHERE id = 1\n  \
+         ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;\nEND",
+        every_slot(page, "base_clock")
+    )
 }
 
 /// The field whose clock a purge of a trashed row takes.
