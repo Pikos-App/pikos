@@ -50,7 +50,7 @@ struct SettingsScreen: View {
                             }
                         }
                     } header: {
-                        Text("Appearance")
+                        Text("Appearance").sectionLabelStyle()
                     } footer: {
                         Text("Calendar density sets how tall an hour is, so how much of the day fits on screen at once.")
                     }
@@ -62,7 +62,7 @@ struct SettingsScreen: View {
                             }
                         }
                     } header: {
-                        Text("Dates")
+                        Text("Dates").sectionLabelStyle()
                     } footer: {
                         Text("Used by every date picker. Defaults to your region.")
                     }
@@ -75,7 +75,7 @@ struct SettingsScreen: View {
                             }
                         }
                     } header: {
-                        Text("New pages")
+                        Text("New pages").sectionLabelStyle()
                     } footer: {
                         Text(defaultFolderFooter)
                     }
@@ -89,14 +89,14 @@ struct SettingsScreen: View {
                             LabeledContent("Calendars", value: calendarSummary)
                         }
                     } header: {
-                        Text("External calendars")
+                        Text("External calendars").sectionLabelStyle()
                     }
 
                     yourDataSection
 
                     exportSection
 
-                    Section("About") {
+                    Section {
                         // Not decoration: a page written by a newer build cannot be
                         // saved over by this one, and when somebody hits that the
                         // first useful question is which version each device is on.
@@ -114,6 +114,8 @@ struct SettingsScreen: View {
                         Link(destination: URL(string: "https://pikos.app/privacy")!) {
                             Label("Privacy", systemImage: "hand.raised")
                         }
+                    } header: {
+                        Text("About").sectionLabelStyle()
                     }
 
                     #if DEBUG
@@ -131,7 +133,7 @@ struct SettingsScreen: View {
                                 }
                             }
                         } header: {
-                            Text("Diagnostics (debug build)")
+                            Text("Diagnostics (debug build)").sectionLabelStyle()
                         } footer: {
                             Text(
                                 "Lock the phone, wait for a widget to refresh, then come back: every file above should still read “until first unlock”."
@@ -223,6 +225,7 @@ struct SettingsScreen: View {
 
         Section {
             Toggle("Remind me", isOn: $settings.remindersEnabled)
+                .tint(.interactiveFill)
 
             if settings.remindersEnabled {
                 Picker("Default reminder", selection: $settings.defaultReminderMinutes) {
@@ -267,7 +270,7 @@ struct SettingsScreen: View {
                 }
             }
         } header: {
-            Text("Reminders")
+            Text("Reminders").sectionLabelStyle()
         } footer: {
             Text(remindersFooter)
         }
@@ -323,7 +326,7 @@ struct SettingsScreen: View {
             }
             .disabled(exports.isBackingUp)
         } header: {
-            Text("Your data")
+            Text("Your data").sectionLabelStyle()
         } footer: {
             Text(
                 "Your pages, folders and images are stored on this device. A backup copies all of them into Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it."
@@ -339,7 +342,7 @@ struct SettingsScreen: View {
     private var lastBackupLabel: String {
         guard let date = exports.lastBackup else { return String(localized: "Never backed up") }
         let day = DayLabel.relative(DayLabel.today(now: date), today: DayLabel.today())
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let time = ClockTime.string(date)
         return String(localized: "Last backup \(day) at \(time)")
     }
 
@@ -376,9 +379,10 @@ struct SettingsScreen: View {
             // is a question about something the reader does not have.
             if hasCalendars {
                 Toggle("Include calendar events", isOn: $includeSyncedInExport)
+                    .tint(.interactiveFill)
             }
         } header: {
-            Text("Export")
+            Text("Export").sectionLabelStyle()
         } footer: {
             if hasCalendars {
                 Text(

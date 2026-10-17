@@ -78,7 +78,7 @@ struct TrashSheet: View {
                     Text(Self.deletedLabel(page.deletedAt))
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.textSecondary)
             }
             Spacer(minLength: 8)
             Button("Restore") {

@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Put a page on a date, move it, or take the date away: the When sheet.
 ///
-/// Reached from When › Pick a Date… after the one-tap days, so it is for the date those do not
+/// Reached from When › Pick a date… after the one-tap days, so it is for the date those do not
 /// cover. A line at the top reads a typed date with quick add's parser, the day pills repeat the
 /// menu's choices, and the month is open rather than behind a compact picker.
 ///
@@ -12,7 +12,7 @@ import SwiftUI
 /// closes; the time, the end and a typed date are saved when the sheet closes, however it closes.
 /// A date is easy to change back, and the notice carries Undo.
 ///
-/// A repeating page is offered no "No Date", and one a calendar owns never reaches here; the
+/// A repeating page is offered no "No date", and one a calendar owns never reaches here; the
 /// workspace refuses both anyway, because a list row can be a second old by the time a sheet opens.
 struct SchedulePageSheet: View {
     enum Target {
@@ -170,7 +170,7 @@ struct SchedulePageSheet: View {
         if !isBatch { isTimed = iso.contains("T") }
         let day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         understood =
-            iso.contains("T") && !isBatch ? "\(day), \(date.formatted(date: .omitted, time: .shortened))" : day
+            iso.contains("T") && !isBatch ? "\(day), \(ClockTime.string(date))" : day
     }
 
     private static func start(of result: QuickAddResult) -> String? {
@@ -200,7 +200,7 @@ struct SchedulePageSheet: View {
                     understood = nil
                     saveAndClose()
                 } label: {
-                    Pill(title: String(localized: "No Date"), systemImage: "calendar.badge.minus", isOn: !hasDate)
+                    Pill(title: String(localized: "No date"), systemImage: "calendar.badge.minus", isOn: !hasDate)
                 }
                 .buttonStyle(.plain)
             }
@@ -229,6 +229,7 @@ struct SchedulePageSheet: View {
                 DatePicker("Starts at", selection: Binding(get: { start }, set: { moveStart(to: $0) }), displayedComponents: .hourAndMinute)
             }
             Toggle(isTimed ? "Set an end time" : "Ends on a later day", isOn: $hasEnd)
+                .tint(.interactiveFill)
             if hasEnd {
                 DatePicker(
                     "Ends", selection: $end, in: start...,
@@ -302,7 +303,7 @@ struct SchedulePageSheet: View {
     private func spoken(_ iso: String) -> String {
         let day = DayLabel.relative(String(iso.prefix(10)), today: DayLabel.today())
         guard iso.contains("T"), let date = StorageTimestamp.wallClock(iso) else { return day }
-        return "\(day), \(date.formatted(date: .omitted, time: .shortened))"
+        return "\(day), \(ClockTime.string(date))"
     }
 
     /// The next whole hour, in the reader's own calendar: nobody schedules anything for 14:37:22.

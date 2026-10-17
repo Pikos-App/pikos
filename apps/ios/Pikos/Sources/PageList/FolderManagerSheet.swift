@@ -47,11 +47,11 @@ struct FolderManagerSheet: View {
                         Section {
                             Text("No folders yet. Pages without one live in the Inbox.")
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.textSecondary)
                         }
                     } else {
                         if !ownFolders.isEmpty {
-                            Section("Folders") {
+                            Section {
                                 ForEach(ownFolders, id: \.id) { folder in
                                     row(folder)
                                 }
@@ -60,13 +60,17 @@ struct FolderManagerSheet: View {
                                     ids.move(fromOffsets: from, toOffset: to)
                                     Task { await store.reorderFolders(ids) }
                                 }
+                            } header: {
+                                Text("Folders").sectionLabelStyle()
                             }
                         }
                         ForEach(calendarGroups) { group in
-                            Section(group.title) {
+                            Section {
                                 ForEach(group.folders, id: \.id) { folder in
                                     row(folder)
                                 }
+                            } header: {
+                                Text(group.title).sectionLabelStyle()
                             }
                         }
                     }
@@ -98,7 +102,7 @@ struct FolderManagerSheet: View {
                 Spacer()
                 Image(systemName: "calendar")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.textSecondary)
                     .accessibilityLabel("Managed by a calendar")
             } else {
                 // The name is its own field, as Reminders edits a list's name: renaming is typing
@@ -175,10 +179,10 @@ struct FolderManagerSheet: View {
             }
         } label: {
             Circle()
-                .fill(Color(hex: folder.color) ?? Color.secondary.opacity(0.25))
+                .fill(Color(hex: folder.color) ?? Color.textTertiary.opacity(0.25))
                 .frame(width: 14, height: 14)
                 .overlay(
-                    Circle().strokeBorder(Color.secondary.opacity(0.35), lineWidth: folder.color == nil ? 1 : 0)
+                    Circle().strokeBorder(Color.textTertiary.opacity(0.35), lineWidth: folder.color == nil ? 1 : 0)
                 )
         }
         .accessibilityLabel("Colour of \(folder.name)")

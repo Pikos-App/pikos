@@ -78,7 +78,7 @@ struct PageListScreen: View {
     private var header: some View {
         if isSelecting {
             PaneHeader {
-                Button(selection.count == selectable.count ? "Deselect All" : "Select All") {
+                Button(selection.count == selectable.count ? "Deselect all" : "Select all") {
                     selection = selection.count == selectable.count ? [] : Set(selectable.map(\.id))
                 }
                 .font(.pkUI)
@@ -364,6 +364,8 @@ struct PageListScreen: View {
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.surfacePrimary)
         .listRowSeparator(.hidden)
+        .selectionDisabled()
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .accessibilityAddTraits(.isHeader)
     }
 
@@ -601,7 +603,7 @@ struct PageListScreen: View {
                     verbLabel("When", systemImage: "calendar")
                 }
                 Menu {
-                    Picker("Move to Folder", selection: Binding(get: { String?.some("") }, set: { move(to: $0) })) {
+                    Picker("Move to folder", selection: Binding(get: { String?.some("") }, set: { move(to: $0) })) {
                         FolderChoices(folders: store.fileableFolders)
                     }
                     .pickerStyle(.inline)
@@ -619,6 +621,7 @@ struct PageListScreen: View {
         }
         .padding(.horizontal, 8)
         .frame(height: ShellBar.height)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .floatingSurface(in: Capsule())
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
@@ -639,8 +642,10 @@ struct PageListScreen: View {
         -> some View
     {
         VStack(spacing: 3) {
+            // One height for every symbol, or a taller one pushes its label below the others.
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .regular))
+                .frame(height: 22)
             Text(title)
                 .font(.system(.caption2, weight: .medium))
         }
@@ -764,7 +769,7 @@ struct ExampleSentence: View {
             partial, item in
             let word = String(item.element)
             let piece = Text(item.offset == 0 ? word : " " + word)
-            if word.hasPrefix("!") { return partial + piece.foregroundColor(.statusDueSoon) }
+            if word.hasPrefix("!") { return partial + piece.foregroundColor(.textDueSoon) }
             if word.hasPrefix("#") || word.hasPrefix("~") { return partial + piece.foregroundColor(.textTertiary) }
             if Self.dateWords.contains(word.lowercased()) || word.lowercased().hasSuffix("pm")
                 || word.lowercased().hasSuffix("am") || word == "at"

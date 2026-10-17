@@ -46,7 +46,7 @@ struct RepeatSheet: View {
                         Section {
                             Text(label)
                         } header: {
-                            Text("Repeats")
+                            Text("Repeats").sectionLabelStyle()
                         } footer: {
                             Text(
                                 "This repeat is more detailed than Pikos can edit on iPhone. It still works, and you can change it on the desktop."
@@ -161,7 +161,7 @@ struct RepeatSheet: View {
                         }
                     }
                 } header: {
-                    Text("On these days")
+                    Text("On these days").sectionLabelStyle()
                 } footer: {
                     // Not an error state: an empty set is a valid weekly rule
                     // meaning "the day it starts on", which is what somebody
@@ -185,7 +185,7 @@ struct RepeatSheet: View {
         Section {
             Picker("Ends", selection: endKind) {
                 Text("Never").tag(EndKind.never)
-                Text("On a Day").tag(EndKind.onDay)
+                Text("On a day").tag(EndKind.onDay)
                 Text("After").tag(EndKind.afterCount)
             }
             switch ends {
@@ -198,8 +198,6 @@ struct RepeatSheet: View {
                     count == 1 ? String(localized: "Once") : String(localized: "\(count) times"),
                     value: endCount, in: 1...999)
             }
-        } header: {
-            Text("Ends")
         }
     }
 

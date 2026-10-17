@@ -72,7 +72,7 @@ struct CaldavAccountSheet: View {
                                 .submitLabel(.next)
                                 .onSubmit { focus = .password }
                         } header: {
-                            Text("Server")
+                            Text("Server").sectionLabelStyle()
                         } footer: {
                             Text("Fastmail, iCloud, Nextcloud and most self-hosted calendars speak CalDAV. Some require an app-specific password rather than your usual one.")
                         }

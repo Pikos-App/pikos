@@ -41,7 +41,7 @@ struct CalendarSyncScreen: View {
                     Section {
                         Text("No calendars connected.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.textSecondary)
                     } footer: {
                         Text(
                             "Connect a CalDAV server, such as Fastmail, iCloud or Nextcloud, and its events appear in Pikos as pages you can see but not edit."
@@ -111,7 +111,7 @@ struct CalendarSyncScreen: View {
                     reconnecting = Reconnecting(account: entry.account)
                 } label: {
                     Label("Password rejected. Reconnect", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.textDueSoon)
                 }
             }
 
@@ -148,7 +148,7 @@ struct CalendarSyncScreen: View {
             .disabled(sync.isBusy)
         } header: {
             HStack {
-                Text(entry.account.displayName)
+                Text(entry.account.displayName).sectionLabelStyle()
                 if sync.busyAccountID == entry.account.id {
                     ProgressView().controlSize(.small)
                 }
@@ -171,6 +171,7 @@ struct CalendarSyncScreen: View {
                         }
                     })
             )
+            .tint(.interactiveFill)
             .disabled(sync.isBusy)
 
             // Said before the switch is flipped, not after. Turning a calendar
@@ -185,7 +186,7 @@ struct CalendarSyncScreen: View {
                         : "\(calendar.detachedPages) pages you edited were kept when this was switched off. Switching it back on will let the calendar's versions win."
                 )
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.textSecondary)
             }
         }
     }
