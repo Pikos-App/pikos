@@ -80,7 +80,7 @@ struct MoveOccurrenceSheet: View {
                 .padding(.vertical, 12)
             }
             .background(.surfaceElevated)
-            .navigationTitle("Move This One")
+            .navigationTitle("Move this one")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

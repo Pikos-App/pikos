@@ -10,8 +10,8 @@ extension WhenChoice: Identifiable {
         switch self {
         case .today: return String(localized: "Today")
         case .tomorrow: return String(localized: "Tomorrow")
-        case .thisWeekend: return String(localized: "This Weekend")
-        case .nextWeek: return String(localized: "Next Week")
+        case .thisWeekend: return String(localized: "This weekend")
+        case .nextWeek: return String(localized: "Next week")
         }
     }
 
@@ -45,12 +45,12 @@ struct WhenMenuItems: View {
         }
         if let onPickDate {
             Button(action: onPickDate) {
-                Label("Pick a Date…", systemImage: "calendar")
+                Label("Pick a date…", systemImage: "calendar")
             }
         }
         if let onClear {
             Button(action: onClear) {
-                Label("No Date", systemImage: "calendar.badge.minus")
+                Label("No date", systemImage: "calendar.badge.minus")
             }
         }
     }
@@ -131,7 +131,7 @@ struct PriorityPalette: View {
                 get: { PagePriority(stored: stored)?.stored ?? 0 },
                 set: { onChoose(PagePriority(stored: $0)?.value) })
         ) {
-            Label { Text("No Priority") } icon: { PriorityMark.none }.tag(Int64(0))
+            Label { Text("No priority") } icon: { PriorityMark.none }.tag(Int64(0))
             ForEach(PagePriority.allCases) { option in
                 Label { Text(option.name) } icon: { PriorityMark.image(option) }
                     .tag(option.stored)
