@@ -17,6 +17,8 @@ struct PaneHeader<Leading: View, Trailing: View>: View {
         .padding(.trailing, 8)
         .padding(.top, 4)
         .padding(.bottom, 8)
+        // A title and its tools share one line: past this size the tools broke mid-word ("Se-lect").
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .background(.surfacePrimary)
         .overlay(alignment: .bottom) {
             Rectangle().fill(.borderSecondary).frame(height: 1 / displayScale)

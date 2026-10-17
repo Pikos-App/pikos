@@ -135,6 +135,8 @@ struct CalendarGrid: View {
                     Text("all-day")
                         .font(.pkUISm)
                         .foregroundStyle(.textTertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                     if hidden > 0 || allDayExpanded {
                         Button(allDayExpanded ? "less" : "+\(hidden)") {
                             withAnimation(reduceMotion ? nil : .pkQuick) { allDayExpanded.toggle() }
@@ -227,6 +229,8 @@ struct CalendarGrid: View {
                     .font(.pkUISm)
                     .monospacedDigit()
                     .foregroundStyle(.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .offset(y: CGFloat(hour) * hourHeight - 7)
             }
         }

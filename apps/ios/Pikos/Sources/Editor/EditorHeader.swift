@@ -19,8 +19,11 @@ struct EditorHeader: View {
 
     @Environment(WorkspaceStore.self) private var store
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     @State private var title = ""
     @State private var subtitle = ""
+    @State private var isBylineOpen = false
 
     private var facts: PageFacts { PageFacts(page) }
 
@@ -88,18 +91,28 @@ struct EditorHeader: View {
 
     // MARK: - Byline
 
-    /// Wraps rather than scrolls: a byline cut off at the edge hid its priority and every tag.
+    /// Wraps rather than scrolls: a byline cut off at the edge hid its priority and every tag. At
+    /// accessibility sizes it folds to its first chip and More, or it fills the screen before the
+    /// document starts.
+    @ViewBuilder
     private var byline: some View {
+        let folds = typeSize.isAccessibilitySize && !isBylineOpen
         FlowLayout(spacing: 12, lineSpacing: 6) {
             folderChip
-            if let start = page.scheduledStart {
-                dateChip(start)
-                ReminderChip(pageId: page.id, isAllDay: CalendarGeometry.isAllDay(start))
+            if folds {
+                Button("More") { isBylineOpen = true }
+                    .foregroundStyle(.textAction)
+                    .touchTarget()
+            } else {
+                if let start = page.scheduledStart {
+                    dateChip(start)
+                    ReminderChip(pageId: page.id, isAllDay: CalendarGeometry.isAllDay(start))
+                }
+                if let priority = PagePriority(stored: page.priority) {
+                    priorityChip(priority)
+                }
+                tagsChip
             }
-            if let priority = PagePriority(stored: page.priority) {
-                priorityChip(priority)
-            }
-            tagsChip
         }
         .font(.pkUISm)
         .foregroundStyle(.textTertiary)
@@ -157,7 +170,7 @@ struct EditorHeader: View {
                 Text(priority.mark).fontWeight(.heavy)
                 Text(priority.name)
             }
-            .foregroundStyle(priority.color)
+            .foregroundStyle(priority.textColor)
             .touchTarget()
         }
         .accessibilityLabel("Priority: \(priority.name)")

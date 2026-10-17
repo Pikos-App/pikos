@@ -37,6 +37,7 @@ struct QuickAddSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Route.self) private var route
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     /// Added or cancelled. A sheet swiped away without either keeps its line as a draft for the next
     /// open, so a sentence is never lost to a stray swipe.
@@ -151,11 +152,8 @@ struct QuickAddSheet: View {
 
             Rectangle().fill(.borderSecondary).frame(height: 1)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                chipRow
-                    .padding(.horizontal, 20)
-            }
-            .padding(.vertical, 12)
+            chipRow
+                .padding(.vertical, 12)
 
             if isPickingDate && schedule != .none {
                 VStack(spacing: 10) {
@@ -229,13 +227,26 @@ struct QuickAddSheet: View {
     /// Whether the date pickers are unfolded under the row.
     @State private var isPickingDate = false
 
+    @ViewBuilder
     private var chipRow: some View {
-        HStack(spacing: 8) {
-            whenMenu
-            priorityMenu
-            if !store.fileableFolders.isEmpty {
-                folderMenu
+        if typeSize.isAccessibilitySize {
+            // A sideways scroll nobody can see the end of hides the folder chip; wrapped, all three show.
+            FlowLayout(spacing: 8, lineSpacing: 8) { chips }
+                .padding(.horizontal, 20)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) { chips }
+                    .padding(.horizontal, 20)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var chips: some View {
+        whenMenu
+        priorityMenu
+        if !store.fileableFolders.isEmpty {
+            folderMenu
         }
     }
 
@@ -257,7 +268,7 @@ struct QuickAddSheet: View {
         } label: {
             ControlChip(
                 title: priorityLabel, mark: priorityLevel?.mark ?? "—",
-                tint: priority == nil ? nil : priorityLevel?.color)
+                tint: priority == nil ? nil : priorityLevel?.textColor)
         }
         .accessibilityLabel("Priority: \(priorityLabel)")
     }
@@ -318,7 +329,7 @@ struct QuickAddSheet: View {
             day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         }
         guard schedule == .timed else { return day }
-        return "\(day), \(date.formatted(date: .omitted, time: .shortened))"
+        return "\(day), \(ClockTime.string(date))"
     }
 
     private var folderMenu: some View {
@@ -678,7 +689,7 @@ private struct ExtrasRow: View {
                 ? String(localized: "Tomorrow")
                 : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         guard iso.contains("T") else { return day }
-        return "\(day), \(date.formatted(date: .omitted, time: .shortened))"
+        return "\(day), \(ClockTime.string(date))"
     }
 
     private func name(_ priority: Priority) -> String {

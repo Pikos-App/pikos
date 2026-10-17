@@ -39,6 +39,8 @@ struct ShellBar: View {
         }
         .padding(6)
         .frame(height: Self.height)
+        // A bar of fixed height: past this size its labels truncate to a letter.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .floatingSurface(in: Capsule())
         .sensoryFeedback(.selection, trigger: pane?.wrappedValue)
     }

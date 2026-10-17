@@ -36,6 +36,8 @@ struct DayPeek: View {
         TimelineView(.everyMinute) { context in
             content(now: context.date)
         }
+        // Fixed hour rows, as on the calendar's grid: past this size the hour labels broke a digit to a line.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // On the outermost view: a target inside the timeline, or one that only exists once a page
         // is lifted, is never found by the drag session.
         .onDrop(
@@ -183,6 +185,8 @@ struct DayPeek: View {
                     .font(.pkUISm)
                     .foregroundStyle(.textTertiary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .frame(width: Self.gutter - 10, alignment: .trailing)
                     .offset(y: y - 7)
             }
@@ -313,7 +317,7 @@ struct DayPeek: View {
         guard let date = Calendar.current.date(byAdding: .minute, value: minute, to: midnight) else {
             return ""
         }
-        return date.formatted(date: .omitted, time: .shortened)
+        return ClockTime.string(date)
     }
 }
 
@@ -387,7 +391,7 @@ private struct Timeline {
                 ? String(localized: "tomorrow")
                 : date.formatted(.dateTime.weekday(.abbreviated))
             if CalendarGeometry.isAllDay(entry.scheduledStart) { return "\(title), \(dayText)" }
-            return "\(title), \(dayText) \(date.formatted(date: .omitted, time: .shortened))"
+            return "\(title), \(dayText) \(ClockTime.string(date))"
         }
     }
 }

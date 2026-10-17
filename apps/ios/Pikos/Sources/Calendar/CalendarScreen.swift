@@ -150,6 +150,9 @@ struct CalendarScreen: View {
                     reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
             }
         }
+        // The grid's gutter, columns and hour rows are fixed geometry: past this size the hour labels
+        // broke a letter to a line and the week strip's dates became ellipses.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .pkQuick, value: dayStrings.first)
         // The swipe below is a gesture VoiceOver does not pass through; the
         // chevrons remain, and these put the same two moves on the rotor so

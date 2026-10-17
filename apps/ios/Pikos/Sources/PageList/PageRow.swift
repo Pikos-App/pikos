@@ -1,4 +1,5 @@
 import PikosCore
+import PikosSupport
 import SwiftUI
 
 /// The completion checkbox: the desktop's square, stroked red for urgent and amber for high.
@@ -46,19 +47,28 @@ struct PageRow: View {
 
     @Environment(SettingsStore.self) private var settings
     @Environment(WorkspaceStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var isDone: Bool { page.status == "done" }
 
     private static let shownTags = 2
 
     var body: some View {
+        // At accessibility sizes the date goes under the title: beside it, it left the title one letter wide.
+        let stacksDate = typeSize.isAccessibilitySize
+        let titleLine =
+            stacksDate
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
         VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            titleLine {
                 Text(page.title.isEmpty ? String(localized: "Untitled") : page.title)
                     .font(.pkBodyMedium)
                     .foregroundStyle(isDone ? Color.textTertiary : Color.textPrimary)
                     .lineLimit(2)
-                Spacer(minLength: 4)
+                if !stacksDate {
+                    Spacer(minLength: 4)
+                }
                 if let scheduled = page.scheduledStart {
                     ScheduleLabel(iso: scheduled, end: page.scheduledEnd, isDone: isDone)
                 }
@@ -184,7 +194,7 @@ struct ScheduleLabel: View {
 
     private var color: Color {
         if isOverdue { return .statusOverdue }
-        if isDueSoon { return .statusDueSoon }
+        if isDueSoon { return .textDueSoon }
         return .textTertiary
     }
 
@@ -195,7 +205,7 @@ struct ScheduleLabel: View {
                 + rangeEnd.formatted(.dateTime.month(.abbreviated).day())
         }
         let calendar = Calendar.current
-        let time = parsed.formatted(date: .omitted, time: .shortened)
+        let time = ClockTime.string(parsed)
         if calendar.isDateInToday(parsed) {
             return isAllDay ? String(localized: "Today") : time
         }

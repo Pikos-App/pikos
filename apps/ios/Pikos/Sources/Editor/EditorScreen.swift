@@ -83,6 +83,8 @@ struct EditorScreen: View {
 
             if !isDocumentFocused {
                 EditorHeader(page: page, actions: $actions, focus: $headerFocus)
+                    // Otherwise the webview squeezes it, and at large text its lines overlap.
+                    .fixedSize(horizontal: false, vertical: true)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 

@@ -166,7 +166,9 @@ struct FlowLayout: Layout {
         var lineHeight: CGFloat = 0
         var widest: CGFloat = 0
         for subview in subviews {
-            let size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            var size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            // One item wider than the row would widen the whole layout, and with it the screen.
+            size.width = min(size.width, width)
             if x > 0, x + size.width > width {
                 x = 0
                 y += lineHeight + lineSpacing
