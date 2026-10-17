@@ -3,15 +3,27 @@
 // were seen failing when its code broke.
 //
 //   pnpm qa:mutants <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--limit <n>]
-//                             [--uncommitted]
+//                             [--uncommitted] [--swift-only]
 //
 // Two stages. Stryker (TypeScript) and cargo-mutants (Rust) break each changed line and
 // run the unit tests. A mutant they miss is then applied to the working tree, and the
 // real-writer e2e tests tagged with the rows its file reaches run against it; the first
 // failure kills it. Most changed lines are interface code that only the e2e tests look
 // at, so the unit stage alone would demote nearly every row it reached. What survives
-// both is written to `releases/<version>/mutants.json`, where `qa-release-copy.mjs`
-// demotes the automated rows each survivor's file reaches.
+// both is written to `releases/<version>/mutants.json`, each survivor with the automated
+// rows its file reaches.
+//
+// The iPhone app's Swift gets the same two stages, from mutants generated here
+// (`lib/swift-mutants.mjs`). A mutant in a package is applied and run against that package's
+// host tests with `swift test`. What they miss, and every mutant in the app's own code, goes to
+// the tier-1 UI tests on a simulator the run makes and deletes, after an incremental build. Only
+// the UI tests whose coverage reaches the mutant's line run, which one coverage run per test
+// measures and `mutants/ios-coverage.jsonl` keeps while the Swift is unchanged. A Swift
+// survivor's rows are the ones its reaching UI tests, and its package's host tests, claim
+// with `// qa:`. `--swift-only` runs just these stages, and `--limit` samples the mutants the
+// simulator tries. Every Swift verdict is kept as it lands, so a stopped run carries on where
+// it was. The app needs `scripts/build-ios-framework.sh` and `scripts/build-editor-bundle.sh`
+// run first; the Xcode project is generated and built under `build/ios-mutants`.
 //
 // A survivor that changes nothing anyone could observe goes on the skip list where it
 // lives, with the reason, so it is judged once rather than every release:
@@ -24,13 +36,14 @@
 // pnpm adopts the folder into the workspace and rewrites the lockfile.
 //
 // Runs at the release candidate, where the release is cut, with its source committed: it
-// edits source files in place, in the desktop crate's cargo-mutants stage and the e2e stage,
-// and puts each one back.
+// edits source files in place, in the desktop crate's cargo-mutants stage, the e2e stage and
+// both Swift stages, and puts each one back.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -52,6 +65,7 @@ import {
   ROOT,
   sectionsReachedBy,
 } from "./lib/qa-rows.mjs";
+import { swiftMutants } from "./lib/swift-mutants.mjs";
 
 const STRYKER_HOME = join(homedir(), ".cache/pikos-stryker");
 const STRYKER_PACKAGES = [
@@ -118,6 +132,45 @@ const RUST_ROOTS = [
   },
 ];
 
+/** The Swift a run mutates, by where its tests run. A package's own tests run on the host, in
+ *  seconds; the app's code needs a simulator. `PikosCore`'s own target is generated bindings, and the
+ *  widgets are left out because no per-change test runs the extension, so every mutant there would
+ *  survive unseen. */
+const SWIFT_PACKAGES = [
+  {
+    dir: "apps/ios/PikosCore",
+    source: "apps/ios/PikosCore/Sources/PikosSupport",
+    tests: "PikosSupportTests",
+  },
+  {
+    dir: "apps/ios/PikosEditorBridge",
+    source: "apps/ios/PikosEditorBridge/Sources",
+    tests: "PikosEditorBridgeTests",
+  },
+];
+const SWIFT_SOURCE = [...SWIFT_PACKAGES.map((p) => p.source), "apps/ios/Pikos/Sources"];
+
+/** The flows run on every change. The screen tour is a release's, and the speed run needs a phone. */
+const UI_TEST_FILES = [
+  "apps/ios/PikosUITests/Sources/TierOneTests.swift",
+  "apps/ios/PikosUITests/Sources/TierOneWideTests.swift",
+];
+const SIMULATOR = { device: "iPhone 17 Pro", name: "Pikos Mutants" };
+/** Seconds a UI test may take before it counts as hung; xcodebuild rounds it up to a minute. The
+ *  slowest unmutated test, a monthly repeat, takes about three minutes under coverage. */
+const UI_TEST_ALLOWANCE = 300;
+const IOS_BUILD = join(ROOT, "build/ios-mutants");
+const IOS_DERIVED = join(IOS_BUILD, "DerivedData");
+const IOS_PROJECT = join(ROOT, "apps/ios/Pikos/Pikos.xcodeproj");
+/** Build artifacts the app needs and no Xcode build makes, each from a script in `scripts/`. */
+const IOS_PREREQUISITES = [
+  ["build-ios-framework.sh", "apps/ios/PikosCore/Frameworks/PikosFFI.xcframework"],
+  [
+    "build-editor-bundle.sh",
+    "apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources/editor.html",
+  ],
+];
+
 const WORK = mkdtempSync(join(tmpdir(), "qa-mutants-"));
 const SKIPPED = new Map(
   JSON.parse(readFileSync(join(ROOT, "scripts/qa-mutants-skip.json"), "utf8")).map((s) => [
@@ -144,6 +197,7 @@ function parseArgs(argv) {
     uncommitted: false,
     reuseUnit: false,
     since: null,
+    swiftOnly: false,
     unitOnly: false,
     version: null,
   };
@@ -156,12 +210,13 @@ function parseArgs(argv) {
     else if (arg === "--retry") opts.retry = true;
     else if (arg === "--resume") opts.resume = true;
     else if (arg === "--uncommitted") opts.uncommitted = true;
+    else if (arg === "--swift-only") opts.swiftOnly = true;
     else if (!arg.startsWith("--") && !opts.version) opts.version = arg;
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!opts.version)
     throw new Error(
-      "usage: qa-mutants.mjs <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--resume] [--limit <n>] [--uncommitted]"
+      "usage: qa-mutants.mjs <version> [--since <rev>] [--unit-only] [--reuse-unit] [--retry] [--resume] [--limit <n>] [--uncommitted] [--swift-only]"
     );
   opts.since ??= git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*");
   return opts;
@@ -616,28 +671,44 @@ function e2eProgress(path, tried, resume, verdicts) {
   };
 }
 
-/** Every e2e verdict, kept across runs and reused while what it rests on is unchanged: the mutated
- *  file, the specs tagged with the rows the file reaches, and the e2e helpers every spec uses. Any
- *  of those changing re-proves it, since a proof lasts only until its code or its test changes. A
- *  line can hold two identical mutants, so each is keyed by what it changes plus its occurrence. */
+function hashFile(file) {
+  return createHash("sha1")
+    .update(readFileSync(join(ROOT, file)))
+    .digest("hex");
+}
+
+function hashOf(parts) {
+  return createHash("sha1").update(parts.join("|")).digest("hex");
+}
+
+/** Every e2e verdict rests on the mutated file, the specs tagged with the rows the file reaches, and
+ *  the e2e helpers every spec uses. */
 function e2eVerdicts(path, tried, rowsFor) {
   const e2e = "apps/desktop/e2e";
-  const hash = (file) =>
-    createHash("sha1")
-      .update(readFileSync(join(ROOT, file)))
-      .digest("hex");
   const files = readdirSync(join(ROOT, e2e), { recursive: true })
     .filter((f) => f.endsWith(".ts"))
     .map((f) => `${e2e}/${f}`);
   const specs = files
     .filter((f) => f.endsWith(".spec.ts"))
     .map((f) => ({
-      hash: hash(f),
+      hash: hashFile(f),
       rows: new Set(
         [...readFileSync(join(ROOT, f), "utf8").matchAll(/@([A-Z]+-\d+)/g)].map((t) => t[1])
       ),
     }));
-  const helpers = files.filter((f) => !f.endsWith(".spec.ts")).map(hash);
+  const helpers = files.filter((f) => !f.endsWith(".spec.ts")).map(hashFile);
+  return verdictStore(path, tried, (m) => {
+    const rows = rowsFor(m.file);
+    const tied = specs.filter((s) => rows.some((r) => s.rows.has(r))).map((s) => s.hash);
+    return hashOf([hashFile(m.file), ...helpers, ...tied]);
+  });
+}
+
+/** Verdicts kept across runs and reused while `deps`, what a mutant's verdict rests on, is unchanged.
+ *  Any of it changing re-proves the mutant, since a proof lasts only until its code or its test
+ *  changes. A line can hold two identical mutants, so each is keyed by what it changes plus its
+ *  occurrence. */
+function verdictStore(path, tried, deps) {
   const seen = new Map();
   const keys = tried.map((m) => {
     const base = mutantKey(m);
@@ -645,13 +716,6 @@ function e2eVerdicts(path, tried, rowsFor) {
     seen.set(base, n);
     return `${base}#${n}`;
   });
-  const deps = (m) => {
-    const rows = rowsFor(m.file);
-    const tied = specs.filter((s) => rows.some((r) => s.rows.has(r))).map((s) => s.hash);
-    return createHash("sha1")
-      .update([hash(m.file), ...helpers, ...tied].join("|"))
-      .digest("hex");
-  };
   const stored = new Map();
   if (existsSync(path)) {
     for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean)) {
@@ -671,6 +735,434 @@ function e2eVerdicts(path, tried, rowsFor) {
       );
     },
   };
+}
+
+/** Every Swift mutant on the changed lines, each with the package whose host tests can load it, or
+ *  none for the app's own code, which only a simulator can run. */
+function swiftMutantsIn(ranges) {
+  const out = [];
+  for (const [file, spans] of ranges) {
+    if (!file.endsWith(".swift")) continue;
+    const pkg = SWIFT_PACKAGES.find((p) => file.startsWith(`${p.source}/`)) ?? null;
+    for (const m of swiftMutants(readFileSync(join(ROOT, file), "utf8"), spans)) {
+      out.push({ ...m, file, pkg, status: pkg ? "Pending" : "NoCoverage" });
+    }
+  }
+  return out;
+}
+
+function swiftFiles(dir) {
+  return readdirSync(join(ROOT, dir), { recursive: true })
+    .filter((f) => f.endsWith(".swift") && !f.includes(".build/"))
+    .map((f) => `${dir}/${f}`)
+    .sort();
+}
+
+/** One mutant, or none, against a package's host tests. A mutant that hangs a test is a kill, as
+ *  Stryker counts a timeout. */
+function swiftPackageRun(pkg, log) {
+  const out = openSync(log, "w");
+  const run = (args) =>
+    spawnSync("swift", [...args, "--package-path", pkg.dir], {
+      cwd: ROOT,
+      stdio: ["ignore", out, out],
+      timeout: 600_000,
+    });
+  try {
+    if (run(["build", "--build-tests"]).status !== 0) return "CompileError";
+    const test = run(["test", "--skip-build", "--filter", pkg.tests]);
+    if (test.error?.code === "ETIMEDOUT") return "Timeout";
+    return test.status === 0 ? "Survived" : "Killed";
+  } finally {
+    closeSync(out);
+  }
+}
+
+/** The Swift unit stage: every package mutant against its package's host tests, which take seconds
+ *  where a simulator takes minutes. A verdict rests on the whole package, sources and tests. */
+function swiftPackageStage(mutants, reports) {
+  const log = join(reports, "swift-test.log");
+  for (const pkg of SWIFT_PACKAGES) {
+    const mine = mutants.filter((m) => m.pkg === pkg && m.status === "Pending");
+    if (mine.length === 0) continue;
+    console.log(`\nswift test: ${mine.length} mutant(s) in ${pkg.source}`);
+    const tree = hashOf(swiftFiles(pkg.dir).map(hashFile));
+    const verdicts = verdictStore(join(reports, "swift-unit-verdicts.jsonl"), mine, () => tree);
+    let baselined = false;
+    for (const [i, m] of mine.entries()) {
+      const kept = verdicts.kept(i);
+      if (kept) {
+        m.status = kept.status;
+        continue;
+      }
+      if (!baselined) {
+        if (swiftPackageRun(pkg, log) !== "Survived") {
+          throw new Error(`${pkg.dir}'s tests don't pass unmutated: ${log}`);
+        }
+        baselined = true;
+      }
+      const restore = apply(m);
+      const started = Date.now();
+      try {
+        m.status = swiftPackageRun(pkg, log);
+      } finally {
+        restore();
+      }
+      m.seconds = Math.round((Date.now() - started) / 1000);
+      verdicts.record(i, m);
+      console.log(`  ${i + 1}/${mine.length} ${m.status} in ${m.seconds}s: ${m.file}:${m.line} ${m.mutator}`);
+    }
+  }
+}
+
+function xcrun(...args) {
+  return execFileSync("xcrun", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+}
+
+/** A simulator of the stage's own, made fresh: the UI tests leave state on the one they run on, and
+ *  sharing one with a person's session moves it under them. One left by a stopped run is deleted. */
+function createSimulator() {
+  const { devices } = JSON.parse(xcrun("simctl", "list", "devices", "-j"));
+  for (const d of Object.values(devices).flat()) {
+    if (d.name === SIMULATOR.name) spawnSync("xcrun", ["simctl", "delete", d.udid]);
+  }
+  const runtime = JSON.parse(xcrun("simctl", "list", "runtimes", "-j"))
+    .runtimes.filter((r) => r.isAvailable && r.platform === "iOS")
+    .at(-1);
+  if (!runtime) throw new Error("no iOS simulator runtime is installed");
+  const id = xcrun("simctl", "create", SIMULATOR.name, SIMULATOR.device, runtime.identifier).trim();
+  bootSimulator(id);
+  return id;
+}
+
+function bootSimulator(id) {
+  spawnSync("xcrun", ["simctl", "boot", id]);
+  xcrun("simctl", "bootstatus", id, "-b");
+}
+
+function deleteSimulator(id) {
+  spawnSync("xcrun", ["simctl", "shutdown", id]);
+  spawnSync("xcrun", ["simctl", "delete", id]);
+}
+
+function xcodebuild(action, sim, args, log) {
+  const out = openSync(log, "w");
+  try {
+    return spawnSync(
+      "xcodebuild",
+      [
+        action,
+        "-project",
+        IOS_PROJECT,
+        "-scheme",
+        "Pikos",
+        "-destination",
+        `id=${sim}`,
+        "-derivedDataPath",
+        IOS_DERIVED,
+        "-enableCodeCoverage",
+        "YES",
+        ...args,
+        "CODE_SIGNING_ALLOWED=NO",
+      ],
+      { cwd: ROOT, stdio: ["ignore", out, out], timeout: 1_800_000 }
+    );
+  } finally {
+    closeSync(out);
+  }
+}
+
+/** An incremental build of the app and its UI tests. xcodebuild now and then fails a build with no
+ *  error at all, so a failure with no `error:` in it is tried once more before it counts. */
+function buildApp(sim, log) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (xcodebuild("build-for-testing", sim, [], log).status === 0) return true;
+    if (/\berror:/.test(readFileSync(log, "utf8"))) return false;
+  }
+  return false;
+}
+
+/** Runs UI tests, one simulator and one at a time, and returns each one's result from the bundle.
+ *  Null when the bundle lacks one of them, which means the runner or the simulator failed rather
+ *  than a test. */
+function runUiTests(sim, tests, bundle, log) {
+  rmSync(bundle, { force: true, recursive: true });
+  xcodebuild(
+    "test-without-building",
+    sim,
+    [
+      ...tests.map((t) => `-only-testing:PikosUITests/${t.id}`),
+      "-resultBundlePath",
+      bundle,
+      "-parallel-testing-enabled",
+      "NO",
+      "-test-timeouts-enabled",
+      "YES",
+      "-default-test-execution-time-allowance",
+      String(UI_TEST_ALLOWANCE),
+    ],
+    log
+  );
+  if (!existsSync(bundle)) return null;
+  const results = new Map();
+  const walk = (node) => {
+    if (node.nodeType === "Test Case") {
+      results.set(node.nodeIdentifier.replace(/\(\)$/, ""), {
+        result: node.result,
+        seconds: node.durationInSeconds ?? 0,
+      });
+    }
+    for (const child of node.children ?? []) walk(child);
+  };
+  const run = spawnSync(
+    "xcrun",
+    ["xcresulttool", "get", "test-results", "tests", "--path", bundle],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  if (run.status !== 0) return null;
+  for (const node of JSON.parse(run.stdout).testNodes) walk(node);
+  return tests.every((t) => results.has(t.id)) ? results : null;
+}
+
+/** The UI tests a change is proven by on every commit, read from their sources. */
+function uiTests() {
+  return UI_TEST_FILES.flatMap((file) => {
+    let suite = null;
+    const tests = [];
+    for (const line of readFileSync(join(ROOT, file), "utf8").split("\n")) {
+      const opens = /^\s*(?:(?:final\s+)?class (\w+)\s*:|extension (\w+)\b)/.exec(line);
+      if (opens) suite = opens[1] ?? opens[2];
+      const fn = /^\s*(?:@MainActor\s+)?func (test\w+)\(/.exec(line)?.[1];
+      if (fn && suite) tests.push({ file, fn, id: `${suite}/${fn}` });
+    }
+    return tests;
+  });
+}
+
+function toRanges(lines) {
+  const out = [];
+  for (const n of lines) {
+    const last = out.at(-1);
+    if (last && n === last[1] + 1) last[1] = n;
+    else out.push([n, n]);
+  }
+  return out.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(",");
+}
+
+function fromRanges(text) {
+  const out = new Set();
+  for (const part of text.split(",").filter(Boolean)) {
+    const [a, b = a] = part.split("-").map(Number);
+    for (let n = a; n <= b; n++) out.add(n);
+  }
+  return out;
+}
+
+/** The lines of mutated Swift a coverage bundle holds: which can run at all, and which ran. */
+function coveredLines(bundle) {
+  const run = spawnSync("xcrun", ["xccov", "view", "--archive", "--json", bundle], {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  if (run.status !== 0) throw new Error(`xccov couldn't read ${bundle}`);
+  const executable = {};
+  const executed = {};
+  for (const [path, lines] of Object.entries(JSON.parse(run.stdout))) {
+    const file = path.startsWith(`${ROOT}/`) ? path.slice(ROOT.length + 1) : null;
+    if (!file || !SWIFT_SOURCE.some((dir) => file.startsWith(`${dir}/`))) continue;
+    executable[file] = toRanges(lines.filter((l) => l.isExecutable).map((l) => l.line));
+    const ran = lines.filter((l) => l.executionCount > 0).map((l) => l.line);
+    if (ran.length > 0) executed[file] = toRanges(ran);
+  }
+  return { executable, executed };
+}
+
+/**
+ * Which UI tests reach each line, from one coverage run per test, so a mutant runs only the tests
+ * that can see it rather than the whole suite. Kept beside the reports and reused while every Swift
+ * file the app builds from is unchanged, since a change anywhere can move what a test reaches; a run
+ * stopped partway keeps the tests it finished.
+ *
+ * A test reaches a line when the nearest line at or above it that can run, ran: a condition split
+ * over lines is counted at its first. A test that failed or skipped unmutated reaches nothing.
+ */
+function uiCoverage(sim, tests, reports) {
+  const path = join(reports, "ios-coverage.jsonl");
+  const source = hashOf(
+    [...SWIFT_SOURCE, "apps/ios/PikosUITests/Sources"]
+      .flatMap(swiftFiles)
+      .concat("apps/ios/Pikos/project.yml")
+      .map(hashFile)
+  );
+  const stored = existsSync(path)
+    ? readFileSync(path, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
+        .filter((e) => e.source === source)
+    : [];
+  const byTest = new Map(stored.filter((e) => e.test).map((e) => [e.test, e]));
+  let executable = stored.find((e) => e.executable)?.executable ?? null;
+  const fresh = new Set();
+  const bundle = join(IOS_BUILD, "coverage.xcresult");
+  const todo = tests.filter((t) => !byTest.has(t.id));
+  if (todo.length > 0) {
+    console.log(`  coverage: ${todo.length} of ${tests.length} UI test(s) to measure`);
+  }
+  for (const t of todo) {
+    const log = join(reports, "ios-test.log");
+    const results = runUiTests(sim, [t], bundle, log);
+    if (!results) throw new Error(`the coverage run of ${t.id} didn't finish: ${log}`);
+    const { result, seconds } = results.get(t.id);
+    const lines = coveredLines(bundle);
+    if (!executable) {
+      executable = lines.executable;
+      appendFileSync(path, `${JSON.stringify({ executable, source })}\n`);
+    }
+    const entry = { executed: lines.executed, result, seconds, source, test: t.id };
+    appendFileSync(path, `${JSON.stringify(entry)}\n`);
+    byTest.set(t.id, entry);
+    fresh.add(t.id);
+    console.log(`  ${t.id}: ${result} in ${Math.round(seconds)}s`);
+  }
+  rmSync(bundle, { force: true, recursive: true });
+  const runnable = new Map(
+    Object.entries(executable ?? {}).map(([file, r]) => [file, [...fromRanges(r)].sort((a, b) => b - a)])
+  );
+  const ran = new Map(
+    tests.map((t) => [
+      t.id,
+      new Map(Object.entries(byTest.get(t.id).executed).map(([f, r]) => [f, fromRanges(r)])),
+    ])
+  );
+  const passing = tests.filter((t) => byTest.get(t.id).result === "Passed");
+  return {
+    fresh,
+    reach(file, line) {
+      const at = runnable.get(file)?.find((n) => n <= line);
+      if (at === undefined) return [];
+      return passing.filter((t) => ran.get(t.id).get(file)?.has(at));
+    },
+    seconds: (t) => byTest.get(t.id).seconds,
+  };
+}
+
+/** The rows each Swift test claims, from the `// qa:` lines the marks script reads. */
+function swiftTestRows(automated) {
+  const rows = new Map();
+  for (const [row, ids] of Object.entries(automated)) {
+    for (const id of ids) {
+      const test = /^(apps\/ios\/\S+\.swift):\d+ (\w+)$/.exec(id);
+      if (!test) continue;
+      const key = `${test[1]}|${test[2]}`;
+      (rows.get(key) ?? rows.set(key, new Set()).get(key)).add(row);
+    }
+  }
+  return rows;
+}
+
+/**
+ * The Swift UI stage: what the host tests missed, and the app's own code, against the UI tests that
+ * reach it, on a simulator made for the run. Each mutant is applied, the app rebuilt incrementally,
+ * and its tests run as `uiVerdict` orders them. Every test is baselined unmutated first; its coverage
+ * run counts as that when it ran in this run. A red one is dropped, so its mutants survive unless
+ * another test catches them.
+ *
+ * A run whose bundle is missing a test's result is the simulator failing, not a kill: the simulator
+ * is restarted and the mutant tried again, and a second failure stops the stage rather than fill it
+ * with kills nothing caused.
+ */
+function swiftUiStage(mutants, reports, opts) {
+  const candidates = mutants.filter((m) => m.status === "Survived" || m.status === "NoCoverage");
+  if (candidates.length === 0) return;
+  for (const [what, file] of IOS_PREREQUISITES) {
+    if (!existsSync(join(ROOT, file))) throw new Error(`the UI stage needs ${what}: ${file}`);
+  }
+  mkdirSync(IOS_BUILD, { recursive: true });
+  execFileSync("xcodegen", ["generate", "--spec", "apps/ios/Pikos/project.yml", "--project", "apps/ios/Pikos"], {
+    cwd: ROOT,
+    stdio: "ignore",
+  });
+  const buildLog = join(reports, "ios-build.log");
+  const testLog = join(reports, "ios-test.log");
+  const bundle = join(IOS_BUILD, "mutant.xcresult");
+  console.log(`\nUI stage: ${candidates.length} Swift mutant(s) the host tests missed or can't load`);
+  const sim = createSimulator();
+  let restore = null;
+  try {
+    if (!buildApp(sim, buildLog)) throw new Error(`the app doesn't build unmutated: ${buildLog}`);
+    const tests = uiTests();
+    const coverage = uiCoverage(sim, tests, reports);
+    for (const m of candidates) m.tests = coverage.reach(m.file, m.line);
+    const reached = candidates.filter((m) => m.tests.length > 0);
+    const tried = opts.limit ? sample(reached, opts.limit) : reached;
+    console.log(`  ${reached.length} reached by a UI test; trying ${tried.length}`);
+    const uiFiles = swiftFiles("apps/ios/PikosUITests/Sources").map(hashFile);
+    const verdicts = verdictStore(join(reports, "swift-ui-verdicts.jsonl"), tried, (m) =>
+      hashOf([hashFile(m.file), ...uiFiles])
+    );
+    const todo = [];
+    for (const [i, m] of tried.entries()) {
+      const kept = verdicts.kept(i);
+      if (kept) m.status = kept.status;
+      else todo.push(i);
+    }
+    const unproven = [...new Set(todo.flatMap((i) => tried[i].tests))].filter(
+      (t) => !coverage.fresh.has(t.id)
+    );
+    if (unproven.length > 0) {
+      const results = runUiTests(sim, unproven, bundle, testLog);
+      if (!results) throw new Error(`the baseline run didn't finish: ${testLog}`);
+      const red = unproven.filter((t) => results.get(t.id).result !== "Passed");
+      if (red.length > 0) {
+        console.log(`  red unmutated, so dropped: ${red.map((t) => t.id).join(", ")}`);
+        for (const m of tried) m.tests = m.tests.filter((t) => !red.includes(t));
+      }
+    }
+    for (const i of todo) {
+      const m = tried[i];
+      if (m.tests.length === 0) continue;
+      const started = Date.now();
+      restore = apply(m);
+      try {
+        m.status = buildApp(sim, buildLog) ? uiVerdict(sim, m, coverage, bundle, testLog) : "CompileError";
+      } finally {
+        restore();
+        restore = null;
+      }
+      m.seconds = Math.round((Date.now() - started) / 1000);
+      verdicts.record(i, m);
+      console.log(
+        `  ${i + 1}/${tried.length} ${m.status} in ${m.seconds}s, ${m.tests.length} test(s): ${m.file}:${m.line} ${m.mutator}`
+      );
+    }
+  } finally {
+    restore?.();
+    deleteSimulator(sim);
+    rmSync(bundle, { force: true, recursive: true });
+  }
+}
+
+/** xcodebuild can't stop at a test's first failure, so a mutant's tests run cheapest first in
+ *  batches that double: a kill costs about the tests before it, and a survivor a handful of extra
+ *  launches. */
+function uiVerdict(sim, m, coverage, bundle, log) {
+  const ordered = [...m.tests].sort((a, b) => coverage.seconds(a) - coverage.seconds(b));
+  const batches = [];
+  for (let at = 0, size = 1; at < ordered.length; at += size, size *= 2) {
+    batches.push(ordered.slice(at, at + size));
+  }
+  for (const batch of batches) {
+    let results = runUiTests(sim, batch, bundle, log);
+    if (!results) {
+      spawnSync("xcrun", ["simctl", "shutdown", sim]);
+      bootSimulator(sim);
+      results = runUiTests(sim, batch, bundle, log);
+      if (!results) throw new Error(`the simulator failed twice running ${m.file}:${m.line}: ${log}`);
+    }
+    if (batch.some((t) => results.get(t.id).result === "Failed")) return "KilledByE2e";
+  }
+  return "Survived";
 }
 
 /** Names a mutant by what it changes rather than where, so a line moved by an edit above
@@ -705,7 +1197,7 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   putBackLeftover();
   const until = git("rev-parse", "HEAD");
-  const dirty = git("status", "--porcelain", "--", ...MUTATED);
+  const dirty = git("status", "--porcelain", "--", ...MUTATED, ...SWIFT_SOURCE);
   if (dirty && !opts.uncommitted) {
     throw new Error(`source under test has uncommitted changes:\n${dirty}`);
   }
@@ -734,10 +1226,12 @@ function main() {
   const reports = join(ROOT, ".agent/releases", opts.version, "mutants");
   mkdirSync(reports, { recursive: true });
   const ranges = changedRanges(diffBase, ["packages/core/src", "apps/desktop/src"]);
-  const mutants = [
-    ...strykerStage(ranges, reports, opts.reuseUnit, opts.uncommitted),
-    ...cargoStage(diffBase, reports, opts.reuseUnit, opts.uncommitted),
-  ];
+  const mutants = opts.swiftOnly
+    ? []
+    : [
+        ...strykerStage(ranges, reports, opts.reuseUnit, opts.uncommitted),
+        ...cargoStage(diffBase, reports, opts.reuseUnit, opts.uncommitted),
+      ];
   // Reused reports can predate a scope change, so the scope is applied to them here too.
   const inScope = mutants.filter((m) => mutated(m.file));
   mutants.length = 0;
@@ -760,23 +1254,41 @@ function main() {
         opts.limit
       )
     : pending;
-  if (!opts.unitOnly) {
+  if (!opts.unitOnly && !opts.swiftOnly) {
     console.log(`\ne2e stage: ${tried.length} of ${missed.length} mutant(s) the unit tests missed`);
     const verdicts = e2eVerdicts(join(reports, "e2e-verdicts.jsonl"), tried, rowsFor);
     const progress = e2eProgress(join(reports, "e2e-progress.jsonl"), tried, opts.resume, verdicts);
     e2eStage(tried, rowsFor, reports, progress);
   }
 
+  const swift = swiftMutantsIn(changedRanges(diffBase, SWIFT_SOURCE));
+  for (const m of swift) {
+    if (SKIPPED.has(mutantKey(m)) || LOGGING.test(m.original)) m.status = "Ignored";
+  }
+  swiftPackageStage(swift, reports);
+  for (const m of swift) {
+    const missedByHost = m.status === "Survived" || m.status === "NoCoverage";
+    if (missedByHost && previous?.get(mutantKey(m)) === "KilledByE2e") m.status = "KilledByE2e";
+  }
+  if (!opts.unitOnly) swiftUiStage(swift, reports, opts);
+  const testRows = swiftTestRows(automated);
+  for (const m of swift) {
+    const claims = (m.tests ?? []).map((t) => `${t.file}|${t.fn}`);
+    if (m.pkg) claims.push(...[...testRows.keys()].filter((k) => k.startsWith(`${m.pkg.dir}/`)));
+    m.rows = [...new Set(claims.flatMap((k) => [...(testRows.get(k) ?? [])]))].sort();
+  }
+  mutants.push(...swift);
+
   const survivors = mutants
     .filter((m) => m.status === "Survived" || m.status === "NoCoverage")
-    .map(({ file, line, mutator, original, replacement, status }) => ({
-      file,
-      line,
-      mutator,
-      original,
-      replacement,
-      rows: rowsFor(file),
-      status,
+    .map((m) => ({
+      file: m.file,
+      line: m.line,
+      mutator: m.mutator,
+      original: m.original,
+      replacement: m.replacement,
+      rows: m.rows ?? rowsFor(m.file),
+      status: m.status,
     }));
   const outcomes = Object.fromEntries(mutants.map((m) => [mutantKey(m), m.status]));
   const count = (s) => mutants.filter((m) => m.status === s).length;
@@ -797,7 +1309,7 @@ function main() {
     },
     // A sample proves nothing about the rows it skipped, and work in progress nothing about
     // any commit, so the release copy reads neither.
-    complete: !opts.limit && !opts.uncommitted,
+    complete: !opts.limit && !opts.uncommitted && !opts.swiftOnly,
     e2e: !opts.unitOnly,
     outcomes,
     range,
