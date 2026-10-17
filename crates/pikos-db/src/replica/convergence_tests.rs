@@ -77,6 +77,13 @@ impl Cloud {
             .insert(name.to_string(), (name, stored, self.seq));
     }
 
+    fn everything(&self) -> Vec<(RecordName, FieldMap)> {
+        self.records
+            .values()
+            .map(|(name, fields, _)| (name.clone(), fields.clone()))
+            .collect()
+    }
+
     /// What changed since `cursor`, in an order shuffled by `rng`: CloudKit promises none.
     fn changed_since(&self, cursor: u64, rng: &mut Rng) -> (Vec<(RecordName, FieldMap)>, u64) {
         let mut changed: Vec<_> = self
@@ -147,6 +154,20 @@ impl Store {
     fn tick(&mut self, by: u64) {
         if let Store::Folder(folder) = self {
             folder.step += by;
+        }
+    }
+
+    /// Every record ever delivered: the CloudKit stand-in's current copies, or every log entry,
+    /// old versions included.
+    fn everything(&self) -> Vec<(RecordName, FieldMap)> {
+        match self {
+            Store::Cloud(cloud) => cloud.everything(),
+            Store::Folder(folder) => folder
+                .logs
+                .values()
+                .flatten()
+                .map(|(_, name, fields)| (name.clone(), fields.clone()))
+                .collect(),
         }
     }
 }
@@ -506,6 +527,50 @@ async fn derived_mismatches(pool: &SqlitePool) -> Vec<String> {
     .await
 }
 
+/// Pages whose search entry doesn't match the page, from the index's own check against its table.
+async fn search_is_stale(pool: &SqlitePool) -> bool {
+    sqlx::query("INSERT INTO pages_fts(pages_fts, rank) VALUES ('integrity-check', 1)")
+        .execute(pool)
+        .await
+        .is_err()
+}
+
+async fn broken_foreign_keys(pool: &SqlitePool) -> Vec<String> {
+    sqlx::query_as::<_, (String, i64, String)>("PRAGMA foreign_key_check")
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|(table, rowid, parent)| format!("{table} row {rowid} -> {parent}"))
+        .collect()
+}
+
+/// Pages whose cached schedule differs from what the schedule code works out now. Rebuilt in a
+/// transaction that's rolled back.
+async fn stale_schedules(pool: &SqlitePool) -> Vec<String> {
+    const CACHED: &str = "SELECT id, scheduled_start, scheduled_end FROM pages ORDER BY id";
+    type Cached = (String, Option<String>, Option<String>);
+    let mut tx = pool.begin().await.unwrap();
+    let before: Vec<Cached> = sqlx::query_as(CACHED).fetch_all(&mut *tx).await.unwrap();
+    for (page, _, _) in &before {
+        crate::schedules::refresh_schedule_denorm_conn(&mut tx, page)
+            .await
+            .unwrap();
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, page)
+            .await
+            .unwrap();
+    }
+    let after: Vec<Cached> = sqlx::query_as(CACHED).fetch_all(&mut *tx).await.unwrap();
+    tx.rollback().await.unwrap();
+
+    before
+        .into_iter()
+        .zip(after)
+        .filter(|(was, rebuilt)| was != rebuilt)
+        .map(|(was, rebuilt)| format!("{was:?} rebuilt as {rebuilt:?}"))
+        .collect()
+}
+
 async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
     // Shown only when the test fails, so a panic deep in a run still names its seed.
     eprintln!("seed {seed}");
@@ -573,11 +638,40 @@ async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
             "seed {seed}: device {i} differs from device 0, as (device 0, device {i}): {differing:#?}"
         );
     }
-    for device in &fleet {
+    let delivered = store.everything();
+    for (i, device) in fleet.iter().enumerate() {
         let stale = derived_mismatches(&device.pool).await;
         assert!(
             stale.is_empty(),
             "seed {seed}: stale tag caches on {stale:?}"
+        );
+        assert!(
+            !search_is_stale(&device.pool).await,
+            "seed {seed}: device {i}'s search index doesn't match its pages"
+        );
+        let broken = broken_foreign_keys(&device.pool).await;
+        assert!(broken.is_empty(), "seed {seed}: device {i}: {broken:?}");
+        let stale = stale_schedules(&device.pool).await;
+        assert!(
+            stale.is_empty(),
+            "seed {seed}: device {i}'s schedule caches: {stale:#?}"
+        );
+
+        let before = synced(&device.pool).await;
+        let again = apply(&device.pool, &delivered).await.unwrap();
+        assert_eq!(
+            again.changed, 0,
+            "seed {seed}: re-applying everything delivered changed device {i}"
+        );
+        assert_eq!(
+            synced(&device.pool).await,
+            before,
+            "seed {seed}: device {i}"
+        );
+        let queued = pending(&device.pool, 10).await.unwrap();
+        assert!(
+            queued.is_empty(),
+            "seed {seed}: re-applying queued {queued:?} to send on device {i}"
         );
     }
 }
