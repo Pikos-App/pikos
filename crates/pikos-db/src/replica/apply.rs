@@ -497,6 +497,14 @@ fn page_of(record: &Record) -> Option<String> {
     }
 }
 
+fn page_in_row(entity: &EntityMap, row: &[Vec<Value>]) -> Option<String> {
+    let (field, column) = locate(entity, "page_id")?;
+    match row.get(field)?.get(column)? {
+        Value::Text(page) => Some(page.clone()),
+        _ => None,
+    }
+}
+
 /// The field and column index of a column in an entity's fields.
 fn locate(entity: &EntityMap, column: &str) -> Option<(usize, usize)> {
     entity
@@ -844,7 +852,7 @@ async fn apply_record(
 
     let changed = writes_row || (was_live && !now_live);
     if changed {
-        note_touched(entity, record, &merged, touched);
+        note_touched(entity, record, &merged, local_row.as_deref(), touched);
     }
     Ok(if changed {
         Outcome::Changed
@@ -894,13 +902,16 @@ async fn rearm_if_moved(
     Ok(())
 }
 
+/// `before` is the row as it was here: a delete carries no fields, so a schedule, reminder or focus
+/// session that goes names its page only through the row it removed.
 fn note_touched(
     entity: &EntityMap,
     record: &Record,
     merged: &merge::Merged,
+    before: Option<&[Vec<Value>]>,
     touched: &mut Touched,
 ) {
-    let page = page_of(record);
+    let page = page_of(record).or_else(|| before.and_then(|row| page_in_row(entity, row)));
     match record.name.entity {
         Entity::Body => {
             touched.bodies.extend(page.clone());
