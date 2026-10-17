@@ -151,16 +151,21 @@ async fn read(pool: &SqlitePool, entity: &EntityMap, key: &str) -> AppResult<Rea
                 })
                 .collect()
         }
-        // A tombstone carries no values: the receiver only compares when the row went.
+        // A tombstone carries no values: the receiver only compares when the row went. No clock
+        // passes the tombstone's, or the record would read as a live row of NULLs.
         None => entity
             .fields
             .iter()
             .enumerate()
             .map(|(i, f)| FieldState {
                 values: vec![Value::Null; f.columns.len()],
-                clock: clock_of(i),
+                clock: tomb.map_or(clock_of(i), |t| clock_of(i).min(t)),
             })
             .collect(),
+    };
+    let born = match (&row, tomb) {
+        (None, Some(t)) => born.min(t),
+        _ => born,
     };
     // Gone with no tombstone of its own: a cascade, which every device repeats from the parent's.
     if row.is_none() && tomb.is_none() {

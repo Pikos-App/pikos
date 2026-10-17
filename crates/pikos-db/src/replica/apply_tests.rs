@@ -161,6 +161,28 @@ async fn a_page_made_on_one_device_arrives_whole_on_the_other() {
 }
 
 #[tokio::test]
+async fn a_note_written_before_the_other_device_turned_sync_on_keeps_its_body() {
+    let mac = device().await;
+    let page = create_page_impl(
+        &mac,
+        NewPage {
+            content: BODY.into(),
+            ..new_page("Groceries")
+        },
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let phone = device().await;
+
+    send(&mac, &phone).await;
+
+    let on_phone = get_page(&phone, &page.id).await.unwrap().unwrap();
+    assert_eq!(on_phone.content, BODY);
+    assert_converged(&mac, &phone).await;
+}
+
+#[tokio::test]
 async fn edits_to_different_fields_on_two_devices_both_survive() {
     let (mac, phone) = (device().await, device().await);
     let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();

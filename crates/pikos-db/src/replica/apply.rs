@@ -500,6 +500,9 @@ async fn apply_record(
 
     if writes_row {
         write_row(tx.conn(), entity, &record.name.key, &merged.row).await?;
+        if !was_live {
+            unstamp_parts(tx.conn(), entity, &record.name.key).await?;
+        }
     } else if was_live && !now_live {
         delete_row(tx.conn(), entity, &record.name.key).await?;
     }
@@ -567,6 +570,32 @@ fn note_touched(
         *slot = (*slot).max(won);
     }
     let _ = entity;
+}
+
+/// A row created by an apply holds column defaults for the entities that share its table, like a
+/// page's body before the body record arrives. Clocked at zero, so any record for them wins; left
+/// unclocked, they'd read as this device's base clock and could beat an older edit made elsewhere.
+async fn unstamp_parts(
+    conn: &mut SqliteConnection,
+    created: &EntityMap,
+    key: &str,
+) -> AppResult<()> {
+    let sharing = super::manifest::ENTITIES
+        .iter()
+        .filter(|e| e.table == created.table && e.entity != created.entity && e.key == created.key);
+    for entity in sharing {
+        let zero = Hlc::ZERO.to_string().repeat(entity.fields.len() + 1);
+        sqlx::query(
+            "INSERT INTO replica_clocks (entity, key, clocks) VALUES (?, ?, ?)
+             ON CONFLICT (entity, key) DO NOTHING",
+        )
+        .bind(entity.entity.prefix())
+        .bind(key)
+        .bind(zero)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
 }
 
 /// The local row's synced values by field, or None when this device doesn't have it.
