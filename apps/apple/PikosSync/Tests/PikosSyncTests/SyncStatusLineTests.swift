@@ -5,10 +5,12 @@ import XCTest
 final class SyncStatusLineTests: XCTestCase {
     private let empty = SyncStatusLine.Queue(toSend: 0, needsUpdate: false, lastFetch: nil)
 
+    // qa: CLOUD-120:3
     func testSyncTurnedOffSaysOff() {
         XCTAssertEqual(SyncStatusLine(status: nil, queue: empty).text, "Off")
     }
 
+    // qa: CLOUD-120:3
     func testASettledDeviceSaysUpToDateAndWhenItLastChecked() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let queue = SyncStatusLine.Queue(

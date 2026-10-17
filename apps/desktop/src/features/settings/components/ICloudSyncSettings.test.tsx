@@ -18,6 +18,7 @@ function answers(state: { on: boolean; text: string; action: string }) {
 describe("ICloudSyncSettings", () => {
   beforeEach(() => invoke.mockReset());
 
+  // qa: CLOUD-120:3
   it("shows the switch on with the line the transport last sent", async () => {
     answers({ action: "none", on: true, text: "Up to date · checked 2 minutes ago" });
 

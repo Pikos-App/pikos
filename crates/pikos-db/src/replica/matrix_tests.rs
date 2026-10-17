@@ -1338,3 +1338,28 @@ async fn a_calendar_account_and_its_folders_stay_on_their_device() {
         0
     );
 }
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+// qa: CLOUD-121
+#[tokio::test]
+async fn changes_made_while_sync_was_off_reach_the_other_device_once_it_is_back_on() {
+    let (mac, phone) = (device().await, device().await);
+    let id = created(&mac, new_page("Packing list")).await;
+    converge(&mac, &phone).await;
+
+    crate::replica::set_paused(&mac, true).await.unwrap();
+    edit(
+        &mac,
+        &id,
+        PageUpdate {
+            title: Some("Packing list, Lisbon".into()),
+            ..Default::default()
+        },
+    )
+    .await;
+    crate::replica::set_paused(&mac, false).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_eq!(page(&phone, &id).await.title, "Packing list, Lisbon");
+}
