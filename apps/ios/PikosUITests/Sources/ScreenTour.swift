@@ -12,7 +12,7 @@ final class ScreenTour: PikosUITestCase {
     private static let demoKeys = [
         "PIKOS_DEMO_SCOPE", "PIKOS_DEMO_PANE", "PIKOS_DEMO_SPAN", "PIKOS_DEMO_SWITCHER",
         "PIKOS_DEMO_QUICKADD", "PIKOS_DEMO_SEARCH", "PIKOS_DEMO_SETTINGS", "PIKOS_DEMO_OPEN",
-        "PIKOS_DEMO_DRAG", "PIKOS_DEMO_TIPS",
+        "PIKOS_DEMO_DRAG", "PIKOS_DEMO_TIPS", "PIKOS_DEMO_ERROR",
     ]
 
     private var missed: [String] = []
@@ -97,8 +97,8 @@ final class ScreenTour: PikosUITestCase {
             }
         }
         relaunch()
-        if longPressRow("Order FlexiSpot E7 frame"), tap(app.buttons["Move to Folder"].firstMatch, "move submenu") {
-            shot(section, 18, "Page menu: Move to Folder")
+        if longPressRow("Order FlexiSpot E7 frame"), tap(app.buttons["Move to folder"].firstMatch, "move submenu") {
+            shot(section, 18, "Page menu: Move to folder")
         }
         relaunch()
         if longPressRow("Order FlexiSpot E7 frame"), tap(app.buttons["Rename"].firstMatch, "rename") {
@@ -110,7 +110,7 @@ final class ScreenTour: PikosUITestCase {
         }
         relaunch()
         if longPressRow("Order FlexiSpot E7 frame"), tap(app.buttons["When"].firstMatch, "when submenu"),
-            tap(app.buttons["Pick a Date…"].firstMatch, "pick a date")
+            tap(app.buttons["Pick a date…"].firstMatch, "pick a date")
         {
             shot(section, 21, "When sheet")
         }
@@ -124,7 +124,8 @@ final class ScreenTour: PikosUITestCase {
             shot(section, 23, "Repeat, on a page that repeats, with Ends")
         }
 
-        relaunch(["PIKOS_DEMO_DRAG": "Call mom"])
+        // From the Inbox: Today has no day under it to hold a page over.
+        relaunch(["PIKOS_DEMO_SCOPE": "inbox", "PIKOS_DEMO_DRAG": "Book the car in for a service"])
         settle(3)
         shot(section, 24, "Holding a page over the day")
 
@@ -404,6 +405,177 @@ final class ScreenTour: PikosUITestCase {
         shot(section, 6, "Upright: the Inbox")
     }
 
+    // MARK: - Widgets
+
+    /// The app's debug widget gallery: each widget's real view at its family's size, since no test
+    /// can reach a home screen. The lock screen is always dark.
+    func test10Widgets() {
+        let section = "10 Widgets"
+        let boards = ["list", "now", "list-edge", "now-edge"]
+        for (index, board) in boards.enumerated() {
+            relaunch(arguments: ["-PikosWidgetGallery", board])
+            shot(section, index + 1, "Gallery: \(board), light")
+            relaunch(arguments: ["-PikosWidgetGallery", board, "-PikosWidgetGalleryDark", "YES"])
+            shot(section, index + 11, "Gallery: \(board), dark")
+        }
+        relaunch(arguments: ["-PikosWidgetGallery", "lock"])
+        shot(section, 21, "Gallery: lock screen")
+    }
+
+    // MARK: - Empty and error states
+
+    func test11States() throws {
+        let section = "11 States"
+        relaunch(["PIKOS_DEMO_ERROR": "The page could not be saved. Try again."])
+        shot(section, 1, "An error")
+
+        let fresh = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pikos-tour-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fresh, withIntermediateDirectories: true)
+        app.launchEnvironment["PIKOS_DEMO"] = nil
+        app.launchEnvironment["PIKOS_WORKSPACE_DIRECTORY"] = fresh.path
+        relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
+        shot(section, 2, "An empty Inbox")
+        relaunch(["PIKOS_DEMO_SCOPE": "upcoming"])
+        shot(section, 3, "An empty Upcoming")
+        relaunch(["PIKOS_DEMO_PANE": "week"])
+        shot(section, 4, "An empty day")
+        relaunch(["PIKOS_DEMO_PANE": "week", "PIKOS_DEMO_SPAN": "month"])
+        shot(section, 5, "An empty month")
+        relaunch(["PIKOS_DEMO_SEARCH": "zebra"])
+        settle(1)
+        shot(section, 6, "Search with no results")
+        relaunch(["PIKOS_DEMO_SWITCHER": "1"])
+        if tap(button("Trash"), "trash") {
+            settle(1)
+            shot(section, 7, "An empty trash")
+        }
+    }
+
+    // MARK: - The main screens, for a second appearance or text size
+
+    /// One shot of each screen a person spends time on. Run on its own after switching the
+    /// simulator to dark, or to the largest text size, to see those without the whole tour.
+    func test12Essentials() {
+        let section = "12 Essentials"
+        shot(section, 1, "Today")
+        relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
+        shot(section, 2, "Inbox")
+        relaunch(["PIKOS_DEMO_SCOPE": "Projects"])
+        shot(section, 3, "A folder")
+        relaunch(["PIKOS_DEMO_SCOPE": "upcoming"])
+        shot(section, 4, "Upcoming")
+        relaunch(["PIKOS_DEMO_SWITCHER": "1"])
+        shot(section, 5, "View switcher")
+        relaunch(["PIKOS_DEMO_PANE": "week"])
+        shot(section, 6, "Day")
+        relaunch(["PIKOS_DEMO_PANE": "week", "PIKOS_DEMO_SPAN": "threeDays"])
+        shot(section, 7, "Three days")
+        relaunch(["PIKOS_DEMO_PANE": "week", "PIKOS_DEMO_SPAN": "month"])
+        shot(section, 8, "Month")
+        relaunch(["PIKOS_DEMO_QUICKADD": "Call the dentist tomorrow at 3pm !high #health ~Personal"])
+        shot(section, 9, "Quick add")
+        relaunch(["PIKOS_DEMO_SEARCH": "desk"])
+        settle(1)
+        shot(section, 10, "Search results")
+        relaunch(["PIKOS_DEMO_OPEN": "Order FlexiSpot E7 frame"])
+        shot(section, 11, "Page")
+        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
+        shot(section, 12, "Settings")
+        relaunch()
+        if longPressRow("Order FlexiSpot E7 frame") {
+            shot(section, 13, "Page menu")
+        }
+        relaunch()
+        if tap(app.buttons["Move to today"].firstMatch, "move to today") {
+            settle(1)
+            shot(section, 14, "Notice")
+        }
+    }
+
+    // MARK: - Writing space
+
+    /// Each screen where a person types, with the keyboard up, and how many points the text has
+    /// between the top of where it is typed and the first thing that is not the text: the keyboard,
+    /// the formatting bar, or a control below the field.
+    func test13Writing() {
+        let section = "13 Writing"
+        var lines: [String] = []
+        let page = ["PIKOS_DEMO_OPEN": "Order FlexiSpot E7 frame"]
+
+        relaunch(page)
+        let document = app.webViews.firstMatch
+        if document.waitForExistence(timeout: 10) {
+            document.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            settle(1.5)
+            shot(section, 1, "The document")
+            let bar = app.buttons["More formatting"].firstMatch
+            let bottom = bar.exists ? bar.frame.minY : keyboardTop()
+            lines.append(measure("document", top: document.frame.minY, bottom: bottom))
+        }
+
+        relaunch(page)
+        let title = textInput("Title")
+        if tap(title, "title") {
+            settle(1)
+            shot(section, 2, "The title")
+            lines.append(measure("title", top: title.frame.minY, bottom: keyboardTop()))
+        }
+
+        relaunch(page)
+        let subtitle = textInput("Subtitle")
+        if tap(subtitle, "subtitle") {
+            settle(1)
+            shot(section, 3, "The subtitle")
+            lines.append(measure("subtitle", top: subtitle.frame.minY, bottom: keyboardTop()))
+        }
+
+        // The empty sheet's hint sits where it would sit under a sentence, so its top is where the
+        // sentence stopped while the hint stayed up.
+        relaunch(["PIKOS_DEMO_QUICKADD": ""])
+        let emptyHint = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Type a date")).firstMatch
+        let hintTop = emptyHint.waitForExistence(timeout: 8) ? emptyHint.frame.minY : nil
+
+        // A sentence typed: the chips under it move down as it grows, and whatever sits fixed above the
+        // keyboard is where it stops.
+        relaunch(["PIKOS_DEMO_QUICKADD": "Call the dentist tomorrow at 3pm !high #health"])
+        let line = textInput("What needs doing?")
+        if line.waitForExistence(timeout: 8) {
+            settle(1)
+            shot(section, 4, "Quick add")
+            let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "When")).firstMatch
+            let chips = chip.exists ? chip.frame.maxY + 12 - line.frame.maxY : 0
+            let hint = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Type a date")).firstMatch
+            let limit = hint.exists ? hint.frame.minY : keyboardTop()
+            lines.append(measure("quick add", top: line.frame.minY, bottom: limit - chips))
+            if let hintTop {
+                lines.append(measure("quick add, were the hint kept", top: line.frame.minY, bottom: hintTop - chips))
+            }
+        }
+
+        relaunch()
+        if longPressRow("Order FlexiSpot E7 frame"), tap(app.buttons["Rename"].firstMatch, "rename") {
+            settle(1)
+            shot(section, 5, "Rename")
+            let field = app.alerts.textFields.firstMatch
+            lines.append(measure("rename", top: field.frame.minY, bottom: field.frame.maxY))
+        }
+
+        let note = XCTAttachment(string: lines.joined(separator: "\n"))
+        note.name = "\(section)|00|measurements"
+        note.lifetime = .keepAlways
+        add(note)
+    }
+
+    private func keyboardTop() -> CGFloat {
+        let keyboard = app.keyboards.firstMatch
+        return keyboard.exists ? keyboard.frame.minY : app.frame.maxY
+    }
+
+    private func measure(_ name: String, top: CGFloat, bottom: CGFloat) -> String {
+        "\(name): \(Int((bottom - top).rounded()))pt (from y \(Int(top)) to y \(Int(bottom)))"
+    }
+
     // MARK: - Helpers
 
     private func shot(_ section: String, _ order: Int, _ title: String) {
@@ -418,10 +590,11 @@ final class ScreenTour: PikosUITestCase {
         Thread.sleep(forTimeInterval: seconds)
     }
 
-    private func relaunch(_ environment: [String: String] = [:]) {
+    private func relaunch(_ environment: [String: String] = [:], arguments: [String] = []) {
         app.terminate()
         for key in Self.demoKeys { app.launchEnvironment[key] = nil }
         for (key, value) in environment { app.launchEnvironment[key] = value }
+        app.launchArguments = arguments
         app.launch()
         _ = app.wait(for: .runningForeground, timeout: Self.timeout)
         settle(3.5)

@@ -123,6 +123,7 @@
                 route.path = [.search]
             }
             if environment["PIKOS_DEMO_SETTINGS"] != nil { route.isSettingsPresented = true }
+            if let message = environment["PIKOS_DEMO_ERROR"] { store.errorMessage = message }
             if let title = environment["PIKOS_DEMO_OPEN"], let workspace = store.handle,
                 let match = try? await workspace.listPages(query: PageQuery()).first(where: { $0.title == title })
             {
