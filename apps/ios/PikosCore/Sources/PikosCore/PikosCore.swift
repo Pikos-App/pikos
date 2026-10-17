@@ -1375,6 +1375,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func reconnectCaldav(accountId: String, password: String) async throws  -> SyncAccountWithCalendars
     
     /**
+     * Note what a new workspace's first-run pages are, right after seeding them, so turning on
+     * device sync can tell a workspace nobody has used from one with work in it.
+     */
+    func recordFirstRunSeed() async throws 
+    
+    /**
      * Record a finished focus session against a page.
      *
      * The timing is the caller's: a running session is never persisted, because
@@ -2806,6 +2812,26 @@ open func reconnectCaldav(accountId: String, password: String)async throws  -> S
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncAccountWithCalendars_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Note what a new workspace's first-run pages are, right after seeding them, so turning on
+     * device sync can tell a workspace nobody has used from one with work in it.
+     */
+open func recordFirstRunSeed()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_record_first_run_seed(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -9618,6 +9644,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_record_first_run_seed() != 22987) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 53674) {

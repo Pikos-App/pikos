@@ -163,6 +163,7 @@ export const WRITE_COMMANDS = new Set([
   "reset_db",
   "wipe_app_data",
   "release_sync_credentials",
+  "record_first_run_seed",
 ]);
 
 /** Commands that only read. Listed rather than inferred so a new command has to be
@@ -638,5 +639,9 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   async releaseSyncCredentials(): Promise<void> {
     await invoke<void>("release_sync_credentials");
+  }
+
+  recordFirstRunSeed(): Promise<void> {
+    return invoke<void>("record_first_run_seed");
   }
 }

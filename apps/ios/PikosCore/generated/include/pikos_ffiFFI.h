@@ -508,6 +508,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_recent_pages(uint64_t ptr, uint32_
 uint64_t uniffi_pikos_ffi_fn_method_workspace_reconnect_caldav(uint64_t ptr, RustBuffer account_id, RustBuffer password
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECORD_FIRST_RUN_SEED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECORD_FIRST_RUN_SEED
+uint64_t uniffi_pikos_ffi_fn_method_workspace_record_first_run_seed(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECORD_FOCUS_SESSION
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECORD_FOCUS_SESSION
 uint64_t uniffi_pikos_ffi_fn_method_workspace_record_focus_session(uint64_t ptr, RustBuffer page_id, RustBuffer started_at, RustBuffer ended_at
@@ -1346,6 +1351,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_recent_pages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECORD_FIRST_RUN_SEED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECORD_FIRST_RUN_SEED
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_record_first_run_seed(void
     
 );
 #endif

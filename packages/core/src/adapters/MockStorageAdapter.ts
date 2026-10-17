@@ -2037,6 +2037,10 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  recordFirstRunSeed(): Promise<void> {
+    return Promise.resolve();
+  }
+
   private _pollAccount(accountId: string): CalendarSyncResult[] {
     const synced = this._calendarsFor(accountId).filter((c) => c.enabled);
     // Stamp freshness like `persist_progress` does on every successful poll — the

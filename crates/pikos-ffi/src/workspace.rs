@@ -2922,6 +2922,13 @@ impl Workspace {
         Ok(pikos_db::export::backup_to(&self.pool, &destination).await?)
     }
 
+    /// Note what a new workspace's first-run pages are, right after seeding them, so turning on
+    /// device sync can tell a workspace nobody has used from one with work in it.
+    pub async fn record_first_run_seed(&self) -> Result<(), WorkspaceError> {
+        pikos_db::replica::record_seed(&self.pool).await?;
+        Ok(())
+    }
+
     /// Delete everything in the workspace.
     ///
     /// Every page, folder, schedule, repeat and calendar link, with no trash to

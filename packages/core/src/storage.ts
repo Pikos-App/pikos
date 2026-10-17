@@ -457,4 +457,7 @@ export interface StorageAdapter {
    *  OS keychain. Must run before `wipeAllData` — the account ids it keys on
    *  live in the database that call destroys. */
   releaseSyncCredentials(): Promise<void>;
+  /** Note what a new workspace's first-run pages are, right after seeding them, so turning on
+   *  device sync can tell a workspace nobody has used from one with work in it. */
+  recordFirstRunSeed(): Promise<void>;
 }
