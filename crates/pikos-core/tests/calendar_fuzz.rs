@@ -13,9 +13,8 @@
 //! does.
 //!
 //! Scenarios come from `apps/desktop/scripts/fuzz-calendar-parity.ts`, which
-//! keeps the density guard: cascade depth is computed at all three rendering
-//! densities and a disagreement stops the generator, because the port assumes
-//! column assignment is pixel-independent.
+//! records each one at all three rendering densities with that density's
+//! shortest block in minutes.
 //!
 //! Search wider than the committed corpus by hand:
 //!
@@ -66,8 +65,10 @@ struct ExpectedBlock {
 #[serde(rename_all = "camelCase")]
 struct TimedScenario {
     day: String,
+    density: String,
     pages: Vec<CorpusPage>,
     blocks: Vec<ExpectedBlock>,
+    shortest_block_minutes: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,7 +152,7 @@ fn randomly_composed_timed_days_match_the_reference() {
     let mut failures = Vec::new();
     for scenario in &corpus.timed {
         let pages: Vec<LayoutPage> = scenario.pages.iter().map(LayoutPage::from).collect();
-        let actual = assign_timed_columns(&pages, &scenario.day);
+        let actual = assign_timed_columns(&pages, &scenario.day, scenario.shortest_block_minutes);
 
         // Keyed, not positional: the reference emits in DOM paint order, which
         // is pixel-derived and deliberately not reproduced.
@@ -185,8 +186,9 @@ fn randomly_composed_timed_days_match_the_reference() {
 
         if expected_map != actual_map {
             failures.push(format!(
-                "  {}\n    reference: {expected_map:?}\n    rust:      {actual_map:?}",
-                describe(&scenario.pages)
+                "  {} at {}\n    reference: {expected_map:?}\n    rust:      {actual_map:?}",
+                describe(&scenario.pages),
+                scenario.density
             ));
         }
     }

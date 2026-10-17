@@ -17,10 +17,12 @@
 //! would be a bug dressed as reuse — iOS should make that call for itself,
 //! against the same *column assignment* computed here.
 //!
+//! Column assignment itself reads one metric: the shortest a block is drawn,
+//! which the caller passes as minutes (see [`timed::assign_timed_columns`]).
+//!
 //! Likewise absent: the final `blocks.sort(by leftPct)` that `buildDayBlocks`
 //! applies before returning. That orders elements for DOM painting so deeper
-//! cascades overlay their hosts; it is not layout, and it is the one part of
-//! the pipeline that genuinely does vary with pixel density.
+//! cascades overlay their hosts; it is not layout.
 
 pub mod all_day;
 pub mod occurrences;

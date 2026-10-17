@@ -12,6 +12,7 @@ import {
   mapHourToY,
   mapYToDate,
   mapYToHour,
+  shortestBlockMinutes,
   snapY,
   timeToY,
   weekDays,
@@ -389,5 +390,12 @@ describe("zoom", () => {
     expect(computeCalendarMetrics("compact", 2).compactBlockHeight).toBe(32);
     expect(computeCalendarMetrics("compact", 10 / 14).compactBlockHeight).toBe(16);
     expect(computeCalendarMetrics("normal", 10 / 14).compactBlockHeight).toBe(16);
+  });
+
+  it("gives the shortest block in minutes: a quarter hour, until compact draws it longer", () => {
+    expect(shortestBlockMinutes(computeCalendarMetrics("normal"))).toBe(15);
+    expect(shortestBlockMinutes(computeCalendarMetrics("spacious"))).toBe(15);
+    expect(shortestBlockMinutes(computeCalendarMetrics("compact"))).toBeCloseTo(24);
+    expect(shortestBlockMinutes(computeCalendarMetrics("normal", 10 / 14))).toBeCloseTo(21);
   });
 });

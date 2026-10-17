@@ -16,10 +16,9 @@
 //   pnpm --filter @pikos/desktop gen:fuzz-calendar
 //   FUZZ_CASES=5000 FUZZ_SEED=7 pnpm --filter @pikos/desktop gen:fuzz-calendar
 //
-// The density guard from the hand-written generator applies here too, and for
-// the same reason: the Rust port assumes column assignment is pixel-independent,
-// so every scenario is laid out at all three densities and any disagreement
-// stops the run rather than being averaged away.
+// Every timed scenario is laid out at all three densities and recorded once per
+// density with that density's shortest block in minutes, which is the one metric
+// column assignment reads.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -27,7 +26,7 @@ import { dirname, resolve } from "node:path";
 import type { PageSummary } from "@pikos/core";
 import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import { assignStableAllDayRows, buildAllDayBars } from "@pikos/core";
-import { computeCalendarMetrics } from "@pikos/core";
+import { computeCalendarMetrics, shortestBlockMinutes } from "@pikos/core";
 import { buildDayBlocks } from "@pikos/core";
 import type { CalendarDensity } from "@pikos/core";
 
@@ -220,51 +219,31 @@ function main(): void {
       Array.from({ length: count }, (_, n) => timedEvent(random, `p${String(n).padStart(2, "0")}`))
     );
 
-    // Same guard as the hand-written generator, for the same reason: the Rust
-    // port assumes column assignment does not depend on pixels. If that ever
-    // becomes false, stop — do not average it away.
-    const perDensity = DENSITIES.map((density) =>
-      buildDayBlocks(pages, day, computeCalendarMetrics(density))
-    );
-    const signatures = perDensity.map((blocks) =>
-      JSON.stringify(
-        blocks
-          .map((b) => [b.page.id, b.cascadeDepth] as const)
-          .sort((x, y) => x[0].localeCompare(y[0]))
-      )
-    );
-    if (new Set(signatures).size !== 1) {
-      throw new Error(
-        `cascadeDepth is density-dependent for a fuzzed scenario:\n` +
-          `  pages: ${JSON.stringify(
-            pages.map((p) => [p.id, p.scheduledStart, p.scheduledEnd])
-          )}\n` +
-          DENSITIES.map((d, i) => `  ${d}: ${signatures[i]!}`).join("\n") +
-          `\nThe Rust port assumes column assignment is pixel-independent. ` +
-          `That assumption is now false — stop and re-scope the port.`
-      );
+    for (const density of DENSITIES) {
+      const metrics = computeCalendarMetrics(density);
+      const blocks = buildDayBlocks(pages, day, metrics);
+      timed.push({
+        // Sorted by page id rather than emit order: emit order is a DOM painting
+        // concern a native renderer will not share.
+        blocks: blocks
+          .map((b) => ({
+            cascadeDepth: b.cascadeDepth,
+            isContinuationAfter: b.isContinuationAfter === true,
+            isContinuationBefore: b.isContinuationBefore === true,
+            pageId: b.page.id,
+          }))
+          .sort((x, y) => x.pageId.localeCompare(y.pageId)),
+        day: DAY,
+        density,
+        pages: pages.map((p) => ({
+          createdAt: p.createdAt,
+          id: p.id,
+          scheduledEnd: p.scheduledEnd ?? null,
+          scheduledStart: p.scheduledStart ?? null,
+        })),
+        shortestBlockMinutes: shortestBlockMinutes(metrics),
+      });
     }
-
-    const blocks = perDensity[1]!; // "normal"
-    timed.push({
-      // Sorted by page id rather than emit order: emit order is a DOM painting
-      // concern a native renderer will not share.
-      blocks: blocks
-        .map((b) => ({
-          cascadeDepth: b.cascadeDepth,
-          isContinuationAfter: b.isContinuationAfter === true,
-          isContinuationBefore: b.isContinuationBefore === true,
-          pageId: b.page.id,
-        }))
-        .sort((x, y) => x.pageId.localeCompare(y.pageId)),
-      day: DAY,
-      pages: pages.map((p) => ({
-        createdAt: p.createdAt,
-        id: p.id,
-        scheduledEnd: p.scheduledEnd ?? null,
-        scheduledStart: p.scheduledStart ?? null,
-      })),
-    });
   }
 
   const allDay = [];

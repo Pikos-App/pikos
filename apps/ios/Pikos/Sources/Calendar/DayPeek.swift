@@ -27,6 +27,7 @@ struct DayPeek: View {
     private static let restingHours = 3
     static let droppingHours = 6
     private static let hourHeight: CGFloat = 40
+    private static let metrics = CalendarGeometry.Metrics(hourHeight: hourHeight, minBlockHeight: 20)
     private static let gutter: CGFloat = 50
     private static let gridTopInset: CGFloat = 8
     private static let trayShape = UnevenRoundedRectangle(
@@ -60,7 +61,7 @@ struct DayPeek: View {
 
     @ViewBuilder
     private func content(now: Date) -> some View {
-        let day = Timeline(entries: entries, now: now)
+        let day = Timeline(entries: entries, now: now, metrics: Self.metrics)
         let isDropping = drag.page != nil
         let hours = isDropping ? Self.droppingHours : Self.restingHours
         let firstHour = Self.firstHour(now: now, hours: hours)
@@ -197,7 +198,7 @@ struct DayPeek: View {
     private func blocks(day: Timeline, firstHour: Int, height: CGFloat, columnWidth: CGFloat)
         -> some View
     {
-        let metrics = CalendarGeometry.Metrics(hourHeight: Self.hourHeight, minBlockHeight: 20)
+        let metrics = Self.metrics
         let origin = CGFloat(firstHour) * Self.hourHeight
         let layout = day.layout
         let colors = CalendarPalette.folderColors(store.folders)
@@ -333,7 +334,7 @@ private struct Timeline {
     let next: String?
 
     @MainActor
-    init(entries: [CalendarEntry], now: Date) {
+    init(entries: [CalendarEntry], now: Date, metrics: CalendarGeometry.Metrics) {
         today = WallClockDay.string(from: now)
         nowMinute = CalendarGeometry.minutesIntoDay(WallClockDay.instant(from: now)) ?? 0
 
@@ -361,7 +362,9 @@ private struct Timeline {
                 id: $0.key, createdAt: $0.createdAt,
                 scheduledStart: $0.scheduledStart, scheduledEnd: $0.scheduledEnd)
         }
-        let blocks = pages.isEmpty ? [] : layoutTimedDay(pages: pages, day: today)
+        let blocks =
+            pages.isEmpty
+            ? [] : layoutTimedDay(pages: pages, day: today, shortestBlockMinutes: metrics.shortestBlockMinutes)
         layout = Dictionary(blocks.map { ($0.pageId, $0) }, uniquingKeysWith: { first, _ in first })
 
         let upcoming = remaining.sorted { $0.scheduledStart < $1.scheduledStart }

@@ -70,6 +70,7 @@ export {
   mapHourToY,
   mapYToDate,
   mapYToHour,
+  shortestBlockMinutes,
   snapY,
   snapYCollapse,
   timeToY,

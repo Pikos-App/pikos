@@ -21,24 +21,21 @@
 // sweep-line column) and the continuation flags, and ignores top/height/
 // leftPct/widthPct.
 //
-// ## The metrics-independence check
+// ## The one metric column assignment reads
 //
-// Porting `cascadeDepth` without the pixel layer is only sound if it does not
-// depend on the pixel layer. `buildDayBlocks` takes `metrics`, and `isCompact`
-// is derived from pixel height, so this is an assumption rather than an
-// obvious truth. The generator therefore computes every timed scenario at all
-// three densities and fails if any page's `cascadeDepth` differs between them.
+// A block is never drawn shorter than a normal quarter hour, and overlap is
+// decided by what is drawn, so in compact a 15-minute event reaches into the
+// next one and the columns change. Column assignment therefore depends on one
+// metric, the shortest block in minutes, and on no other pixel. Every timed
+// scenario is recorded at all three densities with that number, which is what
+// the Rust port is handed in place of pixels.
 //
-// The comparison is deliberately keyed by page id rather than positional.
+// Blocks are recorded keyed by page id rather than positional.
 // `buildDayBlocks` ends with `blocks.sort((a, b) => a.leftPct - b.leftPct ...)`,
 // emitting in DOM paint order so deeper-cascade events paint over their hosts.
-// `leftPct` comes from the text-collision split, which is pixel-based, so the
-// emitted *order* genuinely does vary with density — while each page's column
-// assignment does not. An ordered comparison conflates the two and reports a
-// false positive; this one separates them.
-//
-// Emit order is therefore not captured at all: it is a DOM painting concern
-// that a native calendar renderer will not share.
+// That order comes from the pixel-based text-collision split; it is a DOM
+// painting concern a native calendar renderer will not share, so it is not
+// captured at all.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -49,7 +46,7 @@ import {
   buildAllDayBars,
   crossingMidnightsCount,
 } from "@pikos/core";
-import { computeCalendarMetrics } from "@pikos/core";
+import { computeCalendarMetrics, shortestBlockMinutes } from "@pikos/core";
 import { buildDayBlocks } from "@pikos/core";
 import type { CalendarDensity } from "@pikos/core";
 import { computeScheduleTransition, normalizeEndInput } from "@pikos/core";
@@ -473,53 +470,35 @@ const NORMALIZE_END_CASES: { id: string; start: string; end: string | null }[] =
 function main(): void {
   assertEnvironment();
 
-  const timed = TIMED_SCENARIOS.map((scenario) => {
+  // One entry per scenario per density — see the module docs.
+  const timed = TIMED_SCENARIOS.flatMap((scenario) => {
     const day = new Date(`${scenario.day}T00:00:00`);
-
-    // Compute at every density and require cascadeDepth agreement — see the
-    // module docs. A mismatch means cascadeDepth is pixel-dependent after all
-    // and must not be ported without the pixel layer.
-    const perDensity = DENSITIES.map((density) =>
-      buildDayBlocks(scenario.pages, day, computeCalendarMetrics(density))
-    );
-    const signatures = perDensity.map((blocks) =>
-      JSON.stringify(
-        blocks
-          .map((b) => [b.page.id, b.cascadeDepth] as const)
-          .sort((x, y) => x[0].localeCompare(y[0]))
-      )
-    );
-    if (new Set(signatures).size !== 1) {
-      throw new Error(
-        `cascadeDepth is density-dependent for scenario "${scenario.id}":\n` +
-          DENSITIES.map((d, i) => `  ${d}: ${signatures[i]!}`).join("\n") +
-          `\nThe Rust port assumes column assignment is pixel-independent. ` +
-          `That assumption is now false — stop and re-scope the port.`
-      );
-    }
-
-    const blocks = perDensity[1]!; // "normal"
-    return {
-      // Sorted by page id, not emit order — see the module docs on why emit
-      // order is a rendering concern rather than portable behaviour.
-      blocks: blocks
-        .map((b) => ({
-          cascadeDepth: b.cascadeDepth,
-          isContinuationAfter: b.isContinuationAfter === true,
-          isContinuationBefore: b.isContinuationBefore === true,
-          pageId: b.page.id,
-        }))
-        .sort((x, y) => x.pageId.localeCompare(y.pageId)),
-      day: scenario.day,
-      id: scenario.id,
-      note: scenario.note,
-      pages: scenario.pages.map((p) => ({
-        createdAt: p.createdAt,
-        id: p.id,
-        scheduledEnd: p.scheduledEnd ?? null,
-        scheduledStart: p.scheduledStart ?? null,
-      })),
-    };
+    return DENSITIES.map((density) => {
+      const metrics = computeCalendarMetrics(density);
+      const blocks = buildDayBlocks(scenario.pages, day, metrics);
+      return {
+        // Sorted by page id, not emit order — see the module docs on why emit
+        // order is a rendering concern rather than portable behaviour.
+        blocks: blocks
+          .map((b) => ({
+            cascadeDepth: b.cascadeDepth,
+            isContinuationAfter: b.isContinuationAfter === true,
+            isContinuationBefore: b.isContinuationBefore === true,
+            pageId: b.page.id,
+          }))
+          .sort((x, y) => x.pageId.localeCompare(y.pageId)),
+        day: scenario.day,
+        id: `${scenario.id}@${density}`,
+        note: scenario.note,
+        pages: scenario.pages.map((p) => ({
+          createdAt: p.createdAt,
+          id: p.id,
+          scheduledEnd: p.scheduledEnd ?? null,
+          scheduledStart: p.scheduledStart ?? null,
+        })),
+        shortestBlockMinutes: shortestBlockMinutes(metrics),
+      };
+    });
   });
 
   const allDay = ALL_DAY_SCENARIOS.map((scenario) => {
@@ -592,7 +571,7 @@ function main(): void {
   process.stdout.write(
     `calendar.json: ${timed.length} timed, ${allDay.length} all-day, ${midnights.length} midnight\n` +
       `platform.json: ${deepLinks.length} deep-link, ${scheduleTransitions.length} transition, ${normalizeEnds.length} normalize-end\n` +
-      `cascadeDepth verified density-independent across ${DENSITIES.length} densities\n` +
+      `timed scenarios recorded at ${DENSITIES.length} densities\n` +
       `out: ${OUT_DIR}\n`
   );
 }

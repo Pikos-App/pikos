@@ -474,10 +474,16 @@ impl From<core_quick_add::ParseResult> for QuickAddResult {
 // ─── Calendar layout ─────────────────────────────────────────────────────────
 
 /// Cascade columns for every timed event touching `day` (a `YYYY-MM-DD`).
+/// `shortest_block_minutes` is the renderer's minimum block height in minutes
+/// of its grid, as `pikos_core::calendar::timed::assign_timed_columns` reads it.
 #[uniffi::export]
-pub fn layout_timed_day(pages: Vec<LayoutPage>, day: String) -> Vec<TimedBlock> {
+pub fn layout_timed_day(
+    pages: Vec<LayoutPage>,
+    day: String,
+    shortest_block_minutes: f64,
+) -> Vec<TimedBlock> {
     let core: Vec<CoreLayoutPage> = pages.iter().map(Into::into).collect();
-    assign_timed_columns(&core, &day)
+    assign_timed_columns(&core, &day, shortest_block_minutes)
         .into_iter()
         .map(|b| TimedBlock {
             page_id: b.page_id,
@@ -624,7 +630,7 @@ mod tests {
                 s.to_string(),
                 s.to_string(),
             );
-            let _ = layout_timed_day(vec![], s.to_string());
+            let _ = layout_timed_day(vec![], s.to_string(), 15.0);
             let _ = layout_all_day(vec![], vec![s.to_string()]);
         }
     }
@@ -648,7 +654,7 @@ mod tests {
                 scheduled_end: Some("2026-03-16T10:00:00".into()),
             },
         ];
-        let blocks = layout_timed_day(pages, "2026-03-16".into());
+        let blocks = layout_timed_day(pages, "2026-03-16".into(), 15.0);
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].page_id, "good");
     }

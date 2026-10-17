@@ -513,6 +513,22 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
+    typealias FfiType = Double
+    typealias SwiftType = Double
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Double {
+        return try lift(readDouble(&buf))
+    }
+
+    public static func write(_ value: Double, into buf: inout [UInt8]) {
+        writeDouble(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -9320,13 +9336,16 @@ public func layoutAllDay(pages: [LayoutPage], days: [String]) -> [AllDayBar]  {
 }
 /**
  * Cascade columns for every timed event touching `day` (a `YYYY-MM-DD`).
+ * `shortest_block_minutes` is the renderer's minimum block height in minutes
+ * of its grid, as `pikos_core::calendar::timed::assign_timed_columns` reads it.
  */
-public func layoutTimedDay(pages: [LayoutPage], day: String) -> [TimedBlock]  {
+public func layoutTimedDay(pages: [LayoutPage], day: String, shortestBlockMinutes: Double) -> [TimedBlock]  {
     return try!  FfiConverterSequenceTypeTimedBlock.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_pikos_ffi_fn_func_layout_timed_day(
         FfiConverterSequenceTypeLayoutPage.lower(pages),
-        FfiConverterString.lower(day),uniffiCallStatus
+        FfiConverterString.lower(day),
+        FfiConverterDouble.lower(shortestBlockMinutes),uniffiCallStatus
     )
 })
 }
@@ -9442,7 +9461,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_func_layout_all_day() != 9636) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_func_layout_timed_day() != 3648) {
+    if (uniffi_pikos_ffi_checksum_func_layout_timed_day() != 62179) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_next_occurrence_after() != 41709) {

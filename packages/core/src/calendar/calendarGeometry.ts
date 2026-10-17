@@ -136,6 +136,13 @@ export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): Cale
   };
 }
 
+/** The shortest block, in minutes of the grid. It is the one metric column assignment
+ *  reads, because a floored block overlaps what its drawn height covers, so it is what
+ *  the Rust port of that assignment is handed in place of pixels. */
+export function shortestBlockMinutes(metrics: CalendarMetrics): number {
+  return (metrics.compactBlockHeight / metrics.hourHeight) * 60;
+}
+
 /** Baseline metrics for tests + callers that don't have settings context. */
 export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
 

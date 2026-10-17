@@ -292,7 +292,9 @@ struct CalendarGrid: View {
                 id: $0.key, createdAt: $0.createdAt,
                 scheduledStart: $0.scheduledStart, scheduledEnd: $0.scheduledEnd)
         }
-        let blocks = pages.isEmpty ? [] : layoutTimedDay(pages: pages, day: day)
+        let blocks =
+            pages.isEmpty
+            ? [] : layoutTimedDay(pages: pages, day: day, shortestBlockMinutes: metrics.shortestBlockMinutes)
 
         return ZStack(alignment: .topLeading) {
             // The empty grid under the blocks; the blocks take their own presses first.

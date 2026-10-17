@@ -28,19 +28,33 @@ pub struct TimedBlock {
     pub is_continuation_after: bool,
 }
 
-/// Internal per-event view, in time only.
+const MINUTES_PER_DAY: f64 = 1440.0;
+
+/// Internal per-event view, in minutes of the grid rather than pixels.
 struct Raw {
     page_id: String,
     start: NaiveDateTime,
     /// Start clamped into the day.
     visual_start: NaiveDateTime,
-    /// Visual end used for overlap, after the minimum-duration quantization.
+    /// Where the block's top edge is drawn, in minutes from midnight. Usually
+    /// the start, but a floored block late in the day rises to stay on the grid.
+    top: f64,
+    /// Visual end used for overlap: what the drawn block covers.
     overlap_end: NaiveDateTime,
     is_continuation_before: bool,
     is_continuation_after: bool,
 }
 
-fn build_raw(page: &LayoutPage, day_start: NaiveDateTime, day_end: NaiveDateTime) -> Option<Raw> {
+fn minute_of_day(at: NaiveDateTime) -> f64 {
+    f64::from(at.hour() * 60 + at.minute())
+}
+
+fn build_raw(
+    page: &LayoutPage,
+    day_start: NaiveDateTime,
+    day_end: NaiveDateTime,
+    shortest_block_minutes: f64,
+) -> Option<Raw> {
     let start_str = page.scheduled_start.as_deref()?;
     if is_all_day_iso(start_str) {
         return None;
@@ -53,19 +67,25 @@ fn build_raw(page: &LayoutPage, day_start: NaiveDateTime, day_end: NaiveDateTime
     };
 
     // Overlap with the day is half-open on both sides: an event ending exactly
-    // at midnight belongs to the previous day only.
-    if real_start >= day_end || real_end <= day_start {
+    // at midnight belongs to the previous day only. One with no length belongs
+    // where its start falls, or at exactly midnight it would land on no day.
+    let touches_day = if real_end > real_start {
+        real_start < day_end && real_end > day_start
+    } else {
+        real_start >= day_start && real_start < day_end
+    };
+    if !touches_day {
         return None;
     }
 
     let duration_minutes = if has_end {
-        (real_end - real_start).num_minutes()
+        (real_end - real_start).num_milliseconds() as f64 / 60_000.0
     } else {
-        0
+        0.0
     };
 
     let is_continuation_before = real_start < day_start;
-    let is_continuation_after = has_end && duration_minutes > 0 && real_end >= day_end;
+    let is_continuation_after = has_end && duration_minutes > 0.0 && real_end >= day_end;
 
     let visual_start = if is_continuation_before {
         day_start
@@ -78,23 +98,33 @@ fn build_raw(page: &LayoutPage, day_start: NaiveDateTime, day_end: NaiveDateTime
         real_end
     };
 
-    // Round the duration up to the next whole minimum slot, with the slot
-    // itself as the floor. Ceiling division written out rather than via
-    // `div_ceil`, which is still unstable for signed integers.
-    let clamped = duration_minutes.max(0);
-    let slots = (clamped + MIN_TIMED_MINUTES - 1) / MIN_TIMED_MINUTES;
-    let visual_duration = MIN_TIMED_MINUTES.max(slots * MIN_TIMED_MINUTES);
+    let slot = MIN_TIMED_MINUTES as f64;
+    let visual_duration = slot.max((duration_minutes.max(0.0) / slot).ceil() * slot);
+
+    let start_minute = minute_of_day(visual_start);
+    let end_minute = if is_continuation_after {
+        MINUTES_PER_DAY
+    } else if is_continuation_before {
+        minute_of_day(visual_end)
+    } else {
+        MINUTES_PER_DAY.min(start_minute + visual_duration)
+    };
+    let height = (end_minute - start_minute).max(shortest_block_minutes);
+    let top = start_minute.min(MINUTES_PER_DAY - height);
 
     let overlap_end = if is_continuation_after {
         visual_end
     } else {
-        visual_start + Duration::minutes(visual_duration)
+        // Truncated to the millisecond, as a JavaScript Date is.
+        let overlap_ms = (visual_duration.max(height) * 60_000.0) as i64;
+        visual_start + Duration::milliseconds(overlap_ms)
     };
 
     Some(Raw {
         page_id: page.id.clone(),
         start: real_start,
         visual_start,
+        top,
         overlap_end,
         is_continuation_before,
         is_continuation_after,
@@ -103,7 +133,7 @@ fn build_raw(page: &LayoutPage, day_start: NaiveDateTime, day_end: NaiveDateTime
 
 /// Group into transitively-connected overlap clusters.
 ///
-/// Requires input sorted by visual start. A overlapping B and B overlapping C
+/// Requires input sorted by top. A overlapping B and B overlapping C
 /// puts all three in one cluster even when A and C do not touch.
 fn group_into_clusters(raws: Vec<Raw>) -> Vec<Vec<Raw>> {
     let mut clusters: Vec<Vec<Raw>> = Vec::new();
@@ -164,10 +194,22 @@ fn assign_columns(cluster: &[Raw]) -> Vec<usize> {
 
 /// Structural layout for every timed event touching `day` (a `YYYY-MM-DD`).
 ///
+/// `shortest_block_minutes` is the shortest a block is drawn, in minutes of
+/// the grid: the renderer's minimum block height over its hour height, times
+/// 60. Overlap is decided by what is drawn, so a floored block claims the
+/// minutes its height covers, or a 9:00 reminder drawn 24 minutes tall would
+/// sit on a 9:15 event. That makes columns depend on the renderer's metrics,
+/// which is why the caller passes them in as minutes rather than this crate
+/// carrying any pixels.
+///
 /// Returns blocks in cluster order. The TypeScript original additionally sorts
 /// its result by `leftPct` before returning, to control DOM paint order; that
 /// is a rendering concern and is deliberately not reproduced here.
-pub fn assign_timed_columns(pages: &[LayoutPage], day: &str) -> Vec<TimedBlock> {
+pub fn assign_timed_columns(
+    pages: &[LayoutPage],
+    day: &str,
+    shortest_block_minutes: f64,
+) -> Vec<TimedBlock> {
     let Some(day_start) = parse_local_iso(day) else {
         return Vec::new();
     };
@@ -175,23 +217,16 @@ pub fn assign_timed_columns(pages: &[LayoutPage], day: &str) -> Vec<TimedBlock> 
 
     let mut raws: Vec<Raw> = pages
         .iter()
-        .filter_map(|p| build_raw(p, day_start, day_end))
+        .filter_map(|p| build_raw(p, day_start, day_end, shortest_block_minutes))
         .collect();
 
     if raws.is_empty() {
         return Vec::new();
     }
 
-    // The original sorts by pixel `top`, then start, then id. `top` is
-    // `timeToY(visual_start)`, which is strictly monotonic in the minute of the
-    // day, so ordering by visual_start is equivalent and carries no pixels.
-    // Comparing the minute-of-day rather than the full datetime matches the
-    // original exactly: every visual_start has already been clamped into this
-    // day, so the date component is constant.
     raws.sort_by(|a, b| {
-        let am = a.visual_start.hour() * 60 + a.visual_start.minute();
-        let bm = b.visual_start.hour() * 60 + b.visual_start.minute();
-        am.cmp(&bm)
+        a.top
+            .total_cmp(&b.top)
             .then_with(|| a.start.cmp(&b.start))
             .then_with(|| a.page_id.cmp(&b.page_id))
     });

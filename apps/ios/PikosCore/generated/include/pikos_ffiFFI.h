@@ -701,7 +701,7 @@ RustBuffer uniffi_pikos_ffi_fn_func_layout_all_day(RustBuffer pages, RustBuffer 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_LAYOUT_TIMED_DAY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_LAYOUT_TIMED_DAY
-RustBuffer uniffi_pikos_ffi_fn_func_layout_timed_day(RustBuffer pages, RustBuffer day, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_pikos_ffi_fn_func_layout_timed_day(RustBuffer pages, RustBuffer day, double shortest_block_minutes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_NEXT_OCCURRENCE_AFTER

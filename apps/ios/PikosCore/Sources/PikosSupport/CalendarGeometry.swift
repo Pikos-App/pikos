@@ -46,6 +46,10 @@ public enum CalendarGeometry {
         }
 
         public var dayHeight: CGFloat { hourHeight * 24 }
+
+        /// The minimum block height as minutes of this grid, which is how the
+        /// column layout reads it: a floored block overlaps what its drawn height covers.
+        public var shortestBlockMinutes: Double { Double(minBlockHeight / hourHeight * 60) }
     }
 
     // MARK: - Reading wall-clock strings

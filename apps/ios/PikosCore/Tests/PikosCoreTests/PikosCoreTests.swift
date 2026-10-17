@@ -91,12 +91,30 @@ final class BridgeMappingTests: XCTestCase {
                        scheduledStart: "2026-03-16T10:00:00",
                        scheduledEnd: "2026-03-16T11:00:00"),
         ]
-        let blocks = layoutTimedDay(pages: pages, day: "2026-03-16")
+        let blocks = layoutTimedDay(pages: pages, day: "2026-03-16", shortestBlockMinutes: 15)
         XCTAssertEqual(blocks.count, 2)
 
         let byId = Dictionary(uniqueKeysWithValues: blocks.map { ($0.pageId, $0) })
         XCTAssertEqual(byId["a"]?.cascadeDepth, 0, "the earlier event hosts the cluster")
         XCTAssertEqual(byId["b"]?.cascadeDepth, 1, "the overlapping event cascades over it")
+    }
+
+    func testAShortEventOverlapsWhatItsDrawnHeightCovers() {
+        let pages = [
+            LayoutPage(id: "a", createdAt: "2026-03-01T00:00:00",
+                       scheduledStart: "2026-03-16T09:00:00",
+                       scheduledEnd: "2026-03-16T09:15:00"),
+            LayoutPage(id: "b", createdAt: "2026-03-01T00:00:00",
+                       scheduledStart: "2026-03-16T09:15:00",
+                       scheduledEnd: "2026-03-16T10:00:00"),
+        ]
+        let depth = { (minutes: Double) in
+            Dictionary(uniqueKeysWithValues: layoutTimedDay(
+                pages: pages, day: "2026-03-16", shortestBlockMinutes: minutes
+            ).map { ($0.pageId, $0.cascadeDepth) })["b"]
+        }
+        XCTAssertEqual(depth(15), 0, "back to back at their true length")
+        XCTAssertEqual(depth(22.0 / 64 * 60), 1, "drawn 22pt tall, the first reaches into the second")
     }
 
     func testAllDayBarsSpanAndFlagContinuation() {
@@ -114,7 +132,7 @@ final class BridgeMappingTests: XCTestCase {
     }
 
     func testEmptyCollectionsCrossCleanly() {
-        XCTAssertTrue(layoutTimedDay(pages: [], day: "2026-03-16").isEmpty)
+        XCTAssertTrue(layoutTimedDay(pages: [], day: "2026-03-16", shortestBlockMinutes: 15).isEmpty)
         XCTAssertTrue(layoutAllDay(pages: [], days: []).isEmpty)
         XCTAssertTrue(expandRecurrence(rrule: "FREQ=DAILY", scheduledStart: "2026-03-15",
                                        scheduledEnd: nil, exdates: [],
