@@ -411,6 +411,10 @@ db_commands! {
         search_tags(query: String) -> Vec<String> = pikos_db::search_tags(&query);
     }
 
+    mod replica {
+        record_first_run_seed() -> () = pikos_db::replica::record_seed();
+    }
+
     /// Per-page reminder CRUD. The write/read logic lives in
     /// `pikos_db::reminders` (pool-based, unit-tested).
     mod notifications {

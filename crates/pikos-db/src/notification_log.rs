@@ -875,7 +875,7 @@ pub async fn list_notification_history(
 /// reminder pinned as fired, so a moved event never notifies again until the
 /// 30-day prune.
 pub(crate) async fn clear_reminder_log_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    conn: &mut sqlx::SqliteConnection,
     schedule_id: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -883,7 +883,7 @@ pub(crate) async fn clear_reminder_log_tx(
          WHERE type = 'reminder' AND (schedule_id = ?1 OR schedule_id LIKE ?1 || '#%')",
     )
     .bind(schedule_id)
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }

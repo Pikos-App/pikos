@@ -5,7 +5,7 @@ use pikos_db::{hard_delete_page_impl, hard_delete_would_resurrect, list_pages_to
 use serde_json::json;
 
 use crate::cli::{
-    Cli, CliCommand, FolderCommand, OccurrenceCommand, ReminderCommand, StressCommand,
+    Cli, CliCommand, FolderCommand, OccurrenceCommand, ReminderCommand, StressCommand, SyncCommand,
 };
 use crate::error::{classify, CliError};
 use crate::occurrences;
@@ -52,9 +52,22 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 )
                 .await
             }
-            StressCommand::Bench { runs, only } => {
-                crate::stress::bench(&cli.db, *runs, only, json).await
+            StressCommand::SyncBootstrap { batch } => {
+                crate::stress::sync_bootstrap(&cli.db, *batch, json).await
             }
+            StressCommand::Bench { runs, only, sync } => {
+                crate::stress::bench(&cli.db, *runs, only, *sync, json).await
+            }
+        };
+    }
+    // Opens the files it names, read-only, and never the resolved workspace.
+    if let CliCommand::Sync { action } = &cli.command {
+        return match action {
+            SyncCommand::Diff {
+                first,
+                second,
+                limit,
+            } => crate::sync::diff(first, second, *limit, json).await,
         };
     }
     let pool = open_workspace(&cli.db, cli.migrate).await?;
@@ -426,7 +439,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 }
             }
         },
-        CliCommand::Mcp | CliCommand::Stress { .. } => {
+        CliCommand::Mcp | CliCommand::Stress { .. } | CliCommand::Sync { .. } => {
             unreachable!("handled above, before the workspace was opened")
         }
     }

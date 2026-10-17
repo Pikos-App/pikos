@@ -6,10 +6,13 @@
 //! no merge or policy logic of their own.
 
 pub mod clock;
+pub mod codec;
+pub mod merge;
 pub mod record;
+pub mod zone;
 
 pub use clock::{Hlc, ParseHlcError};
-pub use record::{Entity, ParseRecordNameError, RecordName};
+pub use record::{Entity, ParseRecordNameError, RecordName, ALL_ENTITIES};
 
 /// Bump when a record's shape changes or a migration changes a synced value, so a
 /// device that hasn't updated stops syncing instead of holding a clock with another value.

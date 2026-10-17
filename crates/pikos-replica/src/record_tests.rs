@@ -55,3 +55,33 @@ fn malformed_names_are_refused() {
         assert!(bad.parse::<RecordName>().is_err(), "{bad:?} parsed");
     }
 }
+
+#[test]
+fn a_plain_record_name_is_stored_as_it_is() {
+    let name = RecordName::live(Entity::Override, "p1/2026-10-17T09:00:00");
+
+    assert_eq!(name.store_name(), "override:p1/2026-10-17T09:00:00");
+}
+
+#[test]
+fn a_name_with_characters_cloudkit_refuses_is_escaped() {
+    let name = RecordName::live(Entity::PageTag, "p1/café ☕");
+
+    let stored = name.store_name();
+
+    assert_eq!(stored, "pagetag:p1/caf%C3%A9%20%E2%98%95");
+    assert!(stored.is_ascii());
+}
+
+#[test]
+fn a_name_too_long_is_cut_and_kept_unique() {
+    let long =
+        |tail: &str| RecordName::live(Entity::PageTag, format!("p1/{}{tail}", "x".repeat(400)));
+
+    let a = long("a").store_name();
+    let b = long("b").store_name();
+
+    assert_eq!(a.len(), 255);
+    assert_ne!(a, b);
+    assert_eq!(a, long("a").store_name());
+}

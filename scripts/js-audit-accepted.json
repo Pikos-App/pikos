@@ -56,6 +56,13 @@
     "until": "2027-04-01"
   },
   {
+    "id": "GHSA-r9w8-h9r3-54w4",
+    "package": "devalue",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
+    "until": "2027-04-01"
+  },
+  {
     "id": "GHSA-5wm8-gmm8-39j9",
     "package": "fast-xml-builder",
     "severity": "high",

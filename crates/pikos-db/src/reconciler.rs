@@ -1480,7 +1480,7 @@ pub(crate) async fn link_addresses_in_seeded_bodies(pool: &sqlx::SqlitePool) -> 
     .bind(CONTENT_TEXT_PROJECTION_VERSION)
     .fetch_all(pool)
     .await?;
-    let mut tx = pool.begin().await?;
+    let mut tx = crate::replica::Uncaptured::begin(pool).await?;
     for (id, content, text, hash) in rows {
         if fnv_hex(&text) != hash {
             continue;
@@ -1492,7 +1492,7 @@ pub(crate) async fn link_addresses_in_seeded_bodies(pool: &sqlx::SqlitePool) -> 
             sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
                 .bind(doc.to_string())
                 .bind(&id)
-                .execute(&mut *tx)
+                .execute(tx.conn())
                 .await?;
         }
     }
@@ -1558,7 +1558,7 @@ fn project_description(text: &str) -> (String, String) {
 
 /// FNV-1a 64-bit hex — deterministic across builds (std `DefaultHasher` isn't)
 /// and dep-free. Change detection, not security.
-fn fnv_hex(s: &str) -> String {
+pub(crate) fn fnv_hex(s: &str) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.as_bytes() {
         hash ^= *b as u64;

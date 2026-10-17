@@ -8,16 +8,16 @@ import Foundation
 /// place all three can reach.
 ///
 /// The identifier has to match an App Group capability on every target's
-/// provisioning profile, which is why it is a constant here rather than
-/// something derived: the string in the entitlements file and the string in
-/// this file must be the same, and one obvious place to look beats two clever
-/// ones.
+/// provisioning profile. Each target's Info.plist names it, from the same build
+/// setting its entitlements use, so the staging build reaches its own group and
+/// never the real one.
 public enum WorkspaceLocation {
     /// Must match the App Group in every target's entitlements.
     ///
-    /// Changing it after release strands every existing user's notes in a
-    /// container nothing opens any more, so treat it as permanent.
-    public static let appGroupIdentifier = "group.app.pikos"
+    /// Changing the release value after release strands every existing user's
+    /// notes in a container nothing opens any more, so treat it as permanent.
+    public static let appGroupIdentifier =
+        Bundle.main.object(forInfoDictionaryKey: "PikosAppGroup") as? String ?? "group.app.pikos"
 
     /// The database filename inside whichever container is in use.
     static let databaseName = "pikos.sqlite"

@@ -2399,3 +2399,40 @@ async fn update_content_refuses_markdown_the_editor_cannot_hold_and_writes_nothi
     assert_eq!(read["content"], before.as_str());
     assert_eq!(read["title"], "Trip");
 }
+
+// qa: CLOUD-116
+#[tokio::test]
+async fn sync_diff_passes_for_one_copy_and_exits_10_listing_what_two_workspaces_disagree_on() {
+    let first = unique_db();
+    let second = unique_db();
+    let (first, second) = (first.to_str().unwrap(), second.to_str().unwrap());
+    seed(first, vec![base_page("Groceries")]).await;
+    seed(second, vec![base_page("Laundry")]).await;
+
+    let same = Command::new(BIN)
+        .args(["sync", "diff", first, first])
+        .output()
+        .unwrap();
+    let apart = Command::new(BIN)
+        .args(["--json", "sync", "diff", first, second])
+        .output()
+        .unwrap();
+
+    assert_eq!(code(&same), 0, "{}", String::from_utf8_lossy(&same.stdout));
+    assert_eq!(code(&apart), 10);
+    let report = json(&apart);
+    let zones: Vec<&str> = report["copies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["zone"].as_str().unwrap())
+        .collect();
+    assert_ne!(zones[0], zones[1]);
+    let only_one_side = report["differences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["kind"] == "only_in")
+        .count();
+    assert!(only_one_side >= 2, "{report}");
+}

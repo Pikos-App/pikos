@@ -229,6 +229,21 @@ async fn renew_epoch(workspace_path: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// Device sync's state on the workspace a restore is about to replace, read before the file goes.
+async fn sync_before_restore(workspace_path: &str) -> AppResult<Option<crate::replica::Displaced>> {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(workspace_path)
+                .create_if_missing(false),
+        )
+        .await?;
+    let carried = crate::replica::before_restore(&pool).await;
+    pool.close().await;
+    carried
+}
+
 /// Put `file_name` back as the workspace, after snapshotting what is there now.
 ///
 /// The caller must have closed its pool: SQLite's WAL and shared-memory files
@@ -246,8 +261,10 @@ pub async fn restore_backup(workspace_path: &str, file_name: &str) -> AppResult<
     let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
     let displaced = dir.join(format!("pre-restore-{ts}.sqlite"));
 
+    let mut carried = None;
     if Path::new(workspace_path).exists() {
         snapshot_workspace(workspace_path, &displaced).await?;
+        carried = sync_before_restore(workspace_path).await?;
     }
 
     std::fs::copy(&source, workspace_path)?;
@@ -258,6 +275,12 @@ pub async fn restore_backup(workspace_path: &str, file_name: &str) -> AppResult<
         }
     }
     renew_epoch(workspace_path).await?;
+    if let Some(carried) = carried {
+        let pool = crate::pool::open_pool_for_maintenance(workspace_path).await?;
+        let result = crate::replica::after_restore(&pool, carried).await;
+        pool.close().await;
+        result?;
+    }
 
     Ok(displaced.to_string_lossy().to_string())
 }
@@ -437,6 +460,106 @@ mod tests {
             !std::path::Path::new(&format!("{path}-wal")).exists(),
             "a WAL belonging to the replaced database survived the restore"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    async fn pending(path: &str) -> Vec<(String, String, bool)> {
+        let pool = crate::pool::open_pool(path).await.unwrap();
+        let ops = sqlx::query_as(
+            "SELECT entity, key, deleted FROM replica_ops WHERE entity = 'page' ORDER BY key",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+        ops
+    }
+
+    #[tokio::test]
+    async fn a_restore_with_sync_on_replaces_the_workspace_on_every_device() {
+        let (dir, path) = workspace().await;
+        let pool = crate::pool::open_pool(&path).await.unwrap();
+        let device = crate::replica::start(&pool).await.unwrap().device_id;
+        crate::insert_test_page(&pool, crate::TestPage::new("kept", "Groceries"))
+            .await
+            .unwrap();
+        pool.close().await;
+        snapshot(&path, "pre-import-2026-10-17T00-00-00.sqlite").await;
+
+        let pool = crate::pool::open_pool(&path).await.unwrap();
+        crate::insert_test_page(
+            &pool,
+            crate::TestPage::new("after", "Made after the backup"),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pages SET title = 'Edited after the backup' WHERE id = 'kept'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM replica_ops")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let before = crate::replica::meta(&pool).await.unwrap();
+        pool.close().await;
+
+        restore_backup(&path, "pre-import-2026-10-17T00-00-00.sqlite")
+            .await
+            .unwrap();
+
+        let pool = crate::pool::open_pool(&path).await.unwrap();
+        let after = crate::replica::meta(&pool).await.unwrap();
+        let title: String = sqlx::query_scalar("SELECT title FROM pages WHERE id = 'kept'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let built = crate::replica::build::build(
+            &pool,
+            &[pikos_replica::RecordName::live(
+                pikos_replica::Entity::Page,
+                "kept",
+            )],
+        )
+        .await
+        .unwrap();
+        pool.close().await;
+        assert_eq!(title, "Groceries");
+        assert!(after.started);
+        assert_eq!(after.device_id, device, "this device carries on as itself");
+        assert!(after.hlc > before.hlc);
+        assert_eq!(
+            pending(&path).await,
+            vec![
+                ("page".to_owned(), "after".to_owned(), true),
+                ("page".to_owned(), "kept".to_owned(), false),
+            ],
+            "the restored page goes out as a fresh write, and the page the backup lacks as removed"
+        );
+        let title_clock: pikos_replica::Hlc = match built[0].fields.get("title_at") {
+            Some(pikos_replica::merge::Value::Text(c)) => c.parse().unwrap(),
+            other => panic!("no title clock: {other:?}"),
+        };
+        assert!(
+            title_clock > before.hlc,
+            "it beats the edit made after the backup"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_restore_with_sync_never_started_sends_nothing() {
+        let (dir, path) = workspace().await;
+        snapshot(&path, "pre-import-2026-10-17T00-00-00.sqlite").await;
+
+        restore_backup(&path, "pre-import-2026-10-17T00-00-00.sqlite")
+            .await
+            .unwrap();
+
+        assert!(pending(&path).await.is_empty());
+        let pool = crate::pool::open_pool(&path).await.unwrap();
+        assert!(!crate::replica::meta(&pool).await.unwrap().started);
+        pool.close().await;
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

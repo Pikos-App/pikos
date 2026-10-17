@@ -153,7 +153,12 @@ function unitClaims() {
  *  real test under it. */
 function swiftClaims() {
   const claims = [];
-  const roots = ["apps/ios/PikosUITests/Sources", "apps/ios/PikosCore/Tests", "apps/ios/PikosEditorBridge/Tests"];
+  const roots = [
+    "apps/ios/PikosUITests/Sources",
+    "apps/ios/PikosCore/Tests",
+    "apps/ios/PikosEditorBridge/Tests",
+    "apps/apple/PikosSync/Tests",
+  ];
   for (const root of roots.filter((r) => existsSync(join(ROOT, r)))) {
     for (const rel of readdirSync(join(ROOT, root), { recursive: true })) {
       if (!rel.endsWith(".swift")) continue;

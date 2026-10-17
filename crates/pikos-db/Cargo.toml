@@ -30,6 +30,8 @@ pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
 # a content transform like `extract_text` — it belongs beside it rather than in
 # the layer that happens to read the rows.
 pikos-core = { path = "../pikos-core" }
+# The replica clock, advanced by the capture triggers through a registered function.
+pikos-replica = { path = "../pikos-replica" }
 log = "0.4"
 ts-rs = "12.0.1"
 

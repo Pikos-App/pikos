@@ -1547,7 +1547,22 @@ export class MockStorageAdapter implements StorageAdapter {
 
   // ─── Reminders ──────────────────────────────────────────────────────────────
 
+  /** The writer's rules: "no reminders" (-1) replaces the page's reminders, a real one replaces
+   *  "no reminders", and a lead the page already has returns that reminder. */
   createPageReminder(data: NewPageReminder): Promise<PageReminder> {
+    const noReminders = -1;
+    for (const [id, r] of this.reminders) {
+      if (r.pageId !== data.pageId) continue;
+      const replaced =
+        data.minutesBefore === noReminders
+          ? r.minutesBefore !== noReminders
+          : r.minutesBefore === noReminders;
+      if (replaced) this.reminders.delete(id);
+    }
+    const existing = [...this.reminders.values()].find(
+      (r) => r.pageId === data.pageId && r.minutesBefore === data.minutesBefore
+    );
+    if (existing) return Promise.resolve(existing);
     const reminder: PageReminder = {
       createdAt: now(),
       id: uuid(),
@@ -2034,6 +2049,10 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   releaseSyncCredentials(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  recordFirstRunSeed(): Promise<void> {
     return Promise.resolve();
   }
 

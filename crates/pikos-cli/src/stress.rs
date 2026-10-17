@@ -392,10 +392,83 @@ where
     Ok(Timing { name, samples })
 }
 
+/// A fresh install joining a workspace that already syncs, at the scale of the scratch workspace:
+/// start sync there, which queues every row, then build every record in batches and apply each
+/// batch into an empty workspace beside it, as a transport would carry them.
+pub async fn sync_bootstrap(db: &Option<String>, batch: u32, json: bool) -> Result<(), CliError> {
+    let path = require_scratch_db(db)?;
+    let joining = format!("{path}.joining");
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{joining}{suffix}"));
+    }
+    let source = pikos_db::open_pool(&path).await.map_err(classify)?;
+    let target = pikos_db::open_pool(&joining).await.map_err(classify)?;
+
+    let started = Instant::now();
+    pikos_db::replica::start(&source).await.map_err(classify)?;
+    pikos_db::replica::start(&target).await.map_err(classify)?;
+    let queue_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+    let (mut build_ms, mut apply_ms, mut records) = (0.0, 0.0, 0usize);
+    loop {
+        let names = pikos_db::replica::build::pending(&source, i64::from(batch))
+            .await
+            .map_err(classify)?;
+        if names.is_empty() {
+            break;
+        }
+        let building = Instant::now();
+        let built = pikos_db::replica::build::build(&source, &names)
+            .await
+            .map_err(classify)?;
+        build_ms += building.elapsed().as_secs_f64() * 1000.0;
+
+        let carried: Vec<_> = built
+            .iter()
+            .map(|b| (b.name.clone(), b.fields.clone()))
+            .collect();
+        let applying = Instant::now();
+        pikos_db::replica::apply::apply(&target, &carried)
+            .await
+            .map_err(classify)?;
+        apply_ms += applying.elapsed().as_secs_f64() * 1000.0;
+
+        let acked: Vec<_> = built.iter().map(|b| (b.name.clone(), b.clock)).collect();
+        pikos_db::replica::build::sent(&source, &acked)
+            .await
+            .map_err(classify)?;
+        records += built.len();
+    }
+
+    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
+        .fetch_one(&target)
+        .await
+        .map_err(|e| classify(e.into()))?;
+    let total_s = started.elapsed().as_secs_f64();
+    if json {
+        println!(
+            "{}",
+            json!({
+                "records": records, "pages_arrived": pages, "queue_ms": queue_ms,
+                "build_ms": build_ms, "apply_ms": apply_ms, "total_s": total_s,
+            })
+        );
+    } else {
+        println!("{records} records, {pages} pages arrived, in {total_s:.1}s");
+        println!("  queue  {queue_ms:>10.0} ms");
+        println!("  build  {build_ms:>10.0} ms");
+        println!("  apply  {apply_ms:>10.0} ms");
+    }
+    source.close().await;
+    target.close().await;
+    Ok(())
+}
+
 pub async fn bench(
     db: &Option<String>,
     runs: u32,
     only: &[String],
+    sync: bool,
     json: bool,
 ) -> Result<(), CliError> {
     let path = require_scratch_db(db)?;
@@ -408,6 +481,9 @@ pub async fn bench(
         .map_err(classify)?;
     let open_ms = open_start.elapsed().as_secs_f64() * 1000.0;
     pikos_db::gather_statistics(&pool).await.map_err(classify)?;
+    if sync {
+        pikos_db::replica::start(&pool).await.map_err(classify)?;
+    }
 
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
         .fetch_one(&pool)

@@ -18,6 +18,7 @@ mod ops;
 mod render;
 mod schedule;
 mod stress;
+mod sync;
 mod workspace;
 mod write;
 

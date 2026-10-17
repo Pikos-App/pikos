@@ -67,6 +67,7 @@ Thumbs.db
 apps/ios/**/Frameworks/
 apps/ios/**/.build/
 apps/ios/**/*.xcframework
+apps/apple/**/.build/
 
 # The Xcode project and the two Info.plists, written by `xcodegen generate`
 # from apps/ios/Pikos/project.yml — which says why the project is generated

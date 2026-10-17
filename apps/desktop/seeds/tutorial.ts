@@ -190,6 +190,7 @@ export async function seedTutorial(
     title: "Shortcuts & tips",
   });
 
+  await adapter.recordFirstRunSeed();
   return { folderId: tutorial.id, welcomePageId: welcome.id };
 }
 

@@ -9,6 +9,8 @@ use crate::error::{AppError, AppResult};
 pub mod assets;
 pub mod commands;
 pub mod dev;
+#[cfg(all(target_os = "macos", feature = "icloud-sync"))]
+mod icloud;
 #[path = "schedules/schedules.rs"]
 pub mod schedules;
 pub mod sync;
@@ -21,7 +23,7 @@ mod watch;
 // names the rest of the app (and the IPC tests) know them by. `schedules` and
 // `sync` are not in this list because they also hold hand-written commands —
 // those modules pull their generated half in themselves.
-pub use commands::{focus, folders, notifications, pages, search, tags, windows};
+pub use commands::{focus, folders, notifications, pages, replica, search, tags, windows};
 
 /// Shared database state. None until connect_db is called.
 ///
@@ -148,6 +150,11 @@ pub async fn connect_db(
         path: Some(canonical),
     };
     log::info!("DB connected, migrations applied");
+
+    #[cfg(all(target_os = "macos", feature = "icloud-sync"))]
+    if let Some(pool) = guard.pool.clone() {
+        icloud::start(app.clone(), pool);
+    }
 
     // Watch the workspace file so external writes (e.g. the CLI) live-refresh
     // the open app. Self-caused writes are filtered out on the frontend.

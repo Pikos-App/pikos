@@ -7,7 +7,7 @@ final class TierOneLongListTests: PikosUITestCase {
         ["PIKOS_PERF_PAGES": "120", "PIKOS_WINDOW_SIZE": "8"]
     }
 
-    // qa: IOS-25
+    // qa: IOS-25:2
     func testScrollingALongInboxReadsTheRestOfIt() {
         showView("Inbox")
         let first = app.staticTexts["Page 1"].firstMatch

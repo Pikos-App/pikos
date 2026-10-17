@@ -26,6 +26,7 @@ pub mod reconciler;
 pub mod recurrence_derive;
 pub mod reminder_horizon;
 pub mod reminders;
+pub mod replica;
 pub mod schedules;
 pub mod search;
 pub mod sql_functions;
@@ -68,7 +69,7 @@ pub use pool::{
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{
     insert_test_folder, insert_test_page, insert_test_page_sync,
-    insert_test_page_sync_connected_at, test_pool, TestPage, TEST_CONNECTED_LONG_AGO,
+    insert_test_page_sync_connected_at, test_pool, test_pool_on, TestPage, TEST_CONNECTED_LONG_AGO,
 };
 pub use reconciler::*;
 pub use recurrence_derive::*;

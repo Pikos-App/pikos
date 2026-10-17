@@ -596,6 +596,24 @@ fileprivate struct FfiConverterString: FfiConverter {
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return Data(try readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
 
 
 
@@ -896,6 +914,91 @@ public func FfiConverterTypeReadOnlyWorkspace_lower(_ value: ReadOnlyWorkspace) 
  * writer; extensions get a [`ReadOnlyWorkspace`].
  */
 public protocol WorkspaceProtocol: AnyObject, Sendable {
+    
+    func adoptWorkspaceId(workspaceId: String) async throws 
+    
+    /**
+     * Merges fetched records, in one transaction. Save the transport's state only after this
+     * returns: CloudKit never hands back changes once its state has moved past them.
+     */
+    func applyRecords(records: [SyncRecord]) async throws  -> SyncApplied
+    
+    /**
+     * A page body's clock as stored now, None while sync has never started. Keep it with the body
+     * the editor loaded and pass it to `save_body_if_unchanged`.
+     */
+    func bodyClock(pageId: String) async throws  -> String?
+    
+    func buildRecords(names: [String]) async throws  -> [BuiltRecord]
+    
+    /**
+     * Checks the device id kept in the keychain against the workspace's, at every launch. Returns
+     * the id to keep there, a new one when the workspace was copied from another device.
+     */
+    func claimDevice(keychainDeviceId: String?) async throws  -> String?
+    
+    func clearForJoin(workspaceId: String) async throws 
+    
+    func engineState() async throws  -> Data?
+    
+    /**
+     * Forgets tombstones and holds past retention. Run now and then, such as on launch. Returns the
+     * records whose tombstones went, to delete from CloudKit as well.
+     */
+    func expireSync() async throws  -> [RecordAddress]
+    
+    /**
+     * Forget sync on this device: it joins again as a new one.
+     */
+    func forgetSync() async throws 
+    
+    /**
+     * The zone to sync in, given every zone the account holds; moves this workspace into it when
+     * another device's zone wins.
+     */
+    func joinSync(zones: [String]) async throws  -> String
+    
+    /**
+     * The records waiting to send, oldest change first.
+     */
+    func pendingRecords(limit: UInt32) async throws  -> [RecordAddress]
+    
+    func planJoin() async throws  -> JoinPlan
+    
+    /**
+     * The transport stored these. Returns the names edited since they were built, to queue again.
+     */
+    func recordsSent(sent: [SentRecord]) async throws  -> [String]
+    
+    /**
+     * Tries every held record again. Call after an update, which may read a format the old build
+     * couldn't.
+     */
+    func retryHeldRecords() async throws  -> SyncApplied
+    
+    /**
+     * Saves a body only if it is still the one the editor loaded.
+     */
+    func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?) async throws  -> BodySave
+    
+    /**
+     * Keeps CloudKit's metadata for records it saved or fetched.
+     */
+    func saveSystemFields(records: [SystemFields]) async throws 
+    
+    func setEngineState(state: Data) async throws 
+    
+    func setSyncPaused(paused: Bool) async throws 
+    
+    /**
+     * Starts recording changes to send. Store the returned device id in the keychain, this
+     * device only, straight away: `claim_device` reads it back.
+     */
+    func startSync() async throws  -> SyncState
+    
+    func syncState() async throws  -> SyncState
+    
+    func syncSummary() async throws  -> SyncSummary
     
     /**
      * Add a reminder to a page, as minutes before its scheduled start.
@@ -1375,6 +1478,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func reconnectCaldav(accountId: String, password: String) async throws  -> SyncAccountWithCalendars
     
     /**
+     * Note what a new workspace's first-run pages are, right after seeding them, so turning on
+     * device sync can tell a workspace nobody has used from one with work in it.
+     */
+    func recordFirstRunSeed() async throws 
+    
+    /**
      * Record a finished focus session against a page.
      *
      * The timing is the caller's: a running session is never persisted, because
@@ -1785,6 +1894,385 @@ public static func `open`(path: String)async throws  -> Workspace  {
 }
     
 
+    
+open func adoptWorkspaceId(workspaceId: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_adopt_workspace_id(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(workspaceId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Merges fetched records, in one transaction. Save the transport's state only after this
+     * returns: CloudKit never hands back changes once its state has moved past them.
+     */
+open func applyRecords(records: [SyncRecord])async throws  -> SyncApplied  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_apply_records(
+                        self.uniffiCloneHandle(),FfiConverterSequenceTypeSyncRecord.lower(records)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncApplied_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * A page body's clock as stored now, None while sync has never started. Keep it with the body
+     * the editor loaded and pass it to `save_body_if_unchanged`.
+     */
+open func bodyClock(pageId: String)async throws  -> String?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_body_clock(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func buildRecords(names: [String])async throws  -> [BuiltRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_build_records(
+                        self.uniffiCloneHandle(),FfiConverterSequenceString.lower(names)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeBuiltRecord.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Checks the device id kept in the keychain against the workspace's, at every launch. Returns
+     * the id to keep there, a new one when the workspace was copied from another device.
+     */
+open func claimDevice(keychainDeviceId: String?)async throws  -> String?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_claim_device(
+                        self.uniffiCloneHandle(),FfiConverterOptionString.lower(keychainDeviceId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func clearForJoin(workspaceId: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_clear_for_join(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(workspaceId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func engineState()async throws  -> Data?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_engine_state(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionData.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Forgets tombstones and holds past retention. Run now and then, such as on launch. Returns the
+     * records whose tombstones went, to delete from CloudKit as well.
+     */
+open func expireSync()async throws  -> [RecordAddress]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_expire_sync(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRecordAddress.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Forget sync on this device: it joins again as a new one.
+     */
+open func forgetSync()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_forget_sync(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The zone to sync in, given every zone the account holds; moves this workspace into it when
+     * another device's zone wins.
+     */
+open func joinSync(zones: [String])async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_join_sync(
+                        self.uniffiCloneHandle(),FfiConverterSequenceString.lower(zones)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The records waiting to send, oldest change first.
+     */
+open func pendingRecords(limit: UInt32)async throws  -> [RecordAddress]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_pending_records(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRecordAddress.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func planJoin()async throws  -> JoinPlan  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_plan_join(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeJoinPlan_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The transport stored these. Returns the names edited since they were built, to queue again.
+     */
+open func recordsSent(sent: [SentRecord])async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_records_sent(
+                        self.uniffiCloneHandle(),FfiConverterSequenceTypeSentRecord.lower(sent)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Tries every held record again. Call after an update, which may read a format the old build
+     * couldn't.
+     */
+open func retryHeldRecords()async throws  -> SyncApplied  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_retry_held_records(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncApplied_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Saves a body only if it is still the one the editor loaded.
+     */
+open func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?)async throws  -> BodySave  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_save_body_if_unchanged(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(content),FfiConverterOptionString.lower(loadedClock)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBodySave_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Keeps CloudKit's metadata for records it saved or fetched.
+     */
+open func saveSystemFields(records: [SystemFields])async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_save_system_fields(
+                        self.uniffiCloneHandle(),FfiConverterSequenceTypeSystemFields.lower(records)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func setEngineState(state: Data)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_engine_state(
+                        self.uniffiCloneHandle(),FfiConverterData.lower(state)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func setSyncPaused(paused: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_sync_paused(
+                        self.uniffiCloneHandle(),FfiConverterBool.lower(paused)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Starts recording changes to send. Store the returned device id in the keychain, this
+     * device only, straight away: `claim_device` reads it back.
+     */
+open func startSync()async throws  -> SyncState  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_start_sync(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncState_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func syncState()async throws  -> SyncState  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_sync_state(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncState_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func syncSummary()async throws  -> SyncSummary  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_sync_summary(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncSummary_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
     
     /**
      * Add a reminder to a page, as minutes before its scheduled start.
@@ -2811,6 +3299,26 @@ open func reconnectCaldav(accountId: String, password: String)async throws  -> S
 }
     
     /**
+     * Note what a new workspace's first-run pages are, right after seeding them, so turning on
+     * device sync can tell a workspace nobody has used from one with work in it.
+     */
+open func recordFirstRunSeed()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_record_first_run_seed(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Record a finished focus session against a page.
      *
      * The timing is the caller's: a running session is never persisted, because
@@ -3695,6 +4203,77 @@ public func FfiConverterTypeAllDayBar_lift(_ buf: RustBuffer) throws -> AllDayBa
 #endif
 public func FfiConverterTypeAllDayBar_lower(_ value: AllDayBar) -> RustBuffer {
     return FfiConverterTypeAllDayBar.lower(value)
+}
+
+
+/**
+ * A record ready to send, with the clock it was built at, which `records_sent` takes back.
+ */
+public struct BuiltRecord: Equatable, Hashable {
+    public var record: SyncRecord
+    public var storeName: String
+    public var builtAt: String
+    /**
+     * CloudKit's metadata for the record as last seen, from `save_system_fields`.
+     */
+    public var systemFields: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(record: SyncRecord, storeName: String, builtAt: String, 
+        /**
+         * CloudKit's metadata for the record as last seen, from `save_system_fields`.
+         */systemFields: Data?) {
+        self.record = record
+        self.storeName = storeName
+        self.builtAt = builtAt
+        self.systemFields = systemFields
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BuiltRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuiltRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuiltRecord {
+        return
+            try BuiltRecord(
+                record: FfiConverterTypeSyncRecord.read(from: &buf), 
+                storeName: FfiConverterString.read(from: &buf), 
+                builtAt: FfiConverterString.read(from: &buf), 
+                systemFields: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BuiltRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeSyncRecord.write(value.record, into: &buf)
+        FfiConverterString.write(value.storeName, into: &buf)
+        FfiConverterString.write(value.builtAt, into: &buf)
+        FfiConverterOptionData.write(value.systemFields, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuiltRecord_lift(_ buf: RustBuffer) throws -> BuiltRecord {
+    return try FfiConverterTypeBuiltRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuiltRecord_lower(_ value: BuiltRecord) -> RustBuffer {
+    return FfiConverterTypeBuiltRecord.lower(value)
 }
 
 
@@ -5616,6 +6195,64 @@ public func FfiConverterTypeQuickAddInput_lower(_ value: QuickAddInput) -> RustB
 
 
 /**
+ * A record's name and the name it's stored under in CloudKit, which takes only ASCII and up to
+ * 255 characters. The record carries its real name, so the stored one never has to be reversed.
+ */
+public struct RecordAddress: Equatable, Hashable {
+    public var name: String
+    public var storeName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, storeName: String) {
+        self.name = name
+        self.storeName = storeName
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RecordAddress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecordAddress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecordAddress {
+        return
+            try RecordAddress(
+                name: FfiConverterString.read(from: &buf), 
+                storeName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecordAddress, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.storeName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecordAddress_lift(_ buf: RustBuffer) throws -> RecordAddress {
+    return try FfiConverterTypeRecordAddress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecordAddress_lower(_ value: RecordAddress) -> RustBuffer {
+    return FfiConverterTypeRecordAddress.lower(value)
+}
+
+
+/**
  * What completing one occurrence of a series did.
  *
  * Narrow on purpose. The caller refreshes its list afterwards, so the full
@@ -6085,6 +6722,63 @@ public func FfiConverterTypeSearchResults_lower(_ value: SearchResults) -> RustB
 
 
 /**
+ * A record the transport stored, with the clock it was built at.
+ */
+public struct SentRecord: Equatable, Hashable {
+    public var name: String
+    public var builtAt: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, builtAt: String) {
+        self.name = name
+        self.builtAt = builtAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SentRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSentRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SentRecord {
+        return
+            try SentRecord(
+                name: FfiConverterString.read(from: &buf), 
+                builtAt: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SentRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.builtAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSentRecord_lift(_ buf: RustBuffer) throws -> SentRecord {
+    return try FfiConverterTypeSentRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSentRecord_lower(_ value: SentRecord) -> RustBuffer {
+    return FfiConverterTypeSentRecord.lower(value)
+}
+
+
+/**
  * One connected calendar account.
  */
 public struct SyncAccount: Equatable, Hashable {
@@ -6240,6 +6934,72 @@ public func FfiConverterTypeSyncAccountWithCalendars_lower(_ value: SyncAccountW
 }
 
 
+public struct SyncApplied: Equatable, Hashable {
+    /**
+     * Records that changed something here.
+     */
+    public var changed: UInt32
+    /**
+     * Records waiting for a parent or a newer Pikos.
+     */
+    public var held: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Records that changed something here.
+         */changed: UInt32, 
+        /**
+         * Records waiting for a parent or a newer Pikos.
+         */held: UInt32) {
+        self.changed = changed
+        self.held = held
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncApplied: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncApplied: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncApplied {
+        return
+            try SyncApplied(
+                changed: FfiConverterUInt32.read(from: &buf), 
+                held: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncApplied, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.changed, into: &buf)
+        FfiConverterUInt32.write(value.held, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncApplied_lift(_ buf: RustBuffer) throws -> SyncApplied {
+    return try FfiConverterTypeSyncApplied.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncApplied_lower(_ value: SyncApplied) -> RustBuffer {
+    return FfiConverterTypeSyncApplied.lower(value)
+}
+
+
 /**
  * One calendar inside an account.
  */
@@ -6342,6 +7102,283 @@ public func FfiConverterTypeSyncCalendar_lift(_ buf: RustBuffer) throws -> SyncC
 #endif
 public func FfiConverterTypeSyncCalendar_lower(_ value: SyncCalendar) -> RustBuffer {
     return FfiConverterTypeSyncCalendar.lower(value)
+}
+
+
+/**
+ * A record as a transport stores it: its name within the workspace's zone and its fields.
+ */
+public struct SyncRecord: Equatable, Hashable {
+    public var name: String
+    public var fields: [String: SyncValue]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, fields: [String: SyncValue]) {
+        self.name = name
+        self.fields = fields
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncRecord {
+        return
+            try SyncRecord(
+                name: FfiConverterString.read(from: &buf), 
+                fields: FfiConverterDictionaryStringTypeSyncValue.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterDictionaryStringTypeSyncValue.write(value.fields, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncRecord_lift(_ buf: RustBuffer) throws -> SyncRecord {
+    return try FfiConverterTypeSyncRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncRecord_lower(_ value: SyncRecord) -> RustBuffer {
+    return FfiConverterTypeSyncRecord.lower(value)
+}
+
+
+public struct SyncState: Equatable, Hashable {
+    public var workspaceId: String
+    /**
+     * The zone the workspace syncs into.
+     */
+    public var zone: String
+    public var deviceId: String?
+    public var started: Bool
+    public var paused: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(workspaceId: String, 
+        /**
+         * The zone the workspace syncs into.
+         */zone: String, deviceId: String?, started: Bool, paused: Bool) {
+        self.workspaceId = workspaceId
+        self.zone = zone
+        self.deviceId = deviceId
+        self.started = started
+        self.paused = paused
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncState {
+        return
+            try SyncState(
+                workspaceId: FfiConverterString.read(from: &buf), 
+                zone: FfiConverterString.read(from: &buf), 
+                deviceId: FfiConverterOptionString.read(from: &buf), 
+                started: FfiConverterBool.read(from: &buf), 
+                paused: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncState, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.workspaceId, into: &buf)
+        FfiConverterString.write(value.zone, into: &buf)
+        FfiConverterOptionString.write(value.deviceId, into: &buf)
+        FfiConverterBool.write(value.started, into: &buf)
+        FfiConverterBool.write(value.paused, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncState_lift(_ buf: RustBuffer) throws -> SyncState {
+    return try FfiConverterTypeSyncState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncState_lower(_ value: SyncState) -> RustBuffer {
+    return FfiConverterTypeSyncState.lower(value)
+}
+
+
+/**
+ * What the sync status line reads.
+ */
+public struct SyncSummary: Equatable, Hashable {
+    public var started: Bool
+    public var paused: Bool
+    /**
+     * Records waiting to send.
+     */
+    public var pending: Int64
+    /**
+     * Records waiting for a parent or a newer Pikos.
+     */
+    public var held: Int64
+    /**
+     * A newer Pikos wrote some of what arrived: the status line says to update.
+     */
+    public var needsUpdate: Bool
+    public var lastFetchAt: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(started: Bool, paused: Bool, 
+        /**
+         * Records waiting to send.
+         */pending: Int64, 
+        /**
+         * Records waiting for a parent or a newer Pikos.
+         */held: Int64, 
+        /**
+         * A newer Pikos wrote some of what arrived: the status line says to update.
+         */needsUpdate: Bool, lastFetchAt: String?) {
+        self.started = started
+        self.paused = paused
+        self.pending = pending
+        self.held = held
+        self.needsUpdate = needsUpdate
+        self.lastFetchAt = lastFetchAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncSummary: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncSummary: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncSummary {
+        return
+            try SyncSummary(
+                started: FfiConverterBool.read(from: &buf), 
+                paused: FfiConverterBool.read(from: &buf), 
+                pending: FfiConverterInt64.read(from: &buf), 
+                held: FfiConverterInt64.read(from: &buf), 
+                needsUpdate: FfiConverterBool.read(from: &buf), 
+                lastFetchAt: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncSummary, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.started, into: &buf)
+        FfiConverterBool.write(value.paused, into: &buf)
+        FfiConverterInt64.write(value.pending, into: &buf)
+        FfiConverterInt64.write(value.held, into: &buf)
+        FfiConverterBool.write(value.needsUpdate, into: &buf)
+        FfiConverterOptionString.write(value.lastFetchAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncSummary_lift(_ buf: RustBuffer) throws -> SyncSummary {
+    return try FfiConverterTypeSyncSummary.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncSummary_lower(_ value: SyncSummary) -> RustBuffer {
+    return FfiConverterTypeSyncSummary.lower(value)
+}
+
+
+/**
+ * CloudKit's metadata for a record, change tag included, to keep with the workspace.
+ */
+public struct SystemFields: Equatable, Hashable {
+    public var name: String
+    public var data: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, data: Data) {
+        self.name = name
+        self.data = data
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SystemFields: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSystemFields: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SystemFields {
+        return
+            try SystemFields(
+                name: FfiConverterString.read(from: &buf), 
+                data: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SystemFields, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterData.write(value.data, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSystemFields_lift(_ buf: RustBuffer) throws -> SystemFields {
+    return try FfiConverterTypeSystemFields.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSystemFields_lower(_ value: SystemFields) -> RustBuffer {
+    return FfiConverterTypeSystemFields.lower(value)
 }
 
 
@@ -6911,6 +7948,89 @@ public func FfiConverterTypeViewCounts_lower(_ value: ViewCounts) -> RustBuffer 
 
 
 /**
+ * What a conditional body save did.
+ */
+
+public enum BodySave: Equatable, Hashable {
+    
+    /**
+     * Saved; the clock to save with next time.
+     */
+    case saved(clock: String?
+    )
+    /**
+     * Another device's edit moved the body on since it was loaded. Nothing was written: take this
+     * body, replay the unsaved edits onto it, and save again.
+     */
+    case moved(content: String, clock: String?
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BodySave: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBodySave: FfiConverterRustBuffer {
+    typealias SwiftType = BodySave
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BodySave {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .saved(clock: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 2: return .moved(content: try FfiConverterString.read(from: &buf), clock: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BodySave, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .saved(clock):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionString.write(clock, into: &buf)
+            
+        
+        case let .moved(content,clock):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(content, into: &buf)
+            FfiConverterOptionString.write(clock, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBodySave_lift(_ buf: RustBuffer) throws -> BodySave {
+    return try FfiConverterTypeBodySave.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBodySave_lower(_ value: BodySave) -> RustBuffer {
+    return FfiConverterTypeBodySave.lower(value)
+}
+
+
+
+/**
  * Which finished pages a "Completed" section should show.
  *
  * One case per view rather than a generic filter, because the views do not ask
@@ -7358,6 +8478,81 @@ public func FfiConverterTypeFolderScope_lift(_ buf: RustBuffer) throws -> Folder
 #endif
 public func FfiConverterTypeFolderScope_lower(_ value: FolderScope) -> RustBuffer {
     return FfiConverterTypeFolderScope.lower(value)
+}
+
+
+
+/**
+ * What turning sync on does when the account already holds a workspace.
+ */
+
+public enum JoinPlan: Equatable, Hashable {
+    
+    /**
+     * Nothing here was made by the person: clear it with `clear_for_join` and take the account's.
+     */
+    case replace
+    /**
+     * Merge by id.
+     */
+    case merge
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension JoinPlan: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJoinPlan: FfiConverterRustBuffer {
+    typealias SwiftType = JoinPlan
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinPlan {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .replace
+        
+        case 2: return .merge
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: JoinPlan, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .replace:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .merge:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinPlan_lift(_ buf: RustBuffer) throws -> JoinPlan {
+    return try FfiConverterTypeJoinPlan.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinPlan_lower(_ value: JoinPlan) -> RustBuffer {
+    return FfiConverterTypeJoinPlan.lower(value)
 }
 
 
@@ -8118,6 +9313,91 @@ public func FfiConverterTypeSmartView_lower(_ value: SmartView) -> RustBuffer {
 
 
 /**
+ * A record field's value, as CloudKit stores one. Absent fields are NULL.
+ */
+
+public enum SyncValue: Equatable, Hashable {
+    
+    case integer(value: Int64
+    )
+    case real(value: Double
+    )
+    case text(value: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SyncValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncValue: FfiConverterRustBuffer {
+    typealias SwiftType = SyncValue
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncValue {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .integer(value: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        case 2: return .real(value: try FfiConverterDouble.read(from: &buf)
+        )
+        
+        case 3: return .text(value: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SyncValue, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .integer(value):
+            writeInt(&buf, Int32(1))
+            FfiConverterInt64.write(value, into: &buf)
+            
+        
+        case let .real(value):
+            writeInt(&buf, Int32(2))
+            FfiConverterDouble.write(value, into: &buf)
+            
+        
+        case let .text(value):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(value, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncValue_lift(_ buf: RustBuffer) throws -> SyncValue {
+    return try FfiConverterTypeSyncValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncValue_lower(_ value: SyncValue) -> RustBuffer {
+    return FfiConverterTypeSyncValue.lower(value)
+}
+
+
+
+/**
  * What can go wrong, in terms Swift can act on.
  *
  * Deliberately coarse. Swift's realistic responses are "tell the user",
@@ -8419,6 +9699,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = Data?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterData.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeIndexMark: FfiConverterRustBuffer {
     typealias SwiftType = IndexMark?
 
@@ -8679,6 +9983,31 @@ fileprivate struct FfiConverterSequenceTypeAllDayBar: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAllDayBar.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBuiltRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [BuiltRecord]
+
+    public static func write(_ value: [BuiltRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBuiltRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BuiltRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BuiltRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBuiltRecord.read(from: &buf))
         }
         return seq
     }
@@ -8987,6 +10316,31 @@ fileprivate struct FfiConverterSequenceTypeQuickAddInput: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRecordAddress: FfiConverterRustBuffer {
+    typealias SwiftType = [RecordAddress]
+
+    public static func write(_ value: [RecordAddress], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRecordAddress.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RecordAddress] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RecordAddress]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRecordAddress.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
     typealias SwiftType = [SearchHit]
 
@@ -9004,6 +10358,31 @@ fileprivate struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSearchHit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSentRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [SentRecord]
+
+    public static func write(_ value: [SentRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSentRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SentRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SentRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSentRecord.read(from: &buf))
         }
         return seq
     }
@@ -9054,6 +10433,56 @@ fileprivate struct FfiConverterSequenceTypeSyncCalendar: FfiConverterRustBuffer 
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSyncCalendar.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSyncRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [SyncRecord]
+
+    public static func write(_ value: [SyncRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSyncRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SyncRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SyncRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSyncRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSystemFields: FfiConverterRustBuffer {
+    typealias SwiftType = [SystemFields]
+
+    public static func write(_ value: [SystemFields], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSystemFields.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SystemFields] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SystemFields]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSystemFields.read(from: &buf))
         }
         return seq
     }
@@ -9179,6 +10608,32 @@ fileprivate struct FfiConverterDictionaryStringInt64: FfiConverterRustBuffer {
         for _ in 0..<len {
             let key = try FfiConverterString.read(from: &buf)
             let value = try FfiConverterInt64.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringTypeSyncValue: FfiConverterRustBuffer {
+    public static func write(_ value: [String: SyncValue], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterTypeSyncValue.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: SyncValue] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: SyncValue]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterTypeSyncValue.read(from: &buf)
             dict[key] = value
         }
         return dict
@@ -9497,6 +10952,69 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_search() != 35518) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_adopt_workspace_id() != 2425) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_apply_records() != 40556) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_body_clock() != 20974) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_build_records() != 60036) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_claim_device() != 4011) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_clear_for_join() != 1883) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_engine_state() != 14582) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_expire_sync() != 39385) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_forget_sync() != 48135) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_join_sync() != 64877) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_pending_records() != 10248) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_plan_join() != 8486) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_records_sent() != 35806) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_retry_held_records() != 3988) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged() != 63885) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_save_system_fields() != 44227) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_engine_state() != 7982) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_sync_paused() != 3084) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_start_sync() != 9428) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_sync_state() != 41248) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_sync_summary() != 21331) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_add_page_reminder() != 49849) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9618,6 +11136,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_record_first_run_seed() != 22987) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 53674) {

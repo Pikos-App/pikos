@@ -453,6 +453,8 @@ pub async fn backup_to(pool: &sqlx::SqlitePool, destination: &str) -> AppResult<
 /// first — and one that cannot reach the server should still be able to wipe its
 /// local data, which is why the two are separate calls rather than one.
 pub async fn reset_workspace(pool: &sqlx::SqlitePool) -> AppResult<()> {
+    // Captured, these deletes would wipe every device the workspace syncs to.
+    crate::replica::forget(pool).await?;
     for table in [
         "focus_sessions",
         "page_schedules",

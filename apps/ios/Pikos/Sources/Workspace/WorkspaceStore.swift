@@ -367,6 +367,7 @@ public final class WorkspaceStore {
                 content: plainTextToDocument(text: page.text), tags: ["tutorial"])
             _ = try? await workspace.createPage(page: new)
         }
+        try? await workspace.recordFirstRunSeed()
     }
 
     /// The desktop tutorial's folder colour, so the folder looks the same on both.

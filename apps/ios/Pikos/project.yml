@@ -21,7 +21,19 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+# Staging is Debug with its own identity: its own bundle ids, App Group and iCloud container, so a
+# dogfood build never opens the real workspace. Sync runs only in it. It leaves out DEBUG because
+# Xcode builds local packages as release for any configuration not named Debug, so their
+# debug-only code is missing.
+configs:
+  Debug: debug
+  Release: release
+  Staging: debug
+
 settings:
+  configs:
+    Staging:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: STAGING
   base:
     SWIFT_VERSION: "6.0"
     # The plan calls for strict concurrency. Expect this to surface work on the
@@ -39,6 +51,8 @@ packages:
     path: ../PikosCore
   PikosEditorBridge:
     path: ../PikosEditorBridge
+  PikosSync:
+    path: ../../apple/PikosSync
 
 targets:
   Pikos:
@@ -64,6 +78,7 @@ targets:
       - package: PikosCore
         product: PikosSupport
       - package: PikosEditorBridge
+      - package: PikosSync
       - target: PikosWidgets
     settings:
       configs:
@@ -71,7 +86,17 @@ targets:
           EXCLUDED_SOURCE_FILE_NAMES: >-
             ListWidget.swift NowWidget.swift WidgetSupport.swift CompletePageIntent.swift
             SendToTomorrowIntent.swift
+        Staging:
+          PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.staging
+          CODE_SIGN_ENTITLEMENTS: PikosStaging.entitlements
+          PIKOS_APP_GROUP: group.app.pikos.staging
+          PIKOS_DISPLAY_NAME: Pikos Staging
       base:
+        PIKOS_APP_GROUP: group.app.pikos
+        PIKOS_DISPLAY_NAME: Pikos
+        # Which iCloud environment a staging build syncs through. A Developer ID Mac build reaches
+        # only Production, so the phone is set to it for anything the Mac takes part in.
+        PIKOS_CLOUDKIT_ENVIRONMENT: Development
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
         # Sources/Assets.xcassets. The accent is the brand's terracotta, the
         # same value PikosSupport's `Brand.accentHex` hands to the editor and
@@ -99,9 +124,11 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Pikos
+        CFBundleDisplayName: $(PIKOS_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        PikosAppGroup: $(PIKOS_APP_GROUP)
+        PikosCloudKitContainer: iCloud.app.pikos.staging
         # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
         # settings: those are synthesised only when Xcode generates the
         # Info.plist, and this target supplies one. As settings they were
@@ -179,12 +206,19 @@ targets:
       - package: PikosCore
         product: PikosSupport
     settings:
+      configs:
+        Staging:
+          PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.staging.widgets
+          CODE_SIGN_ENTITLEMENTS: ../PikosWidgets/PikosWidgetsStaging.entitlements
+          PIKOS_APP_GROUP: group.app.pikos.staging
       base:
+        PIKOS_APP_GROUP: group.app.pikos
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.widgets
         CODE_SIGN_ENTITLEMENTS: ../PikosWidgets/PikosWidgets.entitlements
     info:
       path: ../PikosWidgets/Info.plist
       properties:
+        PikosAppGroup: $(PIKOS_APP_GROUP)
         CFBundleDisplayName: Pikos
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

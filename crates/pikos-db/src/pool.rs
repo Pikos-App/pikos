@@ -293,7 +293,21 @@ async fn integrity_failure(path: &str) -> Option<String> {
 /// Registers [`crate::sql_functions`] on each connection the pool opens. Any pool that runs the
 /// migrations or writes pages needs it.
 pub fn with_functions(options: sqlx::sqlite::SqlitePoolOptions) -> sqlx::sqlite::SqlitePoolOptions {
-    options.after_connect(|conn, _| Box::pin(crate::sql_functions::register(conn)))
+    with_functions_on(options, crate::sql_functions::Clock::System)
+}
+
+/// [`with_functions`] reading the time from `clock`.
+pub fn with_functions_on(
+    options: sqlx::sqlite::SqlitePoolOptions,
+    clock: crate::sql_functions::Clock,
+) -> sqlx::sqlite::SqlitePoolOptions {
+    options.after_connect(move |conn, _| Box::pin(crate::sql_functions::register(conn, clock)))
+}
+
+/// [`open_pool`] without the background passes, for a short maintenance step that closes the pool
+/// straight after: a restore fixing up the file it just put back.
+pub(crate) async fn open_pool_for_maintenance(path: &str) -> AppResult<SqlitePool> {
+    open_pool_inner(path, Checkpoints::Inline).await
 }
 
 async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<SqlitePool> {
@@ -723,11 +737,17 @@ fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
 /// query hits the same `:memory:` DB; foreign keys on to match production.
 #[cfg(any(test, feature = "test-support"))]
 pub async fn test_pool() -> SqlitePool {
+    test_pool_on(crate::sql_functions::Clock::System).await
+}
+
+/// [`test_pool`] reading the time from `clock`.
+#[cfg(any(test, feature = "test-support"))]
+pub async fn test_pool_on(clock: crate::sql_functions::Clock) -> SqlitePool {
     use std::str::FromStr;
     let opts = sqlx::sqlite::SqliteConnectOptions::from_str(":memory:")
         .expect("parse :memory: opts")
         .foreign_keys(true);
-    let pool = with_functions(sqlx::sqlite::SqlitePoolOptions::new())
+    let pool = with_functions_on(sqlx::sqlite::SqlitePoolOptions::new(), clock)
         .max_connections(1)
         .connect_with(opts)
         .await

@@ -69,18 +69,52 @@ async fn accepts_zero_and_none_sentinel_minutes() {
     let pool = test_pool().await;
     seed_page(&pool, "p1").await;
 
+    seed_page(&pool, "p2").await;
+
     // 0 = "at start", -1 = "no reminders" sentinel (migration 007 widened the
     // CHECK to allow -1). Both must insert cleanly.
     create_page_reminder(&pool, "p1", 0).await.unwrap();
-    create_page_reminder(&pool, "p1", -1).await.unwrap();
+    create_page_reminder(&pool, "p2", -1).await.unwrap();
 
-    let minutes: Vec<i64> = list_page_reminders(&pool, "p1")
+    assert_eq!(leads(&pool, "p1").await, vec![0]);
+    assert_eq!(leads(&pool, "p2").await, vec![-1]);
+}
+
+async fn leads(pool: &sqlx::SqlitePool, page: &str) -> Vec<i64> {
+    list_page_reminders(pool, page)
         .await
         .unwrap()
         .iter()
         .map(|r| r.minutes_before)
-        .collect();
-    assert_eq!(minutes, vec![-1, 0]);
+        .collect()
+}
+
+#[tokio::test]
+async fn no_reminders_replaces_a_pages_reminders_and_a_reminder_replaces_no_reminders() {
+    let pool = test_pool().await;
+    seed_page(&pool, "p1").await;
+    create_page_reminder(&pool, "p1", 10).await.unwrap();
+    create_page_reminder(&pool, "p1", 60).await.unwrap();
+
+    create_page_reminder(&pool, "p1", NO_REMINDERS)
+        .await
+        .unwrap();
+    assert_eq!(leads(&pool, "p1").await, vec![NO_REMINDERS]);
+
+    create_page_reminder(&pool, "p1", 15).await.unwrap();
+    assert_eq!(leads(&pool, "p1").await, vec![15]);
+}
+
+#[tokio::test]
+async fn adding_a_lead_the_page_already_has_returns_that_reminder() {
+    let pool = test_pool().await;
+    seed_page(&pool, "p1").await;
+    let first = create_page_reminder(&pool, "p1", 10).await.unwrap();
+
+    let again = create_page_reminder(&pool, "p1", 10).await.unwrap();
+
+    assert_eq!(again, first);
+    assert_eq!(leads(&pool, "p1").await, vec![10]);
 }
 
 #[tokio::test]

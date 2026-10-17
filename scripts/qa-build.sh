@@ -12,6 +12,9 @@
 # Notarization is intentionally skipped: it only gates the download / Gatekeeper
 # / updater path, which a locally-run build never exercises. For a major release
 # smoke-test the actual notarized .dmg from the GitHub release instead.
+#
+#   scripts/qa-build.sh --icloud   also turn on iCloud sync, which needs the staging Developer ID
+#                                  provisioning profile at $PIKOS_STAGING_PROFILE
 
 set -euo pipefail
 
@@ -50,6 +53,18 @@ fi
 OVERLAY=apps/desktop/src-tauri/tauri.conf.staging.json
 NAME=$(node -p "require('./$OVERLAY').productName")
 
+# CloudKit refuses an app whose entitlements its embedded profile doesn't grant, so both go in.
+icloud=()
+if [ "${1:-}" = "--icloud" ]; then
+  PROFILE="${PIKOS_STAGING_PROFILE:-$HOME/.config/pikos/signing/Pikos_Staging_Developer_ID.provisionprofile}"
+  if [ ! -f "$PROFILE" ]; then
+    echo "[qa-build] No provisioning profile at $PROFILE" >&2
+    exit 1
+  fi
+  log "with iCloud sync, profile: $PROFILE"
+  icloud=(--features icloud-sync --config "{\"bundle\":{\"macOS\":{\"entitlements\":\"PikosStaging.entitlements\",\"files\":{\"embedded.provisionprofile\":\"$PROFILE\"}}}}")
+fi
+
 # Remove previously built bundles so macOS Spotlight can't launch a stale copy
 # (duplicate registrations of one identifier also confuse notification auth).
 log "removing stale target bundles"
@@ -58,7 +73,7 @@ find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
 
 # The app bundle only: QA never opens the disk image, and building it is most of the wait.
 VITE_STAGING=true APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
-  tauri build --config "src-tauri/tauri.conf.staging.json" --bundles app
+  tauri build --config "src-tauri/tauri.conf.staging.json" --bundles app ${icloud[@]+"${icloud[@]}"}
 
 BUNDLE="$ROOT/apps/desktop/src-tauri/target/release/bundle"
 
@@ -73,6 +88,10 @@ APP="$HOME/Applications/$NAME.app"
 mkdir -p "$HOME/Applications"
 rm -rf "$APP"
 mv "$BUNDLE/macos/$NAME.app" "$APP"
+
+if [ ${#icloud[@]} -gt 0 ]; then
+  bash "$ROOT/scripts/check-sync-pairing.sh" "" "$APP" || true
+fi
 
 echo
 log "installed: $APP"

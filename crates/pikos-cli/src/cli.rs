@@ -199,6 +199,26 @@ pub enum CliCommand {
         #[command(subcommand)]
         action: StressCommand,
     },
+    /// Check device sync between copies of a workspace. Reads only, and never migrates.
+    Sync {
+        #[command(subcommand)]
+        action: SyncCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SyncCommand {
+    /// List where two copies disagree on what sync carries; exits 10 when they do
+    Diff {
+        first: String,
+        second: String,
+        #[arg(
+            long,
+            default_value_t = 50,
+            help = "Differences to print before summing up the rest"
+        )]
+        limit: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -280,6 +300,16 @@ pub enum StressCommand {
         )]
         today: Option<chrono::NaiveDate>,
     },
+    /// Time a new device joining by sync: every record of the scratch workspace built and applied
+    /// into an empty one beside it
+    SyncBootstrap {
+        #[arg(
+            long,
+            default_value_t = 500,
+            help = "Records per batch, as a transport sends them"
+        )]
+        batch: u32,
+    },
     /// Time the operations that decide whether Pikos feels instant
     Bench {
         #[arg(
@@ -295,6 +325,11 @@ pub enum StressCommand {
             help = "Time only the operations whose names contain one of these, e.g. --only list,save"
         )]
         only: Vec<String>,
+        #[arg(
+            long,
+            help = "Turn on device sync first, so every write also records what it would send"
+        )]
+        sync: bool,
     },
 }
 
