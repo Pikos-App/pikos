@@ -6,7 +6,8 @@ set -euo pipefail
 #   pnpm ios:device              the first paired iPhone, over USB or Wi-Fi
 #   pnpm ios:device <udid>       a specific one, from `xcrun devicectl list devices`
 #   pnpm ios:device --staging    the staging app instead, which syncs through the staging iCloud
-#                                container; PIKOS_CLOUDKIT_ENVIRONMENT=Production pairs it with a Mac
+#                                container's Production environment, the only one a Developer ID Mac
+#                                reaches; PIKOS_CLOUDKIT_ENVIRONMENT=Development keeps it to the phone
 #
 # Xcode the app never opens. Its indexing and simulators are what eat a laptop, and
 # `xcodebuild` with `devicectl` needs neither.
@@ -100,12 +101,16 @@ xcodebuild build \
   -derivedDataPath "$DERIVED" \
   -allowProvisioningUpdates \
   DEVELOPMENT_TEAM="$TEAM" \
-  PIKOS_CLOUDKIT_ENVIRONMENT="${PIKOS_CLOUDKIT_ENVIRONMENT:-Development}" \
+  PIKOS_CLOUDKIT_ENVIRONMENT="${PIKOS_CLOUDKIT_ENVIRONMENT:-Production}" \
   CODE_SIGN_STYLE=Automatic |
   if command -v xcbeautify >/dev/null; then xcbeautify --quiet; else grep -E 'error:|warning: .*Pikos|BUILD'; fi
 
 APP="$DERIVED/Build/Products/$CONFIGURATION-iphoneos/Pikos.app"
 [ -d "$APP" ] || fail "the build finished without $APP"
+
+if [ "$CONFIGURATION" = Staging ]; then
+  bash "$ROOT/scripts/check-sync-pairing.sh" "$APP" || true
+fi
 
 step "installing on $DEVICE"
 # Once more on failure: over Wi-Fi to a sleeping phone, the first attempt can drop its connection.

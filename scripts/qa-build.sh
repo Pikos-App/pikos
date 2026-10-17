@@ -89,6 +89,10 @@ mkdir -p "$HOME/Applications"
 rm -rf "$APP"
 mv "$BUNDLE/macos/$NAME.app" "$APP"
 
+if [ ${#icloud[@]} -gt 0 ]; then
+  bash "$ROOT/scripts/check-sync-pairing.sh" "" "$APP" || true
+fi
+
 echo
 log "installed: $APP"
 log "open it from Spotlight as \"$NAME\", or: open -a \"$NAME\""
