@@ -37,33 +37,67 @@ impl From<PageReminderRow> for PageReminder {
     }
 }
 
-/// Insert a reminder for a page. `minutes_before` is minutes ahead of the
-/// scheduled start (0 = at start, -1 = the "no reminders" sentinel).
+/// `minutes_before` meaning "no reminders for this page".
+pub const NO_REMINDERS: i64 = -1;
+
+/// Add a reminder to a page. `minutes_before` is minutes ahead of the scheduled start (0 = at
+/// start), or [`NO_REMINDERS`].
+///
+/// A page holds "no reminders" or real reminders, never both, and each lead once: "no reminders"
+/// replaces the page's reminders, a real one replaces "no reminders", and a lead the page already
+/// has returns that row. Every caller gets the same rules, and sync's settling of two devices'
+/// edits relies on no device holding a page any other way.
 pub async fn create_page_reminder(
     pool: &sqlx::SqlitePool,
     page_id: &str,
     minutes_before: i64,
 ) -> AppResult<PageReminder> {
-    let id = uuid::Uuid::new_v4().to_string();
-    let now = now_iso();
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        let replaced = if minutes_before == NO_REMINDERS {
+            "DELETE FROM page_reminders WHERE page_id = ? AND minutes_before <> ?"
+        } else {
+            "DELETE FROM page_reminders WHERE page_id = ? AND minutes_before = ?"
+        };
+        sqlx::query(replaced)
+            .bind(page_id)
+            .bind(NO_REMINDERS)
+            .execute(&mut *tx)
+            .await?;
 
-    sqlx::query(
-        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
-         VALUES (?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(page_id)
-    .bind(minutes_before)
-    .bind(&now)
-    .execute(pool)
-    .await?;
-
-    Ok(PageReminder {
-        id,
-        page_id: page_id.to_string(),
-        minutes_before,
-        created_at: now,
+        let existing = sqlx::query_as::<_, PageReminderRow>(
+            "SELECT * FROM page_reminders WHERE page_id = ? AND minutes_before = ?",
+        )
+        .bind(page_id)
+        .bind(minutes_before)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let reminder = match existing {
+            Some(row) => PageReminder::from(row),
+            None => {
+                let reminder = PageReminder {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    page_id: page_id.to_string(),
+                    minutes_before,
+                    created_at: now_iso(),
+                };
+                sqlx::query(
+                    "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+                     VALUES (?, ?, ?, ?)",
+                )
+                .bind(&reminder.id)
+                .bind(page_id)
+                .bind(minutes_before)
+                .bind(&reminder.created_at)
+                .execute(&mut *tx)
+                .await?;
+                reminder
+            }
+        };
+        tx.commit().await?;
+        Ok(reminder)
     })
+    .await
 }
 
 /// Reminders for a page, soonest-first (smallest `minutes_before`).
