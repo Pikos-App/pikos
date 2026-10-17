@@ -446,14 +446,14 @@ mod tests {
         let backup_name = "pre-import-2026-01-02T00-00-00.sqlite";
         snapshot(&path, backup_name).await;
 
-        // Reopen so WAL and shm exist beside the live file, as they do in the app.
         let pool = crate::pool::open_pool(&path).await.unwrap();
         crate::insert_test_folder(&pool, "f2", "Later")
             .await
             .unwrap();
+        pool.close().await;
+        // Written after the close: under an open pool, whether a checkpoint gets to it first is a race.
         std::fs::write(format!("{path}-wal"), b"stale").unwrap();
 
-        pool.close().await;
         restore_backup(&path, backup_name).await.unwrap();
 
         assert!(
