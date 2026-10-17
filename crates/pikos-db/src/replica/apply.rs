@@ -24,7 +24,8 @@ use super::Uncaptured;
 use crate::error::{AppError, AppResult};
 
 /// Parents before children, so a batch holding both never pens the child.
-pub(crate) const APPLY_ORDER: [Entity; 12] = [
+pub(crate) const APPLY_ORDER: [Entity; 13] = [
+    Entity::Asset,
     Entity::Folder,
     Entity::Page,
     Entity::Body,
@@ -144,24 +145,33 @@ async fn apply_in(
         for (name, map, held_since) in &round {
             let was_held = held_since.is_some();
             let since = held_since.as_deref();
-            let Some(entity) = entity_map(name.entity) else {
+            let entity = entity_map(name.entity);
+            if entity.is_none() && name.entity != Entity::Asset {
                 continue;
-            };
-            let outcome = match codec::decode(name.clone(), map, &shape(entity)) {
-                Err(DecodeError::NewerFormat(_)) => Outcome::Held(Hold::NewerFormat),
-                Err(DecodeError::Malformed(why)) => {
-                    log::warn!("replica: holding {name}: {why}");
-                    Outcome::Held(Hold::Unreadable)
-                }
-                Ok(record) => {
-                    newest = newest
-                        .max(record.row.newest())
-                        .max(record.row.tomb.unwrap_or(Hlc::ZERO));
-                    apply_record(tx, entity, &record, &mut touched, &mut applied)
-                        .await
-                        .map_err(|e| naming(e, name))?
-                }
-            };
+            }
+            let outcome =
+                match codec::decode(name.clone(), map, &entity.map(shape).unwrap_or_default()) {
+                    Err(DecodeError::NewerFormat(_)) => Outcome::Held(Hold::NewerFormat),
+                    Err(DecodeError::Malformed(why)) => {
+                        log::warn!("replica: holding {name}: {why}");
+                        Outcome::Held(Hold::Unreadable)
+                    }
+                    Ok(record) => match entity {
+                        Some(entity) => {
+                            newest = newest
+                                .max(record.row.newest())
+                                .max(record.row.tomb.unwrap_or(Hlc::ZERO));
+                            apply_record(tx, entity, &record, &mut touched, &mut applied)
+                                .await
+                                .map_err(|e| naming(e, name))?
+                        }
+                        None => match super::images::apply(tx.conn(), &record, map).await {
+                            Ok(true) => Outcome::Changed,
+                            Ok(false) => Outcome::Unchanged,
+                            Err(e) => return Err(naming(e, name)),
+                        },
+                    },
+                };
             match outcome {
                 // A held record can be this device's own, never sent: a child written just before
                 // a purge arrived from elsewhere. Applied once its parent is back, it's sent too.

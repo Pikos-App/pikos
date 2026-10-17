@@ -98,6 +98,26 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.encryptedValues["record"] as? String, "page:p1")
     }
 
+    // qa: CLOUD-126:2
+    func testAnImageGoesAsACloudKitAssetAndComesBackAsTheFileItDownloaded() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).png")
+        try Data("harbour".utf8).write(to: file)
+        let store = FakeStore()
+        let image = SyncRecord(
+            name: "asset:\(file.lastPathComponent)",
+            fields: ["born": .text("0001"), "file": .text(file.path)])
+        await store.queue(image, storeName: image.name)
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+
+        let ids = try await coordinator.pending()
+        let built = try await coordinator.record(for: ids[0])
+        let record = try XCTUnwrap(built)
+
+        XCTAssertEqual((record["file"] as? CKAsset)?.fileURL, file)
+        XCTAssertNil(record.encryptedValues["file"])
+        XCTAssertEqual(RecordCodec.decode(record)?.fields["file"], .text(file.path))
+    }
+
     func testARecordStoredUnderAnEscapedNameKeepsItsRealName() async throws {
         let store = FakeStore()
         let tag = SyncRecord(name: "pagetag:p1/café", fields: ["born": .text("0001")])

@@ -7,6 +7,7 @@ pub mod apply;
 pub mod build;
 pub mod capture;
 pub mod compare;
+pub mod images;
 pub mod manifest;
 pub mod schema;
 pub mod state;
@@ -124,6 +125,7 @@ async fn schedule_rows_for_cached_times(tx: &mut Transaction<'_, Sqlite>) -> App
 /// half of a merge with an account that already syncs. Each row is sent at the base clock, so a row
 /// changed on another device since loses to that change.
 async fn queue_everything(tx: &mut Transaction<'_, Sqlite>) -> AppResult<()> {
+    images::forget_sent(tx).await?;
     for entity in manifest::ENTITIES {
         let covers = entity.covers.unwrap_or("1");
         let sql = format!(

@@ -8,6 +8,9 @@
 
 use sqlx::SqlitePool;
 
+use pikos_replica::codec;
+use pikos_replica::Entity;
+
 use super::manifest::ENTITIES;
 use crate::error::AppResult;
 
@@ -47,44 +50,63 @@ pub async fn cloudkit_schema(pool: &SqlitePool) -> AppResult<String> {
                 .unwrap_or("STRING")
         };
 
-        let mut fields = vec![
-            ("fmt".to_owned(), "INT64"),
-            ("born".to_owned(), "STRING"),
-            ("tomb".to_owned(), "STRING"),
-            (NAME_FIELD.to_owned(), "STRING"),
-        ];
+        let mut fields = header_fields();
         for field in entity.fields {
             fields.push((format!("{}_at", field.name), "STRING"));
             for (i, column) in field.columns.iter().enumerate() {
                 fields.push((format!("{}_{i}", field.name), declared_type(column)));
             }
         }
-
-        let mut lines = vec![
-            r#"        "___createTime" TIMESTAMP"#.to_owned(),
-            r#"        "___createdBy"  REFERENCE"#.to_owned(),
-            r#"        "___etag"       STRING"#.to_owned(),
-            r#"        "___modTime"    TIMESTAMP"#.to_owned(),
-            r#"        "___modifiedBy" REFERENCE"#.to_owned(),
-            r#"        "___recordID"   REFERENCE QUERYABLE"#.to_owned(),
-        ];
-        lines.extend(
-            fields
-                .iter()
-                .map(|(name, ty)| format!(r#"        "{name}" ENCRYPTED {ty}"#)),
-        );
-        lines.extend([
-            r#"        GRANT WRITE TO "_creator""#.to_owned(),
-            r#"        GRANT CREATE TO "_icloud""#.to_owned(),
-            r#"        GRANT READ TO "_world""#.to_owned(),
-        ]);
-        types.push(format!(
-            "    RECORD TYPE \"{}\" (\n{}\n    );",
-            entity.entity.prefix(),
-            lines.join(",\n")
-        ));
+        types.push(record_type(entity.entity.prefix(), &fields, &[]));
     }
+    types.push(record_type(
+        Entity::Asset.prefix(),
+        &header_fields(),
+        &[(codec::FILE, "ASSET")],
+    ));
     Ok(format!("DEFINE SCHEMA\n\n{}\n", types.join("\n\n")))
+}
+
+/// The codec's own keys and the record's real name, which every record type carries.
+fn header_fields() -> Vec<(String, &'static str)> {
+    vec![
+        ("fmt".to_owned(), "INT64"),
+        ("born".to_owned(), "STRING"),
+        ("tomb".to_owned(), "STRING"),
+        (NAME_FIELD.to_owned(), "STRING"),
+    ]
+}
+
+/// `plain` fields sit outside the encrypted values: CloudKit encrypts an asset itself and won't
+/// take one there.
+fn record_type(prefix: &str, encrypted: &[(String, &str)], plain: &[(&str, &str)]) -> String {
+    let mut lines = vec![
+        r#"        "___createTime" TIMESTAMP"#.to_owned(),
+        r#"        "___createdBy"  REFERENCE"#.to_owned(),
+        r#"        "___etag"       STRING"#.to_owned(),
+        r#"        "___modTime"    TIMESTAMP"#.to_owned(),
+        r#"        "___modifiedBy" REFERENCE"#.to_owned(),
+        r#"        "___recordID"   REFERENCE QUERYABLE"#.to_owned(),
+    ];
+    lines.extend(
+        encrypted
+            .iter()
+            .map(|(name, ty)| format!(r#"        "{name}" ENCRYPTED {ty}"#)),
+    );
+    lines.extend(
+        plain
+            .iter()
+            .map(|(name, ty)| format!(r#"        "{name}" {ty}"#)),
+    );
+    lines.extend([
+        r#"        GRANT WRITE TO "_creator""#.to_owned(),
+        r#"        GRANT CREATE TO "_icloud""#.to_owned(),
+        r#"        GRANT READ TO "_world""#.to_owned(),
+    ]);
+    format!(
+        "    RECORD TYPE \"{prefix}\" (\n{}\n    );",
+        lines.join(",\n")
+    )
 }
 
 /// SQLite's affinity rules, narrowed to the three value kinds the codec sends.

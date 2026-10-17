@@ -202,6 +202,15 @@ impl Workspace {
         Ok(pikos_db::replica::adopt_workspace_id(&self.pool, &workspace_id).await?)
     }
 
+    /// Where this device keeps the workspace's images, so sync can send and receive them. Set it at
+    /// every launch, before sync starts.
+    pub async fn set_sync_assets_dir(&self, path: String) -> Result<(), WorkspaceError> {
+        Ok(
+            pikos_db::replica::images::set_assets_dir(&self.pool, std::path::Path::new(&path))
+                .await?,
+        )
+    }
+
     /// The zone to sync in, given every zone the account holds; moves this workspace into it when
     /// another device's zone wins.
     pub async fn join_sync(&self, zones: Vec<String>) -> Result<String, WorkspaceError> {

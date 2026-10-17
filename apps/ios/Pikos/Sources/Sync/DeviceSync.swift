@@ -1,6 +1,7 @@
 import CloudKit
 import Observation
 import PikosCore
+import PikosSupport
 import PikosSync
 import UIKit
 import os
@@ -98,6 +99,7 @@ final class DeviceSync {
 
         do {
             let state = try await workspace.startSync()
+            try await workspace.setSyncAssetsDir(path: WorkspaceLocation.assetsURL().path)
             #if STAGING
                 if UserDefaults.standard.bool(forKey: Self.refetchKey) {
                     UserDefaults.standard.removeObject(forKey: Self.refetchKey)
