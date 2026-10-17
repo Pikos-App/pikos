@@ -722,6 +722,9 @@ actually used, probed from the device zone rather than assumed.
 ⁶⁴ The history panel reads `notification_log` newest-first across every type, which the dedup
 index cannot serve (it leads with `schedule_id`), so migration 012 adds
 `idx_notif_log_fired_at`. Origin never enters: the log keys on `page_id` / `schedule_id`.
+A page deleted for good takes its rows with it, by a trigger on `pages` (migration 024), so the
+trash sweep, Delete Forever and the reconciler's own deletes all clear it; a page in the trash
+keeps its rows.
 ⁶⁵ **macOS only.** `tauri-plugin-notification` exposes no desktop click callback at all, so
 Linux and Windows reminders stay one-way; macOS works because Pikos already bypasses the plugin
 there and its `UNUserNotificationCenter` delegate gets a real click callback. Routing is
