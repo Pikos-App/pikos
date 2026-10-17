@@ -197,6 +197,11 @@ native for backend/CLI, wasm (`@pikos/recurrence-wasm`) for the JS apps. `rrule.
 deleted; the corpus + goldens are regression fixtures generated from it before removal.
 **(0.4.0)** becomes the single expansion engine for both display and reminders.
 
+**Replica sync / `pikos-replica`** — keeping one workspace the same across a person's
+own devices, through iCloud first. The person sees "Sync"; code says replica, because
+`sync` in `pikos-db` already means [calendar sync](#calendar-sync). `pikos-replica` is
+the Rust engine: clocks, records and merge, with no I/O of its own.
+
 **`@pikos/bridge`** — how the CLI reaches the TS-only NLP + recurrence parsing, via a
 one-shot `node` subprocess. Keeps that logic single-sourced in TypeScript.
 

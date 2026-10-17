@@ -1,0 +1,8 @@
+[package]
+name = "pikos-replica"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "Pikos replica sync engine: keeps one workspace the same across a person's devices."
+
+[dependencies]
