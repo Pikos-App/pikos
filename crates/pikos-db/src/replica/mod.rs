@@ -441,8 +441,10 @@ pub async fn clear_for_join(pool: &SqlitePool, workspace_id: &str) -> AppResult<
     tx.commit().await
 }
 
-/// Adopts the workspace id of the zone this one merged into, and queues every row to send there.
-/// What CloudKit knew of the old zone's records and changes is dropped, since none of it applies.
+/// Adopts the workspace id of the zone this one merged into, and queues every row to send there,
+/// and every delete this device remembers, at the delete's own clock: one sent only to the old zone
+/// went with it. What CloudKit knew of the old zone's records and changes is dropped, since none
+/// of it applies.
 pub async fn adopt_workspace_id(pool: &SqlitePool, workspace_id: &str) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
@@ -454,6 +456,13 @@ pub async fn adopt_workspace_id(pool: &SqlitePool, workspace_id: &str) -> AppRes
             .execute(&mut *tx)
             .await?;
         queue_everything(&mut tx).await?;
+        sqlx::query(
+            "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+             SELECT entity, key, 0, 1, tomb FROM replica_clocks WHERE tomb IS NOT NULL
+             ON CONFLICT (entity, key) DO NOTHING",
+        )
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(())
     })

@@ -661,6 +661,24 @@ async fn send_to_own_zone(pool: &SqlitePool) -> Vec<(RecordName, FieldMap)> {
 }
 
 #[tokio::test]
+async fn a_delete_sent_to_a_zone_that_lost_reaches_the_zone_moved_into() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    send(&mac, &phone).await;
+    delete_page_impl(&phone, &page.id).await.unwrap();
+    send_to_own_zone(&phone).await;
+
+    let mac_workspace = meta(&mac).await.unwrap().workspace_id;
+    crate::replica::adopt_workspace_id(&phone, &mac_workspace)
+        .await
+        .unwrap();
+    send(&phone, &mac).await;
+
+    assert!(get_page(&mac, &page.id).await.unwrap().is_none());
+    assert_converged(&mac, &phone).await;
+}
+
+#[tokio::test]
 async fn two_devices_that_each_synced_alone_settle_in_one_zone_with_both_pages() {
     let mac = device().await;
     let phone = device().await;
