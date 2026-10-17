@@ -74,6 +74,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "025",
         include_str!("../migrations/025_search_index_definition.sql"),
     ),
+    (
+        "026",
+        include_str!("../migrations/026_page_status_known_set.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -505,6 +509,63 @@ async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
     .execute(&pool)
     .await
     .expect("a quiet-hours suppression must be storable");
+}
+
+#[tokio::test]
+async fn the_status_migration_brings_every_page_back_on_screen() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..25] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    let saved = [
+        ("cased_done", "Done", None),
+        ("cased_open", "NOT_STARTED", None),
+        (
+            "finished_elsewhere",
+            "completed",
+            Some("2026-01-02T10:00:00"),
+        ),
+        ("unknown", "in_progress", None),
+        ("fine", "done", Some("2026-01-02T10:00:00")),
+    ];
+    for (id, status, completed_at) in saved {
+        sqlx::query(
+            "INSERT INTO pages (id, title, content, content_text, status, priority, tags,
+             sort_order, completed_at, created_at, updated_at)
+             VALUES (?, ?, '{}', '', ?, 0, '[]', 0, ?, '2026-01-01', '2026-01-01')",
+        )
+        .bind(id)
+        .bind(id)
+        .bind(status)
+        .bind(completed_at)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    sqlx::raw_sql(MIGRATIONS[25].1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let statuses: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, status FROM pages ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let expected = [
+        ("cased_done", "done"),
+        ("cased_open", "not_started"),
+        ("fine", "done"),
+        ("finished_elsewhere", "done"),
+        ("unknown", "not_started"),
+    ]
+    .map(|(id, status)| (id.to_string(), status.to_string()));
+    assert_eq!(statuses, expected);
 }
 
 #[tokio::test]
