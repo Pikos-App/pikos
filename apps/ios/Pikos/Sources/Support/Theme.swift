@@ -20,6 +20,7 @@ extension ShapeStyle where Self == Color {
     /// The one teal for anything read as text. The desktop's link and brand teals fall under 4.5:1 on
     /// the light grounds, so the phone does not expose them.
     static var textAction: Color { Color(PikosToken.textAction) }
+    static var textDueSoon: Color { Color(PikosToken.textDueSoon) }
 
     static var borderPrimary: Color { Color(PikosToken.borderPrimary) }
     static var borderSecondary: Color { Color(PikosToken.borderSecondary) }

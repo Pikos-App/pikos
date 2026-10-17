@@ -378,7 +378,11 @@ public final class WorkspaceStore {
             // queries measured in single-digit milliseconds; overlapping them
             // would buy nothing and put two readers on the pool for no reason.
             sections = try await load(scope)
-            folders = try await workspace.listFolders()
+            folders = try await workspace.listFolders().map { folder in
+                var folder = folder
+                folder.color = CurrentPaletteColor.of(folder.color)
+                return folder
+            }
             // An opened section re-reads its rows; a closed one re-reads only
             // its count. The count is not decoration: the screen decides
             // whether to show "nothing here yet" from it, and a view whose
@@ -834,7 +838,11 @@ public final class WorkspaceStore {
     /// boundary at all is so that this app is not a fourth place the palette is
     /// written down.
     public var paletteColors: [PaletteColor] {
-        workspace?.paletteColors() ?? []
+        (workspace?.paletteColors() ?? []).map { color in
+            var color = color
+            color.value = CurrentPaletteColor.of(color.value) ?? color.value
+            return color
+        }
     }
 
     /// Set a folder's colour, or clear it with `nil`.
@@ -975,7 +983,7 @@ public final class WorkspaceStore {
             await refresh()
             let name = title.isEmpty ? String(localized: "Untitled") : title
             let when = StorageTimestamp.wallClock(start).map {
-                $0.formatted(date: .omitted, time: .shortened)
+                ClockTime.string($0)
             } ?? start
             notice = Notice(
                 day.map { String(localized: "“\(name)” moved to \($0)") }

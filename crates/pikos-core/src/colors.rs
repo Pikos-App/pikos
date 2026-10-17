@@ -33,7 +33,7 @@ const fn color(label: &'static str, value: &'static str) -> PaletteColor {
 
 /// Saturated row first, pastel row second — the order the pickers draw.
 pub const PALETTE_COLORS: [PaletteColor; 16] = [
-    color("Red", "#E5534B"),
+    color("Red", "#D9577A"),
     color("Orange", "#E09B4A"),
     color("Yellow", "#C4A143"),
     color("Green", "#57A872"),

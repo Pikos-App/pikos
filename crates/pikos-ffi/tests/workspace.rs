@@ -4579,7 +4579,7 @@ async fn the_palette_comes_from_the_workspace_in_the_order_it_is_drawn() {
     let palette = ws.palette_colors();
     assert_eq!(palette.len(), 16, "two rows of eight");
     assert_eq!(palette[0].label, "Red");
-    assert_eq!(palette[0].value, "#E5534B");
+    assert_eq!(palette[0].value, "#D9577A");
     assert_eq!(
         palette[8].label, "Rose",
         "the pastel row starts at nine — a synced calendar is mapped into it, \

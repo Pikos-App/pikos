@@ -264,7 +264,7 @@ export function PageListItem({
                           isPast && !isCompleted
                             ? "text-status-overdue"
                             : dueSoon
-                              ? "text-status-due-soon"
+                              ? "text-due-soon"
                               : "text-subtle"
                         )}
                         onClick={(e) => {

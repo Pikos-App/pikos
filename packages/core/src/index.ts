@@ -104,7 +104,12 @@ export type {
   MonthCellPlacement,
 } from "./calendar/monthGrid";
 // ── Shared palettes and priority labels ──
-export { defaultColorForProvider, PALETTE_COLORS } from "./constants/colors";
+export {
+  currentPaletteColor,
+  defaultColorForProvider,
+  PALETTE_COLORS,
+  withCurrentColor,
+} from "./constants/colors";
 export type { PaletteColor } from "./constants/colors";
 export { NLP_PRIORITY_MAP, PRIORITY_COLORS, PRIORITY_LABELS } from "./constants/priorities";
 export * from "./errors";

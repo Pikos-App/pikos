@@ -154,7 +154,7 @@ export const PRIMITIVE_GROUPS: readonly TokenGroup[] = [
   {
     comment: ["Folder / category palette (fixed set, user-assignable)"],
     tokens: scale("folder", [
-      ["red", "#e5534b"],
+      ["red", "#d9577a"],
       ["orange", "#e09b4a"],
       ["yellow", "#c4a143"],
       ["green", "#57a872"],
@@ -238,6 +238,9 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
       { dark: hex("#2dd4a8"), name: "text-link", value: hex("#1aae8a") },
       // text-link's light value is 2.8:1 on white; teal a reader has to read as text needs 4.5:1.
       { dark: hex("#2dd4a8"), name: "text-action", value: hex("#117a60") },
+      // status-due-soon is 2.9:1 as text. Its bright step stays for flags and checkbox strokes, where
+      // darkening it would merge with overdue red for a red-green colour-blind reader.
+      { dark: hex("#f59e42"), name: "text-due-soon", value: hex("#a0600a") },
     ],
   },
   {
@@ -264,7 +267,7 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
   {
     comment: ["Status"],
     tokens: [
-      { dark: hex("#f87171"), name: "status-overdue", value: hex("#ef4444") },
+      { dark: hex("#f87171"), name: "status-overdue", value: hex("#dc2626") },
       { dark: hex("#f59e42"), name: "status-due-soon", value: hex("#d4850f") },
       { dark: hex("#60a5fa"), name: "status-open", value: hex("#3b82f6") },
       { dark: hex("#34d399"), name: "status-done", value: hex("#10b981") },
@@ -456,6 +459,7 @@ export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
     aliases: [
       { from: "text-tertiary", name: "subtle" },
       { from: "text-disabled", name: "faint" },
+      { from: "text-due-soon", name: "due-soon" },
     ],
     comment: ["Short aliases (avoid double text- prefix)"],
   },

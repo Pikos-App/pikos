@@ -133,7 +133,7 @@ struct QuickAddField: UIViewRepresentable {
             case .priority:
                 switch parent.priority {
                 case .urgent: return .statusOverdue
-                case .high: return .statusDueSoon
+                case .high: return .textDueSoon
                 default: return .textSecondary
                 }
             case .tag, .folder, .note: return .textTertiary

@@ -4,6 +4,7 @@
 // than living behind a folders-only store.
 
 import type { Folder, FolderUpdate, PageSummary, StorageAdapter } from "@pikos/core";
+import { currentPaletteColor, withCurrentColor } from "@pikos/core";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
 import type { WorkspaceEventBus } from "../events/workspaceEvents";
@@ -43,18 +44,22 @@ export function useFolderWrites({
       ...(color !== undefined && { color }),
       parentId: null,
     });
-    setFolders((prev) => [...prev, folder]);
+    setFolders((prev) => [...prev, withCurrentColor(folder)]);
     return folder;
   }
 
   async function updateFolder(id: string, updates: FolderUpdate) {
-    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
+    setFolders((prev) =>
+      prev.map((f) => (f.id === id ? withCurrentColor({ ...f, ...updates }) : f))
+    );
     const updated = await adapter.updateFolder(id, updates);
-    setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
+    setFolders((prev) => prev.map((f) => (f.id === id ? withCurrentColor(updated) : f)));
   }
 
   function patchFolderColor(folderId: string, color: string) {
-    setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, color } : f)));
+    setFolders((prev) =>
+      prev.map((f) => (f.id === folderId ? { ...f, color: currentPaletteColor(color) } : f))
+    );
   }
 
   async function deleteFolder(id: string) {
@@ -79,7 +84,7 @@ export function useFolderWrites({
       adapter.listFolders(),
     ]);
     setPages(loadedPages);
-    setFolders(loadedFolders);
+    setFolders(loadedFolders.map(withCurrentColor));
   }
 
   async function reorderFolders(orderedIds: string[]) {

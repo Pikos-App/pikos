@@ -184,7 +184,7 @@ struct PageActionsMenu: View {
             ) {
                 FolderChoices(folders: store.fileableFolders)
             } label: {
-                Label("Move to Folder", systemImage: "folder")
+                Label("Move to folder", systemImage: "folder")
             }
             .pickerStyle(.menu)
         }
@@ -209,7 +209,7 @@ struct PageActionsMenu: View {
                 Button {
                     Task { await store.stopRepeating(pageId: page.id, title: page.title) }
                 } label: {
-                    Label("Stop Repeating", systemImage: "repeat.circle")
+                    Label("Stop repeating", systemImage: "repeat.circle")
                 }
             }
         }
@@ -293,6 +293,11 @@ enum PagePriority: Int64, CaseIterable, Identifiable {
         case .medium: return Color(PikosToken.yellow500)
         case .low: return .statusOpen
         }
+    }
+
+    /// For the level read as words: High's bright amber is a mark's colour, not a label's.
+    var textColor: Color {
+        self == .high ? .textDueSoon : color
     }
 
     /// The priority a stored number names, or nil for none and for anything

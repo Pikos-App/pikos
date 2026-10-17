@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultColorForProvider, PALETTE_COLORS } from "./colors";
+import { currentPaletteColor, defaultColorForProvider, PALETTE_COLORS } from "./colors";
+
+describe("currentPaletteColor", () => {
+  it("draws a folder stored with the old red as the palette's red, in either case", () => {
+    const red = PALETTE_COLORS.find((c) => c.label === "Red")!.value;
+    expect(currentPaletteColor("#E5534B")).toBe(red);
+    expect(currentPaletteColor("#e5534b")).toBe(red);
+  });
+
+  it("leaves every current palette colour and an empty colour as they are", () => {
+    for (const { value } of PALETTE_COLORS) expect(currentPaletteColor(value)).toBe(value);
+    expect(currentPaletteColor(null)).toBeNull();
+  });
+});
 
 describe("PALETTE_COLORS", () => {
   it("holds unique #RRGGBB values with distinct labels", () => {
