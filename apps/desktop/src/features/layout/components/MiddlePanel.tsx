@@ -1,4 +1,4 @@
-import { DeletePageShortcut, PageListProvider } from "@/features/pages";
+import { DeletePageShortcut, PageListProvider, SeriesDeleteDialog } from "@/features/pages";
 import { TrashPanel } from "@/features/trash";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { useUI } from "@/shared/context/UIContext";
@@ -14,8 +14,8 @@ import { PageListPanel } from "./PageListPanel";
  * them.
  *
  * The column's contents are resolved here, above that branch, so anything that
- * outlives one view — the delete shortcuts, which act on the active page — keeps
- * working when the trash takes the column.
+ * outlives one view — the delete shortcuts, which act on the active page, and the
+ * question a series' delete asks — keeps working when the trash takes the column.
  */
 export function MiddlePanel({
   onResizeStart,
@@ -28,6 +28,7 @@ export function MiddlePanel({
   return (
     <PageListProvider>
       <DeletePageShortcut />
+      <SeriesDeleteDialog />
       {activeViewId === "trash" ? (
         <ErrorBoundary
           fallback={({ error, reset }) => (

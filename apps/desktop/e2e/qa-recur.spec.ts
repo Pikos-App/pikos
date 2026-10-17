@@ -308,6 +308,7 @@ appTest(
     await appTest.step("RECUR-08 deleting the head takes the series off the calendar", async () => {
       await head.click({ button: "right" });
       await app.getByRole("menuitem", { name: "Delete" }).click();
+      await app.getByRole("button", { name: "Delete All Dates" }).click();
       await expect(head).toHaveCount(0);
       await openCalendarMode(app);
       await nextWeek(app);

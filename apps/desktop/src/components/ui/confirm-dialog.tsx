@@ -26,9 +26,12 @@ export interface ConfirmDialogProps {
   /** When true, dialog stays open and buttons are disabled while async work runs. */
   busy?: boolean;
   onConfirm: () => void;
+  /** A second answer beside the confirm, for a question that has two. */
+  alternative?: { label: string; onSelect: () => void };
 }
 
 export function ConfirmDialog({
+  alternative,
   busy = false,
   cancelLabel = "Cancel",
   confirmLabel,
@@ -54,6 +57,19 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
+          {alternative && (
+            <AlertDialogAction
+              disabled={busy}
+              onClick={(e) => {
+                e.preventDefault();
+                if (busy) return;
+                alternative.onSelect();
+              }}
+              variant="outline"
+            >
+              {alternative.label}
+            </AlertDialogAction>
+          )}
           <AlertDialogAction
             disabled={busy}
             onClick={(e) => {

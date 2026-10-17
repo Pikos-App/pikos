@@ -1,7 +1,7 @@
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { PageSummary } from "@pikos/core";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -26,7 +26,12 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   };
 }
 
-function renderItem(page: PageSummary, onRenameStart: () => void) {
+interface ItemHandlers {
+  menuActsOn?: number;
+  onDelete?: () => void;
+}
+
+function renderItem(page: PageSummary, onRenameStart: () => void, handlers: ItemHandlers = {}) {
   return renderWithProviders(
     <DndContext>
       <SortableContext items={[page.id]} strategy={verticalListSortingStrategy}>
@@ -35,8 +40,9 @@ function renderItem(page: PageSummary, onRenameStart: () => void) {
           isActive={false}
           isRenaming={false}
           isSelected={false}
+          menuActsOn={handlers.menuActsOn ?? 1}
           onClearDate={() => {}}
-          onDelete={() => {}}
+          onDelete={handlers.onDelete ?? (() => {})}
           onMoveToFolder={() => {}}
           onPriorityChange={() => {}}
           onRenameCancel={() => {}}
@@ -131,6 +137,44 @@ describe("PageListItem mirror-lock gating", () => {
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
     expect(screen.getByText("Move to folder")).toBeInTheDocument();
+  });
+});
+
+describe("PageListItem menu", () => {
+  afterEach(cleanup);
+
+  function menuItems(): string[] {
+    return within(screen.getByRole("menu"))
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent ?? "");
+  }
+
+  it("lists Rename, Move to folder, No date and Delete, in that order", () => {
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(menuItems()).toEqual(["Rename", "Move to folder", "No date", "Delete"]);
+  });
+
+  it("drops Rename and counts the pages when it acts on a selection", () => {
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn(), { menuActsOn: 3 });
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(menuItems()).toEqual(["Move to folder", "No date", "Delete 3 pages"]);
+  });
+
+  it("hands Delete to the list, which decides whether to ask", () => {
+    const onDelete = vi.fn();
+    renderItem(makePage({ isRecurring: true, scheduledStart: "2026-08-10" }), vi.fn(), {
+      onDelete,
+    });
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 });
 
