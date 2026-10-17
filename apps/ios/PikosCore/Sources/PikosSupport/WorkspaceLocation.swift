@@ -66,7 +66,12 @@ public enum WorkspaceLocation {
             if let override = ProcessInfo.processInfo.environment[workspaceOverrideKey],
                 !override.isEmpty
             {
-                let directory = URL(fileURLWithPath: override, isDirectory: true)
+                // `~/` is the app's own home: on a phone the app can't reach the test runner's
+                // folders, so a test run on a device names a place inside the app's container.
+                let path =
+                    override.hasPrefix("~/")
+                    ? NSHomeDirectory() + "/" + override.dropFirst(2) : override
+                let directory = URL(fileURLWithPath: path, isDirectory: true)
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
                 return directory.appendingPathComponent(databaseName)

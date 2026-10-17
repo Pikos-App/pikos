@@ -221,6 +221,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.uitests
+        # A device signs the test runner, which needs a plist; a simulator run never did.
+        GENERATE_INFOPLIST_FILE: YES
         # No entitlements of its own. The test bundle never touches the App
         # Group — it hands the app a throwaway directory instead, through
         # `WorkspaceLocation.workspaceOverrideKey`.

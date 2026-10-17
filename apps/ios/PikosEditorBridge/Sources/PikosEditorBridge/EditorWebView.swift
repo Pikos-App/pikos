@@ -56,6 +56,9 @@ public struct EditorWebView: UIViewRepresentable {
     /// M0's pass bar is < 300 ms on iPhone 12-class hardware.
     public var onReady: (_ loadDuration: TimeInterval) -> Void
 
+    /// How long the keystrokes since the last report took to reach the screen, in milliseconds.
+    public var onInputTiming: (_ count: Int, _ medianMs: Double, _ worstMs: Double) -> Void
+
     public init(
         pageId: String,
         documentJSON: String,
@@ -68,7 +71,8 @@ public struct EditorWebView: UIViewRepresentable {
         onSelectionChanged: @escaping ([String], String, Bool) -> Void = { _, _, _ in },
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onImageRequested: @escaping () -> Void = {},
-        onReady: @escaping (TimeInterval) -> Void = { _ in }
+        onReady: @escaping (TimeInterval) -> Void = { _ in },
+        onInputTiming: @escaping (Int, Double, Double) -> Void = { _, _, _ in }
     ) {
         self.pageId = pageId
         self.documentJSON = documentJSON
@@ -82,6 +86,7 @@ public struct EditorWebView: UIViewRepresentable {
         self.onLinkTapped = onLinkTapped
         self.onImageRequested = onImageRequested
         self.onReady = onReady
+        self.onInputTiming = onInputTiming
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -298,6 +303,9 @@ public struct EditorWebView: UIViewRepresentable {
 
             case .requestImagePicker:
                 parent.onImageRequested()
+
+            case .inputTiming(let payload):
+                parent.onInputTiming(payload.count, payload.medianMs, payload.worstMs)
 
             case .heightChanged:
                 // Only meaningful for a host that sizes the webview inline. This

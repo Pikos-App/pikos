@@ -98,6 +98,44 @@
             await store.refresh()
         }
 
+        /// Pages to seed for a speed measurement, from `PIKOS_PERF_PAGES`, or nil for none.
+        static var perfPageCount: Int? {
+            ProcessInfo.processInfo.environment["PIKOS_PERF_PAGES"].flatMap(Int.init)
+        }
+
+        /// A workspace sized for measuring: `count` pages spread over five folders, the Inbox and
+        /// the coming month, and one page of about ten thousand words for typing into.
+        ///
+        /// Written straight through the workspace, not the store: the store refreshes after each
+        /// write, which would make seeding two thousand pages a minute of redrawing.
+        static func seedForSpeed(_ store: WorkspaceStore, count: Int) async {
+            guard let workspace = store.handle else { return }
+            var folders: [String?] = [nil]
+            for name in ["Work", "Projects", "Personal", "Reading", "Finance"] {
+                folders.append(await store.createFolder(named: name)?.id)
+            }
+            for index in 0..<count {
+                let start = index % 3 == 0 ? nil : day(index % 30)
+                _ = try? await workspace.createPage(
+                    page: NewPage(
+                        title: "Page \(index + 1)", subtitle: index % 4 == 0 ? "A subtitle for page \(index + 1)" : nil,
+                        folderId: folders[index % folders.count] ?? nil, content: nil,
+                        tags: index % 5 == 0 ? ["tag\(index % 7)"] : [], scheduledStart: start, scheduledEnd: nil))
+            }
+            let sentence = "The quick brown fox jumps over the lazy dog while the editor keeps up. "
+            let paragraphs = Array(repeating: sentence + sentence, count: 350)
+            func paragraph(_ value: String) -> [String: Any] {
+                ["type": "paragraph", "content": [["type": "text", "text": value]]]
+            }
+            let doc: [String: Any] = ["type": "doc", "content": paragraphs.map(paragraph)]
+            let content = (try? JSONSerialization.data(withJSONObject: doc)).flatMap { String(data: $0, encoding: .utf8) }
+            _ = try? await workspace.createPage(
+                page: NewPage(
+                    title: "Long page", subtitle: nil, folderId: nil, content: content, tags: [],
+                    scheduledStart: nil, scheduledEnd: nil))
+            await store.refresh()
+        }
+
         /// Puts the app on the screen a screenshot asks for, once the workspace is open.
         static func applyScreen(route: Route, store: WorkspaceStore) async {
             let environment = ProcessInfo.processInfo.environment

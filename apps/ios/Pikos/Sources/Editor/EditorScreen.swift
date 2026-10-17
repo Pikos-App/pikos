@@ -24,6 +24,7 @@ struct EditorScreen: View {
     @State private var selection = EditorSelection()
     @State private var assetsURL: URL?
     @State private var coldLoadSeconds: TimeInterval?
+    @State private var typing = TypingTimes()
     @State private var actions = PageActionState()
     @State private var isKeyboardVisible = false
     @State private var isPickingPhoto = false
@@ -120,6 +121,9 @@ struct EditorScreen: View {
                 },
                 onReady: { duration in
                     Task { @MainActor in coldLoadSeconds = duration }
+                },
+                onInputTiming: { count, median, worst in
+                    Task { @MainActor in typing.add(count: count, medianMs: median, worstMs: worst) }
                 }
             )
         }
@@ -177,6 +181,9 @@ struct EditorScreen: View {
                         if let coldLoadSeconds {
                             Divider()
                             Text("Editor loaded in \(Int(coldLoadSeconds * 1000)) ms")
+                        }
+                        if typing.count > 0 {
+                            Text(typing.summary)
                         }
                     #endif
                 } label: {

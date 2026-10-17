@@ -15,6 +15,7 @@ import { Editor } from "@tiptap/core";
 
 import { resolveAssetUrl } from "./assetUrl";
 import { debounce, hasHost, send } from "./bridge";
+import { createInputTimings } from "./inputTimings";
 import { parseHostMessage, PROTOCOL_VERSION } from "./protocol";
 
 /**
@@ -33,6 +34,8 @@ let currentPageId: string | null = null;
 /** Guards against echoing the host's own `load` back as a change. */
 let applyingHostDocument = false;
 
+const inputTimings = createInputTimings();
+
 function mount(): Editor {
   const element = document.querySelector<HTMLElement>("#editor");
   if (!element) throw new Error("#editor element is missing from the document");
@@ -48,7 +51,11 @@ function mount(): Editor {
       // a page typed on the phone.
       plainText: extractText(doc),
     });
+    const timing = inputTimings.drain();
+    if (timing) send("inputTiming", timing);
   }, DOC_CHANGE_DEBOUNCE_MS);
+
+  element.addEventListener("beforeinput", () => inputTimings.start());
 
   const editor = new Editor({
     element,
@@ -70,6 +77,7 @@ function mount(): Editor {
       // the host persist a document it just supplied — harmless in isolation,
       // but it makes every page open look like an edit in the change log.
       if (applyingHostDocument) return;
+      inputTimings.finishOnNextFrame();
       sendDocChanged(e);
       reportHeight(element);
     },
