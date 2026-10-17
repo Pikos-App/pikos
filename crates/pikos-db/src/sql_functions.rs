@@ -36,7 +36,7 @@ type ScalarFn = extern "C" fn(Context, c_int, Values);
 pub(crate) async fn register(conn: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     let mut handle = conn.lock_handle().await?;
     let db = handle.as_raw_handle().as_ptr();
-    let functions: [(&CStr, c_int, c_int, ScalarFn); 3] = [
+    let functions: [(&CStr, c_int, c_int, ScalarFn); 4] = [
         (
             c"pikos_utc",
             2,
@@ -54,6 +54,12 @@ pub(crate) async fn register(conn: &mut SqliteConnection) -> Result<(), sqlx::Er
             1,
             ffi::SQLITE_UTF8 | ffi::SQLITE_INNOCUOUS,
             pikos_title_key,
+        ),
+        (
+            c"pikos_hlc_next",
+            2,
+            ffi::SQLITE_UTF8 | ffi::SQLITE_DETERMINISTIC | ffi::SQLITE_INNOCUOUS,
+            pikos_hlc_next,
         ),
     ];
     for (name, args, flags, function) in functions {
@@ -114,6 +120,32 @@ extern "C" fn pikos_title_key(ctx: Context, _argc: c_int, argv: Values) {
     }
 }
 
+/// The replica clock after `previous` for a write at `now_ms`, as [`pikos_replica::Hlc::next`].
+pub fn hlc_next(previous: &str, now_ms: i64) -> Option<String> {
+    let previous: pikos_replica::Hlc = previous.parse().ok()?;
+    Some(previous.next(now_ms.max(0) as u64).to_string())
+}
+
+/// `pikos_hlc_next(previous, now_ms)`: [`hlc_next`]. An unreadable clock fails the write rather
+/// than restarting the clock, which could stamp a new edit behind one already sent. Called only by
+/// SQLite, with a live context and two values.
+extern "C" fn pikos_hlc_next(ctx: Context, _argc: c_int, argv: Values) {
+    let previous = arg_text(argv, 0);
+    // SAFETY: SQLite's `argv` holds two live values for this two-argument function.
+    let now_ms = unsafe { ffi::sqlite3_value_int64(*argv.add(1)) };
+    let next = catch_unwind(AssertUnwindSafe(|| hlc_next(&previous?, now_ms)))
+        .ok()
+        .flatten();
+    match next {
+        Some(clock) => result_text(ctx, &clock),
+        None => {
+            let message = c"replica clock is unreadable";
+            // SAFETY: `ctx` is the live context of the call; -1 reads the static message to its NUL.
+            let () = unsafe { ffi::sqlite3_result_error(ctx, message.as_ptr(), -1) };
+        }
+    }
+}
+
 /// The text of value `i`, or None for NULL. Only for `argv` as SQLite passes it to a function,
 /// holding more than `i` values that live for the duration of the call.
 fn arg_text(argv: Values, i: usize) -> Option<String> {
@@ -146,7 +178,23 @@ extern "C" fn pikos_utc(ctx: Context, argc: c_int, argv: Values) {
 
 #[cfg(test)]
 mod tests {
-    use super::utc_of;
+    use super::{hlc_next, utc_of};
+
+    #[test]
+    fn the_clock_moves_to_wall_time_or_past_the_last_clock() {
+        let previous = pikos_replica::Hlc::new(1_000, 4).to_string();
+
+        assert_eq!(
+            hlc_next(&previous, 2_000),
+            Some(pikos_replica::Hlc::new(2_000, 0).to_string())
+        );
+        assert_eq!(
+            hlc_next(&previous, 500),
+            Some(pikos_replica::Hlc::new(1_000, 5).to_string()),
+            "a wall clock behind the last clock still moves past it"
+        );
+        assert_eq!(hlc_next("garbage", 2_000), None);
+    }
 
     #[test]
     fn a_wall_clock_resolves_in_its_zone() {

@@ -9,7 +9,7 @@ pub mod clock;
 pub mod record;
 
 pub use clock::{Hlc, ParseHlcError};
-pub use record::{Entity, ParseRecordNameError, RecordName};
+pub use record::{Entity, ParseRecordNameError, RecordName, ALL_ENTITIES};
 
 /// Bump when a record's shape changes or a migration changes a synced value, so a
 /// device that hasn't updated stops syncing instead of holding a clock with another value.

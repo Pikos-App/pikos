@@ -7,6 +7,11 @@ const UNCOUNTED: &[&str] = &[
     "folder_counts",
     "notification_log",
     "page_reminders",
+    // Sync's own bookkeeping, which no view shows.
+    "replica_applying",
+    "replica_clocks",
+    "replica_meta",
+    "replica_ops",
     "search_index_definition",
     "tag_counts",
     "title_key_version",

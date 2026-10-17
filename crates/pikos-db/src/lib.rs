@@ -26,6 +26,7 @@ pub mod reconciler;
 pub mod recurrence_derive;
 pub mod reminder_horizon;
 pub mod reminders;
+pub mod replica;
 pub mod schedules;
 pub mod search;
 pub mod sql_functions;
