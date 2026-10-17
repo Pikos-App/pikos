@@ -784,6 +784,21 @@ mod tests {
     }
 
     #[test]
+    fn a_capitalised_connector_does_not_merge_a_date_with_a_time() {
+        let ParseResult::Recurring { input, rrule } =
+            parse_input("NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3", sunday_noon())
+        else {
+            panic!("expected a recurring page");
+        };
+        assert_eq!(rrule, "FREQ=DAILY;COUNT=2026");
+        assert_eq!(input.title, "ON Apr 10 DEC 28 TO JAN 3");
+        assert_eq!(
+            input.scheduled_start.as_deref(),
+            Some("2026-03-16T12:00:00")
+        );
+    }
+
+    #[test]
     fn a_time_with_no_date_anchors_to_the_cadences_weekday() {
         let ParseResult::Recurring { input, .. } =
             parse_input("standup every monday at 9am", sunday_noon())

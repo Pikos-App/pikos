@@ -59828,6 +59828,118 @@
       }
     },
     {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Apr 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2026-03-16T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2026",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Apr 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2026-03-19T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2026",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Apr 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2026-03-16T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2026",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Apr 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2026-03-22T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2026",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Apr 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2026-03-29T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2026",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Mar 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2024-02-29T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2024",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "NOON ON FRIDAY 10 TIMES DEC 28 TO JAN 3",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "ON Jan 10 DEC 28 TO JAN 3",
+            "scheduledStart": "2027-01-01T12:00:00"
+          },
+          "rrule": "FREQ=DAILY;COUNT=2027",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Next Week Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (Draft)",
       "ref": "sun_noon",
       "result": {
@@ -131221,118 +131333,6 @@
           "input": {
             "tags": [],
             "title": ""
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20270331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "sun_noon",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20260331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "wed_noon",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20260331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "mon_morning",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20260331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "sat_late",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20260331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "dst_eve",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20260331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "leap_day",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "rrule": "FREQ=DAILY;UNTIL=20240331T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "through march 31 !high",
-      "ref": "year_end",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
           },
           "rrule": "FREQ=DAILY;UNTIL=20270331T235959",
           "type": "recurring"
