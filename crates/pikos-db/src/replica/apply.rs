@@ -218,8 +218,12 @@ impl Touched {
             .execute(tx.conn())
             .await?;
         }
-        for page in &self.reminders {
-            settle_reminders(tx.conn(), page).await?;
+        if !self.reminders.is_empty() {
+            tx.capture().await?;
+            for page in &self.reminders {
+                settle_reminders(tx.conn(), page).await?;
+            }
+            tx.uncapture().await?;
         }
         for page in &self.schedules {
             crate::schedules::refresh_schedule_denorm_conn(tx.conn(), page).await?;
@@ -245,8 +249,9 @@ impl Touched {
 }
 
 /// Reminders set on two devices at once can leave a page with both "no reminders" and a real one, or
-/// the same lead twice. "No reminders" wins and a repeated lead counts once, the same way on every
-/// device, so they settle on the same rows. Settling isn't sent; every device does it.
+/// the same lead twice. "No reminders" wins and a repeated lead counts once. The removal is captured
+/// and sent like any edit: left for each device to repeat, a device that never saw the reason, a
+/// "no reminders" removed again before it was sent, would keep the reminder the others dropped.
 async fn settle_reminders(conn: &mut SqliteConnection, page: &str) -> AppResult<()> {
     sqlx::query(
         "DELETE FROM page_reminders WHERE page_id = ?1 AND minutes_before <> ?2
