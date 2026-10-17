@@ -14,14 +14,22 @@
 //! records are built with that, so links merge like any other field and come back if the purged
 //! row does.
 //!
-//! The generated SQL is checked in as a migration. `UPDATE_GOLDEN=1 cargo test -p pikos-db
-//! replica` rewrites it, and a test fails when the database's triggers differ from what the
-//! manifest generates.
+//! A delete is captured only if the row was in scope as it went, so a calendar's own removals stay
+//! on the device that mirrors the calendar. A row's scope can hang on rows its delete cascades to,
+//! such as a page's calendar link, so a purge target's delete is captured before the delete runs.
+//!
+//! The generated SQL is checked in as a migration that drops every capture trigger and makes them
+//! again. `UPDATE_GOLDEN=1 cargo test -p pikos-db replica` rewrites it, and a test fails when the
+//! database's triggers differ from what the manifest generates. A migration that has shipped is
+//! never rewritten: a change to the triggers takes a new one, named here.
 
 use super::manifest::{EntityMap, Lifecycle, Scope, ENTITIES, PURGE_NULLED};
 
 /// Where the generated triggers are checked in, relative to the crate.
-pub const MIGRATION: &str = "migrations/028_replica_capture.sql";
+pub const MIGRATION: &str = "migrations/030_replica_capture_in_scope.sql";
+
+/// Triggers an earlier capture migration made that the manifest no longer generates.
+const RETIRED: &[&str] = &["replica_page_delete", "replica_folder_delete"];
 
 const HLC_WIDTH: usize = 20;
 
@@ -233,7 +241,7 @@ fn purge_trigger_name(target: &EntityMap) -> String {
 /// what it pointed at, in `replica_detached`. A link's synced value stays what it pointed at; the
 /// column only shows whether that row is here, NULL while it isn't. So a link merges by the plain
 /// field rule like any other value, and a purged row that a later write brings back has its links
-/// back on every device. The delete trigger takes this trigger's clock for the tombstone.
+/// back on every device. It then captures the delete, at this trigger's clock.
 fn create_purge_trigger(target: &EntityMap) -> String {
     let mut statements = vec![ADVANCE_CLOCK.to_owned()];
     for (table, column, _) in PURGE_NULLED.iter().filter(|(_, _, t)| *t == target.table) {
@@ -257,6 +265,7 @@ fn create_purge_trigger(target: &EntityMap) -> String {
             ));
         }
     }
+    statements.push(body(target, Op::Delete).trim_start().to_owned());
     format!(
         "CREATE TRIGGER {} BEFORE DELETE ON {}\nWHEN {GATE}\nBEGIN\n  {}\nEND",
         purge_trigger_name(target),
@@ -269,9 +278,17 @@ fn create_purge_trigger(target: &EntityMap) -> String {
 pub fn migration_sql() -> String {
     let mut sql = String::from(
         "-- Generated from the replica manifest in pikos-db. Don't edit; regenerate with\n\
-         -- UPDATE_GOLDEN=1 cargo test -p pikos-db replica\n",
+         -- UPDATE_GOLDEN=1 cargo test -p pikos-db replica\n\n",
     );
-    for (_, create) in triggers() {
+    let triggers = triggers();
+    let names = triggers
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .chain(RETIRED.iter().copied());
+    for name in names {
+        sql.push_str(&format!("DROP TRIGGER IF EXISTS {name};\n"));
+    }
+    for (_, create) in triggers {
         sql.push('\n');
         sql.push_str(&create);
         sql.push_str(";\n");
@@ -279,9 +296,11 @@ pub fn migration_sql() -> String {
     sql
 }
 
+/// A purge target's delete is captured in its purge trigger instead.
 fn ops(entity: &EntityMap) -> Vec<Op> {
     let changes = !entity.fields.is_empty();
     match entity.lifecycle {
+        Lifecycle::Row if is_purge_target(entity) => vec![Op::Insert, Op::Update],
         Lifecycle::Row if changes => vec![Op::Insert, Op::Update, Op::Delete],
         Lifecycle::Row => vec![Op::Insert, Op::Delete],
         Lifecycle::CreateOnly => vec![Op::Insert],
@@ -326,6 +345,9 @@ fn when(entity: &EntityMap, op: Op) -> String {
     if let Some(covers) = entity.covers {
         terms.push(on_row(covers, row));
     }
+    if let Op::Delete = op {
+        terms.push(in_scope_as_deleted(entity));
+    }
     if let (Op::Delete, Some(parent)) = (op, &entity.parent) {
         terms.push(format!(
             "EXISTS (SELECT 1 FROM {} WHERE id = OLD.{})",
@@ -339,6 +361,11 @@ fn when(entity: &EntityMap, op: Op) -> String {
         terms.push(format!("({})", any.join("\n    OR ")));
     }
     terms.join("\n  AND ")
+}
+
+/// SQL true when the row in `OLD` was in scope.
+fn in_scope_as_deleted(entity: &EntityMap) -> String {
+    on_row(&entity.scope.sql(), "OLD")
 }
 
 /// `source` repeated once per clock slot: the row's creation, then each field.
@@ -377,10 +404,18 @@ fn body(entity: &EntityMap, op: Op) -> String {
             "fields = 0, deleted = 1, clock = excluded.clock",
         ),
     };
+    // A purge trigger also notes links for rows out of scope, so its capture is filtered here
+    // rather than in its WHEN.
+    let purged_already = matches!(op, Op::Delete) && is_purge_target(entity);
+    let only = if purged_already {
+        format!(" AND {}", in_scope_as_deleted(entity))
+    } else {
+        String::new()
+    };
     let op_row = format!(
         "INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
          SELECT '{name}', {key},\n      {fields},\n      {deleted}, hlc \
-         FROM replica_meta WHERE id = 1\n  \
+         FROM replica_meta WHERE id = 1{only}\n  \
          ON CONFLICT (entity, key) DO UPDATE SET {on_conflict};"
     );
 
@@ -427,7 +462,7 @@ fn body(entity: &EntityMap, op: Op) -> String {
         }
         Op::Delete => format!(
             "INSERT INTO replica_clocks (entity, key, clocks, tomb)\n  \
-             SELECT '{name}', {key}, {}, {} FROM replica_meta WHERE id = 1\n  \
+             SELECT '{name}', {key}, {}, {} FROM replica_meta WHERE id = 1{only}\n  \
              ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;",
             every_slot(entity, "base_clock"),
             purge_clock(entity)
@@ -436,7 +471,6 @@ fn body(entity: &EntityMap, op: Op) -> String {
 
     // A purge target's clock already moved in its purge trigger, and the tombstone has to match the
     // clock that trigger stamped.
-    let purged_already = matches!(op, Op::Delete) && is_purge_target(entity);
     if purged_already {
         format!("  {op_row}\n  {clocks}")
     } else {
