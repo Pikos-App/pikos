@@ -2,7 +2,8 @@ import BackgroundTasks
 import Observation
 import PikosCore
 import PikosSupport
-import UserNotifications
+// Before the iOS 26 SDK its settings and delivered notifications are not marked Sendable.
+@preconcurrency import UserNotifications
 
 /// Reminders, as local notifications planned ahead.
 ///

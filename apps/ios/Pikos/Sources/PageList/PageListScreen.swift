@@ -285,6 +285,7 @@ struct PageListScreen: View {
     private func row(_ page: PageSummary) -> some View {
         let done = page.status == "done"
         let facts = PageFacts(page)
+        let separatorLeading: CGFloat = isSelecting ? 0 : 44
         // The checkbox sits beside the link, not inside it: a Button in a link's label loses its tap.
         return HStack(alignment: .top, spacing: 0) {
             if !isSelecting {
@@ -303,7 +304,7 @@ struct PageListScreen: View {
             drag.page?.id == page.id || (layout == .split && route.openPageId == page.id)
                 ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
-        .alignmentGuide(.listRowSeparatorLeading) { _ in isSelecting ? 0 : 44 }
+        .alignmentGuide(.listRowSeparatorLeading) { _ in separatorLeading }
         // `PKOS-0150`: the likeliest day, any other day, and a folder. The checkbox completes, so
         // nothing is on the other side.
         .swipeActions(edge: .trailing) {
