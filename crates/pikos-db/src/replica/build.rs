@@ -18,7 +18,11 @@ use crate::error::{AppError, AppResult};
 /// Records waiting to send, oldest change first.
 pub async fn pending(pool: &SqlitePool, limit: i64) -> AppResult<Vec<RecordName>> {
     let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT entity, key FROM replica_ops ORDER BY clock LIMIT ?")
+        // sql-ok: apply_rank is built from entity prefixes, which are constants
+        sqlx::query_as(&format!(
+            "SELECT entity, key FROM replica_ops ORDER BY clock, {}, key LIMIT ?",
+            apply_rank()
+        ))
             .bind(limit)
             .fetch_all(pool)
             .await?;
@@ -29,6 +33,17 @@ pub async fn pending(pool: &SqlitePool, limit: i64) -> AppResult<Vec<RecordName>
                 .map_err(|e| AppError::Internal(format!("pending record: {e}")))
         })
         .collect()
+}
+
+/// SQL ranking `entity` in apply order. Within one clock, as everything has at a first upload,
+/// parents go first, so a receiver rarely has to hold a child for its parent.
+fn apply_rank() -> String {
+    let arms: String = super::apply::APPLY_ORDER
+        .iter()
+        .enumerate()
+        .map(|(rank, entity)| format!(" WHEN '{}' THEN {rank}", entity.prefix()))
+        .collect();
+    format!("CASE entity{arms} ELSE 99 END")
 }
 
 /// A built record and the op clock it was built at, which [`sent`] compares against.

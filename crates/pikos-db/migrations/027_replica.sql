@@ -53,9 +53,11 @@ CREATE INDEX idx_replica_ops_clock ON replica_ops(clock);
 CREATE TABLE replica_pen (
   name   TEXT PRIMARY KEY,
   record TEXT NOT NULL,
+  awaits TEXT,
   since  TEXT NOT NULL,
   reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'deleted_parent', 'newer_format', 'unreadable'))
 ) WITHOUT ROWID;
+CREATE INDEX idx_replica_pen_awaits ON replica_pen(awaits);
 
 -- Links shown NULL because the row they point at isn't here, purged or not yet arrived, with what
 -- they point at. That target, not the NULL, is the link's synced value; the column shows it again

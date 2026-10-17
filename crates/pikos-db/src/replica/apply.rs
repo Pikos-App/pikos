@@ -24,7 +24,7 @@ use super::Uncaptured;
 use crate::error::{AppError, AppResult};
 
 /// Parents before children, so a batch holding both never pens the child.
-const APPLY_ORDER: [Entity; 12] = [
+pub(crate) const APPLY_ORDER: [Entity; 12] = [
     Entity::Folder,
     Entity::Page,
     Entity::Body,
@@ -58,23 +58,33 @@ pub fn shape(entity: &EntityMap) -> Vec<(&'static str, usize)> {
         .collect()
 }
 
-/// Why a record is held back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Why a record is held back, and for a missing parent, which record it waits for. It's retried
+/// when that record arrives rather than on every apply: retrying everything held each time made a
+/// first sync of a large workspace quadratic.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Hold {
-    UnknownParent,
+    UnknownParent(String),
     /// A later write elsewhere can bring the parent back, and the record with it.
-    DeletedParent,
+    DeletedParent(String),
+    /// Retried by [`retry_held`] once an update can read it.
     NewerFormat,
     Unreadable,
 }
 
 impl Hold {
-    fn reason(self) -> &'static str {
+    fn reason(&self) -> &'static str {
         match self {
-            Hold::UnknownParent => "unknown_parent",
-            Hold::DeletedParent => "deleted_parent",
+            Hold::UnknownParent(_) => "unknown_parent",
+            Hold::DeletedParent(_) => "deleted_parent",
             Hold::NewerFormat => "newer_format",
             Hold::Unreadable => "unreadable",
+        }
+    }
+
+    fn awaits(&self) -> Option<&str> {
+        match self {
+            Hold::UnknownParent(parent) | Hold::DeletedParent(parent) => Some(parent),
+            Hold::NewerFormat | Hold::Unreadable => None,
         }
     }
 }
@@ -86,11 +96,23 @@ enum Outcome {
     Dropped,
 }
 
-/// Merges `records` into the workspace in one transaction, retrying held records alongside them.
+/// Merges `records` into the workspace in one transaction, with any held record whose parent
+/// arrives among them.
 pub async fn apply(pool: &SqlitePool, records: &[(RecordName, FieldMap)]) -> AppResult<Applied> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = Uncaptured::begin(pool).await?;
-        let applied = apply_in(&mut tx, records).await?;
+        let applied = apply_in(&mut tx, records, false).await?;
+        tx.commit().await?;
+        Ok(applied)
+    })
+    .await
+}
+
+/// Tries every held record again, for after an update that reads a newer format.
+pub async fn retry_held(pool: &SqlitePool) -> AppResult<Applied> {
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = Uncaptured::begin(pool).await?;
+        let applied = apply_in(&mut tx, &[], true).await?;
         tx.commit().await?;
         Ok(applied)
     })
@@ -100,63 +122,63 @@ pub async fn apply(pool: &SqlitePool, records: &[(RecordName, FieldMap)]) -> App
 async fn apply_in(
     tx: &mut Uncaptured<'_>,
     incoming: &[(RecordName, FieldMap)],
+    everything_held: bool,
 ) -> AppResult<Applied> {
-    // Each record with when it was first held here, if it was, sorted parents first.
-    let mut batch: Vec<(RecordName, FieldMap, Option<String>)> = held(tx.conn())
-        .await?
-        .into_iter()
-        .map(|(name, map, since)| (name, map, Some(since)))
-        .chain(
-            incoming
-                .iter()
-                .cloned()
-                .map(|(name, map)| (name, map, None)),
-        )
+    // Each record with when it was first held here, if it was.
+    let mut round: Vec<(RecordName, FieldMap, Option<String>)> = incoming
+        .iter()
+        .cloned()
+        .map(|(name, map)| (name, map, None))
         .collect();
-    sqlx::query("DELETE FROM replica_pen")
-        .execute(tx.conn())
-        .await?;
-    batch.sort_by_key(|(name, _, _)| APPLY_ORDER.iter().position(|e| *e == name.entity));
+    if everything_held {
+        round.extend(take_held(tx.conn(), None).await?);
+    }
 
     let mut applied = Applied::default();
     let mut touched = Touched::default();
     let mut newest = Hlc::ZERO;
 
-    for (name, map, held_since) in &batch {
-        let was_held = held_since.is_some();
-        let since = held_since.as_deref();
-        let Some(entity) = entity_map(name.entity) else {
-            continue;
-        };
-        let outcome = match codec::decode(name.clone(), map, &shape(entity)) {
-            Err(DecodeError::NewerFormat(_)) => Outcome::Held(Hold::NewerFormat),
-            Err(DecodeError::Malformed(why)) => {
-                log::warn!("replica: holding {name}: {why}");
-                Outcome::Held(Hold::Unreadable)
+    // Each round is followed by the held records waiting on what it brought, until none are.
+    while !round.is_empty() {
+        round.sort_by_key(|(name, _, _)| APPLY_ORDER.iter().position(|e| *e == name.entity));
+        for (name, map, held_since) in &round {
+            let was_held = held_since.is_some();
+            let since = held_since.as_deref();
+            let Some(entity) = entity_map(name.entity) else {
+                continue;
+            };
+            let outcome = match codec::decode(name.clone(), map, &shape(entity)) {
+                Err(DecodeError::NewerFormat(_)) => Outcome::Held(Hold::NewerFormat),
+                Err(DecodeError::Malformed(why)) => {
+                    log::warn!("replica: holding {name}: {why}");
+                    Outcome::Held(Hold::Unreadable)
+                }
+                Ok(record) => {
+                    newest = newest
+                        .max(record.row.newest())
+                        .max(record.row.tomb.unwrap_or(Hlc::ZERO));
+                    apply_record(tx, entity, &record, &mut touched, &mut applied)
+                        .await
+                        .map_err(|e| naming(e, name))?
+                }
+            };
+            match outcome {
+                // A held record can be this device's own, never sent: a child written just before
+                // a purge arrived from elsewhere. Applied once its parent is back, it's sent too.
+                Outcome::Changed if was_held => {
+                    applied.changed += 1;
+                    queue_whole(tx.conn(), name).await?;
+                }
+                Outcome::Changed => applied.changed += 1,
+                Outcome::Held(hold) => {
+                    hold_record(tx.conn(), name, map, &hold, since).await?;
+                    applied.held += 1;
+                }
+                Outcome::Unchanged | Outcome::Dropped => {}
             }
-            Ok(record) => {
-                newest = newest
-                    .max(record.row.newest())
-                    .max(record.row.tomb.unwrap_or(Hlc::ZERO));
-                apply_record(tx, entity, &record, &mut touched, &mut applied)
-                    .await
-                    .map_err(|e| naming(e, name))?
-            }
-        };
-        match outcome {
-            // A held record can be this device's own, never sent: a child written just before a
-            // purge arrived from elsewhere. Applied once its parent is back, it's sent too.
-            Outcome::Changed if was_held => {
-                applied.changed += 1;
-                queue_whole(tx.conn(), name).await?;
-            }
-            Outcome::Changed => applied.changed += 1,
-            Outcome::Held(hold) => {
-                hold_record(tx.conn(), name, map, hold, since).await?;
-                applied.held += 1;
-            }
-            Outcome::Unchanged | Outcome::Dropped => {}
         }
+        let arrived = std::mem::take(&mut touched.arrived);
+        round = take_held(tx.conn(), Some(&arrived)).await?;
     }
 
     touched.rederive(tx).await?;
@@ -182,6 +204,8 @@ fn naming(error: AppError, name: &RecordName) -> AppError {
 /// Pages whose derived columns are stale after the batch.
 #[derive(Default)]
 struct Touched {
+    /// Records this round created or brought back, which held records may be waiting on.
+    arrived: Vec<String>,
     bodies: BTreeSet<String>,
     tags: BTreeSet<String>,
     reminders: BTreeSet<String>,
@@ -295,20 +319,45 @@ async fn observe(conn: &mut SqliteConnection, newest: Hlc) -> AppResult<()> {
     Ok(())
 }
 
-/// Held records, each with when it was first held.
-async fn held(conn: &mut SqliteConnection) -> AppResult<Vec<(RecordName, FieldMap, String)>> {
-    let rows: Vec<(String, String, String)> =
-        sqlx::query_as("SELECT name, record, since FROM replica_pen")
-            .fetch_all(&mut *conn)
+/// Takes held records out of the pen to try again: those waiting on one of `arrived`, or all of
+/// them. Each comes with when it was first held.
+async fn take_held(
+    conn: &mut SqliteConnection,
+    arrived: Option<&[String]>,
+) -> AppResult<Vec<(RecordName, FieldMap, Option<String>)>> {
+    let rows: Vec<(String, String, String)> = match arrived {
+        None => {
+            sqlx::query_as("SELECT name, record, since FROM replica_pen")
+                .fetch_all(&mut *conn)
+                .await?
+        }
+        Some(arrived) => {
+            let mut rows = Vec::new();
+            for parent in arrived {
+                rows.extend(
+                    sqlx::query_as::<_, (String, String, String)>(
+                        "SELECT name, record, since FROM replica_pen WHERE awaits = ?",
+                    )
+                    .bind(parent)
+                    .fetch_all(&mut *conn)
+                    .await?,
+                );
+            }
+            rows
+        }
+    };
+    let mut taken = Vec::with_capacity(rows.len());
+    for (name, record, since) in rows {
+        sqlx::query("DELETE FROM replica_pen WHERE name = ?")
+            .bind(&name)
+            .execute(&mut *conn)
             .await?;
-    rows.into_iter()
-        .map(|(name, record, since)| {
-            let name = name
-                .parse()
-                .map_err(|e| AppError::Internal(format!("held record name: {e}")))?;
-            Ok((name, map_from_json(&record)?, since))
-        })
-        .collect()
+        let name = name
+            .parse()
+            .map_err(|e| AppError::Internal(format!("held record name: {e}")))?;
+        taken.push((name, map_from_json(&record)?, Some(since)));
+    }
+    Ok(taken)
 }
 
 /// Holds a record, keeping `since` when it was already held so its retention runs from the first
@@ -317,17 +366,19 @@ async fn hold_record(
     conn: &mut SqliteConnection,
     name: &RecordName,
     map: &FieldMap,
-    hold: Hold,
+    hold: &Hold,
     since: Option<&str>,
 ) -> AppResult<()> {
     sqlx::query(
-        "INSERT INTO replica_pen (name, record, reason, since)
-         VALUES (?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
-         ON CONFLICT (name) DO UPDATE SET record = excluded.record, reason = excluded.reason",
+        "INSERT INTO replica_pen (name, record, reason, awaits, since)
+         VALUES (?, ?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
+         ON CONFLICT (name) DO UPDATE SET record = excluded.record, reason = excluded.reason,
+           awaits = excluded.awaits",
     )
     .bind(name.to_string())
     .bind(map_to_json(map))
     .bind(hold.reason())
+    .bind(hold.awaits())
     .bind(since)
     .execute(&mut *conn)
     .await?;
@@ -642,8 +693,12 @@ async fn apply_record(
                     return Ok(Outcome::Dropped)
                 }
                 Known::Present(_) => {}
-                Known::Tombstoned(_) => return Ok(Outcome::Held(Hold::DeletedParent)),
-                Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
+                Known::Tombstoned(_) => {
+                    return Ok(Outcome::Held(Hold::DeletedParent(format!("page:{page}"))))
+                }
+                Known::Unknown => {
+                    return Ok(Outcome::Held(Hold::UnknownParent(format!("page:{page}"))))
+                }
             }
         }
         if record.name.entity == Entity::Override
@@ -651,7 +706,8 @@ async fn apply_record(
                 .await?
                 .is_none()
         {
-            return Ok(Outcome::Held(Hold::UnknownParent));
+            let page = page_of(record).unwrap_or_default();
+            return Ok(Outcome::Held(Hold::UnknownParent(format!("rule:{page}"))));
         }
     }
 
@@ -709,13 +765,15 @@ async fn apply_record(
     let writes_row = now_live && (merged.taken != 0 || !was_live);
 
     if entity.lifecycle == Lifecycle::Part && writes_row && !was_live {
-        return Ok(Outcome::Held(Hold::UnknownParent));
+        let owner = format!("page:{}", record.name.key);
+        return Ok(Outcome::Held(Hold::UnknownParent(owner)));
     }
 
     if writes_row {
         let writable = project_links(tx.conn(), entity, &record.name.key, &merged.row).await?;
         write_row(tx.conn(), entity, &record.name.key, &writable).await?;
         if !was_live {
+            touched.arrived.push(record.name.to_string());
             unstamp_parts(tx.conn(), entity, &record.name.key).await?;
             if super::capture::is_purge_target(entity) {
                 reattach_references(tx.conn(), entity, &record.name.key).await?;
@@ -946,7 +1004,8 @@ async fn hold_newer_children(conn: &mut SqliteConnection, page: &str, tomb: Hlc)
                 row,
             };
             let map = codec::encode(&record, &shape(entity));
-            hold_record(conn, &name, &map, Hold::DeletedParent, None).await?;
+            let hold = Hold::DeletedParent(format!("page:{page}"));
+            hold_record(conn, &name, &map, &hold, None).await?;
         }
     }
     Ok(())
