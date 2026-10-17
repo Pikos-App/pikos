@@ -12,6 +12,7 @@ import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { ICloudSyncSettings } from "./ICloudSyncSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SettingsNav } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
@@ -138,6 +139,7 @@ export function SettingsPage() {
           {section === "general" && <GeneralSettings />}
           {section === "notifications" && <NotificationSettings />}
           {section === "calendar-sync" && <CalendarSyncSettings />}
+          {__PIKOS_ICLOUD_SYNC__ && section === "icloud" && <ICloudSyncSettings />}
           {section === "data" && (
             <DataSettings
               importState={importState}

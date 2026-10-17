@@ -9,3 +9,6 @@ declare const __PIKOS_BENCH__: boolean;
 /** True only in the staging build `pnpm qa:build` makes (`VITE_STAGING=true`): the app under its
  *  own identifier, for QA that can't reach the installed app's workspace. */
 declare const __PIKOS_STAGING__: boolean;
+/** True only in a build with iCloud sync compiled in (`VITE_ICLOUD_SYNC=true`, set with the Rust
+ *  `icloud-sync` feature by `pnpm qa:build --icloud`). Test it where it's used, as the benchmark's. */
+declare const __PIKOS_ICLOUD_SYNC__: boolean;

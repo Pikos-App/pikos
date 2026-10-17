@@ -55,6 +55,7 @@ NAME=$(node -p "require('./$OVERLAY').productName")
 
 # CloudKit refuses an app whose entitlements its embedded profile doesn't grant, so both go in.
 icloud=()
+icloud_ui=false
 if [ "${1:-}" = "--icloud" ]; then
   PROFILE="${PIKOS_STAGING_PROFILE:-$HOME/.config/pikos/signing/Pikos_Staging_Developer_ID.provisionprofile}"
   if [ ! -f "$PROFILE" ]; then
@@ -62,6 +63,7 @@ if [ "${1:-}" = "--icloud" ]; then
     exit 1
   fi
   log "with iCloud sync, profile: $PROFILE"
+  icloud_ui=true
   icloud=(--features icloud-sync --config "{\"bundle\":{\"macOS\":{\"entitlements\":\"PikosStaging.entitlements\",\"files\":{\"embedded.provisionprofile\":\"$PROFILE\"}}}}")
 fi
 
@@ -72,7 +74,7 @@ find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
   -exec rm -rf {} + 2>/dev/null || true
 
 # The app bundle only: QA never opens the disk image, and building it is most of the wait.
-VITE_STAGING=true APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
+VITE_STAGING=true VITE_ICLOUD_SYNC="$icloud_ui" APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
   tauri build --config "src-tauri/tauri.conf.staging.json" --bundles app ${icloud[@]+"${icloud[@]}"}
 
 BUNDLE="$ROOT/apps/desktop/src-tauri/target/release/bundle"

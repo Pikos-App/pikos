@@ -11,6 +11,7 @@ pub mod commands;
 pub mod dev;
 #[cfg(all(target_os = "macos", feature = "icloud-sync"))]
 mod icloud;
+pub mod icloud_settings;
 #[path = "schedules/schedules.rs"]
 pub mod schedules;
 pub mod sync;
@@ -154,7 +155,7 @@ pub async fn connect_db(
 
     #[cfg(all(target_os = "macos", feature = "icloud-sync"))]
     if let Some(pool) = guard.pool.clone() {
-        icloud::start(app.clone(), pool);
+        icloud::attach(app.clone(), pool);
     }
 
     // Watch the workspace file so external writes (e.g. the CLI) live-refresh

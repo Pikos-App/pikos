@@ -57,6 +57,28 @@
             try call("join", ["zones": zones])
         }
 
+        /// What waits on this device, for the status line.
+        func summary() async throws -> (pending: Int, needsUpdate: Bool, lastFetch: Date?) {
+            let summary: WireSummary = try call("summary", [String: Int]())
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return (
+                summary.pending, summary.needsUpdate,
+                summary.lastFetchAt.flatMap(formatter.date(from:))
+            )
+        }
+
+        /// Hands the line Settings shows to the app.
+        func report(_ line: SyncStatusLine) async throws {
+            let action =
+                switch line.action {
+                case .none: "none"
+                case .useThisAccount: "useThisAccount"
+                case .uploadAgain: "uploadAgain"
+                }
+            let _: Empty? = try call("status", ["text": line.text, "action": action])
+        }
+
         private func call<Input: Encodable, Output: Decodable>(_ op: String, _ input: Input) throws
             -> Output
         {
@@ -186,6 +208,18 @@
     private struct WireNamedData: Encodable {
         let name: String
         let data: [UInt8]
+    }
+
+    private struct WireSummary: Decodable {
+        let pending: Int
+        let needsUpdate: Bool
+        let lastFetchAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case pending
+            case needsUpdate = "needs_update"
+            case lastFetchAt = "last_fetch_at"
+        }
     }
 
     private struct WireApplied: Decodable {
