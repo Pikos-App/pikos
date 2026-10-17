@@ -189,6 +189,199 @@ pub async fn expire(pool: &SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
+/// What turning sync on does when the account already holds a workspace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Join {
+    /// Nothing here was made by the person: take the account's rows instead. Merging would put a
+    /// second set of first-run pages on every device.
+    Replace,
+    /// Union by id. Two devices used apart show both copies of anything made on both, which the
+    /// person can tidy; nothing is lost.
+    Merge,
+}
+
+pub async fn plan_join(pool: &SqlitePool) -> AppResult<Join> {
+    Ok(if holds_only_seed(pool).await? {
+        Join::Replace
+    } else {
+        Join::Merge
+    })
+}
+
+/// Clears a workspace nobody has used before it takes an account's rows, and adopts that
+/// workspace's id. The calendar layer stays: it's this device's own. Nothing here is sent.
+pub async fn clear_for_join(pool: &SqlitePool, workspace_id: &str) -> AppResult<()> {
+    let mut tx = Uncaptured::begin(pool).await?;
+    for entity in [
+        manifest::entity(pikos_replica::Entity::Page),
+        manifest::entity(pikos_replica::Entity::Folder),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let sql = format!(
+            "DELETE FROM {} WHERE rowid IN (SELECT t.rowid FROM {} AS t WHERE {})",
+            entity.table,
+            entity.table,
+            entity.scope.sql()
+        )
+        .replace("{row}", "t");
+        sqlx::query(&sql).execute(tx.conn()).await?;
+    }
+    sqlx::query("DELETE FROM replica_ops")
+        .execute(tx.conn())
+        .await?;
+    sqlx::query("DELETE FROM replica_clocks")
+        .execute(tx.conn())
+        .await?;
+    sqlx::query("UPDATE replica_meta SET workspace_id = ?, seeded = '{}' WHERE id = 1")
+        .bind(workspace_id)
+        .execute(tx.conn())
+        .await?;
+    tx.commit().await
+}
+
+/// Adopts the workspace id of the zone this one merged into.
+pub async fn adopt_workspace_id(pool: &SqlitePool, workspace_id: &str) -> AppResult<()> {
+    sqlx::query("UPDATE replica_meta SET workspace_id = ? WHERE id = 1")
+        .bind(workspace_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Sync's state on a workspace about to be replaced by a backup, carried over to the file put back.
+pub struct Displaced {
+    device_id: Option<String>,
+    hlc: Hlc,
+    base_clock: Option<Hlc>,
+    paused: bool,
+    engine_state: Option<Vec<u8>>,
+    workspace_id: String,
+    names: Vec<pikos_replica::RecordName>,
+}
+
+/// Notes what a restore must carry over, or None when sync never started on this workspace (or it
+/// predates sync), and the restore is just a file copy.
+pub async fn before_restore(pool: &SqlitePool) -> AppResult<Option<Displaced>> {
+    let has_sync: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'replica_meta')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if !has_sync {
+        return Ok(None);
+    }
+    let current = meta(pool).await?;
+    if !current.started {
+        return Ok(None);
+    }
+    Ok(Some(Displaced {
+        device_id: current.device_id,
+        hlc: current.hlc,
+        base_clock: current.base_clock,
+        paused: current.paused,
+        engine_state: engine_state(pool).await?,
+        workspace_id: current.workspace_id,
+        names: state::synced_rows(pool)
+            .await?
+            .into_iter()
+            .map(|row| row.name)
+            .collect(),
+    }))
+}
+
+/// Makes a restored file the truth on every device that syncs it. Merged as it is, the backup's
+/// older rows would lose to every device's newer copy and the restore would quietly undo itself. So
+/// every restored row is re-stamped as a fresh write, every row the workspace had that the backup
+/// doesn't gets a tombstone, and this device carries on as itself, with its id, clock and transport
+/// state.
+pub async fn after_restore(pool: &SqlitePool, displaced: Displaced) -> AppResult<()> {
+    let mut tx = Uncaptured::begin(pool).await?;
+    sqlx::query(
+        "UPDATE replica_meta
+         SET started = 1, paused = ?, device_id = ?, base_clock = ?, engine_state = ?,
+             workspace_id = ?, hlc = max(hlc, ?)
+         WHERE id = 1",
+    )
+    .bind(displaced.paused)
+    .bind(&displaced.device_id)
+    .bind(displaced.base_clock.map(|c| c.to_string()))
+    .bind(&displaced.engine_state)
+    .bind(&displaced.workspace_id)
+    .bind(displaced.hlc.to_string())
+    .execute(tx.conn())
+    .await?;
+    sqlx::query("UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1")
+        .execute(tx.conn())
+        .await?;
+    let clock: String = sqlx::query_scalar("SELECT hlc FROM replica_meta WHERE id = 1")
+        .fetch_one(tx.conn())
+        .await?;
+    sqlx::query("DELETE FROM replica_ops")
+        .execute(tx.conn())
+        .await?;
+    sqlx::query("DELETE FROM replica_pen")
+        .execute(tx.conn())
+        .await?;
+    sqlx::query("DELETE FROM replica_detached")
+        .execute(tx.conn())
+        .await?;
+
+    let restored: std::collections::HashSet<String> = {
+        let rows = state::synced_rows_conn(tx.conn()).await?;
+        for row in &rows {
+            let entity = manifest::entity(row.name.entity).expect("synced rows have an entity");
+            restamp(tx.conn(), entity, &row.name.key, &clock, None).await?;
+        }
+        rows.into_iter().map(|row| row.name.to_string()).collect()
+    };
+    for name in displaced.names {
+        let Some(entity) = manifest::entity(name.entity) else {
+            continue;
+        };
+        if !restored.contains(&name.to_string()) {
+            restamp(tx.conn(), entity, &name.key, &clock, Some(&clock)).await?;
+        }
+    }
+    tx.commit().await
+}
+
+/// Every slot of a record at `clock`, queued to send whole, or as removed with `tomb`.
+async fn restamp(
+    conn: &mut sqlx::SqliteConnection,
+    entity: &manifest::EntityMap,
+    key: &str,
+    clock: &str,
+    tomb: Option<&str>,
+) -> AppResult<()> {
+    sqlx::query(
+        "INSERT INTO replica_clocks (entity, key, clocks, tomb) VALUES (?, ?, ?, ?)
+         ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = excluded.tomb",
+    )
+    .bind(entity.entity.prefix())
+    .bind(key)
+    .bind(clock.repeat(entity.fields.len() + 1))
+    .bind(tomb)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "INSERT INTO replica_ops (entity, key, fields, deleted, clock) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(entity.entity.prefix())
+    .bind(key)
+    .bind(if tomb.is_some() {
+        0
+    } else {
+        (1i64 << entity.fields.len()) - 1
+    })
+    .bind(tomb.is_some())
+    .bind(clock)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 type Fingerprints = std::collections::BTreeMap<String, String>;
 
 async fn fingerprints(pool: &SqlitePool) -> AppResult<Fingerprints> {

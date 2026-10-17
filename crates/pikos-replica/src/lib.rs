@@ -9,6 +9,7 @@ pub mod clock;
 pub mod codec;
 pub mod merge;
 pub mod record;
+pub mod zone;
 
 pub use clock::{Hlc, ParseHlcError};
 pub use record::{Entity, ParseRecordNameError, RecordName, ALL_ENTITIES};

@@ -580,3 +580,65 @@ async fn a_page_that_left_scope_and_came_back_arrives_again() {
 
     assert!(get_page(&phone, "event").await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_new_phone_joining_takes_the_macs_workspace_instead_of_adding_its_first_run_pages() {
+    let mac = device().await;
+    create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    let phone = test_pool().await;
+    insert_test_folder(&phone, "start", "Start here")
+        .await
+        .unwrap();
+    insert_test_page(
+        &phone,
+        TestPage {
+            folder_id: Some("start"),
+            ..TestPage::new("welcome", "Welcome to Pikos")
+        },
+    )
+    .await
+    .unwrap();
+    crate::replica::record_seed(&phone).await.unwrap();
+    insert_test_page(&phone, TestPage::new("event", "Dentist"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&phone, "event", "active")
+        .await
+        .unwrap();
+    start(&phone).await.unwrap();
+
+    assert_eq!(
+        crate::replica::plan_join(&phone).await.unwrap(),
+        crate::replica::Join::Replace
+    );
+    let mac_workspace = meta(&mac).await.unwrap().workspace_id;
+    crate::replica::clear_for_join(&phone, &mac_workspace)
+        .await
+        .unwrap();
+    send(&mac, &phone).await;
+
+    assert_converged(&mac, &phone).await;
+    assert_eq!(meta(&phone).await.unwrap().workspace_id, mac_workspace);
+    assert!(get_page(&phone, "welcome").await.unwrap().is_none());
+    assert!(
+        get_page(&phone, "event").await.unwrap().is_some(),
+        "the phone's own calendar stays"
+    );
+    assert!(
+        pending(&phone, 10).await.unwrap().is_empty(),
+        "clearing sends nothing"
+    );
+}
+
+#[tokio::test]
+async fn a_used_workspace_joining_merges() {
+    let phone = device().await;
+    create_page_impl(&phone, new_page("Made on the phone"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        crate::replica::plan_join(&phone).await.unwrap(),
+        crate::replica::Join::Merge
+    );
+}

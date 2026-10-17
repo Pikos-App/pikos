@@ -45,9 +45,19 @@ fn select_sql(entity: &EntityMap) -> String {
 
 /// Every in-scope row, entity by entity in manifest order.
 pub async fn synced_rows(pool: &SqlitePool) -> AppResult<Vec<SyncedRow>> {
+    let mut conn = pool.acquire().await?;
+    synced_rows_conn(&mut conn).await
+}
+
+pub(crate) async fn synced_rows_conn(
+    conn: &mut sqlx::SqliteConnection,
+) -> AppResult<Vec<SyncedRow>> {
     let mut rows = Vec::new();
     for entity in ENTITIES {
-        for row in sqlx::query(&select_sql(entity)).fetch_all(pool).await? {
+        for row in sqlx::query(&select_sql(entity))
+            .fetch_all(&mut *conn)
+            .await?
+        {
             let mut values = (1..row.len()).map(|i| row.get::<String, _>(i));
             let fields = entity
                 .fields

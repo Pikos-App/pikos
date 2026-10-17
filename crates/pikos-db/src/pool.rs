@@ -304,6 +304,12 @@ pub fn with_functions_on(
     options.after_connect(move |conn, _| Box::pin(crate::sql_functions::register(conn, clock)))
 }
 
+/// [`open_pool`] without the background passes, for a short maintenance step that closes the pool
+/// straight after: a restore fixing up the file it just put back.
+pub(crate) async fn open_pool_for_maintenance(path: &str) -> AppResult<SqlitePool> {
+    open_pool_inner(path, Checkpoints::Inline).await
+}
+
 async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
