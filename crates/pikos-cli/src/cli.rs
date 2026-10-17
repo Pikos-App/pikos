@@ -199,6 +199,26 @@ pub enum CliCommand {
         #[command(subcommand)]
         action: StressCommand,
     },
+    /// Check device sync between copies of a workspace. Reads only, and never migrates.
+    Sync {
+        #[command(subcommand)]
+        action: SyncCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SyncCommand {
+    /// List where two copies disagree on what sync carries; exits 10 when they do
+    Diff {
+        first: String,
+        second: String,
+        #[arg(
+            long,
+            default_value_t = 50,
+            help = "Differences to print before summing up the rest"
+        )]
+        limit: usize,
+    },
 }
 
 #[derive(Subcommand)]

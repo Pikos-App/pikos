@@ -1957,6 +1957,7 @@ dependencies = [
  "pikos-core",
  "pikos-db",
  "pikos-recurrence",
+ "pikos-replica",
  "serde",
  "serde_json",
  "sqlx",
