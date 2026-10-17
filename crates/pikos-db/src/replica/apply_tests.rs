@@ -823,3 +823,61 @@ async fn a_reminder_fired_here_fires_again_when_another_device_moves_its_time() 
     .await;
     assert_eq!(fired, None, "the move cleared the old firing");
 }
+
+#[tokio::test]
+async fn two_versions_held_for_a_missing_page_merge_rather_than_the_later_arrival_winning() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Dentist")).await.unwrap();
+    let block = create_page_schedule_impl(
+        &mac,
+        NewPageSchedule {
+            page_id: page.id.clone(),
+            scheduled_start: "2030-01-05T09:00:00".into(),
+            scheduled_end: None,
+            timezone: Some("UTC".into()),
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    let first = build(&mac, &pending(&mac, 100).await.unwrap())
+        .await
+        .unwrap();
+    let (older, page_records): (Vec<_>, Vec<_>) = first
+        .into_iter()
+        .map(|b| (b.name, b.fields))
+        .filter(|(name, _)| matches!(name.entity, Entity::Schedule | Entity::Page))
+        .partition(|(name, _)| name.entity == Entity::Schedule);
+    update_page_schedule_impl(
+        &mac,
+        block.id.clone(),
+        PageScheduleUpdate {
+            scheduled_start: Some("2030-01-05T10:00:00".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let newer: Vec<_> = build(&mac, &pending(&mac, 100).await.unwrap())
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|b| b.name.entity == Entity::Schedule)
+        .map(|b| (b.name, b.fields))
+        .collect();
+
+    apply(&phone, &newer).await.unwrap();
+    apply(&phone, &older).await.unwrap();
+    apply(&phone, &page_records).await.unwrap();
+
+    let start = text(
+        &phone,
+        &format!(
+            "SELECT scheduled_start FROM page_schedules WHERE id = '{}'",
+            block.id
+        ),
+    )
+    .await;
+    assert_eq!(start.as_deref(), Some("2030-01-05T10:00:00"));
+}

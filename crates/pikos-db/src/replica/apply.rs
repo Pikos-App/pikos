@@ -363,6 +363,10 @@ async fn take_held(
 
 /// Holds a record, keeping `since` when it was already held so its retention runs from the first
 /// time. A new hold is dated by wall time, never the clock, which a device far ahead could inflate.
+///
+/// A record already held under the same name is merged with, not replaced: two devices can send
+/// versions of one child while its page is gone, and the older arriving last would otherwise be
+/// all that's left when the page comes back.
 async fn hold_record(
     conn: &mut SqliteConnection,
     name: &RecordName,
@@ -370,6 +374,17 @@ async fn hold_record(
     hold: &Hold,
     since: Option<&str>,
 ) -> AppResult<()> {
+    let already: Option<String> =
+        sqlx::query_scalar("SELECT record FROM replica_pen WHERE name = ?")
+            .bind(name.to_string())
+            .fetch_optional(&mut *conn)
+            .await?;
+    let merged = match already {
+        Some(held) => merge_held(name, &map_from_json(&held)?, map),
+        None => None,
+    };
+    let map = merged.as_ref().unwrap_or(map);
+
     sqlx::query(
         "INSERT INTO replica_pen (name, record, reason, awaits, since)
          VALUES (?, ?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
@@ -384,6 +399,19 @@ async fn hold_record(
     .execute(&mut *conn)
     .await?;
     Ok(())
+}
+
+/// Two versions of a held record merged into one, or None when either can't be read here, in which
+/// case the newer arrival is kept.
+fn merge_held(name: &RecordName, held: &FieldMap, arrived: &FieldMap) -> Option<FieldMap> {
+    let shape = shape(entity_map(name.entity)?);
+    let held = codec::decode(name.clone(), held, &shape).ok()?;
+    let arrived = codec::decode(name.clone(), arrived, &shape).ok()?;
+    let record = Record {
+        name: name.clone(),
+        row: merge::merge(Some(&held.row), &arrived.row).row,
+    };
+    Some(codec::encode(&record, &shape))
 }
 
 /// Values tagged with their type, since JSON alone can't tell an integer from a real.
