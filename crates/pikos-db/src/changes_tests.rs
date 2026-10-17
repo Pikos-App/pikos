@@ -7,6 +7,7 @@ const UNCOUNTED: &[&str] = &[
     "folder_counts",
     "notification_log",
     "page_reminders",
+    "search_index_definition",
     "tag_counts",
     "title_key_version",
 ];

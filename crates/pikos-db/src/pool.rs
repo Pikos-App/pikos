@@ -2,7 +2,7 @@
 //! db/mod.rs, minus the app-only bits (notification-log prune, path
 //! canonicalisation, DbState/Tauri). Opens with the same pragmas the app uses so
 //! concurrent access is safe, runs the sqlx migrations, backfills content_text,
-//! and rebuilds the FTS index once per schema bump.
+//! and rebuilds the FTS index when its definition or the derived text changes.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -17,9 +17,10 @@ use crate::error::{AppError, AppResult};
 /// pre-migration backup check (to read the highest known version).
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
-/// Bump when what the app derives from a page's text changes: an indexed column, how
-/// `content_text` is derived, or how a seeded body is built. A workspace opened at an older
-/// version gets each pass it missed and an index rebuild, once.
+/// Bump when what the app derives from a page's text changes: how `content_text` is derived, or
+/// how a seeded body is built. A workspace opened at an older version gets each pass it missed and
+/// an index rebuild, once. A change to the indexed columns or tokenizer needs no bump; the index
+/// rebuilds when its definition changes.
 const DERIVED_TEXT_VERSION: i64 = 3;
 
 /// How many pre-migration snapshots to retain. Older ones are pruned so they
@@ -323,19 +324,30 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
     let stored: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&pool)
         .await?;
-    if stored != DERIVED_TEXT_VERSION {
+    let definition = crate::search::index_definition(&pool).await?;
+
+    let derived_text_is_stale = stored != DERIVED_TEXT_VERSION;
+    let definition_changed = matches!(definition, crate::search::IndexDefinition::Changed(_));
+    if derived_text_is_stale || definition_changed {
         if stored < 2 {
             rederive_line_breaks(&pool).await?;
         }
         if stored < 3 {
             crate::reconciler::link_addresses_in_seeded_bodies(&pool).await?;
         }
+
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
             .execute(&pool)
             .await?;
         sqlx::query(&format!("PRAGMA user_version = {DERIVED_TEXT_VERSION}")) // sql-ok: compile-time constant
             .execute(&pool)
             .await?;
+    }
+
+    if let crate::search::IndexDefinition::Changed(current)
+    | crate::search::IndexDefinition::Unrecorded(current) = definition
+    {
+        crate::search::record_index_definition(&pool, &current).await?;
     }
 
     Ok(pool)

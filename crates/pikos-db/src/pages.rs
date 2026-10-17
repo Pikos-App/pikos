@@ -555,7 +555,27 @@ async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> Ap
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
+/// Every status a page can hold. Migration 026's triggers refuse anything else, so widening the
+/// set takes a migration as well as this list.
+pub const PAGE_STATUSES: &[&str] = &["not_started", "done"];
+
+/// Refuses a status the app doesn't know, as an input error naming the field rather than the
+/// storage error the database's own refusal would be.
+fn ensure_known_status(status: &str) -> AppResult<()> {
+    let is_known = PAGE_STATUSES.contains(&status);
+    if is_known {
+        return Ok(());
+    }
+
+    Err(AppError::Invalid(format!(
+        "status must be one of {}, not {status:?}",
+        PAGE_STATUSES.join(", ")
+    )))
+}
+
 pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResult<Page> {
+    ensure_known_status(&data.status)?;
+
     // External-calendar folders are system-managed; only the reconciler (raw SQL)
     // seeds into them. Reject a create targeting one, or the page lands trapped —
     // the placement lock in update_page_impl then blocks it from ever leaving.
@@ -629,6 +649,10 @@ pub async fn update_page_impl(
     id: String,
     updates: PageUpdate,
 ) -> AppResult<Page> {
+    if let Some(status) = &updates.status {
+        ensure_known_status(status)?;
+    }
+
     // Editing any authored field claims ownership (the reconciler never calls this
     // path, so sync can't trip it). `last_opened_at`/`sort_order` are excluded —
     // reading and arranging don't author — and ownership decides whether an
@@ -1355,6 +1379,8 @@ pub async fn set_pages_status_impl(
     status: &str,
     completed_at: Option<&str>,
 ) -> AppResult<Vec<PageSummary>> {
+    ensure_known_status(status)?;
+
     if ids.is_empty() {
         return Ok(Vec::new());
     }
