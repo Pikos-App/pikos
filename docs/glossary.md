@@ -202,6 +202,19 @@ own devices, through iCloud first. The person sees "Sync"; code says replica, be
 `sync` in `pikos-db` already means [calendar sync](#calendar-sync). `pikos-replica` is
 the Rust engine: clocks, records and merge, with no I/O of its own.
 
+**Capture (sync)** — recording, in the same transaction as a write, which synced fields of
+which row changed and at what clock. Database triggers do it, so no writer can skip it;
+writes applied from another device, and maintenance every device runs for itself, run
+with capture held off.
+
+**Tombstone (sync)** — the record of a delete, carrying its clock, so a delete and an
+offline edit settle the same way on every device. A row is gone while its tombstone is
+newer than every write to it, and a strictly later write brings it back.
+
+**Holding pen (sync)** — where an arriving record waits when it can't be applied yet: its
+parent hasn't arrived or was deleted here, a newer Pikos wrote it, or it can't be read.
+Held records are retried on every apply rather than dropped.
+
 **`@pikos/bridge`** — how the CLI reaches the TS-only NLP + recurrence parsing, via a
 one-shot `node` subprocess. Keeps that logic single-sourced in TypeScript.
 
