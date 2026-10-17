@@ -21,7 +21,7 @@ Pikos is a desktop app for macOS and Linux in which a note, a task, and a calend
 - Rich text editor with slash commands, formatting toolbar, Markdown paste, and autosave
 - Task management with priorities (Urgent/High/Medium/Low), statuses, tags, and folders
 - Calendar showing one to seven days or a month, with drag-to-schedule and both timed and all-day events
-- External calendar sync: read-only, opt-in, from Google Calendar, iCloud, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged, or ticked off becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
+- External calendar sync: read-only, opt-in, from Google Calendar, iCloud, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged, or marked done becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
 - Quick add with natural language parsing (extracts dates, priorities, tags, folders)
 - Full-text search with BM25 ranking
 - Recurring pages and recurring calendar events, sharing one recurrence engine
@@ -86,7 +86,7 @@ Pikos competes with Notion, NotePlan, Obsidian, Logseq, TickTick, Things, and To
 
 {{legend}} Things and Todoist attach notes to individual tasks but have no standalone notes.
 
-In most of these apps a note, a task, and a calendar event are separate items, even when one app holds all three. In Pikos they are one page: the same page holds the meeting notes, gets ticked off as a task, and sits on the calendar. Notion can do this once the user has built a database for it, and NotePlan comes close, since its tasks live inside notes. In Pikos every page works this way with no setup.
+In most of these apps a note, a task, and a calendar event are separate items, even when one app holds all three. In Pikos they are one page: the same page holds the meeting notes, gets marked done as a task, and sits on the calendar. Notion can do this once the user has built a database for it, and NotePlan comes close, since its tasks live inside notes. In Pikos every page works this way with no setup.
 
 NotePlan is the closest match: notes, tasks, and a calendar, stored on the device, with phone apps and iCloud sync, on a $99/yr subscription. Notion matches the breadth but keeps data on its servers and requires an account. TickTick and Todoist put their calendar views behind a paid plan. Obsidian and Logseq keep data on the device but need community plugins for a calendar.
 

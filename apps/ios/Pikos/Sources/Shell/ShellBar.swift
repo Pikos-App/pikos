@@ -17,6 +17,7 @@ struct ShellBar: View {
 
     @Namespace private var selection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(Route.self) private var route
 
     static let height: CGFloat = 56
     /// What content under the bar keeps clear so its last line can scroll above it.
@@ -50,6 +51,10 @@ struct ShellBar: View {
     ) -> some View {
         let isSelected = pane.wrappedValue == value
         return Button {
+            // A segment always lands on its pane itself, never on a page left open over it.
+            if !route.path.isEmpty {
+                withTransaction(\.disablesAnimations, true) { route.path = [] }
+            }
             withAnimation(reduceMotion ? nil : .pkQuick) { pane.wrappedValue = value }
         } label: {
             HStack(spacing: 7) {

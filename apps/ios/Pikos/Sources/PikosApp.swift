@@ -2,6 +2,7 @@ import AppIntents
 import BackgroundTasks
 import CoreSpotlight
 import PikosCore
+import PikosSupport
 import SwiftUI
 import UserNotifications
 import WidgetKit
@@ -49,6 +50,13 @@ struct PikosApp: App {
         // list can already ask whether its tip is due.
         PikosTips.configure()
 
+        #if DEBUG
+            // A UI test run on a phone fails the moment the screen locks.
+            if ProcessInfo.processInfo.environment[WorkspaceLocation.workspaceOverrideKey] != nil {
+                UIApplication.shared.isIdleTimerDisabled = true
+            }
+        #endif
+
         // Reminders. The delegate routes a tap through the same link a widget
         // uses, and "Complete" through the same store method the checkbox
         // uses, so a notification is another entry point and not a second
@@ -74,11 +82,12 @@ struct PikosApp: App {
         // in a background launch, so it is opened on demand. The order is the
         // point: a meeting that landed in the sync gets its reminder planned
         // in the same wake.
+        // The main queue: the handler is main-actor code, and on the scheduler's own queue the
+        // isolation check stopped the app every time a refresh ran.
         BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: ReminderScheduler.refreshTaskIdentifier, using: nil
+            forTaskWithIdentifier: ReminderScheduler.refreshTaskIdentifier, using: .main
         ) { task in
-            // The task object is handed over on the scheduler's queue and is
-            // not Sendable; it crosses into the main actor in a box, is
+            // The task object is not Sendable; it crosses into the main actor in a box, is
             // completed exactly once there, and is never shared beyond that.
             let handle = BackgroundTaskHandle(task: task)
             let work = Task { @MainActor in
@@ -183,7 +192,14 @@ struct RootView: View {
         let layout = ShellLayout(horizontal: widthClass, vertical: heightClass)
 
         Group {
-            if layout == .split {
+            if let failure = store.openFailure {
+                ContentUnavailableView {
+                    Label("Pikos couldn't open its workspace", systemImage: "externaldrive.badge.exclamationmark")
+                } description: {
+                    Text(failure)
+                        .textSelection(.enabled)
+                }
+            } else if layout == .split {
                 WorkspaceSplitView()
             } else {
                 // The path lives on the router so a `pikos://page/<id>` link can push from outside.
@@ -214,6 +230,7 @@ struct RootView: View {
             QuickAddSheet(
                 prefill: route.quickAddPrefill.isEmpty ? route.quickAddDraft : route.quickAddPrefill,
                 prefillDate: route.quickAddPrefillDate,
+                prefillMinutes: route.quickAddPrefillMinutes,
                 context: route.quickAddContext)
         }
         // Errors surface here, above every tab and sheet, so a write that
@@ -226,6 +243,15 @@ struct RootView: View {
             ),
             actions: { Button("OK", role: .cancel) {} },
             message: { Text(store.errorMessage ?? "") }
+        )
+        .alert(
+            "Started a new workspace",
+            isPresented: Binding(
+                get: { store.startupNote != nil },
+                set: { if !$0 { store.startupNote = nil } }
+            ),
+            actions: { Button("OK", role: .cancel) {} },
+            message: { Text(store.startupNote ?? "") }
         )
         // Coming back to the foreground re-reads the workspace. A page added
         // by Siri, a widget or a Shortcut lands while the app is suspended,
@@ -273,10 +299,8 @@ struct RootView: View {
             await reminders.sync()
             WidgetCenter.shared.reloadAllTimelines()
         }
-        // The home screen's search index follows the same signal, more
-        // slowly: it is a full rebuild, and nobody is searching Spotlight
-        // for a page they typed three seconds ago. A burst of writes
-        // rebuilds once, after the last.
+        // The home screen's search index follows the same signal, more slowly: nobody is searching
+        // Spotlight for a page they typed three seconds ago, and a burst of writes catches up once.
         .task(id: store.dataVersion) {
             guard store.dataVersion > 0 else { return }
             try? await Task.sleep(for: .seconds(4))

@@ -48,6 +48,14 @@ struct NowPlanTests {
         #expect(plan.suggestion?.id == "a")
     }
 
+    @Test func nextIsTheSoonestToStartWhateverTheListOrder() {
+        let plan = NowPlan(
+            items: [timed("evening", from: 300, to: 360), timed("soon", from: 30, to: 60), timed("noon", from: 120, to: 150)],
+            now: now)
+        #expect(plan.next?.id == "soon")
+        #expect(plan.freeUntil == at(30))
+    }
+
     @Test func aPageStillAheadIsNotSuggested() {
         let plan = NowPlan(items: [timed("later", from: 30, to: 60)], now: now)
         #expect(plan.suggestion == nil)

@@ -94,6 +94,10 @@ export const WEBVIEW_TO_HOST = {
     doc: "The content's height in CSS pixels, for hosts sizing the webview inline rather than letting it scroll itself.",
     fields: { px: "number" },
   },
+  inputTiming: {
+    doc: "How long the keystrokes since the last report took from input to the next painted frame, sent with each docChanged. What the phone's typing speed is measured by.",
+    fields: { count: "integer", medianMs: "number", worstMs: "number" },
+  },
   linkTapped: {
     doc: "A link was tapped. The webview does not navigate — the host decides whether to open it.",
     fields: { url: "string" },

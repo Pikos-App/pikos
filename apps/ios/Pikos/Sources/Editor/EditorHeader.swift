@@ -18,6 +18,7 @@ struct EditorHeader: View {
     }
 
     @Environment(WorkspaceStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -84,6 +85,13 @@ struct EditorHeader: View {
             }
         }
         .onDisappear {
+            commitTitle()
+            commitSubtitle()
+        }
+        // Leaving the app keeps focus where it was, so neither commit above would run, and a
+        // suspended app may never come back to run them.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active else { return }
             commitTitle()
             commitSubtitle()
         }

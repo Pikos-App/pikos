@@ -7,6 +7,7 @@ import XCTest
 /// scheduled. Anything narrower is a question the Rust tests or `PikosSupport`
 /// answer in milliseconds.
 final class TierOneTests: PikosUITestCase {
+    // qa: IOS-01
     func testTheAppLaunchesOnTodayWithTheBar() {
         let switcher = app.buttons["Switch view"].firstMatch
         XCTAssertTrue(switcher.waitForExistence(timeout: Self.timeout), "the app should open on the list")
@@ -15,6 +16,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Calendar"].firstMatch.exists, "and the way to the calendar")
     }
 
+    // qa: IOS-22
     func testSelectIsOfferedOnlyWhenThereIsAPageToSelect() {
         XCTAssertTrue(app.staticTexts["Nothing here yet"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["Select"].exists, "an empty Today has nothing to select")
@@ -24,6 +26,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 5), "a page to select brings it back")
     }
 
+    // qa: IOS-21
     func testScrollingTheCalendarDownShrinksTheBarAndTappingBringsItBack() {
         app.buttons["Calendar"].firstMatch.tap()
         let grid = app.scrollViews.firstMatch
@@ -42,6 +45,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Search"].isHittable, "one tap brings the bar back")
     }
 
+    // qa: IOS-20
     func testAFocusLinkOpensThePageWithTheTimerRunning() throws {
         quickAdd("Write the report today")
         assertRowExists("Write the report")
@@ -54,11 +58,28 @@ final class TierOneTests: PikosUITestCase {
             "the widget's Focus button opens the page already timing")
     }
 
+    // qa: IOS-19
+    /// A workspace a test build made under a migration number that now means something else.
+    func testAWorkspaceFromAnotherBuildIsSetAsideAndANewOneWorks() {
+        assertRowExists("Nothing here yet")
+        app.terminate()
+        alterWorkspace("UPDATE _sqlx_migrations SET checksum = x'00' WHERE version = 13")
+        app.launch()
+
+        let note = app.alerts["Started a new workspace"]
+        XCTAssertTrue(note.waitForExistence(timeout: Self.timeout), "the reader is told, once")
+        note.buttons["OK"].tap()
+        quickAdd("Buy milk today")
+        assertRowExists("Buy milk", "and capture writes to the new workspace")
+    }
+
+    // qa: IOS-02
     func testQuickAddCreatesAPageThatAppearsInTheList() {
         quickAdd("Buy milk today")
         assertRowExists("Buy milk", "the parsed title, not the raw line")
     }
 
+    // qa: IOS-03
     /// A page typed while a folder is showing lands in that folder, not in the Inbox out of sight.
     func testAPageAddedFromAFolderLandsInThatFolder() {
         app.buttons["Switch view"].firstMatch.tap()
@@ -75,6 +96,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.buttons["View"].exists, "and no notice points somewhere else")
     }
 
+    // qa: IOS-04:2
     /// The checkbox sits beside the link rather than inside it, so it has to be proven to land.
     func testTickingAPageMovesItOutOfTheOpenList() {
         quickAdd("Buy milk today")
@@ -90,6 +112,7 @@ final class TierOneTests: PikosUITestCase {
             "and is counted as finished")
     }
 
+    // qa: IOS-04:2
     func testTheCompletedSectionLoadsAgainAfterSwitchingViews() {
         showView("Inbox")
         quickAdd("Buy milk")
@@ -110,6 +133,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.staticTexts["Loading…"].exists)
     }
 
+    // qa: IOS-05:2
     func testSearchFindsAPageByItsTitle() {
         quickAdd("Quarterly review today")
         assertRowExists("Quarterly review")
@@ -137,6 +161,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Switch view"].firstMatch.isHittable, "onto the list it was opened from")
     }
 
+    // qa: IOS-05:2
     func testSearchSuggestsThePageLastOpenedBeforeAnythingIsTyped() {
         quickAdd("Trip notes today")
         assertRowExists("Trip notes")
@@ -150,6 +175,7 @@ final class TierOneTests: PikosUITestCase {
             "the page just opened is offered with the field still empty")
     }
 
+    // qa: IOS-06
     func testAReminderSetInThePageHeaderIsKept() {
         quickAdd("Call the dentist today at 11pm")
         allowNotificationsIfAsked()
@@ -170,6 +196,7 @@ final class TierOneTests: PikosUITestCase {
             app.buttons["Reminders: 30 min"].waitForExistence(timeout: Self.timeout), "and it is still there on reopening")
     }
 
+    // qa: IOS-07:3
     /// The desktop's week-of-the-month preset and an end, both saved and read back through the rule
     /// layer, which could hold neither before.
     func testAMonthlyWeekdayRepeatWithAnEndIsKept() {
@@ -201,6 +228,7 @@ final class TierOneTests: PikosUITestCase {
             app.staticTexts["10 times"].waitForExistence(timeout: Self.timeout), "the end is still there on reopening")
     }
 
+    // qa: IOS-08
     func testTheMonthViewOpensADayWhenOneIsTapped() {
         app.buttons["Calendar"].firstMatch.tap()
         let title = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Visible days'")).firstMatch
@@ -215,6 +243,7 @@ final class TierOneTests: PikosUITestCase {
             app.otherElements["Week"].waitForExistence(timeout: Self.timeout), "and tapping it lands on the day view")
     }
 
+    // qa: IOS-09:2
     func testAnInboxRearrangedByHandKeepsItsOrderAfterARelaunch() {
         showView("Inbox")
         for title in ["Alpha errand", "Beta errand", "Gamma errand"] {
@@ -240,6 +269,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertLessThan(gamma.frame.minY, alpha.frame.minY, "the order was saved, not just drawn")
     }
 
+    // qa: IOS-10
     /// The switcher is spring-loaded: a page held over the title opens it, and a folder in it takes the drop.
     func testAPageCarriedOntoAFolderInTheSwitcherMovesThere() {
         app.buttons["Switch view"].firstMatch.tap()
@@ -271,6 +301,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(waitForDisappearance(of: page), "and it leaves the Inbox")
     }
 
+    // qa: IOS-09:2
     func testFoldersRearrangedOnThePhoneKeepTheirOrderAfterARelaunch() {
         app.buttons["Switch view"].firstMatch.tap()
         let edit = app.buttons["Edit"].firstMatch
@@ -297,6 +328,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertLessThan(folder("Beta").frame.minY, folder("Alpha").frame.minY, "the order was saved, not just drawn")
     }
 
+    // qa: IOS-11
     /// The one flow that crosses into the webview, so it proves the editor bundle shipped.
     func testOpeningAPageShowsTheEditor() {
         quickAdd("Trip notes today")
@@ -312,6 +344,30 @@ final class TierOneTests: PikosUITestCase {
             "and the editor webview loads — a missing bundle fails here")
     }
 
+    // qa: IOS-18
+    /// Leaving the app mid-title keeps the title, though focus never left the field.
+    func testATitleTypedJustBeforeLeavingTheAppIsKept() {
+        quickAdd("Trip notes today")
+        assertRowExists("Trip notes")
+        app.staticTexts["Trip notes"].firstMatch.tap()
+        let title = textInput("Title")
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        title.typeText(" for Lisbon")
+        XCTAssertEqual(title.value as? String, "Trip notes for Lisbon")
+
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+        app.launch()
+
+        // Relaunching may land back on the page, where the title is a field's value, or on the list.
+        let kept = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR value == %@", "Trip notes for Lisbon", "Trip notes for Lisbon"))
+            .firstMatch
+        XCTAssertTrue(kept.waitForExistence(timeout: Self.timeout), "the edit was saved on the way out")
+    }
+
+    // qa: IOS-12:2
     /// The desktop's signature move on a phone: lift a page, drop it on an hour of today.
     /// One press, two outcomes: still opens the menu, moving carries the page (the drag tests below).
     func testHoldingARowStillOpensItsMenu() {
@@ -325,6 +381,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.buttons["Undo"].exists, "and nothing was moved")
     }
 
+    // qa: IOS-12:2
     func testDraggingAPageOntoTheDayGivesItATime() {
         quickAdd("Plan the offsite today")
         let title = app.staticTexts["Plan the offsite"].firstMatch
@@ -342,6 +399,143 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.staticTexts["Drop on an hour"].exists, "and the day settles back")
     }
 
+    // qa: IOS-14
+    /// Hold empty grid until a block appears, then draw it out: quick add opens holding the range.
+    func testDraggingOutABlockOnTheCalendarOpensQuickAddWithThatRange() {
+        app.buttons["Calendar"].firstMatch.tap()
+        let grid = app.scrollViews.firstMatch
+        XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
+
+        let press = grid.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.25))
+        press.press(
+            forDuration: 1.0, thenDragTo: press.withOffset(CGVector(dx: 0, dy: grid.frame.height * 0.3)),
+            withVelocity: .slow, thenHoldForDuration: 0.3)
+
+        let when = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'When:' AND label CONTAINS '–'")).firstMatch
+        XCTAssertTrue(when.waitForExistence(timeout: 5), "quick add opens on the drawn start and end")
+    }
+
+    // qa: IOS-15
+    func testDraggingABlocksBottomEdgeMakesItLonger() throws {
+        let hour = Calendar.current.component(.hour, from: Date()) + 1
+        try XCTSkipIf(hour > 21, "the grid opens on the current hour, so a block this late sits below the screen")
+        let clock = "\(hour % 12 == 0 ? 12 : hour % 12)\(hour < 12 ? "am" : "pm")"
+        quickAdd("Budget review today at \(clock) for 30m")
+        assertRowExists("Budget review")
+        app.buttons["Calendar"].firstMatch.tap()
+
+        // In the calendar's scroll view: the list stays in the tree behind it, so its row matches too.
+        let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Budget review'")).firstMatch
+        XCTAssertTrue(block.waitForExistence(timeout: Self.timeout), "the page is on the calendar")
+        let before = block.label
+        // A half-hour block is half an hour tall. Grabbed just below the edge, as a thumb does.
+        let hourHeight = block.frame.height * 2
+        let edge = block.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1)).withOffset(CGVector(dx: 0, dy: 6))
+        edge.press(
+            forDuration: 0.25, thenDragTo: edge.withOffset(CGVector(dx: 0, dy: hourHeight)),
+            withVelocity: .slow, thenHoldForDuration: 0.2)
+
+        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5), "letting go saves the new end and offers it back")
+        XCTAssertNotEqual(block.label, before, "and the block says its new time")
+        let start = before.components(separatedBy: ", ").last?.components(separatedBy: " –").first ?? before
+        XCTAssertTrue(block.label.contains("\(start) –"), "with its start where it was: a resize, not a move")
+    }
+
+    // qa: IOS-26
+    func testThePageMenuCompletesAnOpenPageAndReopensAFinishedOne() {
+        showView("Inbox")
+        quickAdd("Water the fern")
+        let title = app.collectionViews.staticTexts["Water the fern"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+
+        title.press(forDuration: 1.0)
+        let complete = app.buttons["Complete"].firstMatch
+        XCTAssertTrue(complete.waitForExistence(timeout: 5), "an open page's menu offers Complete")
+        XCTAssertFalse(app.buttons["Reopen"].exists, "and not Reopen")
+        complete.tap()
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: title)
+        wait(for: [gone], timeout: 5)
+
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Completed'")).firstMatch.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "it's listed under Completed")
+        title.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["Reopen"].firstMatch.waitForExistence(timeout: 5), "a finished page's menu offers Reopen")
+    }
+
+    // qa: IOS-27
+    func testTheWeekStripMarksTheDayItMovedTo() {
+        app.buttons["Calendar"].firstMatch.tap()
+        let week = app.otherElements["Week"]
+        XCTAssertTrue(week.waitForExistence(timeout: Self.timeout))
+        let today = week.buttons.matching(NSPredicate(format: "label CONTAINS ', today'")).firstMatch
+        XCTAssertTrue(today.isSelected, "the day view opens on today")
+
+        let other = week.buttons.matching(NSPredicate(format: "NOT (label CONTAINS ', today')")).firstMatch
+        other.tap()
+        XCTAssertTrue(other.isSelected, "the tapped day is the one marked")
+        XCTAssertFalse(today.isSelected, "and today no longer is")
+    }
+
+    // qa: IOS-24
+    /// A tap on a block shows its card; a step there moves it at once, and Open still opens it.
+    func testTappingABlockMovesItAnHourLaterInTwoTaps() throws {
+        let hour = Calendar.current.component(.hour, from: Date()) + 1
+        try XCTSkipIf(hour > 21, "the grid opens on the current hour, so a block this late sits below the screen")
+        let clock = "\(hour % 12 == 0 ? 12 : hour % 12)\(hour < 12 ? "am" : "pm")"
+        quickAdd("Dentist today at \(clock) for 30m")
+        assertRowExists("Dentist")
+        app.buttons["Calendar"].firstMatch.tap()
+
+        let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Dentist'")).firstMatch
+        XCTAssertTrue(block.waitForExistence(timeout: Self.timeout), "the page is on the calendar")
+        let before = block.label
+        block.tap()
+
+        let later = app.buttons["1 hour later"].firstMatch
+        XCTAssertTrue(later.waitForExistence(timeout: 5), "the tap shows the card rather than opening the page")
+        later.tap()
+        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5), "the step applies at once and offers it back")
+        XCTAssertNotEqual(block.label, before, "and the block says its new time")
+
+        app.buttons["Open"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: Self.timeout), "Open still opens the page")
+    }
+
+    // qa: IOS-16
+    /// `PKOS-0150`: a left swipe offers the likeliest day, When and Folder.
+    func testARowSwipesLeftToADayWhenOrAFolder() {
+        showView("Inbox")
+        quickAdd("Book the car in")
+        assertRowExists("Book the car in")
+        row(titled: "Book the car in").swipeLeft()
+        XCTAssertTrue(app.buttons["Today"].waitForExistence(timeout: 5), "the likeliest day")
+        XCTAssertTrue(app.buttons["When"].exists, "any other day")
+        app.buttons["Folder"].firstMatch.tap()
+        XCTAssertTrue(
+            app.navigationBars["Move to folder"].waitForExistence(timeout: 5), "and the folder, in a sheet")
+    }
+
+    // qa: IOS-17
+    /// Deleting a series asks this date or all of them; skipping one keeps the series.
+    func testDeletingARepeatingPageAsksAndCanSkipJustOneDate() {
+        showView("Upcoming")
+        quickAdd("Standup every day at 9am")
+        allowNotificationsIfAsked()
+        let title = app.collectionViews.staticTexts["Standup"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        title.press(forDuration: 1.0)
+        let delete = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        delete.tap()
+
+        let skip = app.buttons["Skip This Date"].firstMatch
+        XCTAssertTrue(skip.waitForExistence(timeout: 5), "a series asks before it goes")
+        XCTAssertTrue(app.buttons["Delete All Dates"].exists)
+        skip.tap()
+        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5), "the skip offers itself back")
+        XCTAssertTrue(app.collectionViews.staticTexts["Standup"].firstMatch.exists, "and the series is still there")
+    }
+
     func testTheDaySitsUnderEveryListButTheTwoThatAreTheSchedule() {
         showView("Inbox")
         XCTAssertTrue(app.buttons["Day peek"].waitForExistence(timeout: Self.timeout), "under the Inbox")
@@ -349,6 +543,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(waitForDisappearance(of: app.buttons["Day peek"]), "and not under Upcoming")
     }
 
+    // qa: IOS-13
     /// A drag that ends anywhere but the day must not leave the day waiting for a drop.
     func testALiftedPageLetGoOverTheListLeavesTheDayAsItWas() {
         quickAdd("Plan the offsite today")

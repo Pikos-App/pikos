@@ -242,9 +242,18 @@ export function renderEditorCssBlock(): string {
     ...EDITOR_VARIABLES.map(([name, token]) => `  ${name}: ${value(token, scheme)};`),
     "}",
   ];
+  // The system's scheme until the host sends its own: the page draws before the host can, and a
+  // light background there flashed white as a dark-mode page opened.
+  const followingSystem = [
+    "@media (prefers-color-scheme: dark) {",
+    ...block(':root:not([data-scheme="light"])', "dark").map((line) => `  ${line}`),
+    "}",
+  ];
   return [
     EDITOR_CSS_START,
     ...block(":root", "light"),
+    "",
+    ...followingSystem,
     "",
     ...block(':root[data-scheme="dark"]', "dark"),
     EDITOR_CSS_END,

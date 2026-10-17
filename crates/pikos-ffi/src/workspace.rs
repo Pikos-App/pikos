@@ -88,6 +88,35 @@ pub enum WorkspaceError {
     /// is broken.
     #[error("{message}")]
     Network { message: String },
+
+    /// The workspace applied a migration under a number this build gives to a different one.
+    /// A released migration never changes, so only a workspace an unreleased build made can be
+    /// in this state, and no build can open it as it stands.
+    #[error("this workspace was made by another build of Pikos: {message}")]
+    MadeByAnotherBuild { message: String },
+
+    /// The workspace has migrations this build doesn't know: it was opened by a newer Pikos.
+    #[error("this workspace was made by a newer version of Pikos")]
+    TooNew,
+}
+
+impl WorkspaceError {
+    fn opening(error: AppError) -> Self {
+        if let AppError::Db(sqlx::Error::Migrate(ref migrate)) = error {
+            match **migrate {
+                sqlx::migrate::MigrateError::VersionMismatch(_) => {
+                    return WorkspaceError::MadeByAnotherBuild {
+                        message: error.to_string(),
+                    }
+                }
+                sqlx::migrate::MigrateError::VersionMissing(_) => return WorkspaceError::TooNew,
+                _ => {}
+            }
+        }
+        WorkspaceError::Open {
+            message: error.to_string(),
+        }
+    }
 }
 
 impl From<AppError> for WorkspaceError {
@@ -529,6 +558,68 @@ pub enum PageRepeat {
     Fixed { label: String },
 }
 
+#[derive(Debug, uniffi::Enum)]
+pub enum ListScope {
+    Inbox,
+    Folder { id: String },
+}
+
+/// The orders a folder or the Inbox can be read in, as the desktop offers them.
+#[derive(Debug, uniffi::Enum)]
+pub enum ListSort {
+    Manual,
+    Date,
+    Title,
+    Priority,
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct PageWindow {
+    pub pages: Vec<PageSummary>,
+    /// Where the next window starts, or None at the end of the list.
+    pub next: Option<String>,
+    /// Every open page in the list, on the first window only.
+    pub total: Option<i64>,
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct TodayWindow {
+    /// Open pages from before today, oldest first, a window at a time.
+    pub earlier: PageWindow,
+    /// Today's timed pages whose time has passed, soonest first.
+    pub slipped_today: Vec<PageSummary>,
+    /// Today's pages still to come, with all-day ones at now.
+    pub today: Vec<PageSummary>,
+}
+
+/// Where a search index last caught up to: a change number, and the counter's epoch it belongs to.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct IndexMark {
+    pub seq: i64,
+    pub epoch: String,
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct IndexChanges {
+    /// Open pages to add or update.
+    pub pages: Vec<PageSummary>,
+    /// Pages to take out: finished or trashed since the mark.
+    pub removed: Vec<String>,
+    /// `pages` is every open page, so whatever the index held before is void.
+    pub everything: bool,
+    /// What to pass as `since` next time.
+    pub mark: IndexMark,
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct ViewCounts {
+    pub today: i64,
+    pub upcoming: i64,
+    pub inbox: i64,
+    /// Open pages by folder id, for folders that have held one.
+    pub folders: std::collections::HashMap<String, i64>,
+}
+
 /// Today's list, already split into the two sections it is drawn as.
 ///
 /// Split here rather than in the shell because the rule is not a rendering
@@ -893,9 +984,7 @@ impl Workspace {
     pub async fn open(path: String) -> Result<Arc<Self>, WorkspaceError> {
         let pool = pikos_db::open_pool(&path)
             .await
-            .map_err(|e| WorkspaceError::Open {
-                message: e.to_string(),
-            })?;
+            .map_err(WorkspaceError::opening)?;
         Ok(Arc::new(Workspace { pool }))
     }
 
@@ -998,6 +1087,165 @@ impl Workspace {
             })
             .collect(),
         )
+    }
+
+    /// The next window of the Inbox's or a folder's open pages, in the order `sort` puts them.
+    ///
+    /// `after` is the `next` of the window before, or None for the top. The cursor is the last
+    /// row's place in the order, so the next window starts after it however the list has changed.
+    pub async fn list_window(
+        &self,
+        scope: ListScope,
+        sort: ListSort,
+        after: Option<String>,
+        limit: u32,
+    ) -> Result<PageWindow, WorkspaceError> {
+        let key = pikos_db::views::ViewKey {
+            scope: match scope {
+                ListScope::Inbox => pikos_db::views::ViewScope::Inbox,
+                ListScope::Folder { id } => pikos_db::views::ViewScope::Folder(id),
+            },
+            sort: match sort {
+                ListSort::Manual => pikos_db::views::ViewSort::Manual,
+                ListSort::Date => pikos_db::views::ViewSort::Date,
+                ListSort::Title => pikos_db::views::ViewSort::Title,
+                ListSort::Priority => pikos_db::views::ViewSort::Priority,
+            },
+            zone: pikos_db::device_zone().name().to_string(),
+            dates: None,
+        };
+        window_of(&self.pool, &key, after, limit).await
+    }
+
+    /// Today a window at a time: what slipped from earlier days, oldest first, read like a list,
+    /// and today's own pages whole, split by the same rule [`Workspace::list_today_sections`] uses.
+    /// Today's come with the first window only.
+    pub async fn list_today_window(
+        &self,
+        after: Option<String>,
+        limit: u32,
+    ) -> Result<TodayWindow, WorkspaceError> {
+        let (today, now) = pikos_db::now_local_parts();
+        let day = chrono::Local::now().date_naive();
+        let key = pikos_db::views::ViewKey {
+            scope: pikos_db::views::ViewScope::Everywhere,
+            sort: pikos_db::views::ViewSort::Date,
+            zone: pikos_db::device_zone().name().to_string(),
+            dates: Some(pikos_db::views::DateBounds {
+                from: None,
+                until: day,
+            }),
+        };
+        let first = after.is_none();
+        let earlier = window_of(&self.pool, &key, after, limit).await?;
+        if !first {
+            return Ok(TodayWindow {
+                earlier,
+                slipped_today: Vec::new(),
+                today: Vec::new(),
+            });
+        }
+        let todays: Vec<PageSummary> = pikos_db::list_pages_impl(
+            &self.pool,
+            Some(pikos_db::PageFilter {
+                scheduled_after: Some(today.clone()),
+                scheduled_before: Some(format!("{today}T23:59:59")),
+                open_only: Some(true),
+                ..Default::default()
+            }),
+        )
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+        let groups = pikos_core::views::group_today(todays, &today, &now, |page| {
+            page.scheduled_start.as_deref()
+        });
+        Ok(TodayWindow {
+            earlier,
+            slipped_today: groups.overdue,
+            today: groups.today,
+        })
+    }
+
+    /// Move `ids`, in that order, to land after `after` and before `before` in their folder's
+    /// manual order, rewriting no other page. None for `after` is the top, for `before` the
+    /// bottom. A neighbour that has moved since is a conflict, and the caller re-reads.
+    pub async fn move_pages(
+        &self,
+        ids: Vec<String>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::moves::move_pages(
+            &self.pool,
+            &ids,
+            &pikos_db::moves::Placement { after, before },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// What a search index kept outside the workspace has to change to catch up from `since`.
+    ///
+    /// Every open page when `since` is None or from another epoch of the change counter, which is
+    /// when it may have moved backwards; otherwise only the pages written after it, with those
+    /// finished or trashed since as ids to remove.
+    pub async fn index_changes(
+        &self,
+        since: Option<IndexMark>,
+    ) -> Result<IndexChanges, WorkspaceError> {
+        let state = pikos_db::changes::change_state(&self.pool).await?;
+        let mark = IndexMark {
+            seq: state.seq,
+            epoch: state.epoch.clone(),
+        };
+        match since {
+            Some(since) if since.epoch == state.epoch && since.seq <= state.seq => {
+                let (written, trashed) =
+                    pikos_db::reads::pages_changed_since(&self.pool, since.seq).await?;
+                let (open, finished): (Vec<_>, Vec<_>) =
+                    written.into_iter().partition(|page| page.status != "done");
+                Ok(IndexChanges {
+                    pages: open.into_iter().map(Into::into).collect(),
+                    removed: trashed
+                        .into_iter()
+                        .chain(finished.into_iter().map(|p| p.id))
+                        .collect(),
+                    everything: false,
+                    mark,
+                })
+            }
+            _ => {
+                let open = pikos_db::list_pages_impl(
+                    &self.pool,
+                    Some(pikos_db::PageFilter {
+                        open_only: Some(true),
+                        ..Default::default()
+                    }),
+                )
+                .await?;
+                Ok(IndexChanges {
+                    pages: open.into_iter().map(Into::into).collect(),
+                    removed: Vec::new(),
+                    everything: true,
+                    mark,
+                })
+            }
+        }
+    }
+
+    /// Open pages per view, as the desktop's sidebar counts them, without reading a page.
+    pub async fn view_counts(&self) -> Result<ViewCounts, WorkspaceError> {
+        let today = chrono::Local::now().date_naive();
+        let counts =
+            pikos_db::reads::count_views(&self.pool, pikos_db::device_zone().name(), today).await?;
+        Ok(ViewCounts {
+            today: counts.today,
+            upcoming: counts.upcoming,
+            inbox: counts.inbox,
+            folders: counts.folders.into_iter().collect(),
+        })
     }
 
     /// Finished pages for one view, newest first.
@@ -2466,53 +2714,7 @@ impl Workspace {
         include_completed: bool,
         limit: u32,
     ) -> Result<SearchResults, WorkspaceError> {
-        // Two ways in, decided by the query itself. A plain one is full-text
-        // search. One carrying an operator — `tag:`, `folder:`, `is:`,
-        // `priority:`, `due:` — becomes a structured query with full-text
-        // search applied to whatever words are left over, which is not
-        // something FTS5 can express: "every open page tagged work due this
-        // week" is a question about columns, and the words are the part it
-        // happens to also have.
-        let (_, now) = pikos_db::now_local_parts();
-        let parsed = pikos_core::parse_search_query(&query, now);
-        let asked_for_completed = parsed.status == Some(pikos_core::SearchStatus::Done);
-        let indexed_text = if parsed.has_operators {
-            parsed.text.as_str()
-        } else {
-            query.as_str()
-        };
-        let terms = pikos_db::fts_tokens(indexed_text);
-        let (results, completed_count) = if parsed.has_operators {
-            let rows = filtered_search(&self.pool, &parsed).await?;
-            let completed = rows.iter().filter(|r| r.status == "done").count();
-            let shows_done = include_completed || asked_for_completed;
-            let rows = rows
-                .into_iter()
-                .filter(|r| shows_done || r.status != "done")
-                .collect();
-            (rows, completed)
-        } else if query.trim().chars().count() < MIN_FTS_QUERY_CHARS {
-            (Vec::new(), 0)
-        } else {
-            let response =
-                pikos_db::search_pages_impl(&self.pool, query, Some(include_completed)).await?;
-            let completed = usize::try_from(response.completed_count).unwrap_or(0);
-            (response.results, completed)
-        };
-        // The data layer has no limit parameter — it returns its own capped set
-        // — so the cap is applied here rather than pushed down. Worth knowing if
-        // a caller passes a large limit expecting more results: it will not get
-        // them, and the fix belongs in search_pages_impl.
-        Ok(SearchResults {
-            hits: results
-                .into_iter()
-                .take(limit as usize)
-                .map(Into::into)
-                .collect(),
-            completed_count: u32::try_from(completed_count).unwrap_or(u32::MAX),
-            asked_for_completed,
-            terms,
-        })
+        search_in(&self.pool, query, include_completed, limit).await
     }
 
     /// Note that a page was opened, which is what orders [`Workspace::recent_pages`].
@@ -2874,6 +3076,82 @@ impl Workspace {
 /// broad to run. The desktop palette holds the same floor.
 const MIN_FTS_QUERY_CHARS: usize = 2;
 
+async fn window_of(
+    pool: &sqlx::SqlitePool,
+    key: &pikos_db::views::ViewKey,
+    after: Option<String>,
+    limit: u32,
+) -> Result<PageWindow, WorkspaceError> {
+    let after = after
+        .map(|text| serde_json::from_str(&text))
+        .transpose()
+        .map_err(|_| WorkspaceError::InvalidInput {
+            message: "not a cursor this list gave out".to_string(),
+        })?;
+    let window = pikos_db::views::list_view(pool, key, after.as_ref(), limit as usize).await?;
+    Ok(PageWindow {
+        pages: window.rows.into_iter().map(Into::into).collect(),
+        next: window
+            .next
+            .map(|cursor| serde_json::to_string(&cursor).unwrap_or_default()),
+        total: window.total,
+    })
+}
+
+async fn search_in(
+    pool: &sqlx::SqlitePool,
+    query: String,
+    include_completed: bool,
+    limit: u32,
+) -> Result<SearchResults, WorkspaceError> {
+    // Two ways in, decided by the query itself. A plain one is full-text
+    // search. One carrying an operator — `tag:`, `folder:`, `is:`,
+    // `priority:`, `due:` — becomes a structured query with full-text
+    // search applied to whatever words are left over, which is not
+    // something FTS5 can express: "every open page tagged work due this
+    // week" is a question about columns, and the words are the part it
+    // happens to also have.
+    let (_, now) = pikos_db::now_local_parts();
+    let parsed = pikos_core::parse_search_query(&query, now);
+    let asked_for_completed = parsed.status == Some(pikos_core::SearchStatus::Done);
+    let indexed_text = if parsed.has_operators {
+        parsed.text.as_str()
+    } else {
+        query.as_str()
+    };
+    let terms = pikos_db::fts_tokens(indexed_text);
+    let (results, completed_count) = if parsed.has_operators {
+        let rows = filtered_search(pool, &parsed).await?;
+        let completed = rows.iter().filter(|r| r.status == "done").count();
+        let shows_done = include_completed || asked_for_completed;
+        let rows = rows
+            .into_iter()
+            .filter(|r| shows_done || r.status != "done")
+            .collect();
+        (rows, completed)
+    } else if query.trim().chars().count() < MIN_FTS_QUERY_CHARS {
+        (Vec::new(), 0)
+    } else {
+        let response = pikos_db::search_pages_impl(pool, query, Some(include_completed)).await?;
+        let completed = usize::try_from(response.completed_count).unwrap_or(0);
+        (response.results, completed)
+    };
+    // The data layer has no limit parameter — it returns its own capped set
+    // — so the cap is applied here rather than pushed down. Worth knowing if
+    // a caller passes a large limit expecting more results: it will not get
+    // them, and the fix belongs in search_pages_impl.
+    Ok(SearchResults {
+        hits: results
+            .into_iter()
+            .take(limit as usize)
+            .map(Into::into)
+            .collect(),
+        completed_count: u32::try_from(completed_count).unwrap_or(u32::MAX),
+        asked_for_completed,
+        terms,
+    })
+}
+
 const EMPTY_DOCUMENT: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
 
 /// A read-only handle, for widget and intent extensions.
@@ -2909,6 +3187,16 @@ impl ReadOnlyWorkspace {
                 message: e.to_string(),
             })?;
         Ok(Arc::new(ReadOnlyWorkspace { pool }))
+    }
+
+    /// The app's search, for Siri finding a page by name.
+    pub async fn search(
+        &self,
+        query: String,
+        include_completed: bool,
+        limit: u32,
+    ) -> Result<SearchResults, WorkspaceError> {
+        search_in(&self.pool, query, include_completed, limit).await
     }
 
     pub async fn list_pages(&self, query: PageQuery) -> Result<Vec<PageSummary>, WorkspaceError> {

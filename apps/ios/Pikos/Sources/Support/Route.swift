@@ -53,6 +53,8 @@ final class Route {
     /// A time to open quick add already scheduled for, from a long press on
     /// an empty calendar slot. Cleared with the text, for the same reason.
     var quickAddPrefillDate: Date?
+    /// How long the page runs from that time, when the slot was dragged out rather than pressed.
+    var quickAddPrefillMinutes: Int?
 
     /// The view quick add was opened from, which a line that says nothing else lands in.
     struct QuickAddContext {
@@ -70,6 +72,7 @@ final class Route {
     func presentQuickAdd(from store: WorkspaceStore, under pane: Pane) {
         quickAddPrefill = ""
         quickAddPrefillDate = nil
+        quickAddPrefillMinutes = nil
         switch (pane, store.scope) {
         case (.week, _): quickAddContext = QuickAddContext(day: calendarDay)
         case (.list, .today): quickAddContext = QuickAddContext(day: DayLabel.today())
@@ -130,9 +133,10 @@ final class Route {
     }
 
     /// Quick add with the slot's time already chosen, so the sentence typed names the page, not the time.
-    func presentQuickAdd(at date: Date) {
+    func presentQuickAdd(at date: Date, minutes: Int? = nil) {
         quickAddPrefill = ""
         quickAddPrefillDate = date
+        quickAddPrefillMinutes = minutes
         isQuickAddPresented = true
     }
 
@@ -140,6 +144,7 @@ final class Route {
     func clearQuickAddPrefill() {
         quickAddPrefill = ""
         quickAddPrefillDate = nil
+        quickAddPrefillMinutes = nil
         quickAddContext = QuickAddContext()
     }
 
@@ -213,6 +218,7 @@ final class Route {
         case .quickAdd(let prefill):
             quickAddPrefill = prefill
             quickAddPrefillDate = nil
+            quickAddPrefillMinutes = nil
             isQuickAddPresented = true
 
         case .search(let prefill):

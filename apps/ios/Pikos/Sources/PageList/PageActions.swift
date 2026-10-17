@@ -79,12 +79,14 @@ struct PageActionState {
         case schedule(PageFacts)
         case tags(PageFacts)
         case repeatRule(PageFacts)
+        case folder(PageFacts)
 
         var id: String {
             switch self {
             case .schedule(let page): return "schedule-\(page.id)"
             case .tags(let page): return "tags-\(page.id)"
             case .repeatRule(let page): return "repeat-\(page.id)"
+            case .folder(let page): return "folder-\(page.id)"
             }
         }
     }
@@ -92,6 +94,18 @@ struct PageActionState {
     var sheet: Sheet?
     var renaming: PageFacts?
     var renameText = ""
+    /// A repeating page whose Delete was chosen, asked "this date or all of them" first.
+    var deletingSeries: SeriesDeletion?
+
+    struct SeriesDeletion {
+        let page: PageFacts
+        let afterDelete: () -> Void
+    }
+
+    var isAskingAboutSeries: Bool {
+        get { deletingSeries != nil }
+        set { if !newValue { deletingSeries = nil } }
+    }
 
     init() {}
 
@@ -128,6 +142,12 @@ struct PageActionsMenu: View {
 
     /// A repeating page's date belongs to its rule, so it is sent to a day only through the sheet.
     private var canSendToDay: Bool { !page.scheduleLocked && !page.isRecurring }
+
+    private func offers(_ action: PageActionRules.Action) -> Bool {
+        PageActionRules.offers(
+            action, isRecurring: page.isRecurring, scheduleLocked: page.scheduleLocked,
+            hasDate: page.scheduledStart != nil)
+    }
 
     var body: some View {
         ControlGroup {
@@ -168,17 +188,17 @@ struct PageActionsMenu: View {
                         choices: [.thisWeekend, .nextWeek],
                         onChoose: { choice in Task { await store.send(page, to: choice) } },
                         onPickDate: { state.sheet = .schedule(page) },
-                        onClear: page.scheduledStart == nil
-                            ? nil : { Task { await store.clearDate(pageId: page.id) } })
+                        onClear: offers(.clearDate)
+                            ? { Task { await store.clearDate(pageId: page.id) } } : nil)
                 } else {
-                    // Clearing a repeating page's date does nothing visible: the head owns its
-                    // `scheduled_start`, pinned by `clearing_a_repeating_page_s_date_leaves_the_head_where_it_is`.
                     WhenMenuItems(choices: [], onChoose: { _ in }, onPickDate: { state.sheet = .schedule(page) })
                 }
             } label: {
                 Label("When", systemImage: "calendar")
             }
+        }
 
+        if offers(.moveToFolder) {
             Picker(
                 selection: Binding(get: { page.folderId }, set: { move(to: $0) })
             ) {
@@ -216,7 +236,7 @@ struct PageActionsMenu: View {
 
         Divider()
 
-        if showsRename && !page.scheduleLocked {
+        if showsRename && offers(.rename) {
             Button {
                 state.renameText = page.title
                 state.renaming = page
@@ -226,6 +246,12 @@ struct PageActionsMenu: View {
         }
 
         Button(role: .destructive) {
+            // A series goes with every date it has left, so it asks first. A calendar's series
+            // doesn't: its dates are upstream's, and there is no one date to skip here.
+            if page.isRecurring && !page.scheduleLocked {
+                state.deletingSeries = PageActionState.SeriesDeletion(page: page, afterDelete: afterDelete)
+                return
+            }
             Task {
                 await store.trash(pageId: page.id, title: page.title)
                 afterDelete()
@@ -318,6 +344,44 @@ extension View {
     }
 }
 
+/// Where to file a page, chosen in one tap: the sheet closes on the choice and the notice offers
+/// the old folder back.
+private struct FolderPickerSheet: View {
+    let page: PageFacts
+
+    @Environment(WorkspaceStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Picker("Folder", selection: choice) {
+                    FolderChoices(folders: store.fileableFolders)
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+            .navigationTitle("Move to folder")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var choice: Binding<String?> {
+        Binding(
+            get: { page.folderId },
+            set: { folderId in
+                dismiss()
+                Task { await store.file(page, toFolder: folderId) }
+            })
+    }
+}
+
 private struct PageActionSheets: ViewModifier {
     @Binding var state: PageActionState
     @Environment(WorkspaceStore.self) private var store
@@ -329,16 +393,40 @@ private struct PageActionSheets: ViewModifier {
                 case .schedule(let page): SchedulePageSheet(page: page)
                 case .tags(let page): TagsSheet(page: page)
                 case .repeatRule(let page): RepeatSheet(page: page)
+                case .folder(let page): FolderPickerSheet(page: page)
                 }
             }
             // An alert rather than an inline edit: a row that becomes editable
             // on tap competes with the tap that opens the page, and a phone has
             // no hover to disambiguate.
+            // Calendar's question: this date is a skip, which undoes, and all of them is the delete.
+            .confirmationDialog(
+                deletionTitle, isPresented: $state.isAskingAboutSeries, titleVisibility: .visible,
+                presenting: state.deletingSeries
+            ) { deletion in
+                Button("Skip This Date") {
+                    Task { await store.skipCurrentDate(of: deletion.page) }
+                }
+                Button("Delete All Dates", role: .destructive) {
+                    Task {
+                        await store.trash(pageId: deletion.page.id, title: deletion.page.title)
+                        deletion.afterDelete()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("It repeats. Skip just this date, or delete it and every date it has left.")
+            }
             .alert("Rename page", isPresented: $state.isRenaming) {
                 TextField("Title", text: $state.renameText)
                 Button("Cancel", role: .cancel) { state.renaming = nil }
                 Button("Rename") { commitRename() }
             }
+    }
+
+    private var deletionTitle: String {
+        let title = state.deletingSeries.map { $0.page.title.isEmpty ? String(localized: "Untitled") : $0.page.title }
+        return String(localized: "Delete “\(title ?? "")”?")
     }
 
     private func commitRename() {

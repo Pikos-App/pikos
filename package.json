@@ -17,6 +17,7 @@
     "cleanup": "bash scripts/cleanup-builds.sh",
     "qa:build": "bash scripts/qa-build.sh",
     "ios:device": "bash scripts/ios-device.sh",
+    "ios:speed": "bash scripts/ios-speed.sh",
     "qa:egress": "node scripts/check-egress.mjs",
     "qa:reset": "bash scripts/qa-staging.sh reset",
     "qa:seed": "bash scripts/qa-staging.sh seed",

@@ -178,6 +178,74 @@ public enum CalendarGeometry {
         return min(max(0, snapped), 24 * 60 - slot)
     }
 
+    public enum BlockEdge: Sendable {
+        case top, bottom
+    }
+
+    /// A timed page with one edge dragged to `minute`, snapped to the nearest quarter hour.
+    ///
+    /// The other edge stays put, the page never gets shorter than a quarter hour, and it stays
+    /// inside its own day. A page with no end is a point in time, so its far edge is its start.
+    /// Nil for what an edge drag cannot change: an all-day page, or one that crosses midnight.
+    public static func resized(
+        start: String, end: String?, edge: BlockEdge, toMinute minute: Int
+    ) -> (start: String, end: String)? {
+        guard let day = self.day(of: start), let from = minutesIntoDay(start) else { return nil }
+        var to = from
+        if let end {
+            guard self.day(of: end) == day, let minutes = minutesIntoDay(end) else { return nil }
+            to = minutes
+        }
+        let snapped = Int((Double(minute) / 15).rounded()) * 15
+        switch edge {
+        case .top:
+            let newStart = max(0, min(snapped, max(to, from + 15) - 15))
+            return (wallClock(day: day, minute: newStart), wallClock(day: day, minute: max(to, newStart + 15)))
+        case .bottom:
+            let newEnd = min(max(snapped, from + 15), 24 * 60 - 1)
+            return (start, wallClock(day: day, minute: newEnd))
+        }
+    }
+
+    /// A timed page moved `minutes` later (or earlier, negative), keeping its length and its day.
+    ///
+    /// Against the day's edge it stops rather than spilling into the next day, so a block near
+    /// midnight stays where it can be seen. Nil for an all-day page or one that crosses midnight.
+    public static func shifted(start: String, end: String?, by minutes: Int) -> (start: String, end: String?)? {
+        guard let day = self.day(of: start), let from = minutesIntoDay(start) else { return nil }
+        var to: Int?
+        if let end {
+            guard self.day(of: end) == day, let minutes = minutesIntoDay(end) else { return nil }
+            to = minutes
+        }
+        let length = (to ?? from) - from
+        let newStart = min(max(0, from + minutes), 24 * 60 - 1 - length)
+        return (wallClock(day: day, minute: newStart), to.map { _ in wallClock(day: day, minute: newStart + length) })
+    }
+
+    /// A timed page made `minutes` longer (or shorter, negative) at its end, as the bottom grip would.
+    public static func lengthened(start: String, end: String?, by minutes: Int) -> (start: String, end: String)? {
+        guard let from = minutesIntoDay(start) else { return nil }
+        let to = end.flatMap(minutesIntoDay) ?? from
+        return resized(start: start, end: end, edge: .bottom, toMinute: to + minutes)
+    }
+
+    /// The minutes a new block covers while a finger that pressed at `from` is drawn to `y`.
+    ///
+    /// The end follows the finger to the nearest quarter hour and the start stays where the press
+    /// was, so dragging up past the start makes the start the end. Never shorter than a quarter
+    /// hour, and inside the day.
+    public static func stretched(from start: Int, toY y: CGFloat, metrics: Metrics) -> (start: Int, end: Int) {
+        let perMinute = metrics.hourHeight / 60
+        guard perMinute > 0 else { return (start, start + 15) }
+        let reached = min(max(0, Int((y / perMinute / 15).rounded()) * 15), 24 * 60)
+        if reached >= start {
+            return (start, max(reached, start + 15))
+        }
+        let top = min(reached, start - 15)
+        return (max(0, top), start + 15)
+    }
+
     /// The wall-clock string for a minute of a day — `2026-09-14T15:30:00`.
     ///
     /// The inverse of `minutesIntoDay`, for the one caller that starts from a

@@ -75,13 +75,13 @@ final class ScreenTour: PikosUITestCase {
 
         relaunch()
         if let row = cell("Order FlexiSpot E7 frame") {
-            row.swipeRight()
-            shot(section, 13, "Swipe right on a row")
-        }
-        relaunch()
-        if let row = cell("Order FlexiSpot E7 frame") {
             row.swipeLeft()
             shot(section, 14, "Swipe left on a row")
+            let folder = app.buttons["Folder"].firstMatch
+            if folder.waitForExistence(timeout: 3) {
+                folder.tap()
+                shot(section, 13, "Folder, from a swipe")
+            }
         }
         relaunch(["PIKOS_DEMO_SCOPE": "inbox"])
         if let row = cell("Book the car in for a service") {

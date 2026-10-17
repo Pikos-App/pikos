@@ -1857,7 +1857,7 @@ async fn history_lists_every_kind_newest_first_with_the_page_title() {
 #[tokio::test]
 async fn history_honours_its_limit_and_survives_a_missing_page() {
     let pool = test_pool().await;
-    // No pages table row for 'gone' — the log outlives the page it names.
+    // A reminder logged just after its page was purged names a page that's gone.
     log_reminder_fired(&pool, "gone", "s1#10", "2026-05-25 08:50:00")
         .await
         .unwrap();
@@ -1872,6 +1872,79 @@ async fn history_honours_its_limit_and_survives_a_missing_page() {
         history[0].page_title, None,
         "the outer join yields no title"
     );
+}
+
+async fn log_rows_naming(pool: &sqlx::SqlitePool, page_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM notification_log WHERE page_id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn seed_page_with_history(pool: &sqlx::SqlitePool, page_id: &str) {
+    insert_page(pool, page_id, "not_started", "2026-05-01T00:00:00").await;
+    let schedule_id = format!("{page_id}-s");
+    insert_schedule(
+        pool,
+        &schedule_id,
+        page_id,
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
+    insert_reminder(pool, page_id, 10).await;
+    log_reminder_fired(
+        pool,
+        page_id,
+        &format!("{schedule_id}#10"),
+        "2026-05-25 08:50:00",
+    )
+    .await
+    .unwrap();
+    log_reminder_suppressed(
+        pool,
+        page_id,
+        &format!("{schedule_id}#10"),
+        "2026-05-25 08:51:00",
+    )
+    .await
+    .unwrap();
+}
+
+// qa: TRASH-10
+#[tokio::test]
+async fn deleting_a_page_for_good_removes_it_from_recent_notifications() {
+    let pool = test_pool().await;
+    seed_page_with_history(&pool, "gone").await;
+    seed_page_with_history(&pool, "trashed").await;
+
+    crate::pages::hard_delete_page_impl(&pool, "gone")
+        .await
+        .unwrap();
+    soft_delete_page(&pool, "trashed").await;
+
+    let history = list_notification_history(&pool, 50).await.unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|h| h.page_id.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("trashed"), Some("trashed")]
+    );
+}
+
+#[tokio::test]
+async fn a_raw_delete_removes_notifications_too() {
+    let pool = test_pool().await;
+    seed_page_with_history(&pool, "mirror").await;
+
+    sqlx::query("DELETE FROM pages WHERE id = 'mirror'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(log_rows_naming(&pool, "mirror").await, 0);
 }
 
 // ─── Click-through ───────────────────────────────────────────────────────────

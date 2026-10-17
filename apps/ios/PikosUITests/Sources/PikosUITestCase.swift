@@ -83,6 +83,12 @@ class PikosUITestCase: XCTestCase {
             input.waitForExistence(timeout: Self.timeout), "quick add's field should be there")
         input.tap()
         input.typeText(line)
+        // The first typing of a fresh simulator session can drop keystrokes, which titled the
+        // first test's page wrongly in about half of full runs.
+        if let typed = input.value as? String, typed != line {
+            input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count) + line)
+        }
+        XCTAssertEqual(input.value as? String, line, "quick add holds the line as typed")
 
         app.buttons["Add"].firstMatch.tap()
     }
@@ -112,7 +118,9 @@ class PikosUITestCase: XCTestCase {
 
     /// Switch the page list to one of its views, through the title's switcher.
     func showView(_ name: String) {
-        app.buttons["Switch view"].firstMatch.tap()
+        let switcher = app.buttons["Switch view"].firstMatch
+        XCTAssertTrue(switcher.waitForExistence(timeout: Self.timeout), "the shell is on screen")
+        switcher.tap()
         // A row's label carries its count after the name: "Inbox, 2".
         let row = app.buttons.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, "\(name), ")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout), "the switcher lists \(name)")
@@ -132,6 +140,15 @@ class PikosUITestCase: XCTestCase {
         sqlite3_bind_text(statement, 1, title, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
         guard sqlite3_step(statement) == SQLITE_ROW, let text = sqlite3_column_text(statement, 0) else { return nil }
         return String(cString: text)
+    }
+
+    /// Run one statement against the test's workspace file while the app is not running.
+    func alterWorkspace(_ sql: String) {
+        var db: OpaquePointer?
+        let path = workspaceDirectory.appendingPathComponent("pikos.sqlite").path
+        XCTAssertEqual(sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, nil), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK, String(cString: sqlite3_errmsg(db)))
     }
 
     /// The field or text view a vertical-axis `TextField` became, by its label.

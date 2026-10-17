@@ -47,6 +47,8 @@ struct QuickAddSheet: View {
     @State private var folderId: String?
     @State private var schedule: Schedule = .none
     @State private var date = Date()
+    /// How long a timed page runs, when a calendar slot was dragged out to a length.
+    @State private var minutes: Int?
     @State private var isSaving = false
     /// Set once the user touches a control, after which the parse stops
     /// steering it.
@@ -75,11 +77,15 @@ struct QuickAddSheet: View {
     /// from a long press on a calendar slot and counts as a choice already
     /// made: the picker opens on it, and a date the line happens to mention
     /// does not move it — the reader pressed *there*.
-    init(prefill: String = "", prefillDate: Date? = nil, context: Route.QuickAddContext = .init()) {
+    init(
+        prefill: String = "", prefillDate: Date? = nil, prefillMinutes: Int? = nil,
+        context: Route.QuickAddContext = .init()
+    ) {
         _line = State(initialValue: prefill)
         self.context = context
         if let prefillDate {
             _date = State(initialValue: prefillDate)
+            _minutes = State(initialValue: prefillMinutes)
             _schedule = State(initialValue: .timed)
             _scheduleIsManual = State(initialValue: true)
         } else if let day = context.day.flatMap({ DayLabel.date(from: $0) }) {
@@ -329,7 +335,13 @@ struct QuickAddSheet: View {
             day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         }
         guard schedule == .timed else { return day }
-        return "\(day), \(ClockTime.string(date))"
+        guard let end = manualEnd else { return "\(day), \(ClockTime.string(date))" }
+        return "\(day), \(ClockTime.string(date)) – \(ClockTime.string(end))"
+    }
+
+    private var manualEnd: Date? {
+        guard schedule == .timed, let minutes else { return nil }
+        return date.addingTimeInterval(TimeInterval(minutes * 60))
     }
 
     private var folderMenu: some View {
@@ -463,7 +475,8 @@ struct QuickAddSheet: View {
                 folderId: folderId,
                 content: parsed?.content.map { plainTextToDocument(text: $0) },
                 tags: parsed?.tags,
-                scheduledStart: manualScheduledStart
+                scheduledStart: manualScheduledStart,
+                scheduledEnd: manualEnd.map(Self.storedWallClock)
             ))
         guard let created else {
             dismiss()
@@ -499,9 +512,19 @@ struct QuickAddSheet: View {
     /// The picked date as the wall-clock string the workspace stores.
     private var manualScheduledStart: String? {
         guard schedule != .none else { return nil }
+        guard schedule == .timed else {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: date)
+        }
+        return Self.storedWallClock(date)
+    }
+
+    private static func storedWallClock(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = schedule == .allDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm:ss"
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         return formatter.string(from: date)
     }
 

@@ -66,7 +66,12 @@ public enum WorkspaceLocation {
             if let override = ProcessInfo.processInfo.environment[workspaceOverrideKey],
                 !override.isEmpty
             {
-                let directory = URL(fileURLWithPath: override, isDirectory: true)
+                // `~/` is the app's own home: on a phone the app can't reach the test runner's
+                // folders, so a test run on a device names a place inside the app's container.
+                let path =
+                    override.hasPrefix("~/")
+                    ? NSHomeDirectory() + "/" + override.dropFirst(2) : override
+                let directory = URL(fileURLWithPath: path, isDirectory: true)
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
                 return directory.appendingPathComponent(databaseName)
@@ -111,6 +116,27 @@ public enum WorkspaceLocation {
                 [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
                 ofItemAtPath: path)
         }
+    }
+
+    /// Move the database and its sidecars out of the way, into the app's Documents where the Files
+    /// app shows them, and return the folder they went to.
+    ///
+    /// Moved rather than deleted: a workspace no build can open still holds whatever was written
+    /// in it, and the write-ahead log goes with it because it can hold the newest of that.
+    public static func setAside(now: Date = Date()) throws -> URL {
+        let database = try databaseURL()
+        let documents = try FileManager.default.url(
+            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let folder = documents.appendingPathComponent("Set aside", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let stamp = now.formatted(.iso8601.year().month().day().dateSeparator(.dash).time(includingFractionalSeconds: false).timeSeparator(.omitted))
+        for suffix in ["", "-wal", "-shm"] {
+            let source = URL(fileURLWithPath: database.path + suffix)
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            try FileManager.default.moveItem(
+                at: source, to: folder.appendingPathComponent("pikos-\(stamp).sqlite\(suffix)"))
+        }
+        return folder
     }
 
     /// Directory holding page images, beside the database in the same container.

@@ -201,6 +201,8 @@ export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
 export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
 export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
+export { deleteAsksWhichDates, pageActions } from "./pages/pageActions";
+export type { PageAction, PageActionId, PageActionRefusal } from "./pages/pageActions";
 export {
   belongsToView,
   compareByScheduledStart,

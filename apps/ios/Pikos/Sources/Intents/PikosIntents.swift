@@ -148,6 +148,28 @@ struct SearchPagesIntent: AppIntent {
     }
 }
 
+// MARK: - Today's list
+
+/// "What's on my list today", read out rather than opened, with the pages handed back for a
+/// shortcut to use. Titles and times only (`PKOS-0152`).
+struct TodayListIntent: AppIntent {
+    static let title: LocalizedStringResource = "Today's list"
+    static let description = IntentDescription(
+        "Hear what's on your list today: what's due and what's overdue.",
+        categoryName: "Pages")
+
+    static let openAppWhenRun = false
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<[PageEntity]> & ProvidesDialog {
+        let workspace = try await openForReading()
+        let open = try await workspace.listToday().filter { $0.status != "done" }
+        let entities = await PageEntity.describing(open, in: workspace)
+        let items = open.map { TodaySpeech.Item(title: $0.title, time: PageEntity.timeLabel($0.scheduledStart)) }
+        return .result(value: entities, dialog: IntentDialog(stringLiteral: TodaySpeech.sentence(for: items)))
+    }
+}
+
 // MARK: - Open
 
 struct OpenTodayIntent: AppIntent {
@@ -175,21 +197,66 @@ struct OpenTodayIntent: AppIntent {
 
 // MARK: - Entities
 
-/// A page, as Shortcuts sees it.
+/// A page, as Shortcuts, Siri and Apple Intelligence see it: its title, date, folder and whether it's
+/// done, and never its body (`PKOS-0152`).
 struct PageEntity: AppEntity, Identifiable {
     let id: String
-    let title: String
+    @Property(title: "Title") var title: String
+    @Property(title: "Date") var date: Date?
+    @Property(title: "Folder") var folder: String?
+    @Property(title: "Done") var isDone: Bool
+
+    init(id: String, title: String, date: Date? = nil, folder: String? = nil, isDone: Bool = false) {
+        self.id = id
+        self.title = title
+        self.date = date
+        self.folder = folder
+        self.isDone = isDone
+    }
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Page"
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(title.isEmpty ? "Untitled" : title)")
+        let place = [folder, date.map { $0.formatted(date: .abbreviated, time: .omitted) }]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+        return DisplayRepresentation(
+            title: "\(title.isEmpty ? "Untitled" : title)",
+            subtitle: place.isEmpty ? nil : "\(place)")
     }
 
     static let defaultQuery = PageEntityQuery()
+
+    /// Pages as entities, with their folders' names looked up once.
+    static func describing(_ pages: [PageSummary], in workspace: ReadOnlyWorkspace) async -> [PageEntity] {
+        let names = Dictionary(
+            ((try? await workspace.listFolders()) ?? []).map { ($0.id, $0.name) },
+            uniquingKeysWith: { first, _ in first })
+        return pages.map { page in
+            PageEntity(
+                id: page.id, title: page.title,
+                date: page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) },
+                folder: page.folderId.flatMap { names[$0] }, isDone: page.status == "done")
+        }
+    }
+
+    /// "9:30 AM" for a timed page, nil for one with a day and no time.
+    static func timeLabel(_ scheduledStart: String?) -> String? {
+        guard let start = scheduledStart, start.contains("T"),
+            let date = StorageTimestamp.wallClock(start)
+        else { return nil }
+        return date.formatted(date: .omitted, time: .shortened)
+    }
 }
 
-struct PageEntityQuery: EntityQuery {
+/// Also how Siri finds a page by name, through the search index on the device.
+struct PageEntityQuery: EntityStringQuery {
+    func entities(matching string: String) async throws -> [PageEntity] {
+        let workspace = try await openForReading()
+        let ids = try await workspace.search(query: string, includeCompleted: false, limit: 20).hits.map(\.pageId)
+        return try await entities(for: ids)
+    }
+
     func entities(for identifiers: [String]) async throws -> [PageEntity] {
         let workspace = try await openForReading()
         var found: [PageEntity] = []
@@ -198,7 +265,11 @@ struct PageEntityQuery: EntityQuery {
             // it is right: Shortcuts drops entities it cannot resolve, which is
             // better than failing the whole run over one stale reference.
             if let page = try? await workspace.getPage(id: id) {
-                found.append(PageEntity(id: page.id, title: page.title))
+                found.append(
+                    PageEntity(
+                        id: page.id, title: page.title,
+                        date: page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) },
+                        isDone: page.status == "done"))
             }
         }
         return found
@@ -259,6 +330,25 @@ struct PikosShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "New page",
             systemImageName: "square.and.pencil")
+
+        AppShortcut(
+            intent: TodayListIntent(),
+            phrases: [
+                "What's on my \(.applicationName) list",
+                "What's on my list today in \(.applicationName)",
+                "What's due in \(.applicationName)",
+            ],
+            shortTitle: "Today's list",
+            systemImageName: "list.bullet")
+
+        AppShortcut(
+            intent: SearchPagesIntent(),
+            phrases: [
+                "Search \(.applicationName)",
+                "Find a page in \(.applicationName)",
+            ],
+            shortTitle: "Search pages",
+            systemImageName: "magnifyingglass")
 
         AppShortcut(
             intent: OpenTodayIntent(),

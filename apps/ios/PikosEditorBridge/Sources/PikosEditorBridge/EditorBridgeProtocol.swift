@@ -177,6 +177,21 @@ public enum EditorBridge {
         }
     }
 
+    /// How long the keystrokes since the last report took from input to the next
+    /// painted frame, sent with each docChanged. What the phone's typing speed is
+    /// measured by.
+    public struct IncomingInputTimingPayload: Codable, Equatable {
+        public let count: Int
+        public let medianMs: Double
+        public let worstMs: Double
+
+        public init(count: Int, medianMs: Double, worstMs: Double) {
+            self.count = count
+            self.medianMs = medianMs
+            self.worstMs = worstMs
+        }
+    }
+
     /// A link was tapped. The webview does not navigate — the host decides whether
     /// to open it.
     public struct IncomingLinkTappedPayload: Codable, Equatable {
@@ -222,6 +237,7 @@ public enum EditorBridge {
     public enum Incoming: Decodable {
         case docChanged(IncomingDocChangedPayload)
         case heightChanged(IncomingHeightChangedPayload)
+        case inputTiming(IncomingInputTimingPayload)
         case linkTapped(IncomingLinkTappedPayload)
         case ready(IncomingReadyPayload)
         case requestImagePicker(IncomingRequestImagePickerPayload)
@@ -252,6 +268,8 @@ public enum EditorBridge {
                 self = .docChanged(try container.decode(IncomingDocChangedPayload.self, forKey: .payload))
             case "heightChanged":
                 self = .heightChanged(try container.decode(IncomingHeightChangedPayload.self, forKey: .payload))
+            case "inputTiming":
+                self = .inputTiming(try container.decode(IncomingInputTimingPayload.self, forKey: .payload))
             case "linkTapped":
                 self = .linkTapped(try container.decode(IncomingLinkTappedPayload.self, forKey: .payload))
             case "ready":

@@ -57,7 +57,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     completedHasMore,
     completedPages,
     folders,
-    handleDeleteRequest,
     handleMoveToFolder,
     handlePriorityChange,
     handleRenameCancel,
@@ -68,6 +67,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     loadMoreCompleted,
     onExpandCompleted,
     renamingId,
+    requestDelete,
     setRenamingId,
     visiblePages,
   } = usePageListContext();
@@ -461,7 +461,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         key={page.id}
         menuActsOn={menuActsOn(page.id)}
         onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
-        onDelete={() => batchAction(page, (p) => handleDeleteRequest(p))}
+        onDelete={() => batchAction(page, (p) => requestDelete(p, menuActsOn(page.id)))}
         onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}
         onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         onRenameCancel={handleRenameCancel}

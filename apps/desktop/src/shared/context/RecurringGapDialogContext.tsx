@@ -47,6 +47,8 @@ export interface RecurringGapDialogContextValue {
   requestComplete: (page: PageSummary) => void;
   /** Delete on a rendered occurrence. Whole-series delete does not come here. */
   requestDelete: (page: PageSummary) => void;
+  /** Skip the one date a series row names, with Undo, never asking about a backlog. */
+  skipDate: (page: PageSummary) => void;
   /** Internal dialog state — read by the mounted RecurringGapDialog. */
   pending: PendingGap | null;
   confirm: (scope: GapScope) => void;
@@ -209,6 +211,10 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     void open("delete", page);
   }
 
+  function skipDate(page: PageSummary): void {
+    void dismiss(page, "one", []);
+  }
+
   function confirm(scope: GapScope): void {
     const target = pending;
     setPending(null);
@@ -226,6 +232,7 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     pending,
     requestComplete,
     requestDelete,
+    skipDate,
   };
 
   return (
