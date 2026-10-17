@@ -57,15 +57,15 @@ CREATE TABLE replica_pen (
   reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'deleted_parent', 'newer_format', 'unreadable'))
 ) WITHOUT ROWID;
 
--- References a purge set NULL here, with the row they pointed at and the clock they had, so they
--- point at it again if a later write elsewhere brings that row back.
+-- Links shown NULL because the row they point at isn't here, purged or not yet arrived, with what
+-- they point at. That target, not the NULL, is the link's synced value; the column shows it again
+-- when the row arrives or comes back.
 CREATE TABLE replica_detached (
   entity  TEXT NOT NULL,
   key     TEXT NOT NULL,
   field   INTEGER NOT NULL,
   col     TEXT NOT NULL,
   target  TEXT NOT NULL,
-  clock   TEXT NOT NULL,
   PRIMARY KEY (entity, key, field)
 ) WITHOUT ROWID;
 CREATE INDEX idx_replica_detached_target ON replica_detached(target);

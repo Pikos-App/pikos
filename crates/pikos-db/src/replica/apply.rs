@@ -462,24 +462,13 @@ async fn known(
     })
 }
 
-/// The entity whose purge sets `table`'s rows' references NULL.
-fn purge_target(table: &str) -> Option<&'static EntityMap> {
-    super::manifest::ENTITIES
-        .iter()
-        .find(|e| e.table == table && super::capture::is_purge_target(e))
-}
-
 /// What a purge of `target`'s row `id`, heard of from a tombstone, does to the rows pointing at it
-/// here, before the foreign key sets them NULL: each is noted with what it pointed at and its clock,
-/// as the purge trigger did where the purge happened, and keeps that clock.
-///
-/// A reference newer than the purge wasn't detached by it, and only falls to the cascade here, so its
-/// NULL is this device's own edit, sent at now.
+/// here: each is noted with what it pointed at before the foreign key sets the column NULL, as the
+/// purge trigger does where the purge happens. The link's synced value is unchanged.
 async fn detach_references(
     conn: &mut SqliteConnection,
     target: &EntityMap,
     id: &str,
-    tomb: Hlc,
 ) -> AppResult<()> {
     for (table, column, _) in PURGE_NULLED.iter().filter(|(_, _, t)| *t == target.table) {
         for entity in super::manifest::ENTITIES
@@ -500,33 +489,7 @@ async fn detach_references(
                 .fetch_all(&mut *conn)
                 .await?;
             for key in keys {
-                let (born, mut slots, row_tomb) = match read_clocks(conn, entity, &key).await? {
-                    Some(clocks) => clocks,
-                    None => {
-                        let base = base_clock(conn).await?;
-                        (base, vec![base; entity.fields.len()], None)
-                    }
-                };
-                if slots[field] <= tomb {
-                    note_detached(conn, entity, &key, field, column, id, slots[field]).await?;
-                    write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
-                    continue;
-                }
-                let now = advance_clock(conn).await?;
-                sqlx::query(
-                    "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
-                     VALUES (?, ?, ?, 0, ?)
-                     ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields,
-                       clock = excluded.clock",
-                )
-                .bind(entity.entity.prefix())
-                .bind(&key)
-                .bind(1i64 << field)
-                .bind(now.to_string())
-                .execute(&mut *conn)
-                .await?;
-                slots[field] = now;
-                write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
+                note_detached(conn, entity, &key, field, column, id).await?;
             }
         }
     }
@@ -540,37 +503,34 @@ async fn note_detached(
     field: usize,
     column: &str,
     target: &str,
-    clock: Hlc,
 ) -> AppResult<()> {
     sqlx::query(
-        "INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target, clock)
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target)
+         VALUES (?, ?, ?, ?, ?)",
     )
     .bind(entity.entity.prefix())
     .bind(key)
     .bind(field as i64)
     .bind(column)
     .bind(target)
-    .bind(clock.to_string())
     .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-/// A purged row has come back: every reference its purge set NULL here points at it again, unless
-/// it was changed since. Every device that set one NULL noted it, so they all come back the same.
+/// A row links point at has arrived, or come back after a purge: every link here noted as pointing
+/// at it shows it again.
 async fn reattach_references(
     conn: &mut SqliteConnection,
     target: &EntityMap,
     id: &str,
 ) -> AppResult<()> {
-    let detached: Vec<(String, String, i64, String, String)> = sqlx::query_as(
-        "SELECT entity, key, field, col, clock FROM replica_detached WHERE target = ?",
-    )
-    .bind(id)
-    .fetch_all(&mut *conn)
-    .await?;
-    for (prefix, key, field, column, clock) in detached {
+    let detached: Vec<(String, String, i64, String)> =
+        sqlx::query_as("SELECT entity, key, field, col FROM replica_detached WHERE target = ?")
+            .bind(id)
+            .fetch_all(&mut *conn)
+            .await?;
+    for (prefix, key, field, column) in detached {
         let Some(entity) = super::manifest::ENTITIES
             .iter()
             .find(|e| e.entity.prefix() == prefix)
@@ -583,24 +543,18 @@ async fn reattach_references(
         if !points_here {
             continue;
         }
-        let unchanged = match read_clocks(conn, entity, &key).await? {
-            Some((_, slots, _)) => slots.get(field as usize).map(|c| c.to_string()) == Some(clock),
-            None => false,
-        };
-        if unchanged {
-            let covers = entity.covers.unwrap_or("1");
-            let sql = format!(
-                "UPDATE {} SET {column} = ? WHERE {column} IS NULL AND rowid IN
-                   (SELECT t.rowid FROM {} AS t WHERE ({covers}) AND {} = ?)",
-                entity.table, entity.table, entity.key
-            )
-            .replace("{row}", "t");
-            sqlx::query(&sql)
-                .bind(id)
-                .bind(&key)
-                .execute(&mut *conn)
-                .await?;
-        }
+        let covers = entity.covers.unwrap_or("1");
+        let sql = format!(
+            "UPDATE {} SET {column} = ? WHERE {column} IS NULL AND rowid IN
+               (SELECT t.rowid FROM {} AS t WHERE ({covers}) AND {} = ?)",
+            entity.table, entity.table, entity.key
+        )
+        .replace("{row}", "t");
+        sqlx::query(&sql)
+            .bind(id)
+            .bind(&key)
+            .execute(&mut *conn)
+            .await?;
         sqlx::query("DELETE FROM replica_detached WHERE entity = ? AND key = ? AND field = ?")
             .bind(&prefix)
             .bind(&key)
@@ -611,6 +565,52 @@ async fn reattach_references(
     Ok(())
 }
 
+/// The row as it can be written here: a link to a row this device doesn't have is written NULL, as
+/// its foreign key requires, and noted with what it points at; a link that can be shown clears any
+/// note. The synced values, which merge and are sent, keep every link.
+async fn project_links(
+    conn: &mut SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+    row: &RowState,
+) -> AppResult<RowState> {
+    let mut projected = row.clone();
+    for (_, column, target_table) in PURGE_NULLED.iter().filter(|(t, _, _)| *t == entity.table) {
+        let Some((f, c)) = locate(entity, column) else {
+            continue;
+        };
+        let missing = match &row.fields[f].values[c] {
+            Value::Text(id) => {
+                let here: bool = sqlx::query_scalar(&format!(
+                    "SELECT EXISTS (SELECT 1 FROM {target_table} WHERE id = ?)"
+                )) // sql-ok: table names are literals from the manifest
+                .bind(id)
+                .fetch_one(&mut *conn)
+                .await?;
+                (!here).then(|| id.clone())
+            }
+            _ => None,
+        };
+        match missing {
+            Some(id) => {
+                projected.fields[f].values[c] = Value::Null;
+                note_detached(conn, entity, key, f, column, &id).await?;
+            }
+            None => {
+                sqlx::query(
+                    "DELETE FROM replica_detached WHERE entity = ? AND key = ? AND field = ?",
+                )
+                .bind(entity.entity.prefix())
+                .bind(key)
+                .bind(f as i64)
+                .execute(&mut *conn)
+                .await?;
+            }
+        }
+    }
+    Ok(projected)
+}
+
 async fn apply_record(
     tx: &mut Uncaptured<'_>,
     entity: &EntityMap,
@@ -618,7 +618,7 @@ async fn apply_record(
     touched: &mut Touched,
     applied: &mut Applied,
 ) -> AppResult<Outcome> {
-    let mut remote = record.row.clone();
+    let remote = record.row.clone();
 
     // A calendar page here, and what hangs off it, is this device's own; its synced copy elsewhere
     // is a different row that left scope.
@@ -643,35 +643,6 @@ async fn apply_record(
                 }
                 Known::Present(_) => {}
                 Known::Tombstoned(_) => return Ok(Outcome::Held(Hold::DeletedParent)),
-                Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
-            }
-        }
-        // A reference to a row purged here is NULL, as the purge's foreign key would have made it,
-        // at the reference's own clock, and noted so it points there again if the row comes back.
-        for (_, column, target_table) in PURGE_NULLED.iter().filter(|(t, _, _)| *t == entity.table)
-        {
-            let (Some((f, c)), Some(target)) = (locate(entity, column), purge_target(target_table))
-            else {
-                continue;
-            };
-            let Value::Text(id) = remote.fields[f].values[c].clone() else {
-                continue;
-            };
-            match known(tx.conn(), target_table, target.entity, &id).await? {
-                Known::Present(_) => {}
-                Known::Tombstoned(_) => {
-                    note_detached(
-                        tx.conn(),
-                        entity,
-                        &record.name.key,
-                        f,
-                        column,
-                        &id,
-                        remote.fields[f].clock,
-                    )
-                    .await?;
-                    remote.fields[f].values[c] = Value::Null;
-                }
                 Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
             }
         }
@@ -742,7 +713,8 @@ async fn apply_record(
     }
 
     if writes_row {
-        write_row(tx.conn(), entity, &record.name.key, &merged.row).await?;
+        let writable = project_links(tx.conn(), entity, &record.name.key, &merged.row).await?;
+        write_row(tx.conn(), entity, &record.name.key, &writable).await?;
         if !was_live {
             unstamp_parts(tx.conn(), entity, &record.name.key).await?;
             if super::capture::is_purge_target(entity) {
@@ -751,7 +723,7 @@ async fn apply_record(
         }
     } else if was_live && !now_live {
         if let (true, Some(tomb)) = (super::capture::is_purge_target(entity), merged.row.tomb) {
-            detach_references(tx.conn(), entity, &record.name.key, tomb).await?;
+            detach_references(tx.conn(), entity, &record.name.key).await?;
             if entity.entity == Entity::Page {
                 hold_newer_children(tx.conn(), &record.name.key, tomb).await?;
             }
@@ -1026,13 +998,31 @@ async fn read_row(
         return Ok(None);
     };
     let mut values = (1..row.len()).map(|i| unquote(&row.get::<String, _>(i)));
-    Ok(Some(
-        entity
+    let mut fields: Vec<Vec<Value>> = entity
+        .fields
+        .iter()
+        .map(|f| values.by_ref().take(f.columns.len()).collect())
+        .collect();
+
+    // A link shown NULL because its row isn't here still points at that row.
+    let detached: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT field, col, target FROM replica_detached WHERE entity = ? AND key = ?",
+    )
+    .bind(entity.entity.prefix())
+    .bind(key)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (field, column, target) in detached {
+        let position = entity
             .fields
-            .iter()
-            .map(|f| values.by_ref().take(f.columns.len()).collect())
-            .collect(),
-    ))
+            .get(field as usize)
+            .and_then(|f| f.columns.iter().position(|c| *c == column));
+        let value = position.and_then(|c| fields.get_mut(field as usize)?.get_mut(c));
+        if let Some(value @ Value::Null) = value {
+            *value = Value::Text(target);
+        }
+    }
+    Ok(Some(fields))
 }
 
 type Clocks = (Hlc, Vec<Hlc>, Option<Hlc>);
