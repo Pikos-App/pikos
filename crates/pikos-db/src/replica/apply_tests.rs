@@ -717,3 +717,54 @@ async fn the_same_reminder_added_on_both_devices_counts_once() {
     assert_eq!(leads(&mac, &page.id).await, vec![15]);
     assert_converged(&mac, &phone).await;
 }
+
+#[tokio::test]
+async fn a_calendar_folder_left_with_pages_when_its_calendar_is_turned_off_arrives_with_them() {
+    let (mac, phone) = (device().await, device().await);
+    insert_test_folder(&mac, "cal-folder", "Work calendar")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = 'cal-folder'")
+        .execute(&mac)
+        .await
+        .unwrap();
+    insert_test_page(
+        &mac,
+        TestPage {
+            folder_id: Some("cal-folder"),
+            ..TestPage::new("event", "Planning")
+        },
+    )
+    .await
+    .unwrap();
+    insert_test_page_sync(&mac, "event", "active")
+        .await
+        .unwrap();
+    send(&mac, &phone).await;
+
+    link_state(&mac, "event", "detached").await;
+    sqlx::query("UPDATE folders SET is_external_calendar = 0 WHERE id = 'cal-folder'")
+        .execute(&mac)
+        .await
+        .unwrap();
+    send(&mac, &phone).await;
+
+    let landed = get_page(&phone, "event").await.unwrap().unwrap();
+    assert_eq!(landed.folder_id.as_deref(), Some("cal-folder"));
+    assert_converged(&mac, &phone).await;
+
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = 'cal-folder'")
+        .execute(&mac)
+        .await
+        .unwrap();
+    link_state(&mac, "event", "active").await;
+    send(&mac, &phone).await;
+    let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders WHERE id = 'cal-folder'")
+        .fetch_one(&phone)
+        .await
+        .unwrap();
+    assert_eq!(
+        folders, 0,
+        "turned back on, the folder is the calendar's again"
+    );
+}

@@ -748,3 +748,31 @@ BEGIN
   SELECT 'page', NEW.page_id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
+
+CREATE TRIGGER replica_folder_scope_enter AFTER UPDATE OF is_external_calendar ON folders
+WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+  AND NOT EXISTS (SELECT 1 FROM replica_applying)
+  AND OLD.is_external_calendar = 1 AND NEW.is_external_calendar = 0
+BEGIN
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'folder', NEW.id, 63, 0, hlc FROM replica_meta WHERE id = 1
+  ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'folder', NEW.id, hlc || hlc || hlc || hlc || hlc || hlc || hlc FROM replica_meta WHERE id = 1
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
+END;
+
+CREATE TRIGGER replica_folder_scope_leave AFTER UPDATE OF is_external_calendar ON folders
+WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+  AND NOT EXISTS (SELECT 1 FROM replica_applying)
+  AND OLD.is_external_calendar = 0 AND NEW.is_external_calendar = 1
+BEGIN
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'folder', NEW.id, 0, 1, hlc FROM replica_meta WHERE id = 1
+  ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
+  INSERT INTO replica_clocks (entity, key, clocks, tomb)
+  SELECT 'folder', NEW.id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
+END;

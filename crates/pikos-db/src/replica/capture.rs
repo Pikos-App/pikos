@@ -71,6 +71,14 @@ pub fn triggers() -> Vec<(String, String)> {
     let scope = [
         ("replica_scope_enter".to_owned(), scope_enter_trigger()),
         ("replica_scope_leave".to_owned(), scope_leave_trigger()),
+        (
+            "replica_folder_scope_enter".to_owned(),
+            folder_scope_enter_trigger(),
+        ),
+        (
+            "replica_folder_scope_leave".to_owned(),
+            folder_scope_leave_trigger(),
+        ),
     ];
     captures.chain(purges).chain(scope).collect()
 }
@@ -140,6 +148,50 @@ fn scope_leave_trigger() -> String {
          SELECT 'page', NEW.page_id, {}, hlc FROM replica_meta WHERE id = 1\n  \
          ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;\nEND",
         every_slot(page, "base_clock")
+    )
+}
+
+/// A calendar's folder becomes a person's when the calendar is turned off with pages left in it:
+/// it enters scope, sent whole as a fresh write so the pages filed in it there have it to land in.
+fn folder_scope_enter_trigger() -> String {
+    let folder = ENTITIES
+        .iter()
+        .find(|e| e.entity == pikos_replica::Entity::Folder)
+        .expect("folders are synced");
+    format!(
+        "CREATE TRIGGER replica_folder_scope_enter AFTER UPDATE OF is_external_calendar ON folders\n\
+         WHEN {GATE}\n  AND OLD.is_external_calendar = 1 AND NEW.is_external_calendar = 0\n\
+         BEGIN\n  {ADVANCE_CLOCK}\n  \
+         INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
+         SELECT 'folder', NEW.id, {}, 0, hlc FROM replica_meta WHERE id = 1\n  \
+         ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, \
+         clock = excluded.clock;\n  \
+         INSERT INTO replica_clocks (entity, key, clocks)\n  \
+         SELECT 'folder', NEW.id, {} FROM replica_meta WHERE id = 1\n  \
+         ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;\nEND",
+        (1u64 << folder.fields.len()) - 1,
+        every_slot(folder, "hlc")
+    )
+}
+
+/// Turning the calendar back on makes the folder its again: it leaves scope, and every other
+/// device removes its copy with a tombstone.
+fn folder_scope_leave_trigger() -> String {
+    let folder = ENTITIES
+        .iter()
+        .find(|e| e.entity == pikos_replica::Entity::Folder)
+        .expect("folders are synced");
+    format!(
+        "CREATE TRIGGER replica_folder_scope_leave AFTER UPDATE OF is_external_calendar ON folders\n\
+         WHEN {GATE}\n  AND OLD.is_external_calendar = 0 AND NEW.is_external_calendar = 1\n\
+         BEGIN\n  {ADVANCE_CLOCK}\n  \
+         INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
+         SELECT 'folder', NEW.id, 0, 1, hlc FROM replica_meta WHERE id = 1\n  \
+         ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;\n  \
+         INSERT INTO replica_clocks (entity, key, clocks, tomb)\n  \
+         SELECT 'folder', NEW.id, {}, hlc FROM replica_meta WHERE id = 1\n  \
+         ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;\nEND",
+        every_slot(folder, "base_clock")
     )
 }
 
