@@ -280,6 +280,16 @@ pub enum StressCommand {
         )]
         today: Option<chrono::NaiveDate>,
     },
+    /// Time a new device joining by sync: every record of the scratch workspace built and applied
+    /// into an empty one beside it
+    SyncBootstrap {
+        #[arg(
+            long,
+            default_value_t = 500,
+            help = "Records per batch, as a transport sends them"
+        )]
+        batch: u32,
+    },
     /// Time the operations that decide whether Pikos feels instant
     Bench {
         #[arg(
