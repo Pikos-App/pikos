@@ -573,6 +573,10 @@ BEGIN
   SELECT 'page', c.id, replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock FROM pages AS c, replica_meta
   WHERE replica_meta.id = 1 AND c.parent_id = OLD.id
   ON CONFLICT (entity, key) DO NOTHING;
+  INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target, clock)
+  SELECT 'page', c.id, 3, 'parent_id', OLD.id, substr(replica_clocks.clocks, 81, 20)
+  FROM pages AS c JOIN replica_clocks ON replica_clocks.entity = 'page' AND replica_clocks.key = c.id
+  WHERE c.parent_id = OLD.id AND substr(replica_clocks.clocks, 81, 20) <= CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'page', c.id, 8, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
   FROM pages AS c JOIN replica_clocks ON replica_clocks.entity = 'page' AND replica_clocks.key = c.id
@@ -583,7 +587,7 @@ BEGIN
       || substr(clocks, 21, 20)
       || substr(clocks, 41, 20)
       || substr(clocks, 61, 20)
-      || CASE WHEN substr(clocks, 81, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END END
+      || CASE WHEN substr(clocks, 81, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE substr(clocks, 81, 20) END
       || substr(clocks, 101, 20)
       || substr(clocks, 121, 20)
       || substr(clocks, 141, 20)
@@ -595,6 +599,10 @@ BEGIN
   SELECT 'focus', c.id, replica_meta.base_clock || replica_meta.base_clock FROM focus_sessions AS c, replica_meta
   WHERE replica_meta.id = 1 AND c.page_id = OLD.id
   ON CONFLICT (entity, key) DO NOTHING;
+  INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target, clock)
+  SELECT 'focus', c.id, 0, 'page_id', OLD.id, substr(replica_clocks.clocks, 21, 20)
+  FROM focus_sessions AS c JOIN replica_clocks ON replica_clocks.entity = 'focus' AND replica_clocks.key = c.id
+  WHERE c.page_id = OLD.id AND substr(replica_clocks.clocks, 21, 20) <= CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'focus', c.id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
   FROM focus_sessions AS c JOIN replica_clocks ON replica_clocks.entity = 'focus' AND replica_clocks.key = c.id
@@ -602,7 +610,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields, clock = excluded.clock;
   UPDATE replica_clocks SET clocks =
       substr(clocks, 1, 20)
-      || CASE WHEN substr(clocks, 21, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END END
+      || CASE WHEN substr(clocks, 21, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE substr(clocks, 21, 20) END
   WHERE entity = 'focus' AND key IN (SELECT c.id FROM focus_sessions AS c WHERE c.page_id = OLD.id);
 END;
 
@@ -615,6 +623,10 @@ BEGIN
   SELECT 'page', c.id, replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock FROM pages AS c, replica_meta
   WHERE replica_meta.id = 1 AND c.folder_id = OLD.id
   ON CONFLICT (entity, key) DO NOTHING;
+  INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target, clock)
+  SELECT 'page', c.id, 2, 'folder_id', OLD.id, substr(replica_clocks.clocks, 61, 20)
+  FROM pages AS c JOIN replica_clocks ON replica_clocks.entity = 'page' AND replica_clocks.key = c.id
+  WHERE c.folder_id = OLD.id AND substr(replica_clocks.clocks, 61, 20) <= CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'page', c.id, 4, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
   FROM pages AS c JOIN replica_clocks ON replica_clocks.entity = 'page' AND replica_clocks.key = c.id
@@ -624,7 +636,7 @@ BEGIN
       substr(clocks, 1, 20)
       || substr(clocks, 21, 20)
       || substr(clocks, 41, 20)
-      || CASE WHEN substr(clocks, 61, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END END
+      || CASE WHEN substr(clocks, 61, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE substr(clocks, 61, 20) END
       || substr(clocks, 81, 20)
       || substr(clocks, 101, 20)
       || substr(clocks, 121, 20)

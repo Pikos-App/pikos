@@ -179,6 +179,10 @@ pub(crate) async fn read(
             })
             .collect(),
     };
+    let mut fields = fields;
+    if row.is_some() {
+        restore_detached(conn, entity, key, &mut fields).await?;
+    }
     let born = match (&row, tomb) {
         (None, Some(t)) => born.min(t),
         _ => born,
@@ -188,6 +192,39 @@ pub(crate) async fn read(
         return Ok(Read::Missing);
     }
     Ok(Read::Row(RowState { born, fields, tomb }))
+}
+
+/// A reference a purge set NULL here is sent as what it pointed at: the NULL is this device's
+/// leftover of the purge, which each device makes for itself, and the record has to read the same
+/// wherever the purged row turns out to come back.
+async fn restore_detached(
+    conn: &mut sqlx::SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+    fields: &mut [FieldState],
+) -> AppResult<()> {
+    let detached: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT field, col, target FROM replica_detached WHERE entity = ? AND key = ?",
+    )
+    .bind(entity.entity.prefix())
+    .bind(key)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (field, column, target) in detached {
+        let Some(state) = fields.get_mut(field as usize) else {
+            continue;
+        };
+        let position = entity.fields[field as usize]
+            .columns
+            .iter()
+            .position(|c| *c == column);
+        if let Some(value) = position.and_then(|c| state.values.get_mut(c)) {
+            if *value == Value::Null {
+                *value = Value::Text(target);
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn drop_op(pool: &SqlitePool, name: &RecordName) -> AppResult<()> {

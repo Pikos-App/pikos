@@ -138,14 +138,7 @@ async fn apply_in(
                 newest = newest
                     .max(record.row.newest())
                     .max(record.row.tomb.unwrap_or(Hlc::ZERO));
-                let mut rehold = false;
-                let outcome =
-                    apply_record(tx, entity, &record, &mut touched, &mut applied, &mut rehold)
-                        .await?;
-                if rehold {
-                    hold_record(tx.conn(), name, map, Hold::DeletedParent, since).await?;
-                }
-                outcome
+                apply_record(tx, entity, &record, &mut touched, &mut applied).await?
             }
         };
         match outcome {
@@ -434,19 +427,17 @@ fn purge_target(table: &str) -> Option<&'static EntityMap> {
         .find(|e| e.table == table && super::capture::is_purge_target(e))
 }
 
-/// What a purge of `target`'s row `id` does to the rows pointing at it, on a device that learns of
-/// it from a tombstone: each reference the purge's foreign key sets NULL is stamped with the purge's
-/// clock, as the purge trigger did where it happened, so the NULL carries one clock everywhere.
+/// What a purge of `target`'s row `id`, heard of from a tombstone, does to the rows pointing at it
+/// here, before the foreign key sets them NULL: each is noted with what it pointed at and its clock,
+/// as the purge trigger did where the purge happened, and keeps that clock.
 ///
-/// When a later write elsewhere has brought the row back, the purge still detached what pointed at
-/// it, so references no newer than the purge are set NULL here by hand. Without that, the devices
-/// that purged would hold NULL and the ones that kept the row would hold the reference.
-async fn stamp_purge_nulls(
+/// A reference newer than the purge wasn't detached by it, and only falls to the cascade here, so its
+/// NULL is this device's own edit, sent at now.
+async fn detach_references(
     conn: &mut SqliteConnection,
     target: &EntityMap,
     id: &str,
     tomb: Hlc,
-    survives: bool,
 ) -> AppResult<()> {
     for (table, column, _) in PURGE_NULLED.iter().filter(|(_, _, t)| *t == target.table) {
         for entity in super::manifest::ENTITIES
@@ -474,40 +465,106 @@ async fn stamp_purge_nulls(
                         (base, vec![base; entity.fields.len()], None)
                     }
                 };
-                let detached = slots[field] <= tomb;
-                // A reference newer than the purge, which the cascade is about to set NULL here: the
-                // purge didn't detach it, so the NULL is this device's own edit, sent at now.
-                let newer_nulled = !detached && !survives;
-                slots[field] = if newer_nulled {
-                    let now = advance_clock(conn).await?;
-                    sqlx::query(
-                        "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
-                         VALUES (?, ?, ?, 0, ?)
-                         ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields,
-                           clock = excluded.clock",
-                    )
-                    .bind(entity.entity.prefix())
-                    .bind(&key)
-                    .bind(1i64 << field)
-                    .bind(now.to_string())
-                    .execute(&mut *conn)
-                    .await?;
-                    now
-                } else {
-                    slots[field].max(tomb)
-                };
-                write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
-                if survives && detached {
-                    let sql = format!(
-                        "UPDATE {table} SET {column} = NULL WHERE rowid IN \
-                         (SELECT t.rowid FROM {table} AS t WHERE {} = ? AND ({covers}))",
-                        entity.key
-                    )
-                    .replace("{row}", "t");
-                    sqlx::query(&sql).bind(&key).execute(&mut *conn).await?;
+                if slots[field] <= tomb {
+                    note_detached(conn, entity, &key, field, column, id, slots[field]).await?;
+                    write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
+                    continue;
                 }
+                let now = advance_clock(conn).await?;
+                sqlx::query(
+                    "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+                     VALUES (?, ?, ?, 0, ?)
+                     ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields,
+                       clock = excluded.clock",
+                )
+                .bind(entity.entity.prefix())
+                .bind(&key)
+                .bind(1i64 << field)
+                .bind(now.to_string())
+                .execute(&mut *conn)
+                .await?;
+                slots[field] = now;
+                write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
             }
         }
+    }
+    Ok(())
+}
+
+async fn note_detached(
+    conn: &mut SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+    field: usize,
+    column: &str,
+    target: &str,
+    clock: Hlc,
+) -> AppResult<()> {
+    sqlx::query(
+        "INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target, clock)
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(entity.entity.prefix())
+    .bind(key)
+    .bind(field as i64)
+    .bind(column)
+    .bind(target)
+    .bind(clock.to_string())
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// A purged row has come back: every reference its purge set NULL here points at it again, unless
+/// it was changed since. Every device that set one NULL noted it, so they all come back the same.
+async fn reattach_references(
+    conn: &mut SqliteConnection,
+    target: &EntityMap,
+    id: &str,
+) -> AppResult<()> {
+    let detached: Vec<(String, String, i64, String, String)> = sqlx::query_as(
+        "SELECT entity, key, field, col, clock FROM replica_detached WHERE target = ?",
+    )
+    .bind(id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (prefix, key, field, column, clock) in detached {
+        let Some(entity) = super::manifest::ENTITIES
+            .iter()
+            .find(|e| e.entity.prefix() == prefix)
+        else {
+            continue;
+        };
+        let points_here = PURGE_NULLED
+            .iter()
+            .any(|(t, c, tt)| *t == entity.table && *c == column && *tt == target.table);
+        if !points_here {
+            continue;
+        }
+        let unchanged = match read_clocks(conn, entity, &key).await? {
+            Some((_, slots, _)) => slots.get(field as usize).map(|c| c.to_string()) == Some(clock),
+            None => false,
+        };
+        if unchanged {
+            let covers = entity.covers.unwrap_or("1");
+            let sql = format!(
+                "UPDATE {} SET {column} = ? WHERE {column} IS NULL AND rowid IN
+                   (SELECT t.rowid FROM {} AS t WHERE ({covers}) AND {} = ?)",
+                entity.table, entity.table, entity.key
+            )
+            .replace("{row}", "t");
+            sqlx::query(&sql)
+                .bind(id)
+                .bind(&key)
+                .execute(&mut *conn)
+                .await?;
+        }
+        sqlx::query("DELETE FROM replica_detached WHERE entity = ? AND key = ? AND field = ?")
+            .bind(&prefix)
+            .bind(&key)
+            .bind(field)
+            .execute(&mut *conn)
+            .await?;
     }
     Ok(())
 }
@@ -518,7 +575,6 @@ async fn apply_record(
     record: &Record,
     touched: &mut Touched,
     applied: &mut Applied,
-    rehold: &mut bool,
 ) -> AppResult<Outcome> {
     let mut remote = record.row.clone();
 
@@ -548,8 +604,8 @@ async fn apply_record(
                 Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
             }
         }
-        // A reference to a purged row is NULL here, as the purge's foreign key made it, at the
-        // purge's clock unless the reference is newer.
+        // A reference to a row purged here is NULL, as the purge's foreign key would have made it,
+        // at the reference's own clock, and noted so it points there again if the row comes back.
         for (_, column, target_table) in PURGE_NULLED.iter().filter(|(t, _, _)| *t == entity.table)
         {
             let (Some((f, c)), Some(target)) = (locate(entity, column), purge_target(target_table))
@@ -560,21 +616,19 @@ async fn apply_record(
                 continue;
             };
             match known(tx.conn(), target_table, target.entity, &id).await? {
-                Known::Present(None) => {}
-                // The row came back after a purge, and the purge detached whatever pointed at it
-                // then; a reference that old arrives detached.
-                Known::Present(Some(tomb)) => {
-                    if remote.fields[f].clock <= tomb {
-                        remote.fields[f].values[c] = Value::Null;
-                        remote.fields[f].clock = tomb;
-                    }
-                }
-                Known::Tombstoned(tomb) => {
-                    // Made after the purge, so the purge didn't detach it: kept to apply again if
-                    // a later write brings the row back.
-                    *rehold |= remote.fields[f].clock > tomb;
+                Known::Present(_) => {}
+                Known::Tombstoned(_) => {
+                    note_detached(
+                        tx.conn(),
+                        entity,
+                        &record.name.key,
+                        f,
+                        column,
+                        &id,
+                        remote.fields[f].clock,
+                    )
+                    .await?;
                     remote.fields[f].values[c] = Value::Null;
-                    remote.fields[f].clock = remote.fields[f].clock.max(tomb);
                 }
                 Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
             }
@@ -644,10 +698,13 @@ async fn apply_record(
         write_row(tx.conn(), entity, &record.name.key, &merged.row).await?;
         if !was_live {
             unstamp_parts(tx.conn(), entity, &record.name.key).await?;
+            if super::capture::is_purge_target(entity) {
+                reattach_references(tx.conn(), entity, &record.name.key).await?;
+            }
         }
     } else if was_live && !now_live {
         if let (true, Some(tomb)) = (super::capture::is_purge_target(entity), merged.row.tomb) {
-            stamp_purge_nulls(tx.conn(), entity, &record.name.key, tomb, false).await?;
+            detach_references(tx.conn(), entity, &record.name.key, tomb).await?;
             if entity.entity == Entity::Page {
                 hold_newer_children(tx.conn(), &record.name.key, tomb).await?;
             }
@@ -661,7 +718,6 @@ async fn apply_record(
         super::capture::is_purge_target(entity),
         purge_news,
     ) {
-        stamp_purge_nulls(tx.conn(), entity, &record.name.key, tomb, true).await?;
         // Unless the write that outlived the purge was this device's own: then its children are
         // what it sends again, re-stamped.
         let died_here = local.as_ref().is_some_and(|l| l.newest() <= tomb);

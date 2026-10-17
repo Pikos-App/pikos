@@ -57,6 +57,19 @@ CREATE TABLE replica_pen (
   reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'deleted_parent', 'newer_format', 'unreadable'))
 ) WITHOUT ROWID;
 
+-- References a purge set NULL here, with the row they pointed at and the clock they had, so they
+-- point at it again if a later write elsewhere brings that row back.
+CREATE TABLE replica_detached (
+  entity  TEXT NOT NULL,
+  key     TEXT NOT NULL,
+  field   INTEGER NOT NULL,
+  col     TEXT NOT NULL,
+  target  TEXT NOT NULL,
+  clock   TEXT NOT NULL,
+  PRIMARY KEY (entity, key, field)
+) WITHOUT ROWID;
+CREATE INDEX idx_replica_detached_target ON replica_detached(target);
+
 -- Each synced row's clocks: `clocks` is 20 hex characters per slot, the row's creation first and
 -- then one per field in the entity's field order. `tomb` is the clock of the delete, while the row
 -- is gone. `system_fields` is the transport's own copy of the record's metadata.

@@ -10,6 +10,7 @@ const UNCOUNTED: &[&str] = &[
     // Sync's own bookkeeping, which no view shows.
     "replica_applying",
     "replica_clocks",
+    "replica_detached",
     "replica_meta",
     "replica_ops",
     "replica_pen",

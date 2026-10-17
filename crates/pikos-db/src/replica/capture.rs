@@ -10,10 +10,10 @@
 //! makes them itself when the purge's tombstone arrives: a cascade delete, and a column set NULL by
 //! a purged row's foreign key.
 //!
-//! The NULL still needs a clock, the same on every device, or a purged folder that a later write
-//! brings back leaves its pages in it on one device and in the Inbox on another. So a purge first
-//! stamps each column it's about to set NULL with the purge's own clock, here before the delete and
-//! in the apply on every other device.
+//! The NULL keeps the reference's own clock, so a move made elsewhere before the purge still wins
+//! over it, and each reference set NULL is noted with what it pointed at. If a later write elsewhere
+//! brings the purged row back, every device that set a reference NULL points it there again, so a
+//! folder that comes back has its pages back on every device.
 //!
 //! The generated SQL is checked in as a migration. `UPDATE_GOLDEN=1 cargo test -p pikos-db
 //! replica` rewrites it, and a test fails when the database's triggers differ from what the
@@ -178,8 +178,10 @@ fn purge_trigger_name(target: &EntityMap) -> String {
     format!("replica_{}_purge", target.entity.prefix())
 }
 
-/// Before a purge target goes, stamps every column its foreign keys will set NULL with the purge's
-/// clock. The delete trigger then takes the same clock for the tombstone without moving it.
+/// Before a purge target goes, notes every reference its foreign keys are about to set NULL, with
+/// what it pointed at and its clock, so it points there again if a later write elsewhere brings the
+/// row back. The NULL keeps the reference's own clock: a move made elsewhere before the purge still
+/// beats it. The delete trigger then takes the same clock for the tombstone without moving it.
 ///
 /// Purging a trashed row is clocked at the trashing, so a reference made after it, a focus session
 /// started on the trashed page, is newer than the purge. Its NULL is sent as an ordinary edit, at
@@ -201,6 +203,12 @@ fn create_purge_trigger(target: &EntityMap) -> String {
                 .covers
                 .map_or(String::new(), |c| format!(" AND {}", on_row(c, "c")));
             let key = on_row(entity.key, "c");
+            let slot_start = (field + 1) * HLC_WIDTH + 1;
+            let slot = format!("substr(replica_clocks.clocks, {slot_start}, {HLC_WIDTH})");
+            let referencing = format!(
+                "FROM {table} AS c JOIN replica_clocks ON replica_clocks.entity = '{name}' \
+                 AND replica_clocks.key = {key}\n  WHERE c.{column} = OLD.id{covers}"
+            );
             statements.push(format!(
                 "INSERT INTO replica_clocks (entity, key, clocks)\n  \
                  SELECT '{name}', {key}, {} FROM {table} AS c, replica_meta\n  \
@@ -208,25 +216,26 @@ fn create_purge_trigger(target: &EntityMap) -> String {
                  ON CONFLICT (entity, key) DO NOTHING;",
                 every_slot(entity, "replica_meta.base_clock")
             ));
-            let slot_start = (field + 1) * HLC_WIDTH + 1;
+            statements.push(format!(
+                "INSERT OR REPLACE INTO replica_detached (entity, key, field, col, target, clock)\n  \
+                 SELECT '{name}', {key}, {field}, '{column}', OLD.id, {slot}\n  \
+                 {referencing} AND {slot} <= {clock};"
+            ));
             statements.push(format!(
                 "INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
                  SELECT '{name}', {key}, {}, 0, (SELECT hlc FROM replica_meta WHERE id = 1)\n  \
-                 FROM {table} AS c JOIN replica_clocks ON replica_clocks.entity = '{name}' \
-                 AND replica_clocks.key = {key}\n  \
-                 WHERE c.{column} = OLD.id{covers} \
-                 AND substr(replica_clocks.clocks, {slot_start}, {HLC_WIDTH}) > {clock}\n  \
+                 {referencing} AND {slot} > {clock}\n  \
                  ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields, \
                  clock = excluded.clock;",
                 1u64 << field
             ));
             let slots: Vec<String> = (0..=entity.fields.len())
-                .map(|slot| {
-                    let current = format!("substr(clocks, {}, {HLC_WIDTH})", slot * HLC_WIDTH + 1);
-                    if slot == field + 1 {
+                .map(|i| {
+                    let current = format!("substr(clocks, {}, {HLC_WIDTH})", i * HLC_WIDTH + 1);
+                    if i == field + 1 {
                         format!(
                             "CASE WHEN {current} > {clock} \
-                             THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE {clock} END"
+                             THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE {current} END"
                         )
                     } else {
                         current
