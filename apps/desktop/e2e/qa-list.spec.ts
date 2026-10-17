@@ -283,7 +283,7 @@ appTest(
       await app.getByRole("menuitem", { name: "Red" }).click();
       await expect(folder("Chores").getByTestId("folder-color")).toHaveCSS(
         "background-color",
-        "rgb(229, 83, 75)"
+        "rgb(217, 87, 122)"
       );
     });
 
