@@ -99,6 +99,9 @@ jobs:
       - name: Test PikosEditorBridge
         run: swift test --package-path apps/ios/PikosEditorBridge
 
+      - name: Test PikosSync
+        run: swift test --package-path apps/apple/PikosSync
+
       # ── Compile the app ───────────────────────────────────────────────────
       #
       # The step this workflow exists for. Everything under `apps/ios/Pikos` —
