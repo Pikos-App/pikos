@@ -441,6 +441,8 @@ async fn derived_mismatches(pool: &SqlitePool) -> Vec<String> {
 }
 
 async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
+    // Shown only when the test fails, so a panic deep in a run still names its seed.
+    eprintln!("seed {seed}");
     let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
     let world: &'static AtomicU64 = Box::leak(Box::new(AtomicU64::new(1_800_000_000_000)));
     let mut fleet = Vec::new();

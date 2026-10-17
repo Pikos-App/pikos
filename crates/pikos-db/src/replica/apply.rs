@@ -138,7 +138,9 @@ async fn apply_in(
                 newest = newest
                     .max(record.row.newest())
                     .max(record.row.tomb.unwrap_or(Hlc::ZERO));
-                apply_record(tx, entity, &record, &mut touched, &mut applied).await?
+                apply_record(tx, entity, &record, &mut touched, &mut applied)
+                    .await
+                    .map_err(|e| naming(e, name))?
             }
         };
         match outcome {
@@ -166,6 +168,15 @@ async fn apply_in(
         revive(tx.conn(), &name).await?;
     }
     Ok(applied)
+}
+
+/// Names the record an apply failed on. A busy database stays as it is, so the write is retried.
+fn naming(error: AppError, name: &RecordName) -> AppError {
+    if crate::tx::is_retryable_busy(&error) {
+        error
+    } else {
+        AppError::Internal(format!("applying {name}: {error}"))
+    }
 }
 
 /// Pages whose derived columns are stale after the batch.
@@ -666,22 +677,27 @@ async fn apply_record(
                 tomb,
             })
         }
-        // Gone here, so only when it went counts.
-        (None, Some((born, slots, Some(tomb)))) => Some(RowState {
-            born,
-            fields: entity
-                .fields
-                .iter()
-                .zip(slots)
-                .map(|(f, clock)| FieldState {
-                    values: vec![Value::Null; f.columns.len()],
-                    clock,
-                })
-                .collect(),
-            tomb: Some(tomb),
-        }),
-        // Removed by its parent's purge. While the parent is gone its records are dropped above, so
-        // one that gets here came with the parent brought back, and is taken as new.
+        // Removed by its own delete, so only when it went counts.
+        (None, Some((born, slots, Some(tomb))))
+            if slots.iter().copied().fold(born, Hlc::max) <= tomb =>
+        {
+            Some(RowState {
+                born,
+                fields: entity
+                    .fields
+                    .iter()
+                    .zip(slots)
+                    .map(|(f, clock)| FieldState {
+                        values: vec![Value::Null; f.columns.len()],
+                        clock,
+                    })
+                    .collect(),
+                tomb: Some(tomb),
+            })
+        }
+        // Removed by its parent's purge, its clocks newer than any delete of its own. While the
+        // parent is gone its records are held above, so one that gets here came with the parent
+        // brought back, and is taken as new.
         (None, _) => None,
     };
 
