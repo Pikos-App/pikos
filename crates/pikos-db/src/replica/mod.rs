@@ -474,6 +474,9 @@ impl<'a> Uncaptured<'a> {
 mod tests;
 
 #[cfg(test)]
+pub(crate) mod oracle;
+
+#[cfg(test)]
 #[path = "capture_writers_tests.rs"]
 mod capture_writers_tests;
 

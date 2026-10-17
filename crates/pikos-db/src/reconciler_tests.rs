@@ -4845,3 +4845,63 @@ async fn upgrading_leaves_a_body_the_person_edited_as_it_is() {
     link_addresses_in_seeded_bodies(&pool).await.unwrap();
     assert_eq!(page_content(&pool, &page_id).await, edited);
 }
+
+#[tokio::test]
+async fn every_reconciler_write_captures_exactly_what_it_changed() {
+    use crate::replica::oracle::check;
+    let pool = setup().await;
+    crate::replica::start(&pool).await.unwrap();
+    let p = &pool;
+    let ctx = ctx();
+
+    let first = delta(vec![
+        single(
+            core("/a.ics", "uid-a", "e1", "Standup"),
+            timed("2026-06-15T09:00:00", Some("2026-06-15T09:15:00"), "UTC"),
+        ),
+        single_full(
+            "/b.ics",
+            "uid-b",
+            "e1",
+            "Dentist",
+            Some("Bring the form https://example.com/form"),
+            Some("Main St"),
+            &["a@example.com"],
+        ),
+        single(
+            core("/c.ics", "uid-c", "e1", "Gone soon"),
+            all_day("2026-06-16", None),
+        ),
+    ]);
+    check(p, "first sync", || reconcile(p, &ctx, &first)).await;
+
+    let changed = delta(vec![single(
+        core("/a.ics", "uid-a", "e2", "Standup, moved"),
+        timed("2026-06-15T10:00:00", Some("2026-06-15T10:15:00"), "UTC"),
+    )]);
+    check(p, "an event changes upstream", || {
+        reconcile(p, &ctx, &changed)
+    })
+    .await;
+
+    let removed = SyncDelta {
+        removals: vec![Removal {
+            external_id: "/c.ics".into(),
+        }],
+        ..Default::default()
+    };
+    check(p, "an event is removed upstream", || {
+        reconcile(p, &ctx, &removed)
+    })
+    .await;
+
+    let present: std::collections::HashSet<String> = ["/a.ics".to_string()].into();
+    check(p, "sweeping what's absent", || {
+        sweep_absent(p, &ctx, &present, "2026-01-01")
+    })
+    .await;
+    check(p, "tearing the calendar down", || {
+        teardown_calendar(p, ACCOUNT, "cal", "f1")
+    })
+    .await;
+}
