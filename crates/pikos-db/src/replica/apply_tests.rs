@@ -775,3 +775,51 @@ async fn a_calendar_folder_left_with_pages_when_its_calendar_is_turned_off_arriv
         "turned back on, the folder is the calendar's again"
     );
 }
+
+#[tokio::test]
+async fn a_reminder_fired_here_fires_again_when_another_device_moves_its_time() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Dentist")).await.unwrap();
+    let block = create_page_schedule_impl(
+        &mac,
+        NewPageSchedule {
+            page_id: page.id.clone(),
+            scheduled_start: "2030-01-05T09:00:00".into(),
+            scheduled_end: None,
+            timezone: Some("UTC".into()),
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    create_page_reminder(&mac, &page.id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+    crate::notification_log::log_reminder_fired(
+        &phone,
+        &page.id,
+        &format!("{}#15", block.id),
+        "2030-01-05T08:45:00",
+    )
+    .await
+    .unwrap();
+
+    update_page_schedule_impl(
+        &mac,
+        block.id.clone(),
+        PageScheduleUpdate {
+            scheduled_start: Some("2030-01-06T09:00:00".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    converge(&mac, &phone).await;
+
+    let fired = text(
+        &phone,
+        "SELECT group_concat(schedule_id) FROM notification_log WHERE type = 'reminder'",
+    )
+    .await;
+    assert_eq!(fired, None, "the move cleared the old firing");
+}

@@ -773,6 +773,9 @@ async fn apply_record(
     if writes_row {
         let writable = project_links(tx.conn(), entity, &record.name.key, &merged.row).await?;
         write_row(tx.conn(), entity, &record.name.key, &writable).await?;
+        if let Some(before) = &local_row {
+            rearm_if_moved(tx.conn(), entity, &record.name.key, before, &merged.row).await?;
+        }
         if !was_live {
             touched.arrived.push(record.name.to_string());
             unstamp_parts(tx.conn(), entity, &record.name.key).await?;
@@ -820,6 +823,47 @@ async fn apply_record(
     } else {
         Outcome::Unchanged
     })
+}
+
+/// A schedule row another device moved fires its reminders again at the new time, as a move made
+/// here does: a reminder already fired for the old time would otherwise never fire for the new one.
+async fn rearm_if_moved(
+    conn: &mut SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+    before: &[Vec<Value>],
+    after: &RowState,
+) -> AppResult<()> {
+    let is_schedule_row = matches!(entity.entity, Entity::Schedule | Entity::Override);
+    let Some((field, column)) = locate(entity, "scheduled_start").filter(|_| is_schedule_row)
+    else {
+        return Ok(());
+    };
+    let moved = before[field][column] != after.fields[field].values[column];
+    if !moved {
+        return Ok(());
+    }
+
+    let row_id = match entity.entity {
+        Entity::Schedule => Some(key.to_owned()),
+        _ => {
+            let Some((page, original_date)) = key.split_once('/') else {
+                return Ok(());
+            };
+            sqlx::query_scalar(
+                "SELECT id FROM page_schedules
+                 WHERE page_id = ? AND original_date = ? AND rule_id IS NOT NULL",
+            )
+            .bind(page)
+            .bind(original_date)
+            .fetch_optional(&mut *conn)
+            .await?
+        }
+    };
+    if let Some(row_id) = row_id {
+        crate::notification_log::clear_reminder_log_tx(conn, &row_id).await?;
+    }
+    Ok(())
 }
 
 fn note_touched(
