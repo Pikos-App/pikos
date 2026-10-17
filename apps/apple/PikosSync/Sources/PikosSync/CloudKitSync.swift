@@ -81,6 +81,12 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         await localChangesHappened()
     }
 
+    /// Stops sending and fetching until `start` runs again.
+    public func stop() async {
+        await engine?.cancelOperations()
+        engine = nil
+    }
+
     /// Call after any local write, the app's own or one another process made: queues what's waiting
     /// to send, and Apple's engine sends it when it next can.
     public func localChangesHappened() async {

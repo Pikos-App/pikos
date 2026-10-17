@@ -33,9 +33,6 @@ struct SettingsScreen: View {
         NavigationStack {
             Form {
                 Group {
-                    #if STAGING
-                        StagingSyncSection()
-                    #endif
                     Section {
                         Picker("Theme", selection: $settings.theme) {
                             ForEach(Preferences.Theme.allCases, id: \.self) { theme in
@@ -93,6 +90,10 @@ struct SettingsScreen: View {
                         }
                     } header: {
                         Text("External calendars").sectionLabelStyle()
+                    }
+
+                    if DeviceSync.isAvailable {
+                        SyncSection()
                     }
 
                     yourDataSection

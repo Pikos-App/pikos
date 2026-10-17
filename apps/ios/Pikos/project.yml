@@ -91,9 +91,13 @@ targets:
           CODE_SIGN_ENTITLEMENTS: PikosStaging.entitlements
           PIKOS_APP_GROUP: group.app.pikos.staging
           PIKOS_DISPLAY_NAME: Pikos Staging
+          PIKOS_CLOUDKIT_CONTAINER: iCloud.app.pikos.staging
       base:
         PIKOS_APP_GROUP: group.app.pikos
         PIKOS_DISPLAY_NAME: Pikos
+        # Empty until the production container is set up for app.pikos.ios: a build without one has
+        # no sync and shows no sync settings.
+        PIKOS_CLOUDKIT_CONTAINER: ""
         # Which iCloud environment a staging build syncs through. A Developer ID Mac build reaches
         # only Production, so the phone is set to it for anything the Mac takes part in.
         PIKOS_CLOUDKIT_ENVIRONMENT: Development
@@ -128,7 +132,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         PikosAppGroup: $(PIKOS_APP_GROUP)
-        PikosCloudKitContainer: iCloud.app.pikos.staging
+        PikosCloudKitContainer: $(PIKOS_CLOUDKIT_CONTAINER)
         # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
         # settings: those are synthesised only when Xcode generates the
         # Info.plist, and this target supplies one. As settings they were

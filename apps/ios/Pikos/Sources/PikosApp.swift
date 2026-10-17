@@ -21,9 +21,7 @@ struct PikosApp: App {
     /// The home screen's search, kept in step with the workspace. Not in the
     /// environment: nothing but the shell talks to it.
     @State private var spotlight: SpotlightIndexer
-    #if STAGING
-        @State private var deviceSync: DeviceSync
-    #endif
+    @State private var deviceSync: DeviceSync
 
     /// Held for the life of the app: the notification center keeps only a
     /// weak reference to its delegate, and a delegate that is dropped is a
@@ -48,10 +46,8 @@ struct PikosApp: App {
         let scheduler = ReminderScheduler(workspace: { pages.handle })
         _reminders = State(initialValue: scheduler)
         _spotlight = State(initialValue: SpotlightIndexer(workspace: { pages.handle }))
-        #if STAGING
-            _deviceSync = State(
-                initialValue: DeviceSync(workspace: { pages.handle }, onApplied: { await pages.refresh() }))
-        #endif
+        _deviceSync = State(
+            initialValue: DeviceSync(workspace: { pages.handle }, onApplied: { await pages.refresh() }))
 
         // The in-place hints. Configured before any view exists so the first
         // list can already ask whether its tip is due.
@@ -135,25 +131,21 @@ struct PikosApp: App {
             .environment(exports)
             .environment(reminders)
             .environment(route)
-            #if STAGING
-                .environment(deviceSync)
-                .onChange(of: store.dataVersion) {
-                    Task { await deviceSync.localChangesHappened() }
-                }
-                .onReceive(
-                    NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-                ) { _ in
-                    Task { await deviceSync.fetchNow() }
-                }
-            #endif
+            .environment(deviceSync)
+            .onChange(of: store.dataVersion) {
+                Task { await deviceSync.localChangesHappened() }
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            ) { _ in
+                Task { await deviceSync.fetchNow() }
+            }
             // Opening the workspace runs migrations, so it happens once,
             // here, in the app process. A widget must never be the process
             // that migrates.
             .task {
                 await store.start()
-                #if STAGING
-                    await deviceSync.start()
-                #endif
+                await deviceSync.resume()
                 // An intent or deep link may have arrived while the
                 // workspace was still opening.
                 route.applyPending(to: store)
