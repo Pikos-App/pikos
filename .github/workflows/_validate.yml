@@ -276,13 +276,18 @@ jobs:
   # so until this job existed the shared data layer's tests never ran in CI
   # despite being the single writer behind both the app and the CLI.
   #
-  # No system dependencies needed here — that is the point of the exclusion, and
-  # it keeps this job fast enough to run on every push.
+  # Its one system dependency is the keychain's dbus, which pikos-ffi reaches
+  # through calendar sync. No GTK or WebKit, which keeps it fast enough for every push.
   rust-workspace:
     name: Rust Check (workspace)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
 
       - uses: dtolnay/rust-toolchain@stable
         with:
