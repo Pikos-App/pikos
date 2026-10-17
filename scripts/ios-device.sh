@@ -113,7 +113,10 @@ if pgrep -qx xcodebuild; then
   step "another build is running: leaving the simulators and Xcode alone"
 else
   step "freeing the laptop: simulators down, Xcode and Simulator closed"
-  xcrun simctl shutdown all 2>/dev/null || true
+  # Only Xcode's stock devices: an agent works on one it created and named, often between builds.
+  xcrun simctl list devices booted \
+    | sed -nE 's/^ +(iPhone|iPad).* \(([0-9A-F-]{36})\) \(Booted\) *$/\2/p' \
+    | while read -r udid; do xcrun simctl shutdown "$udid" 2>/dev/null || true; done
   osascript -e 'quit app "Simulator"' -e 'quit app "Xcode"' 2>/dev/null || true
 fi
 
