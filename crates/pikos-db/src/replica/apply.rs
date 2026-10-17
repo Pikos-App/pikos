@@ -181,8 +181,9 @@ async fn apply_in(
         round = take_held(tx.conn(), Some(&arrived)).await?;
     }
 
-    touched.rederive(tx).await?;
+    // Rederiving captures edits, which must be stamped later than the records that caused them.
     observe(tx.conn(), newest).await?;
+    touched.rederive(tx).await?;
     for name in &applied.resent {
         let name: RecordName = name
             .parse()
