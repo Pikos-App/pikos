@@ -1558,7 +1558,7 @@ fn project_description(text: &str) -> (String, String) {
 
 /// FNV-1a 64-bit hex — deterministic across builds (std `DefaultHasher` isn't)
 /// and dep-free. Change detection, not security.
-fn fnv_hex(s: &str) -> String {
+pub(crate) fn fnv_hex(s: &str) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.as_bytes() {
         hash ^= *b as u64;

@@ -44,7 +44,43 @@ pub struct EntityMap {
     /// In slot order. Append only: a slot's position is stored in every row's clocks, so a field
     /// added after sync ships comes with a migration that pads them.
     pub fields: &'static [Field],
+    pub scope: Scope,
     pub parent: Option<Parent>,
+}
+
+/// Which rows sync. The calendar layer stays on each device: a page linked to a calendar, unless
+/// the link is detached, along with everything that hangs off it, the done copies made by ticking
+/// one of its occurrences, and the folders made for calendars. Scope is read when records are built,
+/// not when changes are captured, because the reconciler inserts a page before its calendar link.
+#[derive(Clone, Copy, Debug)]
+pub enum Scope {
+    All,
+    /// While the page this column names is in scope. NULL names no page and is in scope.
+    Page(&'static str),
+    /// A folder a person made, not one made for a calendar.
+    OwnFolder,
+}
+
+impl Scope {
+    /// SQL true when the row, written `{row}`, is in scope.
+    pub fn sql(self) -> String {
+        match self {
+            Scope::All => "1".to_owned(),
+            Scope::OwnFolder => "{row}.is_external_calendar = 0".to_owned(),
+            Scope::Page(column) => {
+                let page = format!("{{row}}.{column}");
+                format!(
+                    "({page} IS NULL OR (\
+                     NOT EXISTS (SELECT 1 FROM page_sync WHERE page_sync.page_id = {page} \
+                     AND page_sync.sync_state <> 'detached') \
+                     AND NOT EXISTS (SELECT 1 FROM completed_set JOIN page_sync \
+                     ON page_sync.page_id = completed_set.page_id \
+                     AND page_sync.sync_state <> 'detached' \
+                     WHERE completed_set.clone_id = {page})))"
+                )
+            }
+        }
+    }
 }
 
 /// A synced table's columns that aren't in any entity's fields.
@@ -122,6 +158,7 @@ pub const ENTITIES: &[EntityMap] = &[
                 columns: &["status", "completed_at"],
             },
         ],
+        scope: Scope::Page("id"),
         parent: None,
     },
     EntityMap {
@@ -134,6 +171,7 @@ pub const ENTITIES: &[EntityMap] = &[
             name: "content",
             columns: &["content", "content_schema_version"],
         }],
+        scope: Scope::Page("id"),
         parent: None,
     },
     EntityMap {
@@ -168,6 +206,7 @@ pub const ENTITIES: &[EntityMap] = &[
                 columns: &["created_at"],
             },
         ],
+        scope: Scope::OwnFolder,
         parent: None,
     },
     EntityMap {
@@ -180,6 +219,7 @@ pub const ENTITIES: &[EntityMap] = &[
             name: "created_at",
             columns: &["created_at"],
         }],
+        scope: Scope::All,
         parent: None,
     },
     EntityMap {
@@ -189,6 +229,7 @@ pub const ENTITIES: &[EntityMap] = &[
         key: "{row}.page_id || '/' || (SELECT name FROM tags WHERE id = {row}.tag_id)",
         covers: None,
         fields: &[],
+        scope: Scope::Page("page_id"),
         parent: PAGE_PARENT,
     },
     EntityMap {
@@ -208,6 +249,7 @@ pub const ENTITIES: &[EntityMap] = &[
                 "created_at",
             ],
         }],
+        scope: Scope::Page("page_id"),
         parent: PAGE_PARENT,
     },
     EntityMap {
@@ -227,6 +269,7 @@ pub const ENTITIES: &[EntityMap] = &[
                 "created_at",
             ],
         }],
+        scope: Scope::Page("page_id"),
         parent: PAGE_PARENT,
     },
     EntityMap {
@@ -245,6 +288,7 @@ pub const ENTITIES: &[EntityMap] = &[
                 "created_at",
             ],
         }],
+        scope: Scope::Page("page_id"),
         parent: Some(Parent {
             table: "page_recurrence_rules",
             column: "rule_id",
@@ -260,6 +304,7 @@ pub const ENTITIES: &[EntityMap] = &[
             name: "clone_id",
             columns: &["clone_id"],
         }],
+        scope: Scope::Page("page_id"),
         parent: PAGE_PARENT,
     },
     EntityMap {
@@ -269,6 +314,7 @@ pub const ENTITIES: &[EntityMap] = &[
         key: "{row}.page_id || '/' || {row}.occurrence_date",
         covers: None,
         fields: &[],
+        scope: Scope::Page("page_id"),
         parent: PAGE_PARENT,
     },
     EntityMap {
@@ -281,6 +327,7 @@ pub const ENTITIES: &[EntityMap] = &[
             name: "reminder",
             columns: &["page_id", "minutes_before", "created_at"],
         }],
+        scope: Scope::Page("page_id"),
         parent: PAGE_PARENT,
     },
     EntityMap {
@@ -293,6 +340,7 @@ pub const ENTITIES: &[EntityMap] = &[
             name: "session",
             columns: &["page_id", "started_at", "ended_at", "duration_s"],
         }],
+        scope: Scope::Page("page_id"),
         parent: None,
     },
 ];

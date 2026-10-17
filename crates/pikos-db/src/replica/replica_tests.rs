@@ -1,5 +1,80 @@
-use super::{forget, meta, set_paused, start, Uncaptured};
-use crate::{insert_test_page, test_pool, TestPage};
+use super::{forget, holds_only_seed, meta, record_seed, set_paused, start, Uncaptured};
+use crate::{insert_test_folder, insert_test_page, insert_test_page_sync, test_pool, TestPage};
+
+async fn seeded_workspace() -> sqlx::SqlitePool {
+    let pool = test_pool().await;
+    insert_test_folder(&pool, "start", "Start here")
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("start"),
+            ..TestPage::new("welcome", "Welcome to Pikos")
+        },
+    )
+    .await
+    .unwrap();
+    record_seed(&pool).await.unwrap();
+    pool
+}
+
+#[tokio::test]
+async fn a_workspace_with_only_its_first_run_pages_holds_only_the_seed() {
+    let pool = seeded_workspace().await;
+
+    sqlx::query("UPDATE pages SET last_opened_at = 'now' WHERE id = 'welcome'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(
+        holds_only_seed(&pool).await.unwrap(),
+        "opening a page isn't using it"
+    );
+}
+
+#[tokio::test]
+async fn editing_a_first_run_page_or_adding_one_is_work_to_keep() {
+    let edited = seeded_workspace().await;
+    let added = seeded_workspace().await;
+
+    sqlx::query("UPDATE pages SET title = 'My page' WHERE id = 'welcome'")
+        .execute(&edited)
+        .await
+        .unwrap();
+    insert_test_page(&added, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+
+    assert!(!holds_only_seed(&edited).await.unwrap());
+    assert!(!holds_only_seed(&added).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_connected_calendar_is_not_work_to_keep() {
+    let pool = seeded_workspace().await;
+
+    insert_test_page(&pool, TestPage::new("event", "Dentist"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&pool, "event", "active")
+        .await
+        .unwrap();
+
+    assert!(holds_only_seed(&pool).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_workspace_never_seeded_holds_only_the_seed_while_empty() {
+    let pool = test_pool().await;
+
+    assert!(holds_only_seed(&pool).await.unwrap());
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    assert!(!holds_only_seed(&pool).await.unwrap());
+}
 
 async fn pending(pool: &sqlx::SqlitePool) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM replica_ops")

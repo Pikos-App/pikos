@@ -5,6 +5,7 @@
 
 pub mod capture;
 pub mod manifest;
+pub mod state;
 
 use pikos_replica::Hlc;
 use sqlx::{Sqlite, SqlitePool, Transaction};
@@ -115,6 +116,40 @@ pub async fn forget(pool: &SqlitePool) -> AppResult<()> {
         Ok(())
     })
     .await
+}
+
+type Fingerprints = std::collections::BTreeMap<String, String>;
+
+async fn fingerprints(pool: &SqlitePool) -> AppResult<Fingerprints> {
+    Ok(state::synced_rows(pool)
+        .await?
+        .into_iter()
+        .map(|row| (row.name.to_string(), row.fingerprint()))
+        .collect())
+}
+
+/// Records the synced rows a new workspace's first-run pages created, called by whatever seeded
+/// them, so turning sync on can tell a workspace nobody has used yet from one with work in it.
+pub async fn record_seed(pool: &SqlitePool) -> AppResult<()> {
+    let seeded = serde_json::to_string(&fingerprints(pool).await?)
+        .map_err(|e| AppError::Internal(format!("seed fingerprints: {e}")))?;
+    sqlx::query("UPDATE replica_meta SET seeded = ? WHERE id = 1")
+        .bind(seeded)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Whether every synced row is a first-run row, unchanged since it was seeded. Such a workspace
+/// joining an account that already syncs takes the account's rows instead of merging, which would
+/// put a second set of first-run pages on every device.
+pub async fn holds_only_seed(pool: &SqlitePool) -> AppResult<bool> {
+    let stored: String = sqlx::query_scalar("SELECT seeded FROM replica_meta WHERE id = 1")
+        .fetch_one(pool)
+        .await?;
+    let seeded: Fingerprints = serde_json::from_str(&stored).unwrap_or_default();
+
+    Ok(fingerprints(pool).await? == seeded)
 }
 
 /// A transaction whose writes aren't captured: remote records being applied, or maintenance every
