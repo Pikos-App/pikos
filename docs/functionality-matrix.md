@@ -65,7 +65,7 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Adjust subtitle | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --subtitle`, `""` clears | ○ |
 | Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ○ |
 | Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ○ |
-| Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status` | ○ |
+| Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status`; a status other than `not_started` or `done` is refused | ○ |
 | Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ○ |
 | Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ○ |
 | Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ○ |
