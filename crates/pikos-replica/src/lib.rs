@@ -6,6 +6,8 @@
 //! no merge or policy logic of their own.
 
 pub mod clock;
+pub mod codec;
+pub mod merge;
 pub mod record;
 
 pub use clock::{Hlc, ParseHlcError};
