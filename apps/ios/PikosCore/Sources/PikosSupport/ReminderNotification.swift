@@ -71,7 +71,7 @@ public enum ReminderNotification {
             locale: calendar.locale ?? .autoupdatingCurrent,
             calendar: gregorian,
             timeZone: calendar.timeZone)
-        let time = start.formatted(style.hour().minute())
+        let time = ClockTime.string(start, calendar: gregorian)
 
         let daysAway = gregorian.dateComponents(
             [.day], from: gregorian.startOfDay(for: fire), to: gregorian.startOfDay(for: start)

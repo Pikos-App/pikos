@@ -53,23 +53,23 @@ final class ReminderNotificationTests: XCTestCase {
             ReminderNotification.body(
                 scheduledStart: "2026-05-27T15:00:00", fireAt: "2026-05-27T14:30:00",
                 calendar: calendar),
-            "Today at 15:00")
+            "Today at 3:00pm")
         XCTAssertEqual(
             ReminderNotification.body(
                 scheduledStart: "2026-05-28T09:00:00", fireAt: "2026-05-27T09:00:00",
                 calendar: calendar),
-            "Tomorrow at 09:00")
+            "Tomorrow at 9:00am")
         // Two to six days out is a weekday name; further is a date.
         XCTAssertEqual(
             ReminderNotification.body(
                 scheduledStart: "2026-05-30T09:00:00", fireAt: "2026-05-27T09:00:00",
                 calendar: calendar),
-            "Saturday at 09:00")
+            "Saturday at 9:00am")
         XCTAssertEqual(
             ReminderNotification.body(
                 scheduledStart: "2026-06-10T09:00:00", fireAt: "2026-05-27T09:00:00",
                 calendar: calendar),
-            "Wed 10 Jun at 09:00")
+            "Wed 10 Jun at 9:00am")
     }
 
     func testAnAllDayPageSaysSoInsteadOfATime() {

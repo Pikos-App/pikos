@@ -102,10 +102,10 @@ enum CalendarPalette {
         guard let startDate = StorageTimestamp.wallClock(start), start.contains("T") else {
             return nil
         }
-        let startText = startDate.formatted(date: .omitted, time: .shortened)
+        let startText = ClockTime.string(startDate)
         guard let end, let endDate = StorageTimestamp.wallClock(end), endDate > startDate else {
             return startText
         }
-        return "\(startText) – \(endDate.formatted(date: .omitted, time: .shortened))"
+        return "\(startText) – \(ClockTime.string(endDate))"
     }
 }
