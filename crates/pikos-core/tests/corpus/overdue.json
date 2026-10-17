@@ -308,6 +308,7 @@
   "pages": [
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_allday",
       "isRecurring": false,
@@ -322,6 +323,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_timed_span",
       "isRecurring": false,
@@ -337,6 +339,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_allday_span",
       "isRecurring": false,
@@ -352,6 +355,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_recurring",
       "isRecurring": true,
@@ -366,6 +370,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_locked",
       "isRecurring": false,
@@ -380,6 +385,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_today_early",
       "isRecurring": false,
@@ -394,6 +400,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_today_allday",
       "isRecurring": false,
@@ -408,6 +415,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_future",
       "isRecurring": false,
@@ -422,6 +430,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_none",
       "isRecurring": false,
@@ -435,6 +444,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "o_across_dst",
       "isRecurring": false,

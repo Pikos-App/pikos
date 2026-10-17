@@ -15,8 +15,8 @@
 //!
 //! Everything takes "today" and "now" as parameters rather than reading the
 //! clock. Both are boundaries a test has to be able to stand on: "overdue"
-//! depends on the minute, and a suite that reads the machine clock passes all
-//! day and fails at 23:59.
+//! depends on the day and the order within a section on the minute, and a suite
+//! that reads the machine clock passes all day and fails at 23:59.
 
 use crate::dates::{format_date_only, is_all_day_iso, parse_local_iso};
 use chrono::{Duration, NaiveDateTime};
@@ -87,24 +87,15 @@ pub fn belongs_to_upcoming(scheduled_start: Option<&str>, today: &str) -> bool {
     day >= today && day <= end.as_str()
 }
 
-/// Whether a page has already slipped, as of `now`.
+/// Whether a page was scheduled on an earlier day than `today`.
 ///
-/// The two schedule shapes are judged differently, and the difference is the
-/// whole point. An all-day item is compared by date, so it stays in "today" all
-/// day rather than becoming overdue at 00:01. A timed one is compared by the
-/// moment, so a 1:45am reminder reads as overdue by 10am — which is what makes
-/// the Today view's first section worth looking at.
-pub fn is_overdue(scheduled_start: &str, today: &str, now: &NaiveDateTime) -> bool {
-    if is_all_day_iso(scheduled_start) {
-        return scheduled_start < today;
-    }
-    match parse_local_iso(scheduled_start) {
-        Some(at) => at < *now,
-        // Unparseable: not overdue. A row nobody can place should sit in the
-        // ordinary section rather than being promoted into the one the reader
-        // is meant to act on.
-        None => false,
-    }
+/// Days, never the passing moment, so a page set for 9am is still under Today
+/// at 2pm and reads as late only through its own red time. Grouping on the
+/// moment moved a page to Overdue the minute its time passed, which by the
+/// afternoon filled the section with the day's own plan and left it saying
+/// nothing about what needs rescheduling.
+pub fn is_overdue(scheduled_start: &str, today: &str) -> bool {
+    day_key(scheduled_start) < today
 }
 
 /// Where a page sorts within a date-grouped section, soonest first.
@@ -162,7 +153,7 @@ pub fn group_today<T>(
 ) -> TodayGroups<T> {
     let (mut overdue, mut due): (Vec<T>, Vec<T>) = pages
         .into_iter()
-        .partition(|page| start_of(page).is_some_and(|start| is_overdue(start, today, now)));
+        .partition(|page| start_of(page).is_some_and(|start| is_overdue(start, today)));
     let key = |page: &T| {
         start_of(page)
             .map(|start| schedule_sort_key(start, today, now))
@@ -304,28 +295,22 @@ mod tests {
     }
 
     #[test]
-    fn an_all_day_item_stays_in_today_all_day() {
+    fn only_an_earlier_day_is_overdue() {
         let today = "2026-09-13";
-        let late = at("2026-09-13T23:59:00");
-        assert!(
-            !is_overdue("2026-09-13", today, &late),
-            "not overdue at 23:59"
-        );
-        assert!(is_overdue("2026-09-12", today, &late), "yesterday's is");
+        assert!(is_overdue("2026-09-12", today));
+        assert!(is_overdue("2026-09-12T23:30:00", today));
+        assert!(!is_overdue("2026-09-13", today));
     }
 
     #[test]
-    fn a_timed_item_goes_overdue_when_its_moment_passes() {
-        let today = "2026-09-13";
-        let now = at("2026-09-13T10:00:00");
-        assert!(is_overdue("2026-09-13T01:45:00", today, &now));
-        assert!(!is_overdue("2026-09-13T14:00:00", today, &now));
+    fn a_timed_item_whose_moment_has_passed_today_stays_in_today() {
+        assert!(!is_overdue("2026-09-13T01:45:00", "2026-09-13"));
     }
 
     #[test]
     fn an_unreadable_schedule_is_not_promoted_into_the_overdue_section() {
-        let now = at("2026-09-13T10:00:00");
-        assert!(!is_overdue("2026-09-13Tnope", "2026-09-13", &now));
+        assert!(!is_overdue("2026-09-13Tnope", "2026-09-13"));
+        assert!(!is_overdue("nope", "2026-09-13"));
     }
 
     /// The rule worth porting rather than simplifying: "sometime today" sits

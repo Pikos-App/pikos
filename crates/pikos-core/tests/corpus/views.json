@@ -44,6 +44,7 @@
   "pages": [
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_old_allday",
       "isRecurring": false,
@@ -58,6 +59,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_old_timed",
       "isRecurring": false,
@@ -72,6 +74,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_today_early",
       "isRecurring": false,
@@ -86,6 +89,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_today_allday",
       "isRecurring": false,
@@ -100,6 +104,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_today_late",
       "isRecurring": false,
@@ -114,6 +119,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_tie_a",
       "isRecurring": false,
@@ -128,6 +134,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_tie_b",
       "isRecurring": false,
@@ -142,6 +149,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_day3",
       "isRecurring": false,
@@ -156,6 +164,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_day7",
       "isRecurring": false,
@@ -170,6 +179,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_day8",
       "isRecurring": false,
@@ -184,6 +194,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_far",
       "isRecurring": false,
@@ -198,6 +209,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_none",
       "isRecurring": false,
@@ -211,6 +223,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": null,
       "id": "v_done",
       "isRecurring": false,
@@ -226,6 +239,7 @@
     },
     {
       "createdAt": "2026-03-01T00:00:00",
+      "detachIsReversible": false,
       "folderId": "folder-1",
       "id": "v_filed",
       "isRecurring": false,
@@ -389,10 +403,10 @@
         "ok": true,
         "overdue": [
           "v_old_allday",
-          "v_old_timed",
-          "v_today_early"
+          "v_old_timed"
         ],
         "today": [
+          "v_today_early",
           "v_today_allday",
           "v_today_late"
         ]

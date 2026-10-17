@@ -2369,7 +2369,7 @@ impl Workspace {
     /// goes through the same schedule write a single date edit does, so a page
     /// that has become locked since the plan was made fails alone.
     pub async fn move_overdue_to_today(&self) -> Result<OverdueMoveResult, WorkspaceError> {
-        let (today, now) = pikos_db::now_local_parts();
+        let (today, _) = pikos_db::now_local_parts();
         let open = pikos_db::list_pages_impl(
             &self.pool,
             Some(pikos_db::PageFilter {
@@ -2387,7 +2387,7 @@ impl Workspace {
             .filter(|p| {
                 p.scheduled_start
                     .as_deref()
-                    .is_some_and(|start| pikos_core::views::is_overdue(start, &today, &now))
+                    .is_some_and(|start| pikos_core::views::is_overdue(start, &today))
             })
             .collect();
         let rows: Vec<pikos_core::OverdueRow<'_>> = overdue
