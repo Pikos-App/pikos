@@ -5,6 +5,8 @@ set -euo pipefail
 #
 #   pnpm ios:device              the first paired iPhone, over USB or Wi-Fi
 #   pnpm ios:device <udid>       a specific one, from `xcrun devicectl list devices`
+#   pnpm ios:device --staging    the staging app instead, which syncs through the staging iCloud
+#                                container; PIKOS_CLOUDKIT_ENVIRONMENT=Production pairs it with a Mac
 #
 # Xcode the app never opens. Its indexing and simulators are what eat a laptop, and
 # `xcodebuild` with `devicectl` needs neither.
@@ -18,7 +20,13 @@ PROJECT_DIR="$ROOT/apps/ios/Pikos"
 XCFRAMEWORK="$ROOT/apps/ios/PikosCore/Frameworks/PikosFFI.xcframework"
 EDITOR_HTML="$ROOT/apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources/editor.html"
 DERIVED="$ROOT/target/ios-device"
+CONFIGURATION=Debug
 BUNDLE_ID="app.pikos.ios"
+if [ "${1:-}" = "--staging" ]; then
+  shift
+  CONFIGURATION=Staging
+  BUNDLE_ID="app.pikos.ios.staging"
+fi
 
 step() { printf '\033[1m▶ %s\033[0m\n' "$1"; }
 fail() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
@@ -87,15 +95,16 @@ set -o pipefail
 xcodebuild build \
   -project "$PROJECT_DIR/Pikos.xcodeproj" \
   -scheme Pikos \
-  -configuration Debug \
+  -configuration "$CONFIGURATION" \
   -destination "generic/platform=iOS" \
   -derivedDataPath "$DERIVED" \
   -allowProvisioningUpdates \
   DEVELOPMENT_TEAM="$TEAM" \
+  PIKOS_CLOUDKIT_ENVIRONMENT="${PIKOS_CLOUDKIT_ENVIRONMENT:-Development}" \
   CODE_SIGN_STYLE=Automatic |
   if command -v xcbeautify >/dev/null; then xcbeautify --quiet; else grep -E 'error:|warning: .*Pikos|BUILD'; fi
 
-APP="$DERIVED/Build/Products/Debug-iphoneos/Pikos.app"
+APP="$DERIVED/Build/Products/$CONFIGURATION-iphoneos/Pikos.app"
 [ -d "$APP" ] || fail "the build finished without $APP"
 
 step "installing on $DEVICE"

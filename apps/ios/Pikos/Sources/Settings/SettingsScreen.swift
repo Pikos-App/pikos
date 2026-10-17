@@ -33,6 +33,9 @@ struct SettingsScreen: View {
         NavigationStack {
             Form {
                 Group {
+                    #if STAGING
+                        StagingSyncSection()
+                    #endif
                     Section {
                         Picker("Theme", selection: $settings.theme) {
                             ForEach(Preferences.Theme.allCases, id: \.self) { theme in
