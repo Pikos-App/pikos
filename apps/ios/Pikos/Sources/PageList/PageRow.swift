@@ -20,6 +20,9 @@ struct CompletionToggle: View {
         // `contentShape` must follow the frame, or the hit area stays the size of the glyph.
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
+        // Ahead of the row's hold menu and drag, which made a plain button's tap wait about half a
+        // second on a phone. The button stays for VoiceOver, which activates it directly.
+        .highPriorityGesture(TapGesture().onEnded { onToggle(!isDone) })
         .sensoryFeedback(.success, trigger: isDone) { _, done in done }
         .accessibilityLabel(isDone ? "Mark as not done" : "Mark as done")
         .accessibilityValue(priority.map { "\($0.name) priority" } ?? "")
