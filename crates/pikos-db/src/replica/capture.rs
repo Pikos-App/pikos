@@ -388,7 +388,7 @@ fn body(entity: &EntityMap, op: Op) -> String {
         Op::Insert => format!(
             "INSERT INTO replica_clocks (entity, key, clocks, tomb)\n  \
              SELECT '{name}', {key}, {}, NULL FROM replica_meta WHERE id = 1\n  \
-             ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;",
+             ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;",
             every_slot(entity, "hlc")
         ),
         Op::Update => {

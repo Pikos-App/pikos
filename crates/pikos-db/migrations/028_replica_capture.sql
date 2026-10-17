@@ -13,7 +13,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'page', NEW.id, hlc || hlc || hlc || hlc || hlc || hlc || hlc || hlc || hlc || hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_page_update AFTER UPDATE ON pages
@@ -91,7 +91,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'body', NEW.id, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_body_update AFTER UPDATE ON pages
@@ -126,7 +126,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'folder', NEW.id, hlc || hlc || hlc || hlc || hlc || hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_folder_update AFTER UPDATE ON folders
@@ -190,7 +190,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'tag', NEW.name, hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_pagetag_insert AFTER INSERT ON page_tags
@@ -205,7 +205,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'pagetag', NEW.page_id || '/' || (SELECT name FROM tags WHERE id = NEW.tag_id), hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_pagetag_delete AFTER DELETE ON page_tags
@@ -236,7 +236,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'rule', NEW.page_id, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_rule_update AFTER UPDATE ON page_recurrence_rules
@@ -288,7 +288,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'sched', NEW.id, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_sched_update AFTER UPDATE ON page_schedules
@@ -342,7 +342,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'override', NEW.page_id || '/' || NEW.original_date, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_override_update AFTER UPDATE ON page_schedules
@@ -395,7 +395,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'done', NEW.page_id || '/' || NEW.occurrence_date, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_done_update AFTER UPDATE ON completed_set
@@ -446,7 +446,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'skip', NEW.page_id || '/' || NEW.occurrence_date, hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_skip_delete AFTER DELETE ON skip_set
@@ -477,7 +477,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'remind', NEW.id, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_remind_update AFTER UPDATE ON page_reminders
@@ -528,7 +528,7 @@ BEGIN
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
   SELECT 'focus', NEW.id, hlc || hlc, NULL FROM replica_meta WHERE id = 1
-  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
+  ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks;
 END;
 
 CREATE TRIGGER replica_focus_update AFTER UPDATE ON focus_sessions

@@ -395,7 +395,7 @@ async fn an_override_is_named_by_its_page_and_date_and_goes_with_its_rule() {
 }
 
 #[tokio::test]
-async fn a_row_created_again_after_its_delete_is_live_with_a_fresh_clock() {
+async fn a_row_created_again_after_its_delete_is_live_with_a_fresh_clock_and_keeps_the_delete() {
     let pool = started_pool().await;
     page_with_children(&pool).await;
     exec(&pool, "DELETE FROM skip_set").await;
@@ -418,7 +418,11 @@ async fn a_row_created_again_after_its_delete_is_live_with_a_fresh_clock() {
     assert!(!readded.deleted);
     assert!(readded.clock > removed.clock);
     let (slots, tomb) = clocks(&pool, Entity::Skipped, "p1/2026-10-18").await;
-    assert_eq!(tomb, None);
+    assert_eq!(
+        tomb,
+        Some(removed.clock),
+        "the delete is remembered, so hearing of it again isn't news"
+    );
     assert_eq!(slots, vec![readded.clock]);
 }
 
