@@ -501,11 +501,6 @@ async fn upsert_page_tags_tx(
     page_id: &str,
     tags: &[String],
 ) -> AppResult<()> {
-    sqlx::query("DELETE FROM page_tags WHERE page_id = ?")
-        .bind(page_id)
-        .execute(&mut **tx)
-        .await?;
-
     // Tags are stored lowercase (see migration 009): trim + lowercase, dedupe in
     // input order. The deduped list also rewrites the pages.tags denorm so it
     // can't drift from the page_tags join.
@@ -517,10 +512,26 @@ async fn upsert_page_tags_tx(
         if tag.is_empty() || !seen.insert(tag.clone()) {
             continue;
         }
+        normalized.push(tag);
+    }
+    let tags_json = serde_json::to_string(&normalized).unwrap_or_else(|_| "[]".to_string());
+
+    // Only the tags that went are removed: one removed and added back would sync as a new add,
+    // beating a removal another device made meanwhile.
+    sqlx::query(
+        "DELETE FROM page_tags WHERE page_id = ? AND tag_id NOT IN
+           (SELECT tags.id FROM tags JOIN json_each(?) AS kept ON tags.name = kept.value)",
+    )
+    .bind(page_id)
+    .bind(&tags_json)
+    .execute(&mut **tx)
+    .await?;
+
+    for tag in &normalized {
         let tag_id = uuid::Uuid::new_v4().to_string();
         sqlx::query("INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)")
             .bind(&tag_id)
-            .bind(&tag)
+            .bind(tag)
             .execute(&mut **tx)
             .await?;
 
@@ -529,16 +540,13 @@ async fn upsert_page_tags_tx(
              SELECT ?, id FROM tags WHERE name = ?",
         )
         .bind(page_id)
-        .bind(&tag)
+        .bind(tag)
         .execute(&mut **tx)
         .await?;
-
-        normalized.push(tag);
     }
 
     // Keep the denorm lowercase + deduped so the UI (which renders pages.tags,
     // not the join) never shows case/whitespace duplicates of one tag.
-    let tags_json = serde_json::to_string(&normalized).unwrap_or_else(|_| "[]".to_string());
     sqlx::query("UPDATE pages SET tags = ? WHERE id = ?")
         .bind(&tags_json)
         .bind(page_id)
