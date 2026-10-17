@@ -184,6 +184,7 @@ fn naming(error: AppError, name: &RecordName) -> AppError {
 struct Touched {
     bodies: BTreeSet<String>,
     tags: BTreeSet<String>,
+    reminders: BTreeSet<String>,
     schedules: BTreeSet<String>,
     /// The newest clock that won on each page or folder row, for its `updated_at`.
     stamped: BTreeMap<(&'static str, String), Hlc>,
@@ -217,6 +218,9 @@ impl Touched {
             .execute(tx.conn())
             .await?;
         }
+        for page in &self.reminders {
+            settle_reminders(tx.conn(), page).await?;
+        }
         for page in &self.schedules {
             crate::schedules::refresh_schedule_denorm_conn(tx.conn(), page).await?;
             // A series that runs out marks its page done, a value every device works out for
@@ -238,6 +242,28 @@ impl Touched {
         }
         Ok(())
     }
+}
+
+/// Reminders set on two devices at once can leave a page with both "no reminders" and a real one, or
+/// the same lead twice. "No reminders" wins and a repeated lead counts once, the same way on every
+/// device, so they settle on the same rows. Settling isn't sent; every device does it.
+async fn settle_reminders(conn: &mut SqliteConnection, page: &str) -> AppResult<()> {
+    sqlx::query(
+        "DELETE FROM page_reminders WHERE page_id = ?1 AND minutes_before <> ?2
+           AND EXISTS (SELECT 1 FROM page_reminders WHERE page_id = ?1 AND minutes_before = ?2)",
+    )
+    .bind(page)
+    .bind(crate::reminders::NO_REMINDERS)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM page_reminders WHERE page_id = ?1 AND id NOT IN
+           (SELECT MIN(id) FROM page_reminders WHERE page_id = ?1 GROUP BY minutes_before)",
+    )
+    .bind(page)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 /// A clock's wall time in the `updated_at` format.
@@ -773,6 +799,9 @@ fn note_touched(
         }
         Entity::PageTag => {
             touched.tags.extend(page.clone());
+        }
+        Entity::Reminder => {
+            touched.reminders.extend(page.clone());
         }
         Entity::Rule
         | Entity::Schedule

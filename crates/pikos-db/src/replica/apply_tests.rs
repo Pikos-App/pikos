@@ -679,3 +679,41 @@ async fn emptying_the_trash_with_no_restore_anywhere_removes_the_page_everywhere
 
     assert!(get_page(&phone, &page.id).await.unwrap().is_none());
 }
+
+async fn leads(pool: &SqlitePool, page: &str) -> Vec<i64> {
+    sqlx::query_scalar(
+        "SELECT minutes_before FROM page_reminders WHERE page_id = ? ORDER BY minutes_before",
+    )
+    .bind(page)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn no_reminders_set_on_one_device_beats_a_reminder_added_on_the_other() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Dentist")).await.unwrap();
+    converge(&mac, &phone).await;
+
+    create_page_reminder(&mac, &page.id, -1).await.unwrap();
+    create_page_reminder(&phone, &page.id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_eq!(leads(&mac, &page.id).await, vec![-1]);
+    assert_eq!(leads(&phone, &page.id).await, vec![-1]);
+}
+
+#[tokio::test]
+async fn the_same_reminder_added_on_both_devices_counts_once() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Dentist")).await.unwrap();
+    converge(&mac, &phone).await;
+
+    create_page_reminder(&mac, &page.id, 15).await.unwrap();
+    create_page_reminder(&phone, &page.id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_eq!(leads(&mac, &page.id).await, vec![15]);
+    assert_converged(&mac, &phone).await;
+}
