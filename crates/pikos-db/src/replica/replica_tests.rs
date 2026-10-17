@@ -91,6 +91,20 @@ async fn forgetting_drops_the_clocks_and_stops_capture_but_keeps_the_clock_movin
 }
 
 #[tokio::test]
+async fn resetting_a_workspace_forgets_sync_rather_than_sending_its_deletes() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+
+    crate::export::reset_workspace(&pool).await.unwrap();
+
+    assert_eq!(pending(&pool).await, 0);
+    assert!(!meta(&pool).await.unwrap().started);
+}
+
+#[tokio::test]
 async fn an_uncaptured_transaction_writes_without_capture_and_leaves_no_marker() {
     let pool = test_pool().await;
     start(&pool).await.unwrap();

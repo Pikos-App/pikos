@@ -4800,6 +4800,36 @@ async fn upgrading_links_the_addresses_in_a_seed_left_as_written() {
 }
 
 #[tokio::test]
+async fn upgrading_a_seed_is_not_sent_to_other_devices_as_an_edit() {
+    let pool = setup().await;
+    crate::replica::start(&pool).await.unwrap();
+    let untouched = seed_invite(&pool).await;
+    let unlinked = serde_json::json!({ "type": "doc", "content": INVITE.split('\n').map(|line| {
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+    }).collect::<Vec<_>>() })
+    .to_string();
+    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
+        .bind(&unlinked)
+        .bind(&untouched)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM replica_ops")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM replica_ops")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(hrefs(&page_content(&pool, &untouched).await).len(), 3);
+    assert_eq!(pending, 0, "every device runs the upgrade itself");
+}
+
+#[tokio::test]
 async fn upgrading_leaves_a_body_the_person_edited_as_it_is() {
     let pool = setup().await;
     let page_id = seed_invite(&pool).await;
