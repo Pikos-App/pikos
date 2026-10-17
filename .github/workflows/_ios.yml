@@ -35,15 +35,14 @@ jobs:
     name: Build + test
     runs-on: macos-15
     timeout-minutes: 45
+    # Pinned, so a runner image rolling its default Xcode is a deliberate bump here. The image's
+    # default is 16.4, whose Swift 6.1 rejects concurrency the 26 SDKs mark Sendable; 26.3 is the
+    # newest it carries.
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v5
 
-      # Recorded rather than pinned, for now. Pinning is the right end state —
-      # a runner image rolling to a new Xcode changes the Swift compiler
-      # underneath this, and that should be a deliberate bump in this file
-      # rather than a mystery on a Monday. It is not pinned yet because nobody
-      # has seen which Xcodes this image actually carries; read this line from
-      # the first green run and pin it.
       - name: Record the toolchain
         run: |
           xcodebuild -version
