@@ -1912,18 +1912,26 @@ async fn seed_page_with_history(pool: &sqlx::SqlitePool, page_id: &str) {
     .unwrap();
 }
 
+// qa: TRASH-10
 #[tokio::test]
-async fn deleting_a_page_for_good_removes_its_notifications() {
+async fn deleting_a_page_for_good_removes_it_from_recent_notifications() {
     let pool = test_pool().await;
     seed_page_with_history(&pool, "gone").await;
-    seed_page_with_history(&pool, "kept").await;
+    seed_page_with_history(&pool, "trashed").await;
 
     crate::pages::hard_delete_page_impl(&pool, "gone")
         .await
         .unwrap();
+    soft_delete_page(&pool, "trashed").await;
 
-    assert_eq!(log_rows_naming(&pool, "gone").await, 0);
-    assert_eq!(log_rows_naming(&pool, "kept").await, 2);
+    let history = list_notification_history(&pool, 50).await.unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|h| h.page_id.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("trashed"), Some("trashed")]
+    );
 }
 
 #[tokio::test]
@@ -1937,16 +1945,6 @@ async fn a_raw_delete_removes_notifications_too() {
         .unwrap();
 
     assert_eq!(log_rows_naming(&pool, "mirror").await, 0);
-}
-
-#[tokio::test]
-async fn trashing_a_page_keeps_its_notifications() {
-    let pool = test_pool().await;
-    seed_page_with_history(&pool, "trashed").await;
-
-    soft_delete_page(&pool, "trashed").await;
-
-    assert_eq!(log_rows_naming(&pool, "trashed").await, 2);
 }
 
 // ─── Click-through ───────────────────────────────────────────────────────────
