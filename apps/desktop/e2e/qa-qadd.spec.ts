@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, mod } from "./fixtures";
+import { test as appTest, createFolder, expect, mod, quickAdd } from "./fixtures";
 
 function quickAddParts(app: Page) {
   return {
@@ -331,6 +331,38 @@ appTest(
       if (!barBox || !cellBox) throw new Error("no bar or Monday cell");
       expect(Math.round(barBox.width / cellBox.width)).toBe(5);
       expect(Math.abs(barBox.x - cellBox.x)).toBeLessThan(cellBox.width / 2);
+    });
+  }
+);
+
+appTest(
+  "a page added in the Inbox or Upcoming stays in that view",
+  { tag: ["@QADD-11"] },
+  async ({ app }) => {
+    await createFolder(app, "Notes");
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app
+      .getByRole("region", { name: "Settings" })
+      .getByRole("button", { name: /^Default folder for new pages:/ })
+      .click();
+    await app.getByPlaceholder("Search folders…").fill("Notes");
+    await app
+      .getByRole("dialog")
+      .filter({ has: app.getByPlaceholder("Search folders…") })
+      .getByRole("button", { exact: true, name: "Notes" })
+      .click();
+    await app.keyboard.press("Escape");
+
+    await appTest.step("QADD-11 the Inbox keeps it, not the default folder", async () => {
+      await app.getByRole("button", { name: /^Inbox/ }).click();
+      await quickAdd(app, "empty the dishwasher");
+      await expect(row(app, "empty the dishwasher")).toBeVisible();
+    });
+
+    await appTest.step("QADD-11 Upcoming dates it today", async () => {
+      await app.getByRole("button", { name: /^Upcoming/ }).click();
+      await quickAdd(app, "book the car service");
+      await expect(row(app, "book the car service")).toBeVisible();
     });
   }
 );

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { Folder } from "../types";
-import { folderIdForNewPage, folderIdForRestoredPage, writableFolders } from "./writableFolders";
+import {
+  datesNewPageToday,
+  folderIdForNewPage,
+  folderIdForRestoredPage,
+  writableFolders,
+} from "./writableFolders";
 
 function makeFolder(name: string, isExternalCalendar = false): Folder {
   return {
@@ -55,6 +60,19 @@ describe("folderIdForNewPage", () => {
 
   it("returns Inbox when there is no default", () => {
     expect(folderIdForNewPage("today", FOLDERS, null)).toBeNull();
+  });
+
+  it("keeps a page added in the Inbox there, whatever the default", () => {
+    expect(folderIdForNewPage("inbox", FOLDERS, "home")).toBeNull();
+  });
+});
+
+describe("datesNewPageToday", () => {
+  it("dates a page today in the views that show today, and nowhere else", () => {
+    expect(datesNewPageToday("today")).toBe(true);
+    expect(datesNewPageToday("upcoming")).toBe(true);
+    expect(datesNewPageToday("inbox")).toBe(false);
+    expect(datesNewPageToday("work")).toBe(false);
   });
 });
 

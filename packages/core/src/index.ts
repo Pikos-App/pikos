@@ -230,6 +230,7 @@ export type { ToggleSelectionGroups } from "./pages/toggleSelection";
 export { groupUpcomingPages, upcomingDayLabel } from "./pages/upcoming";
 export type { UpcomingDaySection } from "./pages/upcoming";
 export {
+  datesNewPageToday,
   folderIdForNewPage,
   folderIdForRestoredPage,
   writableFolders,

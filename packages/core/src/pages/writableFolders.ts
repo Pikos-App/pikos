@@ -12,22 +12,29 @@ export function writableFolders(folders: Folder[]): Folder[] {
 }
 
 /**
- * Which folder a page created from a view lands in: the active folder, else the
- * configured default, else Inbox (null). Both candidates are looked up in
- * `writableFolders`, so a view or a stale setting naming a folder that cannot
- * hold pages falls through to the next one instead of failing the create.
+ * Which folder a page created from a view lands in, so it is in that view when it is
+ * added: the active folder, the Inbox (null) when that is the view whatever the
+ * default says, else the configured default, else Inbox. Both folder candidates are
+ * looked up in `writableFolders`, so a view or a stale setting naming a folder that
+ * cannot hold pages falls through to the next one instead of failing the create.
  */
 export function folderIdForNewPage(
   viewId: string,
   folders: Folder[],
   defaultFolderId: string | null
 ): string | null {
+  if (viewId === "inbox") return null;
   const writable = writableFolders(folders);
   return (
     writable.find((folder) => folder.id === viewId)?.id ??
     writable.find((folder) => folder.id === defaultFolderId)?.id ??
     null
   );
+}
+
+/** Whether a page created from a view is dated today to be in it. Upcoming starts at today. */
+export function datesNewPageToday(viewId: string): boolean {
+  return viewId === "today" || viewId === "upcoming";
 }
 
 /**

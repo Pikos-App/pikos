@@ -8,6 +8,7 @@
 
 import type { PagePriority, ParsedInput, ParseResult } from "@pikos/core";
 import {
+  datesNewPageToday,
   DAY_BEFORE_MINUTES,
   folderIdForNewPage,
   fuzzyMatchFolder,
@@ -126,7 +127,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
   const creatableFolders = writableFolders(folders);
   const initialFolderId = folderIdForNewPage(activeViewId, folders, settingsDefaultFolder);
-  const dateActiveToday = activeViewId === "today";
+  const dateActiveToday = datesNewPageToday(activeViewId);
 
   const [inputValue, setInputValue] = useState(() => dialogPrefill ?? "");
   const [shake, setShake] = useState(false);
