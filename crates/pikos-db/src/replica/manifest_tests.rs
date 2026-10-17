@@ -178,3 +178,27 @@ async fn every_entity_on_a_cascading_table_names_a_real_parent() {
         assert!(real, "{:?}: no such cascading foreign key", entity.entity);
     }
 }
+
+#[test]
+fn every_record_key_is_one_cloudkit_accepts_and_none_collide() {
+    for entity in ENTITIES {
+        let keys = pikos_replica::codec::keys(&crate::replica::apply::shape(entity));
+        let unique: HashSet<&String> = keys.iter().collect();
+
+        assert_eq!(
+            unique.len(),
+            keys.len(),
+            "{:?}: two keys collide",
+            entity.entity
+        );
+        for key in &keys {
+            let starts_with_letter = key.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+            let allowed = key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            assert!(
+                starts_with_letter && allowed && key != "record",
+                "{:?}: {key} isn't a field name CloudKit takes",
+                entity.entity
+            );
+        }
+    }
+}

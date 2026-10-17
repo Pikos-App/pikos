@@ -946,9 +946,9 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func forgetSync() async throws 
     
     /**
-     * Names of the records waiting to send, oldest change first.
+     * The records waiting to send, oldest change first.
      */
-    func pendingRecords(limit: UInt32) async throws  -> [String]
+    func pendingRecords(limit: UInt32) async throws  -> [RecordAddress]
     
     func planJoin() async throws  -> JoinPlan
     
@@ -2007,9 +2007,9 @@ open func forgetSync()async throws   {
 }
     
     /**
-     * Names of the records waiting to send, oldest change first.
+     * The records waiting to send, oldest change first.
      */
-open func pendingRecords(limit: UInt32)async throws  -> [String]  {
+open func pendingRecords(limit: UInt32)async throws  -> [RecordAddress]  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2020,7 +2020,7 @@ open func pendingRecords(limit: UInt32)async throws  -> [String]  {
             pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
+            liftFunc: FfiConverterSequenceTypeRecordAddress.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -4065,12 +4065,14 @@ public func FfiConverterTypeAllDayBar_lower(_ value: AllDayBar) -> RustBuffer {
  */
 public struct BuiltRecord: Equatable, Hashable {
     public var record: SyncRecord
+    public var storeName: String
     public var builtAt: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(record: SyncRecord, builtAt: String) {
+    public init(record: SyncRecord, storeName: String, builtAt: String) {
         self.record = record
+        self.storeName = storeName
         self.builtAt = builtAt
     }
 
@@ -4091,12 +4093,14 @@ public struct FfiConverterTypeBuiltRecord: FfiConverterRustBuffer {
         return
             try BuiltRecord(
                 record: FfiConverterTypeSyncRecord.read(from: &buf), 
+                storeName: FfiConverterString.read(from: &buf), 
                 builtAt: FfiConverterString.read(from: &buf)
         )
     }
 
     public static func write(_ value: BuiltRecord, into buf: inout [UInt8]) {
         FfiConverterTypeSyncRecord.write(value.record, into: &buf)
+        FfiConverterString.write(value.storeName, into: &buf)
         FfiConverterString.write(value.builtAt, into: &buf)
     }
 }
@@ -6031,6 +6035,64 @@ public func FfiConverterTypeQuickAddInput_lift(_ buf: RustBuffer) throws -> Quic
 #endif
 public func FfiConverterTypeQuickAddInput_lower(_ value: QuickAddInput) -> RustBuffer {
     return FfiConverterTypeQuickAddInput.lower(value)
+}
+
+
+/**
+ * A record's name and the name it's stored under in CloudKit, which takes only ASCII and up to
+ * 255 characters. The record carries its real name, so the stored one never has to be reversed.
+ */
+public struct RecordAddress: Equatable, Hashable {
+    public var name: String
+    public var storeName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, storeName: String) {
+        self.name = name
+        self.storeName = storeName
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RecordAddress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecordAddress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecordAddress {
+        return
+            try RecordAddress(
+                name: FfiConverterString.read(from: &buf), 
+                storeName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecordAddress, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.storeName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecordAddress_lift(_ buf: RustBuffer) throws -> RecordAddress {
+    return try FfiConverterTypeRecordAddress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecordAddress_lower(_ value: RecordAddress) -> RustBuffer {
+    return FfiConverterTypeRecordAddress.lower(value)
 }
 
 
@@ -9867,6 +9929,31 @@ fileprivate struct FfiConverterSequenceTypeQuickAddInput: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRecordAddress: FfiConverterRustBuffer {
+    typealias SwiftType = [RecordAddress]
+
+    public static func write(_ value: [RecordAddress], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRecordAddress.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RecordAddress] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RecordAddress]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRecordAddress.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
     typealias SwiftType = [SearchHit]
 
@@ -10477,7 +10564,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_forget_sync() != 48135) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_pending_records() != 46035) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_pending_records() != 10248) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_plan_join() != 8486) {

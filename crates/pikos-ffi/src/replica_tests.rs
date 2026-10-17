@@ -46,7 +46,8 @@ fn page(title: &str) -> NewPage {
 
 /// One send from `from` to `to`, as the CloudKit adapter makes it.
 async fn send(from: &Workspace, to: &Workspace) {
-    let names = from.pending_records(1_000).await.unwrap();
+    let pending = from.pending_records(1_000).await.unwrap();
+    let names = pending.into_iter().map(|address| address.name).collect();
     let built = from.build_records(names).await.unwrap();
     let records: Vec<SyncRecord> = built.iter().map(|b| b.record.clone()).collect();
     to.apply_records(records).await.unwrap();
@@ -98,13 +99,13 @@ async fn records_cross_as_plain_fields_without_nulls() {
 
     let fields = &built[0].record.fields;
     assert_eq!(
-        fields.get("title.0"),
+        fields.get("title_0"),
         Some(&SyncValue::Text {
             value: "Groceries".to_string()
         })
     );
     assert!(
-        !fields.contains_key("subtitle.0"),
+        !fields.contains_key("subtitle_0"),
         "a NULL column is left out"
     );
 }

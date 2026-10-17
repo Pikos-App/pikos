@@ -382,7 +382,7 @@ async fn a_page_in_a_purged_folder_lands_in_the_inbox() {
     let mut built = build(&phone, &names).await.unwrap();
     built[0]
         .fields
-        .insert("folder_id.0".into(), Value::Text(folder.id.clone()));
+        .insert("folder_id_0".into(), Value::Text(folder.id.clone()));
 
     apply(&mac, &[(built[0].name.clone(), built[0].fields.clone())])
         .await

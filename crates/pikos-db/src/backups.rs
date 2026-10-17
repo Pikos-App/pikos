@@ -536,7 +536,7 @@ mod tests {
             ],
             "the restored page goes out as a fresh write, and the page the backup lacks as removed"
         );
-        let title_clock: pikos_replica::Hlc = match built[0].fields.get("title@") {
+        let title_clock: pikos_replica::Hlc = match built[0].fields.get("title_at") {
             Some(pikos_replica::merge::Value::Text(c)) => c.parse().unwrap(),
             other => panic!("no title clock: {other:?}"),
         };

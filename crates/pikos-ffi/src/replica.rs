@@ -27,10 +27,19 @@ pub struct SyncRecord {
     pub fields: HashMap<String, SyncValue>,
 }
 
+/// A record's name and the name it's stored under in CloudKit, which takes only ASCII and up to
+/// 255 characters. The record carries its real name, so the stored one never has to be reversed.
+#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+pub struct RecordAddress {
+    pub name: String,
+    pub store_name: String,
+}
+
 /// A record ready to send, with the clock it was built at, which `records_sent` takes back.
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct BuiltRecord {
     pub record: SyncRecord,
+    pub store_name: String,
     pub built_at: String,
 }
 
@@ -157,10 +166,16 @@ impl Workspace {
         Ok(pikos_db::replica::adopt_workspace_id(&self.pool, &workspace_id).await?)
     }
 
-    /// Names of the records waiting to send, oldest change first.
-    pub async fn pending_records(&self, limit: u32) -> Result<Vec<String>, WorkspaceError> {
+    /// The records waiting to send, oldest change first.
+    pub async fn pending_records(&self, limit: u32) -> Result<Vec<RecordAddress>, WorkspaceError> {
         let names = pikos_db::replica::build::pending(&self.pool, i64::from(limit)).await?;
-        Ok(names.into_iter().map(|name| name.to_string()).collect())
+        Ok(names
+            .into_iter()
+            .map(|name| RecordAddress {
+                store_name: name.store_name(),
+                name: name.to_string(),
+            })
+            .collect())
     }
 
     pub async fn build_records(
@@ -175,6 +190,7 @@ impl Workspace {
         Ok(built
             .into_iter()
             .map(|b| BuiltRecord {
+                store_name: b.name.store_name(),
                 record: SyncRecord {
                     name: b.name.to_string(),
                     fields: from_map(&b.fields),

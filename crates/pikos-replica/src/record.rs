@@ -96,6 +96,39 @@ impl RecordName {
     }
 }
 
+/// The longest record name CloudKit accepts.
+const STORE_NAME_MAX: usize = 255;
+
+impl RecordName {
+    /// The name the record is stored under where names are restricted, as CloudKit's are to ASCII
+    /// and 255 characters. Letters, digits and `-_.:/` pass; any other byte is escaped as `%XX`. A
+    /// name still too long is cut and finished with a hash of the whole, so it stays unique. A
+    /// transport keeps the real name in the record and never has to reverse this.
+    pub fn store_name(&self) -> String {
+        let plain = self.to_string();
+        let mut escaped = String::with_capacity(plain.len());
+        for byte in plain.bytes() {
+            if byte.is_ascii_alphanumeric() || b"-_.:/".contains(&byte) {
+                escaped.push(byte as char);
+            } else {
+                escaped.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        if escaped.len() <= STORE_NAME_MAX {
+            return escaped;
+        }
+        let hash = plain.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+        let suffix = format!("~{hash:016x}");
+        let mut cut = STORE_NAME_MAX - suffix.len();
+        while !escaped.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        format!("{}{suffix}", &escaped[..cut])
+    }
+}
+
 impl fmt::Display for RecordName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.tombstone {

@@ -2,8 +2,9 @@
 //!
 //! CloudKit stores a record as named fields of a few plain types, and a folder transport can write
 //! the same map, so the map is the one shape every transport carries. A field's columns are stored
-//! one per name, `<field>.<column index>`, with its clock beside them as `<field>@`; an absent
-//! column is NULL.
+//! one per name, `<field>_<column index>`, with its clock beside them as `<field>_at`; an absent
+//! column is NULL. Names keep to letters, digits and underscores, the only characters CloudKit
+//! allows in a field name.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -45,11 +46,21 @@ impl fmt::Display for DecodeError {
 impl std::error::Error for DecodeError {}
 
 fn column_key(field: &str, column: usize) -> String {
-    format!("{field}.{column}")
+    format!("{field}_{column}")
 }
 
 fn clock_key(field: &str) -> String {
-    format!("{field}@")
+    format!("{field}_at")
+}
+
+/// Every key a record of this shape can hold, the format, creation and tombstone keys first.
+pub fn keys(shape: Shape) -> Vec<String> {
+    let mut keys = vec![FORMAT.to_owned(), BORN.to_owned(), TOMB.to_owned()];
+    for (field, columns) in shape {
+        keys.push(clock_key(field));
+        keys.extend((0..*columns).map(|i| column_key(field, i)));
+    }
+    keys
 }
 
 pub fn encode(record: &Record, shape: Shape) -> FieldMap {

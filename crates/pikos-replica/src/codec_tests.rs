@@ -32,7 +32,7 @@ fn a_record_round_trips_through_its_field_map() {
     let decoded = decode(original.name.clone(), &map, SHAPE).unwrap();
 
     assert_eq!(decoded, original);
-    assert!(!map.contains_key("status.1"), "a NULL column is left out");
+    assert!(!map.contains_key("status_1"), "a NULL column is left out");
     assert!(!map.contains_key("tomb"));
 }
 
@@ -63,7 +63,7 @@ fn a_record_from_a_newer_pikos_is_refused_by_name() {
 #[test]
 fn a_record_missing_a_clock_is_malformed() {
     let mut map: FieldMap = encode(&record(), SHAPE);
-    map.remove("status@");
+    map.remove("status_at");
 
     assert!(matches!(
         decode(record().name, &map, SHAPE),

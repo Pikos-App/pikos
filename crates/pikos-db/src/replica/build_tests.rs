@@ -29,7 +29,7 @@ async fn a_record_is_built_from_the_row_as_it_is_now() {
     let built = build(&pool, &[page("p1")]).await.unwrap();
 
     assert_eq!(
-        built[0].fields.get("title.0"),
+        built[0].fields.get("title_0"),
         Some(&Value::Text("Groceries, Saturday".into()))
     );
     assert!(!built[0].fields.contains_key("tomb"));
@@ -107,7 +107,7 @@ async fn a_purged_page_builds_its_tombstone_and_its_cascaded_children_build_noth
     assert_eq!(built[0].name, page("p1"));
     assert!(built[0].fields.contains_key("tomb"));
     assert!(
-        !built[0].fields.contains_key("title.0"),
+        !built[0].fields.contains_key("title_0"),
         "a tombstone carries no values"
     );
     assert!(!pending(&pool, 10).await.unwrap().contains(&reminder));
