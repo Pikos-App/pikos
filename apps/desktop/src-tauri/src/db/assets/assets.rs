@@ -3,7 +3,12 @@
 //! Pages store the path relative to the app data dir (`assets/<uuid>.<ext>`), and
 //! [`resolve_asset_path`] turns a stored path back into a file on this machine.
 
+use std::collections::HashSet;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
+
+use sqlx::SqlitePool;
 use tauri::Manager;
 
 use crate::error::{AppError, AppResult};
@@ -159,6 +164,100 @@ async fn save_bytes_into_dir(assets_dir: &Path, data: Vec<u8>, ext: &str) -> App
     spawn_blocking_io(move || std::fs::write(&dest, &data)).await?;
 
     Ok(format!("{ASSET_DIR}/{filename}"))
+}
+
+/// How recently written an image must be to survive a collection whatever refers to it. The file
+/// is written before the page that refers to it is saved, so a quit or crash between the two
+/// leaves an image no page names yet.
+const UNREFERENCED_GRACE: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Collects in the background for the workspace just opened, if it is the one beside the app's
+/// assets folder. Any other file, such as a bench or e2e scratch workspace, shares the folder
+/// without sharing its pages, so collecting from it would remove the real workspace's images.
+pub(crate) fn collect_after_launch(
+    app: &tauri::AppHandle,
+    pool: SqlitePool,
+    workspace_path: String,
+) {
+    let Ok(app_data) = app.path().app_data_dir() else {
+        return;
+    };
+    let workspace_dir = Path::new(&workspace_path)
+        .parent()
+        .and_then(|dir| dir.canonicalize().ok());
+    let owns_assets = workspace_dir.is_some() && workspace_dir == app_data.canonicalize().ok();
+    if !owns_assets {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let assets_dir = app_data.join(ASSET_DIR);
+        match collect_unreferenced(&pool, &workspace_path, &assets_dir, SystemTime::now()).await {
+            Ok(0) => {}
+            Ok(removed) => log::info!("assets: removed {removed} image(s) no page refers to"),
+            Err(e) => log::warn!("assets: collecting unreferenced images failed: {e}"),
+        }
+    });
+}
+
+/// Removes the images in `assets_dir` that no page, trashed page or backup of the workspace
+/// refers to, and returns how many went. Only files named as [`save_asset`] names them are
+/// touched, and none written within [`UNREFERENCED_GRACE`].
+///
+/// The one place an image is deleted. Once iCloud sync exists it may run only after synced
+/// content has converged, since a page held on another device can still refer to an image no page
+/// here does, and it never deletes the cloud copy.
+pub(crate) async fn collect_unreferenced(
+    pool: &SqlitePool,
+    workspace_path: &str,
+    assets_dir: &Path,
+    now: SystemTime,
+) -> AppResult<usize> {
+    let referenced = pikos_db::assets::referenced_asset_paths(pool, workspace_path).await?;
+    let keep: HashSet<OsString> = referenced
+        .iter()
+        .map(|stored| resolve_asset_path(assets_dir, stored))
+        .filter(|path| path.parent() == Some(assets_dir))
+        .filter_map(|path| path.file_name().map(ToOwned::to_owned))
+        .collect();
+
+    let assets_dir = assets_dir.to_path_buf();
+    spawn_blocking_io(move || remove_unreferenced(&assets_dir, &keep, now)).await
+}
+
+fn remove_unreferenced(
+    assets_dir: &Path,
+    keep: &HashSet<OsString>,
+    now: SystemTime,
+) -> std::io::Result<usize> {
+    let entries = match std::fs::read_dir(assets_dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(e),
+    };
+
+    let mut removed = 0;
+    for entry in entries {
+        let entry = entry?;
+        let name = entry.file_name();
+        let is_ours = name.to_str().is_some_and(is_pikos_asset_name);
+        if !is_ours || keep.contains(&name) {
+            continue;
+        }
+
+        let modified = entry.metadata()?.modified()?;
+        let is_recent = now
+            .duration_since(modified)
+            .map_or(true, |age| age < UNREFERENCED_GRACE);
+        if is_recent {
+            continue;
+        }
+
+        std::fs::remove_file(entry.path())?;
+        removed += 1;
+    }
+
+    Ok(removed)
 }
 
 #[cfg(test)]

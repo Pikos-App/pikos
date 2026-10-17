@@ -143,6 +143,7 @@ pub async fn connect_db(
     }
 
     let pool = open_pool(&path).await?;
+    assets::collect_after_launch(&app, pool.clone(), path.clone());
     *guard = DbStateInner {
         pool: Some(pool),
         path: Some(canonical),
