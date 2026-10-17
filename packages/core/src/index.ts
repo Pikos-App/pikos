@@ -57,10 +57,13 @@ export {
 } from "./calendar/calendarConstants";
 export type { CalendarCollapseConfig } from "./calendar/calendarConstants";
 export {
+  addClockMinutes,
+  atClockMinutes,
   buildCalendarDays,
   buildCollapseGeometry,
   clampBottomHour,
   clampTopHour,
+  clockMinutesBetween,
   collapsedBandInnerOffset,
   collapsedBandPillHeight,
   computeCalendarMetrics,

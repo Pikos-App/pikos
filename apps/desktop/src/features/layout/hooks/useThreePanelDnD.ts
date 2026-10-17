@@ -7,7 +7,14 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import { isDateGroupedView, isDone, isTimedIso, parseLocalISO } from "@pikos/core";
+import {
+  addClockMinutes,
+  clockMinutesBetween,
+  isDateGroupedView,
+  isDone,
+  isTimedIso,
+  parseLocalISO,
+} from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -20,18 +27,21 @@ import { useViewCacheController } from "@/shared/context/WorkspaceContext";
 import { cachedListNow } from "@/shared/viewCache/useCachedView";
 import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
-/** Gap between timed pages when multi-dropping on calendar (ms). */
-const MULTI_DROP_GAP_MS = 15 * 60 * 1000; // 15 minutes
-/** Gap between point-in-time pages when multi-dropping on calendar (ms). */
-const MULTI_DROP_POINT_GAP_MS = 30 * 60 * 1000; // 30 minutes
+/** Gap between timed pages when multi-dropping on calendar (minutes). */
+const MULTI_DROP_GAP_MIN = 15;
+/** Gap between point-in-time pages when multi-dropping on calendar (minutes). */
+const MULTI_DROP_POINT_GAP_MIN = 30;
 
-/** Returns the duration in ms for a timed page schedule, or undefined for all-day/unscheduled. */
-function getPageDurationMs(page: PageSummary): number | undefined {
+/** A timed page's span in clock minutes, the height the grid draws it; undefined for
+ *  all-day or unscheduled. */
+function getPageDurationMin(page: PageSummary): number | undefined {
   if (!page.scheduledStart || !isTimedIso(page.scheduledStart) || !page.scheduledEnd)
     return undefined;
-  const ms =
-    parseLocalISO(page.scheduledEnd).getTime() - parseLocalISO(page.scheduledStart).getTime();
-  return ms > 0 ? ms : undefined;
+  const minutes = clockMinutesBetween(
+    parseLocalISO(page.scheduledStart),
+    parseLocalISO(page.scheduledEnd)
+  );
+  return minutes > 0 ? minutes : undefined;
 }
 
 /** Excludes synced mirrors: the reconciler owns their schedule and folder, so the
@@ -100,12 +110,12 @@ export function useThreePanelDnD() {
       const page = activePageDataRef.current;
       if (!page) return;
       const folder = foldersRef.current.find((f) => f.id === page.folderId);
-      const durationMs = getPageDurationMs(page);
+      const durationMin = getPageDurationMin(page);
       const result = callExternalDragUpdaterRef.current(
         ev.clientX,
         ev.clientY,
         folder?.color ?? undefined,
-        durationMs,
+        durationMin != null ? durationMin * 60_000 : undefined,
         page.title,
         isDone(page)
       );
@@ -192,10 +202,10 @@ export function useThreePanelDnD() {
         const target = lookup(targets[0] ?? "") ?? pageData;
         let calendarEnd: string | undefined;
         if (isTimedIso(calendarStart)) {
-          const durationMs = getPageDurationMs(target);
-          if (durationMs != null) {
+          const durationMin = getPageDurationMin(target);
+          if (durationMin != null) {
             calendarEnd = format(
-              new Date(new Date(calendarStart).getTime() + durationMs),
+              addClockMinutes(parseLocalISO(calendarStart), durationMin),
               "yyyy-MM-dd'T'HH:mm:ss"
             );
           }
@@ -207,21 +217,21 @@ export function useThreePanelDnD() {
         if (isTimedDrop) {
           // Stagger pages sequentially, preserving each page's existing duration
           // (15min gap after timed pages, 30min slots for point-in-time pages).
-          const baseTime = new Date(calendarStart).getTime();
+          const baseTime = parseLocalISO(calendarStart);
           let offset = 0;
           for (const id of targets) {
             const page = lookup(id);
-            const durationMs = page ? getPageDurationMs(page) : undefined;
-            const startTime = new Date(baseTime + offset);
+            const durationMin = page ? getPageDurationMin(page) : undefined;
+            const startTime = addClockMinutes(baseTime, offset);
             const start = format(startTime, "yyyy-MM-dd'T'HH:mm:ss");
             const end =
-              durationMs != null
-                ? format(new Date(startTime.getTime() + durationMs), "yyyy-MM-dd'T'HH:mm:ss")
+              durationMin != null
+                ? format(addClockMinutes(startTime, durationMin), "yyyy-MM-dd'T'HH:mm:ss")
                 : undefined;
             void scheduleOnce(id, start, end);
             offset +=
-              (durationMs ?? 0) +
-              (durationMs != null ? MULTI_DROP_GAP_MS : MULTI_DROP_POINT_GAP_MS);
+              (durationMin ?? 0) +
+              (durationMin != null ? MULTI_DROP_GAP_MIN : MULTI_DROP_POINT_GAP_MIN);
           }
         } else {
           // All-day drop: all pages become all-day for that date

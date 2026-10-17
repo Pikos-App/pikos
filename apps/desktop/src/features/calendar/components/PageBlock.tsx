@@ -1,5 +1,6 @@
 import type { CalendarBlock, VirtualOccurrence } from "@pikos/core";
 import {
+  addClockMinutes,
   crossingMidnightsCount,
   DEFAULT_EVENT_COLOR,
   fallsShortOf,
@@ -101,9 +102,9 @@ export function PageBlock({
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
-      ? new Date(
-          startDate.getTime() +
-            (snapY(Math.max(resizeHeight, 0), metrics.hourHeight) / metrics.hourHeight) * 3_600_000
+      ? addClockMinutes(
+          startDate,
+          (snapY(Math.max(resizeHeight, 0), metrics.hourHeight) / metrics.hourHeight) * 60
         )
       : null;
   // First segment of a 2+-midnight event shows the full bookend label
