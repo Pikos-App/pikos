@@ -70,6 +70,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "024",
         include_str!("../migrations/024_notification_log_follows_page_delete.sql"),
     ),
+    (
+        "025",
+        include_str!("../migrations/025_search_index_definition.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -552,6 +556,69 @@ async fn fts_rebuilds_on_schema_version_mismatch() {
         hits, 1,
         "FTS index was not rebuilt on schema-version mismatch"
     );
+}
+
+/// Opens a workspace file, finds "needle" on a fresh page, then empties the search index so only a
+/// rebuild can find it again; `change` runs before closing. Returns the hits after reopening.
+async fn needle_hits_after_reopening(change: &str) -> i64 {
+    let path = std::env::temp_dir().join(format!("pkos_fts_def_{}.db", uuid::Uuid::new_v4()));
+    let path_str = path.to_str().unwrap().to_string();
+
+    {
+        let pool = open_pool(&path_str).await.unwrap();
+        insert_test_page(
+            &pool,
+            TestPage {
+                content_text: "needle in the haystack",
+                ..TestPage::new("p1", "Findable")
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("DELETE FROM pages_fts")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::raw_sql(change).execute(&pool).await.unwrap();
+        pool.close().await;
+    }
+
+    let pool = open_pool(&path_str).await.unwrap();
+    let hits: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH 'needle'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    pool.close().await;
+
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{path_str}{suffix}"));
+    }
+
+    hits
+}
+
+#[tokio::test]
+async fn a_migration_changing_what_search_indexes_rebuilds_it_without_a_version_bump() {
+    let redefine_update_trigger = "
+        DROP TRIGGER pages_fts_update;
+        CREATE TRIGGER pages_fts_update
+        AFTER UPDATE OF title, subtitle, content_text, tags, mirror_search_text ON pages BEGIN
+          INSERT INTO pages_fts(pages_fts, rowid, title, subtitle, content_text, tags, mirror_search_text)
+          VALUES ('delete', OLD.rowid, OLD.title, OLD.subtitle, OLD.content_text, OLD.tags, OLD.mirror_search_text);
+          INSERT INTO pages_fts(rowid, title, subtitle, content_text, tags, mirror_search_text)
+          VALUES (NEW.rowid, NEW.title, NEW.subtitle, NEW.content_text, NEW.tags, NEW.mirror_search_text);
+        END;";
+
+    assert_eq!(
+        needle_hits_after_reopening(redefine_update_trigger).await,
+        1
+    );
+}
+
+#[tokio::test]
+async fn an_unchanged_search_definition_is_not_rebuilt_on_open() {
+    assert_eq!(needle_hits_after_reopening("SELECT 1").await, 0);
 }
 
 #[tokio::test]
