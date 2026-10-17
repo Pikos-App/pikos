@@ -81,16 +81,46 @@ pub const ENTITIES: &[EntityMap] = &[
         key: "{row}.id",
         covers: None,
         fields: &[
-            Field { name: "title", columns: &["title"] },
-            Field { name: "subtitle", columns: &["subtitle"] },
-            Field { name: "folder_id", columns: &["folder_id"] },
-            Field { name: "parent_id", columns: &["parent_id"] },
-            Field { name: "priority", columns: &["priority"] },
-            Field { name: "sort_order", columns: &["sort_order"] },
-            Field { name: "links", columns: &["links"] },
-            Field { name: "deleted_at", columns: &["deleted_at"] },
-            Field { name: "created_at", columns: &["created_at"] },
-            Field { name: "status", columns: &["status", "completed_at"] },
+            Field {
+                name: "title",
+                columns: &["title"],
+            },
+            Field {
+                name: "subtitle",
+                columns: &["subtitle"],
+            },
+            Field {
+                name: "folder_id",
+                columns: &["folder_id"],
+            },
+            Field {
+                name: "parent_id",
+                columns: &["parent_id"],
+            },
+            Field {
+                name: "priority",
+                columns: &["priority"],
+            },
+            Field {
+                name: "sort_order",
+                columns: &["sort_order"],
+            },
+            Field {
+                name: "links",
+                columns: &["links"],
+            },
+            Field {
+                name: "deleted_at",
+                columns: &["deleted_at"],
+            },
+            Field {
+                name: "created_at",
+                columns: &["created_at"],
+            },
+            Field {
+                name: "status",
+                columns: &["status", "completed_at"],
+            },
         ],
         parent: None,
     },
@@ -113,12 +143,30 @@ pub const ENTITIES: &[EntityMap] = &[
         key: "{row}.id",
         covers: None,
         fields: &[
-            Field { name: "name", columns: &["name"] },
-            Field { name: "color", columns: &["color"] },
-            Field { name: "icon", columns: &["icon"] },
-            Field { name: "sort_order", columns: &["sort_order"] },
-            Field { name: "deleted_at", columns: &["deleted_at"] },
-            Field { name: "created_at", columns: &["created_at"] },
+            Field {
+                name: "name",
+                columns: &["name"],
+            },
+            Field {
+                name: "color",
+                columns: &["color"],
+            },
+            Field {
+                name: "icon",
+                columns: &["icon"],
+            },
+            Field {
+                name: "sort_order",
+                columns: &["sort_order"],
+            },
+            Field {
+                name: "deleted_at",
+                columns: &["deleted_at"],
+            },
+            Field {
+                name: "created_at",
+                columns: &["created_at"],
+            },
         ],
         parent: None,
     },
@@ -128,7 +176,10 @@ pub const ENTITIES: &[EntityMap] = &[
         lifecycle: Lifecycle::CreateOnly,
         key: "{row}.name",
         covers: None,
-        fields: &[Field { name: "created_at", columns: &["created_at"] }],
+        fields: &[Field {
+            name: "created_at",
+            columns: &["created_at"],
+        }],
         parent: None,
     },
     EntityMap {
@@ -205,7 +256,10 @@ pub const ENTITIES: &[EntityMap] = &[
         lifecycle: Lifecycle::Row,
         key: "{row}.page_id || '/' || {row}.occurrence_date",
         covers: None,
-        fields: &[Field { name: "clone_id", columns: &["clone_id"] }],
+        fields: &[Field {
+            name: "clone_id",
+            columns: &["clone_id"],
+        }],
         parent: PAGE_PARENT,
     },
     EntityMap {

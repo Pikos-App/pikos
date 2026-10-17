@@ -48,11 +48,16 @@ async fn synced_state(pool: &SqlitePool) -> State {
             .parent
             .as_ref()
             .map_or("NULL".to_owned(), |p| format!("t.{}", p.column));
-        let covers = entity.covers.map_or("1".to_owned(), |c| c.replace("{row}", "t"));
+        let covers = entity
+            .covers
+            .map_or("1".to_owned(), |c| c.replace("{row}", "t"));
         let sql = format!(
             "SELECT {} AS key, {parent} AS parent{} FROM {} AS t WHERE {covers}",
             entity.key.replace("{row}", "t"),
-            selected.iter().map(|s| format!(", {s}")).collect::<String>(),
+            selected
+                .iter()
+                .map(|s| format!(", {s}"))
+                .collect::<String>(),
             entity.table,
         );
 
@@ -76,11 +81,13 @@ async fn synced_state(pool: &SqlitePool) -> State {
 }
 
 async fn exists(pool: &SqlitePool, table: &str, id: &str) -> bool {
-    sqlx::query_scalar(&format!("SELECT EXISTS (SELECT 1 FROM {table} WHERE id = ?)")) // sql-ok: table names from the manifest
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(&format!(
+        "SELECT EXISTS (SELECT 1 FROM {table} WHERE id = ?)"
+    )) // sql-ok: table names from the manifest
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 fn unquote(quoted: &str) -> Option<&str> {
@@ -107,7 +114,11 @@ async fn nulled_by_purge(
     after == "NULL" && !exists(pool, parent, old_id).await
 }
 
-async fn expected(pool: &SqlitePool, before: &State, after: &State) -> BTreeMap<(Entity, String), Expected> {
+async fn expected(
+    pool: &SqlitePool,
+    before: &State,
+    after: &State,
+) -> BTreeMap<(Entity, String), Expected> {
     let mut expect = BTreeMap::new();
     let keys: BTreeSet<&(Entity, String)> = before.keys().chain(after.keys()).collect();
 
@@ -160,7 +171,12 @@ async fn captured(pool: &SqlitePool) -> BTreeMap<(Entity, String), Expected> {
                 .map(|e| e.entity)
                 .find(|e| e.prefix() == entity)
                 .unwrap();
-            let all = (1i64 << crate::replica::manifest::entity(entity).unwrap().fields.len()) - 1;
+            let all = (1i64
+                << crate::replica::manifest::entity(entity)
+                    .unwrap()
+                    .fields
+                    .len())
+                - 1;
             let op = match (deleted, fields) {
                 (true, _) => Expected::Removed,
                 (false, f) if f == all && f != 0 => Expected::Created,
@@ -191,12 +207,20 @@ where
     let got = captured(pool).await;
     // A change that rewrites every field can't be told from a creation by the mask alone.
     for (key, op) in want.iter_mut() {
-        let all = (1i64 << crate::replica::manifest::entity(key.0).unwrap().fields.len()) - 1;
+        let all = (1i64
+            << crate::replica::manifest::entity(key.0)
+                .unwrap()
+                .fields
+                .len())
+            - 1;
         if *op == Expected::Changed(all) && got.get(key) == Some(&Expected::Created) {
             *op = Expected::Created;
         }
     }
-    assert_eq!(got, want, "{label}: captured changes differ from what changed");
+    assert_eq!(
+        got, want,
+        "{label}: captured changes differ from what changed"
+    );
     result
 }
 
@@ -263,7 +287,10 @@ async fn every_page_and_folder_writer_captures_exactly_what_it_changed() {
     })
     .await;
     let folder_order = [other.id.clone(), folder.id.clone()];
-    check(p, "reorder folders", || reorder_folders_impl(p, &folder_order)).await;
+    check(p, "reorder folders", || {
+        reorder_folders_impl(p, &folder_order)
+    })
+    .await;
 
     let groceries = check(p, "create page with tags in a folder", || {
         create_page_impl(
@@ -276,7 +303,10 @@ async fn every_page_and_folder_writer_captures_exactly_what_it_changed() {
         )
     })
     .await;
-    let laundry = check(p, "create second page", || create_page_impl(p, page("Laundry"))).await;
+    let laundry = check(p, "create second page", || {
+        create_page_impl(p, page("Laundry"))
+    })
+    .await;
     let child = check(p, "create child page", || {
         create_page_impl(
             p,
@@ -365,21 +395,33 @@ async fn every_page_and_folder_writer_captures_exactly_what_it_changed() {
     })
     .await;
     let just_child = [child.id.clone()];
-    check(p, "reorder pages", || reorder_pages_impl(p, None, &just_child)).await;
+    check(p, "reorder pages", || {
+        reorder_pages_impl(p, None, &just_child)
+    })
+    .await;
     let just_laundry = [laundry.id.clone()];
     let top = Placement::default();
     check(p, "move pages", || move_pages(p, &just_laundry, &top)).await;
 
     check(p, "trash page", || soft_delete_page_impl(p, &laundry.id)).await;
     check(p, "restore page", || restore_page_impl(p, &laundry.id)).await;
-    check(p, "trash folder", || soft_delete_folder_impl(p, folder.id.clone())).await;
-    check(p, "restore folder", || restore_folder_impl(p, folder.id.clone())).await;
+    check(p, "trash folder", || {
+        soft_delete_folder_impl(p, folder.id.clone())
+    })
+    .await;
+    check(p, "restore folder", || {
+        restore_folder_impl(p, folder.id.clone())
+    })
+    .await;
 
     check(p, "purge page with a child page", || {
         hard_delete_page_impl(p, &groceries.id)
     })
     .await;
-    check(p, "purge folder", || delete_folder_impl(p, other.id.clone())).await;
+    check(p, "purge folder", || {
+        delete_folder_impl(p, other.id.clone())
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -415,14 +457,29 @@ async fn every_schedule_recurrence_reminder_and_focus_writer_captures_exactly_wh
     })
     .await;
     let reminder = check(p, "add reminder", || create_page_reminder(p, &task.id, 15)).await;
-    check(p, "remove reminder", || delete_page_reminder(p, &reminder.id)).await;
-    check(p, "add focus session", || {
-        create_focus_session(p, &task.id, "2026-10-16T09:00:00", "2026-10-16T09:25:00", 1500)
+    check(p, "remove reminder", || {
+        delete_page_reminder(p, &reminder.id)
     })
     .await;
-    check(p, "unschedule", || delete_page_schedule_impl(p, block.id.clone())).await;
+    check(p, "add focus session", || {
+        create_focus_session(
+            p,
+            &task.id,
+            "2026-10-16T09:00:00",
+            "2026-10-16T09:25:00",
+            1500,
+        )
+    })
+    .await;
+    check(p, "unschedule", || {
+        delete_page_schedule_impl(p, block.id.clone())
+    })
+    .await;
 
-    let standup = check(p, "create recurring page", || create_page_impl(p, page("Standup"))).await;
+    let standup = check(p, "create recurring page", || {
+        create_page_impl(p, page("Standup"))
+    })
+    .await;
     let rule = check(p, "make it repeat", || {
         create_recurrence_rule_impl(
             p,
@@ -514,7 +571,10 @@ async fn every_schedule_recurrence_reminder_and_focus_writer_captures_exactly_wh
         )
     })
     .await;
-    check(p, "stop repeating", || delete_recurrence_rule_impl(p, &rule.id)).await;
+    check(p, "stop repeating", || {
+        delete_recurrence_rule_impl(p, &rule.id)
+    })
+    .await;
     check(p, "purge the page and everything under it", || {
         hard_delete_page_impl(p, &task.id)
     })

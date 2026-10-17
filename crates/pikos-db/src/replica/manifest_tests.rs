@@ -20,17 +20,15 @@ async fn columns(pool: &SqlitePool, table: &str) -> BTreeSet<String> {
 async fn foreign_keys(pool: &SqlitePool) -> Vec<(String, String, String, String)> {
     let mut keys = Vec::new();
     for table in TABLES {
-        let rows: Vec<(String, String, String)> = sqlx::query_as(
-            r#"SELECT "from", "table", on_delete FROM pragma_foreign_key_list(?)"#,
-        )
-        .bind(table.table)
-        .fetch_all(pool)
-        .await
-        .unwrap();
-        keys.extend(
-            rows.into_iter()
-                .map(|(column, parent, on_delete)| (table.table.to_owned(), column, parent, on_delete)),
-        );
+        let rows: Vec<(String, String, String)> =
+            sqlx::query_as(r#"SELECT "from", "table", on_delete FROM pragma_foreign_key_list(?)"#)
+                .bind(table.table)
+                .fetch_all(pool)
+                .await
+                .unwrap();
+        keys.extend(rows.into_iter().map(|(column, parent, on_delete)| {
+            (table.table.to_owned(), column, parent, on_delete)
+        }));
     }
     keys
 }
@@ -114,8 +112,11 @@ fn entities_sharing_a_table_split_its_rows_or_its_columns() {
                 continue;
             }
             let split_rows = a.covers.is_some() && b.covers.is_some();
-            let a_columns: HashSet<&str> =
-                a.fields.iter().flat_map(|f| f.columns.iter().copied()).collect();
+            let a_columns: HashSet<&str> = a
+                .fields
+                .iter()
+                .flat_map(|f| f.columns.iter().copied())
+                .collect();
             let split_columns = b
                 .fields
                 .iter()

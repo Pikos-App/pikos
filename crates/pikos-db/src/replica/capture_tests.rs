@@ -40,14 +40,13 @@ async fn clear_ops(pool: &SqlitePool) {
 
 /// The row's clock slots, creation first, and its tombstone clock.
 async fn clocks(pool: &SqlitePool, entity: Entity, key: &str) -> (Vec<String>, Option<String>) {
-    let (packed, tomb): (String, Option<String>) = sqlx::query_as(
-        "SELECT clocks, tomb FROM replica_clocks WHERE entity = ? AND key = ?",
-    )
-    .bind(entity.prefix())
-    .bind(key)
-    .fetch_one(pool)
-    .await
-    .unwrap();
+    let (packed, tomb): (String, Option<String>) =
+        sqlx::query_as("SELECT clocks, tomb FROM replica_clocks WHERE entity = ? AND key = ?")
+            .bind(entity.prefix())
+            .bind(key)
+            .fetch_one(pool)
+            .await
+            .unwrap();
     let slots = packed
         .as_bytes()
         .chunks(20)
@@ -141,8 +140,11 @@ async fn an_edit_marks_only_the_fields_it_changed() {
         .unwrap();
     let base = start(&pool).await.unwrap().base_clock.unwrap().to_string();
 
-    exec(&pool, "UPDATE pages SET title = 'Groceries, Saturday', priority = 2 WHERE id = 'p1'")
-        .await;
+    exec(
+        &pool,
+        "UPDATE pages SET title = 'Groceries, Saturday', priority = 2 WHERE id = 'p1'",
+    )
+    .await;
 
     let page = op(&pool, Entity::Page, "p1").await.unwrap();
     assert_eq!(
@@ -161,7 +163,10 @@ async fn an_edit_marks_only_the_fields_it_changed() {
         };
         assert_eq!(&slots[i + 1], expected, "{}", field.name);
     }
-    assert_eq!(slots[0], base, "a row from before sync started was born at the base clock");
+    assert_eq!(
+        slots[0], base,
+        "a row from before sync started was born at the base clock"
+    );
 }
 
 #[tokio::test]
@@ -172,10 +177,17 @@ async fn a_second_edit_adds_to_the_pending_fields_and_moves_the_clock() {
         .unwrap();
     clear_ops(&pool).await;
 
-    exec(&pool, "UPDATE pages SET title = 'Groceries, Saturday' WHERE id = 'p1'").await;
+    exec(
+        &pool,
+        "UPDATE pages SET title = 'Groceries, Saturday' WHERE id = 'p1'",
+    )
+    .await;
     let first = op(&pool, Entity::Page, "p1").await.unwrap();
-    exec(&pool, "UPDATE pages SET status = 'done', completed_at = '2026-10-16T09:00:00' WHERE id = 'p1'")
-        .await;
+    exec(
+        &pool,
+        "UPDATE pages SET status = 'done', completed_at = '2026-10-16T09:00:00' WHERE id = 'p1'",
+    )
+    .await;
     let second = op(&pool, Entity::Page, "p1").await.unwrap();
 
     assert_eq!(
@@ -206,7 +218,11 @@ async fn derived_and_device_only_columns_capture_nothing() {
         .await
         .unwrap();
     assert_eq!(ops, 0);
-    assert_eq!(meta(&pool).await.unwrap().hlc, hlc, "the clock moves only on a capture");
+    assert_eq!(
+        meta(&pool).await.unwrap().hlc,
+        hlc,
+        "the clock moves only on a capture"
+    );
 }
 
 #[tokio::test]
@@ -217,7 +233,11 @@ async fn a_body_edit_is_its_own_record() {
         .unwrap();
     clear_ops(&pool).await;
 
-    exec(&pool, r#"UPDATE pages SET content = '{"type":"doc"}' WHERE id = 'p1'"#).await;
+    exec(
+        &pool,
+        r#"UPDATE pages SET content = '{"type":"doc"}' WHERE id = 'p1'"#,
+    )
+    .await;
 
     assert_eq!(op(&pool, Entity::Page, "p1").await, None);
     assert_eq!(
@@ -237,7 +257,9 @@ async fn page_with_children(pool: &SqlitePool) {
     )
     .await
     .unwrap();
-    insert_test_page(pool, TestPage::new("child", "Milk")).await.unwrap();
+    insert_test_page(pool, TestPage::new("child", "Milk"))
+        .await
+        .unwrap();
     exec(pool, "UPDATE pages SET parent_id = 'p1' WHERE id = 'child'").await;
     exec(
         pool,
@@ -276,11 +298,12 @@ async fn purging_a_page_sends_its_tombstone_and_none_for_what_cascades() {
     let (_, tomb) = clocks(&pool, Entity::Page, "p1").await;
     assert_eq!(tomb, Some(page.clock));
 
-    let others: Vec<(String, String)> =
-        sqlx::query_as("SELECT entity, key FROM replica_ops WHERE NOT (entity = 'page' AND key = 'p1')")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let others: Vec<(String, String)> = sqlx::query_as(
+        "SELECT entity, key FROM replica_ops WHERE NOT (entity = 'page' AND key = 'p1')",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
     assert_eq!(
         others,
         vec![],
@@ -328,7 +351,12 @@ async fn removing_a_child_directly_sends_its_removal() {
     .await;
 
     assert!(op(&pool, Entity::Reminder, "r1").await.unwrap().deleted);
-    assert!(op(&pool, Entity::PageTag, "p1/errands").await.unwrap().deleted);
+    assert!(
+        op(&pool, Entity::PageTag, "p1/errands")
+            .await
+            .unwrap()
+            .deleted
+    );
 }
 
 #[tokio::test]
@@ -351,7 +379,11 @@ async fn an_override_is_named_by_its_page_and_date_and_goes_with_its_rule() {
     assert_eq!(op(&pool, Entity::Schedule, "o1").await, None);
     clear_ops(&pool).await;
 
-    exec(&pool, "DELETE FROM page_recurrence_rules WHERE id = 'rule-here'").await;
+    exec(
+        &pool,
+        "DELETE FROM page_recurrence_rules WHERE id = 'rule-here'",
+    )
+    .await;
 
     assert!(op(&pool, Entity::Rule, "p1").await.unwrap().deleted);
     assert_eq!(
@@ -366,11 +398,19 @@ async fn a_row_created_again_after_its_delete_is_live_with_a_fresh_clock() {
     let pool = started_pool().await;
     page_with_children(&pool).await;
     exec(&pool, "DELETE FROM skip_set").await;
-    exec(&pool, "INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-10-18')").await;
+    exec(
+        &pool,
+        "INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-10-18')",
+    )
+    .await;
     exec(&pool, "DELETE FROM skip_set WHERE page_id = 'p1'").await;
     let removed = op(&pool, Entity::Skipped, "p1/2026-10-18").await.unwrap();
 
-    exec(&pool, "INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-10-18')").await;
+    exec(
+        &pool,
+        "INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-10-18')",
+    )
+    .await;
 
     let readded = op(&pool, Entity::Skipped, "p1/2026-10-18").await.unwrap();
     assert!(removed.deleted);

@@ -86,7 +86,10 @@ async fn forgetting_drops_the_clocks_and_stops_capture_but_keeps_the_clock_movin
     assert_eq!(after.hlc, before.hlc);
 
     let rejoined = start(&pool).await.unwrap();
-    assert_ne!(rejoined.device_id, before.device_id, "it rejoins as a new device");
+    assert_ne!(
+        rejoined.device_id, before.device_id,
+        "it rejoins as a new device"
+    );
     assert!(rejoined.hlc > before.hlc);
 }
 
@@ -129,7 +132,11 @@ async fn an_uncaptured_transaction_writes_without_capture_and_leaves_no_marker()
         .execute(&pool)
         .await
         .unwrap();
-    assert_eq!(pending(&pool).await, 1, "the next local write is captured again");
+    assert_eq!(
+        pending(&pool).await,
+        1,
+        "the next local write is captured again"
+    );
 }
 
 #[tokio::test]
