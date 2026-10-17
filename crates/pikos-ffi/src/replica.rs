@@ -41,6 +41,15 @@ pub struct BuiltRecord {
     pub record: SyncRecord,
     pub store_name: String,
     pub built_at: String,
+    /// CloudKit's metadata for the record as last seen, from `save_system_fields`.
+    pub system_fields: Option<Vec<u8>>,
+}
+
+/// CloudKit's metadata for a record, change tag included, to keep with the workspace.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct SystemFields {
+    pub name: String,
+    pub data: Vec<u8>,
 }
 
 /// A record the transport stored, with the clock it was built at.
@@ -223,6 +232,7 @@ impl Workspace {
                     fields: from_map(&b.fields),
                 },
                 built_at: b.clock.to_string(),
+                system_fields: b.system_fields,
             })
             .collect())
     }
@@ -259,6 +269,18 @@ impl Workspace {
             changed: applied.changed as u32,
             held: applied.held as u32,
         })
+    }
+
+    /// Keeps CloudKit's metadata for records it saved or fetched.
+    pub async fn save_system_fields(
+        &self,
+        records: Vec<SystemFields>,
+    ) -> Result<(), WorkspaceError> {
+        let records = records
+            .into_iter()
+            .map(|r| Ok((parse_name(&r.name)?, r.data)))
+            .collect::<Result<Vec<_>, WorkspaceError>>()?;
+        Ok(pikos_db::replica::build::save_system_fields(&self.pool, &records).await?)
     }
 
     pub async fn engine_state(&self) -> Result<Option<Vec<u8>>, WorkspaceError> {

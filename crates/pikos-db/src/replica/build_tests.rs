@@ -112,3 +112,18 @@ async fn a_purged_page_builds_its_tombstone_and_its_cascaded_children_build_noth
     );
     assert!(!pending(&pool, 10).await.unwrap().contains(&reminder));
 }
+
+#[tokio::test]
+async fn the_transports_metadata_is_kept_and_built_with_the_record() {
+    let pool = started().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+
+    super::save_system_fields(&pool, &[(page("p1"), b"change tag".to_vec())])
+        .await
+        .unwrap();
+    let built = build(&pool, &[page("p1")]).await.unwrap();
+
+    assert_eq!(built[0].system_fields.as_deref(), Some(&b"change tag"[..]));
+}

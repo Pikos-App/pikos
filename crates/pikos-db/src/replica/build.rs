@@ -51,6 +51,8 @@ pub struct Built {
     pub name: RecordName,
     pub fields: FieldMap,
     pub clock: Hlc,
+    /// The transport's metadata for the record as it last saw it, if it kept any.
+    pub system_fields: Option<Vec<u8>>,
 }
 
 /// Builds each named record from the live row and its clocks. A row that's gone builds its
@@ -87,10 +89,19 @@ pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Bui
                     name: name.clone(),
                     row,
                 };
+                let system_fields: Option<Vec<u8>> = sqlx::query_scalar(
+                    "SELECT system_fields FROM replica_clocks WHERE entity = ? AND key = ?",
+                )
+                .bind(name.entity.prefix())
+                .bind(&name.key)
+                .fetch_optional(pool)
+                .await?
+                .flatten();
                 built.push(Built {
                     name: name.clone(),
                     fields: codec::encode(&record, &shape(entity)),
                     clock: op_clock,
+                    system_fields,
                 });
             }
         }
@@ -248,6 +259,25 @@ async fn drop_op(pool: &SqlitePool, name: &RecordName) -> AppResult<()> {
         .bind(&name.key)
         .execute(pool)
         .await?;
+    Ok(())
+}
+
+/// Keeps the transport's metadata for records it saved or fetched, such as CloudKit's change tag,
+/// so the next save builds on the server's copy instead of being refused as stale after a relaunch.
+pub async fn save_system_fields(
+    pool: &SqlitePool,
+    records: &[(RecordName, Vec<u8>)],
+) -> AppResult<()> {
+    let mut tx = pool.begin().await?;
+    for (name, data) in records {
+        sqlx::query("UPDATE replica_clocks SET system_fields = ? WHERE entity = ? AND key = ?")
+            .bind(data)
+            .bind(name.entity.prefix())
+            .bind(&name.key)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 

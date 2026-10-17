@@ -35,7 +35,8 @@ public actor SyncCoordinator {
             let outgoing = try await store.buildRecords(names: [name]).first
         else { return nil }
         inFlight[outgoing.storeName] = outgoing
-        if let copy = serverCopies[outgoing.storeName] {
+        let saved = outgoing.systemFields.flatMap(RecordCodec.record(fromSystemFields:))
+        if let copy = serverCopies[outgoing.storeName] ?? saved {
             RecordCodec.fill(copy, with: outgoing.record)
             return copy
         }
@@ -45,13 +46,16 @@ public actor SyncCoordinator {
     /// CloudKit stored these. Returns the ids edited here since they were built, to queue again.
     public func saved(_ records: [CKRecord]) async throws -> [CKRecord.ID] {
         var sent: [(name: String, builtAt: String)] = []
+        var metadata: [(name: String, data: Data)] = []
         for record in records {
             let storeName = record.recordID.recordName
             serverCopies[storeName] = record
             if let outgoing = inFlight.removeValue(forKey: storeName) {
                 sent.append((outgoing.record.name, outgoing.builtAt))
+                metadata.append((outgoing.record.name, RecordCodec.systemFields(of: record)))
             }
         }
+        try await store.saveSystemFields(metadata)
         let stillPending = Set(try await store.recordsSent(sent))
         return records
             .filter { record in names[record.recordID.recordName].map(stillPending.contains) ?? false }
@@ -84,15 +88,18 @@ public actor SyncCoordinator {
 
     public func fetched(_ records: [CKRecord]) async throws {
         var decoded: [SyncRecord] = []
+        var metadata: [(name: String, data: Data)] = []
         for record in records {
             serverCopies[record.recordID.recordName] = record
             if let sync = RecordCodec.decode(record) {
                 names[record.recordID.recordName] = sync.name
                 decoded.append(sync)
+                metadata.append((sync.name, RecordCodec.systemFields(of: record)))
             }
         }
         if !decoded.isEmpty {
             try await store.applyRecords(decoded)
+            try await store.saveSystemFields(metadata)
         }
     }
 

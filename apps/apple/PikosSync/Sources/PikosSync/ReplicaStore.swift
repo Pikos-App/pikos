@@ -37,11 +37,15 @@ public struct OutgoingRecord: Equatable, Sendable {
     public var record: SyncRecord
     public var storeName: String
     public var builtAt: String
+    /// CloudKit's own metadata for the record as last seen, change tag included, so a save builds on
+    /// the server's copy instead of being refused as stale.
+    public var systemFields: Data?
 
-    public init(record: SyncRecord, storeName: String, builtAt: String) {
+    public init(record: SyncRecord, storeName: String, builtAt: String, systemFields: Data? = nil) {
         self.record = record
         self.storeName = storeName
         self.builtAt = builtAt
+        self.systemFields = systemFields
     }
 }
 
@@ -64,4 +68,6 @@ public protocol ReplicaStore: Sendable {
     func setEngineState(_ state: Data) async throws
     /// Forgets tombstones past retention and returns them, to delete from CloudKit too.
     func expire() async throws -> [RecordAddress]
+    /// Keeps CloudKit's metadata for records it saved or sent, by record name.
+    func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws
 }

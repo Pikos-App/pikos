@@ -975,6 +975,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?) async throws  -> BodySave
     
+    /**
+     * Keeps CloudKit's metadata for records it saved or fetched.
+     */
+    func saveSystemFields(records: [SystemFields]) async throws 
+    
     func setEngineState(state: Data) async throws 
     
     func setSyncPaused(paused: Bool) async throws 
@@ -2136,6 +2141,25 @@ open func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: Stri
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBodySave_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Keeps CloudKit's metadata for records it saved or fetched.
+     */
+open func saveSystemFields(records: [SystemFields])async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_save_system_fields(
+                        self.uniffiCloneHandle(),FfiConverterSequenceTypeSystemFields.lower(records)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -4163,13 +4187,21 @@ public struct BuiltRecord: Equatable, Hashable {
     public var record: SyncRecord
     public var storeName: String
     public var builtAt: String
+    /**
+     * CloudKit's metadata for the record as last seen, from `save_system_fields`.
+     */
+    public var systemFields: Data?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(record: SyncRecord, storeName: String, builtAt: String) {
+    public init(record: SyncRecord, storeName: String, builtAt: String, 
+        /**
+         * CloudKit's metadata for the record as last seen, from `save_system_fields`.
+         */systemFields: Data?) {
         self.record = record
         self.storeName = storeName
         self.builtAt = builtAt
+        self.systemFields = systemFields
     }
 
     
@@ -4190,7 +4222,8 @@ public struct FfiConverterTypeBuiltRecord: FfiConverterRustBuffer {
             try BuiltRecord(
                 record: FfiConverterTypeSyncRecord.read(from: &buf), 
                 storeName: FfiConverterString.read(from: &buf), 
-                builtAt: FfiConverterString.read(from: &buf)
+                builtAt: FfiConverterString.read(from: &buf), 
+                systemFields: FfiConverterOptionData.read(from: &buf)
         )
     }
 
@@ -4198,6 +4231,7 @@ public struct FfiConverterTypeBuiltRecord: FfiConverterRustBuffer {
         FfiConverterTypeSyncRecord.write(value.record, into: &buf)
         FfiConverterString.write(value.storeName, into: &buf)
         FfiConverterString.write(value.builtAt, into: &buf)
+        FfiConverterOptionData.write(value.systemFields, into: &buf)
     }
 }
 
@@ -7262,6 +7296,63 @@ public func FfiConverterTypeSyncSummary_lift(_ buf: RustBuffer) throws -> SyncSu
 #endif
 public func FfiConverterTypeSyncSummary_lower(_ value: SyncSummary) -> RustBuffer {
     return FfiConverterTypeSyncSummary.lower(value)
+}
+
+
+/**
+ * CloudKit's metadata for a record, change tag included, to keep with the workspace.
+ */
+public struct SystemFields: Equatable, Hashable {
+    public var name: String
+    public var data: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, data: Data) {
+        self.name = name
+        self.data = data
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SystemFields: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSystemFields: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SystemFields {
+        return
+            try SystemFields(
+                name: FfiConverterString.read(from: &buf), 
+                data: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SystemFields, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterData.write(value.data, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSystemFields_lift(_ buf: RustBuffer) throws -> SystemFields {
+    return try FfiConverterTypeSystemFields.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSystemFields_lower(_ value: SystemFields) -> RustBuffer {
+    return FfiConverterTypeSystemFields.lower(value)
 }
 
 
@@ -10349,6 +10440,31 @@ fileprivate struct FfiConverterSequenceTypeSyncRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSystemFields: FfiConverterRustBuffer {
+    typealias SwiftType = [SystemFields]
+
+    public static func write(_ value: [SystemFields], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSystemFields.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SystemFields] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SystemFields]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSystemFields.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTimedBlock: FfiConverterRustBuffer {
     typealias SwiftType = [TimedBlock]
 
@@ -10850,6 +10966,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged() != 63885) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_save_system_fields() != 44227) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_engine_state() != 7982) {

@@ -27,7 +27,12 @@ private actor FakeStore: ReplicaStore {
             guard let record = records[name],
                 let address = pending.first(where: { $0.name == name })
             else { return nil }
-            return OutgoingRecord(record: record, storeName: address.storeName, builtAt: "clock-1")
+            return OutgoingRecord(
+                record: record,
+                storeName: address.storeName,
+                builtAt: "clock-1",
+                systemFields: systemFields[name]
+            )
         }
     }
 
@@ -49,6 +54,12 @@ private actor FakeStore: ReplicaStore {
     func expire() async throws -> [RecordAddress] {
         defer { expiring = [] }
         return expiring
+    }
+
+    private(set) var systemFields: [String: Data] = [:]
+
+    func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {
+        for (name, data) in fields { systemFields[name] = data }
     }
 }
 
@@ -170,5 +181,25 @@ final class SyncCoordinatorTests: XCTestCase {
         let ids = try await coordinator.expired()
 
         XCTAssertEqual(ids, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
+    }
+
+    func testASavedRecordsCloudKitMetadataIsKeptAndANewCoordinatorBuildsOnIt() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        let first = SyncCoordinator(store: store, zone: workspaceZone)
+        let ids = try await first.pending()
+        let sentBuilt = try await first.record(for: ids[0])
+        let sent = try XCTUnwrap(sentBuilt)
+        _ = try await first.saved([sent])
+
+        let afterRelaunch = SyncCoordinator(store: store, zone: workspaceZone)
+        let againIds = try await afterRelaunch.pending()
+        let rebuiltBuilt = try await afterRelaunch.record(for: againIds[0])
+        let rebuilt = try XCTUnwrap(rebuiltBuilt)
+
+        let kept = await store.systemFields["page:p1"]
+        XCTAssertNotNil(kept)
+        XCTAssertEqual(rebuilt.recordID, sent.recordID)
+        XCTAssertEqual(rebuilt.encryptedValues["title_0"] as? String, "Groceries")
     }
 }

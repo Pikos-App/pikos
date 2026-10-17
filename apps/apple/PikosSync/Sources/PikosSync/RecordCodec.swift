@@ -37,6 +37,22 @@ public enum RecordCodec {
         }
     }
 
+    /// CloudKit's metadata for a record, change tag included, without its fields.
+    public static func systemFields(of record: CKRecord) -> Data {
+        let archiver = NSKeyedArchiver(requiringSecureCoding: true)
+        record.encodeSystemFields(with: archiver)
+        archiver.finishEncoding()
+        return archiver.encodedData
+    }
+
+    /// A record rebuilt from saved metadata, empty of fields, or nil when the data doesn't read.
+    public static func record(fromSystemFields data: Data) -> CKRecord? {
+        guard let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data) else { return nil }
+        unarchiver.requiresSecureCoding = true
+        defer { unarchiver.finishDecoding() }
+        return CKRecord(coder: unarchiver)
+    }
+
     /// The record a fetched CloudKit record carries, or nil for one that isn't a workspace record.
     public static func decode(_ record: CKRecord) -> SyncRecord? {
         let values = record.encryptedValues
