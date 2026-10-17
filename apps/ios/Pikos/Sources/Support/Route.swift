@@ -82,6 +82,22 @@ final class Route {
     /// Text to open search with, from a `pikos://search` link. The search screen takes it when it appears.
     var searchPrefill = ""
 
+    /// Search is put in place rather than pushed: its field sits at the bottom where the bar's button
+    /// was, so the keyboard rising with it is the only motion. `replacing` is for the three panels,
+    /// where it takes the detail column instead of stacking on the page there.
+    func openSearch(replacing: Bool = false) {
+        isSwitcherPresented = false
+        withTransaction(\.disablesAnimations, true) {
+            if replacing { path = [.search] } else { path.append(.search) }
+        }
+    }
+
+    /// Taken away as it was put in place, with no slide back.
+    func closeSearch() {
+        guard path.last == .search else { return }
+        withTransaction(\.disablesAnimations, true) { _ = path.removeLast() }
+    }
+
     /// The page a `?focus=1` link opened, whose timer starts when its editor appears.
     var focusPageId: String?
 

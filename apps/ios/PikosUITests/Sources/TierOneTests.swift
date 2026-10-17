@@ -15,6 +15,15 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Calendar"].firstMatch.exists, "and the way to the calendar")
     }
 
+    func testSelectIsOfferedOnlyWhenThereIsAPageToSelect() {
+        XCTAssertTrue(app.staticTexts["Nothing here yet"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["Select"].exists, "an empty Today has nothing to select")
+
+        quickAdd("Buy milk today")
+        assertRowExists("Buy milk")
+        XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 5), "a page to select brings it back")
+    }
+
     func testScrollingTheCalendarDownShrinksTheBarAndTappingBringsItBack() {
         app.buttons["Calendar"].firstMatch.tap()
         let grid = app.scrollViews.firstMatch
@@ -122,12 +131,24 @@ final class TierOneTests: PikosUITestCase {
         app.buttons["Search"].firstMatch.tap()
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
-        field.tap()
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: field)
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [focused], timeout: 2), .completed,
+            "the field has the keyboard as search opens, without a tap of its own")
         field.typeText("quarterly")
 
-        XCTAssertTrue(
-            app.buttons["Quarterly review"].waitForExistence(timeout: Self.timeout),
-            "full-text search should find it")
+        let result = app.buttons["Quarterly review"]
+        XCTAssertTrue(result.waitForExistence(timeout: Self.timeout), "full-text search should find it")
+
+        result.tap()
+        XCTAssertTrue(textInput("Title").waitForExistence(timeout: Self.timeout), "a result opens its page")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(result.waitForExistence(timeout: Self.timeout), "and Back returns to the results")
+
+        app.navigationBars.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: field), "Back closes search")
+        XCTAssertTrue(app.buttons["Switch view"].firstMatch.isHittable, "onto the list it was opened from")
     }
 
     func testSearchSuggestsThePageLastOpenedBeforeAnythingIsTyped() {

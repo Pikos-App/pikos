@@ -88,7 +88,7 @@ struct CalendarScreen: View {
                     jumpPanel
                     ScrollView { jumpPanel }
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.opacity)
             } else if effectiveSpan == .day, !stripDayStrings.isEmpty {
                 WeekStrip(
                     days: stripDayStrings,
@@ -150,7 +150,7 @@ struct CalendarScreen: View {
                     reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
             }
         }
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy, value: dayStrings.first)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .pkQuick, value: dayStrings.first)
         // The swipe below is a gesture VoiceOver does not pass through; the
         // chevrons remain, and these put the same two moves on the rotor so
         // the grid itself can be paged without hunting for them.
@@ -181,7 +181,7 @@ struct CalendarScreen: View {
             Text(question.message)
         }
         .pageActionSheets($actions)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: isJumping)
+        .animation(reduceMotion ? nil : .pkQuick, value: isJumping)
         .onChange(of: route.weekFocus) { _, focus in
             guard let focus else { return }
             steppedForward = focus > anchor

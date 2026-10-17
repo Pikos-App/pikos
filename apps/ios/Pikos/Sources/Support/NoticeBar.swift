@@ -42,7 +42,7 @@ struct NoticeBar: View {
         // navigation layer over content, which is the one place the new
         // design language puts glass.
         .floatingSurface(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .transition(.opacity)
         .accessibilityElement(children: .contain)
         // Keyed on the notice, so a second one restarts the countdown instead
         // of inheriting the first one's remaining time.
@@ -87,7 +87,7 @@ private struct BottomChrome<Floating: View>: ViewModifier {
                         // replaced it, and clearing that would cut its window
                         // short.
                         if store.notice == notice {
-                            withAnimation(reduceMotion ? nil : .snappy) { store.notice = nil }
+                            withAnimation(reduceMotion ? nil : .pkQuick) { store.notice = nil }
                         }
                     }
                 }
@@ -96,9 +96,7 @@ private struct BottomChrome<Floating: View>: ViewModifier {
             .padding(.horizontal, 16)
             .padding(.bottom, 4)
         }
-        // A dissolve under Reduce Motion: the slide is decoration, the
-        // sentence is the content.
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy, value: store.notice)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .pkQuick, value: store.notice)
         // Said aloud as well as shown. A bar that appears for six seconds at
         // the bottom of the screen is one VoiceOver would only find by
         // sweeping down to it, and "Deleted — Undo" is exactly the sentence

@@ -28,6 +28,8 @@ struct SearchScreen: View {
     @State private var recents: [PageSummary] = []
     @State private var hasLoadedRecents = false
     @State private var knownTags: [String] = []
+    @State private var isSearchActive = false
+    @State private var hasActivated = false
 
     private var fullQuery: String {
         (tokens.map(\.query) + [query.trimmingCharacters(in: .whitespaces)])
@@ -40,7 +42,8 @@ struct SearchScreen: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if fullQuery.isEmpty {
-                    suggestedPages
+                    // All at once: recents landing under chips already drawn pushed them down while the keyboard rose.
+                    if hasLoadedRecents { suggestedPages }
                 } else {
                     matches
                 }
@@ -52,12 +55,37 @@ struct SearchScreen: View {
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.surfacePrimary, for: .navigationBar)
-        .searchable(text: $query, tokens: $tokens, placement: Self.fieldPlacement, prompt: "Search pages") { token in
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    route.closeSearch()
+                } label: {
+                    Image(systemName: "chevron.backward")
+                }
+                .accessibilityLabel("Back")
+            }
+        }
+        .searchable(
+            text: $query, tokens: $tokens, isPresented: $isSearchActive, placement: Self.fieldPlacement,
+            prompt: "Search pages"
+        ) { token in
             Label(token.label, systemImage: token.systemImage)
         }
-        .focusSearchOnFirstAppear()
+        .keepsNavigationBarWhileSearching()
+        // The field's own close button leaves search, rather than leaving a screen with nothing to do.
+        // A turn later, because a path change made during the field's own dismissal is dropped.
+        .onChange(of: isSearchActive) { wasActive, isActive in
+            if wasActive && !isActive { Task { route.closeSearch() } }
+        }
         .noticeOverlay()
         .onAppear {
+            // The keyboard is up the first time search opens, as the desktop palette takes focus;
+            // coming back from a page opened here leaves it down over the results.
+            if !hasActivated {
+                hasActivated = true
+                isSearchActive = true
+            }
             guard !route.searchPrefill.isEmpty else { return }
             query = route.searchPrefill
             route.searchPrefill = ""
@@ -106,7 +134,7 @@ struct SearchScreen: View {
                     scheduledStart: page.scheduledStart, scheduledEnd: page.scheduledEnd,
                     titleTerms: [], detail: nil)
             }
-        } else if hasLoadedRecents {
+        } else {
             sectionLabel("Recent")
             Text("No recent pages")
                 .font(.pkBodySm)
@@ -400,33 +428,16 @@ extension SearchHit {
     }
 }
 
-// MARK: - Focus
+// MARK: - Presentation
 
 private extension View {
-    /// Puts the keyboard up the first time search opens, as the desktop palette
-    /// takes focus. Only on iOS 18, where a search field's focus can be set.
+    /// The bar hiding as the field activates slid the results up just after search opened.
     @ViewBuilder
-    func focusSearchOnFirstAppear() -> some View {
-        if #available(iOS 18.0, *) {
-            modifier(FocusSearchOnFirstAppear())
+    func keepsNavigationBarWhileSearching() -> some View {
+        if #available(iOS 17.1, *) {
+            searchPresentationToolbarBehavior(.avoidHidingContent)
         } else {
             self
         }
-    }
-}
-
-@available(iOS 18.0, *)
-private struct FocusSearchOnFirstAppear: ViewModifier {
-    @FocusState private var isFocused: Bool
-    @State private var hasFocused = false
-
-    func body(content: Content) -> some View {
-        content
-            .searchFocused($isFocused)
-            .task {
-                guard !hasFocused else { return }
-                hasFocused = true
-                isFocused = true
-            }
     }
 }

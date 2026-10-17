@@ -35,6 +35,7 @@ struct CalendarGrid: View {
     @State private var drops = 0
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(PageDragSession.self) private var drag
 
     /// A percentage rather than the height itself, because `@ScaledMetric` takes its base from a
@@ -136,7 +137,7 @@ struct CalendarGrid: View {
                         .foregroundStyle(.textTertiary)
                     if hidden > 0 || allDayExpanded {
                         Button(allDayExpanded ? "less" : "+\(hidden)") {
-                            withAnimation(.snappy) { allDayExpanded.toggle() }
+                            withAnimation(reduceMotion ? nil : .pkQuick) { allDayExpanded.toggle() }
                         }
                         .font(.pkUISm)
                         .foregroundStyle(.textAction)
