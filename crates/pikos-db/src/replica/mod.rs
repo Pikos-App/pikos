@@ -726,3 +726,10 @@ mod capture_writers_tests;
 #[cfg(test)]
 #[path = "convergence_tests.rs"]
 mod convergence_tests;
+
+#[cfg(test)]
+pub(crate) mod two_devices;
+
+#[cfg(test)]
+#[path = "matrix_tests.rs"]
+mod matrix_tests;

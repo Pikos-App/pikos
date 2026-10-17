@@ -687,9 +687,12 @@ struct CloudKit {
     zones: BTreeMap<String, Zone>,
 }
 
+/// A record as the zone holds it, with its change tag.
+type Tagged = (RecordName, FieldMap, u64);
+
 #[derive(Default)]
 struct Zone {
-    records: BTreeMap<String, (RecordName, FieldMap, u64)>,
+    records: BTreeMap<String, Tagged>,
     seq: u64,
 }
 
@@ -717,12 +720,7 @@ impl CloudKit {
     }
 
     /// What changed in `zone` since `cursor`, shuffled, or None once the zone is gone.
-    fn changed_since(
-        &self,
-        zone: &str,
-        cursor: u64,
-        rng: &mut Rng,
-    ) -> Option<(Vec<(RecordName, FieldMap, u64)>, u64)> {
+    fn changed_since(&self, zone: &str, cursor: u64, rng: &mut Rng) -> Option<(Vec<Tagged>, u64)> {
         let zone = self.zones.get(zone)?;
         let mut changed: Vec<_> = zone
             .records
@@ -769,7 +767,8 @@ impl Phone {
     /// A launch: settle the zone among those the account holds, deleting this device's own when
     /// another wins, and pick fetching up from the saved state.
     async fn launch(&mut self, cloud: &mut CloudKit) {
-        let own = pikos_replica::zone::zone_name(&super::meta(&self.pool).await.unwrap().workspace_id);
+        let own =
+            pikos_replica::zone::zone_name(&super::meta(&self.pool).await.unwrap().workspace_id);
         let zones: Vec<String> = cloud.zones.keys().cloned().collect();
         let joined = super::join(&self.pool, &zones).await.unwrap();
         if joined != own {
@@ -955,6 +954,7 @@ async fn devices_editing_at_random_through_cloudkit_end_up_the_same() {
     }
 }
 
+// qa: CLOUD-110:2
 #[tokio::test]
 async fn devices_that_start_alone_settle_in_one_zone_through_refusals_and_failed_applies() {
     for seed in seeds() {

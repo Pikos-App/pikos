@@ -2400,6 +2400,7 @@ async fn update_content_refuses_markdown_the_editor_cannot_hold_and_writes_nothi
     assert_eq!(read["title"], "Trip");
 }
 
+// qa: CLOUD-116
 #[tokio::test]
 async fn sync_diff_passes_for_one_copy_and_exits_10_listing_what_two_workspaces_disagree_on() {
     let first = unique_db();

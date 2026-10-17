@@ -168,6 +168,7 @@ async fn forgetting_drops_the_clocks_and_stops_capture_but_keeps_the_clock_movin
     assert!(rejoined.hlc > before.hlc);
 }
 
+// qa: CLOUD-109
 #[tokio::test]
 async fn resetting_a_workspace_forgets_sync_rather_than_sending_its_deletes() {
     let pool = test_pool().await;

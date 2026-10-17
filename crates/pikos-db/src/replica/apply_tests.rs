@@ -1,56 +1,13 @@
-use std::collections::BTreeMap;
-
 use pikos_replica::codec::FieldMap;
 use pikos_replica::merge::Value;
 use pikos_replica::{Entity, RecordName, FORMAT_VERSION};
 use sqlx::SqlitePool;
 
-use super::{apply, Applied};
+use super::apply;
 use crate::replica::build::{build, pending, sent};
-use crate::replica::{meta, start, state};
+use crate::replica::two_devices::*;
+use crate::replica::{meta, start};
 use crate::*;
-
-async fn device() -> SqlitePool {
-    let pool = test_pool().await;
-    start(&pool).await.unwrap();
-    pool
-}
-
-/// What a transport carries from `from` to `to` in one round: every pending record, applied in
-/// one batch, then reported sent.
-async fn send(from: &SqlitePool, to: &SqlitePool) -> Applied {
-    let names = pending(from, 100_000).await.unwrap();
-    let built = build(from, &names).await.unwrap();
-    let records: Vec<(RecordName, FieldMap)> = built
-        .iter()
-        .map(|b| (b.name.clone(), b.fields.clone()))
-        .collect();
-    let applied = apply(to, &records).await.unwrap();
-    let acked: Vec<_> = built.iter().map(|b| (b.name.clone(), b.clock)).collect();
-    sent(from, &acked).await.unwrap();
-    applied
-}
-
-async fn converge(a: &SqlitePool, b: &SqlitePool) {
-    for _ in 0..3 {
-        send(a, b).await;
-        send(b, a).await;
-    }
-}
-
-/// Every synced row's values, by record name.
-async fn synced(pool: &SqlitePool) -> BTreeMap<String, Vec<Vec<String>>> {
-    state::synced_rows(pool)
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|row| (row.name.to_string(), row.fields))
-        .collect()
-}
-
-async fn assert_converged(a: &SqlitePool, b: &SqlitePool) {
-    assert_eq!(synced(a).await, synced(b).await);
-}
 
 async fn deleted_at(pool: &SqlitePool, id: &str) -> Option<String> {
     sqlx::query_scalar("SELECT deleted_at FROM pages WHERE id = ?")
@@ -60,37 +17,9 @@ async fn deleted_at(pool: &SqlitePool, id: &str) -> Option<String> {
         .unwrap()
 }
 
-async fn text(pool: &SqlitePool, sql: &str) -> Option<String> {
-    sqlx::query_scalar(sql)
-        .fetch_optional(pool)
-        .await
-        .unwrap()
-        .flatten()
-}
-
-fn new_page(title: &str) -> NewPage {
-    NewPage {
-        folder_id: None,
-        title: title.into(),
-        subtitle: None,
-        content: "{}".into(),
-        content_text: None,
-        status: "not_started".into(),
-        priority: 0,
-        tags: vec![],
-        scheduled_start: None,
-        scheduled_end: None,
-        completed_at: None,
-        links: vec![],
-        parent_id: None,
-        last_opened_at: None,
-        created_at: None,
-        updated_at: None,
-    }
-}
-
 const BODY: &str = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"oat milk"}]}]}"#;
 
+// qa: CLOUD-01, CLOUD-73
 #[tokio::test]
 async fn a_page_made_on_one_device_arrives_whole_on_the_other() {
     let (mac, phone) = (device().await, device().await);
@@ -182,6 +111,7 @@ async fn a_note_written_before_the_other_device_turned_sync_on_keeps_its_body() 
     assert_converged(&mac, &phone).await;
 }
 
+// qa: CLOUD-07
 #[tokio::test]
 async fn edits_to_different_fields_on_two_devices_both_survive() {
     let (mac, phone) = (device().await, device().await);
@@ -214,6 +144,7 @@ async fn edits_to_different_fields_on_two_devices_both_survive() {
     assert_eq!(merged.status, "done");
 }
 
+// qa: CLOUD-02
 #[tokio::test]
 async fn the_later_edit_to_one_field_wins_on_both() {
     let (mac, phone) = (device().await, device().await);
@@ -357,6 +288,7 @@ async fn a_child_that_arrives_before_its_page_waits_for_it() {
     assert_eq!(reminders, 1);
 }
 
+// qa: CLOUD-69:2
 #[tokio::test]
 async fn a_page_in_a_purged_folder_lands_in_the_inbox() {
     let (mac, phone) = (device().await, device().await);
@@ -392,6 +324,7 @@ async fn a_page_in_a_purged_folder_lands_in_the_inbox() {
     assert_eq!(landed.folder_id, None);
 }
 
+// qa: CLOUD-115
 #[tokio::test]
 async fn a_record_from_a_newer_pikos_waits_rather_than_being_dropped() {
     let (mac, phone) = (device().await, device().await);
@@ -458,6 +391,7 @@ async fn applying_is_not_sent_back_and_moves_the_clock_past_what_arrived() {
     assert!(meta(&phone).await.unwrap().hlc >= mac_clock);
 }
 
+// qa: CLOUD-11, CLOUD-12
 #[tokio::test]
 async fn trashing_and_restoring_travel() {
     let (mac, phone) = (device().await, device().await);
@@ -475,6 +409,7 @@ async fn trashing_and_restoring_travel() {
     assert_eq!(deleted_at(&mac, &page.id).await, None);
 }
 
+// qa: CLOUD-43
 #[tokio::test]
 async fn a_completed_occurrence_travels_with_its_done_copy_at_its_time() {
     let (mac, phone) = (device().await, device().await);
@@ -527,15 +462,7 @@ async fn a_completed_occurrence_travels_with_its_done_copy_at_its_time() {
     );
 }
 
-async fn link_state(pool: &SqlitePool, page: &str, state: &str) {
-    sqlx::query("UPDATE page_sync SET sync_state = ? WHERE page_id = ?")
-        .bind(state)
-        .bind(page)
-        .execute(pool)
-        .await
-        .unwrap();
-}
-
+// qa: CLOUD-70:2, CLOUD-98
 #[tokio::test]
 async fn a_calendar_page_stays_local_until_it_detaches_then_leaves_again_when_it_relinks() {
     let (mac, phone) = (device().await, device().await);
@@ -588,6 +515,7 @@ async fn a_page_that_left_scope_and_came_back_arrives_again() {
     assert!(get_page(&phone, "event").await.unwrap().is_some());
 }
 
+// qa: CLOUD-111
 #[tokio::test]
 async fn a_new_phone_joining_takes_the_macs_workspace_instead_of_adding_its_first_run_pages() {
     let mac = device().await;
@@ -660,6 +588,7 @@ async fn send_to_own_zone(pool: &SqlitePool) -> Vec<(RecordName, FieldMap)> {
     built.into_iter().map(|b| (b.name, b.fields)).collect()
 }
 
+// qa: CLOUD-112
 #[tokio::test]
 async fn a_delete_sent_to_a_zone_that_lost_reaches_the_zone_moved_into() {
     let (mac, phone) = (device().await, device().await);
@@ -678,6 +607,7 @@ async fn a_delete_sent_to_a_zone_that_lost_reaches_the_zone_moved_into() {
     assert_converged(&mac, &phone).await;
 }
 
+// qa: CLOUD-110:2
 #[tokio::test]
 async fn two_devices_that_each_synced_alone_settle_in_one_zone_with_both_pages() {
     let mac = device().await;
@@ -721,6 +651,7 @@ async fn two_devices_that_each_synced_alone_settle_in_one_zone_with_both_pages()
     );
 }
 
+// qa: CLOUD-81:2, CLOUD-82:2
 #[tokio::test]
 async fn a_restore_made_offline_before_another_device_empties_the_trash_wins() {
     let (mac, phone) = (device().await, device().await);
@@ -744,6 +675,7 @@ async fn a_restore_made_offline_before_another_device_empties_the_trash_wins() {
     assert_eq!(deleted_at(&mac, &page.id).await, None);
 }
 
+// qa: CLOUD-81:2
 #[tokio::test]
 async fn emptying_the_trash_with_no_restore_anywhere_removes_the_page_everywhere() {
     let (mac, phone) = (device().await, device().await);
@@ -756,16 +688,6 @@ async fn emptying_the_trash_with_no_restore_anywhere_removes_the_page_everywhere
     converge(&mac, &phone).await;
 
     assert!(get_page(&phone, &page.id).await.unwrap().is_none());
-}
-
-async fn leads(pool: &SqlitePool, page: &str) -> Vec<i64> {
-    sqlx::query_scalar(
-        "SELECT minutes_before FROM page_reminders WHERE page_id = ? ORDER BY minutes_before",
-    )
-    .bind(page)
-    .fetch_all(pool)
-    .await
-    .unwrap()
 }
 
 #[tokio::test]
@@ -782,6 +704,7 @@ async fn no_reminders_set_on_one_device_beats_a_reminder_added_on_the_other() {
     assert_eq!(leads(&phone, &page.id).await, vec![-1]);
 }
 
+// qa: CLOUD-22
 #[tokio::test]
 async fn the_same_reminder_added_on_both_devices_counts_once() {
     let (mac, phone) = (device().await, device().await);
@@ -796,6 +719,7 @@ async fn the_same_reminder_added_on_both_devices_counts_once() {
     assert_converged(&mac, &phone).await;
 }
 
+// qa: CLOUD-70:2, CLOUD-104
 #[tokio::test]
 async fn a_calendar_folder_left_with_pages_when_its_calendar_is_turned_off_arrives_with_them() {
     let (mac, phone) = (device().await, device().await);
@@ -847,6 +771,7 @@ async fn a_calendar_folder_left_with_pages_when_its_calendar_is_turned_off_arriv
     );
 }
 
+// qa: CLOUD-23
 #[tokio::test]
 async fn a_reminder_fired_here_fires_again_when_another_device_moves_its_time() {
     let (mac, phone) = (device().await, device().await);

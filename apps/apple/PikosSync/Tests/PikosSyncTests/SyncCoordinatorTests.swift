@@ -131,6 +131,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(again, [second.recordID])
     }
 
+    // qa: CLOUD-113
     func testARefusedSaveMergesTheServerCopyAndBuildsTheNextSendOnIt() async throws {
         let store = FakeStore()
         await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
@@ -182,6 +183,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(saved, Data([1, 2, 3]))
     }
 
+    // qa: CLOUD-114
     func testAfterFetchedRecordsFailToApplyNoLaterStateIsSavedSoTheNextLaunchFetchesThemAgain()
         async throws
     {
