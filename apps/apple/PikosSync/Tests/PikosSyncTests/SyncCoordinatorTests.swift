@@ -41,6 +41,15 @@ private actor FakeStore: ReplicaStore {
     func engineState() async throws -> Data? { state }
 
     func setEngineState(_ state: Data) async throws { self.state = state }
+
+    var expiring: [RecordAddress] = []
+
+    func expireLater(_ address: RecordAddress) { expiring.append(address) }
+
+    func expire() async throws -> [RecordAddress] {
+        defer { expiring = [] }
+        return expiring
+    }
 }
 
 private let workspaceZone = CKRecordZone.ID(zoneName: "ws-test", ownerName: CKCurrentUserDefaultName)
@@ -151,5 +160,15 @@ final class SyncCoordinatorTests: XCTestCase {
 
         let saved = await store.state
         XCTAssertEqual(saved, Data([1, 2, 3]))
+    }
+
+    func testExpiredTombstonesBecomeCloudKitDeletions() async throws {
+        let store = FakeStore()
+        await store.expireLater(RecordAddress(name: "page:old", storeName: "page:old"))
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+
+        let ids = try await coordinator.expired()
+
+        XCTAssertEqual(ids, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
     }
 }

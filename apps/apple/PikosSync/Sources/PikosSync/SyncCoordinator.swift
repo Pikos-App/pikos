@@ -96,6 +96,17 @@ public actor SyncCoordinator {
         }
     }
 
+    /// Tombstones past retention, as ids to delete from CloudKit. Every device deletes them, and a
+    /// delete of a record already gone changes nothing.
+    public func expired() async throws -> [CKRecord.ID] {
+        let gone = try await store.expire()
+        for address in gone {
+            serverCopies[address.storeName] = nil
+            names[address.storeName] = nil
+        }
+        return gone.map { CKRecord.ID(recordName: $0.storeName, zoneID: zone) }
+    }
+
     public func stateUpdated(_ state: Data) async throws {
         try await store.setEngineState(state)
     }
