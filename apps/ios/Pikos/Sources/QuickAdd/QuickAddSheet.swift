@@ -178,11 +178,14 @@ struct QuickAddSheet: View {
 
             Spacer(minLength: 0)
 
-            Text("Type a date, !priority, #tag or ~folder, or set them with the buttons above.")
-                .font(.pkUISm)
-                .foregroundStyle(.textTertiary)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
+            // Only before the first word: once there is a sentence, its lines need the room more.
+            if line.isEmpty {
+                Text("Type a date, !priority, #tag or ~folder, or set them with the buttons above.")
+                    .font(.pkUISm)
+                    .foregroundStyle(.textTertiary)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+            }
         }
         .background(.surfaceElevated)
         .animation(reduceMotion ? nil : .pkQuick, value: parsed?.hasAnything)
