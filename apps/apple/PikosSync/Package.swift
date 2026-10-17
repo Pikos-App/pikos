@@ -12,9 +12,18 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "PikosSync", targets: ["PikosSync"]),
+        // The Mac app's half, a static library the desktop's build script links in: its Rust serves
+        // the workspace through `pikos_replica_call`, and this exports `pikos_sync_start`.
+        .library(name: "PikosSyncMac", type: .static, targets: ["PikosSyncMac"]),
     ],
     targets: [
         .target(name: "PikosSync", path: "Sources/PikosSync"),
+        .target(name: "PikosReplicaC", path: "Sources/PikosReplicaC"),
+        .target(
+            name: "PikosSyncMac",
+            dependencies: ["PikosSync", "PikosReplicaC"],
+            path: "Sources/PikosSyncMac"
+        ),
         .testTarget(
             name: "PikosSyncTests",
             dependencies: ["PikosSync"],

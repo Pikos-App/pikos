@@ -26,6 +26,9 @@ path = "bins/e2e_bridge.rs"
 required-features = ["e2e-bridge"]
 
 [features]
+# iCloud sync on the Mac: links the Swift transport (apps/apple/PikosSync) in through build.rs.
+# Staging builds only, until sync ships.
+icloud-sync = ["dep:pikos-replica"]
 # The in-app benchmark: opens a scratch workspace from the environment, times real interactions
 # and quits. No release carries it.
 bench = []
@@ -55,6 +58,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
 pikos-db = { path = "../../../crates/pikos-db" }
+pikos-replica = { path = "../../../crates/pikos-replica", optional = true }
 pikos-core = { path = "../../../crates/pikos-core" }
 pikos-calendar-sync = { path = "../../../crates/pikos-calendar-sync" }
 pikos-recurrence = { path = "../../../crates/pikos-recurrence" }

@@ -22,7 +22,7 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 /// Emitted after a background pass that changed page data; the frontend
 /// listens and reloads (see `useSyncAppliedReload`).
-const SYNC_APPLIED_EVENT: &str = "calendar-sync:applied";
+pub(crate) const SYNC_APPLIED_EVENT: &str = "calendar-sync:applied";
 
 /// Emitted after every completed pass, changed or not. The sync panel's freshness
 /// (`sync_calendar.last_synced_at`) moves on a no-change poll too, and a calendar

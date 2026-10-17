@@ -9,6 +9,8 @@ use crate::error::{AppError, AppResult};
 pub mod assets;
 pub mod commands;
 pub mod dev;
+#[cfg(all(target_os = "macos", feature = "icloud-sync"))]
+mod icloud;
 #[path = "schedules/schedules.rs"]
 pub mod schedules;
 pub mod sync;
@@ -148,6 +150,11 @@ pub async fn connect_db(
         path: Some(canonical),
     };
     log::info!("DB connected, migrations applied");
+
+    #[cfg(all(target_os = "macos", feature = "icloud-sync"))]
+    if let Some(pool) = guard.pool.clone() {
+        icloud::start(app.clone(), pool);
+    }
 
     // Watch the workspace file so external writes (e.g. the CLI) live-refresh
     // the open app. Self-caused writes are filtered out on the frontend.
