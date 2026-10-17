@@ -476,7 +476,7 @@ async fn trashing_and_restoring_travel() {
 }
 
 #[tokio::test]
-async fn a_completed_occurrence_travels_with_its_done_copy() {
+async fn a_completed_occurrence_travels_with_its_done_copy_at_its_time() {
     let (mac, phone) = (device().await, device().await);
     let standup = create_page_impl(&mac, new_page("Standup")).await.unwrap();
     create_recurrence_rule_impl(
@@ -494,7 +494,7 @@ async fn a_completed_occurrence_travels_with_its_done_copy() {
     .unwrap();
     converge(&mac, &phone).await;
 
-    complete_recurring_page_impl(
+    let done = complete_recurring_page_impl(
         &mac,
         CompleteRecurringInput {
             page_id: standup.id.clone(),
@@ -505,10 +505,17 @@ async fn a_completed_occurrence_travels_with_its_done_copy() {
         },
     )
     .await
-    .unwrap();
+    .unwrap()
+    .clone;
     converge(&mac, &phone).await;
 
     assert_converged(&mac, &phone).await;
+    let on_phone = get_page(&phone, &done.id).await.unwrap().unwrap();
+    assert_eq!(
+        on_phone.scheduled_start.as_deref(),
+        Some("2026-10-16T09:00:00"),
+        "the done copy keeps the ticked occurrence's time"
+    );
     let head = |pool: &SqlitePool| {
         let (pool, id) = (pool.clone(), standup.id.clone());
         async move { get_page(&pool, &id).await.unwrap().unwrap().scheduled_start }

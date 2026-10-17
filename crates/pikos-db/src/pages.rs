@@ -1648,12 +1648,17 @@ struct CloneSpec<'a> {
     completed_at: Option<&'a str>,
     scheduled_start: Option<&'a str>,
     scheduled_end: Option<&'a str>,
+    timezone: Option<&'a str>,
 }
 
 /// Snapshot-clones `head` as a new page inside the caller's transaction:
 /// allocates the next sort_order in the head's folder, copies content/metadata,
 /// and syncs the normalized tag tables. Shared by recurring completion and
 /// virtual-occurrence reschedule.
+///
+/// A scheduled clone gets a schedule row, not just the cached time on the page: the cache is
+/// rebuilt from rows, by any later schedule edit here and by every sync on other devices, and a
+/// time held only in the cache is lost then.
 async fn insert_head_clone_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     head: &Page,
@@ -1714,6 +1719,23 @@ async fn insert_head_clone_tx(
     // Sync tags for the clone — same transaction as the pages insert above
     // so the JSON denorm and the page_tags join can't fall out of sync.
     upsert_page_tags_tx(tx, spec.clone_id, &head.tags).await?;
+
+    if let Some(start) = spec.scheduled_start {
+        sqlx::query(
+            "INSERT INTO page_schedules
+             (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+             VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(spec.clone_id)
+        .bind(start)
+        .bind(spec.scheduled_end)
+        .bind(spec.timezone)
+        .bind(spec.status)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    }
     Ok(())
 }
 
@@ -1834,6 +1856,8 @@ async fn complete_recurring_page_once(
             completed_at: Some(&completed),
             scheduled_start: Some(&occurrence_start),
             scheduled_end: occurrence_end.as_deref(),
+            // Floating, as the time was when it lived only on the page.
+            timezone: None,
         },
         &now,
     )
@@ -2306,26 +2330,10 @@ async fn reschedule_virtual_occurrence_once(
             completed_at: None,
             scheduled_start: Some(&data.scheduled_start),
             scheduled_end: data.scheduled_end.as_deref(),
+            timezone: Some(&data.timezone),
         },
         &now,
     )
-    .await?;
-
-    // The clone's schedule block. Its denorm scheduled_start/end is already set
-    // by the insert above (single row, matches by construction), so no
-    // refresh_schedule_denorm pass is needed.
-    sqlx::query(
-        "INSERT INTO page_schedules
-         (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, 'not_started', ?)",
-    )
-    .bind(&schedule_id)
-    .bind(&clone_id)
-    .bind(&data.scheduled_start)
-    .bind(&data.scheduled_end)
-    .bind(&data.timezone)
-    .bind(&now)
-    .execute(&mut *tx)
     .await?;
 
     let rule_exdates = crate::schedules::merge_rule_exdates_tx(
