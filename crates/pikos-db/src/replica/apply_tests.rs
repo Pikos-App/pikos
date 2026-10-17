@@ -642,3 +642,40 @@ async fn a_used_workspace_joining_merges() {
         crate::replica::Join::Merge
     );
 }
+
+#[tokio::test]
+async fn a_restore_made_offline_before_another_device_empties_the_trash_wins() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    converge(&mac, &phone).await;
+    soft_delete_page_impl(&mac, &page.id).await.unwrap();
+    converge(&mac, &phone).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+    restore_page_impl(&phone, &page.id).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+    let swept = purge_trashed_pages_older_than(&mac, 0).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_eq!(
+        swept, 1,
+        "the sweep ran after the restore, on a device that hadn't seen it"
+    );
+    assert_converged(&mac, &phone).await;
+    assert!(get_page(&mac, &page.id).await.unwrap().is_some());
+    assert_eq!(deleted_at(&mac, &page.id).await, None);
+}
+
+#[tokio::test]
+async fn emptying_the_trash_with_no_restore_anywhere_removes_the_page_everywhere() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    converge(&mac, &phone).await;
+    soft_delete_page_impl(&mac, &page.id).await.unwrap();
+    converge(&mac, &phone).await;
+
+    purge_trashed_pages_older_than(&mac, 0).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert!(get_page(&phone, &page.id).await.unwrap().is_none());
+}
