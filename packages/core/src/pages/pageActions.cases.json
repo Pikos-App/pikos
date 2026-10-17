@@ -1,0 +1,59 @@
+[
+  {
+    "name": "a plain dated page offers everything",
+    "page": { "isRecurring": false, "scheduleLocked": false, "hasDate": true },
+    "actsOn": 1,
+    "expect": { "rename": "offered", "move-to-folder": "offered", "clear-date": "offered", "delete": "offered" }
+  },
+  {
+    "name": "an undated page has no date to clear",
+    "page": { "isRecurring": false, "scheduleLocked": false, "hasDate": false },
+    "actsOn": 1,
+    "expect": { "rename": "offered", "move-to-folder": "offered", "clear-date": "no-date", "delete": "offered" }
+  },
+  {
+    "name": "a repeating page's date belongs to its rule",
+    "page": { "isRecurring": true, "scheduleLocked": false, "hasDate": true },
+    "actsOn": 1,
+    "expect": { "rename": "offered", "move-to-folder": "offered", "clear-date": "repeats", "delete": "offered" }
+  },
+  {
+    "name": "a calendar's page keeps its title, date and place, and can still go",
+    "page": { "isRecurring": false, "scheduleLocked": true, "hasDate": true },
+    "actsOn": 1,
+    "expect": {
+      "rename": "calendar-owned",
+      "move-to-folder": "calendar-owned",
+      "clear-date": "calendar-owned",
+      "delete": "offered"
+    }
+  },
+  {
+    "name": "a calendar's series is the calendar's before it is a series",
+    "page": { "isRecurring": true, "scheduleLocked": true, "hasDate": true },
+    "actsOn": 1,
+    "expect": {
+      "rename": "calendar-owned",
+      "move-to-folder": "calendar-owned",
+      "clear-date": "calendar-owned",
+      "delete": "offered"
+    }
+  },
+  {
+    "name": "a selection can't be renamed as one page",
+    "page": { "isRecurring": false, "scheduleLocked": false, "hasDate": true },
+    "actsOn": 2,
+    "expect": { "rename": "several-pages", "move-to-folder": "offered", "clear-date": "offered", "delete": "offered" }
+  },
+  {
+    "name": "a selection of calendar pages is refused for the calendar first",
+    "page": { "isRecurring": false, "scheduleLocked": true, "hasDate": true },
+    "actsOn": 2,
+    "expect": {
+      "rename": "calendar-owned",
+      "move-to-folder": "calendar-owned",
+      "clear-date": "calendar-owned",
+      "delete": "offered"
+    }
+  }
+]

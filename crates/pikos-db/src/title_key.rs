@@ -110,20 +110,24 @@ pub async fn rekey_if_stale(pool: &sqlx::SqlitePool) -> crate::error::AppResult<
     let mut after: i64 = 0;
     loop {
         let last: Option<i64> = sqlx::query_scalar(
-            "UPDATE pages SET title_key = pikos_title_key(title)
-             WHERE rowid IN (SELECT rowid FROM pages WHERE rowid > ? ORDER BY rowid LIMIT ?)
-             RETURNING rowid",
+            "SELECT MAX(rowid) FROM (SELECT rowid FROM pages WHERE rowid > ? ORDER BY rowid LIMIT ?)",
         )
         .bind(after)
         .bind(REKEY_BATCH)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .max();
-        match last {
-            Some(rowid) => after = rowid,
-            None => break,
-        }
+        .fetch_one(pool)
+        .await?;
+        let Some(last) = last else { break };
+        // Only keys that change: rewriting an equal key still moves the page's change number,
+        // and every reader catching up by it would read the whole workspace again.
+        sqlx::query(
+            "UPDATE pages SET title_key = pikos_title_key(title)
+             WHERE rowid > ? AND rowid <= ? AND title_key IS NOT pikos_title_key(title)",
+        )
+        .bind(after)
+        .bind(last)
+        .execute(pool)
+        .await?;
+        after = last;
     }
     sqlx::query("UPDATE title_key_version SET version = ? WHERE id = 1")
         .bind(&version)

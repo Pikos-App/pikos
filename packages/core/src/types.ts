@@ -53,6 +53,22 @@ export type PageStatus = "not_started" | "done";
 // 0 = none  1 = urgent  2 = high  3 = medium  4 = low
 export type PagePriority = 0 | 1 | 2 | 3 | 4;
 
+/**
+ * The Tiptap document schema this build writes and can safely read.
+ *
+ * Mirror of `pikos_db::CONTENT_SCHEMA_VERSION` — the Rust constant is the
+ * authority, since the database outlives any one client. A test in
+ * `crates/pikos-db` reads this file and fails if the two drift apart, so
+ * bumping one side without the other is caught rather than discovered later
+ * as corrupted documents.
+ *
+ * The `Page` interface that used to sit here is gone: page types are generated
+ * from the Rust structs by ts-rs now, so `contentSchemaVersion` reaches
+ * TypeScript from the same declaration the database uses rather than from a
+ * hand-written copy of it.
+ */
+export const CONTENT_SCHEMA_VERSION = 1;
+
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
 // One explicit calendar block (from page_schedules table).
 // All-day vs timed is inferred from scheduledStart format:

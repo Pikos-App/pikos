@@ -62,7 +62,7 @@ if (scenariosToRun.length === 0) {
 
 // ── Vite dev server ─────────────────────────────────────────────────────────
 
-console.log(`Starting Vite on :${PORT} with VITE_TEST_MODE=true VITE_SEED=calendar-colors…`);
+console.log(`Starting Vite on :${PORT} with VITE_TEST_MODE=true VITE_SEED=calendar…`);
 const vite = spawn(
   "pnpm",
   ["vite", "--port", String(PORT), "--strictPort"],
@@ -71,7 +71,7 @@ const vite = spawn(
     env: {
       ...process.env,
       VITE_TEST_MODE: "true",
-      VITE_SEED: "calendar-colors",
+      VITE_SEED: "calendar",
     },
     stdio: ["ignore", "pipe", "pipe"],
   }

@@ -52,6 +52,12 @@ export type Page = {
   createdAt: string;
   updatedAt: string;
   /**
+   * Which Tiptap document schema produced `content`. See migration 023:
+   * a client finding a version above its own must not save over the document,
+   * or it silently drops node types it cannot represent.
+   */
+  contentSchemaVersion: number;
+  /**
    * True while a calendar owns this page's schedule. Its title, dates and
    * recurrence are read-only, and the calendar block can't be dragged or resized.
    */

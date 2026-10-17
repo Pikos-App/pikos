@@ -41,6 +41,46 @@ jobs:
           SKIP_UNIT_TESTS: "1"
         run: pnpm verify
 
+      # The editor bridge's Swift half is generated from
+      # packages/editor-mobile/src/protocol.ts so the two ends cannot disagree
+      # about a field name or a type. Regenerating here and failing on a diff is
+      # what keeps that true — a drifted field would not fail to compile on
+      # either side, it would arrive as nil and the editor would quietly stop
+      # saving.
+      - name: Editor bridge protocol is up to date
+        run: |
+          pnpm --filter @pikos/editor-mobile gen:swift
+          git diff --exit-code -- apps/ios/PikosEditorBridge/Sources \
+            || {
+              echo "::error::The editor bridge protocol is stale. Run 'pnpm --filter @pikos/editor-mobile gen:swift' and commit the result."
+              exit 1
+            }
+
+      # The Rust date engine is graded against corpora recorded from the
+      # TypeScript parser, which stays the reference until the port replaces it.
+      # A change to parser.ts that moves what chrono-node is asked would leave
+      # the corpora describing the old behaviour, and the Rust side would keep
+      # passing against a stale reference. Regenerating and failing on a diff is
+      # what makes that change show up here instead of on a user's phone.
+      - name: Date-engine corpora are up to date
+        run: |
+          pnpm --filter @pikos/core gen:date-corpus
+          pnpm --filter @pikos/core gen:date-calls
+          git diff --exit-code -- crates/pikos-core/tests/corpus \
+            || {
+              echo "::error::The date-engine corpora are stale. Run 'pnpm --filter @pikos/core gen:date-corpus && pnpm --filter @pikos/core gen:date-calls' and commit the result — then check crates/pikos-core/tests/date_parity.rs still passes."
+              exit 1
+            }
+
+      # The bindings drift check above proves the bindings match the Rust. This
+      # proves the app matches the bindings — the other half, and the one that
+      # cannot be caught here any other way, because building the app needs a
+      # Mac. Rename a field in the FFI and the bindings regenerate cleanly while
+      # every call site using the old name stays broken until somebody opens
+      # Xcode.
+      - name: iOS call sites match the generated bindings
+        run: pnpm check:ios-ffi
+
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 
@@ -77,6 +117,58 @@ jobs:
           path: |
             apps/desktop/coverage/
             packages/core/coverage/
+          retention-days: 7
+
+  # The mobile editor driven in a real browser.
+  #
+  # Not a substitute for M0: typing latency, keyboard behaviour and selection
+  # handles are WKWebView questions no desktop browser can answer. What it does
+  # cover is the bridge protocol, document fidelity and message validation —
+  # which would otherwise only ever be exercised on a device, where a failure
+  # costs far more to diagnose.
+  #
+  # Its own job rather than a step in `verify` (that runner has no browsers) and
+  # rather than a step in `e2e` (which is sharded five ways, and this would then
+  # run five times). Same container image, for the same reason: pre-baked
+  # browsers, no download to stall on.
+  editor-e2e:
+    name: Mobile Editor E2E
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Assert Playwright matches the container image
+        run: |
+          PKG=$(pnpm --filter @pikos/editor-mobile exec playwright --version | awk '{print $NF}')
+          if [ "$PKG" != "1.58.2" ]; then
+            echo "::error::@pikos/editor-mobile pins @playwright/test $PKG but the container is v1.58.2-noble. Bump both together."
+            exit 1
+          fi
+
+      - name: Build the editor
+        run: pnpm --filter @pikos/editor-mobile build
+
+      - name: Run editor e2e
+        run: pnpm --filter @pikos/editor-mobile test:e2e
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: editor-e2e-report
+          path: packages/editor-mobile/test-results/
           retention-days: 7
 
   e2e:
@@ -175,6 +267,110 @@ jobs:
           path: apps/desktop/playwright-report/
           retention-days: 7
 
+  # The root Cargo workspace (crates/*) — pikos-db, pikos-cli, pikos-core.
+  #
+  # Separate from the `rust` job below because that one runs inside
+  # apps/desktop/src-tauri, which Cargo.toml deliberately *excludes* from the
+  # root workspace (Tauri links GTK/WebKit system libraries). The consequence
+  # went unnoticed: `cargo test --all` in src-tauri resolves to src-tauri alone,
+  # so until this job existed the shared data layer's tests never ran in CI
+  # despite being the single writer behind both the app and the CLI.
+  #
+  # Its one system dependency is the keychain's dbus, which pikos-ffi reaches
+  # through calendar sync. No GTK or WebKit, which keeps it fast enough for every push.
+  rust-workspace:
+    name: Rust Check (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: Cargo check (zero warnings)
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo check --workspace --all-targets
+
+      - name: Cargo clippy (zero warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test --workspace --quiet
+
+      # The generator is TypeScript — it runs the reference implementation —
+      # so this job needs Node as well as Rust. Set up after the Rust checks so
+      # a formatting or clippy failure surfaces without waiting on an install.
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The committed fuzz corpus is a sample. This searches wider on every CI
+      # run, with a seed derived from the run so successive runs explore
+      # different ground — which is the point: the first 20,000-line sweep found
+      # five divergence classes the 317-input corpus never reached, and a second
+      # seed found a sixth the first had missed.
+      - name: Wider differential fuzz against the TypeScript parser
+        run: |
+          FUZZ_CASES=8000 FUZZ_SEED=${{ github.run_number }} \
+            FUZZ_OUT=/tmp/fuzz-wide.json pnpm --filter @pikos/core gen:fuzz
+          PIKOS_FUZZ_CORPUS=/tmp/fuzz-wide.json PIKOS_FUZZ_FAILURES=/tmp/fuzz-failures.json \
+            cargo test --release -p pikos-core --test quick_add_fuzz
+
+      # No recurrence step here on purpose. It fuzzed pikos-core's own RRULE
+      # engine against rrule.js through packages/core; that engine is gone and
+      # TypeScript now calls crates/pikos-recurrence through wasm, so the two
+      # sides are one implementation. Its grading is
+      # crates/pikos-recurrence/tests/rrule_js_goldens.rs, which the workspace
+      # cargo test above already runs. See crates/pikos-core/tests/parity.rs.
+
+      - name: Wider differential fuzz against the TypeScript calendar layout
+        run: |
+          FUZZ_CASES=10000 FUZZ_SEED=${{ github.run_number }} \
+            FUZZ_OUT=/tmp/calendar-wide.json pnpm --filter @pikos/desktop gen:fuzz-calendar
+          PIKOS_CALENDAR_FUZZ=/tmp/calendar-wide.json \
+            cargo test --release -p pikos-core --test calendar_fuzz
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ failure() }}
+        with:
+          name: fuzz-failures
+          path: /tmp/fuzz-failures.json
+          retention-days: 7
+
+      # The Swift bindings are generated from the Rust FFI surface and
+      # committed so the API is reviewable in a pull request. Regenerating here
+      # and failing on a diff is what stops the Rust surface changing while the
+      # committed Swift silently describes the old one — a mismatch that would
+      # otherwise surface as a link error on somebody's Mac, far from the cause.
+      # uniffi-bindgen reads the compiled cdylib's metadata, so this needs no
+      # Apple toolchain.
+      - name: Swift bindings are up to date
+        run: |
+          bash scripts/gen-swift-bindings.sh
+          git diff --exit-code -- apps/ios/PikosCore/Sources apps/ios/PikosCore/generated \
+            || {
+              echo "::error::Swift bindings are stale. Run scripts/gen-swift-bindings.sh and commit the result."
+              exit 1
+            }
   # Every test not tagged @mock-only, against the real Rust writer. Same
   # container as `e2e`, so the browser is the one the mock lane uses; the bridge
   # links the app crate, so the container also needs Rust and the Tauri build

@@ -78,7 +78,7 @@ export async function seedDemo(adapter: StorageAdapter): Promise<void> {
   const projects = await folder("Projects", "#9b8ae8");
   const personal = await folder("Personal", "#57a872");
   const reading = await folder("Reading", "#e09b4a");
-  const finance = await folder("Finance", "#e5534b");
+  const finance = await folder("Finance", "#d9577a");
 
   await page({
     folderId: projects,

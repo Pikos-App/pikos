@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@bridge/*": ["./bridge/*"],
+      "@pikos/core": ["../../packages/core/src/index.ts"],
+      "@pikos/core/*": ["../../packages/core/src/*"],
+      "@seeds/*": ["./seeds/*"]
+    }
+  },
+  "include": ["scripts/**/*.ts", "src/vite-env.d.ts"]
+}

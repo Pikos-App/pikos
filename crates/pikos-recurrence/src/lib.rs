@@ -22,12 +22,13 @@ pub mod zoned;
 pub use engine::{
     align_weekly_rule_to_anchor, compute_next_end, expand_range, list_occurrences,
     missed_occurrences_between, next_occurrence_after, occurrences_in_window,
-    oldest_open_occurrence, snap_anchor_to_rule, snap_schedule_to_rule, Occurrence,
+    oldest_open_occurrence, resolve_anchor_move, snap_anchor_to_rule, snap_schedule_to_rule,
+    AnchorMove, Occurrence,
 };
 pub use label::{rrule_to_label, rrule_to_short_label};
 pub use rule::{
-    build_rrule, extract_until, parse_rrule, rewrite_until_with, Freq, RecurrenceError,
-    RecurrenceOptions,
+    build_rrule, extract_until, parse_rrule, rewrite_until_with, rrule_edit_would_degrade, Freq,
+    RecurrenceError, RecurrenceOptions,
 };
 
 /// A naive wall-clock value: a date, optionally with a time. Time-less values are

@@ -349,7 +349,7 @@ export function DateTimePicker({
             isPast
               ? "text-status-overdue hover:text-status-overdue/80"
               : isDueSoon
-                ? "text-status-due-soon hover:text-status-due-soon/80"
+                ? "text-due-soon hover:text-due-soon/80"
                 : hasDate
                   ? "text-muted-foreground hover:text-foreground"
                   : "text-subtle hover:text-muted-foreground"

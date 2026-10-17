@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The App Group is what lets widgets and the share extension read the same
+  workspace as the app. The identifier must match WorkspaceLocation.appGroupIdentifier
+  exactly — WorkspaceLocation throws rather than falling back if it cannot reach
+  the container, so a mismatch fails loudly at launch instead of leaving widgets
+  quietly reading an empty database.
+
+  No keychain-access-group is declared, deliberately. Calendar sync stores its
+  CalDAV credentials in the app's own default keychain, which needs no
+  entitlement — and must NOT be shared with the widget: the widget renders
+  today's pages and has no business holding a password. If sync ever needs to
+  run from an extension, that is the moment to add a group here, not before.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.pikos</string>
+	</array>
+</dict>
+</plist>

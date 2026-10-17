@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Page, PageSummary, PageUpdate, ViewCursor, ViewKey, ViewScope } from "../index";
+import { CONTENT_SCHEMA_VERSION } from "../types";
 import { wallClockToUtc } from "../utils/zoned";
 import { readFixture } from "./conformanceTable";
 import { MockStorageAdapter } from "./MockStorageAdapter";
@@ -61,6 +62,7 @@ function page(seed: SeedPage): Page {
     completedAt: seed.completedAt,
     completedOccurrences: null,
     content: "{}",
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     contentText: "",
     createdAt: seed.createdAt,
     detachIsReversible: false,

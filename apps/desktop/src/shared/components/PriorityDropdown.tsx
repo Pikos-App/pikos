@@ -36,8 +36,8 @@ const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
     label: "High",
   },
   3: {
-    badgeClassName: "text-status-due-soon",
-    className: "text-status-due-soon",
+    badgeClassName: "text-due-soon",
+    className: "text-due-soon",
     icon: "··",
     label: "Medium",
   },

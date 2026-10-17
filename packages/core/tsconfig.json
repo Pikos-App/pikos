@@ -5,5 +5,5 @@
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
     "lib": ["ES2020"]
   },
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "scripts", "vitest.config.ts"]
 }

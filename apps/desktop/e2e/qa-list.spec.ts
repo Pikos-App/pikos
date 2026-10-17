@@ -283,7 +283,7 @@ appTest(
       await app.getByRole("menuitem", { name: "Red" }).click();
       await expect(folder("Chores").getByTestId("folder-color")).toHaveCSS(
         "background-color",
-        "rgb(229, 83, 75)"
+        "rgb(217, 87, 122)"
       );
     });
 
@@ -583,5 +583,113 @@ appTest(
     );
 
     expect(summary?.today).toBe(today.length);
+  }
+);
+
+appTest(
+  "deleting a repeating page from its menu asks to skip the date or delete every date",
+  { tag: ["@LIST-15"] },
+  async ({ app }) => {
+    await quickAdd(app, "buy stamps");
+    await quickAdd(app, "water plants every day");
+    const items = app.locator("[data-page-list-item]");
+    const series = items.filter({ hasText: "water plants" });
+    const question = app.getByRole("alertdialog", { name: "Delete “water plants”?" });
+    const schedule = (day: string) => app.getByRole("button", { name: `Scheduled: ${day}` });
+    async function deleteFromMenu(row: typeof series) {
+      await row.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Delete" }).click();
+    }
+
+    await appTest.step("LIST-15 a plain page deletes at once, with Undo", async () => {
+      await deleteFromMenu(items.filter({ hasText: "buy stamps" }));
+      await expect(app.getByRole("alertdialog")).toHaveCount(0);
+      await expect(items.filter({ hasText: "buy stamps" })).toHaveCount(0);
+      await expect(app.getByRole("alert", { name: "Deleted “buy stamps”" })).toBeVisible();
+    });
+
+    await appTest.step("LIST-15 a repeating page asks first, and Cancel leaves it", async () => {
+      await series.click();
+      await expect(schedule("Today")).toBeVisible();
+      await deleteFromMenu(series);
+      await expect(question).toBeVisible();
+      await expect(
+        question.getByText(
+          "It repeats. Skip just this date, or delete it and every date it has left."
+        )
+      ).toBeVisible();
+      await question.getByRole("button", { name: "Cancel" }).click();
+      await expect(question).toHaveCount(0);
+      await expect(series).toHaveCount(1);
+      await expect(schedule("Today")).toBeVisible();
+    });
+
+    await appTest.step(
+      "LIST-15 Skip This Date moves the page to its next date, and Undo gives it back",
+      async () => {
+        await deleteFromMenu(series);
+        await question.getByRole("button", { name: "Skip This Date" }).click();
+        await expect(question).toHaveCount(0);
+        await expect(schedule("Tomorrow")).toBeVisible();
+        const toast = app.getByRole("alert", { name: /Deleted one day of “water plants”/ });
+        await toast.getByRole("button", { name: "Undo" }).click();
+        await expect(schedule("Today")).toBeVisible();
+      }
+    );
+
+    await appTest.step("LIST-15 Delete All Dates deletes the page, with Undo", async () => {
+      await deleteFromMenu(series);
+      await question.getByRole("button", { name: "Delete All Dates" }).click();
+      await expect(question).toHaveCount(0);
+      await expect(series).toHaveCount(0);
+      const toast = app.getByRole("alert", { name: "Deleted “water plants”" });
+      await toast.getByRole("button", { name: "Undo" }).click();
+      await expect(series).toHaveCount(1);
+    });
+
+    await appTest.step("LIST-15 Cmd+Backspace on a repeating page asks the same", async () => {
+      await series.click();
+      await expect(schedule("Today")).toBeVisible();
+      await series.focus();
+      await app.keyboard.press(mod("Mod+Backspace"));
+      await expect(question).toBeVisible();
+      await question.getByRole("button", { name: "Skip This Date" }).click();
+      await expect(question).toHaveCount(0);
+      await expect(schedule("Tomorrow")).toBeVisible();
+    });
+
+    await appTest.step("LIST-15 Cmd+Shift+Backspace in the editor asks too", async () => {
+      await app.getByRole("textbox", { name: "Page content" }).click();
+      await app.keyboard.press(mod("Mod+Shift+Backspace"));
+      await expect(question).toBeVisible();
+      await question.getByRole("button", { name: "Cancel" }).click();
+      await expect(question).toHaveCount(0);
+      await expect(series).toHaveCount(1);
+    });
+
+    await appTest.step("LIST-15 a selection with a repeating page deletes at once", async () => {
+      await quickAdd(app, "post the letter");
+      const plain = items.filter({ hasText: "post the letter" });
+      await series.click();
+      await plain.click({ modifiers: ["ControlOrMeta"] });
+      await expect(app.locator("[data-page-list-item][data-selected=true]")).toHaveCount(2);
+      await app.keyboard.press(mod("Mod+Backspace"));
+      await expect(app.getByRole("alertdialog")).toHaveCount(0);
+      await expect(series).toHaveCount(0);
+      await expect(plain).toHaveCount(0);
+    });
+
+    await appTest.step("LIST-15 a calendar's series deletes at once", async () => {
+      await seedSynced(app);
+      const folder = app
+        .getByRole("group", { name: "Views and folders" })
+        .locator('[aria-label="Personal"]:not([aria-roledescription="sortable"])');
+      await folder.click();
+      await expect(folder).toHaveAttribute("aria-current", "true");
+      const mirror = items.filter({ hasText: "Weekly 1:1 (London)" }).first();
+      await deleteFromMenu(mirror);
+      await expect(app.getByRole("alertdialog")).toHaveCount(0);
+      await expect(app.getByRole("alert", { name: /Deleted “Weekly 1:1 \(London\)”/ })).toBeVisible();
+    });
   }
 );

@@ -1,4 +1,5 @@
 import type { PagePriority, PageRecurrenceRule, PageStatus, PageSummary } from "@pikos/core";
+import { deleteAsksWhichDates } from "@pikos/core";
 import { useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
@@ -36,6 +37,7 @@ export function usePageList() {
   const activePage = useActivePage();
   const { selectedPageIds } = useSelection();
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [deletingSeries, setDeletingSeries] = useState<PageSummary | null>(null);
   const cachedViews = useCachedViews(activeViewId, sortMode, [
     ...(activePage ? [activePage.id] : []),
     ...selectedPageIds,
@@ -77,6 +79,12 @@ export function usePageList() {
     requestDeletePage(page);
   }
 
+  /** Delete from a gesture acting on `actsOn` pages; a lone series asks which dates first. */
+  function requestDelete(page: PageSummary, actsOn = 1) {
+    if (deleteAsksWhichDates(page, actsOn)) setDeletingSeries(page);
+    else requestDeletePage(page);
+  }
+
   function handleRenameChange(id: string, title: string) {
     updatePage(id, { title });
   }
@@ -116,6 +124,9 @@ export function usePageList() {
     cached,
     completedHasMore: completed.hasMore,
     completedPages,
+    /** The series whose Delete is waiting on "this date or all of them". */
+    deletingSeries,
+    dismissSeriesDelete: () => setDeletingSeries(null),
     folders,
     handleDeleteRequest,
     handleMoveToFolder,
@@ -131,6 +142,7 @@ export function usePageList() {
     loadMoreCompleted: completed.loadMore,
     onExpandCompleted: completed.onExpand,
     renamingId,
+    requestDelete,
     setRenamingId,
     visiblePages,
   };

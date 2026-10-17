@@ -14,6 +14,9 @@ mod menu;
 mod notifications;
 mod window_state;
 
+pub use db::commands::dispatch as dispatch_db_command;
+#[cfg(debug_assertions)]
+pub use db::dev::{backdate_page_impl, dev_seed_synced_calendar_impl, BackdateParams};
 use db::DbState;
 use notifications::scheduler::{NotificationSettingsState, SchedulerRuntimeState};
 

@@ -1,20 +1,19 @@
-// Realistic seed — believable day-to-day life scenario.
-// Tests mixed status/priority, Today view, calendar density, folder structure, tags.
+// A believable week of work, projects, personal life, reading and finance:
+// mixed status and priority, a full Today, folders and tags.
+//
+// The mock calendar sync is planted on top of this (see `synced` in
+// seedLoaders), and its events sit in slots this leaves free, which
+// e2e/calendar-sync.spec.ts relies on. Move a time or a folder here and check
+// syncedCalendar.ts's lane notes first.
 
 import type { StorageAdapter } from "@pikos/core";
-import { isTimedIso } from "@pikos/core";
+import { formatLocalISO } from "@pikos/core";
 import { addDays, addMonths, format, startOfMonth } from "date-fns";
 
-const MARKER = "Realistic seed marker";
+import { bullets, doc, h2, h3, p, tasks } from "./doc";
+import { plantPage } from "./plant";
 
-async function alreadySeeded(adapter: StorageAdapter): Promise<boolean> {
-  const { results } = await adapter.searchPages(MARKER);
-  return results.some((r) => r.title.includes(MARKER));
-}
-
-export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
-  if (await alreadySeeded(adapter)) return;
-
+export async function plantRealistic(adapter: StorageAdapter): Promise<void> {
   const now = new Date();
 
   function daysFrom(n: number): Date {
@@ -64,35 +63,19 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
   };
 
   async function createWithSchedule(spec: PageSpec) {
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: spec.content,
+      done:
+        spec.status === "done" && (spec.end && spec.end < formatLocalISO(now) ? spec.end : true),
       folderId: spec.folderId,
       priority: spec.priority,
-      status: spec.status,
       subtitle: spec.subtitle ?? null,
       tags: spec.tags,
       title: spec.title,
+      ...(spec.start !== undefined && { start: spec.start }),
+      ...(spec.end !== undefined && { end: spec.end }),
     });
-    if (spec.start) {
-      const isTimed = isTimedIso(spec.start);
-      await adapter.createPageSchedule({
-        pageId: page.id,
-        ...(spec.end !== undefined && { scheduledEnd: spec.end }),
-        scheduledStart: spec.start,
-        ...(isTimed && { timezone: "America/Los_Angeles" }),
-      });
-    }
   }
-
-  await adapter.createPage({
-    content: doc(p("Realistic seed marker.")),
-    folderId: work.id,
-    priority: 0,
-    status: "done",
-    subtitle: "Delete this page to re-seed",
-    tags: [],
-    title: MARKER,
-  });
 
   // ── Work ───────────────────────────────────────────────────────────────
 
@@ -991,8 +974,6 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
   // These use the head + recurrence rule model: one page + one rrule.
   // Virtual occurrences are expanded by the calendar at render time.
 
-  const tz = "America/Los_Angeles";
-
   // Daily standup — every weekday at 9:15am, 15 min
   {
     // Head is scheduled for the next weekday
@@ -1002,26 +983,20 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     const startStr = timed(nextWeekday, 9, 15);
     const endStr = timed(nextWeekday, 9, 30);
 
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(
         h2("Daily standup"),
         h3("Template"),
         bullets("What I did yesterday", "What I\u2019m doing today", "Blockers")
       ),
+      end: endStr,
       folderId: work.id,
       priority: 0,
-      status: "not_started",
+      repeat: { rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR" },
+      start: startStr,
       subtitle: "Quick sync \u2014 blockers, priorities, updates",
       tags: ["meeting"],
       title: "Daily standup",
-    });
-    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
-    await adapter.createRecurrenceRule({
-      pageId: page.id,
-      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
-      scheduledEnd: endStr,
-      scheduledStart: startStr,
-      timezone: tz,
     });
   }
 
@@ -1033,7 +1008,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     const startStr = timed(nextWed, 14);
     const endStr = timed(nextWed, 14, 30);
 
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(
         h2("1:1 with Sarah"),
         h3("Standing agenda"),
@@ -1043,20 +1018,14 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
           "Career growth check-in (monthly)"
         )
       ),
+      end: endStr,
       folderId: work.id,
       priority: 2,
-      status: "not_started",
+      repeat: { rrule: "FREQ=WEEKLY;BYDAY=WE" },
+      start: startStr,
       subtitle: "Weekly sync \u2014 wins, blockers, growth",
       tags: ["meeting", "1:1"],
       title: "1:1 with Sarah",
-    });
-    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
-    await adapter.createRecurrenceRule({
-      pageId: page.id,
-      rrule: "FREQ=WEEKLY;BYDAY=WE",
-      scheduledEnd: endStr,
-      scheduledStart: startStr,
-      timezone: tz,
     });
   }
 
@@ -1068,22 +1037,16 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     const startStr = timed(nextMon, 6, 30);
     const endStr = timed(nextMon, 7, 10);
 
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(h2("Morning run"), p("Easy zone 2 pace. Focus on form and breathing.")),
+      end: endStr,
       folderId: personal.id,
       priority: 0,
-      status: "not_started",
+      repeat: { rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR" },
+      start: startStr,
       subtitle: "5k easy pace \u2014 zone 2, no earbuds",
       tags: ["health", "run"],
       title: "Morning run",
-    });
-    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
-    await adapter.createRecurrenceRule({
-      pageId: page.id,
-      rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR",
-      scheduledEnd: endStr,
-      scheduledStart: startStr,
-      timezone: tz,
     });
   }
 
@@ -1095,7 +1058,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     const startStr = timed(nextFri, 16);
     const endStr = timed(nextFri, 16, 45);
 
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(
         h2("Weekly review"),
         h3("Checklist"),
@@ -1107,20 +1070,14 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
           { checked: false, text: "Clean up stale tasks" }
         )
       ),
+      end: endStr,
       folderId: personal.id,
       priority: 2,
-      status: "not_started",
+      repeat: { rrule: "FREQ=WEEKLY;BYDAY=FR" },
+      start: startStr,
       subtitle: "GTD-style weekly review \u2014 inbox zero, plan next week",
       tags: ["review", "productivity"],
       title: "Weekly review",
-    });
-    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
-    await adapter.createRecurrenceRule({
-      pageId: page.id,
-      rrule: "FREQ=WEEKLY;BYDAY=FR",
-      scheduledEnd: endStr,
-      scheduledStart: startStr,
-      timezone: tz,
     });
   }
 
@@ -1129,7 +1086,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     const nextMonth = startOfMonth(addMonths(now, 1));
     const startStr = dateStr(nextMonth);
 
-    const page = await adapter.createPage({
+    await plantPage(adapter, {
       content: doc(
         p("Transfer $2,350 via Zelle to landlord."),
         tasks(
@@ -1140,58 +1097,11 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
       ),
       folderId: finance.id,
       priority: 1,
-      status: "not_started",
+      repeat: { rrule: "FREQ=MONTHLY" },
+      start: startStr,
       subtitle: "$2,350 via Zelle \u2014 due 1st of each month",
       tags: ["finance", "recurring"],
       title: "Pay rent",
     });
-    await adapter.updatePage(page.id, { scheduledStart: startStr });
-    await adapter.createRecurrenceRule({
-      pageId: page.id,
-      rrule: "FREQ=MONTHLY",
-      scheduledStart: startStr,
-      timezone: tz,
-    });
   }
-}
-
-// ── Tiptap JSON helpers ──────────────────────────────────────────────────────
-
-type Node = Record<string, unknown>;
-
-function doc(...nodes: Node[]): string {
-  return JSON.stringify({ content: nodes, type: "doc" });
-}
-
-function p(text: string): Node {
-  return { content: [{ text, type: "text" }], type: "paragraph" };
-}
-
-function h2(text: string): Node {
-  return { attrs: { level: 2 }, content: [{ text, type: "text" }], type: "heading" };
-}
-
-function h3(text: string): Node {
-  return { attrs: { level: 3 }, content: [{ text, type: "text" }], type: "heading" };
-}
-
-function bullets(...items: string[]): Node {
-  return {
-    content: items.map((text) => ({
-      content: [p(text)],
-      type: "listItem",
-    })),
-    type: "bulletList",
-  };
-}
-
-function tasks(...items: { text: string; checked: boolean }[]): Node {
-  return {
-    content: items.map(({ checked, text }) => ({
-      attrs: { checked },
-      content: [p(text)],
-      type: "taskItem",
-    })),
-    type: "taskList",
-  };
 }

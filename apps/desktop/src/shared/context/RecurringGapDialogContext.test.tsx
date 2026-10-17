@@ -367,3 +367,30 @@ describe("deleting through the dialog", () => {
     expect(hook.result.current.dialog.pending!.syncedActive).toBe(true);
   });
 });
+
+describe("skipping one date", () => {
+  it("skips the date the head sits on, without asking about the backlog behind it", async () => {
+    const { hook, pageId } = await setup();
+
+    await act(async () => {
+      hook.result.current.dialog.skipDate(head(hook, pageId));
+      await Promise.resolve();
+    });
+
+    expect(hook.result.current.dialog.pending).toBeNull();
+    await waitFor(() => expect(head(hook, pageId).skippedOccurrences).toEqual(["2099-01-05"]));
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-06T09:00:00");
+    expect(doneClones(hook)).toEqual([]);
+  });
+
+  it("skips the date an occurrence row names, not the head's", async () => {
+    const { hook, pageId } = await setup();
+
+    await act(async () => {
+      hook.result.current.dialog.skipDate(virtualAt(hook, pageId, "2099-01-07"));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(head(hook, pageId).skippedOccurrences).toEqual(["2099-01-07"]));
+  });
+});

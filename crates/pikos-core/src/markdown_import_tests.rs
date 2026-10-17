@@ -68,6 +68,6 @@ fn a_url_is_encoded_once() {
 fn an_empty_body_is_one_empty_paragraph() {
     assert_eq!(
         markdown_to_prosemirror("").unwrap(),
-        json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
+        json!({ "type": "doc", "content": [{ "type": "paragraph", "attrs": { "indent": 0 } }] })
     );
 }

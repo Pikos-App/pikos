@@ -3,11 +3,25 @@ name = "pikos-core"
 version = "0.1.0"
 edition = "2021"
 license = "BUSL-1.1"
-description = "Pikos portable domain logic, shared by the desktop app and the CLI."
+description = "Pikos portable domain logic, shared by the desktop app, the CLI and the iPhone app."
 
 [dependencies]
+# The RRULE engine. One engine, shared: this crate had its own until the
+# calendar-sync work landed a better one — timezone-aware, with a conformance
+# corpus generated from rrule.js. Two engines that must agree is exactly the
+# drift this codebase keeps getting bitten by.
+pikos-recurrence = { path = "../pikos-recurrence" }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+chrono-tz = "0.10"
+fancy-regex = "0.19"
 pulldown-cmark = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+url = "2"
 
 [dev-dependencies]
+# Integration tests are their own crates and do not inherit [dependencies];
+# the recurrence corpora below call the engine directly.
+pikos-recurrence = { path = "../pikos-recurrence" }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"

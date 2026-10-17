@@ -1,0 +1,35 @@
+{
+  "name": "@pikos/editor-schema",
+  "version": "0.1.0",
+  "private": true,
+  "license": "BUSL-1.1",
+  "type": "module",
+  "description": "The Tiptap document schema shared by every Pikos editor \u2014 desktop, mobile webview, and tests. Schema only: no UI, no platform APIs.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.20.1",
+    "@tiptap/extension-image": "^3.20.1",
+    "@tiptap/extension-link": "^3.20.1",
+    "@tiptap/extension-table": "3.20.1",
+    "@tiptap/extension-table-cell": "3.20.1",
+    "@tiptap/extension-table-header": "3.20.1",
+    "@tiptap/extension-table-row": "3.20.1",
+    "@tiptap/extension-task-item": "^3.20.1",
+    "@tiptap/extension-task-list": "^3.20.1",
+    "@tiptap/pm": "^3.20.1",
+    "@tiptap/starter-kit": "^3.20.1",
+    "tiptap-markdown": "^0.9.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0",
+    "jsdom": "^28.1.0"
+  }
+}

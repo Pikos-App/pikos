@@ -14,6 +14,7 @@ import type {
   Tag,
   TagCount,
 } from "@pikos/core";
+import { withCurrentColor } from "@pikos/core";
 import {
   type Dispatch,
   type RefObject,
@@ -95,7 +96,7 @@ export function usePagesStore({
       adapter.listFolders(),
       adapter.listRecurrenceRules(),
     ]);
-    setFolders(loadedFolders);
+    setFolders(loadedFolders.map(withCurrentColor));
     setRecurrenceRules(loadedRules);
   }
 

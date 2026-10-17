@@ -21,6 +21,15 @@ jobs:
   validate:
     uses: ./.github/workflows/_validate.yml
 
+  # ── iOS ────────────────────────────────────────────────────────────────────
+  # The only macOS runner in the repo, so it is its own workflow rather than a
+  # job in _validate.yml — see the note at the top of _ios.yml. The UI flows are
+  # off here: they need a simulator to boot, and the build plus the package
+  # suites catch most of what breaks for a fraction of the wall clock. Turn them
+  # on for a release, or when a screen is what changed.
+  ios:
+    uses: ./.github/workflows/_ios.yml
+
   # ── Build ──────────────────────────────────────────────────────────────────
   # Prod-bundle gate: bundle size, the packaged-CSP smoke test, and perf.
   # Extracted into _build.yml so release.yml runs the same gate on the tag.

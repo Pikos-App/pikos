@@ -1,0 +1,63 @@
+[package]
+name = "pikos-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "UniFFI bindings over pikos-core and pikos-db — the surface the iOS app consumes as a Swift package."
+
+[lib]
+# staticlib for linking into the iOS app, cdylib so uniffi-bindgen can read the
+# compiled library's metadata, lib so the bindgen binary below can depend on it.
+crate-type = ["staticlib", "cdylib", "lib"]
+name = "pikos_ffi"
+
+[[bin]]
+# Generates the Swift bindings. A plain Rust binary — it needs no Xcode and no
+# Apple toolchain, so bindings can be generated and reviewed on any machine.
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+pikos-core = { path = "../pikos-core" }
+# One subtraction, in one place: the backlog window opens a millisecond before
+# the head's own midnight, because it is exclusive at both ends and the head is
+# part of the backlog whenever the gesture pointed elsewhere.
+# One warning, in one place: a calendar server that will not answer must not
+# stop somebody wiping their own device, and swallowing that silently would make
+# a failed disconnect indistinguishable from a clean one.
+log = "0.4"
+pikos-db = { path = "../pikos-db" }
+# The reminder horizon is placed on the phone's own clock, which arrives as an
+# IANA name and has to be resolved here; both are already what pikos-db uses.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono-tz = "0.10"
+pikos-recurrence = { path = "../pikos-recurrence" }
+# CalDAV account management and manual sync. Brings reqwest+rustls and the
+# keychain into the iOS static library; both were verified to cross-compile to
+# aarch64-apple-ios by the M0 spike (docs/ios/06-platform-audit.md). What it
+# does NOT bring is the scheduler: `run_sync_loop` is an in-process timer that
+# iOS suspends within seconds of backgrounding, so nothing here polls.
+pikos-calendar-sync = { path = "../pikos-calendar-sync" }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+thiserror = "2"
+# The async exports below need a runtime UniFFI can drive. Multi-threaded so a
+# widget refresh and a foreground query are not serialised behind each other.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
+uniffi = { version = "0.32", features = ["cli", "tokio"] }
+
+[dev-dependencies]
+# The date-view tests position pages relative to the machine's own today, which
+# is what those views are computed against — a fixed date in the fixture would
+# fall out of the window the day after it was written.
+chrono = "0.4"
+# Reached directly by one test, which writes the kind of row only the desktop
+# writes today — a materialised override for a single occurrence of a series.
+# iOS must honour one it finds, and there is no iOS-side writer to create it
+# with, so the test plays the part of the other app.
+pikos-db = { path = "../pikos-db" }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+
+[build-dependencies]
+uniffi = { version = "0.32", features = ["build"] }

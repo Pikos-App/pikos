@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-scheme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      viewport-fit=cover lets the page extend under the home indicator so the
+      host controls safe-area insets; user-scalable=no stops a double-tap from
+      zooming the editor, which on a text surface reads as a bug rather than a
+      feature.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Pikos Editor</title>
+    <link rel="stylesheet" href="/src/editor.css" />
+  </head>
+  <body>
+    <div id="editor"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

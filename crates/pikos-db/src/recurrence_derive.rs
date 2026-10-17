@@ -405,12 +405,11 @@ struct ReminderSeries {
     synced: bool,
 }
 
-/// Recurring occurrences whose reminder fire instant lands in the scheduler's
-/// fixed 60-second window `[now − 60s, now]` — an enumeration per (occurrence ×
-/// reminder-lead), so a series with two occurrences in-window fires both (a scalar
-/// head misses one). Native series compare wall-clock in device-local time
-/// (`now_local`); synced series resolve occurrence wall-clock + TZID → absolute
-/// UTC and compare against `now_utc`. `synced` is `sync_state = 'active'`, so a
+/// Recurring occurrences whose reminder fire instant lands in the tick's window —
+/// an enumeration per (occurrence × reminder-lead), so a series with two
+/// occurrences in-window fires both (a scalar head misses one). Native series
+/// compare wall-clock in device-local time; synced series resolve occurrence
+/// wall-clock + TZID → absolute UTC and compare against the window's instants. `synced` is `sync_state = 'active'`, so a
 /// **detached** series is treated as native and fires on device-local wall-clock —
 /// consistent with the display, which also treats a detached series as native once
 /// it unlocks (`useRecurrenceExpansion`), even though its wall-clock stays
@@ -425,8 +424,21 @@ pub async fn occurrences_with_open_reminder_window(
     default_minutes: i64,
     max_lead: i64,
 ) -> AppResult<Vec<DueReminder>> {
-    let now_local = window.end_local();
-    let now_utc = window.end_utc();
+    let fires =
+        occurrences_with_reminders_firing_in(pool, window, default_minutes, max_lead).await?;
+    Ok(fires.into_iter().map(|fire| fire.reminder).collect())
+}
+
+/// [`occurrences_with_open_reminder_window`] with each fire's instant kept, so a caller
+/// planning ahead over a long window can place every one on the device's clock.
+pub async fn occurrences_with_reminders_firing_in(
+    pool: &SqlitePool,
+    window: &crate::notification_log::ReminderWindow,
+    default_minutes: i64,
+    max_lead: i64,
+) -> AppResult<Vec<crate::notification_log::ReminderFire>> {
+    use crate::notification_log::ReminderFire;
+
     // CROSS JOIN fixes the order, rules first, with or without statistics: `gather_statistics`.
     let series: Vec<ReminderSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, p.title, r.rrule, r.rrule_exdates,
@@ -442,26 +454,28 @@ pub async fn occurrences_with_open_reminder_window(
     .fetch_all(pool)
     .await?;
 
-    let mut candidates = Vec::new();
+    let mut candidates: Vec<ReminderFire> = Vec::new();
     for s in series {
-        // The wall-clock "now" the occurrence enumeration seeks near: source-zone
-        // for synced, device-local for native. An unparseable synced zone is
-        // skipped (matches `synced_fire_instant`'s None).
-        let zone_now = if s.synced {
+        // The wall-clock window the occurrence enumeration seeks within:
+        // source-zone for synced, device-local for native. An unparseable
+        // synced zone is skipped (matches `synced_fire_instant`'s None).
+        let (zone_lo, zone_hi) = if s.synced {
             match s.timezone.parse::<chrono_tz::Tz>() {
-                Ok(tz) => now_utc.with_timezone(&tz).naive_local(),
+                Ok(tz) => (
+                    window.start_utc().with_timezone(&tz).naive_local(),
+                    window.end_utc().with_timezone(&tz).naive_local(),
+                ),
                 Err(_) => continue,
             }
         } else {
-            now_local
+            (window.start_local(), window.end_local())
         };
-        // Widen the upper bound by an hour so a DST shift on the synced wall→instant
-        // mapping can't drop a boundary occurrence; the exact fire check filters the
-        // over-enumeration.
-        let lo = (zone_now - Duration::seconds(60))
-            .format(WALL_FMT)
-            .to_string();
-        let hi = (zone_now + Duration::minutes(max_lead) + Duration::hours(1))
+        // An occurrence's reminder can fire up to `max_lead` before it, so the
+        // enumeration runs that much past the window's end; widened by an hour
+        // more so a DST shift on the synced wall→instant mapping can't drop a
+        // boundary occurrence. The exact fire check filters the over-enumeration.
+        let lo = zone_lo.format(WALL_FMT).to_string();
+        let hi = (zone_hi + Duration::minutes(max_lead) + Duration::hours(1))
             .format(WALL_FMT)
             .to_string();
 
@@ -491,24 +505,29 @@ pub async fn occurrences_with_open_reminder_window(
 
         for occ in &occurrences {
             for lead in &leads {
-                if !fires_in_window(&s, &occ.scheduled_start, lead.minutes, window) {
+                let Some(fire_at) = fire_in_window(&s, &occ.scheduled_start, lead.minutes, window)
+                else {
                     continue;
-                }
-                candidates.push(DueReminder {
-                    schedule_id: lead.schedule_id(&s.page_id, &occ.scheduled_start),
-                    page_id: s.page_id.clone(),
-                    title: s.title.clone(),
-                    scheduled_start: occ.scheduled_start.clone(),
-                    minutes_before: lead.minutes,
+                };
+                candidates.push(ReminderFire {
+                    reminder: DueReminder {
+                        schedule_id: lead.schedule_id(&s.page_id, &occ.scheduled_start),
+                        page_id: s.page_id.clone(),
+                        title: s.title.clone(),
+                        scheduled_start: occ.scheduled_start.clone(),
+                        minutes_before: lead.minutes,
+                    },
+                    fire_at,
                 });
             }
         }
     }
 
-    let fired = fired_schedule_ids(pool, &candidates).await?;
+    let rows: Vec<DueReminder> = candidates.iter().map(|c| c.reminder.clone()).collect();
+    let fired = fired_schedule_ids(pool, &rows).await?;
     Ok(candidates
         .into_iter()
-        .filter(|c| !fired.contains(&c.schedule_id))
+        .filter(|c| !fired.contains(&c.reminder.schedule_id))
         .collect())
 }
 
@@ -599,24 +618,23 @@ async fn reminder_leads(
     Ok(leads)
 }
 
-/// Whether `scheduled_start - lead` lands in the tick's window. A synced series resolves to
-/// an instant; a native one stays device-local wall-clock.
-fn fires_in_window(
+/// When `scheduled_start - lead` fires, if that lands in the window. A synced series resolves
+/// to an instant; a native one stays device-local wall-clock.
+fn fire_in_window(
     series: &ReminderSeries,
     scheduled_start: &str,
     minutes_before: i64,
     window: &crate::notification_log::ReminderWindow,
-) -> bool {
+) -> Option<crate::notification_log::FireAt> {
+    use crate::notification_log::FireAt;
+
     if series.synced {
-        match synced_fire_instant(scheduled_start, &series.timezone, minutes_before) {
-            Some(fire) => window.holds_utc(fire),
-            None => false,
-        }
+        let fire = synced_fire_instant(scheduled_start, &series.timezone, minutes_before)?;
+        window.holds_utc(fire).then_some(FireAt::Absolute(fire))
     } else {
-        match NaiveDateTime::parse_from_str(scheduled_start, WALL_FMT) {
-            Ok(start) => window.holds_local(start - Duration::minutes(minutes_before)),
-            Err(_) => false,
-        }
+        let start = NaiveDateTime::parse_from_str(scheduled_start, WALL_FMT).ok()?;
+        let fire = start - Duration::minutes(minutes_before);
+        window.holds_local(fire).then_some(FireAt::Local(fire))
     }
 }
 

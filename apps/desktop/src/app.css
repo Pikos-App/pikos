@@ -153,7 +153,7 @@ button,
   --color-pink-500: #ec4899;
 
   /* ─── Folder / category palette (fixed set, user-assignable) ─── */
-  --color-folder-red: #e5534b;
+  --color-folder-red: #d9577a;
   --color-folder-orange: #e09b4a;
   --color-folder-yellow: #c4a143;
   --color-folder-green: #57a872;
@@ -199,11 +199,13 @@ button,
   /* ─── Text ─── */
   --text-primary: #161613;
   --text-secondary: #5a5955;
-  --text-tertiary: #767571;
+  --text-tertiary: #6f6e6a;
   --text-disabled: #8e8d88;
   --text-inverse: #ffffff;
   --text-brand: #14896c;
   --text-link: #1aae8a;
+  --text-action: #117a60;
+  --text-due-soon: #a0600a;
 
   /* ─── Borders ─── */
   --border-primary: #d5d4d0;
@@ -214,11 +216,13 @@ button,
   /* ─── Interactive ─── */
   --interactive-primary: #1aae8a;
   --interactive-primary-hover: #14896c;
+  --interactive-fill: #117a60;
+  --interactive-fill-neutral: #5a5955;
   --interactive-secondary: #f0efed;
   --interactive-secondary-hover: #e6e5e2;
 
   /* ─── Status ─── */
-  --status-overdue: #ef4444;
+  --status-overdue: #dc2626;
   --status-due-soon: #d4850f;
   --status-open: #3b82f6;
   --status-done: #10b981;
@@ -312,6 +316,8 @@ button,
   --text-inverse: #161613;
   --text-brand: #2dd4a8;
   --text-link: #2dd4a8;
+  --text-action: #2dd4a8;
+  --text-due-soon: #f59e42;
 
   /* ─── Borders ─── */
   --border-primary: #3a3a37;
@@ -322,6 +328,8 @@ button,
   /* ─── Interactive ─── */
   --interactive-primary: #2dd4a8;
   --interactive-primary-hover: #4ddcb2;
+  --interactive-fill: #117a60;
+  --interactive-fill-neutral: #6b6a66;
   --interactive-secondary: #272724;
   --interactive-secondary-hover: #3a3a37;
 
@@ -396,6 +404,7 @@ button,
   /* ── Short aliases (avoid double text- prefix) ── */
   --color-subtle: var(--text-tertiary);
   --color-faint: var(--text-disabled);
+  --color-due-soon: var(--text-due-soon);
 
   /* ── shadcn/ui backward-compatible aliases ── */
   --color-background: var(--background);

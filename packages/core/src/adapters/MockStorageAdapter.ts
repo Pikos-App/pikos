@@ -59,6 +59,7 @@ import type {
   ViewScope,
   ViewWindow,
 } from "../types";
+import { CONTENT_SCHEMA_VERSION } from "../types";
 import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
@@ -414,6 +415,7 @@ export class MockStorageAdapter implements StorageAdapter {
       const page: Page = {
         completedAt: done ? stamp : null,
         content: body.content,
+        contentSchemaVersion: CONTENT_SCHEMA_VERSION,
         contentText: body.text || body.content,
         createdAt: stamp,
         detachIsReversible: false,
@@ -438,6 +440,9 @@ export class MockStorageAdapter implements StorageAdapter {
     const page: Page = {
       links: [],
       ...data,
+      // Also mirrors the Rust writer, which stamps the version it wrote with
+      // rather than leaving it to the column default (pikos-db migration 023).
+      contentSchemaVersion: CONTENT_SCHEMA_VERSION,
       // Mirror the Rust adapter, which extracts plain text from Tiptap JSON on
       // every save so FTS indexes the visible body, not the structural tokens.
       contentText: data.contentText ?? deriveContentText(data.content),

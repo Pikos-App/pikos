@@ -2,16 +2,13 @@
 // (setContent instead of destroy/recreate) for instant switching.
 
 import { extractText } from "@pikos/core";
-import Link from "@tiptap/extension-link";
+import { createDocumentExtensions } from "@pikos/editor-schema";
+import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
-import TaskItem from "@tiptap/extension-task-item";
-import TaskList from "@tiptap/extension-task-list";
 import Typography from "@tiptap/extension-typography";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { Markdown } from "tiptap-markdown";
 
 import { EmptyState } from "@/shared/components/EmptyState";
 import { EDITOR_ATTRIBUTES, LINE_WIDTH_CLASS } from "@/shared/constants/editor";
@@ -23,11 +20,10 @@ import { useUI } from "@/shared/context/UIContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { onFlushPending } from "@/shared/pendingWrites";
+import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 import { PikosImage } from "../extensions/PikosImage";
-import { PikosTable } from "../extensions/PikosTable";
-import { TabIndent } from "../extensions/TabIndent";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
 import { registerActiveEditor } from "../utils/imageDropBridge";
@@ -40,37 +36,30 @@ import { PageInfoPopover } from "./PageInfoPopover";
 import { SlashMenuExtension } from "./SlashMenu";
 import { TableToolbar } from "./TableToolbar";
 
-const extensions = [
-  StarterKit.configure({
-    codeBlock: { HTMLAttributes: { class: "editor-code-block" } },
-    heading: { levels: [1, 2, 3] },
-    link: false,
+// Schema first, then behaviour.
+//
+// The schema half comes from @pikos/editor-schema and is shared with the iOS
+// webview — it decides what `getJSON()` produces, so the two platforms have to
+// agree on it exactly or documents stop round-tripping. PikosImage is the
+// shared image node with the desktop's Tauri node view and drop handling
+// layered on; the shared package supplies its attributes.
+//
+// The behaviour half below is desktop's own and intentionally not shared. A
+// slash menu, a placeholder, smart-quote input rules, markdown paste and a tab
+// keymap all belong to a keyboard-driven app, and none of them can change a
+// stored document.
+export const editorExtensions = [
+  ...createDocumentExtensions({
+    image: PikosImage.configure({ allowBase64: false, inline: false }),
+    onKeyHandled: (event) => Keyboard.markUsed(event),
+    resolveAssetUrl: assetUrl,
   }),
-  TaskList,
-  TaskItem.configure({ nested: true }),
   Placeholder.configure({
     placeholder: "Start writing, or press / for commands",
     showOnlyWhenEditable: true,
   }),
   Typography,
-  Link.configure({
-    autolink: true,
-    defaultProtocol: "https",
-    HTMLAttributes: { class: "editor-link" },
-    linkOnPaste: true,
-    openOnClick: false,
-  }),
-  Markdown.configure({
-    transformCopiedText: false,
-    transformPastedText: true,
-  }),
-  PikosImage.configure({
-    allowBase64: false,
-    inline: false,
-  }),
-  PikosTable,
   SlashMenuExtension,
-  TabIndent,
 ];
 
 // tiptap-markdown only converts pasted markdown when the clipboard has no
@@ -85,6 +74,27 @@ function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): bool
   if (!text || !looksLikeMarkdown(text)) return false;
   // insertContent is overridden by tiptap-markdown to parse strings as markdown.
   return editor.commands.insertContent(text);
+}
+
+/**
+ * Put a page's content into the editor.
+ *
+ * Exported so the behaviour below can be tested directly rather than through a
+ * React effect — and so there is exactly one load path to get right.
+ *
+ * Two flags, both load-bearing:
+ *
+ * - `emitUpdate: false` stops the load being reported as a change, which would
+ *   trigger autosave for content the user has not touched.
+ * - `addToHistory: false` keeps the load out of the undo stack. Without it the
+ *   load is an undoable step, so undo on a freshly-opened page reverts to the
+ *   empty document the editor was constructed with — and because onUpdate then
+ *   fires, autosave persists that empty document. Typing within ProseMirror's
+ *   ~500ms grouping window has the same effect, as the keystroke is grouped
+ *   with the load and one undo reverts both.
+ */
+export function loadPageContent(editor: Editor, doc: JSONContent): void {
+  editor.chain().setMeta("addToHistory", false).setContent(doc, { emitUpdate: false }).run();
 }
 
 // Append at the very end of the doc, never at the cursor: the caller is a banner
@@ -125,7 +135,7 @@ export function EditorPane() {
       attributes: EDITOR_ATTRIBUTES,
       handlePaste: (_view, event) => handleMarkdownPaste(editorRef.current, event),
     },
-    extensions,
+    extensions: editorExtensions,
     onBlur: () => Keyboard.popScope("editor"),
     onFocus: () => {
       Keyboard.pushScope("editor");
@@ -189,9 +199,8 @@ export function EditorPane() {
 
     const doc = tryParseTiptapJson(page.content, `EditorPane page=${page.id}`);
 
-    // setContent without emitting an update (avoids triggering autosave for loaded content)
     if (!editor.isDestroyed) {
-      editor.commands.setContent(doc ?? EMPTY_TIPTAP_DOC, { emitUpdate: false });
+      loadPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
       // Which page the editor holds, for tests and the in-app benchmark to wait on.
       editor.view.dom.setAttribute("data-page-id", page.id);
     }

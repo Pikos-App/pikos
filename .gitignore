@@ -60,6 +60,34 @@ CLAUDE.md
 # OS generated files
 Thumbs.db
 
+# iOS build artifacts.
+# The XCFramework is a multi-megabyte binary produced by
+# scripts/build-ios-framework.sh on a Mac. The Swift bindings beside it ARE
+# committed — those are reviewable source, generated on any platform.
+apps/ios/**/Frameworks/
+apps/ios/**/.build/
+apps/ios/**/*.xcframework
+
+# The Xcode project and the two Info.plists, written by `xcodegen generate`
+# from apps/ios/Pikos/project.yml — which says why the project is generated
+# rather than committed.
+apps/ios/Pikos/Pikos.xcodeproj/
+apps/ios/Pikos/Info.plist
+apps/ios/PikosWidgets/Info.plist
+
+# Xcode's per-package state, and the PDF script's bytecode cache.
+apps/ios/**/.swiftpm/
+scripts/__pycache__/
+
+# Built mobile editor bundle (scripts/build-editor-bundle.sh).
+# A generated single-file build, not source.
+apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources/editor.html
+packages/editor-mobile/dist/
+
+# Playwright output for the mobile editor suite.
+packages/editor-mobile/test-results/
+packages/editor-mobile/playwright-report/
+
 # ts-rs writes here when TS_RS_EXPORT_DIR is unset (a bare `cargo test`); the
 # committed copy lives in packages/core/src/generated via scripts/gen-ts-bindings.sh.
 crates/pikos-db/bindings/

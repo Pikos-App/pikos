@@ -41,9 +41,16 @@ import type {
 // ─── Page input helpers ───────────────────────────────────────────────────────
 // sort_order excluded — backend assigns max+1 on create
 
-// scheduleLocked (active page_sync row) and isRecurring (a page_recurrence_rules
-// row exists) are both derived, never inputs — excluded from both write shapes.
-// A page becomes recurring by gaining a rule, not by being written as one.
+// Three kinds of field are excluded from both write shapes, for one reason:
+// none of them is the caller's to state.
+//
+// scheduleLocked (an active page_sync row) and isRecurring (a
+// page_recurrence_rules row exists) are derived — a page becomes recurring by
+// gaining a rule, not by being written as one.
+//
+// contentSchemaVersion is stamped by whichever build wrote the content (see
+// CONTENT_SCHEMA_VERSION), so accepting it from a caller would let a client
+// claim a document shape it did not actually produce.
 export type NewPage = Omit<
   Page,
   | "id"
@@ -52,6 +59,7 @@ export type NewPage = Omit<
   | "sortOrder"
   | "scheduleLocked"
   | "isRecurring"
+  | "contentSchemaVersion"
   | "detachIsReversible"
 > & {
   /** Optional override for created_at (used during import to preserve original dates). */
@@ -62,7 +70,13 @@ export type NewPage = Omit<
 export type PageUpdate = Partial<
   Omit<
     Page,
-    "id" | "createdAt" | "updatedAt" | "scheduleLocked" | "isRecurring" | "detachIsReversible"
+    | "id"
+    | "createdAt"
+    | "updatedAt"
+    | "scheduleLocked"
+    | "isRecurring"
+    | "detachIsReversible"
+    | "contentSchemaVersion"
   >
 >;
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),

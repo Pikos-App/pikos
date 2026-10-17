@@ -28,8 +28,11 @@ export default tseslint.config(
         project: [
           "./apps/desktop/tsconfig.app.json",
           "./apps/desktop/tsconfig.node.json",
+          "./apps/desktop/tsconfig.scripts.json",
           "./apps/desktop/tsconfig.e2e.json",
           "./packages/core/tsconfig.json",
+          "./packages/editor-schema/tsconfig.json",
+          "./packages/editor-mobile/tsconfig.json",
           "./packages/pikos-bridge/tsconfig.json",
           "./packages/ui/tsconfig.json",
         ],

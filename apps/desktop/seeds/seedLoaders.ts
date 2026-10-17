@@ -1,7 +1,7 @@
-// Registry of dev/test seed scenarios, shared by the two paths that plant one:
-// the launch flag (`VITE_SEED=…`, read once on mount) and the developer menu's
-// reset-and-seed. Each seed module is imported lazily so none of this reaches a
-// user build's main chunk.
+// Registry of dev/test seed scenarios, shared by the paths that plant one:
+// the launch flag (`VITE_SEED=…`, read once on mount), the developer menu's
+// reset-and-seed, and scripts/seed-ios-simulator.sh. Each seed module is
+// imported lazily so none of this reaches a user build's main chunk.
 //
 // This directory sits beside `src/`, not inside it, and the app reaches it
 // through the `@seeds` alias (vite.config.ts, vitest.config.ts,
@@ -11,17 +11,8 @@
 
 import type { StorageAdapter } from "@pikos/core";
 
-import { STORAGE_BACKEND } from "@/shared/constants/testMode";
-
 /** Scenarios the developer menu offers (see DeveloperSettings). */
-export type SeedScenario =
-  | "calendar"
-  | "calendar-colors"
-  | "calendar-edges"
-  | "notifications"
-  | "realistic"
-  | "synced"
-  | "tutorial";
+export type SeedScenario = "calendar" | "deep" | "editor" | "synced" | "tutorial" | "wide";
 
 /** Every scenario that exists. `demo` and the `marketing` pair are launch-only — see LAUNCH_SEEDS. */
 export type SeedName = SeedScenario | "demo" | "marketing" | "marketing-sync";
@@ -49,17 +40,17 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedCalendar } = await import("./calendar");
         await seedCalendar(adapter);
       },
-      "calendar-colors": async ({ adapter }) => {
-        const { seedCalendarColors } = await import("./calendarColors");
-        await seedCalendarColors(adapter);
-      },
-      "calendar-edges": async ({ adapter }) => {
-        const { seedCalendarEdgeCases } = await import("./calendarEdgeCases");
-        await seedCalendarEdgeCases(adapter);
+      deep: async ({ adapter }) => {
+        const { seedDeep } = await import("./deep");
+        await seedDeep(adapter);
       },
       demo: async ({ adapter }) => {
         const { seedDemo } = await import("./demo");
         await seedDemo(adapter);
+      },
+      editor: async ({ adapter }) => {
+        const { seedEditor } = await import("./editor");
+        await seedEditor(adapter);
       },
       marketing: async ({ adapter }) => {
         const { seedMarketing } = await import("./marketing");
@@ -69,13 +60,9 @@ const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.me
         const { seedMarketingSync } = await import("./marketingSync");
         await seedMarketingSync(adapter);
       },
-      notifications: async ({ adapter }) => {
-        const { seedNotifications } = await import("./notifications");
-        await seedNotifications(adapter);
-      },
-      realistic: async ({ adapter }) => {
-        const { seedRealistic } = await import("./realistic");
-        await seedRealistic(adapter);
+      wide: async ({ adapter }) => {
+        const { seedWide } = await import("./wide");
+        await seedWide(adapter);
       },
     }
   : undefined;
@@ -86,35 +73,20 @@ const unavailable: SeedLoader = async () => {
 
 export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   calendar: DEV_LOADERS?.calendar ?? unavailable,
-  "calendar-colors": DEV_LOADERS?.["calendar-colors"] ?? unavailable,
-  "calendar-edges": DEV_LOADERS?.["calendar-edges"] ?? unavailable,
+  deep: DEV_LOADERS?.deep ?? unavailable,
   demo: DEV_LOADERS?.demo ?? unavailable,
+  editor: DEV_LOADERS?.editor ?? unavailable,
   marketing: DEV_LOADERS?.marketing ?? unavailable,
   "marketing-sync": DEV_LOADERS?.["marketing-sync"] ?? unavailable,
-  notifications: DEV_LOADERS?.notifications ?? unavailable,
-  realistic: DEV_LOADERS?.realistic ?? unavailable,
   synced: async ({ adapter, phase }) => {
-    // Believable native data + a mock external-calendar sync on top, so the
-    // synced treatment can be spot-checked alongside normal pages. Only the
-    // reset path lays the native data down; the launch flag seeds the mirrors
-    // alone, which is what the synced-calendar e2e fixtures expect.
+    // Only reset lays the realistic week under the mirrors; the launch flag
+    // plants the mirrors alone, which the synced-calendar e2e fixtures expect.
     if (phase === "reset") {
-      const { seedRealistic } = await import("./realistic");
-      await seedRealistic(adapter);
+      const { plantRealistic } = await import("./realistic");
+      await plantRealistic(adapter);
     }
-    // Only the mock needs its own copy of the synced rows. Both other backends
-    // reach the real writer's dev command, which is the point of the bridge
-    // lane: the same seed a person QAs against, planted by the same code.
-    if (STORAGE_BACKEND === "mock") {
-      const { seedSyncedCalendar } = await import("./syncedCalendar");
-      await seedSyncedCalendar(adapter);
-    } else if (STORAGE_BACKEND === "bridge") {
-      const { bridgeInvoke } = await import("@bridge/transport");
-      await bridgeInvoke("dev_seed_synced_calendar");
-    } else {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("dev_seed_synced_calendar");
-    }
+    const { plantSyncedLayer } = await import("./plant");
+    await plantSyncedLayer(adapter);
   },
   tutorial: async ({ adapter, setPendingNavigation }) => {
     const { seedTutorial } = await import("./tutorial");
@@ -123,32 +95,29 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
       setPendingNavigation({ folderId: result.folderId, pageId: result.welcomePageId });
     }
   },
+  wide: DEV_LOADERS?.wide ?? unavailable,
 };
 
 /**
  * Scenarios `VITE_SEED=` accepts at launch, and the build each one needs.
  *
- * The two paths are deliberately not the same set. `marketing`, `marketing-sync`
- * and `demo` only ever arrive through the launch flag — playwright.record.config.ts
- * and playwright.tour.config.ts set them, and the developer menu doesn't list them.
- * `notifications` is the mirror image: its
- * fixtures are anchored to the moment they're planted and you watch them fire
- * over the following minutes, which is a menu action, so it has no launch
- * entry here.
+ * `marketing`, `marketing-sync` and `demo` only ever arrive through the launch flag —
+ * playwright.record.config.ts and playwright.tour.config.ts set them, and the developer menu
+ * doesn't list them.
  *
- * "any-build" scenarios must also work with import.meta.env.DEV false: the
- * Playwright perf project serves a production `vite preview` build.
+ * "any-build" scenarios must also work with import.meta.env.DEV false, since a
+ * production `vite preview` build can be launched with one.
  */
 const LAUNCH_SEEDS: Partial<Record<SeedName, "any-build" | "dev-only">> = {
   calendar: "dev-only",
-  "calendar-colors": "dev-only",
-  "calendar-edges": "dev-only",
+  deep: "dev-only",
   demo: "dev-only",
+  editor: "dev-only",
   marketing: "dev-only",
   "marketing-sync": "dev-only",
-  realistic: "dev-only",
   synced: "any-build",
   tutorial: "any-build",
+  wide: "dev-only",
 };
 
 function isSeedName(name: string): name is SeedName {

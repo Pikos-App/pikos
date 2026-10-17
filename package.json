@@ -16,6 +16,8 @@
     "preflight": "bash scripts/validate.sh",
     "cleanup": "bash scripts/cleanup-builds.sh",
     "qa:build": "bash scripts/qa-build.sh",
+    "ios:device": "bash scripts/ios-device.sh",
+    "ios:speed": "bash scripts/ios-speed.sh",
     "qa:egress": "node scripts/check-egress.mjs",
     "qa:reset": "bash scripts/qa-staging.sh reset",
     "qa:seed": "bash scripts/qa-staging.sh seed",
@@ -26,6 +28,7 @@
     "qa:release": "node scripts/qa-release-copy.mjs",
     "fix:notifications": "bash scripts/reset-launch-services.sh",
     "audit:source": "bash scripts/source-audit.sh",
+    "check:ios-ffi": "python3 scripts/check-swift-ffi-usage.py",
     "release": "bash scripts/release.sh",
     "release:retry": "bash scripts/release-retry.sh"
   },

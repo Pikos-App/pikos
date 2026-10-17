@@ -13,7 +13,7 @@
 //! for a path-qualified registration — travelling with their functions.
 
 mod export;
-mod ics;
+
 mod maintenance;
 // The seed's command is debug-only; the e2e bridge seeds through its impl in any build.
 #[cfg(any(debug_assertions, test, feature = "e2e-bridge"))]
@@ -21,7 +21,7 @@ mod seed;
 mod stats;
 
 pub use export::*;
-pub use ics::*;
+
 pub use maintenance::*;
 #[cfg(all(not(debug_assertions), feature = "e2e-bridge"))]
 pub(crate) use seed::dev_seed_synced_calendar_impl;

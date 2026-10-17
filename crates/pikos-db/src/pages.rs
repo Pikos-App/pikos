@@ -40,6 +40,7 @@ struct PageRow {
     last_opened_at: Option<String>,
     created_at: String,
     updated_at: String,
+    content_schema_version: i64,
     schedule_locked: bool,
     detach_is_reversible: bool,
     sync_state: Option<String>,
@@ -96,6 +97,11 @@ pub struct Page {
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[ts(type = "number")]
+    /// Which Tiptap document schema produced `content`. See migration 023:
+    /// a client finding a version above its own must not save over the document,
+    /// or it silently drops node types it cannot represent.
+    pub content_schema_version: i64,
     /// True while a calendar owns this page's schedule. Its title, dates and
     /// recurrence are read-only, and the calendar block can't be dragged or resized.
     pub schedule_locked: bool,
@@ -174,6 +180,7 @@ impl From<PageRow> for Page {
             last_opened_at: row.last_opened_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            content_schema_version: row.content_schema_version,
             schedule_locked: row.schedule_locked,
             sync_state: row.sync_state,
             timezone: row.timezone,
@@ -470,6 +477,16 @@ pub struct PageFilter {
     /// used by the calendar to pull completed scheduled pages without also
     /// loading unscheduled completed pages.
     pub has_schedule: Option<bool>,
+    /// When Some(true), restrict to pages that are not finished — the SQL form
+    /// of `isOpen`.
+    ///
+    /// Deliberately a negation rather than `status = 'not_started'`, which is
+    /// what it happens to be equivalent to today. `pages.status` currently only
+    /// ever holds `not_started` or `done` (the third value in the schema
+    /// comment, `skipped`, belongs to `page_schedules`), but a list of open
+    /// work should widen to a new status rather than silently drop every page
+    /// carrying it, which an equality filter would do without any error.
+    pub open_only: Option<bool>,
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -610,8 +627,9 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         sqlx::query(
             "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
              priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-             links, parent_id, last_opened_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             links, parent_id, last_opened_at, created_at, updated_at,
+             content_schema_version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&data.folder_id)
@@ -631,6 +649,9 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         .bind(&data.last_opened_at)
         .bind(created_at)
         .bind(updated_at)
+        // Stamped explicitly rather than left to the column default, so the
+        // version travels with the writer that produced the content.
+        .bind(crate::CONTENT_SCHEMA_VERSION)
         .execute(&mut *tx)
         .await?;
 
@@ -744,6 +765,11 @@ async fn apply_page_update(
     if let Some(v) = &updates.content {
         fields.push("content = ");
         fields.push_bind_unseparated(v.clone());
+        // Re-stamp on every content write: whatever produced this document did
+        // so with this build's editor schema, so the stored version must follow
+        // the content rather than stay at whatever wrote the row originally.
+        fields.push("content_schema_version = ");
+        fields.push_bind_unseparated(crate::CONTENT_SCHEMA_VERSION);
     }
     if let Some(v) = &updates.content_text {
         fields.push("content_text = ");
@@ -1152,6 +1178,9 @@ pub async fn list_pages_window(
         if f.has_schedule == Some(true) {
             builder.push(" AND scheduled_start IS NOT NULL");
         }
+        if f.open_only == Some(true) {
+            builder.push(" AND status != 'done'");
+        }
         if let Some(ref query) = f.query {
             let like = format!("%{query}%");
             builder.push(" AND (title LIKE ");
@@ -1216,6 +1245,37 @@ pub async fn list_pages_window(
     Ok(summaries)
 }
 
+/// Pages whose schedule overlaps `[start, end]` (both `YYYY-MM-DD`, inclusive).
+///
+/// Distinct from filtering on `scheduled_after`/`scheduled_before`, which bound
+/// `scheduled_start` alone and so miss the case a calendar meets constantly: a
+/// multi-day event that began before the visible range and is still running
+/// through it. A three-day conference starting Sunday simply would not appear
+/// on Tuesday.
+///
+/// Reads the denormalised columns on `pages` rather than joining
+/// `page_schedules`, matching what the desktop calendar draws from — one block
+/// per page, at the page's nearest schedule.
+pub async fn list_pages_overlapping_impl(
+    pool: &sqlx::SqlitePool,
+    start: &str,
+    end: &str,
+) -> AppResult<Vec<PageSummary>> {
+    let query = format!(
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages
+         WHERE deleted_at IS NULL
+           AND scheduled_start IS NOT NULL
+           AND date(scheduled_start) <= ?
+           AND date(COALESCE(scheduled_end, scheduled_start)) >= ?
+         ORDER BY sort_order ASC"
+    );
+    let rows = sqlx::query_as::<_, PageSummaryRow>(&query)
+        .bind(end)
+        .bind(start)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(PageSummary::from).collect())
+}
 /// Open pages due or scheduled on or before today — what the app's Today surface
 /// shows.
 ///
@@ -1616,8 +1676,9 @@ async fn insert_head_clone_tx(
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
          priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-         links, parent_id, last_opened_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?)",
+         links, parent_id, last_opened_at, created_at, updated_at,
+         content_schema_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?, ?)",
     )
     .bind(spec.clone_id)
     .bind(&head.folder_id)
@@ -1634,6 +1695,11 @@ async fn insert_head_clone_tx(
     .bind(spec.completed_at)
     .bind(now) // created_at
     .bind(now) // updated_at
+    // The clone copies head.content verbatim, so it inherits the head's
+    // schema — but the head was readable by this build (it was just fetched),
+    // so stamping the current version is correct and keeps the clone from
+    // looking staler than it is.
+    .bind(crate::CONTENT_SCHEMA_VERSION)
     .execute(&mut **tx)
     .await?;
 

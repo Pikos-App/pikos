@@ -1,0 +1,190 @@
+{
+  "extractTextCases": [
+    {
+      "doc": "",
+      "id": "empty_string",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "{}",
+      "id": "empty_object_literal",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "not json at all",
+      "id": "invalid_json",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "null",
+      "id": "json_null",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "\"just a string\"",
+      "id": "json_string",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "[]",
+      "id": "json_array",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "empty_paragraph",
+      "text": {
+        "ok": true,
+        "value": ""
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"Hello world\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "single_paragraph",
+      "text": {
+        "ok": true,
+        "value": "Hello world"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"First\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"content\":[{\"text\":\"Second\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "two_paragraphs",
+      "text": {
+        "ok": true,
+        "value": "First\nSecond"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"plain \",\"type\":\"text\"},{\"marks\":[{\"type\":\"bold\"}],\"text\":\"bold\",\"type\":\"text\"},{\"text\":\" tail\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "marks_are_transparent",
+      "text": {
+        "ok": true,
+        "value": "plain bold tail"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"Heading\",\"type\":\"text\"}],\"type\":\"heading\"},{\"content\":[{\"content\":[{\"content\":[{\"text\":\"one\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"listItem\"},{\"content\":[{\"content\":[{\"text\":\"two\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"listItem\"}],\"type\":\"bulletList\"}],\"type\":\"doc\"}",
+      "id": "heading_and_bullet_list",
+      "text": {
+        "ok": true,
+        "value": "Heading\none\ntwo"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"content\":[{\"content\":[{\"text\":\"task a\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"taskItem\"},{\"content\":[{\"content\":[{\"text\":\"task b\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"taskItem\"}],\"type\":\"taskList\"}],\"type\":\"doc\"}",
+      "id": "task_list",
+      "text": {
+        "ok": true,
+        "value": "task a\ntask b"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"const x = 1;\",\"type\":\"text\"}],\"type\":\"codeBlock\"}],\"type\":\"doc\"}",
+      "id": "code_block",
+      "text": {
+        "ok": true,
+        "value": "const x = 1;"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"content\":[{\"text\":\"quoted\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"blockquote\"}],\"type\":\"doc\"}",
+      "id": "blockquote",
+      "text": {
+        "ok": true,
+        "value": "quoted"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"attrs\":{\"src\":\"asset://x.png\"},\"type\":\"image\"},{\"content\":[{\"text\":\"after\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "leaf_without_text",
+      "text": {
+        "ok": true,
+        "value": "after"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"content\":[{\"content\":[{\"content\":[{\"text\":\"deep\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"listItem\"}],\"type\":\"bulletList\"}],\"type\":\"listItem\"}],\"type\":\"bulletList\"}",
+      "id": "deeply_nested_lists",
+      "text": {
+        "ok": true,
+        "value": "deep"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"  padded  \",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "outer_whitespace_trimmed",
+      "text": {
+        "ok": true,
+        "value": "padded"
+      }
+    },
+    {
+      "doc": "{\"content\":[{\"content\":[{\"text\":\"emoji 🎉 and ünïcode\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"}",
+      "id": "unicode",
+      "text": {
+        "ok": true,
+        "value": "emoji 🎉 and ünïcode"
+      }
+    }
+  ],
+  "meta": {
+    "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "references": [
+      {
+        "id": "sun_noon",
+        "iso": "2026-03-15T12:00:00",
+        "note": "suite NOW — Sunday, midday"
+      },
+      {
+        "id": "wed_noon",
+        "iso": "2026-03-18T12:00:00",
+        "note": "midweek — forward-date rollover differs"
+      },
+      {
+        "id": "mon_morning",
+        "iso": "2026-03-16T08:00:00",
+        "note": "before 9am — 'today vs tomorrow' flips"
+      },
+      {
+        "id": "sat_late",
+        "iso": "2026-03-21T22:30:00",
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
+      },
+      {
+        "id": "dst_eve",
+        "iso": "2026-03-28T12:00:00",
+        "note": "eve of EU DST change"
+      },
+      {
+        "id": "leap_day",
+        "iso": "2024-02-29T09:00:00",
+        "note": "leap day"
+      },
+      {
+        "id": "year_end",
+        "iso": "2026-12-31T23:00:00",
+        "note": "year boundary"
+      }
+    ],
+    "timezone": "UTC"
+  }
+}

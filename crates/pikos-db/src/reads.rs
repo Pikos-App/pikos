@@ -284,6 +284,28 @@ pub async fn get_pages(pool: &SqlitePool, ids: &[String]) -> AppResult<Vec<PageS
     Ok(ids.iter().filter_map(|id| by_id.remove(id)).collect())
 }
 
+/// Every page written after change number `since`: the live ones, and the ids of those trashed
+/// since. A copy of the workspace kept outside it, such as a search index, catches up from these.
+pub async fn pages_changed_since(
+    pool: &SqlitePool,
+    since: i64,
+) -> AppResult<(Vec<PageSummary>, Vec<String>)> {
+    // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
+    let live = sqlx::query_as::<_, PageSummaryRow>(&format!(
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages \
+         WHERE row_seq > ? AND deleted_at IS NULL"
+    ))
+    .bind(since)
+    .fetch_all(pool)
+    .await?;
+    let trashed =
+        sqlx::query_scalar("SELECT id FROM pages WHERE row_seq > ? AND deleted_at IS NOT NULL")
+            .bind(since)
+            .fetch_all(pool)
+            .await?;
+    Ok((live.into_iter().map(PageSummary::from).collect(), trashed))
+}
+
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(

@@ -1,0 +1,167 @@
+{
+  "cases": [
+    {
+      "elapsed": "0:00",
+      "seconds": 0,
+      "sessionLength": "0 minutes"
+    },
+    {
+      "elapsed": "0:01",
+      "seconds": 1,
+      "sessionLength": "0 minutes"
+    },
+    {
+      "elapsed": "0:29",
+      "seconds": 29,
+      "sessionLength": "0 minutes"
+    },
+    {
+      "elapsed": "0:30",
+      "seconds": 30,
+      "sessionLength": "1 minute"
+    },
+    {
+      "elapsed": "0:31",
+      "seconds": 31,
+      "sessionLength": "1 minute"
+    },
+    {
+      "elapsed": "0:59",
+      "seconds": 59,
+      "sessionLength": "1 minute"
+    },
+    {
+      "elapsed": "1:00",
+      "seconds": 60,
+      "sessionLength": "1 minute"
+    },
+    {
+      "elapsed": "1:01",
+      "seconds": 61,
+      "sessionLength": "1 minute"
+    },
+    {
+      "elapsed": "1:29",
+      "seconds": 89,
+      "sessionLength": "1 minute"
+    },
+    {
+      "elapsed": "1:30",
+      "seconds": 90,
+      "sessionLength": "2 minutes"
+    },
+    {
+      "elapsed": "1:59",
+      "seconds": 119,
+      "sessionLength": "2 minutes"
+    },
+    {
+      "elapsed": "2:00",
+      "seconds": 120,
+      "sessionLength": "2 minutes"
+    },
+    {
+      "elapsed": "29:59",
+      "seconds": 1799,
+      "sessionLength": "30 minutes"
+    },
+    {
+      "elapsed": "30:00",
+      "seconds": 1800,
+      "sessionLength": "30 minutes"
+    },
+    {
+      "elapsed": "59:00",
+      "seconds": 3540,
+      "sessionLength": "59 minutes"
+    },
+    {
+      "elapsed": "59:59",
+      "seconds": 3599,
+      "sessionLength": "1 hour"
+    },
+    {
+      "elapsed": "1:00:00",
+      "seconds": 3600,
+      "sessionLength": "1 hour"
+    },
+    {
+      "elapsed": "1:00:01",
+      "seconds": 3601,
+      "sessionLength": "1 hour"
+    },
+    {
+      "elapsed": "1:01:00",
+      "seconds": 3660,
+      "sessionLength": "1 hour 1 min"
+    },
+    {
+      "elapsed": "1:30:00",
+      "seconds": 5400,
+      "sessionLength": "1 hour 30 min"
+    },
+    {
+      "elapsed": "1:59:59",
+      "seconds": 7199,
+      "sessionLength": "2 hours"
+    },
+    {
+      "elapsed": "2:00:00",
+      "seconds": 7200,
+      "sessionLength": "2 hours"
+    },
+    {
+      "elapsed": "23:59:59",
+      "seconds": 86399,
+      "sessionLength": "24 hours"
+    },
+    {
+      "elapsed": "24:00:00",
+      "seconds": 86400,
+      "sessionLength": "24 hours"
+    }
+  ],
+  "minSessionS": 30,
+  "meta": {
+    "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "references": [
+      {
+        "id": "sun_noon",
+        "iso": "2026-03-15T12:00:00",
+        "note": "suite NOW — Sunday, midday"
+      },
+      {
+        "id": "wed_noon",
+        "iso": "2026-03-18T12:00:00",
+        "note": "midweek — forward-date rollover differs"
+      },
+      {
+        "id": "mon_morning",
+        "iso": "2026-03-16T08:00:00",
+        "note": "before 9am — 'today vs tomorrow' flips"
+      },
+      {
+        "id": "sat_late",
+        "iso": "2026-03-21T22:30:00",
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
+      },
+      {
+        "id": "dst_eve",
+        "iso": "2026-03-28T12:00:00",
+        "note": "eve of EU DST change"
+      },
+      {
+        "id": "leap_day",
+        "iso": "2024-02-29T09:00:00",
+        "note": "leap day"
+      },
+      {
+        "id": "year_end",
+        "iso": "2026-12-31T23:00:00",
+        "note": "year boundary"
+      }
+    ],
+    "timezone": "UTC"
+  }
+}

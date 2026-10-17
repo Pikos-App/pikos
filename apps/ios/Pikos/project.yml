@@ -1,0 +1,240 @@
+# XcodeGen spec for the Pikos iOS app.
+#
+# The Xcode project is generated rather than committed: a .xcodeproj is a
+# directory of XML that merges badly and hides its own diffs, and this file says
+# the same things in a form that can be reviewed. Generate with:
+#
+#   cd apps/ios/Pikos && xcodegen generate
+#
+# Prerequisites, in order:
+#   1. bash scripts/build-ios-framework.sh   (macOS — builds PikosCore's XCFramework)
+#   2. bash scripts/build-editor-bundle.sh   (anywhere — builds the editor)
+#   3. xcodegen generate
+#
+# Neither the XCFramework nor the editor bundle is committed; both are build
+# artifacts, and the scripts that produce them are.
+
+name: Pikos
+options:
+  bundleIdPrefix: app.pikos
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    # The plan calls for strict concurrency. Expect this to surface work on the
+    # first build — the webview coordinator in particular conforms to two
+    # delegate protocols that are main-actor bound in practice.
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: "" # set locally; deliberately not committed
+    MARKETING_VERSION: "1.0"
+    # The TestFlight workflow raises this to its run number, since every upload needs a higher one.
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  PikosCore:
+    path: ../PikosCore
+  PikosEditorBridge:
+    path: ../PikosEditorBridge
+
+targets:
+  Pikos:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      # The privacy manifest App Store review requires. A resource, not a
+      # source; it says which "required reason" APIs the binary calls and why
+      # — see the comment inside it.
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+      # The widgets' own views, for the debug widget gallery the screen tour photographs
+      # (Support/WidgetGallery.swift). Excluded from Release below.
+      - path: ../PikosWidgets/Sources/ListWidget.swift
+      - path: ../PikosWidgets/Sources/NowWidget.swift
+      - path: ../PikosWidgets/Sources/WidgetSupport.swift
+      - path: ../PikosWidgets/Sources/CompletePageIntent.swift
+      - path: ../PikosWidgets/Sources/SendToTomorrowIntent.swift
+    dependencies:
+      - package: PikosCore
+        product: PikosCore
+      - package: PikosCore
+        product: PikosSupport
+      - package: PikosEditorBridge
+      - target: PikosWidgets
+    settings:
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: >-
+            ListWidget.swift NowWidget.swift WidgetSupport.swift CompletePageIntent.swift
+            SendToTomorrowIntent.swift
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
+        # Sources/Assets.xcassets. The accent is the brand's terracotta, the
+        # same value PikosSupport's `Brand.accentHex` hands to the editor and
+        # the widget — every native control tints from here, so the app and
+        # the document surface agree on what "the" colour is. The icon set is
+        # a slot: drop a 1024×1024 PNG into it and name it in Contents.json.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Sources/Localizable.xcstrings. Every `Text("…")` literal and every
+        # `String(localized:)` in the app target is extracted into it at
+        # build time, so the catalog fills itself as the app is built and a
+        # translator later gets one file rather than a grep. Strings built as
+        # plain `String` values — notice sentences, titles, footers — go
+        # through `String(localized:)` for the same reason; a `"…"` handed to
+        # `Text` is already covered.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        # iPhone and iPad from one binary — a universal purchase, which is the
+        # intent and not merely Xcode's default. Stated explicitly so it is not
+        # narrowed to "1": the iPad gets its own split-view shell from this
+        # binary, and taking it out later would make putting it back a new SKU
+        # rather than an update.
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Pikos.entitlements
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Pikos
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
+        # settings: those are synthesised only when Xcode generates the
+        # Info.plist, and this target supplies one. As settings they were
+        # silently dropped, and an app with no launch screen is given a
+        # letterboxed window on every modern iPhone.
+        #
+        # The modern launch screen: the desktop's ground colour, generated from
+        # its tokens, and no storyboard to keep in step with the UI.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # iPad is expected to rotate freely, upside down included — it has no
+        # single "up", and an iPad app that refuses an orientation reads as
+        # broken rather than opinionated.
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # The scheme the desktop app already uses, so one link grammar serves
+        # both. Parsed by shared Rust — see Support/Route.swift.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.pikos.deeplink
+            CFBundleURLSchemes: [pikos]
+        # No analytics, no phone-home: the privacy claims the marketing site
+        # makes are claims about this binary too.
+        ITSAppUsesNonExemptEncryption: false
+        # Reminders are planned ahead as local notifications, and the plan
+        # goes stale as days pass. This is the one background entry point
+        # that re-plans it without the app being opened — best-effort, on
+        # the system's schedule, which is why the horizon is two weeks and
+        # not two days. See Notifications/ReminderScheduler.swift.
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.pikos.reminders.refresh
+        # The focus timer shows in the Dynamic Island and on the lock screen
+        # while a session runs. Drawn by the widget extension from
+        # `PikosSupport.FocusActivityAttributes`; started and ended by
+        # Editor/FocusTimer.swift.
+        NSSupportsLiveActivities: true
+        UIBackgroundModes:
+          - fetch
+        # The app's Documents folder appears in the Files app as "Pikos",
+        # and files in it can be opened where they are. This is what makes
+        # "your data is a file" true on a phone: Settings › Your data writes
+        # a copy of the workspace there, and a person can see it, keep it,
+        # or move it out. The live database is NOT in Documents — it is in
+        # the App Group container, which Files never shows — so what a
+        # person can touch is always a copy. See ExportStore.backUpToFiles.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+
+  # Today's pages on the home screen.
+  #
+  # Reads the workspace directly through PikosSupport + PikosCore's
+  # ReadOnlyWorkspace, which has no write methods — SQLite in WAL mode permits
+  # one writer, and a widget refresh racing the app for it would block the app.
+  #
+  # It does NOT depend on PikosEditorBridge: a widget has no editor, and
+  # linking a webview into an extension with a tight memory budget is how
+  # widgets get killed.
+  PikosWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../PikosWidgets/Sources
+      # An extension is reviewed on its own manifest, not its app's.
+      - path: ../PikosWidgets/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: PikosCore
+        product: PikosCore
+      - package: PikosCore
+        product: PikosSupport
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.widgets
+        CODE_SIGN_ENTITLEMENTS: ../PikosWidgets/PikosWidgets.entitlements
+    info:
+      path: ../PikosWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Pikos
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Written here as plist keys rather than as `INFOPLIST_KEY_…` build
+        # settings: those are synthesised only when Xcode generates the
+        # Info.plist, and this target supplies one. As settings they were
+        # silently dropped, and an app with no launch screen is given a
+        # letterboxed window on every modern iPhone.
+        #
+        # An empty dictionary is the modern launch screen: a plain background
+        # in the app's own colours, no storyboard to keep in step with the UI.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # iPad is expected to rotate freely, upside down included — it has no
+        # single "up", and an iPad app that refuses an orientation reads as
+        # broken rather than opinionated.
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+  # The tier-1 flows, driven through the real app.
+  #
+  # XCUITest rather than a unit test: what these cover is the wiring between
+  # screens — a sheet that opens, a row that appears, a tap that lands on the
+  # checkbox and not the row behind it — and none of that is reachable from a
+  # unit test, which is exactly why those bugs survive one.
+  #
+  # Deliberately small. Five flows chosen to match the desktop's `@tier1`
+  # Playwright set, because a UI suite earns its keep by being fast enough that
+  # nobody is tempted to skip it. Detail belongs in the Rust and in
+  # `PikosSupport`, both of which run in milliseconds.
+  PikosUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ../PikosUITests/Sources
+    dependencies:
+      - target: Pikos
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.uitests
+        # A device signs the test runner, which needs a plist; a simulator run never did.
+        GENERATE_INFOPLIST_FILE: YES
+        # No entitlements of its own. The test bundle never touches the App
+        # Group — it hands the app a throwaway directory instead, through
+        # `WorkspaceLocation.workspaceOverrideKey`.

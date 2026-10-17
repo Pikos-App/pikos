@@ -73,6 +73,7 @@ export {
   mapHourToY,
   mapYToDate,
   mapYToHour,
+  shortestBlockMinutes,
   snapY,
   snapYCollapse,
   timeToY,
@@ -107,7 +108,12 @@ export type {
   MonthCellPlacement,
 } from "./calendar/monthGrid";
 // ── Shared palettes and priority labels ──
-export { defaultColorForProvider, PALETTE_COLORS } from "./constants/colors";
+export {
+  currentPaletteColor,
+  defaultColorForProvider,
+  PALETTE_COLORS,
+  withCurrentColor,
+} from "./constants/colors";
 export type { PaletteColor } from "./constants/colors";
 export { NLP_PRIORITY_MAP, PRIORITY_COLORS, PRIORITY_LABELS } from "./constants/priorities";
 export * from "./errors";
@@ -126,6 +132,7 @@ export {
   toISODateTime,
 } from "./format/dateTimePicker";
 export type { TimeSlot } from "./format/dateTimePicker";
+export { formatElapsed, formatSessionLength, MIN_SESSION_S } from "./format/focusDuration";
 export { formatDateRange } from "./format/formatDateRange";
 export { formatClockTime, formatTime12h, formatTime12hParts } from "./format/formatTime";
 export {
@@ -198,6 +205,8 @@ export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
 export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
 export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
+export { deleteAsksWhichDates, pageActions } from "./pages/pageActions";
+export type { PageAction, PageActionId, PageActionRefusal } from "./pages/pageActions";
 export {
   belongsToView,
   compareByScheduledStart,

@@ -6,8 +6,9 @@ thing being operated on (does it come from Pikos or a calendar?) and the surface
 performed from.
 
 Scope: **0.4.1**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
-every Synced/Detached cell is unreachable there. Mobile is a placeholder column
-(`apps/mobile` is a bare `package.json`).
+every Synced/Detached cell is unreachable there. The iOS column describes `apps/ios` — a
+native SwiftUI app over the same Rust, not a second implementation. It compiles and its tier-1
+flows run in a simulator; nothing on it has been measured on a phone yet.
 
 Use it for: checking a new feature covers every origin, and settling "what should this
 do?" for a case the app itself doesn't make obvious.
@@ -16,14 +17,14 @@ do?" for a case the app itself doesn't make obvious.
 
 ## Legend
 
-| Symbol | Meaning |
-| --- | --- |
-| ✅ | Supported, no caveat |
-| ⚠️ | Supported, but this origin behaves differently from Native |
-| 🚫 | The product refuses it, by a guard or by never offering it |
-| ❌ | Offered by the UI but fails: a real gap |
-| — | The concept doesn't exist here, so there's nothing to allow or refuse |
-| ○ | Surface not built |
+| Symbol | Meaning                                                               |
+| ------ | --------------------------------------------------------------------- |
+| ✅     | Supported, no caveat                                                  |
+| ⚠️     | Supported, but this origin behaves differently from Native            |
+| 🚫     | The product refuses it, by a guard or by never offering it            |
+| ❌     | Offered by the UI but fails: a real gap                               |
+| —      | The concept doesn't exist here, so there's nothing to allow or refuse |
+| ○      | Surface not built                                                     |
 
 ⚠️ is reserved for a **divergence between columns**. A caveat that lands the same way on
 every origin is ✅ with the footnote carrying it. Otherwise a row of four ⚠️ says only
@@ -31,46 +32,81 @@ every origin is ✅ with the footnote carrying it. Otherwise a row of four ⚠�
 
 ## Column definitions
 
-| Column | Meaning | Discriminator |
-| --- | --- | --- |
-| **Native** | Page created in Pikos | no `page_sync` row |
-| **Synced** | Live mirror of an external calendar event | `page_sync.sync_state = 'active'` → derived `schedule_locked = true` |
+| Column       | Meaning                                                                              | Discriminator                                                                   |
+| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| **Native**   | Page created in Pikos                                                                | no `page_sync` row                                                              |
+| **Synced**   | Live mirror of an external calendar event                                            | `page_sync.sync_state = 'active'` → derived `schedule_locked = true`            |
 | **Detached** | Was synced, link severed (upstream deleted, or calendar unsynced, while Pikos-owned) | `sync_state = 'detached'`; **unlocked**, but still lives in its external folder |
 | **CLI** | `pikos` binary over the same `pikos-db` writer | headless; expands a rule only to name one occurrence, never to draw it; no UI |
-| **Mobile** | Future mobile runtime | not built |
+| **iOS**      | `apps/ios`, a SwiftUI app over the same `pikos-db` writer through UniFFI             | one writer, shared workspace file                                               |
+
+## Reading the iOS column
+
+It shares the origin columns' behaviour wherever it does anything at all: the guards are in
+`pikos-db`, so a mirror is as locked on the phone as in the app. What differs is how much of
+the surface exists, and five facts explain nearly every `○`:
+
+- **Holding a row lifts it to schedule, so arranging is a mode.** Date, priority, tags,
+  folder and repeat are all editable, each from the long-press menu, and several rows at once
+  from select mode. Select mode is also where a hand-sorted list is rearranged, by its rows'
+  handles, because a held row is already carrying its page to the day. That same held page,
+  kept over the title, opens the switcher, and a folder in it takes the drop.
+- **Reminders are planned, not polled.** The desktop fires them from a task that wakes every
+  clock minute, and iOS suspends that within seconds of backgrounding, so the model inverts:
+  the workspace is asked what will fire over the next fourteen days and each answer becomes a
+  local notification, re-planned on every write, on the way to the background, and by a
+  background refresh. The rows that stay `○` are the ones that need the polling model — the
+  daily summary, the fired log — and quiet hours are `—`, since a Focus mode is the same
+  control system-wide. A reminder is set from quick add's line or changed in the page header.
+- **A hold before every drag.** A page held in the list drops onto an hour of today, drawn under
+  the list, which is the desktop's drag from list to calendar. On the grid, a held block moves, a
+  block's edge held briefly resizes it, and empty grid held until a block appears draws one out to
+  a length. The hold is what tells each from a scroll.
+- **One occurrence at a time, from the calendar.** Long-pressing a block completes or skips
+  _that_ occurrence, which is what a series with a backlog needs — the head sits on last
+  Monday while the block on screen is this Thursday — and asks the desktop's scope question
+  when there is a backlog, as an action sheet. The list's checkbox does not ask: it is the
+  next occurrence due, and a tick there means that one.
+- **Sync is not polled.** The desktop's five-minute poll is an in-process timer, which iOS
+  suspends. A sync runs on return to the foreground when the last one is over fifteen minutes
+  old, inside the reminders' background refresh, and on demand. Every ✅ in §9 means "on the
+  next of those".
+
+`apps/ios/README.md` lists what is deliberately missing and why;
+`docs/ios/06-platform-audit.md` has the platform reasons behind the last three.
 
 ## Row vocabulary (recurring)
 
 Restated here with storage, since the matrix is read cell-by-cell. Canonical
 definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.md).
 
-| Term | What it is | Storage |
-| --- | --- | --- |
-| **Head** (materialized) | The real page that owns the rule. Always sits on the **oldest-open occurrence** — for native *and* synced. | `pages` row + `page_recurrence_rules` |
-| **Virtual occurrence** | A client-rendered expansion of the rule. Not in the DB. | none — `expand_recurrence_range` over IPC |
-| **Done clone** | Real page minted when an occurrence is completed. | `pages` row + `completed_set(page_id, occurrence_date) → clone_id` |
-| **Detached clone** | Native "move one occurrence" result: an independent real page, original date EXDATE'd. Native only. | `pages` row + `rrule_exdates` entry |
-| **Materialized override** | One occurrence of a **synced** series pinned off-rule — by the provider, or by the user on a detached series. Renders as a real, completable block; locked while active. | `page_schedules` row with `rule_id` + `original_date` |
+| Term                      | What it is                                                                                                                                                               | Storage                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| **Head** (materialized)   | The real page that owns the rule. Always sits on the **oldest-open occurrence** — for native _and_ synced.                                                               | `pages` row + `page_recurrence_rules`                              |
+| **Virtual occurrence**    | A client-rendered expansion of the rule. Not in the DB.                                                                                                                  | none — `expand_recurrence_range` over IPC                          |
+| **Done clone**            | Real page minted when an occurrence is completed.                                                                                                                        | `pages` row + `completed_set(page_id, occurrence_date) → clone_id` |
+| **Detached clone**        | Native "move one occurrence" result: an independent real page, original date EXDATE'd. Native only.                                                                      | `pages` row + `rrule_exdates` entry                                |
+| **Materialized override** | One occurrence of a **synced** series pinned off-rule — by the provider, or by the user on a detached series. Renders as a real, completable block; locked while active. | `page_schedules` row with `rule_id` + `original_date`              |
 
 ---
 
 ## 1. Page lifecycle
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
+| Functionality | Native | Synced | Detached | CLI | iOS |
 | --- | --- | --- | --- | --- | --- |
-| Create page | ✅ | 🚫 ¹ | 🚫 ¹ | ✅ `add` ² | ○ |
-| Open in editor | ✅ | ✅ read-only mirror ³ | ✅ | ✅ `read` | ○ |
-| Adjust page title | ✅ | 🚫 locked ⁴ | ✅ | ⚠️ `update --title`, refused on synced ⁴ | ○ |
-| Edit body / content | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --content`, markdown, replaces body | ○ |
-| Adjust subtitle | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --subtitle`, `""` clears | ○ |
-| Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ○ |
-| Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ○ |
-| Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status`; a status other than `not_started` or `done` is refused | ○ |
-| Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ○ |
-| Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ○ |
-| Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ○ |
-| Delete page | ✅ soft → trash | ⚠️ soft + tombstone ⁷ | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹ | ○ |
-| Restore from trash | ✅ | ✅ resumes sync ⁷ | ✅ stays detached ⁸ | ✅ `restore` | ○ |
+| Create page | ✅ | 🚫 ¹ | 🚫 ¹ | ✅ `add` ² | ✅ quick add / new page |
+| Open in editor | ✅ | ✅ read-only mirror ³ | ✅ | ✅ `read` | ✅ same webview |
+| Adjust page title | ✅ | 🚫 locked ⁴ | ✅ | ⚠️ `update --title`, refused on synced ⁴ | ✅ header or long press |
+| Edit body / content | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --content`, markdown, replaces body | ✅ |
+| Adjust subtitle | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --subtitle`, `""` clears | ✅ editor header |
+| Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ✅ long press |
+| Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ✅ long press |
+| Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status`; a status other than `not_started` or `done` is refused | ✅ |
+| Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ✅ long press → Move |
+| Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ✅ held over the title, onto the switcher |
+| Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ✅ select mode's handles |
+| Delete page | ✅ soft → trash | ⚠️ soft + tombstone ⁷ | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹ | ✅ long press; a series asks |
+| Restore from trash | ✅ | ✅ resumes sync ⁷ | ✅ stays detached ⁸ | ✅ `restore` | ✅ |
 
 ¹ `create_page_impl` rejects any create targeting an external-calendar folder
 (`crates/pikos-db/src/pages.rs`). Only the reconciler seeds pages there, via raw SQL.
@@ -87,11 +123,11 @@ reachable from the UI.
 makes the page **Pikos-owned** → an upstream delete or unsync **detaches** instead of
 hard-deleting. `last_opened_at` and `sort_order` are both excluded: reading a page and
 arranging it in a list author nothing, so neither changes its lifecycle. A user who only ever
-*rearranges* a synced event will see it disappear on an upstream delete rather than detach, which is
+_rearranges_ a synced event will see it disappear on an upstream delete rather than detach, which is
 the intended read of "they never made it theirs".
 ⁶ The guard keys on the page's **live link**, not on the folder (`update_page_impl`'s placement
 lock): an active `page_sync` row pins the page to its calendar folder, and no page of any
-origin may move *into* an external-calendar folder. Those stay system-managed. A detached page
+origin may move _into_ an external-calendar folder. Those stay system-managed. A detached page
 is the user's, so it files anywhere, and re-linking it moves it back
 (`reclaim_calendar_folder`), keeping "a synced page lives in its calendar folder" true. The
 editor renders the folder as a read-only label while locked; the page list drops its "Move to
@@ -109,29 +145,30 @@ the page was in the trash arrives rather than waiting for the event to change ag
 ⁸ `soft_delete_page_impl` only tombstones an **active** link, and `restore_page_impl` only
 un-tombstones what that delete set. So detached survives the trash round-trip.
 ⁹ `pikos delete` soft-deletes through the app's own path (`soft_delete_page_impl`, the same trash
-+ tombstone semantics as the desktop, every origin). `--hard` destroys (`hard_delete_page_impl`,
-no trash) and is refused on any link that isn't detached. Active
-*and* tombstoned (`hard_delete_would_resurrect`), because the cascade would take the
-tombstone with the page and the next poll would resurrect the event. A **detached** page is
-the only `page_sync`-bearing page it destroys, which is right: nothing upstream re-creates
-it.
+
+- tombstone semantics as the desktop, every origin). `--hard` destroys (`hard_delete_page_impl`,
+  no trash) and is refused on any link that isn't detached. Active
+  _and_ tombstoned (`hard_delete_would_resurrect`), because the cascade would take the
+  tombstone with the page and the next poll would resurrect the event. A **detached** page is
+  the only `page_sync`-bearing page it destroys, which is right: nothing upstream re-creates
+  it.
 
 ## 2. Schedule (non-recurring)
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
+| Functionality | Native | Synced | Detached | CLI | iOS |
 | --- | --- | --- | --- | --- | --- |
-| Adjust page date | ✅ | 🚫 locked ⁴ | ✅ | ✅ `update --due` ¹⁰ | ○ |
-| Adjust page time | ✅ | 🚫 locked ⁴ | ✅ | ✅ `--due` with a time ¹⁰ | ○ |
-| Adjust duration (end) | ✅ | 🚫 locked ⁴ | ✅ | ✅ `--end` ¹⁰ | ○ |
-| Clear the schedule | ✅ | 🚫 locked ⁴ | ✅ | ✅ `update --unschedule` ¹⁰ | ○ |
+| Adjust page date | ✅ | 🚫 locked ⁴ | ✅ | ✅ `update --due` ¹⁰ | ✅ hold → When |
+| Adjust page time | ✅ | 🚫 locked ⁴ | ✅ | ✅ `--due` with a time ¹⁰ | ✅ same sheet |
+| Adjust duration (end) | ✅ | 🚫 locked ⁴ | ✅ | ✅ `--end` ¹⁰ | ✅ same sheet |
+| Clear the schedule | ✅ | 🚫 locked ⁴ | ✅ | ✅ `update --unschedule` ¹⁰ | ✅ hold → When › No Date |
 | Drag block on calendar | ✅ | 🚫 locked ¹¹ | ✅ | — | ○ |
 | Resize block on calendar | ✅ | 🚫 locked ¹¹ | ✅ | — | ○ |
-| Drag page from list onto calendar | ✅ | 🚫 locked ¹² | ✅ | — | ○ |
-| Set / change per-page reminder | ✅ timed only ¹³ | ✅ same ¹³ | ✅ same ¹³ | ⚠️ `reminders add` ¹³ | ○ |
-| Reminder fires with no explicit lead set | ✅ global default ¹³ | ✅ same ¹³ | ✅ same ¹³ | — | ○ |
-| Several leads on one page | ✅ each fires once ¹³ | ✅ same ¹³ | ✅ same ¹³ | — | ○ |
-| Re-timing re-arms a reminder that already fired | ✅ ¹³ | 🚫 locked; upstream move re-arms ¹³ | ✅ page and override ¹³ | ✅ `update --due` ¹³ | ○ |
-| Timezone semantics | floats (device-local) | ⚠️ timed absolute, all-day floats ¹⁴ | ⚠️ floats, converted at detach ¹⁵ | — | ○ |
+| Drag page from list onto calendar | ✅ | 🚫 locked ¹² | ✅ | — | ⚠️ onto today's hours only |
+| Set / change per-page reminder | ✅ timed only ¹³ | ✅ same ¹³ | ✅ same ¹³ | ⚠️ `reminders add` ¹³ | ✅ page header, same options |
+| Reminder fires with no explicit lead set | ✅ global default ¹³ | ✅ same ¹³ | ✅ same ¹³ | — | ✅ per-device default |
+| Several leads on one page | ✅ each fires once ¹³ | ✅ same ¹³ | ✅ same ¹³ | — | ✅ one notification each |
+| Re-timing re-arms a reminder that already fired | ✅ ¹³ | 🚫 locked; upstream move re-arms ¹³ | ✅ page and override ¹³ | ✅ `update --due` ¹³ | ✅ re-planned on every write |
+| Timezone semantics | floats (device-local) | ⚠️ timed absolute, all-day floats ¹⁴ | ⚠️ floats, converted at detach ¹⁵ | — | same store, same rules |
 
 ¹⁰ Three flags, and none of them changes a page's shape by inference: `--due` moves it
 (zero-padded date, or a full timed ISO), `--all-day` is the only way to drop an existing time,
@@ -146,9 +183,9 @@ shifts the end with the start, and a move within all-day keeps the span, because
 app keeps its length. `--unschedule` removes every one-off schedule row, as the app's Clear
 Date does, and `--no-end` drops only the end; both take the same refusals.
 ¹¹ `useTimedDrag` / `useTimedResize` / `useAllDayDrag` short-circuit on `scheduleLocked`, and
-`PageBlock` also suppresses the grab/resize *affordances* so the cursor never advertises a move
+`PageBlock` also suppresses the grab/resize _affordances_ so the cursor never advertises a move
 that can't happen (`PageBlock.tsx`).
-¹² Synced pages *are* in a page list: their calendar folder's, plus search and Today. The
+¹² Synced pages _are_ in a page list: their calendar folder's, plus search and Today. The
 list-to-calendar drag and the Today-nav drop both filter locked pages through
 `useThreePanelDnD`'s `unlockedIds` before calling `scheduleOnce`, and the ghost preview is
 suppressed for a locked drag so no drop is advertised. A mixed multi-select still schedules its
@@ -165,14 +202,14 @@ alarms are never ingested.
 Three firing behaviors are worth knowing about, because none of them is visible from the
 page that produced them. **No explicit lead** is the common case, not an edge one. A
 page with zero `page_reminders` rows still reminds, at the global default; the query serving
-it differs by origin (device-local for native, detached and *zone-less* synced; absolute for
+it differs by origin (device-local for native, detached and _zone-less_ synced; absolute for
 a zoned mirror), so it needs checking on each. **Several leads** on one page each fire in
 their own tick. Dedup is per-(schedule, lead), so a per-schedule key would let the earliest
 lead swallow the rest. **Re-timing** clears the fired anchor so the reminder arms again at
 the new time. Every gesture that moves an event: drag, popover re-pick, `pikos update --due`,
 moving one occurrence of a detached series, and a provider-side time edit (§9). A live mirror
 can't be moved from Pikos at all (⁴), so its only re-arm path is upstream.
-¹⁴ Only a *timed* synced event is absolute. An all-day one carries `timezone: None` from both
+¹⁴ Only a _timed_ synced event is absolute. An all-day one carries `timezone: None` from both
 providers (`caldav/ics.rs`, `google/events.rs`), since a date has no meaningful zone, so it
 floats exactly like a native all-day page and every viewer sees the same date. §3.
 Absolute binds every surface, not only the calendar: the time on a list row, the day a page is
@@ -185,10 +222,10 @@ summary's counts are one more such surface.
 stored wall-clock (base, override rows, the denorm) into the device zone and clears the stamp,
 so the page keeps the instant it was rendered at and floats natively from there. Display and
 the naive reminder paths, which a detached page falls back to since they exclude only
-*active*-synced rows, are then right by construction. **One refusal:** a recurring series whose
+_active_-synced rows, are then right by construction. **One refusal:** a recurring series whose
 base conversion crosses midnight keeps its raw wall-clock, because the shifted date would
 invalidate `completed_set`, `skip_set`, `rrule_exdates` and each override's `original_date`
-while the rule's BYDAY named the old weekday. Needs a non-local calendar *and* a start within
+while the rule's BYDAY named the old weekday. Needs a non-local calendar _and_ a start within
 the zone offset of midnight.
 
 ## 3. All-day pages
@@ -196,22 +233,22 @@ the zone offset of midnight.
 An all-day page is one whose `scheduled_start` is **date-only** (`YYYY-MM-DD`). Shape is the
 discriminator everywhere. `isAllDayIso` (`packages/core/src/utils/dates.ts`); there's no
 flag column. Ends are stored **inclusive**: the last day the event covers. All-day is
-orthogonal to origin *and* to recurrence, so every row here stacks on top of §1–§2.
+orthogonal to origin _and_ to recurrence, so every row here stacks on top of §1–§2.
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
-| --- | --- | --- | --- | --- | --- |
-| Create as all-day | ✅ click / drag the all-day strip ¹⁶ | 🚫 ¹ | 🚫 ¹ | ✅ date-only NL date ¹⁷ | ○ |
-| Convert timed ↔ all-day | ✅ date picker ¹⁸ | 🚫 locked ⁴ | ✅ | ✅ `--all-day` / a timed `--due` ¹⁰ ¹⁷ | ○ |
-| Multi-day span | ✅ | ✅ | ✅ | ✅ `add`, or `update --end` ¹⁷ | ○ |
-| Drag across days | ✅ | 🚫 locked ¹⁹ | ✅ | — | ○ |
-| Edge-resize the span | ⚠️ not while recurring ²⁰ | 🚫 locked ¹⁹ | ⚠️ same ²⁰ | — | ○ |
-| Extend past the week edge | ⚠️ popover only ²⁰ | 🚫 locked ¹⁹ | ⚠️ same ²⁰ | — | ○ |
-| Stored end convention | inclusive | inclusive; provider's exclusive end decremented once ²¹ | inclusive, frozen at detach | inclusive | ○ |
-| Timezone semantics | floats | floats ¹⁴ ²² | floats | floats ²² | ○ |
-| Set / change per-page reminder | ✅ day-before lead only ²³ | ✅ same | ✅ same | ⚠️ `add` only ²³ | ○ |
-| Counted in the daily summary | ✅ ²⁴ | ✅ ²⁴ | ✅ ²⁴ | — | ○ |
-| Overdue / Today classification | ✅ date compare ²⁵ | ✅ same | ✅ same | ✅ same | ○ |
-| Recurring all-day series | ✅ one bar per day ²⁶ | ✅ same | ✅ same | — | ○ |
+| Functionality                  | Native                               | Synced                                                  | Detached                    | CLI                                    | iOS                    |
+| ------------------------------ | ------------------------------------ | ------------------------------------------------------- | --------------------------- | -------------------------------------- | ---------------------- |
+| Create as all-day              | ✅ click / drag the all-day strip ¹⁶ | 🚫 ¹                                                    | 🚫 ¹                        | ✅ date-only NL date ¹⁷                | ✅ quick add           |
+| Convert timed ↔ all-day        | ✅ date picker ¹⁸                    | 🚫 locked ⁴                                             | ✅                          | ✅ `--all-day` / a timed `--due` ¹⁰ ¹⁷ | ✅ same sheet          |
+| Multi-day span                 | ✅                                   | ✅                                                      | ✅                          | ✅ `add`, or `update --end` ¹⁷         | ✅                     |
+| Drag across days               | ✅                                   | 🚫 locked ¹⁹                                            | ✅                          | —                                      | ○                      |
+| Edge-resize the span           | ⚠️ not while recurring ²⁰            | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                      |
+| Extend past the week edge      | ⚠️ popover only ²⁰                   | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                      |
+| Stored end convention          | inclusive                            | inclusive; provider's exclusive end decremented once ²¹ | inclusive, frozen at detach | inclusive                              | inclusive              |
+| Timezone semantics             | floats                               | floats ¹⁴ ²²                                            | floats                      | floats ²²                              | same store, same rules |
+| Set / change per-page reminder | ✅ day-before lead only ²³           | ✅ same                                                 | ✅ same                     | ⚠️ `add` only ²³                       | ✅ page header         |
+| Counted in the daily summary   | ✅ ²⁴                                | ✅ ²⁴                                                   | ✅ ²⁴                       | —                                      | ○ no summary           |
+| Overdue / Today classification | ✅ date compare ²⁵                   | ✅ same                                                 | ✅ same                     | ✅ same                                | ✅ same predicate      |
+| Recurring all-day series       | ✅ one bar per day ²⁶                | ✅ same                                                 | ✅ same                     | —                                      | ✅ renders             |
 
 ¹⁶ A click in the all-day strip creates a single-day page; a drag across columns creates a span
 (`useAllDayCreate`). Quick Add with a date-only date does the same.
@@ -222,7 +259,7 @@ shape. `update` reaches both too, but only when asked: `--all-day` drops a time 
 timed end, which an all-day page can't hold), a timed `--due` collapses an all-day span to that
 instant, and `--end` builds or edits a span in whichever shape the page already is. The app's
 own transition table (¹⁸) keeps the date extent across timed → all-day where the CLI clears it;
-the CLI's flag *is* the request, so it does what it was told and nothing more.
+the CLI's flag _is_ the request, so it does what it was told and nothing more.
 ¹⁸ `computeScheduleTransition` (`shared/utils/schedule.ts`) owns all four transitions: all-day
 → timed collapses to a single day; timed → all-day keeps the date extent and drops the time.
 ¹⁹ Same lock as timed. `useAllDayDrag` short-circuits on `scheduleLocked` for both move and
@@ -238,11 +275,11 @@ raw, so the two directions are separate constructors: `InclusiveEnd::from_provid
 which silently shortens every multi-day span by a day, is now a missing method rather than a
 reachable path.
 ²² All-day floats regardless of the stored `timezone` column: the renderer branches on the
-date-only *shape* (`isAllDayIso` → `parse(iso, "yyyy-MM-dd")`, `dates.ts`) and never reads the
+date-only _shape_ (`isAllDayIso` → `parse(iso, "yyyy-MM-dd")`, `dates.ts`) and never reads the
 zone. The CLI stamps `local_tz()` on every schedule it writes, all-day included (`main.rs`); it
 has no effect on display.
 ²³ An all-day page carries exactly one reminder shape: the `-2` sentinel, "the day before at
-09:00 local", which `due_day_before_reminders` resolves against the event's *date*.
+09:00 local", which `due_day_before_reminders` resolves against the event's _date_.
 Minutes-before leads stay excluded on every origin. `due_explicit_reminders` skips date-only
 starts, since "N minutes before" would land at midnight-minus-N. `ReminderDropdown` therefore
 swaps its whole option list in all-day mode rather than filtering the timed one, so the only
@@ -263,13 +300,13 @@ elapsed minutes a timed span uses.
 
 ## 4. Recurrence rule (the series itself)
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
-| --- | --- | --- | --- | --- | --- |
-| Add a recurrence rule | ✅ | 🚫 calendar-owned ²⁷ | ✅ | ✅ `add` NL ²⁸ | ○ |
-| Edit cadence (freq/interval/weekdays) | ✅ | 🚫 ²⁷ read-only label | ⚠️ ²⁹ | — | ○ |
-| Remove the rule | ✅ | 🚫 calendar-owned ²⁷ | ✅ | — | ○ |
-| Rule source of truth | user | provider (wholesale rewrite each sync) | frozen at detach | user | ○ |
-| Head derivation | `oldest_open_occurrence` | `oldest_open_occurrence` ³⁰ | same | same | ○ |
+| Functionality                         | Native                   | Synced                                 | Detached         | CLI            | iOS                    |
+| ------------------------------------- | ------------------------ | -------------------------------------- | ---------------- | -------------- | ---------------------- |
+| Add a recurrence rule                 | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | ✅ `add` NL ²⁸ | ✅ long press → Repeat |
+| Edit cadence (freq/interval/weekdays) | ✅                       | 🚫 ²⁷ read-only label                  | ⚠️ ²⁹            | —              | ✅ same lock ²⁹        |
+| Remove the rule                       | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | —              | ✅ Repeat → off        |
+| Rule source of truth                  | user                     | provider (wholesale rewrite each sync) | frozen at detach | user           | user                   |
+| Head derivation                       | `oldest_open_occurrence` | `oldest_open_occurrence` ³⁰            | same             | same           | same                   |
 
 ²⁷ `ensure_rule_row_unlocked` (`crates/pikos-db/src/schedules.rs`) guards update / delete rule
 and both exdate paths. **Create is guarded separately**. It calls
@@ -294,28 +331,31 @@ it excluded. Rejected: excluding the end condition entirely (it made that gain s
 locking every timed UNTIL (would lock every rule the editor itself had already saved). The
 residual is a non-conformant date-only UNTIL on a *timed* series, which gains that day's
 occurrence; RFC 5545 pairs a date-only UNTIL with an all-day DTSTART, where it is lossless.
-Locked or not, provider rules still *expand* correctly. A **freq change** still drops what the
+Locked or not, provider rules still *expand\* correctly. A **freq change** still drops what the
 new freq can't carry, by `optionsForFreq`'s whitelist. Including the BYDAY ordinal and BYMONTH,
 which no frequency the editor offers can carry meaningfully. The head-drag realign
 (`alignWeeklyRuleToAnchor`) consults the same lock and skips a locked rule rather than rebuild
-it.
+it. iOS locks the same set, through the same guard. Its form has no controls for a day of the
+month, a month, BYSETPOS or a week start, so a rule carrying any of them shows its pattern as a
+label and keeps those terms through an interval or end change; a new frequency drops the whole
+pattern rather than applying the whitelist.
 ³⁰ Both kinds run the same `recompute_recurring_schedule`. For synced, the reconciler writes
 the provider base as a **floor** then recomputes, so the head lands on oldest-open rather than
 the raw base. The completed/skip sets survive a wholesale rule rewrite and push it forward.
 
 ## 5. The head page (materialized)
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
+| Functionality | Native | Synced | Detached | CLI | iOS |
 | --- | --- | --- | --- | --- | --- |
-| Move the head (drag / date edit) | ⚠️ snaps to rule ³¹ | 🚫 locked ⁴ ¹¹ | ⚠️ ³¹ | 🚫 refused ¹⁰ ³¹ | ○ |
-| Complete head, on time or future | ✅ fast path ³² | ✅ same command ³² | ✅ | ✅ `done` | ○ |
-| Complete head, overdue | ✅ scope dialog ³³ | ✅ same dialog ³⁴ | ✅ same dialog | ⚠️ one occurrence, no prompt ³⁵ | ○ |
-| … scope *Just this one* | ✅ head's own day; the rest stay open ³³ | ✅ same | ✅ | ✅ the only CLI behavior ³⁵ | ○ |
-| … scope *This and everything before today* | ✅ a done clone per open day ³³ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | 🚫 ³⁵ | ○ |
-| Uncomplete (uncheck a done clone) | ✅ ³⁶ | ✅ ³⁶ | ✅ | ✅ `status <clone> not_started` ³⁶ | ○ |
-| Delete the head | ✅ series stops ³⁷ | ⚠️ soft + tombstone ⁷ ³⁷ | ✅ ³⁷ | ✅ soft ⁹ ³⁷ | ○ |
-| Restore the head | ✅ series returns ³⁸ | ✅ ³⁸ | ✅ | — | ○ |
-| Terminal state (series exhausted) | ✅ head marked done, no clone | ⚠️ done once you ticked or skipped every occurrence since connecting; a series you never touched stays open at its last occurrence | ✅ like native | ✅ | ○ |
+| Move the head (drag / date edit) | ⚠️ snaps to rule ³¹ | 🚫 locked ⁴ ¹¹ | ⚠️ ³¹ | 🚫 refused ¹⁰ ³¹ | ⚠️ snaps to rule, from the menu |
+| Complete head, on time or future | ✅ fast path ³² | ✅ same command ³² | ✅ | ✅ `done` | ✅ checkbox |
+| Complete head, overdue | ✅ scope dialog ³³ | ✅ same dialog ³⁴ | ✅ same dialog | ⚠️ one occurrence, no prompt ³⁵ | ⚠️ list: no dialog; calendar: asks ³³ |
+| … scope *Just this one* | ✅ head's own day; the rest stay open ³³ | ✅ same | ✅ | ✅ the only CLI behavior ³⁵ | ✅ the list's only behaviour |
+| … scope *This and everything before today* | ✅ a done clone per open day ³³ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | 🚫 ³⁵ | ✅ from the calendar block ³³ |
+| Uncomplete (uncheck a done clone) | ✅ ³⁶ | ✅ ³⁶ | ✅ | ✅ `status <clone> not_started` ³⁶ | ✅ checkbox |
+| Delete the head | ✅ series stops ³⁷ | ⚠️ soft + tombstone ⁷ ³⁷ | ✅ ³⁷ | ✅ soft ⁹ ³⁷ | ✅ |
+| Restore the head | ✅ series returns ³⁸ | ✅ ³⁸ | ✅ | — | ✅ |
+| Terminal state (series exhausted) | ✅ head marked done, no clone | ⚠️ done once you ticked or skipped every occurrence since connecting; a series you never touched stays open at its last occurrence | ✅ like native | ✅ | ✅ same derivation |
 
 ³¹ The sets model can't represent a head parked on a date the rule can't yield, and the heal
 would silently revert it on relaunch (decided 2026-07-03), so an off-pattern move lands on a
@@ -333,9 +373,9 @@ the Pikos app"). The old silently-inert anchor-row write is gone.
 `completed_set` entry + recompute. No head-advance, no EXDATE merge. Native derives the
 occurrence from the head server-side; **synced passes the client-rendered occurrence**,
 validated against the raw rule (`synced_occurrence_is_valid`, `pages.rs`).
-³³ Open occurrences before today open `RecurringGapDialog`, which asks scope only: *Just this
-one* resolves the gestured occurrence and leaves the rest open; *This and everything before
-today* completes each open day as its own done clone, repeating the ordinary single completion
+³³ Open occurrences before today open `RecurringGapDialog`, which asks scope only: _Just this
+one_ resolves the gestured occurrence and leaves the rest open; _This and everything before
+today_ completes each open day as its own done clone, repeating the ordinary single completion
 until the head reaches today. Nothing goes to the skip-set. Dismissal is the delete gesture's
 (§6). **The backlog is what summons it**: no open day before today, or a gesture on today's/a
 future occurrence, and the tick commits with no dialog at all. Which occurrence a gesture names
@@ -366,40 +406,50 @@ survive soft-delete). Skipped for an active-synced head, whose cache is reconcil
 
 ## 6. A single occurrence
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
+| Functionality | Native | Synced | Detached | CLI | iOS |
 | --- | --- | --- | --- | --- | --- |
-| Render a virtual occurrence | ✅ repeat glyph, no checkbox | ✅ checkbox | ✅ checkbox | — draws none; real rows only | ○ |
-| Open a virtual occurrence | ✅ opens the head | ✅ | ✅ | — | ○ |
-| Delete a single virtual | ✅ skip-set + undo toast ³⁹ | ✅ skip-set survives sync ³⁹ | ✅ | ✅ `occurrence skip` / `unskip` ³⁹ | ○ |
-| Delete an occurrence with a backlog behind it | ✅ scope dialog ³⁹ | ✅ same, copy reads local-only ³⁹ | ✅ plain delete copy ³⁹ | — | ○ |
-| … scope *Just this one* | ✅ that date to the skip-set | ✅ same | ✅ | — | ○ |
-| … scope *This and everything before today* | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | — | ○ |
-| Move a single virtual | ✅ detached clone ⁴⁰ | 🚫 locked ⁴¹ | ✅ mints an override ⁴² | ✅ `occurrence move`, same arms ⁴⁰ ⁴² | ○ |
-| Complete a single virtual | 🚫 head-only ⁴³ | ✅ that occurrence ⁴³ | ✅ ⁴³ | ✅ synced, `done --date` ³⁵ | ○ |
-| Tick an occurrence with a backlog behind it | — head-only ⁴³ | ✅ the same scope dialog ³³ ⁴³ | ✅ ⁴³ | — | ○ |
-| Render a materialized override | — synced series only ⁴⁴ | ✅ locked block at the moved slot ⁴² | ✅ same block, unlocked ⁴² | — | ○ |
-| Move a materialized override | — synced series only ⁴⁴ | 🚫 provider-owned | ✅ moves the row in place ⁴² | — | ○ |
-| Delete a materialized override | — synced series only ⁴⁴ | ✅ skip-set, series intact ³⁹ | ✅ same ³⁹ | — | ○ |
-| Complete a materialized override | — synced series only ⁴⁴ | ✅ keyed on `original_date` ⁴² | ✅ same key ⁴² | — | ○ |
-| Re-link after moving a detached override | — | — | ⚠️ provider's time wins ⁴² | — | ○ |
-| Move / complete / delete a done clone | ✅ independent | ✅ independent (native page) | ✅ | ✅ ⁹ | ○ |
-| Per-occurrence reminder fires (lead, multi-lead, re-arm: §2 ¹³) | ✅ device-local wall-clock | ✅ source-zone → absolute | ⚠️ device-local ¹⁵ | — | ○ |
-| Per-occurrence body / notes | 🚫 body is series-wide ⁴⁵ | 🚫 same | 🚫 same | — | ○ |
+| Render a virtual occurrence | ✅ repeat glyph, no checkbox | ✅ checkbox | ✅ checkbox | — draws none; real rows only | ✅ calendar only |
+| Open a virtual occurrence | ✅ opens the head | ✅ | ✅ | — | ✅ opens the head |
+| Delete a single virtual | ✅ skip-set + undo toast ³⁹ | ✅ skip-set survives sync ³⁹ | ✅ | ✅ `occurrence skip` / `unskip` ³⁹ | ✅ long press → Skip ³⁹ |
+| Delete an occurrence with a backlog behind it | ✅ scope dialog ³⁹ | ✅ same, copy reads local-only ³⁹ | ✅ plain delete copy ³⁹ | — | ✅ action sheet ³⁹ |
+| … scope *Just this one* | ✅ that date to the skip-set | ✅ same | ✅ | — | ✅ the only iOS behaviour |
+| … scope *This and everything before today* | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴ | — | ✅ bounded the same ³⁹ |
+| Move a single virtual | ✅ detached clone ⁴⁰ | 🚫 locked ⁴¹ | ✅ mints an override ⁴² | ✅ `occurrence move`, same arms ⁴⁰ ⁴² | ✅ long press → Move ⁴⁰ |
+| Complete a single virtual | 🚫 head-only ⁴³ | ✅ that occurrence ⁴³ | ✅ ⁴³ | ✅ synced, `done --date` ³⁵ | ✅ long press ⁴³ |
+| Tick an occurrence with a backlog behind it | — head-only ⁴³ | ✅ the same scope dialog ³³ ⁴³ | ✅ ⁴³ | — | ✅ the same question ³³ ⁴³ |
+| Render a materialized override | — synced series only ⁴⁴ | ✅ locked block at the moved slot ⁴² | ✅ same block, unlocked ⁴² | — | ✅ drawn at the moved slot |
+| Move a materialized override | — synced series only ⁴⁴ | 🚫 provider-owned | ✅ moves the row in place ⁴² | — | ✅ Move this one, detached only |
+| Delete a materialized override | — synced series only ⁴⁴ | ✅ skip-set, series intact ³⁹ | ✅ same ³⁹ | — | ✅ Skip this one |
+| Complete a materialized override | — synced series only ⁴⁴ | ✅ keyed on `original_date` ⁴² | ✅ same key ⁴² | — | ✅ Complete this one |
+| Re-link after moving a detached override | — | — | ⚠️ provider's time wins ⁴² | — | — |
+| Move / complete / delete a done clone | ✅ independent | ✅ independent (native page) | ✅ | ✅ ⁹ | ✅ an ordinary page |
+| Per-occurrence reminder fires (lead, multi-lead, re-arm: §2 ¹³) | ✅ device-local wall-clock | ✅ source-zone → absolute | ⚠️ device-local ¹⁵ | — | ✅ same horizon, phone's zone |
+| Per-occurrence body / notes | 🚫 body is series-wide ⁴⁵ | 🚫 same | 🚫 same | — | — |
 
 ³⁹ Dismissals go to `skip_set`, **not** rule EXDATEs. That's what makes a synced dismissal
 survive a wholesale provider rule rewrite: the reconciler never writes the skip-set
 (`pages.rs`). With open occurrences before today behind it, the gesture opens
-`RecurringGapDialog` for scope: *Just this one*, or *This and everything before today*, which
+`RecurringGapDialog` for scope: _Just this one_, or _This and everything before today_, which
 writes the whole backlog to the skip-set. That arm is where "not doing these" lives now;
 completion never dismisses anything (§5 ³³). A moved occurrence deletes on the same path, keyed
 to its `original_date`, so the block that reads as one event can't take the whole series with
 it. The popover is shaped from the series page, and a page-level delete there trashed every
 occurrence. On an active mirror the copy reads local-only ("Remove from Pikos"): read-first,
-nothing is written upstream.
+nothing is written upstream. iOS reaches the same skip-set from a long press on a calendar
+block, with an undo bar rather than a toast, and asks the same scope question — as an **action
+sheet**, since a phone has no room for the desktop's per-choice helper lines: the counts carry
+that instead ("Skip just this one" / "Skip all 4 days"). `Workspace::occurrence_backlog` is what
+decides whether to ask, and it applies every exclusion the desktop does — the rule's exdates,
+completed and skipped days, a moved occurrence's original date, and the synced connect-day floor.
+Empty means no question, so a series that is not behind commits on the first tap.
 ⁴⁰ Spawns an independent real page at the new time and EXDATEs the original date, in one
 transaction. Re-homing this to a `page_schedules` override is deliberately deferred past 0.4.0,
 except a **detached** series, which materializes an override row instead; native keeps the
-clone.
+clone. iOS reaches the same call from the long-press menu rather than from a drag — a drag on a
+phone competes with scrolling the grid — and only on a projected block, since a real one has a
+row of its own to move. The entry is withheld on an active mirror, which
+`ensure_rule_row_unlocked` refuses anyway; `CalendarEntry.schedule_locked` is what lets the menu
+know before offering.
 ⁴¹ Blocked at the backend (`reschedule_virtual_occurrence_impl` → `ensure_rule_row_unlocked`)
 and unreachable from the UI: `VirtualPageBlockPopover` renders the synced schedule as a
 read-only label when the series is locked, matching `PageBlockPopover`. Drag and resize on the
@@ -407,7 +457,7 @@ same block are suppressed too (§2 ¹¹).
 ⁴² A moved synced instance renders as a real, completable block (checkbox + sync icon),
 deliberately **not** a `VirtualOccurrence`, carrying the page's own lock state. Checking it
 records the **original** occurrence date, so it agrees with the reminder derivation
-(`useRecurrenceExpansion.ts`). The block is gated on sync *origin* (`syncState`), not on the
+(`useRecurrenceExpansion.ts`). The block is gated on sync _origin_ (`syncState`), not on the
 lock, since only a synced series has override rows at all. Gating on the lock erased a
 **detached** series' moved instance from the calendar entirely, because the original slot
 stays suppressed either way. A detached override therefore
@@ -418,9 +468,9 @@ device-local path (detach floats the row via `float_wall_clock`).
 already exists and moves in place, a plain virtual mints one. `original_date` is preserved
 either way, so a later re-link reclaims the occurrence and **overwrites the user's time with
 the provider's**. The mirror wins; that is the read-only invariant, not a bug. Cloning instead
-would leave the occurrence to be re-mirrored *beside* the clone: one occurrence, two blocks,
+would leave the occurrence to be re-mirrored _beside_ the clone: one occurrence, two blocks,
 permanently, which is why the plain-virtual half stopped cloning too (the arm is chosen by sync
-*origin*, not by whether a row happens to exist). A native series has no upstream to reclaim
+_origin_, not by whether a row happens to exist). A native series has no upstream to reclaim
 the date, so it keeps clone + EXDATE and the occurrence leaves the series for good.
 ⁴³ The checkbox follows sync **origin** (`useRecurringActions.showsCheckbox`). A synced-origin
 virtual, active or detached, renders one and completes that instance: the event may be a
@@ -428,6 +478,15 @@ birthday rather than a meeting, so "done" means resolved, and the record belongs
 names. Its popover carries the matching Status row. A **native** virtual keeps the repeat glyph
 and no checkbox: a task series funnels to its head, which is the next thing due. To complete a
 specific future native occurrence, materialize it first, then complete the resulting real page.
+iOS's backlog arm walks it with `complete_occurrences_to_today`, repeating the ordinary single
+completion until the head reaches today — one done page per missed day, nothing to the skip-set,
+the same as here. Bounded twice: by today, and by the count the sheet offered. A step that fails
+to advance the head stops it too, so a rule the engine cannot move on cannot spin.
+iOS applies the identical rule from `CalendarEntry.is_synced_origin`, which carries sync
+_origin_ and not the lock: "Complete this one" appears on any occurrence of a synced-origin
+series and on a native series' own head block — a real block, drawn from the row — and never on
+a native virtual. The occurrence it names travels as one `Occurrence` record, because
+`complete_recurring_page_impl` needs the date and the start together.
 ⁴⁴ Override rows exist only on synced series, whichever side authored them. A native move
 produces a clone + EXDATE instead. Why, and what a re-link does to them: ⁴² above. A provider's
 copy of an instance that keeps its time, which Google sends whenever an attendee, call link or
@@ -439,16 +498,16 @@ naturally: write in the head before completing, and the clone captures them.
 
 ## 7. External-calendar folders
 
-| Functionality | Regular folder | External-calendar folder | CLI | Mobile |
+| Functionality | Regular folder | External-calendar folder | CLI | iOS |
 | --- | --- | --- | --- | --- |
-| Create | ✅ | 🚫 sync enable path only | ✅ `folders create` | ○ |
-| Rename | ✅ | 🚫 sync-owned, follows the calendar ⁴⁶ | ✅ `folders rename`, refused on a calendar folder | ○ |
-| Recolor | ✅ | ✅ Pikos palette, user pick wins ⁴⁷ | — | ○ |
-| Reparent / nest | ✅ | 🚫 both directions ⁴⁸ | — | ○ |
-| Delete | ✅ | 🚫 disconnect in settings ⁴⁸ | ✅ `folders delete` to the trash, `folders restore` | ○ |
-| Enable / disable (per-calendar) | — | ⚠️ sync teardown, not hide ⁴⁹ | — | ○ |
-| Default page-list sort | ✅ manual | ⚠️ date ⁵⁰ | — | ○ |
-| Grouped under an account heading | — | ✅ with >1 account ⁵¹ | — | ○ |
+| Create | ✅ | 🚫 sync enable path only | ✅ `folders create` | ✅ folder manager |
+| Rename | ✅ | 🚫 sync-owned, follows the calendar ⁴⁶ | ✅ `folders rename`, refused on a calendar folder | ✅ folder manager |
+| Recolor | ✅ | ✅ Pikos palette, user pick wins ⁴⁷ | — | ✅ folder manager ⁴⁷ |
+| Reparent / nest | ✅ | 🚫 both directions ⁴⁸ | — | — folders don't nest, as on the desktop |
+| Delete | ✅ | 🚫 disconnect in settings ⁴⁸ | ✅ `folders delete` to the trash, `folders restore` | ✅ regular folders only |
+| Enable / disable (per-calendar) | — | ⚠️ sync teardown, not hide ⁴⁹ | — | ✅ Settings → Calendars |
+| Default page-list sort | ✅ manual | ⚠️ date ⁵⁰ | — | ✅ same defaults, per view ⁵⁰ |
+| Grouped under an account heading | — | ✅ with >1 account ⁵¹ | — | ✅ same rule ⁵¹ |
 
 ⁴⁶ The sidebar item offers no rename. Sync owns the name end to end. Every re-discovery
 reconciles the folder to `sync_calendar.display_name` (`upsert_sync_calendar_impl` →
@@ -460,9 +519,18 @@ guard the name, so a programmatic rename lands. It is simply reverted on the nex
 following the provider's color until the user picks one from either surface (the sidebar
 context menu or the Calendar Sync panel row), after which `color_user_set` latches and
 re-discovery leaves it alone. **Both surfaces write `sync_calendar.color`**; the folder's
-column is a derived copy, so they cannot show different colors.
+column is a derived copy, so they cannot show different colors. iOS offers the same picker on
+the folder-manager row's colour dot, for a calendar's folder as well as a regular one — it is
+the one thing about such a folder that is not the calendar's. The palette itself is served by
+the workspace (`Workspace::palette_colors`) rather than written out in Swift: it is already
+defined in `@pikos/core` and mirrored in `pikos-core::colors`, graded against it, and a fourth
+copy is one more place a colour is added and does not arrive.
 ⁴⁸ `EXTERNAL_FOLDER_LOCKED_MSG`: "use the Calendar Sync settings to disconnect"
-(`crates/pikos-db/src/folders.rs`). Color stays editable.
+(`crates/pikos-db/src/folders.rs`). Color stays editable. iOS adds a cycle guard the data layer
+does not have: `set_folder_parent` refuses a folder moved inside itself or any of its own
+descendants, at any depth. Nothing downstream checks for that today, and the result is silent —
+both rows survive, neither is reachable from the top level, and the folders vanish from the
+sidebar with no error and no way back short of editing SQL.
 ⁴⁹ The Calendar Sync panel's per-calendar switch **enables/disables the sync itself. It is not
 a visibility toggle**. Disable runs a full teardown (`disable_sync_calendar` →
 `teardown_calendar`): bare mirrors are hard-deleted, owned pages detach in place, the sync
@@ -476,40 +544,47 @@ Per-calendar *hide* stays unbuilt, and the off-confirm is what stops the switch 
 one.
 ⁵⁰ An external folder's page list defaults to date order (`useActiveSortMode`). A calendar
 mirror is chronology, not a hand-arranged list. A stored per-view sort choice always wins, and
-native folders keep manual.
+native folders keep manual. iOS keeps the same per-view choice in the App Group's defaults and
+orders with the same four rules, ported to `PikosSupport.PageSort` and tested on the host.
 ⁵¹ With calendars from more than one account, the sidebar groups them under per-account
 headings (`useCalendarAccountGroups`); a single account renders headingless, and the heading
 disappears again when a disconnect leaves one. Same-named calendars on different accounts stay
-distinct. Rows are keyed by folder id, headed by account.
+distinct. Rows are keyed by folder id, headed by account. iOS's folder manager applies the same
+rule, with one addition: a calendar folder whose account has gone — a disconnect that left it
+behind — is still listed, under a plain "Calendars" heading, rather than dropping off a screen
+whose whole job is to show what exists.
 
 ## 8. Cross-cutting surfaces
 
-| Functionality | Native | Synced | Detached | CLI | Mobile |
+| Functionality | Native | Synced | Detached | CLI | iOS |
 | --- | --- | --- | --- | --- | --- |
-| Full-text search | ✅ | ✅ ⁵² | ✅ | ✅ `search`, `--any`, `--after` ⁵² | ○ |
-| Today / Inbox views | ✅ | ✅ ⁵³ | ✅ | ✅ `today` / `list` ⁵⁴ | ○ |
+| Full-text search | ✅ | ✅ ⁵² | ✅ | ✅ `search`, `--any`, `--after` ⁵² | ✅ same ranking and rows |
+| Recently opened pages, before a query is typed | ✅ | ✅ | ✅ | — | ✅ |
+| Today / Inbox views | ✅ | ✅ ⁵³ | ✅ | ✅ `today` / `list` ⁵⁴ | ✅ both, plus Upcoming |
 | Page linking (`[[`) + backlinks | ○ ⁵⁵ | ○ ⁵⁵ | ○ ⁵⁵ | — | ○ |
-| Markdown / CSV / SQLite export | ✅ ⁵⁶ | ✅ ⁵⁶ | ✅ ⁵⁶ | — | ○ |
+| Markdown / CSV / SQLite export | ✅ ⁵⁶ | ✅ ⁵⁶ | ✅ ⁵⁶ | — | ✅ share sheet ⁵⁶ |
 | Import (Markdown / CSV) | ⚠️ ⁵⁷ | — ¹ | — | — | ○ |
-| Daily summary notification | ✅ ⁵⁸ | ✅ same | ✅ same | — | ○ |
-| Quiet hours suppress a reminder | ✅ dropped, not deferred ⁵⁸ | ✅ same | ✅ same | — | ○ |
-| A fired reminder doesn't fire twice | ✅ ¹³ | ✅ ¹³ | ✅ ¹³ | — | ○ |
-| Trash view: list, restore, empty now | ✅ ⁵⁹ | ⚠️ restore resumes sync ⁷ | ⚠️ ⁵⁹ | ⚠️ `trash` lists, `restore`; no empty-now | ○ |
-| 30-day trash sweep | ✅ destroyed | ⚠️ kept, by design ⁵⁹ | ⚠️ kept, unintended ⁵⁹ | — | ○ |
+| Daily summary notification | ✅ ⁵⁸ | ✅ same | ✅ same | — | ○ the Today widget instead |
+| Quiet hours suppress a reminder | ✅ dropped, not deferred ⁵⁸ | ✅ same | ✅ same | — | — a Focus mode is the control |
+| A fired reminder doesn't fire twice | ✅ ¹³ | ✅ ¹³ | ✅ ¹³ | — | ✅ the OS delivers each once |
+| Trash view: list, restore, empty now | ✅ ⁵⁹ | ⚠️ restore resumes sync ⁷ | ⚠️ ⁵⁹ | ⚠️ `trash` lists, `restore`; no empty-now | ⚠️ list + restore, no empty |
+| 30-day trash sweep | ✅ destroyed | ⚠️ kept, by design ⁵⁹ | ⚠️ kept, unintended ⁵⁹ | — | ✅ same sweep, same file |
 | List tags by use | ✅ | ✅ | ✅ | ✅ `tags` | ○ |
-| Search operators (`tag:` `folder:` `is:` `priority:` `due:`) | ✅ ⁶⁰ | ✅ ⁶⁰ | ✅ ⁶⁰ | ⚠️ flags, not operators ⁶⁰ | ○ |
-| Command palette (`>` prefix) | ✅ ⁶¹ | — ⁶¹ | — ⁶¹ | — | ○ |
-| Upcoming view (next 7 days, grouped) | ✅ | ✅ | ✅ | — | ○ |
-| Move overdue → today (bulk) | ✅ | 🚫 locked ⁶² | ✅ | — | ○ |
-| Month view | ✅ | ✅ | ✅ | — | ○ |
-| Right-click a calendar block | ✅ opens its popover | ✅ same, schedule read-only ⁴ | ✅ | — | ○ |
-| Escape in the editor | ✅ goes to the calendar; a multi-selection clears first | ✅ same | ✅ same | — | ○ |
-| `.ics` calendar export | ✅ ⁶³ | ✅ ⁶³ | ✅ ⁶³ | — | ○ |
-| Notification history panel | ✅ ⁶⁴ | ✅ ⁶⁴ | ✅ ⁶⁴ | — | ○ |
-| Notification click opens its page | ✅ ⁶⁵ | ✅ ⁶⁵ | ✅ ⁶⁵ | — | ○ |
-| Day-before reminder lead (all-day) | ✅ ⁶⁶ | ✅ ⁶⁶ | ✅ ⁶⁶ | ✅ `add` ⁶⁶ | ○ |
-| Focus timer on a page | ✅ ⁶⁷ | ✅ ⁶⁷ | ✅ ⁶⁷ | — | ○ |
-| MCP tool surface (`pikos mcp`) | ✅ ⁶⁸ | ✅ same guards ⁶⁸ | ✅ ⁶⁸ | ✅ `mcp` ⁶⁸ | ○ |
+| Search operators (`tag:` `folder:` `is:` `priority:` `due:`) | ✅ ⁶⁰ | ✅ ⁶⁰ | ✅ ⁶⁰ | ⚠️ flags, not operators ⁶⁰ | ✅ same grammar ⁶⁰ |
+| Command palette (`>` prefix) | ✅ ⁶¹ | — ⁶¹ | — ⁶¹ | — | — |
+| Upcoming view (next 7 days, grouped) | ✅ | ✅ | ✅ | — | ✅ |
+| Move overdue → today (bulk) | ✅ | 🚫 locked ⁶² | ✅ | — | ✅ Overdue header ⁶² |
+| Select several: complete / schedule / move / delete | ✅ multi-select ¹² | ⚠️ locked members skipped ¹² | ✅ | — | ✅ select mode, same skips ⁶² |
+| System search finds a page (Spotlight) | — | — | — | — | ✅ open pages, on-device |
+| Month view | ✅ | ✅ | ✅ | — | ✅ bars per day, tap for the day |
+| Right-click a calendar block | ✅ opens its popover | ✅ same, schedule read-only ⁴ | ✅ | — | — |
+| Escape in the editor | ✅ goes to the calendar; a multi-selection clears first | ✅ same | ✅ same | — | — |
+| `.ics` calendar export | ✅ ⁶³ | ✅ ⁶³ | ✅ ⁶³ | — | ✅ same builder ⁶³ |
+| Notification history panel | ✅ ⁶⁴ | ✅ ⁶⁴ | ✅ ⁶⁴ | — | ○ the plan is rebuilt, not logged |
+| Notification click opens its page | ✅ ⁶⁵ | ✅ ⁶⁵ | ✅ ⁶⁵ | — | ✅ and "Complete" from the banner |
+| Day-before reminder lead (all-day) | ✅ ⁶⁶ | ✅ ⁶⁶ | ✅ ⁶⁶ | ✅ `add` ⁶⁶ | ✅ quick add, or the default ⁶⁶ |
+| Focus timer on a page | ✅ ⁶⁷ | ✅ ⁶⁷ | ✅ ⁶⁷ | — | ✅ editor toolbar ⁶⁷ |
+| MCP tool surface (`pikos mcp`) | ✅ ⁶⁸ | ✅ same guards ⁶⁸ | ✅ ⁶⁸ | ✅ `mcp` ⁶⁸ | — |
 
 ⁵² Synced events are real pages, so they flow through `pages_fts` automatically. No origin
 filtering anywhere in `search_pages_impl`; trashed pages never appear. A series' done clones
@@ -531,8 +606,8 @@ advertise a number before you ask. The CLI's `search --any` matches pages holdin
 words, and falls back to it when no page holds them all; the app always needs every word.
 `--after` takes the cursor a previous page of results printed.
 ⁵³ The Today predicate (`belongsToView`: `scheduledStart ≤ today`, open only) is origin-blind:
-a past *synced one-off* stays until ticked, agreeing with the daily summary's `overdue_count`.
-A synced *series* is listed at today's occurrence whenever it has one, so a series nobody has
+a past _synced one-off_ stays until ticked, agreeing with the daily summary's `overdue_count`.
+A synced _series_ is listed at today's occurrence whenever it has one, so a series nobody has
 ticked since the calendar was connected reads as today's meeting rather than as weeks overdue,
 and the tick lands on the date shown. It stays one row: today's occurrence replaces the head's,
 never joins it, and the days behind it are on the calendar rather than in the list. A native
@@ -560,8 +635,19 @@ bookkeeping tables (`page_sync`, cursors; credentials stay in the OS keychain �
 desktop's Secret Service, which a session without GNOME Keyring, KWallet or KeePassXC does not
 have, and connecting says so rather than failing silently — never in the
 DB).
+
+Every builder now lives in `pikos_db::export` (the `.ics` in `pikos_db::export_ics`), shared with
+iOS, which writes each one into a temporary directory and hands it to the system share sheet —
+the Markdown tree zipped, since a share sheet given a folder offers little but "save it". What
+stayed platform-side is where a file goes: `~/Downloads` on the desktop, a directory iOS empties
+itself on the phone. Moving it surfaced a bug in the Markdown export that had always been there:
+sqlx decodes a NULL SQLite column into `Ok("")` rather than an error, so the `try_get::<String,
+_>(col).ok()` this code used yielded `Some("")` for every absent value — which put **every
+unfiled page into an `Uncategorized/` directory** whose real purpose (a folder id with no folder)
+a foreign key makes unreachable, and wrote `scheduled_start: ""` into an unscheduled page's
+frontmatter.
 ⁵⁷ Import matches folders **by name** but skips external-calendar folders when reusing
-(`ImportProvider`): a vault folder named like a synced calendar gets a sibling *regular* folder
+(`ImportProvider`): a vault folder named like a synced calendar gets a sibling _regular_ folder
 with the same name (names carry no UNIQUE constraint) and the batch survives.
 ⁵⁸ Both summary counts enumerate a recurring page's rule over their window rather than reading
 `pages.scheduled_start`, so a series whose head lapsed days ago still counts on each day it
@@ -581,7 +667,7 @@ notification at all. It is no longer traceless, though: migration 012 admits
 `notification_log.type = 'suppressed'`, and the tick writes one of those rows so the history
 panel can render "silenced by quiet hours". Previously "why didn't Pikos tell me?" had no
 answer anywhere in the app. The vocabulary sits in `type` rather than `action` because
-`action` records what the *user* did with a notification and nothing was delivered to act on;
+`action` records what the _user_ did with a notification and nothing was delivered to act on;
 keeping them apart also leaves every dedup predicate (all of which read `type = 'reminder'`)
 matching exactly the rows it matched before, so suppression stays bookkeeping and not a
 re-timing. Both halves still precede every query, so origin can't enter into it; no dedup row
@@ -611,14 +697,24 @@ so they compose with the free-text term rather than replacing it, and every orig
 identically. `is:` reads status, never sync state. The CLI reaches the same filter through
 **flags** (`--tag`, `--priority`, `--folder`, `--status`, `--query`, `--created` and
 `--completed` with a day or a range, `--repeating`, `--has-reminders`), not the operator grammar: the operators are a
-palette-input affordance, and `list` had typed flags before they existed.
+palette-input affordance, and `list` had typed flags before they existed. iOS runs the grammar
+itself rather than a second one: `parseSearchQuery` is ported to `pikos-core::search` and graded
+against the TypeScript over every query the TS suite exercises, at seven reference times because
+`due:` reads a clock. `Workspace::search` then takes the same two paths the palette does — the
+filter first, full-text search over the leftover words second, the two intersected — and holds
+finished pages behind the same "Show completed" count unless `is:done` asks for them.
 ⁶¹ A leading `>` switches the palette from searching pages to running commands; the command
 list is derived from the keyboard registry, so a shortcut and its palette entry cannot drift.
 Commands act on the app, not on a page, so the origin columns don't apply.
 ⁶² `planMoveOverdueToToday` skips a locked (active-synced) page and a recurring one before
-building the plan, counting each as `syncedKept` / `recurringKept` so the confirmation names
-what it will not touch. The skip is deliberate, not a failed write. A synced page's schedule is
-calendar-owned, and a recurring head advances by its own rule.
+building the plan, counting each as `syncedKept` / `recurringKept` so the notice afterwards
+names what it did not touch. There is no confirmation on either app — the move is reversible,
+cheap and visible, and the undo is offered in that same notice. The skip is deliberate, not a
+failed write. A synced page's schedule is calendar-owned, and a recurring head advances by its
+own rule. iOS runs the identical planner (`pikos-core::overdue`, graded against the TypeScript
+at seven reference times) from the Overdue section's own heading, and decides _which_ pages are
+overdue in the workspace rather than from the list on screen: a list is as old as its last
+refresh, and a bulk write keyed on a stale one moves pages the reader can no longer see.
 ⁶³ The `.ics` export shares `fetch_export_pages` with the CSV and Markdown exports, so it takes
 the same `include_synced` toggle and the same ownership predicate (⁵⁶). A live mirror the user
 never actioned is omitted unless the toggle is on. `VTIMEZONE` blocks are emitted for the zones
@@ -632,34 +728,41 @@ keeps its rows.
 ⁶⁵ **macOS only.** `tauri-plugin-notification` exposes no desktop click callback at all, so
 Linux and Windows reminders stay one-way; macOS works because Pikos already bypasses the plugin
 there and its `UNUserNotificationCenter` delegate gets a real click callback. Routing is
-durable rather than in-memory. The OS notification identifier *is* the `notification_log` row
+durable rather than in-memory. The OS notification identifier _is_ the `notification_log` row
 id, so a banner left overnight still opens the right page after a restart.
 ⁶⁶ Migration 012 widens `page_reminders.minutes_before` to admit `-2` beside 007's `-1`. Both
 are anchor sentinels, not lead times: `-1` is "never remind for this page", `-2` is "the day
 before, at 09:00 local". An all-day page has no start time for a minutes-before number to lead
-off, so the scheduler resolves `-2` against the event's *date*. One row shape serves the UI,
+off, so the scheduler resolves `-2` against the event's _date_. One row shape serves the UI,
 the adapters, the CSV round-trip and the mock twin; a second column would have made every one
 of them branch. The calendar popover now offers the lead on all-day pages, synced included.
 ⁶⁷ First writer for the `focus_sessions` table, which the schema carried unused. A session is
 keyed by page id only, so origin is irrelevant. Timing a mirror is a Pikos-side annotation and
-never touches the calendar-owned schedule.
+never touches the calendar-owned schedule. The 30-second floor and both duration formats moved to
+`@pikos/core` and were ported to `pikos-core::focus`, graded against it — a phone saying "24 min"
+where the desktop says "24 minutes" is drift nobody notices until both are on screen. The FFI
+derives the duration from the two timestamps rather than taking it as an argument, so a caller
+cannot report a length its own clock disagrees with; a backwards clock is short, not long. The
+timing stays per-app and is never persisted mid-session, and on a phone the elapsed count is
+recomputed from the start instant rather than incremented, because the tick stops the moment the
+app is backgrounded.
 
 ## 9. Upstream events & sync accounts
 
 Added 2026-08-08. §1–§8 are user gestures; this section is the other direction. What the
-reconciler does when the *provider* changes something, and the account-level operations in
+reconciler does when the _provider_ changes something, and the account-level operations in
 the Calendar Sync panel. Origin columns don't fit account ops, so that table is per
 provider.
 
-| Upstream event arrives | Native | Synced | Detached | CLI | Mobile |
+| Upstream event arrives | Native | Synced | Detached | CLI | iOS |
 | --- | --- | --- | --- | --- | --- |
-| Edit (title / time / location) | — | ✅ mirror updates in place ⁶⁹ | — frozen ⁷⁰ | — | ○ |
-| Rewrite of a series' rule | — | ✅ completed/skip sets survive ⁷¹ | — ⁷⁰ | — | ○ |
-| Cancel of one instance | — | ✅ EXDATE — the slot empties ⁷² | — ⁷⁰ | — | ○ |
-| Delete of the event / series | — | ⚠️ detach if owned, else hard-delete ⁷² | — ⁷⁰ | — | ○ |
-| A series that ended before the sync window, a week back | — | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷² | — ⁷⁰ | — | ○ |
-| A copy of one instance at its own time | — | ✅ no override row, so one block ⁴⁴ | — ⁷⁰ | — | ○ |
-| Description change | — | ⚠️ silent refresh vs notice ⁷³ | — ⁷⁰ | — | ○ |
+| Edit (title / time / location) | — | ✅ mirror updates in place ⁶⁹ | — frozen ⁷⁰ | — | ✅ on the next manual sync |
+| Rewrite of a series' rule | — | ✅ completed/skip sets survive ⁷¹ | — ⁷⁰ | — | ✅ same |
+| Cancel of one instance | — | ✅ EXDATE — the slot empties ⁷² | — ⁷⁰ | — | ✅ same |
+| Delete of the event / series | — | ⚠️ detach if owned, else hard-delete ⁷² | — ⁷⁰ | — | ⚠️ same, on the next manual sync |
+| A series that ended before the sync window, a week back | — | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷² | — ⁷⁰ | — | ✅ same |
+| A copy of one instance at its own time | — | ✅ no override row, so one block ⁴⁴ | — ⁷⁰ | — | ✅ same |
+| Description change | — | ⚠️ silent refresh vs notice ⁷³ | — ⁷⁰ | — | ⚠️ same |
 
 ⁶⁸ `pikos mcp` speaks Model Context Protocol on stdio so an agent can drive the workspace:
 search / read / list / create / update pages, set status, complete (one occurrence of a
@@ -694,16 +797,16 @@ Neither re-seeds `seeded_description_hash`: resolving
 a notice is not a re-seed, and re-stamping it would make the *following* change overwrite the
 body silently.
 
-| Account operation | CalDAV | Google | Mobile |
-| --- | --- | --- | --- |
-| Connect | ✅ app password; discovery validates first | ✅ OAuth PKCE loopback ⁷⁴ | ○ |
-| Reconnect the same account | ✅ reuses the row, re-links dormant pages ⁷⁵ | ✅ same ⁷⁵ | ○ |
-| Disconnect | ⚠️ teardown per calendar, then dormant ⁷⁶ | ⚠️ same + token revoke ⁷⁶ | ○ |
-| Manual resync ("Resync now") | ✅ incremental poll from the stored cursor ⁷⁷ | ✅ same; `410 Gone` → full re-enumerate | ○ |
-| Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷ | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ○ |
-| Credentials expire / rotate | ⚠️ reconnect badge, polling stops ⁷⁸ | ⚠️ same ⁷⁸ | ○ |
-| Offline / unreachable | ✅ stale dot, cursor kept, retries | ✅ same; rate limits map here too | ○ |
-| Delete all data | ✅ keychain cleared, dormant swept | ✅ same + grant revoked ⁷⁹ | ○ |
+| Account operation                      | CalDAV                                           | Google                                    | iOS                                   |
+| -------------------------------------- | ------------------------------------------------ | ----------------------------------------- | ------------------------------------- |
+| Connect                                | ✅ app password; discovery validates first       | ✅ OAuth PKCE loopback ⁷⁴                 | ⚠️ CalDAV only                        |
+| Reconnect the same account             | ✅ reuses the row, re-links dormant pages ⁷⁵     | ✅ same ⁷⁵                                | ⚠️ CalDAV only                        |
+| Disconnect                             | ⚠️ teardown per calendar, then dormant ⁷⁶        | ⚠️ same + token revoke ⁷⁶                 | ✅ either provider                    |
+| Manual resync ("Resync now")           | ✅ incremental poll from the stored cursor ⁷⁷    | ✅ same; `410 Gone` → full re-enumerate   | ✅ only when asked                    |
+| Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷ | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ✅ same                               |
+| Credentials expire / rotate            | ⚠️ reconnect badge, polling stops ⁷⁸             | ⚠️ same ⁷⁸                                | ⚠️ badge shown; repair is CalDAV only |
+| Offline / unreachable                  | ✅ stale dot, cursor kept, retries               | ✅ same; rate limits map here too         | ✅ reported, nothing changed          |
+| Delete all data                        | ✅ keychain cleared, dormant swept               | ✅ same + grant revoked ⁷⁹                | ✅ Settings, same wipe ⁷⁹             |
 
 ⁷⁴ Needs build-time client credentials (`option_env!`). Without them the Google option is
 disabled with "Not available in this build". Google's granular consent can withhold a scope;
@@ -723,7 +826,7 @@ event was deleted upstream while nothing was polling. A Google backfill still se
 `authoritative_from`, so its refresh catches only deletions Google itself reports as `status:
 cancelled`. Neither action tears anything down (unchanged etag → no write), and `fullResync`
 stays false on a refresh: the engine reserves that flag for a cursor the
-*provider* rejected.
+_provider_ rejected.
 ⁷⁸ A dead credential is a state, not an error: the badge shows and the sync cursor survives.
 The account **stops being polled**. `load_accounts` selects `WHERE reconnect_needed = 0`, so
 the background pass skips it outright rather than spending a 401 per pass. "Resync now" runs
@@ -731,7 +834,10 @@ regardless of the flag and clears it on the first clean sync, so a manual retry 
 the badge down.
 ⁷⁹ `release_all_credentials` runs before the wipe, dormant accounts included. Their ids are the
 keychain keys and the rows are about to go. The dev-only `reset_db` goes through the same path,
-so it sweeps dormant rows too.
+so it sweeps dormant rows too. iOS runs the same two steps from Settings, and the disconnect half is best-effort on purpose: a
+server that will not answer must not be able to stop somebody wiping their own device, so a
+failure there is logged past and the local rows go either way. The deletes themselves are shared
+(`pikos_db::export::reset_workspace`); the desktop kept only the logging that counts what went.
 
 ---
 
@@ -748,8 +854,10 @@ so it sweeps dormant rows too.
   adding a footnote at all: citing an existing marker from a **new row above** its current
   first reference, and citing a **higher-numbered** footnote from inside a lower-numbered
   one. Reference the section instead, or renumber the pair.
-- This file is the *what*, per origin and surface. The *why* lives elsewhere:
+- This file is the _what_, per origin and surface. The _why_ lives elsewhere:
   [`time-handling.md`](./time-handling.md) §7 for float vs absolute, and
   [`glossary.md`](./glossary.md) for the vocabulary every row assumes.
-- Mobile column stays `○` until `apps/mobile` has a runtime. It exists now so the shape of
-  the question is already in the table.
+- The iOS column is filled from `apps/ios` as built, not as planned. `○` there means the
+  affordance does not exist on that surface — which is different from 🚫, and the difference
+  is the whole value of the column: a gap invites work, a refusal does not. `apps/mobile` is
+  an empty package left from the scrapped Tauri-mobile attempt and describes nothing.

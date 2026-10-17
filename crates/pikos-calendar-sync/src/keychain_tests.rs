@@ -103,8 +103,8 @@ fn every_platform_names_a_keyring_backend() {
 
     for (platform, section) in [
         (
-            "macos",
-            "[target.'cfg(target_os = \"macos\")'.dependencies]",
+            "macos and ios",
+            "[target.'cfg(any(target_os = \"macos\", target_os = \"ios\"))'.dependencies]",
         ),
         (
             "linux",

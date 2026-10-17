@@ -2,6 +2,7 @@
 // Verifies: a locked title is read-only; a detached page shows the disconnected
 // notice; the reminder bell shows on a locked page whether or not it recurs.
 
+import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
@@ -26,6 +27,7 @@ afterEach(() => {
 function makePage(over: Partial<Page>): Page {
   return {
     content: "",
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt: "2026-01-01T00:00:00",
     detachIsReversible: false,
     folderId: null,

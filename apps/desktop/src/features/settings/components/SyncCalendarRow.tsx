@@ -1,5 +1,5 @@
 import type { CalendarSyncResult, SyncCalendar } from "@pikos/core";
-import { calendarSyncDot, PALETTE_COLORS } from "@pikos/core";
+import { calendarSyncDot, currentPaletteColor, PALETTE_COLORS } from "@pikos/core";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 
@@ -29,7 +29,7 @@ export function SyncCalendarRow({
   // without a user interaction, since both derive from the wall clock.
   const now = useNow();
   const dot = calendarSyncDot(calendar, lastResult, now);
-  const swatch = calendar.color ?? "var(--text-tertiary)";
+  const swatch = currentPaletteColor(calendar.color) ?? "var(--text-tertiary)";
   const kept = calendar.detachedPages;
 
   // Both directions move the user's work, and a switch advertises neither.

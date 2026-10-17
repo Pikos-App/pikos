@@ -13,19 +13,10 @@ import {
   parseLocalISO,
   viewerEnd,
   viewerStart,
-  writableFolders,
 } from "@pikos/core";
 import type React from "react";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -34,6 +25,9 @@ import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useNow } from "@/shared/hooks/useNow";
 import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
+
+import { PageRowMenu } from "./PageRowMenu";
+
 interface PageListItemProps {
   page: PageSummary;
   isActive: boolean;
@@ -264,7 +258,7 @@ export function PageListItem({
                           isPast && !isCompleted
                             ? "text-status-overdue"
                             : dueSoon
-                              ? "text-status-due-soon"
+                              ? "text-due-soon"
                               : "text-subtle"
                         )}
                         onClick={(e) => {
@@ -288,48 +282,16 @@ export function PageListItem({
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent {...contextMenuContentProps}>
-        {/* One page has a name; a selection does not. */}
-        {!page.scheduleLocked && menuActsOn === 1 && (
-          <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
-            Rename
-          </ContextMenuItem>
-        )}
-        {!page.scheduleLocked && (
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>Move to folder</ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuItem
-                className={cn(page.folderId === null && "font-medium")}
-                onSelect={() => onMoveToFolder(null)}
-              >
-                Inbox
-              </ContextMenuItem>
-              {writableFolders(folders).map((folder) => (
-                <ContextMenuItem
-                  className={cn(page.folderId === folder.id && "font-medium")}
-                  key={folder.id}
-                  onSelect={() => onMoveToFolder(folder.id)}
-                >
-                  <span
-                    className="color-dot mr-2 h-2 w-2 shrink-0 rounded-full"
-                    style={{
-                      backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
-                    }}
-                  />
-                  {folder.name}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        )}
-        {page.scheduledStart && onClearDate && !page.scheduleLocked && (
-          <ContextMenuItem onSelect={onClearDate}>No date</ContextMenuItem>
-        )}
-        <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
-          {menuActsOn > 1 ? `Delete ${menuActsOn} pages` : "Delete"}
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <PageRowMenu
+        actsOn={menuActsOn}
+        folders={folders}
+        onClearDate={onClearDate}
+        onCloseAutoFocus={(e) => contextMenuContentProps.onCloseAutoFocus(e)}
+        onDelete={onDelete}
+        onMoveToFolder={onMoveToFolder}
+        onRename={() => prepareRenameFromMenu(onRenameStart)}
+        page={page}
+      />
     </ContextMenu>
   );
 }

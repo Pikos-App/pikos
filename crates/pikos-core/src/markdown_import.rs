@@ -36,7 +36,24 @@ pub fn markdown_to_prosemirror(markdown: &str) -> Result<Value, Refused> {
         // Tiptap's trailing node: a document never ends on anything but a paragraph.
         blocks.push(json!({ "type": "paragraph" }));
     }
-    Ok(json!({ "type": "doc", "content": blank_line_paragraphs(markdown, blocks) }))
+    let mut doc = json!({ "type": "doc", "content": blank_line_paragraphs(markdown, blocks) });
+    with_indent_default(&mut doc);
+    Ok(doc)
+}
+
+/// The `indent` the editor's TabIndent gives every paragraph and heading, at any depth.
+fn with_indent_default(node: &mut Value) {
+    if matches!(node["type"].as_str(), Some("paragraph" | "heading")) {
+        if !node["attrs"].is_object() {
+            node["attrs"] = json!({});
+        }
+        node["attrs"]["indent"] = json!(0);
+    }
+    if let Some(children) = node.get_mut("content").and_then(Value::as_array_mut) {
+        for child in children {
+            with_indent_default(child);
+        }
+    }
 }
 
 /// The importer's `insertBlankLineParagraphs`, quirks included: it counts every run of
@@ -200,6 +217,7 @@ impl<'a> Reader<'a> {
                 "title": none_if_empty(&title),
                 "width": null,
                 "height": null,
+                "data-asset-path": null,
             }
         }))
     }
@@ -398,7 +416,7 @@ impl<'a> Reader<'a> {
                             "href": href,
                             "target": "_blank",
                             "rel": "noopener noreferrer nofollow",
-                            "class": null,
+                            "class": "editor-link",
                             "title": none_if_empty(&title),
                         }
                     }));
