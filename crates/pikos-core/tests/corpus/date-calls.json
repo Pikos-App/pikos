@@ -150,6 +150,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "sun_noon",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "sun_noon",
       "result": null,
@@ -160,6 +166,24 @@
       "ref": "sun_noon",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -178,6 +202,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-16T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-16T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-16T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2026-03-16T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -216,6 +314,12 @@
       "text": "Meeting  Mar 24 2026 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "sun_noon",
       "result": {
@@ -249,6 +353,43 @@
       "text": "Pay rent  Apr 1 2026 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2026-03-17T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-16T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "sun_noon",
       "result": {
@@ -264,6 +405,25 @@
         "text": "Mar 24 2026"
       },
       "text": "Plan sprint  Mar 24 2026 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-16T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -296,6 +456,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-16T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -332,6 +511,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "sun_noon",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -819,6 +1016,23 @@
       "text": "call today at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2026-03-16T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "sun_noon",
       "result": null,
@@ -1123,6 +1337,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2026-03-16T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -1740,6 +1970,23 @@
       "ref": "sun_noon",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "sun_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2026-03-16T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -2917,6 +3164,25 @@
       "text": "vacation April 18-25"
     },
     {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "sun_noon",
+      "result": {
+        "end": "2026-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2026-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
+    },
+    {
       "input": "vacation April 25 to April 18",
       "ref": "sun_noon",
       "result": {
@@ -3211,6 +3477,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "wed_noon",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "wed_noon",
       "result": null,
@@ -3221,6 +3493,24 @@
       "ref": "wed_noon",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -3239,6 +3529,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-19T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-19T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-19T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2026-03-19T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -3277,6 +3641,12 @@
       "text": "Meeting  Mar 24 2026 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "wed_noon",
       "result": {
@@ -3310,6 +3680,43 @@
       "text": "Pay rent  Apr 1 2026 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2026-03-20T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-19T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "wed_noon",
       "result": {
@@ -3325,6 +3732,25 @@
         "text": "Mar 24 2026"
       },
       "text": "Plan sprint  Mar 24 2026 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-19T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -3357,6 +3783,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-19T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -3393,6 +3838,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "wed_noon",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -3880,6 +4343,23 @@
       "text": "call today at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2026-03-19T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "wed_noon",
       "result": null,
@@ -4184,6 +4664,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2026-03-19T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -4801,6 +5297,23 @@
       "ref": "wed_noon",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "wed_noon",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2026-03-19T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -5978,6 +6491,25 @@
       "text": "vacation April 18-25"
     },
     {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "wed_noon",
+      "result": {
+        "end": "2026-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2026-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
+    },
+    {
       "input": "vacation April 25 to April 18",
       "ref": "wed_noon",
       "result": {
@@ -6272,6 +6804,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "mon_morning",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "mon_morning",
       "result": null,
@@ -6282,6 +6820,24 @@
       "ref": "mon_morning",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -6300,6 +6856,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-17T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-17T08:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-17T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2026-03-17T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -6338,6 +6968,12 @@
       "text": "Meeting  Mar 24 2026 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "mon_morning",
       "result": {
@@ -6371,6 +7007,43 @@
       "text": "Pay rent  Apr 1 2026 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2026-03-18T08:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-17T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "mon_morning",
       "result": {
@@ -6386,6 +7059,25 @@
         "text": "Mar 24 2026"
       },
       "text": "Plan sprint  Mar 24 2026 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-17T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -6418,6 +7110,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-17T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -6454,6 +7165,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "mon_morning",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -6960,6 +7689,23 @@
       "text": "call today at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2026-03-17T08:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "mon_morning",
       "result": null,
@@ -7264,6 +8010,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2026-03-17T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -7881,6 +8643,23 @@
       "ref": "mon_morning",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "mon_morning",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2026-03-17T08:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -9058,6 +9837,25 @@
       "text": "vacation April 18-25"
     },
     {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "mon_morning",
+      "result": {
+        "end": "2026-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2026-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
+    },
+    {
       "input": "vacation April 25 to April 18",
       "ref": "mon_morning",
       "result": {
@@ -9352,6 +10150,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "sat_late",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "sat_late",
       "result": null,
@@ -9362,6 +10166,24 @@
       "ref": "sat_late",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "sat_late",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "sat_late",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "sat_late",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -9380,6 +10202,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-22T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-22T22:30:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-22T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2026-03-22T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -9418,6 +10314,12 @@
       "text": "Meeting  Mar 24 2026 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "sat_late",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "sat_late",
       "result": {
@@ -9451,6 +10353,43 @@
       "text": "Pay rent  Apr 1 2026 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2026-03-23T22:30:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-22T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "sat_late",
       "result": {
@@ -9466,6 +10405,25 @@
         "text": "Mar 24 2026"
       },
       "text": "Plan sprint  Mar 24 2026 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-22T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -9498,6 +10456,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-22T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -9534,6 +10511,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "sat_late",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "sat_late",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "sat_late",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -9983,6 +10978,23 @@
       "text": "call tomorrow at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2026-03-22T22:30:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "sat_late",
       "result": null,
@@ -10287,6 +11299,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2026-03-22T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -10904,6 +11932,23 @@
       "ref": "sat_late",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "sat_late",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2026-03-22T22:30:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -12081,6 +13126,25 @@
       "text": "vacation April 18-25"
     },
     {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "sat_late",
+      "result": {
+        "end": "2026-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2026-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
+    },
+    {
       "input": "vacation April 25 to April 18",
       "ref": "sat_late",
       "result": {
@@ -12375,6 +13439,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "dst_eve",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "dst_eve",
       "result": null,
@@ -12385,6 +13455,24 @@
       "ref": "dst_eve",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -12403,6 +13491,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-29T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-29T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2026-03-29T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2026-03-29T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -12441,6 +13603,12 @@
       "text": "Meeting  Apr 24 2026 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "dst_eve",
       "result": {
@@ -12474,6 +13642,43 @@
       "text": "Pay rent  Apr 1 2026 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2026-03-30T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-29T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "dst_eve",
       "result": {
@@ -12489,6 +13694,25 @@
         "text": "Apr 24 2026"
       },
       "text": "Plan sprint  Apr 24 2026 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2026-03-29T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -12521,6 +13745,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2026-03-29T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -12557,6 +13800,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "dst_eve",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -13044,6 +14305,23 @@
       "text": "call today at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2026-03-29T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "dst_eve",
       "result": null,
@@ -13348,6 +14626,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2026-03-29T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -13965,6 +15259,23 @@
       "ref": "dst_eve",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "dst_eve",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2026-03-29T12:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -15142,6 +16453,25 @@
       "text": "vacation April 18-25"
     },
     {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "dst_eve",
+      "result": {
+        "end": "2026-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2026-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
+    },
+    {
       "input": "vacation April 25 to April 18",
       "ref": "dst_eve",
       "result": {
@@ -15436,6 +16766,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "leap_day",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "leap_day",
       "result": null,
@@ -15446,6 +16782,24 @@
       "ref": "leap_day",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "leap_day",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "leap_day",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "leap_day",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -15464,6 +16818,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2024-03-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2024-03-01T09:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2024-03-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2024-03-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -15502,6 +16930,12 @@
       "text": "Meeting  Mar 24 2024 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "leap_day",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "leap_day",
       "result": {
@@ -15535,6 +16969,43 @@
       "text": "Pay rent  Mar 1 2024 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2024-03-02T09:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2024-03-01T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "leap_day",
       "result": {
@@ -15550,6 +17021,25 @@
         "text": "Mar 24 2024"
       },
       "text": "Plan sprint  Mar 24 2024 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2024-03-01T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -15582,6 +17072,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2024-03-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -15618,6 +17127,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "leap_day",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "leap_day",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "leap_day",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -16105,6 +17632,23 @@
       "text": "call today at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2024-03-01T09:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "leap_day",
       "result": null,
@@ -16409,6 +17953,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2024-03-01T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -17026,6 +18586,23 @@
       "ref": "leap_day",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "leap_day",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2024-03-01T09:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -18190,6 +19767,25 @@
       "text": "vacation April 18-25"
     },
     {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "leap_day",
+      "result": {
+        "end": "2024-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2024-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
+    },
+    {
       "input": "vacation April 25 to April 18",
       "ref": "leap_day",
       "result": {
@@ -18484,6 +20080,12 @@
       "text": " -only"
     },
     {
+      "input": "// just a note",
+      "ref": "year_end",
+      "result": null,
+      "text": ""
+    },
+    {
       "input": "12345",
       "ref": "year_end",
       "result": null,
@@ -18494,6 +20096,24 @@
       "ref": "year_end",
       "result": null,
       "text": "3rd draft review"
+    },
+    {
+      "input": "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      "ref": "year_end",
+      "result": null,
+      "text": "Buy a gift"
+    },
+    {
+      "input": "Call // tomorrow at 3pm",
+      "ref": "year_end",
+      "result": null,
+      "text": "Call"
+    },
+    {
+      "input": "Call mom !r30",
+      "ref": "year_end",
+      "result": null,
+      "text": "Call mom  \u0000\u0001\u0000 "
     },
     {
       "input": "Call mom on March 24 2pm !high",
@@ -18512,6 +20132,80 @@
         "text": "March 24 2pm"
       },
       "text": "Call mom on March 24 2pm  "
+    },
+    {
+      "input": "Call mom tomorrow at 3pm #family // ask about the trip",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2027-01-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Call mom tomorrow at 3pm  "
+    },
+    {
+      "input": "Dentist tomorrow !r30",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2027-01-01T23:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "Dentist tomorrow  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Dentist tomorrow at 3pm !r1d",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 8,
+        "start": "2027-01-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Dentist tomorrow at 3pm  \u0000\u0001\u0000 "
+    },
+    {
+      "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 12,
+        "start": "2027-01-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Groceries   tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "MEETING TOMORROW AT 2PM",
@@ -18550,6 +20244,12 @@
       "text": "Meeting  Jan 24 2027 "
     },
     {
+      "input": "Notes // line one\nline two",
+      "ref": "year_end",
+      "result": null,
+      "text": "Notes"
+    },
+    {
       "input": "Pay rent by May 1",
       "ref": "year_end",
       "result": {
@@ -18583,6 +20283,43 @@
       "text": "Pay rent  Jan 1 2027 "
     },
     {
+      "input": "Ping team remind me in 2 days",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 20,
+        "start": "2027-01-02T23:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year",
+          "weekday"
+        ],
+        "text": "in 2 days"
+      },
+      "text": "Ping team remind me in 2 days"
+    },
+    {
+      "input": "Ping team tomorrow at 2pm remind me a day before",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2027-01-01T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Ping team tomorrow at 2pm  \u0000\u0001\u0000 "
+    },
+    {
       "input": "Plan sprint Sat 24",
       "ref": "year_end",
       "result": {
@@ -18598,6 +20335,25 @@
         "text": "Jan 24 2027"
       },
       "text": "Plan sprint  Jan 24 2027 "
+    },
+    {
+      "input": "Review PR tomorrow at 2pm // see https://example.com for #context",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 10,
+        "start": "2027-01-01T14:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 2pm"
+      },
+      "text": "Review PR tomorrow at 2pm"
     },
     {
       "input": "Review on May 24",
@@ -18630,6 +20386,25 @@
         "text": "at 9am"
       },
       "text": "STANDUP   at 9am"
+    },
+    {
+      "input": "Ship #work !high tomorrow at 3pm !r15",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 9,
+        "start": "2027-01-01T15:00:00",
+        "startCertain": [
+          "hour",
+          "minute",
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow at 3pm"
+      },
+      "text": "Ship     tomorrow at 3pm  \u0000\u0001\u0000 "
     },
     {
       "input": "Standup fri 13th 4pm",
@@ -18666,6 +20441,24 @@
         "text": "tomorrow"
       },
       "text": "Submit report for tomorrow"
+    },
+    {
+      "input": "Task //",
+      "ref": "year_end",
+      "result": null,
+      "text": "Task"
+    },
+    {
+      "input": "a // b // c",
+      "ref": "year_end",
+      "result": null,
+      "text": "a"
+    },
+    {
+      "input": "a//b",
+      "ref": "year_end",
+      "result": null,
+      "text": "a//b"
     },
     {
       "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -19115,6 +20908,23 @@
       "text": "call tomorrow at 8pm"
     },
     {
+      "input": "check https://example.com/a//b tomorrow",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 31,
+        "start": "2027-01-01T23:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "check https://example.com/a//b tomorrow"
+    },
+    {
       "input": "checkup every 6 months",
       "ref": "year_end",
       "result": null,
@@ -19419,6 +21229,22 @@
         "text": "at 6am"
       },
       "text": "gym   at 6am  "
+    },
+    {
+      "input": "gym m/w/f 7am // bring a towel",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 6,
+        "start": "2027-01-01T07:00:00",
+        "startCertain": [
+          "hour",
+          "minute"
+        ],
+        "text": "7am"
+      },
+      "text": "gym   7am"
     },
     {
       "input": "gym m/w/f at 3pm",
@@ -20036,6 +21862,23 @@
       "ref": "year_end",
       "result": null,
       "text": "relax  "
+    },
+    {
+      "input": "remind me to buy milk tomorrow",
+      "ref": "year_end",
+      "result": {
+        "end": null,
+        "endCertain": [],
+        "index": 22,
+        "start": "2027-01-01T23:00:00",
+        "startCertain": [
+          "day",
+          "month",
+          "year"
+        ],
+        "text": "tomorrow"
+      },
+      "text": "remind me to buy milk tomorrow"
     },
     {
       "input": "renewal yearly",
@@ -21211,6 +23054,25 @@
         "text": "April 18-25"
       },
       "text": "vacation April 18-25"
+    },
+    {
+      "input": "vacation April 18-25 remind day before",
+      "ref": "year_end",
+      "result": {
+        "end": "2027-04-25T12:00:00",
+        "endCertain": [
+          "day",
+          "month"
+        ],
+        "index": 9,
+        "start": "2027-04-18T12:00:00",
+        "startCertain": [
+          "day",
+          "month"
+        ],
+        "text": "April 18-25  "
+      },
+      "text": "vacation April 18-25  \u0000\u0001\u0000 "
     },
     {
       "input": "vacation April 25 to April 18",

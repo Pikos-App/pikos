@@ -121,13 +121,36 @@ pub fn rewrite(text: &str, reference: NaiveDateTime) -> String {
         }
     });
 
+    /// "[by] [the] end of [the|this|next] month". The engine reads "end of next
+    /// month" as one month from today and leaves "by the end of" in the title.
+    /// Months only: where a week ends depends on the week-start setting, which
+    /// the parser doesn't know.
+    static END_OF_MONTH: OnceLock<fancy_regex::Regex> = OnceLock::new();
+    let end_of_month = END_OF_MONTH.get_or_init(|| {
+        compile("\\b(?:by\\s+)?(?:the\\s+)?end\\s+of\\s+(?:(the|this|next)\\s+)?month\\b")
+    });
+    text = replace_all_with(&text, end_of_month, |captures| {
+        let whole = captures.get(0).expect("group 0").as_str().to_string();
+        let is_next = group(captures, 1).is_some_and(|which| which.eq_ignore_ascii_case("next"));
+        let month = if is_next {
+            add_months(reference, 1)
+        } else {
+            Some(reference)
+        };
+
+        month
+            .and_then(|month| with_day_at_midnight(month, days_in_month(month)))
+            .map_or(whole, |last| format!(" {} ", format_month_day_year(last)))
+    });
+
     // Bare day-of-month phrases. The engine reads "May 24" but not "on the
     // 24th" or "Sat 24", so each is resolved to a concrete date and
     // substituted — which also lets the title strip take the connector word
-    // with it.
+    // with it. "of" goes too when a cadence follows ("on the 1st of every
+    // month"), or the cadence strip leaves it stranded in the title.
     static ON_THE_NTH: OnceLock<fancy_regex::Regex> = OnceLock::new();
     let on_the_nth = ON_THE_NTH.get_or_init(|| {
-        compile("\\b(?:on|by)\\s+(?:the\\s+)?(3[01]|[12]\\d|0?[1-9])(?:st|nd|rd|th)\\b")
+        compile("\\b(?:on|by)\\s+(?:the\\s+)?(3[01]|[12]\\d|0?[1-9])(?:st|nd|rd|th)(?:\\s+of(?=\\s+(?:every|each)\\b))?\\b")
     });
     text = replace_all_with(&text, on_the_nth, |captures| {
         let whole = captures.get(0).expect("group 0").as_str().to_string();

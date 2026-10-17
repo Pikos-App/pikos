@@ -432,6 +432,35 @@
       }
     },
     {
+      "input": "Call mum.",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2026-03-19T15:30:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Dentist tomorrow !r30",
       "ref": "sun_noon",
       "result": {
@@ -978,6 +1007,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2026-04-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "sun_noon",
       "result": {
@@ -1020,6 +1065,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -1094,6 +1198,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2026-03-16"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "sun_noon",
       "result": {
@@ -1118,6 +1237,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2026-03-16"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -1390,7 +1524,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -3023,6 +3157,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-16",
+            "scheduledEnd": "2026-03-20"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-16",
+            "scheduledEnd": "2026-03-20"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "sun_noon",
       "result": {
@@ -3260,6 +3426,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2026-03-20",
+            "scheduledEnd": "2026-03-23"
+          },
+          "type": "single"
         }
       }
     },
@@ -5934,7 +6116,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2026-03-16"
+            "scheduledStart": "2026-03-16",
+            "scheduledEnd": "2026-03-20"
           },
           "type": "single"
         }
@@ -6427,6 +6610,35 @@
             "title": "Call mom",
             "content": "ask about the trip",
             "scheduledStart": "2026-03-19T15:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Call mum.",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2026-03-19T15:30:00"
           },
           "type": "single"
         }
@@ -6979,6 +7191,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2026-04-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "wed_noon",
       "result": {
@@ -7021,6 +7249,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -7095,6 +7382,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2026-03-19"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "wed_noon",
       "result": {
@@ -7119,6 +7421,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2026-03-19"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -7391,7 +7708,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -9018,6 +9335,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-23",
+            "scheduledEnd": "2026-03-27"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-23",
+            "scheduledEnd": "2026-03-27"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "wed_noon",
       "result": {
@@ -9255,6 +9604,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2026-03-20",
+            "scheduledEnd": "2026-03-23"
+          },
+          "type": "single"
         }
       }
     },
@@ -11924,7 +12289,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2026-03-23"
+            "scheduledStart": "2026-03-23",
+            "scheduledEnd": "2026-03-27"
           },
           "type": "single"
         }
@@ -12417,6 +12783,35 @@
             "title": "Call mom",
             "content": "ask about the trip",
             "scheduledStart": "2026-03-17T15:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Call mum.",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2026-03-19T15:30:00"
           },
           "type": "single"
         }
@@ -12969,6 +13364,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2026-04-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "mon_morning",
       "result": {
@@ -13011,6 +13422,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -13085,6 +13555,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2026-03-17"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "mon_morning",
       "result": {
@@ -13109,6 +13594,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2026-03-17"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -13381,7 +13881,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -15014,6 +15514,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-16",
+            "scheduledEnd": "2026-03-20"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-16",
+            "scheduledEnd": "2026-03-20"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "mon_morning",
       "result": {
@@ -15251,6 +15783,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2026-03-20",
+            "scheduledEnd": "2026-03-23"
+          },
+          "type": "single"
         }
       }
     },
@@ -17925,7 +18473,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2026-03-16"
+            "scheduledStart": "2026-03-16",
+            "scheduledEnd": "2026-03-20"
           },
           "type": "single"
         }
@@ -18418,6 +18967,35 @@
             "title": "Call mom",
             "content": "ask about the trip",
             "scheduledStart": "2026-03-22T15:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Call mum.",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2026-03-26T15:30:00"
           },
           "type": "single"
         }
@@ -18970,6 +19548,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2026-04-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "sat_late",
       "result": {
@@ -19012,6 +19606,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -19086,6 +19739,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2026-03-22"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "sat_late",
       "result": {
@@ -19110,6 +19778,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2026-03-22"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -19382,7 +20065,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -20997,6 +21680,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-23",
+            "scheduledEnd": "2026-03-27"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-23",
+            "scheduledEnd": "2026-03-27"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "sat_late",
       "result": {
@@ -21234,6 +21949,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2026-03-27",
+            "scheduledEnd": "2026-03-30"
+          },
+          "type": "single"
         }
       }
     },
@@ -23897,7 +24628,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2026-03-23"
+            "scheduledStart": "2026-03-23",
+            "scheduledEnd": "2026-03-27"
           },
           "type": "single"
         }
@@ -24390,6 +25122,35 @@
             "title": "Call mom",
             "content": "ask about the trip",
             "scheduledStart": "2026-03-29T15:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Call mum.",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2026-04-02T15:30:00"
           },
           "type": "single"
         }
@@ -24942,6 +25703,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2026-04-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "dst_eve",
       "result": {
@@ -24984,6 +25761,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2026-04-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-04-30"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -25058,6 +25894,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2026-03-29"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "dst_eve",
       "result": {
@@ -25082,6 +25933,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2026-03-29"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2026-03-31"
           },
           "type": "single"
         }
@@ -25354,7 +26220,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -26951,6 +27817,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-30",
+            "scheduledEnd": "2026-04-03"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2026-03-30",
+            "scheduledEnd": "2026-04-03"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "dst_eve",
       "result": {
@@ -27188,6 +28086,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2026-04-03",
+            "scheduledEnd": "2026-04-06"
+          },
+          "type": "single"
         }
       }
     },
@@ -29851,7 +30765,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2026-03-30"
+            "scheduledStart": "2026-03-30",
+            "scheduledEnd": "2026-04-03"
           },
           "type": "single"
         }
@@ -30344,6 +31259,35 @@
             "title": "Call mom",
             "content": "ask about the trip",
             "scheduledStart": "2024-03-01T15:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Call mum.",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2024-02-29T15:30:00"
           },
           "type": "single"
         }
@@ -30896,6 +31840,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2024-03-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "leap_day",
       "result": {
@@ -30938,6 +31898,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2024-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2024-03-31"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2024-03-31"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2024-02-29"
           },
           "type": "single"
         }
@@ -31012,6 +32031,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2024-03-01"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "leap_day",
       "result": {
@@ -31036,6 +32070,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2024-03-01"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2024-02-29"
           },
           "type": "single"
         }
@@ -31308,7 +32357,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -32977,6 +34026,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2024-03-04",
+            "scheduledEnd": "2024-03-08"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2024-03-04",
+            "scheduledEnd": "2024-03-08"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "leap_day",
       "result": {
@@ -33214,6 +34295,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2024-03-01",
+            "scheduledEnd": "2024-03-04"
+          },
+          "type": "single"
         }
       }
     },
@@ -35915,7 +37012,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2024-03-04"
+            "scheduledStart": "2024-03-04",
+            "scheduledEnd": "2024-03-08"
           },
           "type": "single"
         }
@@ -36408,6 +37506,35 @@
             "title": "Call mom",
             "content": "ask about the trip",
             "scheduledStart": "2027-01-01T15:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Call mum.",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Call mum."
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Coffee with Jordan on Thursday at 3:30pm.",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Coffee with Jordan",
+            "scheduledStart": "2027-01-07T15:30:00"
           },
           "type": "single"
         }
@@ -36960,6 +38087,22 @@
       }
     },
     {
+      "input": "Pay the gym membership on the 1st of every month",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Pay the gym membership",
+            "scheduledStart": "2027-01-01"
+          },
+          "rrule": "FREQ=MONTHLY",
+          "type": "recurring"
+        }
+      }
+    },
+    {
       "input": "Ping team remind me in 2 days",
       "ref": "year_end",
       "result": {
@@ -37002,6 +38145,65 @@
             "tags": [],
             "title": "Plan sprint",
             "scheduledStart": "2027-01-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Read the end of the book",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Read the end of the book"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2027-01-31"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of next month.",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2027-01-31"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Renew passport by the end of the month",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Renew passport",
+            "scheduledStart": "2026-12-31"
           },
           "type": "single"
         }
@@ -37076,6 +38278,21 @@
       }
     },
     {
+      "input": "Ship it tomorrow!",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Ship it!",
+            "scheduledStart": "2027-01-01"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Standup fri 13th 4pm",
       "ref": "year_end",
       "result": {
@@ -37100,6 +38317,21 @@
             "tags": [],
             "title": "Submit report",
             "scheduledStart": "2027-01-01"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Submit timesheet end of month",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Submit timesheet",
+            "scheduledStart": "2026-12-31"
           },
           "type": "single"
         }
@@ -37372,7 +38604,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "call.",
+            "title": "call",
             "priority": "urgent"
           },
           "type": "single"
@@ -39191,6 +40423,38 @@
       }
     },
     {
+      "input": "offsite Mon to Fri",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2027-01-04",
+            "scheduledEnd": "2027-01-08"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "offsite from Mon to Fri",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "offsite",
+            "scheduledStart": "2027-01-04",
+            "scheduledEnd": "2027-01-08"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "page ~side-project",
       "ref": "year_end",
       "result": {
@@ -39428,6 +40692,22 @@
           },
           "rrule": "FREQ=MONTHLY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "retreat Fri to Mon",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "retreat",
+            "scheduledStart": "2027-01-01",
+            "scheduledEnd": "2027-01-04"
+          },
+          "type": "single"
         }
       }
     },
@@ -42257,7 +43537,8 @@
           "input": {
             "tags": [],
             "title": "workshop",
-            "scheduledStart": "2027-01-04"
+            "scheduledStart": "2027-01-04",
+            "scheduledEnd": "2027-01-08"
           },
           "type": "single"
         }
@@ -42325,7 +43606,7 @@
       }
     }
   ],
-  "inputCount": 362,
+  "inputCount": 374,
   "meta": {
     "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
     "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",

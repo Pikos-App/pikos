@@ -133,7 +133,7 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
         if let Some(end) = &matched.end {
             if end.is_certain(Granularity::Hour) || end.is_certain(Granularity::Minute) {
                 range_end_time = Some(end.at);
-            } else if end.is_certain(Granularity::Day) {
+            } else if end.is_certain(Granularity::Day) || end.is_certain(Granularity::Weekday) {
                 range_end_date = Some(end.at);
             }
         }
@@ -445,13 +445,6 @@ fn next_weekday_occurrence(reference: NaiveDateTime, weekday: Weekday) -> Option
     add_days(reference, ahead)
 }
 
-/// Collapse whitespace and tidy the punctuation left stranded when an inline
-/// marker was cut out of the middle of a sentence.
-///
-/// Sentence punctuation keeps its place but loses the gap before it ("call ."
-/// becomes "call."); separators that were only there to divide tokens are
-/// dropped entirely ("note ," becomes "note"). Punctuation inside a word is
-/// never touched — only whitespace-isolated orphans.
 /// Split a line at its first `//` that sits on a whitespace boundary (or a
 /// string edge) on both sides.
 ///
@@ -477,19 +470,31 @@ fn split_body(raw: &str) -> (&str, Option<String>) {
     (raw, None)
 }
 
+/// Collapse whitespace and tidy the punctuation left stranded when an inline
+/// marker was cut out of the middle of a sentence.
+///
+/// A "." orphaned at the end closed the sentence the markers were in, not the
+/// title, so it goes ("call ." becomes "call"); one the title ends with itself
+/// has no gap before it and stays. Other sentence punctuation keeps its place
+/// but loses the gap ("ship it !" becomes "ship it!"); separators that were only
+/// there to divide tokens are dropped ("note ," becomes "note"). Punctuation
+/// inside a word is never touched — only whitespace-isolated orphans.
 fn clean_title(text: &str) -> String {
     static WHITESPACE: OnceLock<fancy_regex::Regex> = OnceLock::new();
+    static CLOSING_STOP: OnceLock<fancy_regex::Regex> = OnceLock::new();
     static SENTENCE_ORPHAN: OnceLock<fancy_regex::Regex> = OnceLock::new();
     static SEPARATOR_ORPHAN: OnceLock<fancy_regex::Regex> = OnceLock::new();
     static LEADING: OnceLock<fancy_regex::Regex> = OnceLock::new();
 
     let whitespace = WHITESPACE.get_or_init(|| compile("\\s+"));
+    let closing_stop = CLOSING_STOP.get_or_init(|| compile("\\s+\\.\\s*$"));
     let sentence_orphan = SENTENCE_ORPHAN.get_or_init(|| compile("\\s+([.!?])(?=\\s|$)"));
     let separator_orphan = SEPARATOR_ORPHAN.get_or_init(|| compile("\\s+[,;:]+(?=\\s|$)"));
     let leading = LEADING.get_or_init(|| compile("^[\\s,;:]+"));
 
     let collapsed = replace_all_with(text, whitespace, |_| " ".to_string());
-    let kept = replace_all_with(&collapsed, sentence_orphan, |captures| {
+    let unstopped = replace_all_with(&collapsed, closing_stop, |_| String::new());
+    let kept = replace_all_with(&unstopped, sentence_orphan, |captures| {
         group(captures, 1).unwrap_or_default().to_string()
     });
     let dropped = replace_all_with(&kept, separator_orphan, |_| String::new());
@@ -689,7 +694,9 @@ mod tests {
 
     #[test]
     fn punctuation_left_by_a_stripped_marker_is_tidied() {
-        assert_eq!(single("call bob #work.").title, "call bob.");
+        assert_eq!(single("call bob #work.").title, "call bob");
+        assert_eq!(single("Call mum.").title, "Call mum.");
+        assert_eq!(single("ship it #work !").title, "ship it!");
         assert_eq!(single("note #a, #b").title, "note");
     }
 
