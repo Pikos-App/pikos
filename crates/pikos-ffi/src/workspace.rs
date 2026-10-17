@@ -1158,15 +1158,15 @@ impl Workspace {
         .into_iter()
         .map(Into::into)
         .collect();
-        let groups =
-            pikos_core::views::group_today(todays, &today, &now, |page| page.scheduled_start.as_deref());
+        let groups = pikos_core::views::group_today(todays, &today, &now, |page| {
+            page.scheduled_start.as_deref()
+        });
         Ok(TodayWindow {
             earlier,
             slipped_today: groups.overdue,
             today: groups.today,
         })
     }
-
 
     /// Move `ids`, in that order, to land after `after` and before `before` in their folder's
     /// manual order, rewriting no other page. None for `after` is the top, for `before` the

@@ -2093,9 +2093,18 @@ async fn todays_windows_add_up_to_its_sections() {
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
     let today = chrono::Local::now().date_naive();
-    for (title, offset) in [("Three days ago", -3), ("Two days ago", -2), ("Yesterday", -1), ("Today", 0)] {
+    for (title, offset) in [
+        ("Three days ago", -3),
+        ("Two days ago", -2),
+        ("Yesterday", -1),
+        ("Today", 0),
+    ] {
         ws.create_page(NewPage {
-            scheduled_start: Some((today + chrono::Duration::days(offset)).format("%Y-%m-%d").to_string()),
+            scheduled_start: Some(
+                (today + chrono::Duration::days(offset))
+                    .format("%Y-%m-%d")
+                    .to_string(),
+            ),
             ..new_page(title)
         })
         .await
@@ -2104,18 +2113,32 @@ async fn todays_windows_add_up_to_its_sections() {
 
     let whole = ws.list_today_sections().await.unwrap();
     let first = ws.list_today_window(None, 2).await.unwrap();
-    let mut earlier: Vec<String> = first.earlier.pages.iter().map(|p| p.title.clone()).collect();
+    let mut earlier: Vec<String> = first
+        .earlier
+        .pages
+        .iter()
+        .map(|p| p.title.clone())
+        .collect();
     assert_eq!(first.earlier.total, Some(3));
     let mut next = first.earlier.next.clone();
     while let Some(cursor) = next {
         let window = ws.list_today_window(Some(cursor), 2).await.unwrap();
-        assert!(window.today.is_empty(), "today's pages come with the first window only");
+        assert!(
+            window.today.is_empty(),
+            "today's pages come with the first window only"
+        );
         earlier.extend(window.earlier.pages.iter().map(|p| p.title.clone()));
         next = window.earlier.next;
     }
     assert_eq!(earlier, ["Three days ago", "Two days ago", "Yesterday"]);
-    let titles = |pages: &[pikos_ffi::workspace::PageSummary]| pages.iter().map(|p| p.title.clone()).collect::<Vec<_>>();
-    assert_eq!(titles(&whole.overdue), earlier, "the whole read's overdue is these, in this order");
+    let titles = |pages: &[pikos_ffi::workspace::PageSummary]| {
+        pages.iter().map(|p| p.title.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        titles(&whole.overdue),
+        earlier,
+        "the whole read's overdue is these, in this order"
+    );
     assert_eq!(titles(&first.today), titles(&whole.today));
 }
 
@@ -2133,7 +2156,13 @@ async fn an_index_gets_everything_once_and_then_only_what_changed() {
     assert_eq!(first.pages.len(), 3);
 
     let quiet = ws.index_changes(Some(first.mark.clone())).await.unwrap();
-    assert!(!quiet.everything && quiet.pages.is_empty() && quiet.removed.is_empty(), "{:?} {:?} {}", quiet.pages.iter().map(|p| &p.title).collect::<Vec<_>>(), quiet.removed, quiet.everything);
+    assert!(
+        !quiet.everything && quiet.pages.is_empty() && quiet.removed.is_empty(),
+        "{:?} {:?} {}",
+        quiet.pages.iter().map(|p| &p.title).collect::<Vec<_>>(),
+        quiet.removed,
+        quiet.everything
+    );
 
     ws.update_page(
         edited.id.clone(),
