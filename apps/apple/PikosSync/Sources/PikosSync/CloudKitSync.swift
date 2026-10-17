@@ -44,6 +44,27 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         self.onStatus = onStatus
     }
 
+    /// The zone to start in, settled before the engine is made: two devices that turned sync on
+    /// before either saw the other each made a zone, and the one whose zone lost moves into the
+    /// other's and deletes its own.
+    public static func join(store: ReplicaStore, container: CKContainer, ownZone: String)
+        async throws -> String
+    {
+        let database = container.privateCloudDatabase
+        let zones = try await database.allRecordZones().map(\.zoneID.zoneName)
+        let zone = try await store.join(zones: zones)
+        log.info("account zones \(zones, privacy: .public), syncing in \(zone, privacy: .public)")
+
+        let ownZoneLost = zone != ownZone && zones.contains(ownZone)
+        if ownZoneLost {
+            let id = CKRecordZone.ID(zoneName: ownZone, ownerName: CKCurrentUserDefaultName)
+            _ = try await database.modifyRecordZones(saving: [], deleting: [id])
+            log.info("moved from \(ownZone, privacy: .public) into \(zone, privacy: .public)")
+        }
+
+        return zone
+    }
+
     public func start() async throws {
         let saved = try await store.engineState()
         let state = saved.flatMap {

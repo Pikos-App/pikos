@@ -650,6 +650,59 @@ async fn a_used_workspace_joining_merges() {
     );
 }
 
+/// Sends everything pending to a zone of its own, as a device does before it has seen another, and
+/// returns what that zone then holds.
+async fn send_to_own_zone(pool: &SqlitePool) -> Vec<(RecordName, FieldMap)> {
+    let names = pending(pool, 100_000).await.unwrap();
+    let built = build(pool, &names).await.unwrap();
+    let acked: Vec<_> = built.iter().map(|b| (b.name.clone(), b.clock)).collect();
+    sent(pool, &acked).await.unwrap();
+    built.into_iter().map(|b| (b.name, b.fields)).collect()
+}
+
+#[tokio::test]
+async fn two_devices_that_each_synced_alone_settle_in_one_zone_with_both_pages() {
+    let mac = device().await;
+    let phone = device().await;
+    create_page_impl(&mac, new_page("Made on the Mac"))
+        .await
+        .unwrap();
+    create_page_impl(&phone, new_page("Made on the phone"))
+        .await
+        .unwrap();
+    let mac_zone = send_to_own_zone(&mac).await;
+    let phone_zone = send_to_own_zone(&phone).await;
+    let zone = |pool: &SqlitePool| {
+        let pool = pool.clone();
+        async move { pikos_replica::zone::zone_name(&meta(&pool).await.unwrap().workspace_id) }
+    };
+    let zones = vec![zone(&mac).await, zone(&phone).await];
+    let winner = zones.iter().min().unwrap().clone();
+    let (mover, held) = if winner == zones[0] {
+        (&phone, mac_zone)
+    } else {
+        (&mac, phone_zone)
+    };
+
+    let mac_joined = crate::replica::join(&mac, &zones).await.unwrap();
+    let phone_joined = crate::replica::join(&phone, &zones).await.unwrap();
+    apply(mover, &held).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_eq!(mac_joined, winner);
+    assert_eq!(phone_joined, winner);
+    assert_eq!(zone(&mac).await, zone(&phone).await);
+    assert_converged(&mac, &phone).await;
+    assert_eq!(
+        synced(&mac)
+            .await
+            .keys()
+            .filter(|k| k.starts_with("page:"))
+            .count(),
+        2
+    );
+}
+
 #[tokio::test]
 async fn a_restore_made_offline_before_another_device_empties_the_trash_wins() {
     let (mac, phone) = (device().await, device().await);

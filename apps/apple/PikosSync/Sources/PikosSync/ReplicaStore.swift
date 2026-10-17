@@ -70,4 +70,7 @@ public protocol ReplicaStore: Sendable {
     func expire() async throws -> [RecordAddress]
     /// Keeps CloudKit's metadata for records it saved or sent, by record name.
     func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws
+    /// The zone to sync in, given every zone the account holds. When another device's zone wins,
+    /// the workspace moves into it.
+    func join(zones: [String]) async throws -> String
 }

@@ -348,6 +348,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_expire_sync(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_forget_sync(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_JOIN_SYNC
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_JOIN_SYNC
+uint64_t uniffi_pikos_ffi_fn_method_workspace_join_sync(uint64_t ptr, RustBuffer zones
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PENDING_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PENDING_RECORDS
 uint64_t uniffi_pikos_ffi_fn_method_workspace_pending_records(uint64_t ptr, uint32_t limit
@@ -1259,6 +1264,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_expire_sync(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_FORGET_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_FORGET_SYNC
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_forget_sync(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_JOIN_SYNC
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_JOIN_SYNC
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_join_sync(void
     
 );
 #endif

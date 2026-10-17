@@ -202,6 +202,12 @@ impl Workspace {
         Ok(pikos_db::replica::adopt_workspace_id(&self.pool, &workspace_id).await?)
     }
 
+    /// The zone to sync in, given every zone the account holds; moves this workspace into it when
+    /// another device's zone wins.
+    pub async fn join_sync(&self, zones: Vec<String>) -> Result<String, WorkspaceError> {
+        Ok(pikos_db::replica::join(&self.pool, &zones).await?)
+    }
+
     /// The records waiting to send, oldest change first.
     pub async fn pending_records(&self, limit: u32) -> Result<Vec<RecordAddress>, WorkspaceError> {
         let names = pikos_db::replica::build::pending(&self.pool, i64::from(limit)).await?;

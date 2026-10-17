@@ -431,20 +431,56 @@ pub async fn clear_for_join(pool: &SqlitePool, workspace_id: &str) -> AppResult<
     sqlx::query("DELETE FROM replica_clocks")
         .execute(tx.conn())
         .await?;
-    sqlx::query("UPDATE replica_meta SET workspace_id = ?, seeded = '{}' WHERE id = 1")
-        .bind(workspace_id)
-        .execute(tx.conn())
-        .await?;
+    sqlx::query(
+        "UPDATE replica_meta SET workspace_id = ?, seeded = '{}', engine_state = NULL WHERE id = 1",
+    )
+    .bind(workspace_id)
+    .execute(tx.conn())
+    .await?;
     tx.commit().await
 }
 
-/// Adopts the workspace id of the zone this one merged into.
+/// Adopts the workspace id of the zone this one merged into, and queues every row to send there.
+/// What CloudKit knew of the old zone's records and changes is dropped, since none of it applies.
 pub async fn adopt_workspace_id(pool: &SqlitePool, workspace_id: &str) -> AppResult<()> {
-    sqlx::query("UPDATE replica_meta SET workspace_id = ? WHERE id = 1")
-        .bind(workspace_id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        sqlx::query("UPDATE replica_meta SET workspace_id = ?, engine_state = NULL WHERE id = 1")
+            .bind(workspace_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE replica_clocks SET system_fields = NULL")
+            .execute(&mut *tx)
+            .await?;
+        queue_everything(&mut tx).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Settles which of the account's zones this workspace syncs in, given every zone the account
+/// holds, and returns it. When another device's zone wins, this workspace moves into it as
+/// [`plan_join`] says; the transport then deletes the zone this one made, if it made one.
+pub async fn join(pool: &SqlitePool, zones: &[String]) -> AppResult<String> {
+    let own = pikos_replica::zone::zone_name(&meta(pool).await?.workspace_id);
+    let listed = zones.iter().map(String::as_str).chain([own.as_str()]);
+    let winner = pikos_replica::zone::winner(listed)
+        .unwrap_or(&own)
+        .to_owned();
+
+    if winner == own {
+        return Ok(own);
+    }
+
+    let workspace_id = pikos_replica::zone::workspace_of(&winner)
+        .ok_or_else(|| AppError::Invalid(format!("zone {winner} names no workspace")))?;
+    match plan_join(pool).await? {
+        Join::Replace => clear_for_join(pool, workspace_id).await?,
+        Join::Merge => adopt_workspace_id(pool, workspace_id).await?,
+    }
+
+    Ok(winner)
 }
 
 /// Sync's state on a workspace about to be replaced by a backup, carried over to the file put back.

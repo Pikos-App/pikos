@@ -61,6 +61,8 @@ private actor FakeStore: ReplicaStore {
     func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {
         for (name, data) in fields { systemFields[name] = data }
     }
+
+    func join(zones: [String]) async throws -> String { zones.min() ?? "" }
 }
 
 private let workspaceZone = CKRecordZone.ID(zoneName: "ws-test", ownerName: CKCurrentUserDefaultName)
