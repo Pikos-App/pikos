@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 use super::{migration_sql, triggers, MIGRATION};
 use crate::replica::manifest::entity;
 use crate::replica::{meta, start};
-use crate::{insert_test_folder, insert_test_page, test_pool, TestPage};
+use crate::{insert_test_folder, insert_test_page, insert_test_page_sync, test_pool, TestPage};
 
 #[derive(Debug, PartialEq, Eq)]
 struct Op {
@@ -311,6 +311,23 @@ async fn purging_a_page_sends_its_tombstone_and_none_for_what_cascades() {
         "children deleted by the cascade, the child page's parent and the focus session's page \
          set NULL by it, are every device's own to repeat"
     );
+}
+
+#[tokio::test]
+async fn deleting_a_calendar_event_page_captures_nothing_and_a_detached_one_its_tombstone() {
+    let pool = started_pool().await;
+    for (id, link) in [("mirror", "active"), ("kept", "detached")] {
+        insert_test_page(&pool, TestPage::new(id, "Standup"))
+            .await
+            .unwrap();
+        insert_test_page_sync(&pool, id, link).await.unwrap();
+    }
+    clear_ops(&pool).await;
+
+    exec(&pool, "DELETE FROM pages WHERE id IN ('mirror', 'kept')").await;
+
+    assert_eq!(op(&pool, Entity::Page, "mirror").await, None);
+    assert!(op(&pool, Entity::Page, "kept").await.unwrap().deleted);
 }
 
 #[tokio::test]

@@ -1308,6 +1308,37 @@ async fn a_calendars_edits_to_a_live_mirror_are_never_sent() {
     assert!(get_page(&phone, "mirror").await.unwrap().is_none());
 }
 
+// qa: CLOUD-97, CLOUD-99
+#[tokio::test]
+async fn a_calendar_removing_a_live_mirror_sends_nothing() {
+    let mac = device().await;
+    insert_test_page(&mac, TestPage::new("mirror", "Standup"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&mac, "mirror", "active")
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('alert', 'mirror', 10, '2030-01-01T00:00:00Z')",
+    )
+    .execute(&mac)
+    .await
+    .unwrap();
+    let queued = pending(&mac, 100).await.unwrap();
+    build(&mac, &queued).await.unwrap();
+
+    for upstream in [
+        "DELETE FROM page_reminders WHERE id = 'alert'",
+        "DELETE FROM pages WHERE id = 'mirror'",
+    ] {
+        sqlx::query(upstream).execute(&mac).await.unwrap();
+        let queued = pending(&mac, 10).await.unwrap();
+        let built = build(&mac, &queued).await.unwrap();
+        assert!(built.is_empty(), "{upstream} sent {:?}", queued);
+    }
+}
+
 // qa: CLOUD-72, CLOUD-102, CLOUD-103, CLOUD-105, CLOUD-106, CLOUD-107, CLOUD-108
 #[tokio::test]
 async fn a_calendar_account_and_its_folders_stay_on_their_device() {

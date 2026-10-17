@@ -3,7 +3,8 @@
 //! It reads every synced column of every entity before and after a write runs, and works out which
 //! records the capture must have marked and which fields: a new row whole, a changed row by the
 //! fields that differ, a removed row as removed. The two writes a purge makes on every device by
-//! itself, a cascade delete and a foreign key set NULL, are expected uncaptured.
+//! itself, a cascade delete and a foreign key set NULL, are expected uncaptured, as is removing a
+//! row out of scope, which was never anywhere else.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,6 +19,7 @@ struct Row {
     /// Each field's columns, quoted so NULL, text and numbers stay distinct.
     fields: Vec<Vec<String>>,
     parent: Option<String>,
+    in_scope: bool,
 }
 
 type State = BTreeMap<(Entity, String), Row>;
@@ -50,8 +52,9 @@ async fn synced_state(pool: &SqlitePool) -> State {
             .covers
             .map_or("1".to_owned(), |c| c.replace("{row}", "t"));
         let sql = format!(
-            "SELECT {} AS key, {parent} AS parent{} FROM {} AS t WHERE {covers}",
+            "SELECT {} AS key, {parent} AS parent, {} AS in_scope{} FROM {} AS t WHERE {covers}",
             entity.key.replace("{row}", "t"),
+            entity.scope.sql().replace("{row}", "t"),
             selected
                 .iter()
                 .map(|s| format!(", {s}"))
@@ -60,7 +63,7 @@ async fn synced_state(pool: &SqlitePool) -> State {
         );
 
         for row in sqlx::query(&sql).fetch_all(pool).await.unwrap() {
-            let mut values = (2..2 + columns.len()).map(|i| row.get::<String, _>(i));
+            let mut values = (3..3 + columns.len()).map(|i| row.get::<String, _>(i));
             let fields = entity
                 .fields
                 .iter()
@@ -71,6 +74,7 @@ async fn synced_state(pool: &SqlitePool) -> State {
                 Row {
                     fields,
                     parent: row.get("parent"),
+                    in_scope: row.get("in_scope"),
                 },
             );
         }
@@ -131,7 +135,8 @@ async fn expected(
                     (Some(parent), Some(id)) => !exists(pool, parent.table, id).await,
                     _ => false,
                 };
-                let removal_is_sent = entity.lifecycle == Lifecycle::Row && !parent_gone;
+                let removal_is_sent =
+                    entity.lifecycle == Lifecycle::Row && !parent_gone && old.in_scope;
                 if removal_is_sent {
                     expect.insert(key.clone(), Expected::Removed);
                 }
