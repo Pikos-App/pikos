@@ -216,4 +216,122 @@ final class CalendarGeometryTests: XCTestCase {
         XCTAssertEqual(CalendarGeometry.dropMinute(atY: -30, firstHour: 0, hourHeight: 40), 0)
         XCTAssertEqual(CalendarGeometry.dropMinute(atY: 400, firstHour: 22, hourHeight: 40), 23 * 60 + 45)
     }
+
+    // MARK: - Resizing by an edge
+
+    private func resize(_ start: String, _ end: String?, _ edge: CalendarGeometry.BlockEdge, _ minute: Int)
+        -> [String]?
+    {
+        CalendarGeometry.resized(start: start, end: end, edge: edge, toMinute: minute).map { [$0.start, $0.end] }
+    }
+
+    func testTheBottomEdgeMovesTheEndToTheNearestQuarterHour() {
+        XCTAssertEqual(
+            resize("2026-09-14T09:00:00", "2026-09-14T10:00:00", .bottom, 11 * 60 + 8),
+            ["2026-09-14T09:00:00", "2026-09-14T11:15:00"])
+    }
+
+    func testTheTopEdgeMovesTheStartAndKeepsTheEnd() {
+        XCTAssertEqual(
+            resize("2026-09-14T09:00:00", "2026-09-14T10:00:00", .top, 8 * 60 + 20),
+            ["2026-09-14T08:15:00", "2026-09-14T10:00:00"])
+    }
+
+    func testNeitherEdgeCanMakeAPageShorterThanAQuarterHour() {
+        XCTAssertEqual(
+            resize("2026-09-14T09:00:00", "2026-09-14T10:00:00", .bottom, 8 * 60),
+            ["2026-09-14T09:00:00", "2026-09-14T09:15:00"])
+        XCTAssertEqual(
+            resize("2026-09-14T09:00:00", "2026-09-14T10:00:00", .top, 11 * 60),
+            ["2026-09-14T09:45:00", "2026-09-14T10:00:00"])
+    }
+
+    func testAPageWithNoEndGainsOneFromEitherEdge() {
+        XCTAssertEqual(
+            resize("2026-09-14T09:00:00", nil, .bottom, 10 * 60),
+            ["2026-09-14T09:00:00", "2026-09-14T10:00:00"])
+        XCTAssertEqual(
+            resize("2026-09-14T09:00:00", nil, .top, 8 * 60),
+            ["2026-09-14T08:00:00", "2026-09-14T09:00:00"])
+    }
+
+    func testAnEdgeStaysInsideItsDay() {
+        XCTAssertEqual(
+            resize("2026-09-14T22:00:00", "2026-09-14T23:00:00", .bottom, 25 * 60),
+            ["2026-09-14T22:00:00", "2026-09-14T23:59:00"])
+        XCTAssertEqual(
+            resize("2026-09-14T01:00:00", "2026-09-14T02:00:00", .top, -90),
+            ["2026-09-14T00:00:00", "2026-09-14T02:00:00"])
+    }
+
+    func testAnAllDayOrOvernightPageIsNotResizedByAnEdge() {
+        XCTAssertNil(resize("2026-09-14", "2026-09-15", .bottom, 600))
+        XCTAssertNil(resize("2026-09-14T22:00:00", "2026-09-15T01:00:00", .bottom, 23 * 60))
+    }
+
+    // MARK: - Quick adjusts
+
+    private func shift(_ start: String, _ end: String?, _ minutes: Int) -> [String?]? {
+        CalendarGeometry.shifted(start: start, end: end, by: minutes).map { [$0.start, $0.end] }
+    }
+
+    func testAShiftKeepsTheLength() {
+        XCTAssertEqual(
+            shift("2026-09-14T09:00:00", "2026-09-14T09:45:00", 30),
+            ["2026-09-14T09:30:00", "2026-09-14T10:15:00"])
+        XCTAssertEqual(
+            shift("2026-09-14T09:00:00", "2026-09-14T09:45:00", -60),
+            ["2026-09-14T08:00:00", "2026-09-14T08:45:00"])
+    }
+
+    func testAPageWithNoEndShiftsWithoutGainingOne() {
+        XCTAssertEqual(shift("2026-09-14T09:00:00", nil, 15), ["2026-09-14T09:15:00", nil])
+    }
+
+    func testAShiftStopsAtTheEdgesOfTheDay() {
+        XCTAssertEqual(
+            shift("2026-09-14T23:00:00", "2026-09-14T23:30:00", 60),
+            ["2026-09-14T23:29:00", "2026-09-14T23:59:00"])
+        XCTAssertEqual(
+            shift("2026-09-14T00:15:00", "2026-09-14T01:00:00", -60),
+            ["2026-09-14T00:00:00", "2026-09-14T00:45:00"])
+    }
+
+    func testAnAllDayOrOvernightPageIsNotShifted() {
+        XCTAssertNil(shift("2026-09-14", nil, 15))
+        XCTAssertNil(shift("2026-09-14T22:00:00", "2026-09-15T01:00:00", 15))
+    }
+
+    func testLengtheningMovesOnlyTheEnd() {
+        let longer = CalendarGeometry.lengthened(start: "2026-09-14T09:00:00", end: "2026-09-14T09:30:00", by: 60)
+        XCTAssertEqual(longer.map { [$0.start, $0.end] }, ["2026-09-14T09:00:00", "2026-09-14T10:30:00"])
+        let fromAPoint = CalendarGeometry.lengthened(start: "2026-09-14T09:00:00", end: nil, by: 30)
+        XCTAssertEqual(fromAPoint.map { [$0.start, $0.end] }, ["2026-09-14T09:00:00", "2026-09-14T09:30:00"])
+    }
+
+    // MARK: - Stretching a new block
+
+    private func stretch(_ start: Int, toMinute minute: Double) -> [Int] {
+        let metrics = CalendarGeometry.Metrics(hourHeight: 60)
+        let range = CalendarGeometry.stretched(from: start, toY: CGFloat(minute), metrics: metrics)
+        return [range.start, range.end]
+    }
+
+    func testAPressThatHasNotMovedIsAQuarterHour() {
+        XCTAssertEqual(stretch(15 * 60, toMinute: 15 * 60 + 4), [15 * 60, 15 * 60 + 15])
+    }
+
+    func testDraggingDownMovesTheEndToTheNearestQuarterHour() {
+        XCTAssertEqual(stretch(15 * 60, toMinute: 16 * 60 + 37), [15 * 60, 16 * 60 + 30])
+        XCTAssertEqual(stretch(15 * 60, toMinute: 16 * 60 + 38), [15 * 60, 16 * 60 + 45])
+    }
+
+    func testDraggingUpMovesTheStartAndKeepsThePressedQuarter() {
+        XCTAssertEqual(stretch(15 * 60, toMinute: 14 * 60), [14 * 60, 15 * 60 + 15])
+    }
+
+    func testAStretchStaysInsideTheDay() {
+        XCTAssertEqual(stretch(23 * 60, toMinute: 25 * 60), [23 * 60, 24 * 60])
+        XCTAssertEqual(stretch(30, toMinute: -60), [0, 45])
+    }
 }

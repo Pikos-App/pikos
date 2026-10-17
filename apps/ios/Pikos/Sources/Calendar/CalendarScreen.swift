@@ -137,8 +137,15 @@ struct CalendarScreen: View {
                     onComplete: { entry in Task { await act(.complete, on: entry) } },
                     onSkip: { entry in Task { await act(.skip, on: entry) } },
                     onMove: { entry in moving = Moving(entry: entry) },
-                    onCreate: { day, minute in create(on: day, at: minute) },
-                    onDrop: { page, day, minute in drop(page, on: day, at: minute) }
+                    onCreate: { day, minute, minutes in create(on: day, at: minute, minutes: minutes) },
+                    onDrop: { page, day, minute in drop(page, on: day, at: minute) },
+                    onReschedule: { page, start, end in
+                        Task {
+                            await store.schedule(
+                                pageId: page.id, title: page.title, start: start, end: end,
+                                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
+                        }
+                    }
                 )
                 .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
                 // A new identity per range is what lets the grid slide rather
@@ -255,10 +262,10 @@ struct CalendarScreen: View {
     /// The desktop's "click a time slot to create a page", as a phone does
     /// it. The sheet opens with the day and time in its picker and the field
     /// focused, so the sentence typed names the page and nothing else.
-    private func create(on day: String, at minute: Int) {
+    private func create(on day: String, at minute: Int, minutes: Int?) {
         let iso = CalendarGeometry.wallClock(day: day, minute: minute)
         guard let date = StorageTimestamp.wallClock(iso) else { return }
-        route.presentQuickAdd(at: date)
+        route.presentQuickAdd(at: date, minutes: minutes)
     }
 
     /// Opening a page from the calendar goes through the same stack the list
