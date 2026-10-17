@@ -58,9 +58,10 @@ the surface exists, and five facts explain nearly every `○`:
   background refresh. The rows that stay `○` are the ones that need the polling model — the
   daily summary, the fired log — and quiet hours are `—`, since a Focus mode is the same
   control system-wide. A reminder is set from quick add's line or changed in the page header.
-- **One drag.** A page held in the list drops onto an hour of today, drawn under the list, which
-  is the desktop's drag from list to calendar. Moving and resizing a block on the grid compete
-  with scrolling on a touch screen and want a design decision rather than a port.
+- **A hold before every drag.** A page held in the list drops onto an hour of today, drawn under
+  the list, which is the desktop's drag from list to calendar. On the grid, a held block moves, a
+  block's edge held briefly resizes it, and empty grid held until a block appears draws one out to
+  a length. The hold is what tells each from a scroll.
 - **One occurrence at a time, from the calendar.** Long-pressing a block completes or skips
   _that_ occurrence, which is what a series with a backlog needs — the head sits on last
   Monday while the block on screen is this Thursday — and asks the desktop's scope question
@@ -104,7 +105,7 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ✅ long press → Move |
 | Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ✅ held over the title, onto the switcher |
 | Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ✅ select mode's handles |
-| Delete page | ✅ soft → trash | ⚠️ soft + tombstone ⁷ | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹ | ✅ swipe / long press |
+| Delete page | ✅ soft → trash | ⚠️ soft + tombstone ⁷ | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹ | ✅ long press; a series asks |
 | Restore from trash | ✅ | ✅ resumes sync ⁷ | ✅ stays detached ⁸ | ✅ `restore` | ✅ |
 
 ¹ `create_page_impl` rejects any create targeting an external-calendar folder

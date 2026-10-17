@@ -66,6 +66,9 @@ Cheap, and each one has caught something on other apps:
   each with their verbs on the rotor; the hour labels should not be visited.
 - Say "Add a page to Pikos" to Siri, then open the app. The page should be
   there without a pull-to-refresh.
+- Ask Siri "What's on my Pikos list". It should read today's pages with their
+  times, without opening the app. Then "Find a page in Pikos" and a word from a
+  title: it should offer that page, and nothing should be read from inside it.
 - Type `Dentist tomorrow at 3pm remind 30m before // bring the card` into quick
   add. The chips should show the time, the reminder and a note; the page's
   document should hold the note.
@@ -98,9 +101,9 @@ Cheap, and each one has caught something on other apps:
   be empty with a "Try …" line under the New page button. Tapping it should
   open quick add with the chips already drawn.
 - The floating `+` at the bottom right of Pages and Calendar: on iOS 26 it
-  should be glass and bounce under the thumb; on 18 a frosted circle. Delete
-  a page with a swipe: the notice bar should slide in _under_ the button and
-  push it up, not cover it. Scroll a long list to the end: the last row
+  should be glass and bounce under the thumb; on 18 a frosted circle. Send a
+  page to tomorrow with a swipe: the notice bar should come in _under_ the
+  button and push it up, not cover it. Scroll a long list to the end: the last row
   should clear the button.
 - iOS 26 only: scrolling a long list down should shrink the tab bar to a
   pill; tapping the Search tab should put the search field at the bottom
@@ -127,6 +130,17 @@ Cheap, and each one has caught something on other apps:
   light as the page passes over it, and letting go there should file the page
   with a notice offering Undo. The day at the bottom should still take a drop
   while the switcher is closed.
+- Calendar, day view: hold an empty hour until a block appears with a thud,
+  then drag down. The block should grow a quarter hour at a time with a tick
+  each, and letting go should open quick add on that range. A quick scroll
+  that starts on empty grid should scroll, not make a block. Then hold the
+  little bar at a block's bottom edge and drag: the block's end should follow,
+  and letting go should save it with Undo.
+- Calendar: tap a one-off block. A card should come up over it with its time;
+  +30 under Move should slide the block half an hour at once, and the card's
+  time should follow. Tap outside: the change stays, and Undo on the notice
+  puts it back where it was before the card. A repeating block should open on a
+  tap, as before.
 - On the desktop, make a page repeat monthly on the 15th, then open its Repeat
   on the phone. It should show Custom with the pattern as a label. Change it
   to every 2 months and close: the desktop should read every 2 months on the
