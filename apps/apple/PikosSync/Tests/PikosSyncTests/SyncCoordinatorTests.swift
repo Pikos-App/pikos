@@ -41,7 +41,14 @@ private actor FakeStore: ReplicaStore {
         return sent.map(\.name).filter(editedSinceBuilt.contains)
     }
 
-    func applyRecords(_ records: [SyncRecord]) async throws { applied.append(contentsOf: records) }
+    var applyFails = false
+
+    func failApplying() { applyFails = true }
+
+    func applyRecords(_ records: [SyncRecord]) async throws {
+        if applyFails { throw CocoaError(.fileWriteUnknown) }
+        applied.append(contentsOf: records)
+    }
 
     func engineState() async throws -> Data? { state }
 
@@ -173,6 +180,28 @@ final class SyncCoordinatorTests: XCTestCase {
 
         let saved = await store.state
         XCTAssertEqual(saved, Data([1, 2, 3]))
+    }
+
+    func testAfterFetchedRecordsFailToApplyNoLaterStateIsSavedSoTheNextLaunchFetchesThemAgain()
+        async throws
+    {
+        let store = FakeStore()
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        try await coordinator.stateUpdated(Data([1]))
+        await store.failApplying()
+        let record = RecordCodec.encode(
+            OutgoingRecord(record: page("p1", title: "Groceries"), storeName: "page:p1", builtAt: ""),
+            zone: workspaceZone
+        )
+
+        do {
+            try await coordinator.fetched([record])
+            XCTFail("the failure reaches the transport")
+        } catch {}
+        try await coordinator.stateUpdated(Data([2]))
+
+        let saved = await store.state
+        XCTAssertEqual(saved, Data([1]))
     }
 
     func testExpiredTombstonesBecomeCloudKitDeletions() async throws {

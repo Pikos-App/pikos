@@ -13,6 +13,10 @@ public actor SyncCoordinator {
     /// The server's last copy of each record this device saved or was refused over. Building on it
     /// keeps the server's change tag, so the next save isn't refused as stale.
     private var serverCopies: [String: CKRecord] = [:]
+    /// Fetched records failed to apply. Apple's engine has moved past them anyway, so no state is
+    /// saved for the rest of this launch: the next one starts from the last state saved before
+    /// them and fetches them again.
+    private var fetchUnapplied = false
 
     public init(store: ReplicaStore, zone: CKRecordZone.ID) {
         self.store = store
@@ -98,7 +102,12 @@ public actor SyncCoordinator {
             }
         }
         if !decoded.isEmpty {
-            try await store.applyRecords(decoded)
+            do {
+                try await store.applyRecords(decoded)
+            } catch {
+                fetchUnapplied = true
+                throw error
+            }
             try await store.saveSystemFields(metadata)
         }
     }
@@ -115,6 +124,8 @@ public actor SyncCoordinator {
     }
 
     public func stateUpdated(_ state: Data) async throws {
+        guard !fetchUnapplied else { return }
+
         try await store.setEngineState(state)
     }
 }
