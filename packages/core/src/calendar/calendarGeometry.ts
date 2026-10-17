@@ -4,10 +4,12 @@
 
 import {
   addDays,
-  addMinutes,
+  differenceInCalendarDays,
   endOfWeek,
   getHours,
   getMinutes,
+  getSeconds,
+  set,
   startOfDay,
   startOfWeek,
 } from "date-fns";
@@ -138,6 +140,37 @@ export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): Cale
 
 /** Baseline metrics for tests + callers that don't have settings context. */
 export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
+
+// ─── Clock time ───────────────────────────────────────────────────────────────
+// The grid is drawn in clock hours: the 4 PM row is 16 hour-heights down on every
+// day. A clock-change day is 23 or 25 hours long, so a time read off the grid is
+// clock minutes past midnight, never elapsed ones. Counting elapsed minutes from
+// `startOfDay` put a drop on the 4 PM row at 3 PM on a 25-hour day and at 5 PM on a
+// 23-hour one.
+
+/** The instant `minutes` clock minutes past midnight on `day`. 1440 is the next midnight. */
+export function atClockMinutes(day: Date, minutes: number): Date {
+  const seconds = Math.round(minutes * 60);
+  return set(startOfDay(day), {
+    hours: Math.floor(seconds / 3600),
+    minutes: Math.floor((seconds % 3600) / 60),
+    seconds: seconds % 60,
+  });
+}
+
+function clockMinutesOf(date: Date): number {
+  return getHours(date) * 60 + getMinutes(date) + getSeconds(date) / 60;
+}
+
+/** How far apart two instants are on the clock, the span the grid draws between them. */
+export function clockMinutesBetween(start: Date, end: Date): number {
+  return differenceInCalendarDays(end, start) * 1440 + clockMinutesOf(end) - clockMinutesOf(start);
+}
+
+/** `date` moved `minutes` along the clock, which is how far the grid moves it. */
+export function addClockMinutes(date: Date, minutes: number): Date {
+  return atClockMinutes(date, clockMinutesOf(date) + minutes);
+}
 
 // ─── Collapse geometry helpers ───────────────────────────────────────────────
 // The calendar can hide the early-morning ([0, topHour)) and late-evening
@@ -275,7 +308,7 @@ export function mapYToDate(y: number, day: Date, geometry: CollapseGeometry): Da
   const rawMinutes = hour * 60;
   const snappedMinutes = Math.round(rawMinutes / 15) * 15;
   const clamped = Math.min(Math.max(snappedMinutes, 0), VISIBLE_HOURS * 60);
-  return addMinutes(startOfDay(day), clamped);
+  return atClockMinutes(day, clamped);
 }
 
 /** Snaps a raw pixel Y to the nearest 15-minute grid line on the collapse-
@@ -325,7 +358,7 @@ export function yToDate(y: number, day: Date, hourHeight: number = HOUR_HEIGHT):
   const rawMinutes = (y / hourHeight) * 60;
   const snappedMinutes = Math.round(rawMinutes / 15) * 15;
   const clampedMinutes = Math.min(Math.max(snappedMinutes, 0), VISIBLE_HOURS * 60);
-  return addMinutes(startOfDay(day), clampedMinutes);
+  return atClockMinutes(day, clampedMinutes);
 }
 
 export function weekStart(date: Date, weekStartsOn: 0 | 1 = 1): Date {
