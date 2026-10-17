@@ -5,6 +5,7 @@ import XCTest
 /// Both panes stay in the accessibility tree whether or not they are on screen, so these assert
 /// on `isHittable` and on frames rather than on existence.
 extension TierOneTests {
+    // qa: IOS-23
     func testTheSidewaysPhoneShowsTheListBesideTheCalendarAndOffersNoWeek() throws {
         try requirePhone()
         rotate(to: .landscapeLeft)

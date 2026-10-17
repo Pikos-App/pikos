@@ -7,7 +7,8 @@
 // above its attribute:
 //   // qa: NOTIF-02
 //   #[tokio::test]
-// or the same annotation above a unit test's `it(` or `test(`, which every commit and CI run.
+// or the same annotation above a unit test's `it(` or `test(`, which every commit and CI run,
+// or above an iPhone test's `func test…`, which the iOS workflow runs.
 // A row that takes N tests together says so on each of them, `@GOLD-01:2` or `qa: GOLD-01:2`,
 // counted across both kinds. The release copy's automated marks are built from this output,
 // never typed.
@@ -147,6 +148,33 @@ function unitClaims() {
   return claims;
 }
 
+/** iPhone tests that claim a row, from the `// qa:` line above a `func test…` (doc comments may sit
+ *  between). The iOS workflow runs every UI flow and every host test, so the claim needs only a
+ *  real test under it. */
+function swiftClaims() {
+  const claims = [];
+  const roots = ["apps/ios/PikosUITests/Sources", "apps/ios/PikosCore/Tests", "apps/ios/PikosEditorBridge/Tests"];
+  for (const root of roots.filter((r) => existsSync(join(ROOT, r)))) {
+    for (const rel of readdirSync(join(ROOT, root), { recursive: true })) {
+      if (!rel.endsWith(".swift")) continue;
+      const file = `${root}/${rel}`;
+      const lines = readFileSync(join(ROOT, file), "utf8").split("\n");
+      lines.forEach((line, i) => {
+        const claim = /^\s*\/\/ qa: (.+)$/.exec(line);
+        if (!claim) return;
+        let next = i + 1;
+        while (next < lines.length && /^\s*\/\/\//.test(lines[next])) next++;
+        const fn = /^\s*(?:@MainActor\s+)?func (test\w+)\(/.exec(lines[next] ?? "");
+        const where = `${file}:${next + 1}${fn ? ` ${fn[1]}` : ""}`;
+        const tags = claim[1].split(/,\s*/);
+        if (!fn) claims.push({ bad: "isn't above a func test…", id: where, tags });
+        else claims.push({ id: where, tags });
+      });
+    }
+  }
+  return claims;
+}
+
 const rows = readMaster(MASTER);
 const realWriterTests = listTests("playwright.bridge.config.ts");
 const onRealWriter = new Set(realWriterTests.map((t) => t.id));
@@ -182,7 +210,7 @@ for (const test of everyTest) {
     }
   }
 }
-for (const test of [...rustClaims(), ...unitClaims()]) {
+for (const test of [...rustClaims(), ...unitClaims(), ...swiftClaims()]) {
   for (const match of test.tags.map((tag) => ROW_TAG.exec(tag))) {
     if (!match) {
       failures.push(`a qa: line names something that isn't a row: ${test.id}`);

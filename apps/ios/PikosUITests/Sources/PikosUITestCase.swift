@@ -118,7 +118,9 @@ class PikosUITestCase: XCTestCase {
 
     /// Switch the page list to one of its views, through the title's switcher.
     func showView(_ name: String) {
-        app.buttons["Switch view"].firstMatch.tap()
+        let switcher = app.buttons["Switch view"].firstMatch
+        XCTAssertTrue(switcher.waitForExistence(timeout: Self.timeout), "the shell is on screen")
+        switcher.tap()
         // A row's label carries its count after the name: "Inbox, 2".
         let row = app.buttons.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, "\(name), ")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout), "the switcher lists \(name)")
