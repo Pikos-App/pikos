@@ -363,6 +363,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_plan_join(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_records_sent(uint64_t ptr, RustBuffer sent
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RETRY_HELD_RECORDS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RETRY_HELD_RECORDS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_retry_held_records(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
 uint64_t uniffi_pikos_ffi_fn_method_workspace_save_body_if_unchanged(uint64_t ptr, RustBuffer page_id, RustBuffer content, RustBuffer loaded_clock
@@ -1267,6 +1272,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_plan_join(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECORDS_SENT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECORDS_SENT
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_records_sent(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RETRY_HELD_RECORDS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RETRY_HELD_RECORDS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_retry_held_records(void
     
 );
 #endif

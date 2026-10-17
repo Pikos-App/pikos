@@ -964,6 +964,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func recordsSent(sent: [SentRecord]) async throws  -> [String]
     
     /**
+     * Tries every held record again. Call after an update, which may read a format the old build
+     * couldn't.
+     */
+    func retryHeldRecords() async throws  -> SyncApplied
+    
+    /**
      * Saves a body only if it is still the one the editor loaded.
      */
     func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?) async throws  -> BodySave
@@ -2089,6 +2095,26 @@ open func recordsSent(sent: [SentRecord])async throws  -> [String]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Tries every held record again. Call after an update, which may read a format the old build
+     * couldn't.
+     */
+open func retryHeldRecords()async throws  -> SyncApplied  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_retry_held_records(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncApplied_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -10816,6 +10842,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_records_sent() != 35806) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_retry_held_records() != 3988) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged() != 63885) {

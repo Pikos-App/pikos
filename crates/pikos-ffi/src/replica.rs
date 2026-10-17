@@ -309,6 +309,16 @@ impl Workspace {
         })
     }
 
+    /// Tries every held record again. Call after an update, which may read a format the old build
+    /// couldn't.
+    pub async fn retry_held_records(&self) -> Result<SyncApplied, WorkspaceError> {
+        let applied = pikos_db::replica::apply::retry_held(&self.pool).await?;
+        Ok(SyncApplied {
+            changed: applied.changed as u32,
+            held: applied.held as u32,
+        })
+    }
+
     /// Forgets tombstones and holds past retention. Run now and then, such as on launch.
     pub async fn expire_sync(&self) -> Result<(), WorkspaceError> {
         Ok(pikos_db::replica::expire(&self.pool).await?)
