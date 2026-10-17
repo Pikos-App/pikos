@@ -748,6 +748,9 @@ fn tag_of(bytes: &[u8]) -> Option<u64> {
 /// keeps CloudKit's metadata and its sync engine's state, so joining a zone clears them for real.
 struct Phone {
     pool: SqlitePool,
+    /// This device's own clock, up to ten minutes off from the true time and moving with it.
+    clock: &'static AtomicU64,
+    skew: i64,
     /// None until it first connects.
     zone: Option<String>,
     /// Where this launch's fetching has got to; what's saved can be behind it.
@@ -852,7 +855,11 @@ async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
     let mut cloud = CloudKit::default();
     let mut fleet = Vec::new();
     for _ in 0..devices {
-        let pool = test_pool_on(Clock::Manual(world)).await;
+        let skew = rng.below(20 * 60_000) as i64 - 10 * 60_000;
+        let clock: &'static AtomicU64 = Box::leak(Box::new(AtomicU64::new(
+            world.load(Ordering::SeqCst).saturating_add_signed(skew),
+        )));
+        let pool = test_pool_on(Clock::Manual(clock)).await;
         // From the seed, since the order of the zones they name decides which one every device
         // joins, and a failure has to replay.
         sqlx::query("UPDATE replica_meta SET workspace_id = ? WHERE id = 1")
@@ -866,6 +873,8 @@ async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
         start(&pool).await.unwrap();
         fleet.push(Phone {
             pool,
+            clock,
+            skew,
             zone: None,
             cursor: 0,
             unapplied: false,
@@ -874,6 +883,12 @@ async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
 
     for n in 0..steps {
         world.fetch_add(rng.below(3) as u64, Ordering::SeqCst);
+        let now = world.load(Ordering::SeqCst);
+        for device in &fleet {
+            device
+                .clock
+                .store(now.saturating_add_signed(device.skew), Ordering::SeqCst);
+        }
         let device = &mut fleet[rng.below(devices)];
         match rng.below(12) {
             0..=5 => random_edit(&device.pool, &mut rng, n).await,
@@ -961,7 +976,8 @@ async fn devices_editing_at_random_through_cloudkit_end_up_the_same() {
 
 // qa: CLOUD-110:2
 #[tokio::test]
-async fn devices_that_start_alone_settle_in_one_zone_through_refusals_and_failed_applies() {
+async fn devices_that_start_alone_with_skewed_clocks_settle_in_one_zone_through_refusals_and_failed_applies(
+) {
     for seed in seeds() {
         run_cloudkit(seed, 3, 160).await;
     }
