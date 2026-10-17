@@ -396,6 +396,7 @@ pub async fn bench(
     db: &Option<String>,
     runs: u32,
     only: &[String],
+    sync: bool,
     json: bool,
 ) -> Result<(), CliError> {
     let path = require_scratch_db(db)?;
@@ -408,6 +409,9 @@ pub async fn bench(
         .map_err(classify)?;
     let open_ms = open_start.elapsed().as_secs_f64() * 1000.0;
     pikos_db::gather_statistics(&pool).await.map_err(classify)?;
+    if sync {
+        pikos_db::replica::start(&pool).await.map_err(classify)?;
+    }
 
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
         .fetch_one(&pool)

@@ -52,8 +52,8 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 )
                 .await
             }
-            StressCommand::Bench { runs, only } => {
-                crate::stress::bench(&cli.db, *runs, only, json).await
+            StressCommand::Bench { runs, only, sync } => {
+                crate::stress::bench(&cli.db, *runs, only, *sync, json).await
             }
         };
     }

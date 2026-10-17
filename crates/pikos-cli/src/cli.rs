@@ -295,6 +295,11 @@ pub enum StressCommand {
             help = "Time only the operations whose names contain one of these, e.g. --only list,save"
         )]
         only: Vec<String>,
+        #[arg(
+            long,
+            help = "Turn on device sync first, so every write also records what it would send"
+        )]
+        sync: bool,
     },
 }
 
