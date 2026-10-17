@@ -2087,6 +2087,233 @@ async fn todays_sections_separate_what_slipped_from_what_is_still_due() {
     assert_eq!(ids(&after.today), vec![all_day.id]);
 }
 
+/// Today read a window at a time holds what the whole read holds, in the same order.
+#[tokio::test]
+async fn todays_windows_add_up_to_its_sections() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let today = chrono::Local::now().date_naive();
+    for (title, offset) in [("Three days ago", -3), ("Two days ago", -2), ("Yesterday", -1), ("Today", 0)] {
+        ws.create_page(NewPage {
+            scheduled_start: Some((today + chrono::Duration::days(offset)).format("%Y-%m-%d").to_string()),
+            ..new_page(title)
+        })
+        .await
+        .unwrap();
+    }
+
+    let whole = ws.list_today_sections().await.unwrap();
+    let first = ws.list_today_window(None, 2).await.unwrap();
+    let mut earlier: Vec<String> = first.earlier.pages.iter().map(|p| p.title.clone()).collect();
+    assert_eq!(first.earlier.total, Some(3));
+    let mut next = first.earlier.next.clone();
+    while let Some(cursor) = next {
+        let window = ws.list_today_window(Some(cursor), 2).await.unwrap();
+        assert!(window.today.is_empty(), "today's pages come with the first window only");
+        earlier.extend(window.earlier.pages.iter().map(|p| p.title.clone()));
+        next = window.earlier.next;
+    }
+    assert_eq!(earlier, ["Three days ago", "Two days ago", "Yesterday"]);
+    let titles = |pages: &[pikos_ffi::workspace::PageSummary]| pages.iter().map(|p| p.title.clone()).collect::<Vec<_>>();
+    assert_eq!(titles(&whole.overdue), earlier, "the whole read's overdue is these, in this order");
+    assert_eq!(titles(&first.today), titles(&whole.today));
+}
+
+/// A search index starts with every open page and then catches up on what changed, no more.
+#[tokio::test]
+async fn an_index_gets_everything_once_and_then_only_what_changed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let kept = ws.create_page(new_page("Kept")).await.unwrap();
+    let edited = ws.create_page(new_page("Edited")).await.unwrap();
+    let finished = ws.create_page(new_page("Finished")).await.unwrap();
+
+    let first = ws.index_changes(None).await.unwrap();
+    assert!(first.everything);
+    assert_eq!(first.pages.len(), 3);
+
+    let quiet = ws.index_changes(Some(first.mark.clone())).await.unwrap();
+    assert!(!quiet.everything && quiet.pages.is_empty() && quiet.removed.is_empty(), "{:?} {:?} {}", quiet.pages.iter().map(|p| &p.title).collect::<Vec<_>>(), quiet.removed, quiet.everything);
+
+    ws.update_page(
+        edited.id.clone(),
+        PageEdit {
+            title: Some("Edited again".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    ws.set_page_status(finished.id.clone(), true).await.unwrap();
+    let later = ws.index_changes(Some(first.mark.clone())).await.unwrap();
+    assert!(!later.everything);
+    assert_eq!(
+        later
+            .pages
+            .iter()
+            .map(|p| p.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Edited again"]
+    );
+    assert_eq!(
+        later.removed,
+        std::slice::from_ref(&finished.id),
+        "a finished page leaves the index"
+    );
+    assert!(
+        !later.pages.iter().any(|p| p.id == kept.id),
+        "an untouched page isn't sent again"
+    );
+
+    let stranger = pikos_ffi::workspace::IndexMark {
+        seq: 0,
+        epoch: "another".into(),
+    };
+    assert!(
+        ws.index_changes(Some(stranger)).await.unwrap().everything,
+        "another epoch starts over"
+    );
+}
+
+/// A list read a window at a time is the whole list, in order, with its total on the first.
+#[tokio::test]
+async fn windows_walk_a_folder_in_its_order_and_a_move_lands_between_neighbours() {
+    use pikos_ffi::workspace::{ListScope, ListSort};
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let mut made = Vec::new();
+    for n in 0..5 {
+        made.push(
+            ws.create_page(new_page(&format!("Page {n}")))
+                .await
+                .unwrap()
+                .id,
+        );
+    }
+
+    let first = ws
+        .list_window(ListScope::Inbox, ListSort::Manual, None, 2)
+        .await
+        .unwrap();
+    assert_eq!(first.total, Some(5));
+    let mut seen: Vec<String> = first.pages.iter().map(|p| p.id.clone()).collect();
+    let mut next = first.next;
+    while let Some(cursor) = next {
+        let window = ws
+            .list_window(ListScope::Inbox, ListSort::Manual, Some(cursor), 2)
+            .await
+            .unwrap();
+        assert_eq!(window.total, None, "only the first window counts");
+        seen.extend(window.pages.iter().map(|p| p.id.clone()));
+        next = window.next;
+    }
+    assert_eq!(
+        seen, made,
+        "the windows add up to the list, in manual order"
+    );
+
+    // The last page to between the first two, naming only its new neighbours.
+    ws.move_pages(
+        vec![made[4].clone()],
+        Some(made[0].clone()),
+        Some(made[1].clone()),
+    )
+    .await
+    .unwrap();
+    let after = ws
+        .list_window(ListScope::Inbox, ListSort::Manual, None, 10)
+        .await
+        .unwrap();
+    let order: Vec<String> = after.pages.iter().map(|p| p.id.clone()).collect();
+    assert_eq!(
+        order,
+        vec![
+            made[0].clone(),
+            made[4].clone(),
+            made[1].clone(),
+            made[2].clone(),
+            made[3].clone()
+        ]
+    );
+
+    assert!(
+        ws.list_window(
+            ListScope::Inbox,
+            ListSort::Manual,
+            Some("not a cursor".into()),
+            2
+        )
+        .await
+        .is_err(),
+        "a made-up cursor is refused rather than read as the top"
+    );
+}
+
+/// The switcher's counts come from counting, and say what the lists they badge hold.
+#[tokio::test]
+async fn view_counts_match_the_lists_they_badge() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let today = chrono::Local::now().date_naive();
+    let day = |offset: i64| {
+        (today + chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string()
+    };
+    let work = ws.create_folder("Work".to_string(), None).await.unwrap();
+    for (title, start, folder) in [
+        ("Slipped", Some(day(-1)), None),
+        ("Today", Some(day(0)), Some(work.id.clone())),
+        ("Thursday", Some(day(3)), Some(work.id.clone())),
+        ("Someday", None, None),
+    ] {
+        ws.create_page(NewPage {
+            scheduled_start: start,
+            folder_id: folder,
+            ..new_page(title)
+        })
+        .await
+        .unwrap();
+    }
+    let done = ws
+        .create_page(NewPage {
+            folder_id: Some(work.id.clone()),
+            ..new_page("Finished")
+        })
+        .await
+        .unwrap();
+    ws.set_page_status(done.id, true).await.unwrap();
+
+    let counts = ws.view_counts().await.unwrap();
+    let sections = ws.list_today_sections().await.unwrap();
+    let upcoming: usize = ws
+        .list_upcoming()
+        .await
+        .unwrap()
+        .iter()
+        .map(|d| d.pages.len())
+        .sum();
+    let inbox = ws
+        .list_pages(PageQuery {
+            folder: Some(FolderScope::Inbox),
+            open_only: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        counts.today,
+        (sections.overdue.len() + sections.today.len()) as i64
+    );
+    assert_eq!(counts.upcoming, upcoming as i64);
+    assert_eq!(counts.inbox, inbox.len() as i64);
+    assert_eq!(
+        counts.folders.get(&work.id),
+        Some(&2),
+        "the finished page isn't counted"
+    );
+}
+
 /// Upcoming's window, at both ends.
 ///
 /// The upper bound is the one worth a test with a database behind it: the
@@ -2941,6 +3168,7 @@ async fn a_page_with_no_date_cannot_be_made_to_repeat() {
 ///
 /// Graded over the corpus the desktop's own guard is graded on, plus the shapes the phone's
 /// fields can't name, which come back with `keeps_pattern` rather than flattened.
+// qa: IOS-07:3
 #[tokio::test]
 async fn every_rule_the_desktop_edits_opens_and_saves_unchanged_on_the_phone() {
     let tmp = TempWorkspace::new();
@@ -3044,6 +3272,7 @@ async fn every_rule_the_desktop_edits_opens_and_saves_unchanged_on_the_phone() {
 
 /// A pattern the phone's fields can't name survives an interval change, and a new frequency
 /// replaces it, as on the desktop.
+// qa: IOS-07:3
 #[tokio::test]
 async fn a_richer_rule_keeps_its_pattern_until_its_frequency_changes() {
     let tmp = TempWorkspace::new();

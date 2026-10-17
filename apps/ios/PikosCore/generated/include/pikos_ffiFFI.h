@@ -283,6 +283,11 @@ uint64_t uniffi_pikos_ffi_fn_method_readonlyworkspace_list_pages(uint64_t ptr, R
 uint64_t uniffi_pikos_ffi_fn_method_readonlyworkspace_list_today(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_READONLYWORKSPACE_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_READONLYWORKSPACE_SEARCH
+uint64_t uniffi_pikos_ffi_fn_method_readonlyworkspace_search(uint64_t ptr, RustBuffer query, int8_t include_completed, uint32_t limit
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_CLONE_WORKSPACE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_CLONE_WORKSPACE
 uint64_t uniffi_pikos_ffi_fn_clone_workspace(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -398,6 +403,11 @@ RustBuffer uniffi_pikos_ffi_fn_method_workspace_focus_elapsed_label(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_get_page(uint64_t ptr, RustBuffer id
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_INDEX_CHANGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_INDEX_CHANGES
+uint64_t uniffi_pikos_ffi_fn_method_workspace_index_changes(uint64_t ptr, RustBuffer since
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_COMPLETED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_COMPLETED
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_completed(uint64_t ptr, RustBuffer scope, uint32_t limit, uint32_t offset
@@ -428,6 +438,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today_sections(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TODAY_WINDOW
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TODAY_WINDOW
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today_window(uint64_t ptr, RustBuffer after, uint32_t limit
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
@@ -436,6 +451,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_UPCOMING
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_UPCOMING
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_upcoming(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_WINDOW
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_WINDOW
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_window(uint64_t ptr, RustBuffer scope, RustBuffer sort, RustBuffer after, uint32_t limit
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MARK_PAGE_OPENED
@@ -451,6 +471,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_move_occurrence(uint64_t ptr, Rust
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_OVERDUE_TO_TODAY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_OVERDUE_TO_TODAY
 uint64_t uniffi_pikos_ffi_fn_method_workspace_move_overdue_to_today(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_PAGES
+uint64_t uniffi_pikos_ffi_fn_method_workspace_move_pages(uint64_t ptr, RustBuffer ids, RustBuffer after, RustBuffer before
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_OCCURRENCE_BACKLOG
@@ -631,6 +656,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_upcoming_reminders(uint64_t ptr, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UPDATE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UPDATE_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_update_page(uint64_t ptr, RustBuffer id, RustBuffer edit
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_VIEW_COUNTS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_VIEW_COUNTS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_view_counts(uint64_t ptr
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_COMPUTE_NEXT_END
@@ -1067,6 +1097,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_SEARCH
+uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_search(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_ADD_PAGE_REMINDER
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_ADD_PAGE_REMINDER
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_add_page_reminder(void
@@ -1187,6 +1223,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_get_page(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_INDEX_CHANGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_INDEX_CHANGES
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_index_changes(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_COMPLETED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_COMPLETED
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_completed(void
@@ -1223,6 +1265,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_today_sections(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TODAY_WINDOW
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TODAY_WINDOW
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_today_window(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages(void
@@ -1232,6 +1280,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_upcoming(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_WINDOW
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_WINDOW
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_window(void
     
 );
 #endif
@@ -1250,6 +1304,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_move_occurrence(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MOVE_OVERDUE_TO_TODAY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MOVE_OVERDUE_TO_TODAY
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_move_overdue_to_today(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MOVE_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MOVE_PAGES
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_move_pages(void
     
 );
 #endif
@@ -1466,6 +1526,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_upcoming_reminders(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_UPDATE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_UPDATE_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_update_page(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_VIEW_COUNTS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_VIEW_COUNTS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_view_counts(void
     
 );
 #endif

@@ -618,6 +618,11 @@ public protocol ReadOnlyWorkspaceProtocol: AnyObject, Sendable {
     
     func listToday() async throws  -> [PageSummary]
     
+    /**
+     * The app's search, for Siri finding a page by name.
+     */
+    func search(query: String, includeCompleted: Bool, limit: UInt32) async throws  -> SearchResults
+    
 }
 /**
  * A read-only handle, for widget and intent extensions.
@@ -794,6 +799,25 @@ open func listToday()async throws  -> [PageSummary]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypePageSummary.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The app's search, for Siri finding a page by name.
+     */
+open func search(query: String, includeCompleted: Bool, limit: UInt32)async throws  -> SearchResults  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_readonlyworkspace_search(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(query),FfiConverterBool.lower(includeCompleted),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSearchResults_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -1113,6 +1137,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func getPage(id: String) async throws  -> Page
     
     /**
+     * What a search index kept outside the workspace has to change to catch up from `since`.
+     *
+     * Every open page when `since` is None or from another epoch of the change counter, which is
+     * when it may have moved backwards; otherwise only the pages written after it, with those
+     * finished or trashed since as ids to remove.
+     */
+    func indexChanges(since: IndexMark?) async throws  -> IndexChanges
+    
+    /**
      * Finished pages for one view, newest first.
      *
      * Paginated because a folder accumulates completed pages without limit and
@@ -1152,6 +1185,13 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func listTodaySections() async throws  -> TodaySections
     
     /**
+     * Today a window at a time: what slipped from earlier days, oldest first, read like a list,
+     * and today's own pages whole, split by the same rule [`Workspace::list_today_sections`] uses.
+     * Today's come with the first window only.
+     */
+    func listTodayWindow(after: String?, limit: UInt32) async throws  -> TodayWindow
+    
+    /**
      * What is in the trash, newest first.
      *
      * Exists because the phone had no way back. Swipe-to-delete was wired and
@@ -1173,6 +1213,14 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * says nothing the next populated one does not.
      */
     func listUpcoming() async throws  -> [UpcomingDay]
+    
+    /**
+     * The next window of the Inbox's or a folder's open pages, in the order `sort` puts them.
+     *
+     * `after` is the `next` of the window before, or None for the top. The cursor is the last
+     * row's place in the order, so the next window starts after it however the list has changed.
+     */
+    func listWindow(scope: ListScope, sort: ListSort, after: String?, limit: UInt32) async throws  -> PageWindow
     
     /**
      * Note that a page was opened, which is what orders [`Workspace::recent_pages`].
@@ -1235,6 +1283,13 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * that has become locked since the plan was made fails alone.
      */
     func moveOverdueToToday() async throws  -> OverdueMoveResult
+    
+    /**
+     * Move `ids`, in that order, to land after `after` and before `before` in their folder's
+     * manual order, rewriting no other page. None for `after` is the top, for `before` the
+     * bottom. A neighbour that has moved since is a conflict, and the caller re-reads.
+     */
+    func movePages(ids: [String], after: String?, before: String?) async throws 
     
     /**
      * The earlier occurrences of a series that are still open, oldest first.
@@ -1625,6 +1680,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func upcomingReminders(timezone: String, horizonDays: UInt32, defaultMinutes: Int64) async throws  -> [UpcomingReminder]
     
     func updatePage(id: String, edit: PageEdit) async throws  -> Page
+    
+    /**
+     * Open pages per view, as the desktop's sidebar counts them, without reading a page.
+     */
+    func viewCounts() async throws  -> ViewCounts
     
 }
 /**
@@ -2233,6 +2293,29 @@ open func getPage(id: String)async throws  -> Page  {
 }
     
     /**
+     * What a search index kept outside the workspace has to change to catch up from `since`.
+     *
+     * Every open page when `since` is None or from another epoch of the change counter, which is
+     * when it may have moved backwards; otherwise only the pages written after it, with those
+     * finished or trashed since as ids to remove.
+     */
+open func indexChanges(since: IndexMark?)async throws  -> IndexChanges  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_index_changes(
+                        self.uniffiCloneHandle(),FfiConverterOptionTypeIndexMark.lower(since)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeIndexChanges_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Finished pages for one view, newest first.
      *
      * Paginated because a folder accumulates completed pages without limit and
@@ -2356,6 +2439,27 @@ open func listTodaySections()async throws  -> TodaySections  {
 }
     
     /**
+     * Today a window at a time: what slipped from earlier days, oldest first, read like a list,
+     * and today's own pages whole, split by the same rule [`Workspace::list_today_sections`] uses.
+     * Today's come with the first window only.
+     */
+open func listTodayWindow(after: String?, limit: UInt32)async throws  -> TodayWindow  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_today_window(
+                        self.uniffiCloneHandle(),FfiConverterOptionString.lower(after),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTodayWindow_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * What is in the trash, newest first.
      *
      * Exists because the phone had no way back. Swipe-to-delete was wired and
@@ -2402,6 +2506,28 @@ open func listUpcoming()async throws  -> [UpcomingDay]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeUpcomingDay.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The next window of the Inbox's or a folder's open pages, in the order `sort` puts them.
+     *
+     * `after` is the `next` of the window before, or None for the top. The cursor is the last
+     * row's place in the order, so the next window starts after it however the list has changed.
+     */
+open func listWindow(scope: ListScope, sort: ListSort, after: String?, limit: UInt32)async throws  -> PageWindow  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_window(
+                        self.uniffiCloneHandle(),FfiConverterTypeListScope_lower(scope),FfiConverterTypeListSort_lower(sort),FfiConverterOptionString.lower(after),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePageWindow_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2506,6 +2632,27 @@ open func moveOverdueToToday()async throws  -> OverdueMoveResult  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeOverdueMoveResult_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Move `ids`, in that order, to land after `after` and before `before` in their folder's
+     * manual order, rewriting no other page. None for `after` is the top, for `before` the
+     * bottom. A neighbour that has moved since is a conflict, and the caller re-reads.
+     */
+open func movePages(ids: [String], after: String?, before: String?)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_move_pages(
+                        self.uniffiCloneHandle(),FfiConverterSequenceString.lower(ids),FfiConverterOptionString.lower(after),FfiConverterOptionString.lower(before)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3383,6 +3530,25 @@ open func updatePage(id: String, edit: PageEdit)async throws  -> Page  {
         )
 }
     
+    /**
+     * Open pages per view, as the desktop's sidebar counts them, without reading a page.
+     */
+open func viewCounts()async throws  -> ViewCounts  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_view_counts(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeViewCounts_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
 
     
 }
@@ -4027,6 +4193,149 @@ public func FfiConverterTypeFolder_lift(_ buf: RustBuffer) throws -> Folder {
 #endif
 public func FfiConverterTypeFolder_lower(_ value: Folder) -> RustBuffer {
     return FfiConverterTypeFolder.lower(value)
+}
+
+
+public struct IndexChanges: Equatable, Hashable {
+    /**
+     * Open pages to add or update.
+     */
+    public var pages: [PageSummary]
+    /**
+     * Pages to take out: finished or trashed since the mark.
+     */
+    public var removed: [String]
+    /**
+     * `pages` is every open page, so whatever the index held before is void.
+     */
+    public var everything: Bool
+    /**
+     * What to pass as `since` next time.
+     */
+    public var mark: IndexMark
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Open pages to add or update.
+         */pages: [PageSummary], 
+        /**
+         * Pages to take out: finished or trashed since the mark.
+         */removed: [String], 
+        /**
+         * `pages` is every open page, so whatever the index held before is void.
+         */everything: Bool, 
+        /**
+         * What to pass as `since` next time.
+         */mark: IndexMark) {
+        self.pages = pages
+        self.removed = removed
+        self.everything = everything
+        self.mark = mark
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension IndexChanges: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexChanges: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexChanges {
+        return
+            try IndexChanges(
+                pages: FfiConverterSequenceTypePageSummary.read(from: &buf), 
+                removed: FfiConverterSequenceString.read(from: &buf), 
+                everything: FfiConverterBool.read(from: &buf), 
+                mark: FfiConverterTypeIndexMark.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexChanges, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypePageSummary.write(value.pages, into: &buf)
+        FfiConverterSequenceString.write(value.removed, into: &buf)
+        FfiConverterBool.write(value.everything, into: &buf)
+        FfiConverterTypeIndexMark.write(value.mark, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexChanges_lift(_ buf: RustBuffer) throws -> IndexChanges {
+    return try FfiConverterTypeIndexChanges.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexChanges_lower(_ value: IndexChanges) -> RustBuffer {
+    return FfiConverterTypeIndexChanges.lower(value)
+}
+
+
+/**
+ * Where a search index last caught up to: a change number, and the counter's epoch it belongs to.
+ */
+public struct IndexMark: Equatable, Hashable {
+    public var seq: Int64
+    public var epoch: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(seq: Int64, epoch: String) {
+        self.seq = seq
+        self.epoch = epoch
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension IndexMark: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexMark: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexMark {
+        return
+            try IndexMark(
+                seq: FfiConverterInt64.read(from: &buf), 
+                epoch: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexMark, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.seq, into: &buf)
+        FfiConverterString.write(value.epoch, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexMark_lift(_ buf: RustBuffer) throws -> IndexMark {
+    return try FfiConverterTypeIndexMark.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexMark_lower(_ value: IndexMark) -> RustBuffer {
+    return FfiConverterTypeIndexMark.lower(value)
 }
 
 
@@ -5025,6 +5334,76 @@ public func FfiConverterTypePageSummary_lift(_ buf: RustBuffer) throws -> PageSu
 #endif
 public func FfiConverterTypePageSummary_lower(_ value: PageSummary) -> RustBuffer {
     return FfiConverterTypePageSummary.lower(value)
+}
+
+
+public struct PageWindow: Equatable, Hashable {
+    public var pages: [PageSummary]
+    /**
+     * Where the next window starts, or None at the end of the list.
+     */
+    public var next: String?
+    /**
+     * Every open page in the list, on the first window only.
+     */
+    public var total: Int64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pages: [PageSummary], 
+        /**
+         * Where the next window starts, or None at the end of the list.
+         */next: String?, 
+        /**
+         * Every open page in the list, on the first window only.
+         */total: Int64?) {
+        self.pages = pages
+        self.next = next
+        self.total = total
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PageWindow: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePageWindow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PageWindow {
+        return
+            try PageWindow(
+                pages: FfiConverterSequenceTypePageSummary.read(from: &buf), 
+                next: FfiConverterOptionString.read(from: &buf), 
+                total: FfiConverterOptionInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PageWindow, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypePageSummary.write(value.pages, into: &buf)
+        FfiConverterOptionString.write(value.next, into: &buf)
+        FfiConverterOptionInt64.write(value.total, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageWindow_lift(_ buf: RustBuffer) throws -> PageWindow {
+    return try FfiConverterTypePageWindow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageWindow_lower(_ value: PageWindow) -> RustBuffer {
+    return FfiConverterTypePageWindow.lower(value)
 }
 
 
@@ -6101,6 +6480,82 @@ public func FfiConverterTypeTodaySections_lower(_ value: TodaySections) -> RustB
 }
 
 
+public struct TodayWindow: Equatable, Hashable {
+    /**
+     * Open pages from before today, oldest first, a window at a time.
+     */
+    public var earlier: PageWindow
+    /**
+     * Today's timed pages whose time has passed, soonest first.
+     */
+    public var slippedToday: [PageSummary]
+    /**
+     * Today's pages still to come, with all-day ones at now.
+     */
+    public var today: [PageSummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Open pages from before today, oldest first, a window at a time.
+         */earlier: PageWindow, 
+        /**
+         * Today's timed pages whose time has passed, soonest first.
+         */slippedToday: [PageSummary], 
+        /**
+         * Today's pages still to come, with all-day ones at now.
+         */today: [PageSummary]) {
+        self.earlier = earlier
+        self.slippedToday = slippedToday
+        self.today = today
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TodayWindow: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTodayWindow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TodayWindow {
+        return
+            try TodayWindow(
+                earlier: FfiConverterTypePageWindow.read(from: &buf), 
+                slippedToday: FfiConverterSequenceTypePageSummary.read(from: &buf), 
+                today: FfiConverterSequenceTypePageSummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TodayWindow, into buf: inout [UInt8]) {
+        FfiConverterTypePageWindow.write(value.earlier, into: &buf)
+        FfiConverterSequenceTypePageSummary.write(value.slippedToday, into: &buf)
+        FfiConverterSequenceTypePageSummary.write(value.today, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTodayWindow_lift(_ buf: RustBuffer) throws -> TodayWindow {
+    return try FfiConverterTypeTodayWindow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTodayWindow_lower(_ value: TodayWindow) -> RustBuffer {
+    return FfiConverterTypeTodayWindow.lower(value)
+}
+
+
 /**
  * A page in the trash, as the recovery list shows it.
  */
@@ -6368,6 +6823,74 @@ public func FfiConverterTypeUpcomingReminder_lift(_ buf: RustBuffer) throws -> U
 #endif
 public func FfiConverterTypeUpcomingReminder_lower(_ value: UpcomingReminder) -> RustBuffer {
     return FfiConverterTypeUpcomingReminder.lower(value)
+}
+
+
+public struct ViewCounts: Equatable, Hashable {
+    public var today: Int64
+    public var upcoming: Int64
+    public var inbox: Int64
+    /**
+     * Open pages by folder id, for folders that have held one.
+     */
+    public var folders: [String: Int64]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(today: Int64, upcoming: Int64, inbox: Int64, 
+        /**
+         * Open pages by folder id, for folders that have held one.
+         */folders: [String: Int64]) {
+        self.today = today
+        self.upcoming = upcoming
+        self.inbox = inbox
+        self.folders = folders
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ViewCounts: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewCounts: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewCounts {
+        return
+            try ViewCounts(
+                today: FfiConverterInt64.read(from: &buf), 
+                upcoming: FfiConverterInt64.read(from: &buf), 
+                inbox: FfiConverterInt64.read(from: &buf), 
+                folders: FfiConverterDictionaryStringInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewCounts, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.today, into: &buf)
+        FfiConverterInt64.write(value.upcoming, into: &buf)
+        FfiConverterInt64.write(value.inbox, into: &buf)
+        FfiConverterDictionaryStringInt64.write(value.folders, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewCounts_lift(_ buf: RustBuffer) throws -> ViewCounts {
+    return try FfiConverterTypeViewCounts.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewCounts_lower(_ value: ViewCounts) -> RustBuffer {
+    return FfiConverterTypeViewCounts.lower(value)
 }
 
 
@@ -6819,6 +7342,158 @@ public func FfiConverterTypeFolderScope_lift(_ buf: RustBuffer) throws -> Folder
 #endif
 public func FfiConverterTypeFolderScope_lower(_ value: FolderScope) -> RustBuffer {
     return FfiConverterTypeFolderScope.lower(value)
+}
+
+
+
+
+public enum ListScope: Equatable, Hashable {
+    
+    case inbox
+    case folder(id: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ListScope: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeListScope: FfiConverterRustBuffer {
+    typealias SwiftType = ListScope
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ListScope {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .inbox
+        
+        case 2: return .folder(id: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ListScope, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .inbox:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .folder(id):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(id, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListScope_lift(_ buf: RustBuffer) throws -> ListScope {
+    return try FfiConverterTypeListScope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListScope_lower(_ value: ListScope) -> RustBuffer {
+    return FfiConverterTypeListScope.lower(value)
+}
+
+
+
+/**
+ * The orders a folder or the Inbox can be read in, as the desktop offers them.
+ */
+
+public enum ListSort: Equatable, Hashable {
+    
+    case manual
+    case date
+    case title
+    case priority
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ListSort: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeListSort: FfiConverterRustBuffer {
+    typealias SwiftType = ListSort
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ListSort {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .manual
+        
+        case 2: return .date
+        
+        case 3: return .title
+        
+        case 4: return .priority
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ListSort, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .manual:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .date:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .title:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .priority:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListSort_lift(_ buf: RustBuffer) throws -> ListSort {
+    return try FfiConverterTypeListSort.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListSort_lower(_ value: ListSort) -> RustBuffer {
+    return FfiConverterTypeListSort.lower(value)
 }
 
 
@@ -7728,6 +8403,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeIndexMark: FfiConverterRustBuffer {
+    typealias SwiftType = IndexMark?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeIndexMark.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeIndexMark.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeOccurrence: FfiConverterRustBuffer {
     typealias SwiftType = Occurrence?
 
@@ -8443,6 +9142,32 @@ fileprivate struct FfiConverterSequenceTypeUpcomingReminder: FfiConverterRustBuf
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringInt64: FfiConverterRustBuffer {
+    public static func write(_ value: [String: Int64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterInt64.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: Int64] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: Int64]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterInt64.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
 
@@ -8750,6 +9475,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today() != 33378) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_search() != 35518) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_add_page_reminder() != 49849) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8810,6 +9538,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_index_changes() != 43065) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_completed() != 34915) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8828,10 +9559,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_list_today_sections() != 3533) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_today_window() != 51737) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages() != 62776) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_upcoming() != 48506) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_window() != 41478) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_mark_page_opened() != 62372) {
@@ -8841,6 +9578,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_move_overdue_to_today() != 5053) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_move_pages() != 15170) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_occurrence_backlog() != 2014) {
@@ -8949,6 +9689,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_update_page() != 63112) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_view_counts() != 37262) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_constructor_readonlyworkspace_open_existing() != 14894) {

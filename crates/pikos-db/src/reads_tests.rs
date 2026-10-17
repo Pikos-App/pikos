@@ -405,6 +405,51 @@ async fn series_heads_pages_by_id_and_newer_copies() {
 }
 
 #[tokio::test]
+async fn pages_changed_since_a_change_number_are_the_written_and_the_trashed() {
+    let pool = test_pool().await;
+    for id in ["kept", "renamed", "trashed", "finished"] {
+        page(&pool, id, None, None, None).await;
+    }
+    let seen: i64 = sqlx::query_scalar("SELECT seq FROM change_counter")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let (live, gone) = pages_changed_since(&pool, seen).await.unwrap();
+    assert!(
+        live.is_empty() && gone.is_empty(),
+        "nothing since the last look"
+    );
+
+    exec(
+        &pool,
+        "UPDATE pages SET title = 'Renamed' WHERE id = 'renamed'",
+    )
+    .await;
+    exec(
+        &pool,
+        "UPDATE pages SET deleted_at = '2026-06-02' WHERE id = 'trashed'",
+    )
+    .await;
+    exec(
+        &pool,
+        "UPDATE pages SET status = 'done' WHERE id = 'finished'",
+    )
+    .await;
+    let (live, gone) = pages_changed_since(&pool, seen).await.unwrap();
+    let mut live: Vec<(String, String)> = live.into_iter().map(|p| (p.id, p.status)).collect();
+    live.sort();
+    assert_eq!(
+        live,
+        [
+            ("finished".to_string(), "done".to_string()),
+            ("renamed".to_string(), "not_started".to_string())
+        ],
+        "a finished page comes back with its status, for the caller to drop"
+    );
+    assert_eq!(gone, ["trashed"]);
+}
+
+#[tokio::test]
 async fn recents_are_the_open_pages_opened_last() {
     let pool = test_pool().await;
     for (id, opened, tags, order) in [
