@@ -469,10 +469,42 @@ pub async fn adopt_workspace_id(pool: &SqlitePool, workspace_id: &str) -> AppRes
     .await
 }
 
+/// A device whose last fetch is older than [`RETENTION_DAYS`] can hold rows another device purged
+/// and has since forgotten the tombstones of, so nothing it fetches would tell it. It sends
+/// everything it holds again and fetches from the start: what it kept comes back everywhere,
+/// rather than living on one device alone.
+async fn catch_up_after_absence(pool: &SqlitePool) -> AppResult<()> {
+    let last_fetch: Option<String> =
+        sqlx::query_scalar("SELECT last_fetch_at FROM replica_meta WHERE id = 1")
+            .fetch_one(pool)
+            .await?;
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(RETENTION_DAYS))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
+    let was_away = last_fetch.is_some_and(|at| at < cutoff);
+    if !was_away {
+        return Ok(());
+    }
+
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        sqlx::query(
+            "UPDATE replica_meta SET engine_state = NULL, last_fetch_at = NULL WHERE id = 1",
+        )
+        .execute(&mut *tx)
+        .await?;
+        queue_everything(&mut tx).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
+}
+
 /// Settles which of the account's zones this workspace syncs in, given every zone the account
 /// holds, and returns it. When another device's zone wins, this workspace moves into it as
 /// [`plan_join`] says; the transport then deletes the zone this one made, if it made one.
 pub async fn join(pool: &SqlitePool, zones: &[String]) -> AppResult<String> {
+    catch_up_after_absence(pool).await?;
     let own = pikos_replica::zone::zone_name(&meta(pool).await?.workspace_id);
     let listed = zones.iter().map(String::as_str).chain([own.as_str()]);
     let winner = pikos_replica::zone::winner(listed)

@@ -1363,3 +1363,50 @@ async fn changes_made_while_sync_was_off_reach_the_other_device_once_it_is_back_
 
     assert_eq!(page(&phone, &id).await.title, "Packing list, Lisbon");
 }
+
+// ─── Long absences ───────────────────────────────────────────────────────────
+
+// qa: CLOUD-125
+#[tokio::test]
+async fn a_device_back_after_the_retention_window_sends_back_what_it_kept() {
+    let (mac, phone) = (device().await, device().await);
+    let id = created(&mac, new_page("Old notes")).await;
+    converge(&mac, &phone).await;
+    let long_ago = (chrono::Utc::now()
+        - chrono::Duration::days(crate::replica::RETENTION_DAYS + 10))
+    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+    .to_string();
+    sqlx::query("UPDATE replica_meta SET last_fetch_at = ? WHERE id = 1")
+        .bind(&long_ago)
+        .execute(&phone)
+        .await
+        .unwrap();
+
+    hard_delete_page_impl(&mac, &id).await.unwrap();
+    crate::replica::build::sent(
+        &mac,
+        &crate::replica::build::build(&mac, &pending(&mac, 100).await.unwrap())
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|b| (b.name, b.clock))
+            .collect::<Vec<_>>(),
+    )
+    .await
+    .unwrap();
+    let past_retention = chrono::Utc::now().timestamp_millis()
+        - (crate::replica::RETENTION_DAYS + 5) * 24 * 60 * 60 * 1000;
+    sqlx::query("UPDATE replica_clocks SET tomb = ? WHERE tomb IS NOT NULL")
+        .bind(pikos_replica::Hlc::new(past_retention as u64, 0).to_string())
+        .execute(&mac)
+        .await
+        .unwrap();
+    crate::replica::expire(&mac).await.unwrap();
+    let zone =
+        pikos_replica::zone::zone_name(&crate::replica::meta(&phone).await.unwrap().workspace_id);
+    crate::replica::join(&phone, &[zone]).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_converged(&mac, &phone).await;
+    assert!(get_page(&mac, &id).await.unwrap().is_some());
+}
