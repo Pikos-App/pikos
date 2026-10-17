@@ -25,7 +25,7 @@ struct ListWidget: Widget {
         AppIntentConfiguration(kind: Self.kind, intent: ListWidgetIntent.self, provider: ListProvider()) {
             entry in
             ListWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(WidgetGround.style, for: .widget)
         }
         .configurationDisplayName("List")
         .description("Today, Upcoming, your Inbox or a folder. Tick pages off or move them to tomorrow.")
@@ -191,11 +191,13 @@ struct ListProvider: AppIntentTimelineProvider {
 // MARK: - Views
 
 struct ListWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetFamily) private var widgetFamily
     let entry: ListEntry
+    /// Set only by the app's debug widget gallery, which can't set WidgetKit's environment value.
+    var family: WidgetFamily? = nil
 
     var body: some View {
-        switch family {
+        switch family ?? widgetFamily {
         case .accessoryInline:
             InlineView(entry: entry)
         case .accessoryCircular:
@@ -203,7 +205,7 @@ struct ListWidgetView: View {
         case .accessoryRectangular:
             RectangularView(entry: entry)
         default:
-            HomeScreenView(entry: entry)
+            HomeScreenView(entry: entry, family: family ?? widgetFamily)
         }
     }
 }
@@ -211,14 +213,14 @@ struct ListWidgetView: View {
 // MARK: Home screen
 
 private struct HomeScreenView: View {
-    @Environment(\.widgetFamily) private var family
     let entry: ListEntry
+    let family: WidgetFamily
 
     /// Trimmed to what fits, since a widget can't scroll.
     private var visible: [PageSummary] {
         let limit: Int
         switch family {
-        case .systemSmall: limit = 3
+        case .systemSmall: limit = 2
         case .systemMedium: limit = 4
         default: limit = 9
         }
@@ -234,7 +236,7 @@ private struct HomeScreenView: View {
                 if !entry.open.isEmpty {
                     Text("\(entry.open.count)")
                         .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetInk.secondary)
                 }
                 Spacer(minLength: 4)
                 if let add = entry.list.addLink {
@@ -248,7 +250,7 @@ private struct HomeScreenView: View {
             }
 
             if entry.failure != nil {
-                WidgetNote(text: "Can't read your notes")
+                WidgetNote(text: "Can't read your pages")
             } else if entry.open.isEmpty {
                 WidgetNote(text: "Nothing open")
             } else {
@@ -258,12 +260,12 @@ private struct HomeScreenView: View {
                             page: page,
                             linksToPage: family != .systemSmall,
                             detail: family == .systemSmall ? nil : dueLabel(page, today: entry.today),
-                            lineLimit: family == .systemLarge ? 2 : 1)
+                            lineLimit: family == .systemMedium ? 1 : 2)
                         if family != .systemSmall, SendToTomorrowIntent.canMove(page) {
                             Button(intent: SendToTomorrowIntent(pageId: page.id)) {
                                 Image(systemName: "arrow.turn.down.right")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(WidgetInk.secondary)
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Move \(displayTitle(page)) to tomorrow")
@@ -273,7 +275,7 @@ private struct HomeScreenView: View {
                 if entry.open.count > visible.count {
                     Text("+\(entry.open.count - visible.count) more")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetInk.secondary)
                 }
             }
 
@@ -292,7 +294,7 @@ private struct InlineView: View {
     var body: some View {
         if let next = entry.open.first {
             if let time = timeOfDay(next) {
-                Text("\(displayTitle(next)) · \(time, style: .time)")
+                Text("\(displayTitle(next)) · \(ClockTime.string(time))")
             } else {
                 Text(displayTitle(next))
             }
@@ -341,14 +343,14 @@ private struct RectangularView: View {
             .font(.caption.weight(.semibold))
 
             if entry.failure != nil {
-                Text("Can't read your notes").font(.caption2).foregroundStyle(.secondary)
+                Text("Can't read your pages").font(.caption2).foregroundStyle(.secondary)
             } else if entry.open.isEmpty {
                 Text("Nothing open").font(.caption2).foregroundStyle(.secondary)
             } else {
                 ForEach(entry.open.prefix(2), id: \.id) { page in
                     HStack(spacing: 4) {
                         if let time = timeOfDay(page) {
-                            Text(time, style: .time)
+                            Text(ClockTime.string(time))
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }

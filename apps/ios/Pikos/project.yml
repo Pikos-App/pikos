@@ -51,6 +51,13 @@ targets:
       # — see the comment inside it.
       - path: PrivacyInfo.xcprivacy
         buildPhase: resources
+      # The widgets' own views, for the debug widget gallery the screen tour photographs
+      # (Support/WidgetGallery.swift). Excluded from Release below.
+      - path: ../PikosWidgets/Sources/ListWidget.swift
+      - path: ../PikosWidgets/Sources/NowWidget.swift
+      - path: ../PikosWidgets/Sources/WidgetSupport.swift
+      - path: ../PikosWidgets/Sources/CompletePageIntent.swift
+      - path: ../PikosWidgets/Sources/SendToTomorrowIntent.swift
     dependencies:
       - package: PikosCore
         product: PikosCore
@@ -59,6 +66,11 @@ targets:
       - package: PikosEditorBridge
       - target: PikosWidgets
     settings:
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: >-
+            ListWidget.swift NowWidget.swift WidgetSupport.swift CompletePageIntent.swift
+            SendToTomorrowIntent.swift
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
         # Sources/Assets.xcassets. The accent is the brand's terracotta, the

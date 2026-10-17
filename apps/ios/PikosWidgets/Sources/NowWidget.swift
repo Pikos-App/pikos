@@ -18,7 +18,7 @@ struct NowWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Self.kind, provider: NowProvider()) { entry in
             NowWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(WidgetGround.style, for: .widget)
         }
         .configurationDisplayName("Now")
         .description("What's happening, what's next, and what to do in between. Large shows your day by the hour.")
@@ -130,11 +130,13 @@ enum NowLink {
 // MARK: - Views
 
 struct NowWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetFamily) private var widgetFamily
     let entry: NowEntry
+    /// See `ListWidgetView.family`.
+    var family: WidgetFamily? = nil
 
     var body: some View {
-        switch family {
+        switch family ?? widgetFamily {
         case .accessoryInline:
             NowInline(entry: entry)
         case .accessoryRectangular:
@@ -143,6 +145,14 @@ struct NowWidgetView: View {
                 .widgetURL(URL(string: "pikos://today"))
         case .systemLarge:
             NowDay(entry: entry)
+        case .systemMedium where isEmptyDay, .systemSmall where isEmptyDay:
+            HStack(alignment: .top) {
+                NowHeadline(entry: entry, compact: false)
+                Spacer(minLength: 4)
+                NowAddButton(hour: nil)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .widgetURL(URL(string: "pikos://today"))
         case .systemMedium:
             HStack(alignment: .top, spacing: 12) {
                 NowHeadline(entry: entry, compact: false)
@@ -152,9 +162,30 @@ struct NowWidgetView: View {
             }
             .widgetURL(URL(string: "pikos://today"))
         default:
-            NowHeadline(entry: entry, compact: false)
+            NowHeadline(entry: entry, compact: false, focusIsIconOnly: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .widgetURL(URL(string: "pikos://today"))
+        }
+    }
+
+    /// Nothing left today: the one thing to offer is adding something, as the large size does.
+    private var isEmptyDay: Bool {
+        entry.failure == nil && entry.pages.isEmpty
+    }
+}
+
+/// Quick add for today, at an hour or without one.
+private struct NowAddButton: View {
+    let hour: Int?
+
+    var body: some View {
+        if let add = NowLink.add(atHour: hour) {
+            Link(destination: add) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(Brand.accent)
+            }
+            .accessibilityLabel("New page today")
         }
     }
 }
@@ -163,17 +194,19 @@ struct NowWidgetView: View {
 private struct NowHeadline: View {
     let entry: NowEntry
     let compact: Bool
+    /// The small size: "Focus" spelled out left the reason two words wide.
+    var focusIsIconOnly = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if entry.failure != nil {
-                WidgetNote(text: "Can't read your notes")
+                WidgetNote(text: "Can't read your pages")
             } else if let current = entry.page(entry.plan.current?.id), let end = entry.plan.current?.end {
                 label("Now", systemImage: "circle.fill")
                 Text(displayTitle(current))
                     .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                     .lineLimit(2)
-                Text("ends in \(end, style: .relative)")
+                Text("ends in \(minutesLeft(until: end))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else {
@@ -185,9 +218,9 @@ private struct NowHeadline: View {
 
     @ViewBuilder private var free: some View {
         if let until = entry.plan.freeUntil, let next = entry.page(entry.plan.next?.id) {
-            label("Free for \(Text(until, style: .relative))", systemImage: "circle")
+            label("Free for \(minutesLeft(until: until))", systemImage: "circle")
             if !compact {
-                Text("then \(displayTitle(next)) at \(until, style: .time)")
+                Text("then \(displayTitle(next)) at \(ClockTime.string(until))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -207,14 +240,20 @@ private struct NowHeadline: View {
                 HStack(spacing: 6) {
                     Text(reasonText(reason, page: page))
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetInk.secondary)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     if let focus = NowLink.focus(page) {
                         Link(destination: focus) {
-                            Label("Focus", systemImage: "timer")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Brand.accent)
+                            if focusIsIconOnly {
+                                Image(systemName: "timer")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(WidgetInk.action)
+                            } else {
+                                Label("Focus", systemImage: "timer")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(WidgetInk.action)
+                            }
                         }
                         .accessibilityLabel("Start focus on \(displayTitle(page))")
                     }
@@ -228,7 +267,7 @@ private struct NowHeadline: View {
         switch reason {
         case .topPriority: String(localized: "Highest priority today")
         case .overdue:
-            timeOfDay(page).map { String(localized: "Due \($0.formatted(date: .omitted, time: .shortened))") }
+            timeOfDay(page).map { String(localized: "Due \(ClockTime.string($0))") }
                 ?? String(localized: "Overdue")
         case .firstInList: String(localized: "First on today's list")
         }
@@ -237,7 +276,7 @@ private struct NowHeadline: View {
     private func label(_ text: LocalizedStringKey, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(Brand.accent)
+            .foregroundStyle(WidgetInk.action)
             .labelStyle(.titleOnly)
     }
 }
@@ -255,12 +294,12 @@ private struct NowNext: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Next")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WidgetInk.secondary)
             if ahead.isEmpty {
                 WidgetNote(text: "Nothing else timed")
             } else {
                 ForEach(ahead.prefix(limit), id: \.id) { page in
-                    WidgetPageRow(page: page, detail: timeOfDay(page)?.formatted(date: .omitted, time: .shortened))
+                    WidgetPageRow(page: page, detail: timeOfDay(page).map { ClockTime.string($0) })
                 }
             }
             Spacer(minLength: 0)
@@ -284,14 +323,7 @@ private struct NowDay: View {
             HStack(alignment: .top) {
                 NowHeadline(entry: entry, compact: true)
                 Spacer(minLength: 4)
-                if let add = NowLink.add(atHour: nil) {
-                    Link(destination: add) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(Brand.accent)
-                    }
-                    .accessibilityLabel("New page today")
-                }
+                NowAddButton(hour: nil)
             }
             Divider()
             if !entry.untimed.isEmpty {
@@ -301,7 +333,7 @@ private struct NowDay: View {
                 if entry.untimed.count > 2 {
                     Text("+\(entry.untimed.count - 2) more today")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetInk.secondary)
                 }
                 Divider()
             }
@@ -325,13 +357,13 @@ private struct NowDay: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(hourLabel(hour))
                 .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WidgetInk.secondary)
                 .frame(width: 34, alignment: .trailing)
             if pages.isEmpty {
                 if let add = NowLink.add(atHour: hour) {
                     Link(destination: add) {
                         Rectangle()
-                            .fill(.quaternary)
+                            .fill(WidgetInk.rule)
                             .frame(height: 1)
                             .frame(maxWidth: .infinity, minHeight: 16)
                             .contentShape(Rectangle())
@@ -356,7 +388,7 @@ private struct NowDay: View {
     /// Only a page that doesn't start on the hour needs its time beside it.
     private func minuteLabel(_ page: PageSummary) -> String? {
         guard let start = timeOfDay(page), Calendar.current.component(.minute, from: start) != 0 else { return nil }
-        return start.formatted(date: .omitted, time: .shortened)
+        return ClockTime.string(start)
     }
 }
 
@@ -366,9 +398,9 @@ private struct NowInline: View {
 
     var body: some View {
         if let current = entry.page(entry.plan.current?.id), let end = entry.plan.current?.end {
-            Text("\(displayTitle(current)) · ends \(end, style: .time)")
+            Text("\(displayTitle(current)) · ends \(ClockTime.string(end))")
         } else if let until = entry.plan.freeUntil {
-            Text("Free until \(until, style: .time)")
+            Text("Free until \(ClockTime.string(until))")
         } else if let page = entry.page(entry.plan.suggestion?.id) {
             Text(displayTitle(page))
         } else {

@@ -87,17 +87,39 @@ func scheduledInstant(_ page: PageSummary) -> Date? {
 
 // MARK: - Drawing a page
 
-/// The same tint the app's list gives the ring, so the widget and the list
-/// agree about which row is the urgent one. Spelled here rather than shared:
-/// the app's `PagePriority` lives in the app target, and four colours are
-/// cheaper than a third package target.
+/// What every home-screen widget is drawn on, and the app's debug widget gallery with it: the app's
+/// own ground rather than the system's blue-gray fill.
+enum WidgetGround {
+    static var style: Color { Color(PikosToken.surfacePrimary) }
+}
+
+/// The widgets' text colours. Named tokens rather than `.primary` and `.secondary`: a hierarchical
+/// style inside a `Link` resolves against the link's tint, which turned every time label teal.
+enum WidgetInk {
+    static var primary: Color { Color(PikosToken.textPrimary) }
+    static var secondary: Color { Color(PikosToken.textTertiary) }
+    static var action: Color { Color(PikosToken.textAction) }
+    static var rule: Color { Color(PikosToken.borderSecondary) }
+}
+
+/// The stroke the app's `CompletionToggle` gives the checkbox: red for urgent, amber for high, and
+/// neutral otherwise. Spelled here rather than shared: the app's `PagePriority` lives in the app
+/// target, and two colours are cheaper than a third package target.
 func ringColor(priority: Int64) -> Color {
     switch priority {
-    case 1: return .red
-    case 2: return .orange
-    case 3: return .yellow
-    case 4: return .blue
-    default: return .secondary
+    case 1: return Color(PikosToken.statusOverdue)
+    case 2: return Color(PikosToken.statusDueSoon)
+    default: return WidgetInk.secondary
+    }
+}
+
+/// The time left until `end`, to the minute. The `.relative` style counts seconds, which wraps a
+/// small widget's headline and keeps it moving while nothing has changed.
+func minutesLeft(until end: Date) -> Text {
+    if #available(iOS 18.0, *) {
+        Text(.now, format: .offset(to: end, allowedFields: [.hour, .minute], sign: .never))
+    } else {
+        Text(end, style: .relative)
     }
 }
 
@@ -126,12 +148,9 @@ struct WidgetPageRow: View {
         let isDone = page.status == "done"
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Button(intent: CompletePageIntent(pageId: page.id, done: !isDone)) {
-                Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                Image(systemName: isDone ? "checkmark.square.fill" : "square")
                     .font(.caption2)
-                    // `Brand.accent` rather than `Color.accentColor`: the
-                    // widget is its own process with no asset catalog, so
-                    // the app's accent is not here to inherit.
-                    .foregroundStyle(isDone ? Brand.accent : ringColor(priority: page.priority))
+                    .foregroundStyle(isDone ? WidgetInk.secondary : ringColor(priority: page.priority))
                     // Drawn dimmed while the tap is being written, so the
                     // moment between the touch and the reload reads as
                     // "working" rather than "ignored".
@@ -144,13 +163,15 @@ struct WidgetPageRow: View {
                 if let detail {
                     Text(detail)
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetInk.secondary)
                 }
                 Text(displayTitle(page))
                     .font(.caption)
-                    .strikethrough(isDone, color: .secondary)
-                    .foregroundStyle(isDone ? Color.secondary : Color.primary)
+                    .strikethrough(isDone, color: WidgetInk.secondary)
+                    .foregroundStyle(isDone ? WidgetInk.secondary : WidgetInk.primary)
                     .lineLimit(lineLimit)
+                    // A link centres a wrapped label; a row's second line starts under its first.
+                    .multilineTextAlignment(.leading)
             }
             if linksToPage, let url = URL(string: "pikos://page/\(page.id)") {
                 Link(destination: url) { title }
@@ -173,7 +194,7 @@ struct WidgetNote: View {
     var body: some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(WidgetInk.secondary)
     }
 }
 
@@ -187,6 +208,6 @@ func dueLabel(_ page: PageSummary, today: String) -> String? {
     }
     let dayLabel = DayLabel.relative(day, today: today)
     guard let time = timeOfDay(page) else { return dayLabel }
-    let clock = time.formatted(date: .omitted, time: .shortened)
+    let clock = ClockTime.string(time)
     return day == today ? clock : "\(dayLabel) \(clock)"
 }

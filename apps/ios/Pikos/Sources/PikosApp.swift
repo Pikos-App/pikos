@@ -99,37 +99,49 @@ struct PikosApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(spotlight: spotlight)
-                .environment(store)
-                .environment(settings)
-                .environment(sync)
-                .environment(exports)
-                .environment(reminders)
-                .environment(route)
-                // Opening the workspace runs migrations, so it happens once,
-                // here, in the app process. A widget must never be the process
-                // that migrates.
-                .task {
-                    await store.start()
-                    // An intent or deep link may have arrived while the
-                    // workspace was still opening.
-                    route.applyPending(to: store)
-                    #if DEBUG
-                        await DemoWorkspace.applyScreen(route: route, store: store)
-                    #endif
-                    await reminders.sync()
+            #if DEBUG
+                if let board = WidgetGallery.requestedBoard {
+                    WidgetGallery(board: board)
+                } else {
+                    shell
                 }
-                .onOpenURL { url in route.handle(url, store: store) }
-                // A page chosen from the home screen's search. Routed through
-                // the same link a widget tap uses, so Spotlight is another
-                // entry point and not a second code path.
-                .onContinueUserActivity(CSSearchableItemActionType) { activity in
-                    guard let pageId = SpotlightIndexer.pageId(from: activity),
-                        let url = URL(string: "pikos://page/\(pageId)")
-                    else { return }
-                    route.handle(url, store: store)
-                }
+            #else
+                shell
+            #endif
         }
+    }
+
+    private var shell: some View {
+        RootView(spotlight: spotlight)
+            .environment(store)
+            .environment(settings)
+            .environment(sync)
+            .environment(exports)
+            .environment(reminders)
+            .environment(route)
+            // Opening the workspace runs migrations, so it happens once,
+            // here, in the app process. A widget must never be the process
+            // that migrates.
+            .task {
+                await store.start()
+                // An intent or deep link may have arrived while the
+                // workspace was still opening.
+                route.applyPending(to: store)
+                #if DEBUG
+                    await DemoWorkspace.applyScreen(route: route, store: store)
+                #endif
+                await reminders.sync()
+            }
+            .onOpenURL { url in route.handle(url, store: store) }
+            // A page chosen from the home screen's search. Routed through
+            // the same link a widget tap uses, so Spotlight is another
+            // entry point and not a second code path.
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                guard let pageId = SpotlightIndexer.pageId(from: activity),
+                    let url = URL(string: "pikos://page/\(pageId)")
+                else { return }
+                route.handle(url, store: store)
+            }
     }
 }
 
