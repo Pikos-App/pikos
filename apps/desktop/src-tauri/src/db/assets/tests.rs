@@ -167,3 +167,103 @@ async fn save_asset_rejects_disallowed_extension() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// An image file named as `save_asset` names one, written `age` ago.
+fn image_file(assets_dir: &Path, age: Duration) -> String {
+    let name = format!("{}.png", uuid::Uuid::new_v4());
+    let path = assets_dir.join(&name);
+    std::fs::write(&path, b"png").unwrap();
+    let file = std::fs::File::options().write(true).open(&path).unwrap();
+    file.set_modified(SystemTime::now() - age).unwrap();
+    name
+}
+
+async fn page_showing(pool: &SqlitePool, title: &str, src: &str) -> String {
+    let content = serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "image", "attrs": { "src": src } }]
+    });
+    let page = pikos_db::create_page_impl(
+        pool,
+        pikos_db::NewPage {
+            folder_id: None,
+            title: title.into(),
+            subtitle: None,
+            content: content.to_string(),
+            content_text: None,
+            status: "not_started".into(),
+            priority: 0,
+            tags: vec![],
+            scheduled_start: None,
+            scheduled_end: None,
+            completed_at: None,
+            links: vec![],
+            parent_id: None,
+            last_opened_at: None,
+            created_at: None,
+            updated_at: None,
+        },
+    )
+    .await
+    .unwrap();
+    page.id
+}
+
+const LONG_AGO: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+// qa: EDIT-24:3
+#[tokio::test]
+async fn an_image_no_page_refers_to_is_removed_and_one_a_page_or_the_trash_refers_to_is_kept() {
+    let dir = unique_tmp_dir();
+    let assets_dir = dir.join("assets");
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    let pool = pikos_db::test_pool().await;
+    let shown = image_file(&assets_dir, LONG_AGO);
+    page_showing(&pool, "Shown", &format!("assets/{shown}")).await;
+    let in_trash = image_file(&assets_dir, LONG_AGO);
+    let trashed = page_showing(&pool, "Trashed", &format!("assets/{in_trash}")).await;
+    pikos_db::soft_delete_page_impl(&pool, &trashed)
+        .await
+        .unwrap();
+    let saved_by_full_path = image_file(&assets_dir, LONG_AGO);
+    page_showing(
+        &pool,
+        "Old",
+        &format!("/abs/pikos/assets/{saved_by_full_path}"),
+    )
+    .await;
+    let orphan = image_file(&assets_dir, LONG_AGO);
+    let workspace = dir.join("workspace.sqlite").to_string_lossy().to_string();
+
+    let removed = collect_unreferenced(&pool, &workspace, &assets_dir, SystemTime::now())
+        .await
+        .unwrap();
+
+    assert_eq!(removed, 1);
+    assert!(!assets_dir.join(&orphan).exists());
+    for kept in [&shown, &in_trash, &saved_by_full_path] {
+        assert!(assets_dir.join(kept).exists(), "{kept} was removed");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// qa: EDIT-24:3
+#[tokio::test]
+async fn a_new_image_and_a_file_pikos_did_not_name_are_kept_though_no_page_refers_to_them() {
+    let dir = unique_tmp_dir();
+    let assets_dir = dir.join("assets");
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    let pool = pikos_db::test_pool().await;
+    let just_pasted = image_file(&assets_dir, Duration::from_secs(60));
+    std::fs::write(assets_dir.join("notes.txt"), b"mine").unwrap();
+    let workspace = dir.join("workspace.sqlite").to_string_lossy().to_string();
+
+    let removed = collect_unreferenced(&pool, &workspace, &assets_dir, SystemTime::now())
+        .await
+        .unwrap();
+
+    assert_eq!(removed, 0);
+    assert!(assets_dir.join(&just_pasted).exists());
+    assert!(assets_dir.join("notes.txt").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

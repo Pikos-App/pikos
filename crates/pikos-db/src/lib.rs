@@ -9,6 +9,7 @@
 // borrow before pushing additional clauses — clippy flags this but it's required.
 #![allow(clippy::drop_non_drop)]
 
+pub mod assets;
 pub mod backups;
 pub mod changes;
 pub mod error;

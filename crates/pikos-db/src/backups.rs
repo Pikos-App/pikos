@@ -186,7 +186,7 @@ pub async fn verify_restorable(workspace_path: &str, file_name: &str) -> AppResu
 /// exactly the most recent edits, which on this path are the ones the user is
 /// about to want back. `VACUUM INTO` reads through the WAL and emits one
 /// consistent file, which is why every other snapshot in the codebase uses it.
-async fn snapshot_workspace(workspace_path: &str, dest: &Path) -> AppResult<()> {
+pub(crate) async fn snapshot_workspace(workspace_path: &str, dest: &Path) -> AppResult<()> {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(
