@@ -62,6 +62,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "022",
         include_str!("../migrations/022_drop_unmoved_overrides.sql"),
     ),
+    (
+        "023",
+        include_str!("../migrations/023_content_schema_version.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
