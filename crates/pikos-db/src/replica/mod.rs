@@ -108,6 +108,87 @@ pub async fn forget(pool: &SqlitePool) -> AppResult<()> {
     .await
 }
 
+/// The transport's own state, saved with the workspace: CloudKit's sync engine state, or a folder
+/// transport's read positions. Opaque here.
+pub async fn engine_state(pool: &SqlitePool) -> AppResult<Option<Vec<u8>>> {
+    Ok(
+        sqlx::query_scalar("SELECT engine_state FROM replica_meta WHERE id = 1")
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
+/// Saves the transport's state. Called only after the apply that consumed the changes it records
+/// has committed: CloudKit never hands changes back once its state moves past them.
+pub async fn set_engine_state(pool: &SqlitePool, state: &[u8]) -> AppResult<()> {
+    sqlx::query("UPDATE replica_meta SET engine_state = ?, last_fetch_at = ? WHERE id = 1")
+        .bind(state)
+        .bind(crate::pool::now_iso())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Checks the device id kept outside the file, in the keychain with a this-device-only flag, against
+/// the one in it, and returns the id to keep there.
+///
+/// A restore, an iPhone transfer or Migration Assistant copies the file but not that keychain item,
+/// so a copy arrives with another device's id and runs as a second device under it. On a mismatch,
+/// or with nothing outside, this device takes a new id and drops the transport's state, keeping
+/// every clock; it then fetches again from the start as a new device. The caller stores the id
+/// `start` returns straight away, so nothing outside means a copy, not a first run.
+pub async fn claim_device(pool: &SqlitePool, outside: Option<&str>) -> AppResult<Option<String>> {
+    let current = meta(pool).await?;
+    let Some(inside) = current.device_id else {
+        return Ok(None);
+    };
+    if outside == Some(inside.as_str()) {
+        return Ok(Some(inside));
+    }
+
+    let fresh = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "UPDATE replica_meta SET device_id = ?, engine_state = NULL, last_fetch_at = NULL
+         WHERE id = 1",
+    )
+    .bind(&fresh)
+    .execute(pool)
+    .await?;
+    Ok(Some(fresh))
+}
+
+/// How long a tombstone, and a record held for a parent that was purged, are kept. A device offline
+/// longer re-fetches everything, which can bring back what it never saw purged.
+pub const RETENTION_DAYS: i64 = 90;
+
+/// Forgets tombstones of rows long gone and records long held for a purged parent, by wall time so
+/// a clock running far ahead can't keep them.
+pub async fn expire(pool: &SqlitePool) -> AppResult<()> {
+    let cutoff_ms = chrono::Utc::now().timestamp_millis() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    let cutoff = Hlc::new(cutoff_ms.max(0) as u64, 0).to_string();
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM replica_pen WHERE reason = 'deleted_parent' AND since < ?")
+        .bind(&cutoff)
+        .execute(&mut *tx)
+        .await?;
+    for entity in manifest::ENTITIES {
+        let covers = entity.covers.unwrap_or("1");
+        let sql = format!(
+            "DELETE FROM replica_clocks WHERE entity = ? AND tomb < ? AND NOT EXISTS
+               (SELECT 1 FROM {} AS t WHERE ({covers}) AND {} = replica_clocks.key)",
+            entity.table, entity.key
+        )
+        .replace("{row}", "t");
+        sqlx::query(&sql)
+            .bind(entity.entity.prefix())
+            .bind(&cutoff)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 type Fingerprints = std::collections::BTreeMap<String, String>;
 
 async fn fingerprints(pool: &SqlitePool) -> AppResult<Fingerprints> {

@@ -53,6 +53,7 @@ CREATE INDEX idx_replica_ops_clock ON replica_ops(clock);
 CREATE TABLE replica_pen (
   name   TEXT PRIMARY KEY,
   record TEXT NOT NULL,
+  since  TEXT NOT NULL,
   reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'deleted_parent', 'newer_format', 'unreadable'))
 ) WITHOUT ROWID;
 

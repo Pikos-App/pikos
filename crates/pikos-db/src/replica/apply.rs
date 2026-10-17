@@ -101,16 +101,16 @@ async fn apply_in(
     tx: &mut Uncaptured<'_>,
     incoming: &[(RecordName, FieldMap)],
 ) -> AppResult<Applied> {
-    // Each record with whether it was held here, sorted parents first.
-    let mut batch: Vec<(RecordName, FieldMap, bool)> = held(tx.conn())
+    // Each record with when it was first held here, if it was, sorted parents first.
+    let mut batch: Vec<(RecordName, FieldMap, Option<String>)> = held(tx.conn())
         .await?
         .into_iter()
-        .map(|(name, map)| (name, map, true))
+        .map(|(name, map, since)| (name, map, Some(since)))
         .chain(
             incoming
                 .iter()
                 .cloned()
-                .map(|(name, map)| (name, map, false)),
+                .map(|(name, map)| (name, map, None)),
         )
         .collect();
     sqlx::query("DELETE FROM replica_pen")
@@ -122,7 +122,9 @@ async fn apply_in(
     let mut touched = Touched::default();
     let mut newest = Hlc::ZERO;
 
-    for (name, map, was_held) in &batch {
+    for (name, map, held_since) in &batch {
+        let was_held = held_since.is_some();
+        let since = held_since.as_deref();
         let Some(entity) = entity_map(name.entity) else {
             continue;
         };
@@ -141,7 +143,7 @@ async fn apply_in(
                     apply_record(tx, entity, &record, &mut touched, &mut applied, &mut rehold)
                         .await?;
                 if rehold {
-                    hold_record(tx.conn(), name, map, Hold::DeletedParent).await?;
+                    hold_record(tx.conn(), name, map, Hold::DeletedParent, since).await?;
                 }
                 outcome
             }
@@ -149,13 +151,13 @@ async fn apply_in(
         match outcome {
             // A held record can be this device's own, never sent: a child written just before a
             // purge arrived from elsewhere. Applied once its parent is back, it's sent too.
-            Outcome::Changed if *was_held => {
+            Outcome::Changed if was_held => {
                 applied.changed += 1;
                 queue_whole(tx.conn(), name).await?;
             }
             Outcome::Changed => applied.changed += 1,
             Outcome::Held(hold) => {
-                hold_record(tx.conn(), name, map, hold).await?;
+                hold_record(tx.conn(), name, map, hold, since).await?;
                 applied.held += 1;
             }
             Outcome::Unchanged | Outcome::Dropped => {}
@@ -258,33 +260,40 @@ async fn observe(conn: &mut SqliteConnection, newest: Hlc) -> AppResult<()> {
     Ok(())
 }
 
-async fn held(conn: &mut SqliteConnection) -> AppResult<Vec<(RecordName, FieldMap)>> {
-    let rows: Vec<(String, String)> = sqlx::query_as("SELECT name, record FROM replica_pen")
-        .fetch_all(&mut *conn)
-        .await?;
+/// Held records, each with when it was first held.
+async fn held(conn: &mut SqliteConnection) -> AppResult<Vec<(RecordName, FieldMap, String)>> {
+    let rows: Vec<(String, String, String)> =
+        sqlx::query_as("SELECT name, record, since FROM replica_pen")
+            .fetch_all(&mut *conn)
+            .await?;
     rows.into_iter()
-        .map(|(name, record)| {
+        .map(|(name, record, since)| {
             let name = name
                 .parse()
                 .map_err(|e| AppError::Internal(format!("held record name: {e}")))?;
-            Ok((name, map_from_json(&record)?))
+            Ok((name, map_from_json(&record)?, since))
         })
         .collect()
 }
 
+/// Holds a record, keeping `since` when it was already held so its retention runs from the first
+/// time. A new hold is dated by wall time, never the clock, which a device far ahead could inflate.
 async fn hold_record(
     conn: &mut SqliteConnection,
     name: &RecordName,
     map: &FieldMap,
     hold: Hold,
+    since: Option<&str>,
 ) -> AppResult<()> {
     sqlx::query(
-        "INSERT INTO replica_pen (name, record, reason) VALUES (?, ?, ?)
+        "INSERT INTO replica_pen (name, record, reason, since)
+         VALUES (?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
          ON CONFLICT (name) DO UPDATE SET record = excluded.record, reason = excluded.reason",
     )
     .bind(name.to_string())
     .bind(map_to_json(map))
     .bind(hold.reason())
+    .bind(since)
     .execute(&mut *conn)
     .await?;
     Ok(())
@@ -859,7 +868,7 @@ async fn hold_newer_children(conn: &mut SqliteConnection, page: &str, tomb: Hlc)
                 row,
             };
             let map = codec::encode(&record, &shape(entity));
-            hold_record(conn, &name, &map, Hold::DeletedParent).await?;
+            hold_record(conn, &name, &map, Hold::DeletedParent, None).await?;
         }
     }
     Ok(())

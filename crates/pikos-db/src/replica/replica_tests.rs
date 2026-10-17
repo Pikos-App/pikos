@@ -239,3 +239,114 @@ async fn an_uncaptured_transaction_dropped_unfinished_takes_its_marker_with_it()
     assert_eq!(pages, 0);
     assert!(pending(&pool).await > 0);
 }
+
+#[tokio::test]
+async fn the_transport_state_round_trips_and_marks_the_fetch() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+
+    super::set_engine_state(&pool, b"engine bytes")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        super::engine_state(&pool).await.unwrap().as_deref(),
+        Some(&b"engine bytes"[..])
+    );
+    let fetched: Option<String> =
+        sqlx::query_scalar("SELECT last_fetch_at FROM replica_meta WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(fetched.is_some());
+}
+
+#[tokio::test]
+async fn the_device_that_started_sync_keeps_its_id() {
+    let pool = test_pool().await;
+    let id = start(&pool).await.unwrap().device_id.unwrap();
+    super::set_engine_state(&pool, b"state").await.unwrap();
+
+    let claimed = super::claim_device(&pool, Some(&id)).await.unwrap();
+
+    assert_eq!(claimed.as_deref(), Some(id.as_str()));
+    assert!(super::engine_state(&pool).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_copied_workspace_runs_as_a_new_device_and_keeps_its_clocks() {
+    let pool = test_pool().await;
+    let id = start(&pool).await.unwrap().device_id.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    super::set_engine_state(&pool, b"state").await.unwrap();
+    let before = meta(&pool).await.unwrap();
+
+    let elsewhere = super::claim_device(&pool, Some("another-device"))
+        .await
+        .unwrap();
+    let nothing_outside = super::claim_device(&pool, None).await.unwrap();
+
+    assert_ne!(elsewhere.as_deref(), Some(id.as_str()));
+    assert_ne!(
+        nothing_outside, elsewhere,
+        "nothing kept outside reads as a copy too"
+    );
+    assert_eq!(super::engine_state(&pool).await.unwrap(), None);
+    let after = meta(&pool).await.unwrap();
+    assert_eq!(after.hlc, before.hlc);
+    assert!(
+        pending(&pool).await > 0,
+        "what was waiting to send still is"
+    );
+}
+
+#[tokio::test]
+async fn a_device_that_never_started_has_nothing_to_claim() {
+    let pool = test_pool().await;
+
+    assert_eq!(super::claim_device(&pool, None).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn tombstones_and_holds_past_retention_are_forgotten_and_newer_ones_kept() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    let old = pikos_replica::Hlc::new(1_000, 0).to_string();
+    let recent = meta(&pool).await.unwrap().hlc.to_string();
+    for (key, tomb) in [("gone-long-ago", &old), ("gone-recently", &recent)] {
+        sqlx::query(
+            "INSERT INTO replica_clocks (entity, key, clocks, tomb) VALUES ('page', ?, ?, ?)",
+        )
+        .bind(key)
+        .bind(tomb.repeat(11))
+        .bind(tomb)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (name, since) in [("remind:old", &old), ("remind:recent", &recent)] {
+        sqlx::query(
+            "INSERT INTO replica_pen (name, record, since, reason) VALUES (?, '{}', ?, 'deleted_parent')",
+        )
+        .bind(name)
+        .bind(since)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    super::expire(&pool).await.unwrap();
+
+    let clocks: Vec<String> = sqlx::query_scalar("SELECT key FROM replica_clocks ORDER BY key")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    let held: Vec<String> = sqlx::query_scalar("SELECT name FROM replica_pen ORDER BY name")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(clocks, vec!["gone-recently"]);
+    assert_eq!(held, vec!["remind:recent"]);
+}
