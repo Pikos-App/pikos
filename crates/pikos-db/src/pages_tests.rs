@@ -849,6 +849,97 @@ async fn update_page_applies_partial_changes_only() {
     assert_eq!(updated.title, "Before", "untouched fields preserved");
 }
 
+fn is_status_input_error(err: &AppError) -> bool {
+    matches!(err, AppError::Invalid(message) if message.contains("status"))
+}
+
+#[tokio::test]
+async fn creating_a_page_with_an_unknown_status_is_refused_by_name() {
+    let pool = test_pool().await;
+
+    let err = create_page_impl(
+        &pool,
+        NewPage {
+            status: "Done".into(),
+            ..new_page("Shouty")
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert!(is_status_input_error(&err), "{err:?}");
+    assert_eq!(count_pages(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn updating_a_page_to_an_unknown_status_is_refused_by_name() {
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Open")).await.unwrap();
+
+    let err = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            status: Some("completed".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert!(is_status_input_error(&err), "{err:?}");
+    assert_eq!(fetch_status(&pool, &page.id).await, "not_started");
+}
+
+#[tokio::test]
+async fn completing_many_pages_with_an_unknown_status_is_refused_by_name() {
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Open")).await.unwrap();
+
+    let err = set_pages_status_impl(&pool, std::slice::from_ref(&page.id), "DONE", None)
+        .await
+        .unwrap_err();
+
+    assert!(is_status_input_error(&err), "{err:?}");
+    assert_eq!(fetch_status(&pool, &page.id).await, "not_started");
+}
+
+#[tokio::test]
+async fn the_database_refuses_an_unknown_status_from_a_writer_that_skips_the_check() {
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Open")).await.unwrap();
+
+    let raw_insert = sqlx::query(
+        "INSERT INTO pages (id, title, content, content_text, status, priority, tags, sort_order,
+         created_at, updated_at)
+         VALUES ('raw', 'Raw', '{}', '', 'Done', 0, '[]', 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await;
+    let raw_update = sqlx::query("UPDATE pages SET status = 'Done' WHERE id = ?")
+        .bind(&page.id)
+        .execute(&pool)
+        .await;
+
+    assert!(raw_insert.unwrap_err().to_string().contains("pages.status"));
+    assert!(raw_update.unwrap_err().to_string().contains("pages.status"));
+}
+
+#[tokio::test]
+async fn the_database_accepts_every_status_the_writer_knows() {
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Open")).await.unwrap();
+
+    for status in PAGE_STATUSES {
+        sqlx::query("UPDATE pages SET status = ? WHERE id = ?")
+            .bind(status)
+            .bind(&page.id)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("{status} refused: {e}"));
+    }
+}
+
 #[tokio::test]
 async fn update_page_clears_nullable_field_when_passed_null() {
     let pool = test_pool().await;

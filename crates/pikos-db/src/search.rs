@@ -739,6 +739,52 @@ async fn capped_search(
     Ok((rows, completed))
 }
 
+/// How the search index's definition compares with the one it was last built from. The
+/// definition is the full-text table's SQL and its triggers', which name the indexed columns and
+/// the tokenizer, so a migration that changes either changes it.
+pub(crate) enum IndexDefinition {
+    Unchanged,
+    /// Nothing recorded yet. Recorded without a rebuild, since every definition change before the
+    /// record existed came with its own version bump.
+    Unrecorded(String),
+    Changed(String),
+}
+
+pub(crate) async fn index_definition(pool: &sqlx::SqlitePool) -> AppResult<IndexDefinition> {
+    let parts: Vec<String> = sqlx::query_scalar(
+        "SELECT sql FROM sqlite_master
+         WHERE (type = 'table' AND name = 'pages_fts')
+            OR (type = 'trigger' AND name GLOB 'pages_fts_*')
+         ORDER BY type, name",
+    )
+    .fetch_all(pool)
+    .await?;
+    let current = parts.join("\n");
+
+    let recorded: Option<String> =
+        sqlx::query_scalar("SELECT definition FROM search_index_definition WHERE id = 1")
+            .fetch_one(pool)
+            .await?;
+
+    Ok(match recorded {
+        None => IndexDefinition::Unrecorded(current),
+        Some(recorded) if recorded == current => IndexDefinition::Unchanged,
+        Some(_) => IndexDefinition::Changed(current),
+    })
+}
+
+pub(crate) async fn record_index_definition(
+    pool: &sqlx::SqlitePool,
+    definition: &str,
+) -> AppResult<()> {
+    sqlx::query("UPDATE search_index_definition SET definition = ? WHERE id = 1")
+        .bind(definition)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "search_tests.rs"]
 mod search_tests;

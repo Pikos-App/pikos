@@ -70,6 +70,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "024",
         include_str!("../migrations/024_notification_log_follows_page_delete.sql"),
     ),
+    (
+        "025",
+        include_str!("../migrations/025_search_index_definition.sql"),
+    ),
+    (
+        "026",
+        include_str!("../migrations/026_page_status_known_set.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -504,6 +512,63 @@ async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
 }
 
 #[tokio::test]
+async fn the_status_migration_brings_every_page_back_on_screen() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..25] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    let saved = [
+        ("cased_done", "Done", None),
+        ("cased_open", "NOT_STARTED", None),
+        (
+            "finished_elsewhere",
+            "completed",
+            Some("2026-01-02T10:00:00"),
+        ),
+        ("unknown", "in_progress", None),
+        ("fine", "done", Some("2026-01-02T10:00:00")),
+    ];
+    for (id, status, completed_at) in saved {
+        sqlx::query(
+            "INSERT INTO pages (id, title, content, content_text, status, priority, tags,
+             sort_order, completed_at, created_at, updated_at)
+             VALUES (?, ?, '{}', '', ?, 0, '[]', 0, ?, '2026-01-01', '2026-01-01')",
+        )
+        .bind(id)
+        .bind(id)
+        .bind(status)
+        .bind(completed_at)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    sqlx::raw_sql(MIGRATIONS[25].1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let statuses: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, status FROM pages ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let expected = [
+        ("cased_done", "done"),
+        ("cased_open", "not_started"),
+        ("fine", "done"),
+        ("finished_elsewhere", "done"),
+        ("unknown", "not_started"),
+    ]
+    .map(|(id, status)| (id.to_string(), status.to_string()));
+    assert_eq!(statuses, expected);
+}
+
+#[tokio::test]
 async fn fts_rebuilds_on_schema_version_mismatch() {
     // open_pool's rebuild path needs a real file: reopening a :memory: DB would
     // start empty. Use a unique temp path and clean it (plus WAL/SHM) up after.
@@ -552,6 +617,69 @@ async fn fts_rebuilds_on_schema_version_mismatch() {
         hits, 1,
         "FTS index was not rebuilt on schema-version mismatch"
     );
+}
+
+/// Opens a workspace file, finds "needle" on a fresh page, then empties the search index so only a
+/// rebuild can find it again; `change` runs before closing. Returns the hits after reopening.
+async fn needle_hits_after_reopening(change: &str) -> i64 {
+    let path = std::env::temp_dir().join(format!("pkos_fts_def_{}.db", uuid::Uuid::new_v4()));
+    let path_str = path.to_str().unwrap().to_string();
+
+    {
+        let pool = open_pool(&path_str).await.unwrap();
+        insert_test_page(
+            &pool,
+            TestPage {
+                content_text: "needle in the haystack",
+                ..TestPage::new("p1", "Findable")
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("DELETE FROM pages_fts")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::raw_sql(change).execute(&pool).await.unwrap();
+        pool.close().await;
+    }
+
+    let pool = open_pool(&path_str).await.unwrap();
+    let hits: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH 'needle'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    pool.close().await;
+
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{path_str}{suffix}"));
+    }
+
+    hits
+}
+
+#[tokio::test]
+async fn a_migration_changing_what_search_indexes_rebuilds_it_without_a_version_bump() {
+    let redefine_update_trigger = "
+        DROP TRIGGER pages_fts_update;
+        CREATE TRIGGER pages_fts_update
+        AFTER UPDATE OF title, subtitle, content_text, tags, mirror_search_text ON pages BEGIN
+          INSERT INTO pages_fts(pages_fts, rowid, title, subtitle, content_text, tags, mirror_search_text)
+          VALUES ('delete', OLD.rowid, OLD.title, OLD.subtitle, OLD.content_text, OLD.tags, OLD.mirror_search_text);
+          INSERT INTO pages_fts(rowid, title, subtitle, content_text, tags, mirror_search_text)
+          VALUES (NEW.rowid, NEW.title, NEW.subtitle, NEW.content_text, NEW.tags, NEW.mirror_search_text);
+        END;";
+
+    assert_eq!(
+        needle_hits_after_reopening(redefine_update_trigger).await,
+        1
+    );
+}
+
+#[tokio::test]
+async fn an_unchanged_search_definition_is_not_rebuilt_on_open() {
+    assert_eq!(needle_hits_after_reopening("SELECT 1").await, 0);
 }
 
 #[tokio::test]

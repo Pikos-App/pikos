@@ -101,7 +101,7 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Adjust subtitle | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --subtitle`, `""` clears | ✅ editor header |
 | Adjust priority | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --priority` | ✅ long press |
 | Add / remove tags | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `update --tag` / `--untag` | ✅ long press |
-| Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status` | ✅ |
+| Toggle status (non-recurring) | ✅ | ✅ marks owned ⁵ | ✅ | ✅ `done` / `status`; a status other than `not_started` or `done` is refused | ✅ |
 | Move page to another folder | ✅ | 🚫 locked ⁶ | ✅ ⁶ | ✅ `update --folder` ⁶ | ✅ long press → Move |
 | Drag page from list onto a folder | ✅ ⁶ | 🚫 locked ⁶ | ✅ ⁶ | — | ✅ held over the title, onto the switcher |
 | Reorder in page list | ✅ | ✅ doesn't mark owned ⁵ | ✅ | — | ✅ select mode's handles |
