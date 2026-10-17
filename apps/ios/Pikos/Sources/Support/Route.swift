@@ -56,10 +56,33 @@ final class Route {
     /// How long the page runs from that time, when the slot was dragged out rather than pressed.
     var quickAddPrefillMinutes: Int?
 
-    /// The view quick add was opened from, which a line that says nothing else lands in.
+    /// The view quick add was opened from, which a line that says nothing else lands in, so the page
+    /// added is in the view it was added from.
     struct QuickAddContext {
         var day: String?
-        var folderId: String?
+        var filing: Filing = .asSettings
+
+        enum Filing {
+            /// The default folder from settings, for a view that is not about a folder.
+            case asSettings
+            /// No folder, whatever the default: a page added to the Inbox stays in it.
+            case inbox
+            case folder(String)
+        }
+
+        init(day: String? = nil, filing: Filing = .asSettings) {
+            self.day = day
+            self.filing = filing
+        }
+
+        /// Upcoming begins today, so a page added there is dated today to be in it.
+        init(scope: WorkspaceStore.Scope, day: String? = nil) {
+            switch scope {
+            case .today, .upcoming: self.init(day: day ?? DayLabel.today())
+            case .inbox: self.init(day: day, filing: .inbox)
+            case .folder(let id, _): self.init(day: day, filing: .folder(id))
+            }
+        }
     }
 
     var quickAddContext = QuickAddContext()
@@ -73,12 +96,7 @@ final class Route {
         quickAddPrefill = ""
         quickAddPrefillDate = nil
         quickAddPrefillMinutes = nil
-        switch (pane, store.scope) {
-        case (.week, _): quickAddContext = QuickAddContext(day: calendarDay)
-        case (.list, .today): quickAddContext = QuickAddContext(day: DayLabel.today())
-        case (.list, .folder(let id, _)): quickAddContext = QuickAddContext(folderId: id)
-        case (.list, _): quickAddContext = QuickAddContext()
-        }
+        quickAddContext = QuickAddContext(scope: store.scope, day: pane == .week ? calendarDay : nil)
         isQuickAddPresented = true
     }
 
@@ -122,6 +140,10 @@ final class Route {
     /// what it was showing.
     var calendarAnchor = Date()
     var calendarSpan: CalendarSpan?
+    /// The hour at the top of the calendar's grid when it was last scrolled, so coming back from
+    /// another view finds the hours where they were left. Nil until then, and after Today, both of
+    /// which open on the hour before now.
+    var calendarTopHour: Int?
 
     /// The `YYYY-MM-DD` the calendar pane is on, so a page added from there lands on that day.
     var calendarDay: String { WallClockDay.string(from: calendarAnchor) }
@@ -133,10 +155,11 @@ final class Route {
     }
 
     /// Quick add with the slot's time already chosen, so the sentence typed names the page, not the time.
-    func presentQuickAdd(at date: Date, minutes: Int? = nil) {
+    func presentQuickAdd(at date: Date, minutes: Int? = nil, from store: WorkspaceStore) {
         quickAddPrefill = ""
         quickAddPrefillDate = date
         quickAddPrefillMinutes = minutes
+        quickAddContext = QuickAddContext(scope: store.scope, day: WallClockDay.string(from: date))
         isQuickAddPresented = true
     }
 

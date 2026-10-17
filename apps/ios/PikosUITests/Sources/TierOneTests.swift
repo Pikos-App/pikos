@@ -96,6 +96,14 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.buttons["View"].exists, "and no notice points somewhere else")
     }
 
+    // qa: IOS-03:2
+    /// A line with no date added in Upcoming is dated today, Upcoming's first day, so it stays in view.
+    func testAPageAddedInUpcomingStaysInUpcoming() {
+        showView("Upcoming")
+        quickAdd("Call the plumber")
+        assertRowExists("Call the plumber", "the new page is in the view on screen")
+    }
+
     // qa: IOS-04:2
     /// The checkbox sits beside the link rather than inside it, so it has to be proven to land.
     func testTickingAPageMovesItOutOfTheOpenList() {
@@ -418,7 +426,7 @@ final class TierOneTests: PikosUITestCase {
     // qa: IOS-15
     func testDraggingABlocksBottomEdgeMakesItLonger() throws {
         let hour = Calendar.current.component(.hour, from: Date()) + 1
-        try XCTSkipIf(hour > 21, "the grid opens on the current hour, so a block this late sits below the screen")
+        try XCTSkipIf(hour > 23, "an hour from now is tomorrow")
         let clock = "\(hour % 12 == 0 ? 12 : hour % 12)\(hour < 12 ? "am" : "pm")"
         quickAdd("Budget review today at \(clock) for 30m")
         assertRowExists("Budget review")
@@ -428,9 +436,9 @@ final class TierOneTests: PikosUITestCase {
         let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Budget review'")).firstMatch
         XCTAssertTrue(block.waitForExistence(timeout: Self.timeout), "the page is on the calendar")
         let before = block.label
-        // A half-hour block is half an hour tall. Grabbed just below the edge, as a thumb does.
+        // A half-hour block is half an hour tall. Grabbed just below the edge at its left, as a thumb does.
         let hourHeight = block.frame.height * 2
-        let edge = block.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1)).withOffset(CGVector(dx: 0, dy: 6))
+        let edge = block.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 1)).withOffset(CGVector(dx: 10, dy: 6))
         edge.press(
             forDuration: 0.25, thenDragTo: edge.withOffset(CGVector(dx: 0, dy: hourHeight)),
             withVelocity: .slow, thenHoldForDuration: 0.2)
@@ -477,10 +485,9 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-24
-    /// A tap on a block shows its card; a step there moves it at once, and Open still opens it.
-    func testTappingABlockMovesItAnHourLaterInTwoTaps() throws {
+    func testTappingABlockOpensItsPage() throws {
         let hour = Calendar.current.component(.hour, from: Date()) + 1
-        try XCTSkipIf(hour > 21, "the grid opens on the current hour, so a block this late sits below the screen")
+        try XCTSkipIf(hour > 23, "an hour from now is tomorrow")
         let clock = "\(hour % 12 == 0 ? 12 : hour % 12)\(hour < 12 ? "am" : "pm")"
         quickAdd("Dentist today at \(clock) for 30m")
         assertRowExists("Dentist")
@@ -488,17 +495,29 @@ final class TierOneTests: PikosUITestCase {
 
         let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Dentist'")).firstMatch
         XCTAssertTrue(block.waitForExistence(timeout: Self.timeout), "the page is on the calendar")
-        let before = block.label
         block.tap()
+        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: Self.timeout), "one tap opens the page")
+    }
 
-        let later = app.buttons["1 hour later"].firstMatch
-        XCTAssertTrue(later.waitForExistence(timeout: 5), "the tap shows the card rather than opening the page")
-        later.tap()
-        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5), "the step applies at once and offers it back")
-        XCTAssertNotEqual(block.label, before, "and the block says its new time")
+    // qa: IOS-28
+    /// Leaving the calendar for the list and coming back finds the hours where they were left.
+    func testTheCalendarKeepsItsPlaceWhenTheListIsShownInBetween() throws {
+        try XCTSkipIf(Calendar.current.component(.hour, from: Date()) < 4, "near midnight the grid opens on this hour anyway")
+        quickAdd("Early swim today at 12:30am")
+        assertRowExists("Early swim")
+        app.buttons["Calendar"].firstMatch.tap()
 
-        app.buttons["Open"].firstMatch.tap()
-        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: Self.timeout), "Open still opens the page")
+        let grid = app.scrollViews.firstMatch
+        XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
+        let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Early swim'")).firstMatch
+        for _ in 0..<6 where !block.isHittable { grid.swipeDown(velocity: .fast) }
+        XCTAssertTrue(block.isHittable, "scrolled up to midnight")
+
+        app.buttons["List"].firstMatch.tap()
+        assertRowExists("Early swim")
+        app.buttons["Calendar"].firstMatch.tap()
+        XCTAssertTrue(block.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(block.isHittable, "back on the calendar, still at midnight rather than the hour before now")
     }
 
     // qa: IOS-16

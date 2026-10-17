@@ -28,7 +28,7 @@ struct CalendarGrid: View {
     let onCreate: (String, Int, Int?) -> Void
     /// A block held, moved and let go over an hour: the page, the day and the snapped minute.
     let onDrop: (PageFacts, String, Int) -> Void
-    /// A block given a new time by an edge or the tap card: the page as it was, and its new start and end.
+    /// A block given a new time by an edge: the page as it was, and its new start and end.
     let onReschedule: (PageFacts, String, String?) -> Void
 
     /// The press is the one gesture on the grid with no visible target, so it is felt.
@@ -36,8 +36,6 @@ struct CalendarGrid: View {
     @State private var stretch: Stretch?
     /// A block whose edge is being drawn, and the minute the finger is at.
     @GestureState private var resizing: Resizing?
-    /// The block whose tap card is up, with its page as the card found it.
-    @State private var adjusting: Adjusting?
     @State private var allDayExpanded = false
     @State private var hover: DropHover?
     @State private var drops = 0
@@ -45,6 +43,7 @@ struct CalendarGrid: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(PageDragSession.self) private var drag
+    @Environment(Route.self) private var route
 
     /// A percentage rather than the height itself, because `@ScaledMetric` takes its base from a
     /// literal and the base is a setting.
@@ -71,11 +70,15 @@ struct CalendarGrid: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     timedSection
-                        .padding(.top, 8)
+                        .padding(.top, Self.timedTopInset)
                 }
                 .minimizesShellBar()
+                .modifier(RemembersTopHour(hourHeight: hourHeight, topInset: Self.timedTopInset))
                 .onAppear {
-                    proxy.scrollTo(Self.hourAnchor(openingHour), anchor: .top)
+                    proxy.scrollTo(Self.hourAnchor(route.calendarTopHour ?? openingHour), anchor: .top)
+                }
+                .onChange(of: route.calendarTopHour == nil) { _, cleared in
+                    if cleared { proxy.scrollTo(Self.hourAnchor(openingHour), anchor: .top) }
                 }
             }
         }
@@ -341,13 +344,7 @@ struct CalendarGrid: View {
                     .frame(width: max(columnWidth - inset - 3, 1), height: placed.height)
                     // Without it VoiceOver and the UI tests got the block as the whole column under it.
                     .contentShape(.accessibility, Rectangle())
-                    .onTapGesture {
-                        if canAdjust(entry) {
-                            adjusting = Adjusting(key: entry.key, day: day, page: PageFacts(entry))
-                        } else {
-                            onOpen(entry.pageId)
-                        }
-                    }
+                    .onTapGesture { onOpen(entry.pageId) }
                     .contextMenu { occurrenceMenu(entry) }
                     .modifier(LiftableBlock(page: PageFacts(entry), isEnabled: canLift(entry)))
                     .accessibilityElement(children: .combine)
@@ -356,22 +353,36 @@ struct CalendarGrid: View {
                     .accessibilityActions { occurrenceActions(entry) }
                     .offset(x: inset + 1.5, y: placed.top)
                     .opacity(resizing?.key == entry.key ? 0.35 : 1)
+                }
+            }
 
+            // After every block, so a block cascading over another never hides its grips.
+            ForEach(blocks, id: \.pageId) { block in
+                if let entry = timed.first(where: { $0.key == block.pageId }),
+                    let placed = CalendarGeometry.placement(
+                        start: entry.scheduledStart, end: entry.scheduledEnd,
+                        on: day, metrics: metrics),
+                    canResize(entry, height: placed.height, width: columnWidth)
+                {
+                    let inset = CalendarGeometry.cascadeInset(
+                        depth: Int(block.cascadeDepth), columnWidth: columnWidth)
+                    let width = max(columnWidth - inset - 3, 1)
+                    let cascadeStep = CalendarGeometry.cascadeInset(depth: 1, columnWidth: columnWidth)
                     // Beside the block rather than inside it, where its menu and lift took the touch.
-                    if canResize(entry, height: placed.height, width: columnWidth) {
-                        let width = max(columnWidth - inset - 3, 1)
-                        ForEach([CalendarGeometry.BlockEdge.top, .bottom], id: \.self) { edge in
-                            // Mostly outside the block, so the finger that meant the edge isn't
-                            // taken by the block's own hold.
-                            let top = max(
-                                0,
-                                edge == .top
-                                    ? placed.top - (Self.gripHeight - Self.gripInside)
-                                    : placed.top + placed.height - Self.gripInside)
-                            grip(entry, edge: edge, day: day, top: top)
-                                .frame(width: width * 0.6, height: Self.gripHeight)
-                                .offset(x: inset + 1.5 + width * 0.2, y: top)
-                        }
+                    ForEach([CalendarGeometry.BlockEdge.top, .bottom], id: \.self) { edge in
+                        // Mostly outside the block, so the finger that meant the edge isn't
+                        // taken by the block's own hold.
+                        let top = max(
+                            0,
+                            edge == .top
+                                ? placed.top - (Self.gripHeight - Self.gripInside)
+                                : placed.top + placed.height - Self.gripInside)
+                        let gripWidth =
+                            edge == .top
+                            ? width * 0.6 : min(width, max(cascadeStep, Self.minimumBottomGripWidth))
+                        grip(entry, edge: edge, day: day, top: top)
+                            .frame(width: gripWidth, height: Self.gripHeight)
+                            .offset(x: inset + 1.5 + (edge == .top ? width * 0.2 : 0), y: top)
                     }
                 }
             }
@@ -395,18 +406,6 @@ struct CalendarGrid: View {
             }
         }
         .frame(width: columnWidth, height: metrics.dayHeight, alignment: .topLeading)
-        // On the column, aimed at the block: a block is offset into place, and a popover on it
-        // would point at the top of the column where its layout frame still is.
-        .popover(
-            isPresented: Binding(
-                get: { adjusting?.day == day },
-                set: { if !$0 { adjusting = nil } }),
-            attachmentAnchor: .rect(.rect(adjustAnchor(day: day, blocks: blocks, columnWidth: columnWidth))),
-            arrowEdge: .bottom
-        ) {
-            adjustCard(timed: timed)
-                .presentationCompactAdaptation(.popover)
-        }
         .onDrop(
             of: [.text],
             delegate: GridDropDelegate(
@@ -449,48 +448,6 @@ struct CalendarGrid: View {
 
     /// A one-off page can be carried to another hour; a repeating one moves through its menu, and a
     /// calendar's page belongs to the calendar.
-    /// A block the tap card can move: one a finger could carry, within one day. Any other block
-    /// has nothing on the card but Open, so a tap opens it.
-    private func canAdjust(_ entry: CalendarEntry) -> Bool {
-        canLift(entry) && CalendarGeometry.shifted(start: entry.scheduledStart, end: entry.scheduledEnd, by: 0) != nil
-    }
-
-    private func adjustAnchor(day: String, blocks: [TimedBlock], columnWidth: CGFloat) -> CGRect {
-        guard let adjusting, adjusting.day == day,
-            let entry = timedEntries.first(where: { $0.key == adjusting.key }),
-            let placed = CalendarGeometry.placement(
-                start: entry.scheduledStart, end: entry.scheduledEnd, on: day, metrics: metrics)
-        else { return .zero }
-        let depth = blocks.first { $0.pageId == adjusting.key }.map { Int($0.cascadeDepth) } ?? 0
-        let inset = CalendarGeometry.cascadeInset(depth: depth, columnWidth: columnWidth)
-        return CGRect(x: inset + 1.5, y: placed.top, width: max(columnWidth - inset - 3, 1), height: placed.height)
-    }
-
-    @ViewBuilder
-    private func adjustCard(timed: [CalendarEntry]) -> some View {
-        if let adjusting, let entry = timed.first(where: { $0.key == adjusting.key }) {
-            BlockAdjustCard(
-                title: entry.title,
-                time: CalendarPalette.timeLabel(start: entry.scheduledStart, end: entry.scheduledEnd),
-                onShift: { minutes in
-                    guard let moved = CalendarGeometry.shifted(
-                        start: entry.scheduledStart, end: entry.scheduledEnd, by: minutes)
-                    else { return }
-                    onReschedule(adjusting.page, moved.start, moved.end)
-                },
-                onLengthen: { minutes in
-                    guard let longer = CalendarGeometry.lengthened(
-                        start: entry.scheduledStart, end: entry.scheduledEnd, by: minutes)
-                    else { return }
-                    onReschedule(adjusting.page, longer.start, longer.end)
-                },
-                onOpen: {
-                    self.adjusting = nil
-                    onOpen(entry.pageId)
-                })
-        }
-    }
-
     private func canLift(_ entry: CalendarEntry) -> Bool {
         !entry.isRecurring && !entry.scheduleLocked && !entry.isVirtual && entry.status != "done"
     }
@@ -512,7 +469,8 @@ struct CalendarGrid: View {
             .fill(color(for: entry))
             .frame(width: 20, height: 4)
             .offset(y: edge == .top ? Self.gripHeight - Self.gripInside - 2 : Self.gripInside - 2)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.leading, edge == .top ? 0 : 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .top ? .top : .topLeading)
             .contentShape(Rectangle())
             // SwiftUI's own hold here, not `HoldAndDrag`: UIKit's lost the touch to the grid's hold
             // behind it, and a scroll that starts on an 18-point strip can afford the wait.
@@ -734,12 +692,18 @@ struct CalendarGrid: View {
 
     private static let gutterWidth: CGFloat = 52
     private static let gripHeight: CGFloat = 28
+    /// The bottom grip sits in the strip at the block's left edge that an event cascading over it
+    /// leaves showing: a cascade is inset one step to the right and starts later, so it lies over
+    /// the host's lower part. It is that step wide, but no narrower than this. The top grip stays
+    /// centred, clear of the checkbox.
+    private static let minimumBottomGripWidth: CGFloat = 24
     /// How much of a grip's height lies inside its block; the rest is outside the edge.
     private static let gripInside: CGFloat = 10
     /// Far shorter than the grid's hold: a grip is a target the finger chose, so there is no scroll
     /// to tell it from, only a stray brush.
     private static let gripHold: Double = 0.1
     private static let hourLabelClearance: CGFloat = 12
+    private static let timedTopInset: CGFloat = 8
     /// Narrower than this a title wraps a letter to a line, so a block shows its colour alone.
     private static let minimumTextWidth: CGFloat = 44
     /// Where the grid opens when today is not on screen, rather than at an empty midnight.
@@ -816,18 +780,32 @@ private struct GridFeedback: ViewModifier {
     }
 }
 
+/// Records the hour at the top of the grid as the person scrolls. iOS 17 has no scroll geometry
+/// to read, so there the grid opens on the hour before now, as it always did.
+private struct RemembersTopHour: ViewModifier {
+    let hourHeight: CGFloat
+    let topInset: CGFloat
+    @Environment(Route.self) private var route
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.onScrollGeometryChange(for: Int.self) { geometry in
+                let offset = geometry.contentOffset.y + geometry.contentInsets.top - topInset
+                return hourHeight > 0 ? max(0, Int((offset / hourHeight).rounded())) : 0
+            } action: { _, hour in
+                route.calendarTopHour = hour
+            }
+        } else {
+            content
+        }
+    }
+}
+
 private struct Resizing: Equatable {
     let key: String
     let day: String
     let edge: CalendarGeometry.BlockEdge
     let minute: Int
-}
-
-private struct Adjusting {
-    let key: String
-    let day: String
-    /// The schedule when the card opened, which every step's Undo returns to.
-    let page: PageFacts
 }
 
 private struct Stretch: Equatable {

@@ -211,29 +211,6 @@ public enum CalendarGeometry {
         }
     }
 
-    /// A timed page moved `minutes` later (or earlier, negative), keeping its length and its day.
-    ///
-    /// Against the day's edge it stops rather than spilling into the next day, so a block near
-    /// midnight stays where it can be seen. Nil for an all-day page or one that crosses midnight.
-    public static func shifted(start: String, end: String?, by minutes: Int) -> (start: String, end: String?)? {
-        guard let day = self.day(of: start), let from = minutesIntoDay(start) else { return nil }
-        var to: Int?
-        if let end {
-            guard self.day(of: end) == day, let minutes = minutesIntoDay(end) else { return nil }
-            to = minutes
-        }
-        let length = (to ?? from) - from
-        let newStart = min(max(0, from + minutes), 24 * 60 - 1 - length)
-        return (wallClock(day: day, minute: newStart), to.map { _ in wallClock(day: day, minute: newStart + length) })
-    }
-
-    /// A timed page made `minutes` longer (or shorter, negative) at its end, as the bottom grip would.
-    public static func lengthened(start: String, end: String?, by minutes: Int) -> (start: String, end: String)? {
-        guard let from = minutesIntoDay(start) else { return nil }
-        let to = end.flatMap(minutesIntoDay) ?? from
-        return resized(start: start, end: end, edge: .bottom, toMinute: to + minutes)
-    }
-
     /// The minutes a new block covers while a finger that pressed at `from` is drawn to `y`.
     ///
     /// The end follows the finger to the nearest quarter hour and the start stays where the press
