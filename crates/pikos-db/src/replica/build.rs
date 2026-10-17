@@ -8,7 +8,7 @@
 
 use pikos_replica::codec::{self, FieldMap, Record};
 use pikos_replica::merge::{FieldState, RowState, Value};
-use pikos_replica::{Hlc, RecordName};
+use pikos_replica::{Entity, Hlc, RecordName};
 use sqlx::{Row as _, SqlitePool};
 
 use super::apply::shape;
@@ -60,9 +60,6 @@ pub struct Built {
 pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Built>> {
     let mut built = Vec::new();
     for name in names {
-        let Some(entity) = entity_map(name.entity) else {
-            continue;
-        };
         let op: Option<(String, bool)> =
             sqlx::query_as("SELECT clock, deleted FROM replica_ops WHERE entity = ? AND key = ?")
                 .bind(name.entity.prefix())
@@ -76,6 +73,26 @@ pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Bui
             .parse()
             .map_err(|e| AppError::Invalid(format!("op clock: {e}")))?;
 
+        if name.entity == Entity::Asset {
+            let fields = {
+                let mut conn = pool.acquire().await?;
+                super::images::build(&mut conn, name).await?
+            };
+            match fields {
+                Some(fields) => built.push(Built {
+                    name: name.clone(),
+                    fields,
+                    clock: op_clock,
+                    system_fields: system_fields(pool, name).await?,
+                }),
+                None => drop_op(pool, name).await?,
+            }
+            continue;
+        }
+        let Some(entity) = entity_map(name.entity) else {
+            continue;
+        };
+
         let read = {
             let mut conn = pool.acquire().await?;
             read(&mut conn, entity, &name.key, deleted).await?
@@ -85,28 +102,40 @@ pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Bui
                 drop_op(pool, name).await?;
             }
             Read::Row(row) => {
+                let content = match row.fields.first().and_then(|f| f.values.first()) {
+                    Some(Value::Text(content)) if name.entity == Entity::Body => Some(content),
+                    _ => None,
+                };
+                if let Some(content) = content {
+                    let mut conn = pool.acquire().await?;
+                    super::images::queue_shown(&mut conn, content, op_clock).await?;
+                }
+
                 let record = Record {
                     name: name.clone(),
                     row,
                 };
-                let system_fields: Option<Vec<u8>> = sqlx::query_scalar(
-                    "SELECT system_fields FROM replica_clocks WHERE entity = ? AND key = ?",
-                )
-                .bind(name.entity.prefix())
-                .bind(&name.key)
-                .fetch_optional(pool)
-                .await?
-                .flatten();
                 built.push(Built {
                     name: name.clone(),
                     fields: codec::encode(&record, &shape(entity)),
                     clock: op_clock,
-                    system_fields,
+                    system_fields: system_fields(pool, name).await?,
                 });
             }
         }
     }
     Ok(built)
+}
+
+async fn system_fields(pool: &SqlitePool, name: &RecordName) -> AppResult<Option<Vec<u8>>> {
+    Ok(
+        sqlx::query_scalar("SELECT system_fields FROM replica_clocks WHERE entity = ? AND key = ?")
+            .bind(name.entity.prefix())
+            .bind(&name.key)
+            .fetch_optional(pool)
+            .await?
+            .flatten(),
+    )
 }
 
 pub(crate) enum Read {

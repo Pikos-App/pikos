@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{asset_paths_in, referenced_asset_paths};
+use super::{asset_paths_in, pikos_file_name, referenced_asset_paths};
 use crate::backups::{backups_dir, snapshot_workspace};
 use crate::*;
 
@@ -77,4 +77,18 @@ async fn an_image_only_a_backup_still_refers_to_is_referenced() {
     assert_eq!(found, set(&["assets/old.png"]));
     pool.close().await;
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn only_a_file_pikos_saved_is_named_as_one() {
+    let name = "0f8a1b6e-2c3d-4e5f-8a9b-0c1d2e3f4a5b.png";
+
+    assert_eq!(pikos_file_name(&format!("assets/{name}")), Some(name));
+    assert_eq!(
+        pikos_file_name(&format!("/abs/app.pikos.desktop/assets/{name}")),
+        Some(name)
+    );
+    assert_eq!(pikos_file_name("assets/holiday.png"), None);
+    assert_eq!(pikos_file_name(&format!("photos/{name}")), None);
+    assert_eq!(pikos_file_name(&format!("assets/../{name}")), None);
 }

@@ -61,7 +61,15 @@ struct Cloud {
 
 impl Cloud {
     fn save(&mut self, name: RecordName, fields: FieldMap) {
-        let entity = entity_map(name.entity).expect("a synced entity");
+        // An image never changes, so the first copy stands.
+        let Some(entity) = entity_map(name.entity) else {
+            if !self.records.contains_key(&name.to_string()) {
+                self.seq += 1;
+                self.records
+                    .insert(name.to_string(), (name, fields, self.seq));
+            }
+            return;
+        };
         let shape = shape(entity);
         let stored = match self.records.get(&name.to_string()) {
             Some((_, current, _)) => {
@@ -254,6 +262,47 @@ impl Device {
     }
 }
 
+async fn images_folder(pool: &SqlitePool) -> Option<std::path::PathBuf> {
+    let dir: Option<String> =
+        sqlx::query_scalar("SELECT assets_dir FROM replica_meta WHERE id = 1")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    dir.map(Into::into)
+}
+
+/// A name in the form Pikos gives an image, from the seed so a failure replays.
+fn image_name(rng: &mut Rng) -> String {
+    let hex = format!("{:016x}{:016x}", rng.next(), rng.next());
+    format!(
+        "{}-{}-4{}-8{}-{}.png",
+        &hex[..8],
+        &hex[8..12],
+        &hex[13..16],
+        &hex[17..20],
+        &hex[20..32]
+    )
+}
+
+async fn give_images_folder(pool: &SqlitePool) {
+    let dir = std::env::temp_dir().join(format!("pkos_converge_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    super::images::set_assets_dir(pool, &dir).await.unwrap();
+}
+
+/// Images a device's pages show that aren't in its folder.
+async fn missing_images(pool: &SqlitePool) -> Vec<String> {
+    let dir = images_folder(pool).await.unwrap();
+    crate::assets::asset_paths_in(pool)
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|path| crate::assets::pikos_file_name(path))
+        .filter(|name| !dir.join(name).is_file())
+        .map(str::to_owned)
+        .collect()
+}
+
 fn page(title: String) -> NewPage {
     NewPage {
         folder_id: None,
@@ -331,21 +380,37 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
         )
         .await
         .map(drop),
-        (3, Some(id)) => update_page_impl(
-            pool,
-            id,
-            PageUpdate {
-                content: Some(format!(
-                    r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{{"type":"text","text":"body {n}"}}]}}]}}"#
-                )),
-                ..Default::default()
-            },
-        )
-        .await
-        .map(drop),
+        (3, Some(id)) => {
+            let image = match images_folder(pool).await {
+                Some(dir) if rng.chance(30) => {
+                    let name = image_name(rng);
+                    std::fs::write(dir.join(&name), format!("image {n}")).unwrap();
+                    format!(r#",{{"type":"image","attrs":{{"src":"assets/{name}"}}}}"#)
+                }
+                _ => String::new(),
+            };
+            update_page_impl(
+                pool,
+                id,
+                PageUpdate {
+                    content: Some(format!(
+                        r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{{"type":"text","text":"body {n}"}}]}}{image}]}}"#
+                    )),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map(drop)
+        }
         (4, Some(id)) => {
-            let status = if rng.chance(50) { "done" } else { "not_started" };
-            set_pages_status_impl(pool, &[id], status, None).await.map(drop)
+            let status = if rng.chance(50) {
+                "done"
+            } else {
+                "not_started"
+            };
+            set_pages_status_impl(pool, &[id], status, None)
+                .await
+                .map(drop)
         }
         (5, Some(id)) => update_page_impl(
             pool,
@@ -426,7 +491,12 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
             pool,
             NewRecurrenceRule {
                 page_id: id,
-                rrule: if rng.chance(50) { "FREQ=DAILY" } else { "FREQ=WEEKLY" }.into(),
+                rrule: if rng.chance(50) {
+                    "FREQ=DAILY"
+                } else {
+                    "FREQ=WEEKLY"
+                }
+                .into(),
                 rrule_exdates: vec![],
                 scheduled_start: "2030-01-01T09:00:00".into(),
                 scheduled_end: Some("2030-01-01T09:30:00".into()),
@@ -435,7 +505,13 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
         )
         .await
         .map(drop),
-        (17, _) => match rng.pick(&ids(pool, "SELECT page_id FROM page_recurrence_rules ORDER BY rowid").await) {
+        (17, _) => match rng.pick(
+            &ids(
+                pool,
+                "SELECT page_id FROM page_recurrence_rules ORDER BY rowid",
+            )
+            .await,
+        ) {
             Some(page) => complete_recurring_page_impl(
                 pool,
                 CompleteRecurringInput {
@@ -450,7 +526,9 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
             .map(drop),
             None => Ok(()),
         },
-        (18, _) => match rng.pick(&ids(pool, "SELECT id FROM page_recurrence_rules ORDER BY rowid").await) {
+        (18, _) => match rng
+            .pick(&ids(pool, "SELECT id FROM page_recurrence_rules ORDER BY rowid").await)
+        {
             Some(rule) => reschedule_virtual_occurrence_impl(
                 pool,
                 RescheduleVirtualInput {
@@ -465,26 +543,29 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
             .map(drop),
             None => Ok(()),
         },
-        (19, _) => match rng.pick(&ids(pool, "SELECT id FROM page_recurrence_rules ORDER BY rowid").await) {
+        (19, _) => match rng
+            .pick(&ids(pool, "SELECT id FROM page_recurrence_rules ORDER BY rowid").await)
+        {
             Some(rule) => delete_recurrence_rule_impl(pool, rule).await,
             None => Ok(()),
         },
         (20, _) => {
-            let ticked: Vec<(String, String)> = sqlx::query_as(
-                "SELECT page_id, occurrence_date FROM completed_set ORDER BY rowid",
-            )
-            .fetch_all(pool)
-            .await
-            .unwrap();
+            let ticked: Vec<(String, String)> =
+                sqlx::query_as("SELECT page_id, occurrence_date FROM completed_set ORDER BY rowid")
+                    .fetch_all(pool)
+                    .await
+                    .unwrap();
             match rng.pick(&ticked) {
-                Some((page, date)) => uncomplete_recurring_occurrence_impl(
-                    pool,
-                    UncompleteRecurringInput {
-                        page_id: page.clone(),
-                        occurrence_date: date.clone(),
-                    },
-                )
-                .await,
+                Some((page, date)) => {
+                    uncomplete_recurring_occurrence_impl(
+                        pool,
+                        UncompleteRecurringInput {
+                            page_id: page.clone(),
+                            occurrence_date: date.clone(),
+                        },
+                    )
+                    .await
+                }
                 None => Ok(()),
             }
         }
@@ -492,14 +573,16 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
             let removed = ids(pool, "SELECT id FROM page_reminders ORDER BY rowid").await;
             match rng.pick(&removed) {
                 Some(r) => delete_page_reminder(pool, r).await,
-                None => skip_occurrence_impl(
-                    pool,
-                    SkipOccurrenceInput {
-                        page_id: id,
-                        occurrence_date: "2030-01-01".into(),
-                    },
-                )
-                .await,
+                None => {
+                    skip_occurrence_impl(
+                        pool,
+                        SkipOccurrenceInput {
+                            page_id: id,
+                            occurrence_date: "2030-01-01".into(),
+                        },
+                    )
+                    .await
+                }
             }
         }
     };
@@ -583,6 +666,7 @@ async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
     let mut fleet = Vec::new();
     for _ in 0..devices {
         let pool = test_pool_on(Clock::Manual(world)).await;
+        give_images_folder(&pool).await;
         // Some devices have work from before sync was turned on, sent in their first upload.
         for n in 0..rng.below(3) {
             random_edit(&pool, &mut rng, 10_000 + n).await;
@@ -655,6 +739,11 @@ async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
         );
         let broken = broken_foreign_keys(&device.pool).await;
         assert!(broken.is_empty(), "seed {seed}: device {i}: {broken:?}");
+        let missing = missing_images(&device.pool).await;
+        assert!(
+            missing.is_empty(),
+            "seed {seed}: device {i} lacks images {missing:?}"
+        );
         let stale = stale_schedules(&device.pool).await;
         assert!(
             stale.is_empty(),
@@ -860,6 +949,7 @@ async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
             world.load(Ordering::SeqCst).saturating_add_signed(skew),
         )));
         let pool = test_pool_on(Clock::Manual(clock)).await;
+        give_images_folder(&pool).await;
         // From the seed, since the order of the zones they name decides which one every device
         // joins, and a failure has to replay.
         sqlx::query("UPDATE replica_meta SET workspace_id = ? WHERE id = 1")
@@ -940,6 +1030,11 @@ async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
     for (i, device) in fleet.iter().enumerate() {
         let broken = broken_foreign_keys(&device.pool).await;
         assert!(broken.is_empty(), "seed {seed}: device {i}: {broken:?}");
+        let missing = missing_images(&device.pool).await;
+        assert!(
+            missing.is_empty(),
+            "seed {seed}: device {i} lacks images {missing:?}"
+        );
         assert!(
             !search_is_stale(&device.pool).await,
             "seed {seed}: device {i}'s search index doesn't match its pages"

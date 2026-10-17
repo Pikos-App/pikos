@@ -17,19 +17,7 @@ const ALLOWED_IMAGE_EXTENSIONS: [&str; 9] = [
     "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
 ];
 
-/// The folder under the app data dir that holds every image a page embeds.
-pub(crate) const ASSET_DIR: &str = "assets";
-
-/// True for the `<uuid>.<ext>` names [`save_asset`] gives the files it writes.
-fn is_pikos_asset_name(name: &str) -> bool {
-    let Some((stem, ext)) = name.rsplit_once('.') else {
-        return false;
-    };
-    stem.len() == 36
-        && uuid::Uuid::parse_str(stem).is_ok()
-        && !ext.is_empty()
-        && ext.chars().all(|c| c.is_ascii_alphanumeric())
-}
+pub(crate) use pikos_db::assets::{is_pikos_asset_name, ASSET_DIR};
 
 /// The file a page's stored image path names, inside this machine's `assets_dir`.
 ///

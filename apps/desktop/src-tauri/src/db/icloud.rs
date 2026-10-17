@@ -15,7 +15,7 @@ use pikos_replica::merge::Value;
 use pikos_replica::{Hlc, RecordName};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::icloud_settings::ICloudSyncState;
 use crate::error::{AppError, AppResult};
@@ -37,10 +37,19 @@ extern "C" {
 
 /// Holds on to the workspace just opened, and syncs again if sync was on when the app last ran.
 pub fn attach(app: AppHandle, pool: SqlitePool) {
+    let assets = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join(pikos_db::assets::ASSET_DIR));
     if WORKSPACE.set((pool.clone(), app)).is_err() {
         return;
     }
     tauri::async_runtime::spawn(async move {
+        if let Ok(assets) = assets {
+            if let Err(e) = pikos_db::replica::images::set_assets_dir(&pool, &assets).await {
+                log::error!("icloud: setting the images folder failed: {e}");
+            }
+        }
         let resuming = pikos_db::replica::meta(&pool)
             .await
             .is_ok_and(|meta| meta.started && !meta.paused);

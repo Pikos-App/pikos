@@ -7,6 +7,10 @@ public enum RecordCodec {
     /// The field holding the record's name in the workspace, since the CloudKit name may be an
     /// escaped or shortened form of it.
     static let nameField = "record"
+    /// The field holding a file the record carries, as a local path in the workspace's records
+    /// and as a CKAsset in CloudKit. CloudKit encrypts assets itself, and they can't go in
+    /// `encryptedValues`.
+    static let fileField = "file"
 
     /// The record type: the entity prefix of the record's name, such as `page`.
     static func recordType(of name: String) -> String {
@@ -28,7 +32,10 @@ public enum RecordCodec {
             values[key] = nil
         }
         values[nameField] = source.name
-        for (key, value) in source.fields {
+        if case .text(let path) = source.fields[fileField] {
+            record[fileField] = CKAsset(fileURL: URL(fileURLWithPath: path))
+        }
+        for (key, value) in source.fields where key != fileField {
             switch value {
             case .integer(let v): values[key] = v
             case .real(let v): values[key] = v
@@ -67,6 +74,9 @@ public enum RecordCodec {
             case let v as NSNumber: fields[key] = .integer(v.int64Value)
             default: continue
             }
+        }
+        if let file = (record[fileField] as? CKAsset)?.fileURL {
+            fields[fileField] = .text(file.path)
         }
         return SyncRecord(name: name, fields: fields)
     }

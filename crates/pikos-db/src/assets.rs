@@ -9,6 +9,30 @@ use crate::backups::{backups_dir, list_backups};
 use crate::error::AppResult;
 use crate::export::collect_asset_paths;
 
+/// The folder, beside a workspace's own data, that holds every image its pages embed.
+pub const ASSET_DIR: &str = "assets";
+
+/// True for the `<uuid>.<ext>` names Pikos gives the image files it writes.
+pub fn is_pikos_asset_name(name: &str) -> bool {
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    stem.len() == 36
+        && uuid::Uuid::parse_str(stem).is_ok()
+        && !ext.is_empty()
+        && ext.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// The file name of an image Pikos saved, from the path a page stores for it: `assets/<file>`, or
+/// the full path an earlier version stored, ending in an assets folder. None for any other path,
+/// which is not a file Pikos wrote and so is never synced or removed.
+pub fn pikos_file_name(stored: &str) -> Option<&str> {
+    let mut parts = stored.rsplit(['/', '\\']);
+    let name = parts.next()?;
+    let in_asset_dir = parts.next() == Some(ASSET_DIR);
+    (in_asset_dir && is_pikos_asset_name(name)).then_some(name)
+}
+
 /// The stored path of every image a page refers to, trashed pages included, since restoring one
 /// brings its images back.
 pub async fn asset_paths_in(pool: &SqlitePool) -> AppResult<HashSet<String>> {

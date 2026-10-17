@@ -388,6 +388,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_save_system_fields(uint64_t ptr, R
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_engine_state(uint64_t ptr, RustBuffer state
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_SYNC_ASSETS_DIR
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_SYNC_ASSETS_DIR
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_sync_assets_dir(uint64_t ptr, RustBuffer path
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_SYNC_PAUSED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_SYNC_PAUSED
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_sync_paused(uint64_t ptr, int8_t paused
@@ -1312,6 +1317,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_save_system_fields(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_ENGINE_STATE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_ENGINE_STATE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_engine_state(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_SYNC_ASSETS_DIR
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_SYNC_ASSETS_DIR
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_sync_assets_dir(void
     
 );
 #endif

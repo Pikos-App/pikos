@@ -17,6 +17,9 @@ pub type FieldMap = BTreeMap<String, Value>;
 const FORMAT: &str = "fmt";
 const BORN: &str = "born";
 const TOMB: &str = "tomb";
+/// A file the record carries beside its fields, as a local path: the one to send, or where the
+/// transport put what it fetched. A transport stores the file itself, never the path.
+pub const FILE: &str = "file";
 
 /// A field's name and how many columns it holds, in the entity's field order.
 pub type Shape<'a> = &'a [(&'a str, usize)];
