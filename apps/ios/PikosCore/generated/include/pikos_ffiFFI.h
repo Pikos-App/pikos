@@ -313,6 +313,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_adopt_workspace_id(uint64_t ptr, R
 uint64_t uniffi_pikos_ffi_fn_method_workspace_apply_records(uint64_t ptr, RustBuffer records
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BODY_CLOCK
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BODY_CLOCK
+uint64_t uniffi_pikos_ffi_fn_method_workspace_body_clock(uint64_t ptr, RustBuffer page_id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BUILD_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BUILD_RECORDS
 uint64_t uniffi_pikos_ffi_fn_method_workspace_build_records(uint64_t ptr, RustBuffer names
@@ -358,6 +363,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_plan_join(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_records_sent(uint64_t ptr, RustBuffer sent
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
+uint64_t uniffi_pikos_ffi_fn_method_workspace_save_body_if_unchanged(uint64_t ptr, RustBuffer page_id, RustBuffer content, RustBuffer loaded_clock
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_ENGINE_STATE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_ENGINE_STATE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_engine_state(uint64_t ptr, RustBuffer state
@@ -376,6 +386,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_start_sync(uint64_t ptr
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_STATE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_STATE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_sync_state(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_SUMMARY
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_SUMMARY
+uint64_t uniffi_pikos_ffi_fn_method_workspace_sync_summary(uint64_t ptr
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_ADD_PAGE_REMINDER
@@ -1195,6 +1210,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_apply_records(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BODY_CLOCK
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BODY_CLOCK
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_body_clock(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BUILD_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BUILD_RECORDS
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_build_records(void
@@ -1249,6 +1270,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_records_sent(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_ENGINE_STATE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_ENGINE_STATE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_engine_state(void
@@ -1270,6 +1297,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_start_sync(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SYNC_STATE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SYNC_STATE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_sync_state(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SYNC_SUMMARY
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SYNC_SUMMARY
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_sync_summary(void
     
 );
 #endif

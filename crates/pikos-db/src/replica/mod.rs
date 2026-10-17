@@ -55,7 +55,7 @@ pub async fn meta(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
 pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        sqlx::query(
+        let starting = sqlx::query(
             "UPDATE replica_meta
              SET started = 1, paused = 0, device_id = ?,
                  hlc = pikos_hlc_next(hlc, pikos_now_ms()), base_clock = pikos_hlc_next(hlc, pikos_now_ms())
@@ -63,13 +63,41 @@ pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
         )
         .bind(uuid::Uuid::new_v4().to_string())
         .execute(&mut *tx)
-        .await?;
+        .await?
+        .rows_affected()
+            == 1;
+        if starting {
+            queue_everything(&mut tx).await?;
+        }
         tx.commit().await?;
         Ok(())
     })
     .await?;
 
     meta(pool).await
+}
+
+/// Queues every synced row to send, once, when sync starts: the first upload, or this device's
+/// half of a merge with an account that already syncs. Each row is sent at the base clock, so a row
+/// changed on another device since loses to that change.
+async fn queue_everything(tx: &mut Transaction<'_, Sqlite>) -> AppResult<()> {
+    for entity in manifest::ENTITIES {
+        let covers = entity.covers.unwrap_or("1");
+        let sql = format!(
+            "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+             SELECT '{}', {}, {}, 0, (SELECT base_clock FROM replica_meta WHERE id = 1)
+             FROM {} AS t WHERE ({covers}) AND {}
+             ON CONFLICT (entity, key) DO NOTHING",
+            entity.entity.prefix(),
+            entity.key,
+            (1i64 << entity.fields.len()) - 1,
+            entity.table,
+            entity.scope.sql(),
+        )
+        .replace("{row}", "t");
+        sqlx::query(&sql).execute(&mut **tx).await?;
+    }
+    Ok(())
 }
 
 /// Pausing stops the transport and nothing else: capture keeps running, so resuming is an ordinary
@@ -106,6 +134,117 @@ pub async fn forget(pool: &SqlitePool) -> AppResult<()> {
         Ok(())
     })
     .await
+}
+
+/// What the sync status line reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncSummary {
+    pub started: bool,
+    pub paused: bool,
+    /// Records waiting to send.
+    pub pending: i64,
+    /// Records that arrived and are waiting for a parent or a newer Pikos.
+    pub held: i64,
+    /// Held because a newer Pikos wrote them: the status line says to update.
+    pub needs_update: bool,
+    /// When the transport last finished fetching, in `now_iso` form.
+    pub last_fetch_at: Option<String>,
+}
+
+pub async fn summary(pool: &SqlitePool) -> AppResult<SyncSummary> {
+    let (started, paused, last_fetch_at): (bool, bool, Option<String>) =
+        sqlx::query_as("SELECT started, paused, last_fetch_at FROM replica_meta WHERE id = 1")
+            .fetch_one(pool)
+            .await?;
+    let (pending, held, newer): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM replica_ops),
+                (SELECT COUNT(*) FROM replica_pen),
+                (SELECT COUNT(*) FROM replica_pen WHERE reason = 'newer_format')",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(SyncSummary {
+        started,
+        paused,
+        pending,
+        held,
+        needs_update: newer > 0,
+        last_fetch_at,
+    })
+}
+
+/// SQL for a page body's clock as stored now, over the page id in `?1`, or NULL while sync has
+/// never started.
+const BODY_CLOCK_SQL: &str = "CASE WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+    THEN COALESCE(
+      (SELECT substr(clocks, 21, 20) FROM replica_clocks WHERE entity = 'body' AND key = ?1),
+      (SELECT base_clock FROM replica_meta WHERE id = 1))
+  END";
+
+/// A page body's clock as stored now, or None while sync has never started. The editor keeps the
+/// one it loaded and saves with [`save_body_if_unchanged`], so an edit that arrived from another
+/// device meanwhile isn't overwritten by one keystroke on a page that hadn't reloaded.
+pub async fn body_clock(pool: &SqlitePool, page_id: &str) -> AppResult<Option<String>> {
+    Ok(
+        sqlx::query_scalar(&format!("SELECT {BODY_CLOCK_SQL}")) // sql-ok: a constant
+            .bind(page_id)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
+/// What a conditional body save did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BodySave {
+    /// Saved; the clock to save with next time.
+    Saved { clock: Option<String> },
+    /// The body moved on since it was loaded, by an edit from another device. Nothing was written;
+    /// the editor takes this body, replays its unsaved steps onto it and saves again.
+    Moved {
+        content: String,
+        clock: Option<String>,
+    },
+}
+
+/// Saves a page body only if it is still the one the editor loaded, as told by `loaded_clock`, in
+/// one statement so an apply can't land between the check and the write. With sync off the clock
+/// is always None and every save goes through.
+pub async fn save_body_if_unchanged(
+    pool: &SqlitePool,
+    page_id: &str,
+    content: String,
+    loaded_clock: Option<&str>,
+) -> AppResult<BodySave> {
+    let text = crate::pool::extract_text_from_tiptap(&content);
+    // sql-ok: BODY_CLOCK_SQL is a constant
+    let written = sqlx::query(&format!(
+        "UPDATE pages SET content = ?2, content_text = ?3, updated_at = ?4
+         WHERE id = ?1 AND ({BODY_CLOCK_SQL}) IS ?5"
+    ))
+    .bind(page_id)
+    .bind(&content)
+    .bind(&text)
+    .bind(crate::pool::now_iso())
+    .bind(loaded_clock)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    if written == 0 {
+        let stored: Option<String> = sqlx::query_scalar("SELECT content FROM pages WHERE id = ?")
+            .bind(page_id)
+            .fetch_optional(pool)
+            .await?;
+        let Some(stored) = stored else {
+            return Err(AppError::NotFound(format!("page {page_id}")));
+        };
+        return Ok(BodySave::Moved {
+            content: stored,
+            clock: body_clock(pool, page_id).await?,
+        });
+    }
+    Ok(BodySave::Saved {
+        clock: body_clock(pool, page_id).await?,
+    })
 }
 
 /// The transport's own state, saved with the workspace: CloudKit's sync engine state, or a folder

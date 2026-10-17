@@ -923,6 +923,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func applyRecords(records: [SyncRecord]) async throws  -> SyncApplied
     
+    /**
+     * A page body's clock as stored now, None while sync has never started. Keep it with the body
+     * the editor loaded and pass it to `save_body_if_unchanged`.
+     */
+    func bodyClock(pageId: String) async throws  -> String?
+    
     func buildRecords(names: [String]) async throws  -> [BuiltRecord]
     
     /**
@@ -957,6 +963,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func recordsSent(sent: [SentRecord]) async throws  -> [String]
     
+    /**
+     * Saves a body only if it is still the one the editor loaded.
+     */
+    func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?) async throws  -> BodySave
+    
     func setEngineState(state: Data) async throws 
     
     func setSyncPaused(paused: Bool) async throws 
@@ -968,6 +979,8 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func startSync() async throws  -> SyncState
     
     func syncState() async throws  -> SyncState
+    
+    func syncSummary() async throws  -> SyncSummary
     
     /**
      * Add a reminder to a page, as minutes before its scheduled start.
@@ -1900,6 +1913,26 @@ open func applyRecords(records: [SyncRecord])async throws  -> SyncApplied  {
         )
 }
     
+    /**
+     * A page body's clock as stored now, None while sync has never started. Keep it with the body
+     * the editor loaded and pass it to `save_body_if_unchanged`.
+     */
+open func bodyClock(pageId: String)async throws  -> String?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_body_clock(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
 open func buildRecords(names: [String])async throws  -> [BuiltRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -2060,6 +2093,25 @@ open func recordsSent(sent: [SentRecord])async throws  -> [String]  {
         )
 }
     
+    /**
+     * Saves a body only if it is still the one the editor loaded.
+     */
+open func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?)async throws  -> BodySave  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_save_body_if_unchanged(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(content),FfiConverterOptionString.lower(loadedClock)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBodySave_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
 open func setEngineState(state: Data)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -2124,6 +2176,22 @@ open func syncState()async throws  -> SyncState  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncState_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func syncSummary()async throws  -> SyncSummary  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_sync_summary(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncSummary_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -7079,6 +7147,97 @@ public func FfiConverterTypeSyncState_lower(_ value: SyncState) -> RustBuffer {
 
 
 /**
+ * What the sync status line reads.
+ */
+public struct SyncSummary: Equatable, Hashable {
+    public var started: Bool
+    public var paused: Bool
+    /**
+     * Records waiting to send.
+     */
+    public var pending: Int64
+    /**
+     * Records waiting for a parent or a newer Pikos.
+     */
+    public var held: Int64
+    /**
+     * A newer Pikos wrote some of what arrived: the status line says to update.
+     */
+    public var needsUpdate: Bool
+    public var lastFetchAt: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(started: Bool, paused: Bool, 
+        /**
+         * Records waiting to send.
+         */pending: Int64, 
+        /**
+         * Records waiting for a parent or a newer Pikos.
+         */held: Int64, 
+        /**
+         * A newer Pikos wrote some of what arrived: the status line says to update.
+         */needsUpdate: Bool, lastFetchAt: String?) {
+        self.started = started
+        self.paused = paused
+        self.pending = pending
+        self.held = held
+        self.needsUpdate = needsUpdate
+        self.lastFetchAt = lastFetchAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncSummary: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncSummary: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncSummary {
+        return
+            try SyncSummary(
+                started: FfiConverterBool.read(from: &buf), 
+                paused: FfiConverterBool.read(from: &buf), 
+                pending: FfiConverterInt64.read(from: &buf), 
+                held: FfiConverterInt64.read(from: &buf), 
+                needsUpdate: FfiConverterBool.read(from: &buf), 
+                lastFetchAt: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncSummary, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.started, into: &buf)
+        FfiConverterBool.write(value.paused, into: &buf)
+        FfiConverterInt64.write(value.pending, into: &buf)
+        FfiConverterInt64.write(value.held, into: &buf)
+        FfiConverterBool.write(value.needsUpdate, into: &buf)
+        FfiConverterOptionString.write(value.lastFetchAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncSummary_lift(_ buf: RustBuffer) throws -> SyncSummary {
+    return try FfiConverterTypeSyncSummary.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncSummary_lower(_ value: SyncSummary) -> RustBuffer {
+    return FfiConverterTypeSyncSummary.lower(value)
+}
+
+
+/**
  * Structural placement of one timed event within a day.
  *
  * Carries no pixels. The cascade column says which lane the event occupies;
@@ -7641,6 +7800,89 @@ public func FfiConverterTypeViewCounts_lift(_ buf: RustBuffer) throws -> ViewCou
 public func FfiConverterTypeViewCounts_lower(_ value: ViewCounts) -> RustBuffer {
     return FfiConverterTypeViewCounts.lower(value)
 }
+
+
+/**
+ * What a conditional body save did.
+ */
+
+public enum BodySave: Equatable, Hashable {
+    
+    /**
+     * Saved; the clock to save with next time.
+     */
+    case saved(clock: String?
+    )
+    /**
+     * Another device's edit moved the body on since it was loaded. Nothing was written: take this
+     * body, replay the unsaved edits onto it, and save again.
+     */
+    case moved(content: String, clock: String?
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BodySave: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBodySave: FfiConverterRustBuffer {
+    typealias SwiftType = BodySave
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BodySave {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .saved(clock: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 2: return .moved(content: try FfiConverterString.read(from: &buf), clock: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BodySave, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .saved(clock):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionString.write(clock, into: &buf)
+            
+        
+        case let .moved(content,clock):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(content, into: &buf)
+            FfiConverterOptionString.write(clock, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBodySave_lift(_ buf: RustBuffer) throws -> BodySave {
+    return try FfiConverterTypeBodySave.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBodySave_lower(_ value: BodySave) -> RustBuffer {
+    return FfiConverterTypeBodySave.lower(value)
+}
+
 
 
 /**
@@ -10546,6 +10788,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_apply_records() != 40556) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_body_clock() != 20974) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_build_records() != 60036) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10573,6 +10818,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_records_sent() != 35806) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged() != 63885) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_engine_state() != 7982) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10583,6 +10831,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_sync_state() != 41248) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_sync_summary() != 21331) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_add_page_reminder() != 49849) {

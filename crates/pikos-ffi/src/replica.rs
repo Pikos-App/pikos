@@ -68,6 +68,33 @@ pub struct SyncState {
     pub paused: bool,
 }
 
+/// What the sync status line reads.
+#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+pub struct SyncSummary {
+    pub started: bool,
+    pub paused: bool,
+    /// Records waiting to send.
+    pub pending: i64,
+    /// Records waiting for a parent or a newer Pikos.
+    pub held: i64,
+    /// A newer Pikos wrote some of what arrived: the status line says to update.
+    pub needs_update: bool,
+    pub last_fetch_at: Option<String>,
+}
+
+/// What a conditional body save did.
+#[derive(uniffi::Enum, Clone, Debug, PartialEq)]
+pub enum BodySave {
+    /// Saved; the clock to save with next time.
+    Saved { clock: Option<String> },
+    /// Another device's edit moved the body on since it was loaded. Nothing was written: take this
+    /// body, replay the unsaved edits onto it, and save again.
+    Moved {
+        content: String,
+        clock: Option<String>,
+    },
+}
+
 /// What turning sync on does when the account already holds a workspace.
 #[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq)]
 pub enum JoinPlan {
@@ -240,6 +267,46 @@ impl Workspace {
 
     pub async fn set_engine_state(&self, state: Vec<u8>) -> Result<(), WorkspaceError> {
         Ok(pikos_db::replica::set_engine_state(&self.pool, &state).await?)
+    }
+
+    pub async fn sync_summary(&self) -> Result<SyncSummary, WorkspaceError> {
+        let summary = pikos_db::replica::summary(&self.pool).await?;
+        Ok(SyncSummary {
+            started: summary.started,
+            paused: summary.paused,
+            pending: summary.pending,
+            held: summary.held,
+            needs_update: summary.needs_update,
+            last_fetch_at: summary.last_fetch_at,
+        })
+    }
+
+    /// A page body's clock as stored now, None while sync has never started. Keep it with the body
+    /// the editor loaded and pass it to `save_body_if_unchanged`.
+    pub async fn body_clock(&self, page_id: String) -> Result<Option<String>, WorkspaceError> {
+        Ok(pikos_db::replica::body_clock(&self.pool, &page_id).await?)
+    }
+
+    /// Saves a body only if it is still the one the editor loaded.
+    pub async fn save_body_if_unchanged(
+        &self,
+        page_id: String,
+        content: String,
+        loaded_clock: Option<String>,
+    ) -> Result<BodySave, WorkspaceError> {
+        let saved = pikos_db::replica::save_body_if_unchanged(
+            &self.pool,
+            &page_id,
+            content,
+            loaded_clock.as_deref(),
+        )
+        .await?;
+        Ok(match saved {
+            pikos_db::replica::BodySave::Saved { clock } => BodySave::Saved { clock },
+            pikos_db::replica::BodySave::Moved { content, clock } => {
+                BodySave::Moved { content, clock }
+            }
+        })
     }
 
     /// Forgets tombstones and holds past retention. Run now and then, such as on launch.

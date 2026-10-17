@@ -350,3 +350,111 @@ async fn tombstones_and_holds_past_retention_are_forgotten_and_newer_ones_kept()
     assert_eq!(clocks, vec!["gone-recently"]);
     assert_eq!(held, vec!["remind:recent"]);
 }
+
+#[tokio::test]
+async fn starting_queues_the_workspace_already_there_for_its_first_upload() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("event", "Dentist"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&pool, "event", "active")
+        .await
+        .unwrap();
+
+    start(&pool).await.unwrap();
+
+    let queued: Vec<String> =
+        sqlx::query_scalar("SELECT entity || ':' || key FROM replica_ops ORDER BY entity, key")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        queued,
+        vec!["body:p1", "page:p1"],
+        "the calendar's page stays local"
+    );
+}
+
+#[tokio::test]
+async fn the_summary_counts_what_waits_to_send_and_what_waits_to_apply() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO replica_pen (name, record, since, reason) VALUES ('page:x', '{}', '0', 'newer_format')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let summary = super::summary(&pool).await.unwrap();
+
+    assert!(summary.started);
+    assert!(summary.pending > 0);
+    assert_eq!(summary.held, 1);
+    assert!(summary.needs_update);
+}
+
+#[tokio::test]
+async fn a_body_saves_while_it_is_the_one_the_editor_loaded() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    let loaded = super::body_clock(&pool, "p1").await.unwrap();
+
+    let saved =
+        super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), loaded.as_deref())
+            .await
+            .unwrap();
+
+    let super::BodySave::Saved { clock } = saved else {
+        panic!("refused a save over the body it loaded");
+    };
+    assert_ne!(clock, loaded, "the save moved the body's clock");
+}
+
+#[tokio::test]
+async fn a_body_that_moved_since_it_was_loaded_is_handed_back_instead_of_overwritten() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    let loaded = super::body_clock(&pool, "p1").await.unwrap();
+    sqlx::query("UPDATE pages SET content = '{\"from\":\"the phone\"}' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let saved =
+        super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), loaded.as_deref())
+            .await
+            .unwrap();
+
+    let super::BodySave::Moved { content, clock } = saved else {
+        panic!("saved over a body that had moved on");
+    };
+    assert_eq!(content, "{\"from\":\"the phone\"}");
+    assert_ne!(clock, loaded);
+}
+
+#[tokio::test]
+async fn with_sync_off_every_body_save_goes_through() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+
+    let saved = super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), None)
+        .await
+        .unwrap();
+
+    assert_eq!(saved, super::BodySave::Saved { clock: None });
+}

@@ -139,6 +139,7 @@ async fn an_edit_marks_only_the_fields_it_changed() {
         .await
         .unwrap();
     let base = start(&pool).await.unwrap().base_clock.unwrap().to_string();
+    clear_ops(&pool).await;
 
     exec(
         &pool,

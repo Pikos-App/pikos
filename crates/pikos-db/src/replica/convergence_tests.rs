@@ -514,6 +514,10 @@ async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
     let mut fleet = Vec::new();
     for _ in 0..devices {
         let pool = test_pool_on(Clock::Manual(world)).await;
+        // Some devices have work from before sync was turned on, sent in their first upload.
+        for n in 0..rng.below(3) {
+            random_edit(&pool, &mut rng, 10_000 + n).await;
+        }
         start(&pool).await.unwrap();
         let index = fleet.len();
         fleet.push(Device {
