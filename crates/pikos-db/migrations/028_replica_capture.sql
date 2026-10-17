@@ -5,7 +5,7 @@ CREATE TRIGGER replica_page_insert AFTER INSERT ON pages
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'page', NEW.id,
       1023,
@@ -30,7 +30,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
     OR (OLD.created_at IS NOT NEW.created_at)
     OR (OLD.status IS NOT NEW.status OR OLD.completed_at IS NOT NEW.completed_at))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'page', NEW.id,
       (CASE WHEN OLD.title IS NOT NEW.title THEN 1 ELSE 0 END)
@@ -67,14 +67,13 @@ CREATE TRIGGER replica_page_delete AFTER DELETE ON pages
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'page', OLD.id,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'page', OLD.id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'page', OLD.id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -82,7 +81,7 @@ CREATE TRIGGER replica_body_insert AFTER INSERT ON pages
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'body', NEW.id,
       1,
@@ -98,7 +97,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND ((OLD.content IS NOT NEW.content OR OLD.content_schema_version IS NOT NEW.content_schema_version))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'body', NEW.id,
       (CASE WHEN OLD.content IS NOT NEW.content OR OLD.content_schema_version IS NOT NEW.content_schema_version THEN 1 ELSE 0 END),
@@ -117,7 +116,7 @@ CREATE TRIGGER replica_folder_insert AFTER INSERT ON folders
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'folder', NEW.id,
       63,
@@ -138,7 +137,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
     OR (OLD.deleted_at IS NOT NEW.deleted_at)
     OR (OLD.created_at IS NOT NEW.created_at))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'folder', NEW.id,
       (CASE WHEN OLD.name IS NOT NEW.name THEN 1 ELSE 0 END)
@@ -167,14 +166,13 @@ CREATE TRIGGER replica_folder_delete AFTER DELETE ON folders
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'folder', OLD.id,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'folder', OLD.id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'folder', OLD.id, base_clock || base_clock || base_clock || base_clock || base_clock || base_clock || base_clock, CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -182,14 +180,14 @@ CREATE TRIGGER replica_tag_insert AFTER INSERT ON tags
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'tag', NEW.name,
-      1,
+      0,
       0, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'tag', NEW.name, hlc || hlc, NULL FROM replica_meta WHERE id = 1
+  SELECT 'tag', NEW.name, hlc, NULL FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL;
 END;
 
@@ -197,7 +195,7 @@ CREATE TRIGGER replica_pagetag_insert AFTER INSERT ON page_tags
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'pagetag', NEW.page_id || '/' || (SELECT name FROM tags WHERE id = NEW.tag_id),
       0,
@@ -213,14 +211,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'pagetag', OLD.page_id || '/' || (SELECT name FROM tags WHERE id = OLD.tag_id),
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'pagetag', OLD.page_id || '/' || (SELECT name FROM tags WHERE id = OLD.tag_id), base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'pagetag', OLD.page_id || '/' || (SELECT name FROM tags WHERE id = OLD.tag_id), base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -228,7 +226,7 @@ CREATE TRIGGER replica_rule_insert AFTER INSERT ON page_recurrence_rules
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'rule', NEW.page_id,
       1,
@@ -244,7 +242,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND ((OLD.rrule IS NOT NEW.rrule OR OLD.rrule_exdates IS NOT NEW.rrule_exdates OR OLD.scheduled_start IS NOT NEW.scheduled_start OR OLD.scheduled_end IS NOT NEW.scheduled_end OR OLD.timezone IS NOT NEW.timezone OR OLD.created_at IS NOT NEW.created_at))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'rule', NEW.page_id,
       (CASE WHEN OLD.rrule IS NOT NEW.rrule OR OLD.rrule_exdates IS NOT NEW.rrule_exdates OR OLD.scheduled_start IS NOT NEW.scheduled_start OR OLD.scheduled_end IS NOT NEW.scheduled_end OR OLD.timezone IS NOT NEW.timezone OR OLD.created_at IS NOT NEW.created_at THEN 1 ELSE 0 END),
@@ -264,14 +262,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'rule', OLD.page_id,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'rule', OLD.page_id, base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'rule', OLD.page_id, base_clock || base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -280,7 +278,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND NEW.rule_id IS NULL
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'sched', NEW.id,
       1,
@@ -297,7 +295,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NEW.rule_id IS NULL
   AND ((OLD.page_id IS NOT NEW.page_id OR OLD.scheduled_start IS NOT NEW.scheduled_start OR OLD.scheduled_end IS NOT NEW.scheduled_end OR OLD.timezone IS NOT NEW.timezone OR OLD.status IS NOT NEW.status OR OLD.created_at IS NOT NEW.created_at))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'sched', NEW.id,
       (CASE WHEN OLD.page_id IS NOT NEW.page_id OR OLD.scheduled_start IS NOT NEW.scheduled_start OR OLD.scheduled_end IS NOT NEW.scheduled_end OR OLD.timezone IS NOT NEW.timezone OR OLD.status IS NOT NEW.status OR OLD.created_at IS NOT NEW.created_at THEN 1 ELSE 0 END),
@@ -318,14 +316,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND OLD.rule_id IS NULL
   AND EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'sched', OLD.id,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'sched', OLD.id, base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'sched', OLD.id, base_clock || base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -334,7 +332,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND NEW.rule_id IS NOT NULL
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'override', NEW.page_id || '/' || NEW.original_date,
       1,
@@ -351,7 +349,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NEW.rule_id IS NOT NULL
   AND ((OLD.scheduled_start IS NOT NEW.scheduled_start OR OLD.scheduled_end IS NOT NEW.scheduled_end OR OLD.timezone IS NOT NEW.timezone OR OLD.status IS NOT NEW.status OR OLD.created_at IS NOT NEW.created_at))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'override', NEW.page_id || '/' || NEW.original_date,
       (CASE WHEN OLD.scheduled_start IS NOT NEW.scheduled_start OR OLD.scheduled_end IS NOT NEW.scheduled_end OR OLD.timezone IS NOT NEW.timezone OR OLD.status IS NOT NEW.status OR OLD.created_at IS NOT NEW.created_at THEN 1 ELSE 0 END),
@@ -372,14 +370,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND OLD.rule_id IS NOT NULL
   AND EXISTS (SELECT 1 FROM page_recurrence_rules WHERE id = OLD.rule_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'override', OLD.page_id || '/' || OLD.original_date,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'override', OLD.page_id || '/' || OLD.original_date, base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'override', OLD.page_id || '/' || OLD.original_date, base_clock || base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -387,7 +385,7 @@ CREATE TRIGGER replica_done_insert AFTER INSERT ON completed_set
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'done', NEW.page_id || '/' || NEW.occurrence_date,
       1,
@@ -403,7 +401,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND ((OLD.clone_id IS NOT NEW.clone_id))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'done', NEW.page_id || '/' || NEW.occurrence_date,
       (CASE WHEN OLD.clone_id IS NOT NEW.clone_id THEN 1 ELSE 0 END),
@@ -423,14 +421,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'done', OLD.page_id || '/' || OLD.occurrence_date,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'done', OLD.page_id || '/' || OLD.occurrence_date, base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'done', OLD.page_id || '/' || OLD.occurrence_date, base_clock || base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -438,7 +436,7 @@ CREATE TRIGGER replica_skip_insert AFTER INSERT ON skip_set
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'skip', NEW.page_id || '/' || NEW.occurrence_date,
       0,
@@ -454,14 +452,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'skip', OLD.page_id || '/' || OLD.occurrence_date,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'skip', OLD.page_id || '/' || OLD.occurrence_date, base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'skip', OLD.page_id || '/' || OLD.occurrence_date, base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -469,7 +467,7 @@ CREATE TRIGGER replica_remind_insert AFTER INSERT ON page_reminders
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'remind', NEW.id,
       1,
@@ -485,7 +483,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND ((OLD.page_id IS NOT NEW.page_id OR OLD.minutes_before IS NOT NEW.minutes_before OR OLD.created_at IS NOT NEW.created_at))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'remind', NEW.id,
       (CASE WHEN OLD.page_id IS NOT NEW.page_id OR OLD.minutes_before IS NOT NEW.minutes_before OR OLD.created_at IS NOT NEW.created_at THEN 1 ELSE 0 END),
@@ -505,14 +503,14 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'remind', OLD.id,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'remind', OLD.id, base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'remind', OLD.id, base_clock || base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
 END;
 
@@ -520,7 +518,7 @@ CREATE TRIGGER replica_focus_insert AFTER INSERT ON focus_sessions
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'focus', NEW.id,
       1,
@@ -536,7 +534,7 @@ WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
   AND (((OLD.page_id IS NOT NEW.page_id AND NOT (NEW.page_id IS NULL AND NOT EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id))) OR OLD.started_at IS NOT NEW.started_at OR OLD.ended_at IS NOT NEW.ended_at OR OLD.duration_s IS NOT NEW.duration_s))
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'focus', NEW.id,
       (CASE WHEN (OLD.page_id IS NOT NEW.page_id AND NOT (NEW.page_id IS NULL AND NOT EXISTS (SELECT 1 FROM pages WHERE id = OLD.page_id))) OR OLD.started_at IS NOT NEW.started_at OR OLD.ended_at IS NOT NEW.ended_at OR OLD.duration_s IS NOT NEW.duration_s THEN 1 ELSE 0 END),
@@ -555,13 +553,84 @@ CREATE TRIGGER replica_focus_delete AFTER DELETE ON focus_sessions
 WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
   AND NOT EXISTS (SELECT 1 FROM replica_applying)
 BEGIN
-  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
   INSERT INTO replica_ops (entity, key, fields, deleted, clock)
   SELECT 'focus', OLD.id,
       0,
       1, hlc FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET fields = 0, deleted = 1, clock = excluded.clock;
   INSERT INTO replica_clocks (entity, key, clocks, tomb)
-  SELECT 'focus', OLD.id, base_clock || base_clock, hlc FROM replica_meta WHERE id = 1
+  SELECT 'focus', OLD.id, base_clock || base_clock, (SELECT hlc FROM replica_meta WHERE id = 1) FROM replica_meta WHERE id = 1
   ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;
+END;
+
+CREATE TRIGGER replica_page_purge BEFORE DELETE ON pages
+WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+  AND NOT EXISTS (SELECT 1 FROM replica_applying)
+BEGIN
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'page', c.id, replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock FROM pages AS c, replica_meta
+  WHERE replica_meta.id = 1 AND c.parent_id = OLD.id
+  ON CONFLICT (entity, key) DO NOTHING;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'page', c.id, 8, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM pages AS c JOIN replica_clocks ON replica_clocks.entity = 'page' AND replica_clocks.key = c.id
+  WHERE c.parent_id = OLD.id AND substr(replica_clocks.clocks, 81, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END
+  ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields, clock = excluded.clock;
+  UPDATE replica_clocks SET clocks =
+      substr(clocks, 1, 20)
+      || substr(clocks, 21, 20)
+      || substr(clocks, 41, 20)
+      || substr(clocks, 61, 20)
+      || CASE WHEN substr(clocks, 81, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END END
+      || substr(clocks, 101, 20)
+      || substr(clocks, 121, 20)
+      || substr(clocks, 141, 20)
+      || substr(clocks, 161, 20)
+      || substr(clocks, 181, 20)
+      || substr(clocks, 201, 20)
+  WHERE entity = 'page' AND key IN (SELECT c.id FROM pages AS c WHERE c.parent_id = OLD.id);
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'focus', c.id, replica_meta.base_clock || replica_meta.base_clock FROM focus_sessions AS c, replica_meta
+  WHERE replica_meta.id = 1 AND c.page_id = OLD.id
+  ON CONFLICT (entity, key) DO NOTHING;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'focus', c.id, 1, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM focus_sessions AS c JOIN replica_clocks ON replica_clocks.entity = 'focus' AND replica_clocks.key = c.id
+  WHERE c.page_id = OLD.id AND substr(replica_clocks.clocks, 21, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END
+  ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields, clock = excluded.clock;
+  UPDATE replica_clocks SET clocks =
+      substr(clocks, 1, 20)
+      || CASE WHEN substr(clocks, 21, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 161, 20) FROM replica_clocks WHERE entity = 'page' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END END
+  WHERE entity = 'focus' AND key IN (SELECT c.id FROM focus_sessions AS c WHERE c.page_id = OLD.id);
+END;
+
+CREATE TRIGGER replica_folder_purge BEFORE DELETE ON folders
+WHEN (SELECT started FROM replica_meta WHERE id = 1) = 1
+  AND NOT EXISTS (SELECT 1 FROM replica_applying)
+BEGIN
+  UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;
+  INSERT INTO replica_clocks (entity, key, clocks)
+  SELECT 'page', c.id, replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock || replica_meta.base_clock FROM pages AS c, replica_meta
+  WHERE replica_meta.id = 1 AND c.folder_id = OLD.id
+  ON CONFLICT (entity, key) DO NOTHING;
+  INSERT INTO replica_ops (entity, key, fields, deleted, clock)
+  SELECT 'page', c.id, 4, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
+  FROM pages AS c JOIN replica_clocks ON replica_clocks.entity = 'page' AND replica_clocks.key = c.id
+  WHERE c.folder_id = OLD.id AND substr(replica_clocks.clocks, 61, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END
+  ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields, clock = excluded.clock;
+  UPDATE replica_clocks SET clocks =
+      substr(clocks, 1, 20)
+      || substr(clocks, 21, 20)
+      || substr(clocks, 41, 20)
+      || CASE WHEN substr(clocks, 61, 20) > CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE CASE WHEN OLD.deleted_at IS NOT NULL THEN COALESCE((SELECT substr(clocks, 101, 20) FROM replica_clocks WHERE entity = 'folder' AND key = OLD.id), (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE (SELECT hlc FROM replica_meta WHERE id = 1) END END
+      || substr(clocks, 81, 20)
+      || substr(clocks, 101, 20)
+      || substr(clocks, 121, 20)
+      || substr(clocks, 141, 20)
+      || substr(clocks, 161, 20)
+      || substr(clocks, 181, 20)
+      || substr(clocks, 201, 20)
+  WHERE entity = 'page' AND key IN (SELECT c.id FROM pages AS c WHERE c.folder_id = OLD.id);
 END;

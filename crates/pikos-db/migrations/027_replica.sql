@@ -48,11 +48,12 @@ CREATE TABLE replica_ops (
 CREATE INDEX idx_replica_ops_clock ON replica_ops(clock);
 
 -- Records that arrived and couldn't be applied yet, kept as they came and retried on every apply:
--- a parent this device hasn't seen, a newer Pikos's format, or a record this one can't read.
+-- a parent this device hasn't seen or has deleted (it can come back), a newer Pikos's format, or a
+-- record this one can't read.
 CREATE TABLE replica_pen (
   name   TEXT PRIMARY KEY,
   record TEXT NOT NULL,
-  reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'newer_format', 'unreadable'))
+  reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'deleted_parent', 'newer_format', 'unreadable'))
 ) WITHOUT ROWID;
 
 -- Each synced row's clocks: `clocks` is 20 hex characters per slot, the row's creation first and

@@ -120,6 +120,24 @@ fn a_write_after_the_purge_brings_the_row_back_and_is_sent_again() {
 }
 
 #[test]
+fn a_deleted_copy_never_lends_its_values_to_a_live_one() {
+    let blank = || vec![Value::Null];
+    let tombstone = row(5, vec![field(blank(), 18), field(blank(), 18)], Some(20));
+    let revived = titled("Groceries", 10, "done", 30);
+
+    let here = merge(Some(&revived), &tombstone);
+    let there = merge(Some(&tombstone), &revived);
+
+    assert!(here.row.is_live());
+    assert_eq!(
+        here.row.fields, revived.fields,
+        "the newer title clock on the tombstone doesn't count"
+    );
+    assert_eq!(there.row, here.row);
+    assert_eq!(there.taken, 0b11);
+}
+
+#[test]
 fn a_tombstone_seen_twice_is_not_outlived_twice() {
     let revived = RowState {
         tomb: Some(clock(20)),

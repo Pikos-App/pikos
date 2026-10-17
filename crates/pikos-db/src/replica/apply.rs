@@ -7,9 +7,10 @@
 //! The search index, title keys, counts and change counter follow by their own triggers.
 //!
 //! A record whose parent this device has never seen waits in `replica_pen` and is retried on every
-//! apply; one whose parent has a tombstone is dropped, or applied with the reference NULL where the
-//! foreign key would have set it NULL. A record from a newer Pikos waits there too, until an update
-//! can read it.
+//! apply, and so does one whose parent was purged here, since a later write elsewhere can bring the
+//! parent back; dropping it would lose it for good on this device. A reference the foreign key
+//! would have set NULL is applied NULL instead. A record from a newer Pikos waits too, until an
+//! update can read it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,7 +19,7 @@ use pikos_replica::merge::{self, FieldState, RowState, Value};
 use pikos_replica::{Entity, Hlc, RecordName};
 use sqlx::{Row as _, SqliteConnection, SqlitePool};
 
-use super::manifest::{entity as entity_map, EntityMap, Lifecycle};
+use super::manifest::{entity as entity_map, EntityMap, Lifecycle, PURGE_NULLED};
 use super::Uncaptured;
 use crate::error::{AppError, AppResult};
 
@@ -44,7 +45,8 @@ pub struct Applied {
     pub changed: usize,
     /// Records waiting for a parent or a newer Pikos.
     pub held: usize,
-    /// Pages this device sends again whole, because a write here outlived another device's purge.
+    /// Records this device sends again whole, re-stamped, because a write here outlived another
+    /// device's purge of them.
     pub resent: BTreeSet<String>,
 }
 
@@ -60,6 +62,8 @@ pub fn shape(entity: &EntityMap) -> Vec<(&'static str, usize)> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Hold {
     UnknownParent,
+    /// A later write elsewhere can bring the parent back, and the record with it.
+    DeletedParent,
     NewerFormat,
     Unreadable,
 }
@@ -68,6 +72,7 @@ impl Hold {
     fn reason(self) -> &'static str {
         match self {
             Hold::UnknownParent => "unknown_parent",
+            Hold::DeletedParent => "deleted_parent",
             Hold::NewerFormat => "newer_format",
             Hold::Unreadable => "unreadable",
         }
@@ -121,7 +126,14 @@ async fn apply_in(
                 newest = newest
                     .max(record.row.newest())
                     .max(record.row.tomb.unwrap_or(Hlc::ZERO));
-                apply_record(tx, entity, &record, &mut touched, &mut applied).await?
+                let mut rehold = false;
+                let outcome =
+                    apply_record(tx, entity, &record, &mut touched, &mut applied, &mut rehold)
+                        .await?;
+                if rehold {
+                    hold_record(tx.conn(), name, map, Hold::DeletedParent).await?;
+                }
+                outcome
             }
         };
         match outcome {
@@ -136,8 +148,11 @@ async fn apply_in(
 
     touched.rederive(tx).await?;
     observe(tx.conn(), newest).await?;
-    for page in &applied.resent {
-        resend_page(tx.conn(), page).await?;
+    for name in &applied.resent {
+        let name: RecordName = name
+            .parse()
+            .map_err(|e| AppError::Internal(format!("resent record: {e}")))?;
+        revive(tx.conn(), &name).await?;
     }
     Ok(applied)
 }
@@ -351,10 +366,12 @@ fn locate(entity: &EntityMap, column: &str) -> Option<(usize, usize)> {
         .find_map(|(i, f)| f.columns.iter().position(|c| *c == column).map(|c| (i, c)))
 }
 
+/// What this device knows of a row a record refers to. A present row can still carry the tombstone
+/// of a purge that a later write outlived.
 #[derive(Debug, PartialEq, Eq)]
 enum Known {
-    Present,
-    Tombstoned,
+    Present(Option<Hlc>),
+    Tombstoned(Hlc),
     Unknown,
 }
 
@@ -370,30 +387,85 @@ async fn known(
     .bind(id)
     .fetch_one(&mut *conn)
     .await?;
-    if present {
-        return Ok(Known::Present);
-    }
-    let tombstoned: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM replica_clocks WHERE entity = ? AND key = ? AND tomb IS NOT NULL)",
+    let tomb: Option<String> = sqlx::query_scalar(
+        "SELECT tomb FROM replica_clocks WHERE entity = ? AND key = ? AND tomb IS NOT NULL",
     )
     .bind(entity.prefix())
     .bind(id)
-    .fetch_one(&mut *conn)
+    .fetch_optional(&mut *conn)
     .await?;
-    Ok(if tombstoned {
-        Known::Tombstoned
-    } else {
-        Known::Unknown
+    let tomb: Option<Hlc> = tomb.and_then(|t| t.parse().ok());
+    Ok(match (present, tomb) {
+        (true, tomb) => Known::Present(tomb),
+        (false, Some(tomb)) => Known::Tombstoned(tomb),
+        (false, None) => Known::Unknown,
     })
 }
 
-/// References a live record holds that the foreign keys would reject if the row is missing:
-/// `(field, column, table, entity)`. A tombstoned target is set NULL; an unknown one holds the record.
-const NULLABLE_REFS: &[(Entity, &str, &str, Entity)] = &[
-    (Entity::Page, "folder_id", "folders", Entity::Folder),
-    (Entity::Page, "parent_id", "pages", Entity::Page),
-    (Entity::FocusSession, "page_id", "pages", Entity::Page),
-];
+/// The entity whose purge sets `table`'s rows' references NULL.
+fn purge_target(table: &str) -> Option<&'static EntityMap> {
+    super::manifest::ENTITIES
+        .iter()
+        .find(|e| e.table == table && super::capture::is_purge_target(e))
+}
+
+/// What a purge of `target`'s row `id` does to the rows pointing at it, on a device that learns of
+/// it from a tombstone: each reference the purge's foreign key sets NULL is stamped with the purge's
+/// clock, as the purge trigger did where it happened, so the NULL carries one clock everywhere.
+///
+/// When a later write elsewhere has brought the row back, the purge still detached what pointed at
+/// it, so references no newer than the purge are set NULL here by hand. Without that, the devices
+/// that purged would hold NULL and the ones that kept the row would hold the reference.
+async fn stamp_purge_nulls(
+    conn: &mut SqliteConnection,
+    target: &EntityMap,
+    id: &str,
+    tomb: Hlc,
+    survives: bool,
+) -> AppResult<()> {
+    for (table, column, _) in PURGE_NULLED.iter().filter(|(_, _, t)| *t == target.table) {
+        for entity in super::manifest::ENTITIES
+            .iter()
+            .filter(|e| e.table == *table)
+        {
+            let Some((field, _)) = locate(entity, column) else {
+                continue;
+            };
+            let covers = entity.covers.unwrap_or("1");
+            let sql = format!(
+                "SELECT {} FROM {table} AS t WHERE t.{column} = ? AND ({covers})",
+                entity.key
+            )
+            .replace("{row}", "t");
+            let keys: Vec<String> = sqlx::query_scalar(&sql)
+                .bind(id)
+                .fetch_all(&mut *conn)
+                .await?;
+            for key in keys {
+                let (born, mut slots, row_tomb) = match read_clocks(conn, entity, &key).await? {
+                    Some(clocks) => clocks,
+                    None => {
+                        let base = base_clock(conn).await?;
+                        (base, vec![base; entity.fields.len()], None)
+                    }
+                };
+                let detached = slots[field] <= tomb;
+                slots[field] = slots[field].max(tomb);
+                write_packed(conn, entity, &key, born, &slots, row_tomb).await?;
+                if survives && detached {
+                    let sql = format!(
+                        "UPDATE {table} SET {column} = NULL WHERE rowid IN \
+                         (SELECT t.rowid FROM {table} AS t WHERE {} = ? AND ({covers}))",
+                        entity.key
+                    )
+                    .replace("{row}", "t");
+                    sqlx::query(&sql).bind(&key).execute(&mut *conn).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
 async fn apply_record(
     tx: &mut Uncaptured<'_>,
@@ -401,6 +473,7 @@ async fn apply_record(
     record: &Record,
     touched: &mut Touched,
     applied: &mut Applied,
+    rehold: &mut bool,
 ) -> AppResult<Outcome> {
     let mut remote = record.row.clone();
 
@@ -414,24 +487,39 @@ async fn apply_record(
                 return Ok(Outcome::Dropped);
             };
             match known(tx.conn(), "pages", Entity::Page, &page).await? {
-                Known::Present => {}
-                Known::Tombstoned => return Ok(Outcome::Dropped),
+                Known::Present(_) => {}
+                Known::Tombstoned(_) => return Ok(Outcome::Held(Hold::DeletedParent)),
                 Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
             }
         }
-        for (owner, column, table, target) in NULLABLE_REFS {
-            if *owner != record.name.entity {
-                continue;
-            }
-            let Some((f, c)) = locate(entity, column) else {
+        // A reference to a purged row is NULL here, as the purge's foreign key made it, at the
+        // purge's clock unless the reference is newer.
+        for (_, column, target_table) in PURGE_NULLED.iter().filter(|(t, _, _)| *t == entity.table)
+        {
+            let (Some((f, c)), Some(target)) = (locate(entity, column), purge_target(target_table))
+            else {
                 continue;
             };
             let Value::Text(id) = remote.fields[f].values[c].clone() else {
                 continue;
             };
-            match known(tx.conn(), table, *target, &id).await? {
-                Known::Present => {}
-                Known::Tombstoned => remote.fields[f].values[c] = Value::Null,
+            match known(tx.conn(), target_table, target.entity, &id).await? {
+                Known::Present(None) => {}
+                // The row came back after a purge, and the purge detached whatever pointed at it
+                // then; a reference that old arrives detached.
+                Known::Present(Some(tomb)) => {
+                    if remote.fields[f].clock <= tomb {
+                        remote.fields[f].values[c] = Value::Null;
+                        remote.fields[f].clock = tomb;
+                    }
+                }
+                Known::Tombstoned(tomb) => {
+                    // Made after the purge, so the purge didn't detach it: kept to apply again if
+                    // a later write brings the row back.
+                    *rehold |= remote.fields[f].clock > tomb;
+                    remote.fields[f].values[c] = Value::Null;
+                    remote.fields[f].clock = remote.fields[f].clock.max(tomb);
+                }
                 Known::Unknown => return Ok(Outcome::Held(Hold::UnknownParent)),
             }
         }
@@ -468,27 +556,25 @@ async fn apply_record(
                 tomb,
             })
         }
-        // Gone here: what it held no longer matters, only when it went.
-        (None, Some((born, slots, tomb))) => Some(RowState {
+        // Gone here, so only when it went counts.
+        (None, Some((born, slots, Some(tomb)))) => Some(RowState {
             born,
-            fields: remote
+            fields: entity
                 .fields
                 .iter()
                 .zip(slots)
-                .map(|(theirs, clock)| FieldState {
-                    values: theirs.values.clone(),
-                    clock: clock.min(theirs.clock),
+                .map(|(f, clock)| FieldState {
+                    values: vec![Value::Null; f.columns.len()],
+                    clock,
                 })
                 .collect(),
-            tomb,
+            tomb: Some(tomb),
         }),
-        (None, None) => None,
+        // Removed by its parent's purge. While the parent is gone its records are dropped above, so
+        // one that gets here came with the parent brought back, and is taken as new.
+        (None, _) => None,
     };
 
-    // A tombstone carries no values; all that counts is when the row went.
-    if let (false, Some(local)) = (remote.is_live(), &local) {
-        remote.fields = local.fields.clone();
-    }
     let merged = merge::merge(local.as_ref(), &remote);
     let was_live = local_row.is_some();
     let now_live = merged.row.is_live();
@@ -504,14 +590,24 @@ async fn apply_record(
             unstamp_parts(tx.conn(), entity, &record.name.key).await?;
         }
     } else if was_live && !now_live {
+        if let (true, Some(tomb)) = (super::capture::is_purge_target(entity), merged.row.tomb) {
+            stamp_purge_nulls(tx.conn(), entity, &record.name.key, tomb, false).await?;
+        }
         delete_row(tx.conn(), entity, &record.name.key).await?;
+    }
+    let local_tomb = local.as_ref().and_then(|l| l.tomb);
+    let purge_news = remote.tomb.filter(|t| Some(*t) > local_tomb);
+    if let (true, true, Some(tomb)) = (
+        now_live,
+        super::capture::is_purge_target(entity),
+        purge_news,
+    ) {
+        stamp_purge_nulls(tx.conn(), entity, &record.name.key, tomb, true).await?;
     }
     write_clocks(tx.conn(), entity, &record.name.key, &merged.row).await?;
 
     if merged.outlived_tombstone {
-        if let Some(page) = page_of(record) {
-            applied.resent.insert(page);
-        }
+        applied.resent.insert(record.name.to_string());
     }
 
     let changed = writes_row || (was_live && !now_live);
@@ -573,8 +669,9 @@ fn note_touched(
 }
 
 /// A row created by an apply holds column defaults for the entities that share its table, like a
-/// page's body before the body record arrives. Clocked at zero, so any record for them wins; left
-/// unclocked, they'd read as this device's base clock and could beat an older edit made elsewhere.
+/// page's body before the body record arrives. Clocked at zero, so any record for them wins. Left
+/// unclocked, they'd read as this device's base clock; left with the clocks of a row that was purged
+/// and has come back, they'd claim a body the row no longer holds. Either can beat the real one.
 async fn unstamp_parts(
     conn: &mut SqliteConnection,
     created: &EntityMap,
@@ -587,7 +684,7 @@ async fn unstamp_parts(
         let zero = Hlc::ZERO.to_string().repeat(entity.fields.len() + 1);
         sqlx::query(
             "INSERT INTO replica_clocks (entity, key, clocks) VALUES (?, ?, ?)
-             ON CONFLICT (entity, key) DO NOTHING",
+             ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks, tomb = NULL",
         )
         .bind(entity.entity.prefix())
         .bind(key)
@@ -684,8 +781,20 @@ async fn write_clocks(
     key: &str,
     row: &RowState,
 ) -> AppResult<()> {
-    let packed: String = std::iter::once(row.born)
-        .chain(row.fields.iter().map(|f| f.clock))
+    let slots: Vec<Hlc> = row.fields.iter().map(|f| f.clock).collect();
+    write_packed(conn, entity, key, row.born, &slots, row.tomb).await
+}
+
+async fn write_packed(
+    conn: &mut SqliteConnection,
+    entity: &EntityMap,
+    key: &str,
+    born: Hlc,
+    slots: &[Hlc],
+    tomb: Option<Hlc>,
+) -> AppResult<()> {
+    let packed: String = std::iter::once(&born)
+        .chain(slots)
         .map(|c| c.to_string())
         .collect();
     sqlx::query(
@@ -695,7 +804,7 @@ async fn write_clocks(
     .bind(entity.entity.prefix())
     .bind(key)
     .bind(packed)
-    .bind(row.tomb.map(|t| t.to_string()))
+    .bind(tomb.map(|t| t.to_string()))
     .execute(&mut *conn)
     .await?;
     Ok(())
@@ -861,29 +970,61 @@ async fn delete_row(conn: &mut SqliteConnection, entity: &EntityMap, key: &str) 
     Ok(())
 }
 
-/// Marks a page and everything that hangs off it to send again, whole.
-async fn resend_page(conn: &mut SqliteConnection, page: &str) -> AppResult<()> {
+/// A write here outlived another device's purge of `name`. Every other device removed the row, and
+/// for a page everything that hung off it, so this device sends them again as a fresh write at a new
+/// clock. Sent with their old clocks, the outcome would depend on the order the devices heard of the
+/// purge, the revival and each other's older edits; re-stamped, every device takes this copy whole.
+async fn revive(conn: &mut SqliteConnection, name: &RecordName) -> AppResult<()> {
+    sqlx::query("UPDATE replica_meta SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1")
+        .execute(&mut *conn)
+        .await?;
+    let clock: String = sqlx::query_scalar("SELECT hlc FROM replica_meta WHERE id = 1")
+        .fetch_one(&mut *conn)
+        .await?;
+
+    let reviving_page = name.entity == Entity::Page;
     for entity in super::manifest::ENTITIES {
-        if !matches!(entity.scope, super::manifest::Scope::Page(_)) {
-            continue;
-        }
-        let all: i64 = (1i64 << entity.fields.len()) - 1;
-        let page_column = match entity.scope {
-            super::manifest::Scope::Page(column) => column,
+        let rows_sql = match (entity.entity == name.entity, entity.scope) {
+            (true, _) => format!("{} = ?", entity.key),
+            (false, super::manifest::Scope::Page(column)) if reviving_page => {
+                format!("t.{column} = ?")
+            }
             _ => continue,
         };
         let covers = entity.covers.unwrap_or("1");
         let sql = format!(
-            "INSERT INTO replica_ops (entity, key, fields, deleted, clock)
-             SELECT '{}', {}, {all}, 0, (SELECT hlc FROM replica_meta WHERE id = 1)
-             FROM {} AS t WHERE ({covers}) AND t.{page_column} = ?
-             ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0",
-            entity.entity.prefix(),
-            entity.key,
-            entity.table,
+            "SELECT {} FROM {} AS t WHERE ({covers}) AND {rows_sql}",
+            entity.key, entity.table
         )
         .replace("{row}", "t");
-        sqlx::query(&sql).bind(page).execute(&mut *conn).await?;
+        let keys: Vec<String> = sqlx::query_scalar(&sql)
+            .bind(&name.key)
+            .fetch_all(&mut *conn)
+            .await?;
+        let all: i64 = (1i64 << entity.fields.len()) - 1;
+        let stamped = clock.repeat(entity.fields.len() + 1);
+        for key in keys {
+            sqlx::query(
+                "INSERT INTO replica_clocks (entity, key, clocks) VALUES (?, ?, ?)
+                 ON CONFLICT (entity, key) DO UPDATE SET clocks = excluded.clocks",
+            )
+            .bind(entity.entity.prefix())
+            .bind(&key)
+            .bind(&stamped)
+            .execute(&mut *conn)
+            .await?;
+            sqlx::query(
+                "INSERT INTO replica_ops (entity, key, fields, deleted, clock) VALUES (?, ?, ?, 0, ?)
+                 ON CONFLICT (entity, key) DO UPDATE SET fields = excluded.fields, deleted = 0,
+                   clock = excluded.clock",
+            )
+            .bind(entity.entity.prefix())
+            .bind(&key)
+            .bind(all)
+            .bind(&clock)
+            .execute(&mut *conn)
+            .await?;
+        }
     }
     Ok(())
 }

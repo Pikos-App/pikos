@@ -113,21 +113,35 @@ pub fn merge(local: Option<&RowState>, remote: &RowState) -> Merged {
         };
     };
 
+    // A copy that's gone holds no values worth keeping, only when it went: its fields are
+    // whatever was there at the delete, or nothing at all on a device that never had the row. Gone
+    // is judged against the newer of the two tombstones, since a copy that hasn't heard of a purge
+    // yet still died in it if nothing was written to it since.
+    let tomb = local.tomb.max(remote.tomb);
+    let alive = |row: &RowState| tomb.is_none_or(|tomb| row.newest() > tomb);
     let mut taken = 0u64;
-    let fields = local
-        .fields
-        .iter()
-        .zip(&remote.fields)
-        .enumerate()
-        .map(|(i, (mine, theirs))| {
-            if theirs.beats(mine) {
-                taken |= 1 << i;
-                theirs.clone()
-            } else {
-                mine.clone()
-            }
-        })
-        .collect();
+    let all = (0..remote.fields.len()).fold(0, |mask, i| mask | (1 << i));
+    let fields = match (alive(local), alive(remote)) {
+        (true, false) => local.fields.clone(),
+        (false, true) => {
+            taken = all;
+            remote.fields.clone()
+        }
+        _ => local
+            .fields
+            .iter()
+            .zip(&remote.fields)
+            .enumerate()
+            .map(|(i, (mine, theirs))| {
+                if theirs.beats(mine) {
+                    taken |= 1 << i;
+                    theirs.clone()
+                } else {
+                    mine.clone()
+                }
+            })
+            .collect(),
+    };
     let row = RowState {
         born: local.born.max(remote.born),
         fields,

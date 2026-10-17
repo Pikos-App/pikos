@@ -5,6 +5,7 @@
 
 use std::ffi::{c_int, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 use chrono::NaiveDateTime;
@@ -33,10 +34,22 @@ type Context = *mut ffi::sqlite3_context;
 type Values = *mut *mut ffi::sqlite3_value;
 type ScalarFn = extern "C" fn(Context, c_int, Values);
 
-pub(crate) async fn register(conn: &mut SqliteConnection) -> Result<(), sqlx::Error> {
+/// Where `pikos_now_ms()` reads the time: the system clock, or for tests a shared value they move
+/// themselves, so a run that compares clocks across databases replays the same way every time.
+#[derive(Clone, Copy)]
+pub enum Clock {
+    System,
+    Manual(&'static AtomicU64),
+}
+
+pub(crate) async fn register(conn: &mut SqliteConnection, clock: Clock) -> Result<(), sqlx::Error> {
     let mut handle = conn.lock_handle().await?;
     let db = handle.as_raw_handle().as_ptr();
-    let functions: [(&CStr, c_int, c_int, ScalarFn); 4] = [
+    let clock_source = match clock {
+        Clock::System => std::ptr::null_mut(),
+        Clock::Manual(now) => std::ptr::from_ref(now).cast_mut().cast(),
+    };
+    let functions: [(&CStr, c_int, c_int, ScalarFn); 5] = [
         (
             c"pikos_utc",
             2,
@@ -61,18 +74,25 @@ pub(crate) async fn register(conn: &mut SqliteConnection) -> Result<(), sqlx::Er
             ffi::SQLITE_UTF8 | ffi::SQLITE_DETERMINISTIC | ffi::SQLITE_INNOCUOUS,
             pikos_hlc_next,
         ),
+        (c"pikos_now_ms", 0, ffi::SQLITE_UTF8, pikos_now_ms),
     ];
     for (name, args, flags, function) in functions {
+        let user_data = if name == c"pikos_now_ms" {
+            clock_source
+        } else {
+            std::ptr::null_mut()
+        };
         // SAFETY: `db` is this connection's open handle, held locked for the call; the name is a
         // static C string; each function matches SQLite's scalar-function signature and keeps no
-        // per-call state.
+        // per-call state. The clock's user data is null or a `&'static AtomicU64`, which outlives
+        // the connection.
         let rc = unsafe {
             ffi::sqlite3_create_function_v2(
                 db,
                 name.as_ptr(),
                 args,
                 flags,
-                std::ptr::null_mut(),
+                user_data,
                 Some(function),
                 None,
                 None,
@@ -118,6 +138,22 @@ extern "C" fn pikos_title_key(ctx: Context, _argc: c_int, argv: Values) {
         // SAFETY: `ctx` is the live context of the call SQLite is making.
         _ => unsafe { ffi::sqlite3_result_null(ctx) },
     }
+}
+
+/// `pikos_now_ms()`: milliseconds since the Unix epoch, from the connection's [`Clock`]. Called
+/// only by SQLite, with a live context.
+extern "C" fn pikos_now_ms(ctx: Context, _argc: c_int, _argv: Values) {
+    // SAFETY: `ctx` is the live context of the call; its user data was set at registration.
+    let source = unsafe { ffi::sqlite3_user_data(ctx) }.cast::<AtomicU64>();
+    let now = if source.is_null() {
+        chrono::Utc::now().timestamp_millis()
+    } else {
+        // SAFETY: a non-null source is the `&'static AtomicU64` given to `register`.
+        let manual = unsafe { &*source };
+        manual.load(Ordering::SeqCst) as i64
+    };
+    // SAFETY: `ctx` is the live context of the call SQLite is making.
+    let () = unsafe { ffi::sqlite3_result_int64(ctx, now) };
 }
 
 /// The replica clock after `previous` for a write at `now_ms`, as [`pikos_replica::Hlc::next`].

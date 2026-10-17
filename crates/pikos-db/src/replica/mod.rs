@@ -49,33 +49,21 @@ pub async fn meta(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
     })
 }
 
-fn now_ms() -> u64 {
-    chrono::Utc::now().timestamp_millis().max(0) as u64
-}
-
 /// Starts capturing changes, once per device: mints the device id and stamps the base clock that
 /// every existing row holds until it changes, so starting writes nothing per row. Starting again
 /// changes nothing.
 pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        let (started, hlc): (bool, String) =
-            sqlx::query_as("SELECT started, hlc FROM replica_meta WHERE id = 1")
-                .fetch_one(&mut *tx)
-                .await?;
-        if !started {
-            let base = parse_clock(&hlc)?.next(now_ms()).to_string();
-            sqlx::query(
-                "UPDATE replica_meta
-                 SET started = 1, paused = 0, device_id = ?, base_clock = ?, hlc = ?
-                 WHERE id = 1",
-            )
-            .bind(uuid::Uuid::new_v4().to_string())
-            .bind(&base)
-            .bind(&base)
-            .execute(&mut *tx)
-            .await?;
-        }
+        sqlx::query(
+            "UPDATE replica_meta
+             SET started = 1, paused = 0, device_id = ?,
+                 hlc = pikos_hlc_next(hlc, pikos_now_ms()), base_clock = pikos_hlc_next(hlc, pikos_now_ms())
+             WHERE id = 1 AND started = 0",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(())
     })
@@ -214,3 +202,7 @@ mod tests;
 #[cfg(test)]
 #[path = "capture_writers_tests.rs"]
 mod capture_writers_tests;
+
+#[cfg(test)]
+#[path = "convergence_tests.rs"]
+mod convergence_tests;

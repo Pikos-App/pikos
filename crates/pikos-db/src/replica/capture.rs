@@ -10,6 +10,11 @@
 //! makes them itself when the purge's tombstone arrives: a cascade delete, and a column set NULL by
 //! a purged row's foreign key.
 //!
+//! The NULL still needs a clock, the same on every device, or a purged folder that a later write
+//! brings back leaves its pages in it on one device and in the Inbox on another. So a purge first
+//! stamps each column it's about to set NULL with the purge's own clock, here before the delete and
+//! in the apply on every other device.
+//!
 //! The generated SQL is checked in as a migration. `UPDATE_GOLDEN=1 cargo test -p pikos-db
 //! replica` rewrites it, and a test fails when the database's triggers differ from what the
 //! manifest generates.
@@ -25,7 +30,7 @@ const GATE: &str = "(SELECT started FROM replica_meta WHERE id = 1) = 1\n  \
      AND NOT EXISTS (SELECT 1 FROM replica_applying)";
 
 const ADVANCE_CLOCK: &str = "UPDATE replica_meta \
-     SET hlc = pikos_hlc_next(hlc, CAST(unixepoch('subsec') * 1000 AS INTEGER)) WHERE id = 1;";
+     SET hlc = pikos_hlc_next(hlc, pikos_now_ms()) WHERE id = 1;";
 
 #[derive(Clone, Copy)]
 enum Op {
@@ -54,14 +59,122 @@ impl Op {
 /// Every capture trigger's name and `CREATE TRIGGER` statement, in manifest order and without the
 /// closing semicolon, as `sqlite_master` stores it.
 pub fn triggers() -> Vec<(String, String)> {
-    ENTITIES
+    let captures = ENTITIES.iter().flat_map(|entity| {
+        ops(entity)
+            .into_iter()
+            .map(move |op| (trigger_name(entity, op), create_trigger(entity, op)))
+    });
+    let purges = ENTITIES
         .iter()
-        .flat_map(|entity| {
-            ops(entity)
-                .into_iter()
-                .map(move |op| (trigger_name(entity, op), create_trigger(entity, op)))
-        })
-        .collect()
+        .filter(|e| is_purge_target(e))
+        .map(|e| (purge_trigger_name(e), create_purge_trigger(e)));
+    captures.chain(purges).collect()
+}
+
+/// The field whose clock a purge of a trashed row takes.
+const TRASH_FIELD: &str = "deleted_at";
+
+/// A row other rows' foreign keys set NULL when it's purged.
+pub(crate) fn is_purge_target(entity: &EntityMap) -> bool {
+    entity.lifecycle == Lifecycle::Row
+        && entity.covers.is_none()
+        && PURGE_NULLED
+            .iter()
+            .any(|(_, _, target)| *target == entity.table)
+}
+
+/// The clock a purge of the row in `OLD` is stamped with: now, except that purging a trashed row
+/// takes the clock of its trashing, so a restore made on any device after the trashing beats an
+/// empty-trash that runs later, even days later.
+fn purge_clock(entity: &EntityMap) -> String {
+    let now = "(SELECT hlc FROM replica_meta WHERE id = 1)";
+    match entity.fields.iter().position(|f| f.name == TRASH_FIELD) {
+        Some(i) => format!(
+            "CASE WHEN OLD.{TRASH_FIELD} IS NOT NULL THEN COALESCE(\
+             (SELECT substr(clocks, {}, {HLC_WIDTH}) FROM replica_clocks \
+             WHERE entity = '{}' AND key = {}), \
+             (SELECT base_clock FROM replica_meta WHERE id = 1)) ELSE {now} END",
+            (i + 1) * HLC_WIDTH + 1,
+            entity.entity.prefix(),
+            on_row(entity.key, "OLD"),
+        ),
+        None => now.to_owned(),
+    }
+}
+
+fn purge_trigger_name(target: &EntityMap) -> String {
+    format!("replica_{}_purge", target.entity.prefix())
+}
+
+/// Before a purge target goes, stamps every column its foreign keys will set NULL with the purge's
+/// clock. The delete trigger then takes the same clock for the tombstone without moving it.
+///
+/// Purging a trashed row is clocked at the trashing, so a reference made after it, a focus session
+/// started on the trashed page, is newer than the purge. Its NULL is sent as an ordinary edit, at
+/// now, rather than left for every device to repeat from a tombstone that's older than it.
+fn create_purge_trigger(target: &EntityMap) -> String {
+    let clock = purge_clock(target);
+    let mut statements = vec![ADVANCE_CLOCK.to_owned()];
+    for (table, column, _) in PURGE_NULLED.iter().filter(|(_, _, t)| *t == target.table) {
+        for entity in ENTITIES.iter().filter(|e| e.table == *table) {
+            let Some(field) = entity
+                .fields
+                .iter()
+                .position(|f| f.columns.contains(column))
+            else {
+                continue;
+            };
+            let name = entity.entity.prefix();
+            let covers = entity
+                .covers
+                .map_or(String::new(), |c| format!(" AND {}", on_row(c, "c")));
+            let key = on_row(entity.key, "c");
+            statements.push(format!(
+                "INSERT INTO replica_clocks (entity, key, clocks)\n  \
+                 SELECT '{name}', {key}, {} FROM {table} AS c, replica_meta\n  \
+                 WHERE replica_meta.id = 1 AND c.{column} = OLD.id{covers}\n  \
+                 ON CONFLICT (entity, key) DO NOTHING;",
+                every_slot(entity, "replica_meta.base_clock")
+            ));
+            let slot_start = (field + 1) * HLC_WIDTH + 1;
+            statements.push(format!(
+                "INSERT INTO replica_ops (entity, key, fields, deleted, clock)\n  \
+                 SELECT '{name}', {key}, {}, 0, (SELECT hlc FROM replica_meta WHERE id = 1)\n  \
+                 FROM {table} AS c JOIN replica_clocks ON replica_clocks.entity = '{name}' \
+                 AND replica_clocks.key = {key}\n  \
+                 WHERE c.{column} = OLD.id{covers} \
+                 AND substr(replica_clocks.clocks, {slot_start}, {HLC_WIDTH}) > {clock}\n  \
+                 ON CONFLICT (entity, key) DO UPDATE SET fields = fields | excluded.fields, \
+                 clock = excluded.clock;",
+                1u64 << field
+            ));
+            let slots: Vec<String> = (0..=entity.fields.len())
+                .map(|slot| {
+                    let current = format!("substr(clocks, {}, {HLC_WIDTH})", slot * HLC_WIDTH + 1);
+                    if slot == field + 1 {
+                        format!(
+                            "CASE WHEN {current} > {clock} \
+                             THEN (SELECT hlc FROM replica_meta WHERE id = 1) ELSE {clock} END"
+                        )
+                    } else {
+                        current
+                    }
+                })
+                .collect();
+            statements.push(format!(
+                "UPDATE replica_clocks SET clocks =\n      {}\n  \
+                 WHERE entity = '{name}' AND key IN \
+                 (SELECT {key} FROM {table} AS c WHERE c.{column} = OLD.id{covers});",
+                slots.join("\n      || ")
+            ));
+        }
+    }
+    format!(
+        "CREATE TRIGGER {} BEFORE DELETE ON {}\nWHEN {GATE}\nBEGIN\n  {}\nEND",
+        purge_trigger_name(target),
+        target.table,
+        statements.join("\n  ")
+    )
 }
 
 /// The migration that installs [`triggers`].
@@ -210,13 +323,21 @@ fn body(entity: &EntityMap, op: Op) -> String {
         }
         Op::Delete => format!(
             "INSERT INTO replica_clocks (entity, key, clocks, tomb)\n  \
-             SELECT '{name}', {key}, {}, hlc FROM replica_meta WHERE id = 1\n  \
+             SELECT '{name}', {key}, {}, {} FROM replica_meta WHERE id = 1\n  \
              ON CONFLICT (entity, key) DO UPDATE SET tomb = excluded.tomb;",
-            every_slot(entity, "base_clock")
+            every_slot(entity, "base_clock"),
+            purge_clock(entity)
         ),
     };
 
-    format!("  {ADVANCE_CLOCK}\n  {op_row}\n  {clocks}")
+    // A purge target's clock already moved in its purge trigger, and the tombstone has to match the
+    // clock that trigger stamped.
+    let purged_already = matches!(op, Op::Delete) && is_purge_target(entity);
+    if purged_already {
+        format!("  {op_row}\n  {clocks}")
+    } else {
+        format!("  {ADVANCE_CLOCK}\n  {op_row}\n  {clocks}")
+    }
 }
 
 /// A row with no clocks yet holds the base clock in every slot.

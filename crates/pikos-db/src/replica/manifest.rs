@@ -215,10 +215,7 @@ pub const ENTITIES: &[EntityMap] = &[
         lifecycle: Lifecycle::CreateOnly,
         key: "{row}.name",
         covers: None,
-        fields: &[Field {
-            name: "created_at",
-            columns: &["created_at"],
-        }],
+        fields: &[],
         scope: Scope::All,
         parent: None,
     },
@@ -377,7 +374,9 @@ pub const TABLES: &[TableMap] = &[
         table: "tags",
         identity: &["id", "name"],
         derived: &[],
-        local: &[],
+        // A tag is also made on arrival by a tagged page that gets there first, so each device has
+        // its own creation time. Nothing shows it.
+        local: &["created_at"],
     },
     TableMap {
         table: "page_tags",
