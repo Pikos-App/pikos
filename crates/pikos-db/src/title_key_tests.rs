@@ -118,7 +118,7 @@ async fn the_database_orders_titles_by_their_keys() {
 #[tokio::test]
 async fn stale_keys_are_rebuilt_without_counting_a_change() {
     let pool = crate::pool::test_pool().await;
-    for (id, title) in [("a", "Item 10"), ("b", "Item 2")] {
+    for (id, title) in [("a", "Item 10"), ("b", "Item 2"), ("already", "Keyed right")] {
         crate::pool::insert_test_page(&pool, crate::pool::TestPage::new(id, title))
             .await
             .unwrap();
