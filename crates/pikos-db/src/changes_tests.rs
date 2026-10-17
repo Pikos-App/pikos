@@ -12,6 +12,7 @@ const UNCOUNTED: &[&str] = &[
     "replica_clocks",
     "replica_meta",
     "replica_ops",
+    "replica_pen",
     "search_index_definition",
     "tag_counts",
     "title_key_version",

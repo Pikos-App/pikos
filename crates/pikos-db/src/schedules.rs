@@ -168,7 +168,7 @@ pub async fn refresh_schedule_denorm(pool: &sqlx::SqlitePool, page_id: &str) -> 
 /// writers run their mutation and this denorm refresh inside one transaction,
 /// so a mid-flight crash can't commit the row change while leaving
 /// `pages.scheduled_start` stale.
-async fn refresh_schedule_denorm_conn(
+pub(crate) async fn refresh_schedule_denorm_conn(
     conn: &mut sqlx::SqliteConnection,
     page_id: &str,
 ) -> AppResult<()> {

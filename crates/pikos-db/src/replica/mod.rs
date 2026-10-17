@@ -3,6 +3,8 @@
 //! Called "replica" here because "sync" in this crate is calendar sync. Merge, records and
 //! transports are `pikos-replica`'s; this module owns the rows they read and write.
 
+pub mod apply;
+pub mod build;
 pub mod capture;
 pub mod manifest;
 pub mod state;
@@ -162,8 +164,10 @@ pub struct Uncaptured<'a> {
 }
 
 impl<'a> Uncaptured<'a> {
+    /// Takes the write lock up front: an apply reads clocks and then writes, and a transaction
+    /// that read first can't be granted the lock while another connection writes.
     pub async fn begin(pool: &'a SqlitePool) -> AppResult<Uncaptured<'a>> {
-        let mut tx = pool.begin().await?;
+        let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query("INSERT INTO replica_applying (id) VALUES (1)")
             .execute(&mut *tx)
             .await?;
@@ -180,6 +184,26 @@ impl<'a> Uncaptured<'a> {
 
     pub fn conn(&mut self) -> &mut sqlx::SqliteConnection {
         &mut self.tx
+    }
+
+    pub fn tx(&mut self) -> &mut Transaction<'a, Sqlite> {
+        &mut self.tx
+    }
+
+    /// Lets the next writes be captured, until [`Uncaptured::uncapture`]: for a value this device
+    /// derives at its own moment, where one device's copy has to win everywhere.
+    pub async fn capture(&mut self) -> AppResult<()> {
+        sqlx::query("DELETE FROM replica_applying")
+            .execute(&mut *self.tx)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn uncapture(&mut self) -> AppResult<()> {
+        sqlx::query("INSERT INTO replica_applying (id) VALUES (1)")
+            .execute(&mut *self.tx)
+            .await?;
+        Ok(())
     }
 }
 

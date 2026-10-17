@@ -47,6 +47,14 @@ CREATE TABLE replica_ops (
 ) WITHOUT ROWID;
 CREATE INDEX idx_replica_ops_clock ON replica_ops(clock);
 
+-- Records that arrived and couldn't be applied yet, kept as they came and retried on every apply:
+-- a parent this device hasn't seen, a newer Pikos's format, or a record this one can't read.
+CREATE TABLE replica_pen (
+  name   TEXT PRIMARY KEY,
+  record TEXT NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('unknown_parent', 'newer_format', 'unreadable'))
+) WITHOUT ROWID;
+
 -- Each synced row's clocks: `clocks` is 20 hex characters per slot, the row's creation first and
 -- then one per field in the entity's field order. `tomb` is the clock of the delete, while the row
 -- is gone. `system_fields` is the transport's own copy of the record's metadata.
