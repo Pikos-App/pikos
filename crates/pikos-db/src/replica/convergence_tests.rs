@@ -281,7 +281,7 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
         .map(|t| t.to_string())
         .collect();
 
-    let choice = rng.below(16);
+    let choice = rng.below(21);
     if tracing() {
         eprintln!("  edit {choice} on {page_id:?}");
     }
@@ -397,6 +397,72 @@ async fn random_edit(pool: &SqlitePool, rng: &mut Rng, n: usize) {
         )
         .await
         .map(drop),
+        (16, Some(id)) => create_recurrence_rule_impl(
+            pool,
+            NewRecurrenceRule {
+                page_id: id,
+                rrule: if rng.chance(50) { "FREQ=DAILY" } else { "FREQ=WEEKLY" }.into(),
+                rrule_exdates: vec![],
+                scheduled_start: "2030-01-01T09:00:00".into(),
+                scheduled_end: Some("2030-01-01T09:30:00".into()),
+                timezone: "UTC".into(),
+            },
+        )
+        .await
+        .map(drop),
+        (17, _) => match rng.pick(&ids(pool, "SELECT page_id FROM page_recurrence_rules ORDER BY rowid").await) {
+            Some(page) => complete_recurring_page_impl(
+                pool,
+                CompleteRecurringInput {
+                    page_id: page.clone(),
+                    occurrence_date: None,
+                    scheduled_start: None,
+                    scheduled_end: None,
+                    expected_occurrence_date: None,
+                },
+            )
+            .await
+            .map(drop),
+            None => Ok(()),
+        },
+        (18, _) => match rng.pick(&ids(pool, "SELECT id FROM page_recurrence_rules ORDER BY rowid").await) {
+            Some(rule) => reschedule_virtual_occurrence_impl(
+                pool,
+                RescheduleVirtualInput {
+                    rule_id: rule.clone(),
+                    original_date: format!("2030-01-{:02}", 2 + rng.below(20)),
+                    scheduled_start: format!("2030-01-{:02}T11:00:00", 2 + rng.below(20)),
+                    scheduled_end: None,
+                    timezone: "UTC".into(),
+                },
+            )
+            .await
+            .map(drop),
+            None => Ok(()),
+        },
+        (19, _) => match rng.pick(&ids(pool, "SELECT id FROM page_recurrence_rules ORDER BY rowid").await) {
+            Some(rule) => delete_recurrence_rule_impl(pool, rule).await,
+            None => Ok(()),
+        },
+        (20, _) => {
+            let ticked: Vec<(String, String)> = sqlx::query_as(
+                "SELECT page_id, occurrence_date FROM completed_set ORDER BY rowid",
+            )
+            .fetch_all(pool)
+            .await
+            .unwrap();
+            match rng.pick(&ticked) {
+                Some((page, date)) => uncomplete_recurring_occurrence_impl(
+                    pool,
+                    UncompleteRecurringInput {
+                        page_id: page.clone(),
+                        occurrence_date: date.clone(),
+                    },
+                )
+                .await,
+                None => Ok(()),
+            }
+        }
         (_, Some(id)) => {
             let removed = ids(pool, "SELECT id FROM page_reminders ORDER BY rowid").await;
             match rng.pick(&removed) {
