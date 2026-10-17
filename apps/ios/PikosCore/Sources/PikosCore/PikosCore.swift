@@ -988,6 +988,12 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     func setEngineState(state: Data) async throws 
     
+    /**
+     * Where this device keeps the workspace's images, so sync can send and receive them. Set it at
+     * every launch, before sync starts.
+     */
+    func setSyncAssetsDir(path: String) async throws 
+    
     func setSyncPaused(paused: Bool) async throws 
     
     /**
@@ -2196,6 +2202,26 @@ open func setEngineState(state: Data)async throws   {
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_set_engine_state(
                         self.uniffiCloneHandle(),FfiConverterData.lower(state)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Where this device keeps the workspace's images, so sync can send and receive them. Set it at
+     * every launch, before sync starts.
+     */
+open func setSyncAssetsDir(path: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_sync_assets_dir(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(path)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_void,
@@ -11001,6 +11027,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_engine_state() != 7982) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_sync_assets_dir() != 43184) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_sync_paused() != 3084) {
