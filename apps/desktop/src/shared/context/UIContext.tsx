@@ -22,6 +22,7 @@ export type SettingsSection =
   | "general"
   | "notifications"
   | "calendar-sync"
+  | "icloud"
   | "data"
   | "shortcuts"
   | "developer";

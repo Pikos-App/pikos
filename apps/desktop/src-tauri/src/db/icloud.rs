@@ -2,13 +2,13 @@
 //! which the build script links in when the `icloud-sync` feature is on.
 //!
 //! Swift calls one function, [`pikos_replica_call`], with an operation name and JSON, and gets JSON
-//! back; Rust calls `pikos_sync_start` once the workspace is open. A C ABI of two functions keeps
-//! the Swift side free of a second copy of the Rust code, which linking the phone's bindings would
-//! have brought.
+//! back; Rust calls `pikos_sync_start` and `pikos_sync_stop` as Settings turns sync on and off. A C
+//! ABI that small keeps the Swift side free of a second copy of the Rust code, which linking the
+//! phone's bindings would have brought.
 
 use std::collections::BTreeMap;
 use std::ffi::{c_char, CStr, CString};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use pikos_replica::codec::FieldMap;
 use pikos_replica::merge::Value;
@@ -17,34 +17,100 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter};
 
+use super::icloud_settings::ICloudSyncState;
+use crate::error::{AppError, AppResult};
+
 const CONTAINER: &str = "iCloud.app.pikos.staging";
+
+/// Emitted when the line under the Settings switch changes.
+const STATUS_EVENT: &str = "icloud-sync:status";
 
 static WORKSPACE: OnceLock<(SqlitePool, AppHandle)> = OnceLock::new();
 
+/// The line the Swift transport last worked out, with the action it offers, while sync is on.
+static LINE: Mutex<Option<(String, String)>> = Mutex::new(None);
+
 extern "C" {
     fn pikos_sync_start(container: *const c_char, zone: *const c_char);
+    fn pikos_sync_stop();
 }
 
-/// Turns sync on for the open workspace and hands it to the Swift transport.
-pub fn start(app: AppHandle, pool: SqlitePool) {
+/// Holds on to the workspace just opened, and syncs again if sync was on when the app last ran.
+pub fn attach(app: AppHandle, pool: SqlitePool) {
+    if WORKSPACE.set((pool.clone(), app)).is_err() {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
-        let meta = match pikos_db::replica::start(&pool).await {
-            Ok(meta) => meta,
-            Err(e) => {
-                log::error!("icloud: starting sync failed: {e}");
-                return;
+        let resuming = pikos_db::replica::meta(&pool)
+            .await
+            .is_ok_and(|meta| meta.started && !meta.paused);
+        if resuming {
+            if let Err(e) = hand_over(&pool).await {
+                log::error!("icloud: resuming sync failed: {e}");
             }
-        };
-        if WORKSPACE.set((pool, app)).is_err() {
-            return;
         }
-        let zone = pikos_replica::zone::zone_name(&meta.workspace_id);
-        log::info!("icloud: sync started in {zone}");
-        let (Ok(container), Ok(zone)) = (CString::new(CONTAINER), CString::new(zone)) else {
-            return;
-        };
-        unsafe { pikos_sync_start(container.as_ptr(), zone.as_ptr()) }; // SAFETY: NUL-terminated for the call, and Swift copies both
     });
+}
+
+/// Hands the workspace's zone to the Swift transport, which starts sending and fetching.
+async fn hand_over(pool: &SqlitePool) -> AppResult<()> {
+    let meta = pikos_db::replica::meta(pool).await?;
+    let zone = pikos_replica::zone::zone_name(&meta.workspace_id);
+    log::info!("icloud: sync started in {zone}");
+    let (Ok(container), Ok(zone)) = (CString::new(CONTAINER), CString::new(zone)) else {
+        return Err(AppError::Internal(
+            "a container or zone name held a NUL".into(),
+        ));
+    };
+    unsafe { pikos_sync_start(container.as_ptr(), zone.as_ptr()) }; // SAFETY: NUL-terminated for the call, and Swift copies both
+    Ok(())
+}
+
+fn stop_transport() {
+    unsafe { pikos_sync_stop() }; // SAFETY: takes nothing, and Swift ignores a call while stopped
+    *LINE.lock().unwrap() = None;
+}
+
+fn announce() {
+    if let Some((_, app)) = WORKSPACE.get() {
+        let _ = app.emit(STATUS_EVENT, ());
+    }
+}
+
+pub async fn state(pool: &SqlitePool) -> AppResult<ICloudSyncState> {
+    let meta = pikos_db::replica::meta(pool).await?;
+    let on = meta.started && !meta.paused;
+    let line = LINE.lock().unwrap().clone();
+    let (text, action) = match (on, line) {
+        (false, _) => ("Off".to_owned(), "none".to_owned()),
+        (true, Some(line)) => line,
+        (true, None) => ("Starting…".to_owned(), "none".to_owned()),
+    };
+    Ok(ICloudSyncState { on, text, action })
+}
+
+/// Pausing keeps recording changes, so turning sync back on sends what was made meanwhile.
+pub async fn set_on(pool: &SqlitePool, on: bool) -> AppResult<()> {
+    if on {
+        let meta = pikos_db::replica::start(pool).await?;
+        if meta.paused {
+            pikos_db::replica::set_paused(pool, false).await?;
+        }
+        hand_over(pool).await?;
+    } else {
+        stop_transport();
+        pikos_db::replica::set_paused(pool, true).await?;
+    }
+    announce();
+    Ok(())
+}
+
+/// What the status line offers, joining another account or uploading again: both start this
+/// device over as a new one, which merges its pages into whatever iCloud holds.
+pub async fn act(pool: &SqlitePool) -> AppResult<()> {
+    stop_transport();
+    pikos_db::replica::forget(pool).await?;
+    set_on(pool, true).await
 }
 
 /// Runs `op` with the JSON in `input` and returns `{"ok": …}` or `{"err": "…"}` as JSON, in a buffer
@@ -138,15 +204,35 @@ struct NamedData {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Request {
-    Pending { limit: i64 },
-    Build { names: Vec<String> },
-    Sent { sent: Vec<Sent> },
-    Apply { records: Vec<WireRecord> },
+    Pending {
+        limit: i64,
+    },
+    Build {
+        names: Vec<String>,
+    },
+    Sent {
+        sent: Vec<Sent>,
+    },
+    Apply {
+        records: Vec<WireRecord>,
+    },
     EngineState {},
-    SetEngineState { state: Vec<u8> },
+    SetEngineState {
+        state: Vec<u8>,
+    },
     Expire {},
-    SaveSystemFields { records: Vec<NamedData> },
-    Join { zones: Vec<String> },
+    SaveSystemFields {
+        records: Vec<NamedData>,
+    },
+    Join {
+        zones: Vec<String>,
+    },
+    /// The line Settings shows, worked out by the transport, which owns its wording.
+    Status {
+        text: String,
+        action: String,
+    },
+    Summary {},
 }
 
 async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
@@ -239,6 +325,19 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
                 .await
                 .map_err(failed)?;
             json(&zone)
+        }
+        Request::Status { text, action } => {
+            *LINE.lock().unwrap() = Some((text, action));
+            let _ = app.emit(STATUS_EVENT, ());
+            Ok(serde_json::Value::Null)
+        }
+        Request::Summary {} => {
+            let summary = pikos_db::replica::summary(pool).await.map_err(failed)?;
+            Ok(serde_json::json!({
+                "pending": summary.pending,
+                "needs_update": summary.needs_update,
+                "last_fetch_at": summary.last_fetch_at,
+            }))
         }
     }
 }

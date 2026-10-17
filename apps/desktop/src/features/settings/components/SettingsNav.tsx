@@ -1,4 +1,4 @@
-import { Bell, CalendarClock, Code2, Database, Keyboard, Settings, X } from "lucide-react";
+import { Bell, CalendarClock, Cloud, Code2, Database, Keyboard, Settings, X } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }
   { icon: Settings, id: "general", label: "General" },
   { icon: Bell, id: "notifications", label: "Notifications" },
   { icon: CalendarClock, id: "calendar-sync", label: "Calendar sync" },
+  ...(__PIKOS_ICLOUD_SYNC__ ? [{ icon: Cloud, id: "icloud" as const, label: "iCloud" }] : []),
   { icon: Database, id: "data", label: "Data" },
   { icon: Keyboard, id: "shortcuts", label: "Shortcuts" },
   ...(import.meta.env.DEV ? [{ icon: Code2, id: "developer" as const, label: "Developer" }] : []),
