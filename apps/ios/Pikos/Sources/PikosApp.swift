@@ -2,6 +2,7 @@ import AppIntents
 import BackgroundTasks
 import CoreSpotlight
 import PikosCore
+import PikosSupport
 import SwiftUI
 import UserNotifications
 import WidgetKit
@@ -48,6 +49,13 @@ struct PikosApp: App {
         // The in-place hints. Configured before any view exists so the first
         // list can already ask whether its tip is due.
         PikosTips.configure()
+
+        #if DEBUG
+            // A UI test run on a phone fails the moment the screen locks.
+            if ProcessInfo.processInfo.environment[WorkspaceLocation.workspaceOverrideKey] != nil {
+                UIApplication.shared.isIdleTimerDisabled = true
+            }
+        #endif
 
         // Reminders. The delegate routes a tap through the same link a widget
         // uses, and "Complete" through the same store method the checkbox
@@ -210,6 +218,7 @@ struct RootView: View {
             QuickAddSheet(
                 prefill: route.quickAddPrefill.isEmpty ? route.quickAddDraft : route.quickAddPrefill,
                 prefillDate: route.quickAddPrefillDate,
+                prefillMinutes: route.quickAddPrefillMinutes,
                 context: route.quickAddContext)
         }
         // Errors surface here, above every tab and sheet, so a write that
@@ -278,10 +287,8 @@ struct RootView: View {
             await reminders.sync()
             WidgetCenter.shared.reloadAllTimelines()
         }
-        // The home screen's search index follows the same signal, more
-        // slowly: it is a full rebuild, and nobody is searching Spotlight
-        // for a page they typed three seconds ago. A burst of writes
-        // rebuilds once, after the last.
+        // The home screen's search index follows the same signal, more slowly: nobody is searching
+        // Spotlight for a page they typed three seconds ago, and a burst of writes catches up once.
         .task(id: store.dataVersion) {
             guard store.dataVersion > 0 else { return }
             try? await Task.sleep(for: .seconds(4))

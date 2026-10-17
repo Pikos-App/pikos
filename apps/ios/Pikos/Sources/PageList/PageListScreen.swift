@@ -78,8 +78,15 @@ struct PageListScreen: View {
     private var header: some View {
         if isSelecting {
             PaneHeader {
-                Button(selection.count == selectable.count ? "Deselect All" : "Select All") {
-                    selection = selection.count == selectable.count ? [] : Set(selectable.map(\.id))
+                Button(selection.count == selectable.count && store.nextWindow == nil ? "Deselect All" : "Select All") {
+                    if selection.count == selectable.count && store.nextWindow == nil {
+                        selection = []
+                    } else {
+                        Task {
+                            await store.loadAllRows()
+                            selection = Set(selectable.map(\.id))
+                        }
+                    }
                 }
                 .font(.pkUI)
                 .foregroundStyle(.textAction)
@@ -245,12 +252,16 @@ struct PageListScreen: View {
 
             // Headings are rows, not sticky `Section` headers: the desktop's don't stick, and a plain
             // List's header carries top padding nothing can remove.
+            let readsMoreAt = store.readMoreAt
             ForEach(visibleSections) { section in
                 if let title = section.title {
                     sectionHeader(title, section: section)
                 }
                 ForEach(section.pages, id: \.id) { page in
                     row(page)
+                        .onAppear {
+                            if page.id == readsMoreAt { Task { await store.loadMoreRows() } }
+                        }
                 }
                 .onMove(perform: canReorder ? { from, to in move(in: section, from: from, to: to) } : nil)
             }
@@ -263,9 +274,13 @@ struct PageListScreen: View {
         .background(.surfacePrimary)
         .environment(\.defaultMinListRowHeight, 44)
         .environment(\.defaultMinListHeaderHeight, 0)
-        .animation(reduceMotion ? nil : .pkQuick, value: store.sections)
+        // On a re-read after a write, not on more rows arriving: comparing every row and animating
+        // a window's insert is what made a long list hitch as it grew.
+        .animation(reduceMotion ? nil : .pkQuick, value: store.dataVersion)
         .refreshable { await store.refresh() }
+        .onChange(of: sortMode, initial: true) { _, mode in store.listSort = mode }
     }
+
 
     private func row(_ page: PageSummary) -> some View {
         let done = page.status == "done"
@@ -289,35 +304,32 @@ struct PageListScreen: View {
                 ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
         .alignmentGuide(.listRowSeparatorLeading) { _ in isSelecting ? 0 : 44 }
+        // `PKOS-0150`: the likeliest day, any other day, and a folder. The checkbox completes, so
+        // nothing is on the other side.
         .swipeActions(edge: .trailing) {
-            if !done && !page.scheduleLocked && !page.isRecurring {
-                ForEach(Self.swipeDays(for: page.scheduledStart)) { choice in
+            if !page.scheduleLocked {
+                if !done && !page.isRecurring {
+                    let day = Self.swipeDay(for: page.scheduledStart)
                     Button {
-                        Task { await store.send(facts, to: choice) }
+                        Task { await store.send(facts, to: day) }
                     } label: {
-                        Label(choice.label, systemImage: choice.systemImage)
+                        Label(day.label, systemImage: day.systemImage)
                     }
-                    .tint(.interactiveFillNeutral)
-                }
-                if page.scheduledStart != nil {
+                    .tint(.interactiveFill)
                     Button {
                         actions.sheet = .schedule(facts)
                     } label: {
                         Label("When", systemImage: "calendar")
                     }
-                    .tint(.interactiveFill)
+                    .tint(.interactiveFillNeutral)
                 }
+                Button {
+                    actions.sheet = .folder(facts)
+                } label: {
+                    Label("Folder", systemImage: "folder")
+                }
+                .tint(.interactiveFillNeutral)
             }
-        }
-        .swipeActions(edge: .leading) {
-            Button {
-                Task { await store.setStatus(pageId: page.id, done: !done) }
-            } label: {
-                Label(
-                    done ? "Reopen" : "Complete",
-                    systemImage: done ? "arrow.uturn.backward" : "checkmark")
-            }
-            .tint(done ? .interactiveFillNeutral : .interactiveFill)
         }
         .contextMenu { PageActionsMenu(page: facts, state: $actions) }
         .modifier(SchedulableRow(page: facts, isEnabled: !isSelecting && canDragToSchedule(page)))
@@ -367,13 +379,11 @@ struct PageListScreen: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    /// The days a trailing swipe offers: the two a page is likeliest to go to next.
-    ///
-    /// Today and tomorrow for anything not already due by today; tomorrow alone for what is, beside
-    /// When for any other day. Delete is in the hold menu instead, out of reach of a stray swipe.
-    private static func swipeDays(for scheduledStart: String?) -> [WhenChoice] {
-        guard let scheduledStart else { return [.today, .tomorrow] }
-        return String(scheduledStart.prefix(10)) <= DayLabel.today() ? [.tomorrow] : [.today]
+    /// The day a page is likeliest to go to next: today for anything not yet due by today, and
+    /// tomorrow for what is.
+    private static func swipeDay(for scheduledStart: String?) -> WhenChoice {
+        guard let scheduledStart else { return .today }
+        return String(scheduledStart.prefix(10)) <= DayLabel.today() ? .tomorrow : .today
     }
 
     // MARK: - Finished work
@@ -446,21 +456,9 @@ struct PageListScreen: View {
         orderedSections.filter { !$0.pages.isEmpty }
     }
 
-    /// Date views arrive in schedule order; a folder or the Inbox takes the reader's chosen order.
-    private var orderedSections: [WorkspaceStore.Section] {
-        guard !store.scope.isDateGrouped else { return store.sections }
-        let mode = sortMode
-        let now = WallClockDay.instant(from: Date())
-        return store.sections.map { section in
-            WorkspaceStore.Section(
-                id: section.id, title: section.title,
-                pages: PageSort.order(section.pages, by: mode, now: now) { page in
-                    PageSort.Key(
-                        title: page.title, priority: page.priority, sortOrder: page.sortOrder,
-                        scheduledStart: page.scheduledStart)
-                })
-        }
-    }
+    /// Date views arrive in schedule order, and a folder or the Inbox in the reader's chosen order,
+    /// read that way a window at a time.
+    private var orderedSections: [WorkspaceStore.Section] { store.sections }
 
     /// Only a manual order can be arranged by hand, as on the desktop, and a date view is always in
     /// schedule order.
@@ -473,12 +471,13 @@ struct PageListScreen: View {
     }
 
     private func move(in section: WorkspaceStore.Section, from source: IndexSet, to destination: Int) {
+        guard let moved = source.first.map({ section.pages[$0].id }) else { return }
         var arranged = section.pages
         arranged.move(fromOffsets: source, toOffset: destination)
-        let others = visibleSections.filter { $0.id != section.id }.flatMap(\.pages)
-        let ids = arranged.map(\.id) + others.map(\.id)
-        let folderId: String? = if case .folder(let id, _) = store.scope { id } else { nil }
-        Task { await store.reorderPages(inFolder: folderId, orderedIds: ids) }
+        guard let landed = arranged.firstIndex(where: { $0.id == moved }) else { return }
+        let after = landed > 0 ? arranged[landed - 1].id : nil
+        let before = landed + 1 < arranged.count ? arranged[landed + 1].id : nil
+        Task { await store.movePage(moved, after: after, before: before) }
     }
 
     private var sortViewId: String {

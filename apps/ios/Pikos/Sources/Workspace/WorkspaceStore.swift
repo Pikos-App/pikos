@@ -67,6 +67,15 @@ public final class WorkspaceStore {
             }
         }
 
+        /// The Inbox and a folder are read a window at a time; the date views are read whole.
+        var listScope: ListScope? {
+            switch self {
+            case .today, .upcoming: return nil
+            case .inbox: return .inbox
+            case .folder(let id, _): return .folder(id: id)
+            }
+        }
+
         var title: String {
             switch self {
             case .today: return String(localized: "Today")
@@ -93,7 +102,54 @@ public final class WorkspaceStore {
         public let pages: [PageSummary]
     }
 
-    public private(set) var sections: [Section] = []
+    public private(set) var sections: [Section] = [] {
+        didSet { placeReadMore() }
+    }
+
+    /// Rows the Inbox or a folder reads at a time: a screen shows about fifteen, and the rest is
+    /// room for a flick before the next window is needed. A debug build takes `PIKOS_WINDOW_SIZE`,
+    /// so a UI test can cross windows without seeding hundreds of pages.
+    static let windowSize: Int = {
+        #if DEBUG
+            if let size = ProcessInfo.processInfo.environment["PIKOS_WINDOW_SIZE"].flatMap(Int.init), size > 0 {
+                return size
+            }
+        #endif
+        return 200
+    }()
+
+    /// The order the Inbox or a folder is read in, the reader's choice, set by the screen.
+    public var listSort: PageSort.Mode = .manual {
+        didSet {
+            guard listSort != oldValue, scope.listScope != nil else { return }
+            loadedRows = 0
+            Task { await refresh() }
+        }
+    }
+
+    /// Where the list's next window starts, or nil once it's all loaded.
+    public private(set) var nextWindow: String? {
+        didSet { placeReadMore() }
+    }
+
+    /// The row that, coming into view, reads the next window: far enough from the end of the
+    /// section that grows that a flick doesn't reach it first. Worked out once per read rather
+    /// than on every redraw.
+    public private(set) var readMoreAt: String?
+
+    private func placeReadMore() {
+        guard nextWindow != nil, let pages = sections.first(where: { $0.id == windowedSection })?.pages else {
+            readMoreAt = nil
+            return
+        }
+        readMoreAt = pages.dropLast(50).last?.id ?? pages.last?.id
+    }
+
+    /// The section more windows are added to.
+    private var windowedSection: String { scope == .today ? "overdue" : "all" }
+
+    /// How many rows the list has loaded, so a refresh after a write re-reads those and no more.
+    private var loadedRows = 0
 
     /// Every listed page, regardless of which section it is in.
     ///
@@ -178,6 +234,8 @@ public final class WorkspaceStore {
             completedPages = []
             completedTotal = 0
             hasLoadedCompleted = false
+            loadedRows = 0
+            nextWindow = nil
             Task { await refresh() }
         }
     }
@@ -251,7 +309,9 @@ public final class WorkspaceStore {
             try? WorkspaceLocation.applyProtectionClass()
             if isNewWorkspace {
                 #if DEBUG
-                    if DemoWorkspace.isRequested {
+                    if let count = DemoWorkspace.perfPageCount {
+                        await DemoWorkspace.seedForSpeed(self, count: count)
+                    } else if DemoWorkspace.isRequested {
                         await DemoWorkspace.seed(self)
                     } else {
                         await seedStartHere()
@@ -349,9 +409,9 @@ public final class WorkspaceStore {
                         call the dentist monday 9am !high
                         book club thursday 7pm #friends
 
-                        Schedule. Swipe a page left to send it to Today or Tomorrow, or hold it and choose When for any other day. On the calendar, hold an empty slot to add a page at that time.
+                        Schedule. Swipe a page left to send it to Today or Tomorrow, or choose When for any other day. On the calendar, hold an empty slot until a block appears, then drag to set how long it runs.
 
-                        Complete. Swipe a page right, or tick its box in the list, on the page, or on the calendar.
+                        Complete. Tick its box in the list, on the page, or on the calendar.
 
                         Repeats. Type something like "team meeting every monday at 9am", or hold a page and choose Repeat. To skip one, hold it on the calendar and choose Skip this one.
 
@@ -365,11 +425,11 @@ public final class WorkspaceStore {
                     localized: """
                         Everything here is also in a menu, so none of it has to be learned. These are the ones worth knowing.
 
-                        In a list. Swipe right to complete. Swipe left to send to another day. Hold a page for everything else. Tap the title at the top to switch between Today, Upcoming, your Inbox and your folders.
+                        In a list. Swipe left to send a page to another day or file it in a folder. Hold a page for everything else. Tap the title at the top to switch between Today, Upcoming, your Inbox and your folders.
 
                         Several at once. Tap Select at the top, and act on everything you tick.
 
-                        On the calendar. Tap the title to jump to another date or show more days. Hold a block to move it, complete it or skip it.
+                        On the calendar. Tap the title to jump to another date or show more days. Hold a block to move it, complete it or skip it, or hold the bar at its top or bottom edge and drag to change how long it runs.
 
                         Search. Tap a chip under Narrow to, or type a folder or tag name, to search inside it.
 
@@ -437,18 +497,20 @@ public final class WorkspaceStore {
         guard let workspace else { return [] }
         switch scope {
         case .today:
-            let split = try await workspace.listTodaySections()
-            let today = DayLabel.today()
-            let earlierDays = split.overdue.filter { TodayGrouping.isFromAnEarlierDay($0.scheduledStart, today: today) }
-            let laterToday = split.overdue.filter { !TodayGrouping.isFromAnEarlierDay($0.scheduledStart, today: today) }
-            let todayPages = laterToday + split.today
+            // What slipped from earlier days is read a window at a time, since it grows without
+            // limit; today's own pages come whole with the first window.
+            let window = try await workspace.listTodayWindow(
+                after: nil, limit: UInt32(max(Self.windowSize, loadedRows)))
+            nextWindow = window.earlier.next
+            loadedRows = window.earlier.pages.count
+            let todayPages = window.slippedToday + window.today
             // A heading only when there is something under it, and none at all
             // when nothing has slipped: a lone "Today" over the only list on screen labels nothing.
-            guard !earlierDays.isEmpty else {
+            guard !window.earlier.pages.isEmpty else {
                 return [Section(id: "today", title: nil, pages: todayPages)]
             }
             return [
-                Section(id: "overdue", title: String(localized: "Overdue"), pages: earlierDays),
+                Section(id: "overdue", title: String(localized: "Overdue"), pages: window.earlier.pages),
                 Section(id: "today", title: String(localized: "Today"), pages: todayPages),
             ].filter { !$0.pages.isEmpty }
 
@@ -462,10 +524,90 @@ public final class WorkspaceStore {
             }
 
         case .inbox, .folder:
-            return [
-                Section(id: "all", title: nil, pages: try await workspace.listPages(query: scope.query))
-            ]
+            guard let listScope = scope.listScope else { return [] }
+            let window = try await workspace.listWindow(
+                scope: listScope, sort: listSort.listSort, after: nil,
+                limit: UInt32(max(Self.windowSize, loadedRows)))
+            nextWindow = window.next
+            loadedRows = window.pages.count
+            return [Section(id: "all", title: nil, pages: window.pages)]
         }
+    }
+
+    /// The list's next window, read when the reader scrolls near the end of what's loaded.
+    public func loadMoreRows() async {
+        await readOn(windows: 1, limit: Self.windowSize)
+    }
+
+    /// Read the rest of the list in one go, for Select All: every bulk verb keeps each page's
+    /// date and folder for its Undo, so it needs the rows, not just their ids.
+    public func loadAllRows() async {
+        await readOn(windows: .max, limit: 5_000)
+    }
+
+    /// Read up to `windows` more windows after the last, and add them to the list at once.
+    private func readOn(windows: Int, limit: Int) async {
+        guard let workspace, let start = nextWindow, !isLoadingMoreRows else { return }
+        isLoadingMoreRows = true
+        defer { isLoadingMoreRows = false }
+        let windowed = windowedSection
+        var after: String? = start
+        var more: [PageSummary] = []
+        for _ in 0..<windows {
+            guard let cursor = after else { break }
+            let window: PageWindow?
+            switch scope {
+            case .today:
+                window = try? await workspace.listTodayWindow(after: cursor, limit: UInt32(limit)).earlier
+            case .inbox, .folder:
+                guard let listScope = scope.listScope else { return }
+                window = try? await workspace.listWindow(
+                    scope: listScope, sort: listSort.listSort, after: cursor, limit: UInt32(limit))
+            case .upcoming:
+                window = nil
+            }
+            guard let window else { return }
+            more += window.pages
+            after = window.next
+        }
+        // A refresh or another view landed while this read was out; its windows are the current ones.
+        guard nextWindow == start else { return }
+        sections = sections.map { section in
+            section.id == windowed
+                ? Section(id: section.id, title: section.title, pages: section.pages + more) : section
+        }
+        nextWindow = after
+        loadedRows = sections.first { $0.id == windowed }?.pages.count ?? loadedRows
+    }
+
+    private var isLoadingMoreRows = false
+
+    /// Move a page to sit between two others in the list's manual order, as a drag left it.
+    /// Only those two are named, so a list that hasn't loaded every row can still be arranged.
+    public func movePage(_ id: String, after: String?, before: String?) async {
+        guard let workspace else { return }
+        var before = before
+        // Dropped below the last row read, with more after it: the neighbour is the next unread row.
+        if before == nil, let next = nextWindow, let listScope = scope.listScope {
+            before = try? await workspace.listWindow(
+                scope: listScope, sort: listSort.listSort, after: next, limit: 1
+            ).pages.first?.id
+        }
+        // Moved here first, so the row stays where the finger left it while the write goes.
+        if var pages = sections.first?.pages, let from = pages.firstIndex(where: { $0.id == id }) {
+            let page = pages.remove(at: from)
+            let to = after.flatMap { neighbour in pages.firstIndex { $0.id == neighbour } }.map { $0 + 1 } ?? 0
+            pages.insert(page, at: to)
+            sections = [Section(id: "all", title: nil, pages: pages)]
+        }
+        do {
+            try await workspace.movePages(ids: [id], after: after, before: before)
+        } catch WorkspaceError.Refused {
+            // The list moved under the drag; the refresh below shows where things are now.
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await refresh()
     }
 
     // MARK: - Completed pages
@@ -684,32 +826,7 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Hand-arrange the Inbox or a folder into `orderedIds`.
-    ///
-    /// Applied to the list before the write, so a dragged row stays where it was dropped rather
-    /// than snapping back until the write returns.
-    public func reorderPages(inFolder folderId: String?, orderedIds: [String]) async {
-        let position = Dictionary(
-            orderedIds.enumerated().map { ($1, Int64($0)) }, uniquingKeysWith: { first, _ in first })
-        sections = sections.map { section in
-            Section(
-                id: section.id, title: section.title,
-                pages: section.pages.map { page in
-                    var arranged = page
-                    if let index = position[page.id] { arranged.sortOrder = index }
-                    return arranged
-                })
-        }
-        guard let workspace else { return }
-        do {
-            try await workspace.reorderPages(folderId: folderId, orderedIds: orderedIds)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        await refresh()
-    }
-
-    /// Put the folders in `orderedIds` order, applied before the write as `reorderPages` is.
+    /// Put the folders in `orderedIds` order, applied before the write as `movePage` is.
     public func reorderFolders(_ orderedIds: [String]) async {
         let position = Dictionary(
             orderedIds.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
@@ -1055,23 +1172,12 @@ public final class WorkspaceStore {
 
     /// Open pages per view, for the switcher. Read when it opens rather than on every refresh.
     public func viewCounts() async -> ViewCounts {
-        guard let workspace else { return ViewCounts() }
+        guard let workspace, let counted = try? await workspace.viewCounts() else { return ViewCounts() }
         var counts = ViewCounts()
-        if let today = try? await workspace.listTodaySections() {
-            counts.today = today.overdue.count + today.today.count
-        }
-        if let upcoming = try? await workspace.listUpcoming() {
-            counts.upcoming = upcoming.reduce(0) { $0 + $1.pages.count }
-        }
-        if let inbox = try? await workspace.listPages(query: PageQuery(folder: .inbox, openOnly: true)) {
-            counts.inbox = inbox.count
-        }
-        if let open = try? await workspace.listPages(query: PageQuery(openOnly: true)) {
-            for page in open {
-                guard let folder = page.folderId else { continue }
-                counts.folders[folder, default: 0] += 1
-            }
-        }
+        counts.today = Int(counted.today)
+        counts.upcoming = Int(counted.upcoming)
+        counts.inbox = Int(counted.inbox)
+        counts.folders = counted.folders.mapValues(Int.init)
         return counts
     }
 
@@ -1550,6 +1656,26 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Skip the date a repeating page is on, which moves it to the next one its rule yields: what
+    /// "delete this one" means for a series.
+    func skipCurrentDate(of page: PageFacts) async {
+        guard let workspace, let start = page.scheduledStart else { return }
+        let pageId = page.id
+        let title = page.title.isEmpty ? String(localized: "Untitled") : page.title
+        do {
+            let skipped = try await workspace.skipOccurrences(pageId: pageId, dates: [String(start.prefix(10))])
+            await refresh()
+            guard !skipped.isEmpty else { return }
+            notice = Notice(
+                String(localized: "Skipped \(title)"),
+                action: Notice.Action(title: String(localized: "Undo")) { [weak self] in
+                    await self?.unskipOccurrences(pageId: pageId, dates: skipped)
+                })
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     public func unskipOccurrences(pageId: String, dates: [String]) async {
         guard let workspace, !dates.isEmpty else { return }
         do {
@@ -1715,5 +1841,16 @@ public final class WorkspaceStore {
 
     public func canEdit(_ page: Page) -> Bool {
         page.contentSchemaVersion <= contentSchemaVersion
+    }
+}
+
+extension PageSort.Mode {
+    var listSort: ListSort {
+        switch self {
+        case .manual: return .manual
+        case .date: return .date
+        case .title: return .title
+        case .priority: return .priority
+        }
     }
 }
