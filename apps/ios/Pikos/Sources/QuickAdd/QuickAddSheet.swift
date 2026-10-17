@@ -98,6 +98,14 @@ struct QuickAddSheet: View {
 
     private let context: Route.QuickAddContext
 
+    private var preferredFolderId: String? {
+        switch context.filing {
+        case .asSettings: settings.defaultFolderID
+        case .inbox: nil
+        case .folder(let id): id
+        }
+    }
+
     /// The view's own day, which a line with no date of its own keeps.
     private var contextDay: Date? {
         context.day.flatMap { DayLabel.date(from: $0) }
@@ -205,7 +213,7 @@ struct QuickAddSheet: View {
         }
         .onAppear {
             // Applied through `appliedFolderId` so "~work" in the line still wins over the view's folder.
-            if !folderIsManual, let preferred = context.folderId ?? settings.defaultFolderID,
+            if !folderIsManual, let preferred = preferredFolderId,
                 store.fileableFolders.contains(where: { $0.id == preferred })
             {
                 folderId = preferred
@@ -383,10 +391,14 @@ struct QuickAddSheet: View {
     /// A hand-picked date overrules a parsed one — except on a line that also
     /// asked for a recurrence, where there is no way to express "this rule but
     /// that start" and dropping the rule is the larger loss. The summary row
-    /// shows the recurrence, so it is visible that it won.
+    /// shows the recurrence, so it is visible that it won. A line naming no date
+    /// in a view that has one is saved from the picker too, or the line's
+    /// silence would undate a page the view had dated.
     private var usesParse: Bool {
         guard let parsed else { return false }
-        return !scheduleIsManual || parsed.repeats != nil
+        if parsed.repeats != nil { return true }
+        let takesTheViewsDay = contextDay != nil && parsed.scheduledStart == nil && schedule != .none
+        return !scheduleIsManual && !takesTheViewsDay
     }
 
     private func reparse() {

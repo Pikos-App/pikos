@@ -23,7 +23,7 @@ struct CalendarScreen: View {
     @State private var moving: Moving?
     @State private var scopeQuestion: ScopeQuestion?
     @State private var actions = PageActionState()
-    /// The month and the span choice, opened in place under the title.
+    /// The month and the span choice, dropped over the calendar from the title.
     @State private var isJumping = false
     /// Which way the last step went, so the grid slides in from that side.
     @State private var steppedForward = true
@@ -32,6 +32,7 @@ struct CalendarScreen: View {
     @State private var weekEntries: [CalendarEntry] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Moves the current-time line without a timer.
     ///
@@ -82,79 +83,9 @@ struct CalendarScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if isJumping {
-                // Scrolls where the month is taller than the pane, as on a phone on its side.
-                ViewThatFits(in: .vertical) {
-                    jumpPanel
-                    ScrollView { jumpPanel }
-                }
-                .transition(.opacity)
-            } else if effectiveSpan == .day, !stripDayStrings.isEmpty {
-                WeekStrip(
-                    days: stripDayStrings,
-                    selected: dayStrings.first ?? "",
-                    today: WallClockDay.string(from: Date()),
-                    bars: weekBars
-                ) { day in
-                    guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
-                    steppedForward = chosen > anchor
-                    anchor = chosen
-                }
-            }
-            if isJumping && layout == .sideBySide {
-                // Below the header a phone on its side has about the height of the month alone.
-            } else if !hasLoaded {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if effectiveSpan == .month {
-                MonthGrid(
-                    days: dayStrings,
-                    month: String(WallClockDay.string(from: anchor).prefix(7)),
-                    today: WallClockDay.string(from: Date()),
-                    entries: entries,
-                    folderColors: folderColors,
-                    calendar: calendar
-                ) { day in
-                    guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
-                    steppedForward = chosen > anchor
-                    anchor = chosen
-                    span = .day
-                }
-                .id(dayStrings.first ?? "")
-                .transition(
-                    reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
-            } else {
-                CalendarGrid(
-                    days: dayStrings,
-                    entries: entries,
-                    now: now,
-                    hourHeightBase: settings.calendarDensity.hourHeight,
-                    folderColors: folderColors,
-                    actions: $actions,
-                    onOpen: { pageId in openPage(pageId) },
-                    onToggleDone: { entry in
-                        Task { await store.setStatus(pageId: entry.pageId, done: entry.status != "done") }
-                    },
-                    onComplete: { entry in Task { await act(.complete, on: entry) } },
-                    onSkip: { entry in Task { await act(.skip, on: entry) } },
-                    onMove: { entry in moving = Moving(entry: entry) },
-                    onCreate: { day, minute, minutes in create(on: day, at: minute, minutes: minutes) },
-                    onDrop: { page, day, minute in drop(page, on: day, at: minute) },
-                    onReschedule: { page, start, end in
-                        Task {
-                            await store.schedule(
-                                pageId: page.id, title: page.title, start: start, end: end,
-                                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
-                        }
-                    }
-                )
-                .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
-                // A new identity per range is what lets the grid slide rather
-                // than redraw in place when the user pages. A dissolve under
-                // Reduce Motion: the direction is a nicety, the new day is
-                // the content.
-                .id(dayStrings.first ?? "")
-                .transition(
-                    reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
+            ZStack(alignment: .top) {
+                calendarBody
+                if isJumping { jumpLayer }
             }
         }
         // The grid's gutter, columns and hour rows are fixed geometry: past this size the hour labels
@@ -174,7 +105,7 @@ struct CalendarScreen: View {
                 .onEnded { value in
                     let dx = value.translation.width
                     let dy = value.translation.height
-                    guard abs(dx) > 60, abs(dx) > abs(dy) * 1.5 else { return }
+                    guard !isJumping, abs(dx) > 60, abs(dx) > abs(dy) * 1.5 else { return }
                     step(by: dx < 0 ? 1 : -1)
                 }
         )
@@ -229,6 +160,107 @@ struct CalendarScreen: View {
         #endif
     }
 
+    /// Over the calendar rather than above it, the way the view switcher drops over the list, so
+    /// opening it does not shove the days down.
+    private var jumpLayer: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                Color.black.opacity(colorScheme == .dark ? 0.5 : 0.16)
+                    .ignoresSafeArea(edges: .bottom)
+                    .onTapGesture { isJumping = false }
+                    .accessibilityHidden(true)
+                // Scrolls where the month is taller than the pane, as on a phone on its side.
+                ViewThatFits(in: .vertical) {
+                    jumpPanel
+                    ScrollView { jumpPanel }
+                }
+                .frame(maxHeight: geometry.size.height - ShellBar.clearance)
+                .fixedSize(horizontal: false, vertical: true)
+                .background(.surfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(.borderSecondary, lineWidth: 1))
+                .shadow(color: .black.opacity(0.14), radius: 24, y: 10)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .accessibilityAddTraits(.isModal)
+            }
+        }
+        .transition(.opacity)
+    }
+
+    @ViewBuilder
+    private var calendarBody: some View {
+        VStack(spacing: 0) {
+            if effectiveSpan == .day, !stripDayStrings.isEmpty {
+                WeekStrip(
+                    days: stripDayStrings,
+                    selected: dayStrings.first ?? "",
+                    today: WallClockDay.string(from: Date()),
+                    bars: weekBars
+                ) { day in
+                    guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
+                    steppedForward = chosen > anchor
+                    anchor = chosen
+                }
+            }
+            if !hasLoaded {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if effectiveSpan == .month {
+                MonthGrid(
+                    days: dayStrings,
+                    month: String(WallClockDay.string(from: anchor).prefix(7)),
+                    today: WallClockDay.string(from: Date()),
+                    entries: entries,
+                    folderColors: folderColors,
+                    calendar: calendar
+                ) { day in
+                    guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
+                    steppedForward = chosen > anchor
+                    anchor = chosen
+                    span = .day
+                }
+                .id(dayStrings.first ?? "")
+                .transition(
+                    reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
+            } else {
+                CalendarGrid(
+                    days: dayStrings,
+                    entries: entries,
+                    now: now,
+                    hourHeightBase: settings.calendarDensity.hourHeight,
+                    folderColors: folderColors,
+                    actions: $actions,
+                    onOpen: { pageId in openPage(pageId) },
+                    onToggleDone: { entry in
+                        Task { await store.setStatus(pageId: entry.pageId, done: entry.status != "done") }
+                    },
+                    onComplete: { entry in Task { await act(.complete, on: entry) } },
+                    onSkip: { entry in Task { await act(.skip, on: entry) } },
+                    onMove: { entry in moving = Moving(entry: entry) },
+                    onCreate: { day, minute, minutes in create(on: day, at: minute, minutes: minutes) },
+                    onDrop: { page, day, minute in drop(page, on: day, at: minute) },
+                    onReschedule: { page, start, end in
+                        Task {
+                            await store.schedule(
+                                pageId: page.id, title: page.title, start: start, end: end,
+                                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
+                        }
+                    }
+                )
+                .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
+                // A new identity per range is what lets the grid slide rather
+                // than redraw in place when the user pages. A dissolve under
+                // Reduce Motion: the direction is a nicety, the new day is
+                // the content.
+                .id(dayStrings.first ?? "")
+                .transition(
+                    reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
+            }
+        }
+    }
+
     // MARK: - Navigation between ranges
 
     private func step(by spans: Int) {
@@ -239,6 +271,7 @@ struct CalendarScreen: View {
     private func goToToday() {
         steppedForward = Date() > anchor
         anchor = Date()
+        route.calendarTopHour = nil
     }
 
     /// The folder colours on each day of the strip's week, counted the way the month counts them.
@@ -268,7 +301,7 @@ struct CalendarScreen: View {
     private func create(on day: String, at minute: Int, minutes: Int?) {
         let iso = CalendarGeometry.wallClock(day: day, minute: minute)
         guard let date = StorageTimestamp.wallClock(iso) else { return }
-        route.presentQuickAdd(at: date, minutes: minutes)
+        route.presentQuickAdd(at: date, minutes: minutes, from: store)
     }
 
     /// Opening a page from the calendar goes through the same stack the list
@@ -445,8 +478,7 @@ struct CalendarScreen: View {
         return "\(year) · \(effectiveSpan.label)"
     }
 
-    /// Under the title, in place of the week strip: how much to show, and a month to jump to any day
-    /// in one tap.
+    /// Dropped from the title: how much to show, and a month to jump to any day in one tap.
     private var jumpPanel: some View {
         VStack(spacing: 8) {
             Picker("Show", selection: spanBinding) {
@@ -468,12 +500,9 @@ struct CalendarScreen: View {
             )
             .datePickerStyle(.graphical)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .background(.surfacePrimary)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(.borderSecondary).frame(height: 1)
-        }
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
     }
 
     /// True when today is already on screen, which is when "Today" would do

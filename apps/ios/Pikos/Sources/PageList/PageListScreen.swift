@@ -529,8 +529,8 @@ struct PageListScreen: View {
                 .frame(maxWidth: 300)
             if let example = emptyExample {
                 Button {
+                    route.presentQuickAdd(from: store, under: .list)
                     route.quickAddPrefill = example
-                    route.isQuickAddPresented = true
                 } label: {
                     ExampleSentence(text: example)
                 }
