@@ -96,7 +96,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.buttons["View"].exists, "and no notice points somewhere else")
     }
 
-    // qa: IOS-03:2
+    // qa: IOS-54
     /// A line with no date added in Upcoming is dated today, Upcoming's first day, so it stays in view.
     func testAPageAddedInUpcomingStaysInUpcoming() {
         showView("Upcoming")
