@@ -12,6 +12,19 @@
   --pikos-selection: rgba(45, 212, 168, 0.1);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme="light"]) {
+    --pikos-accent: #2dd4a8;
+    --pikos-bg: #161613;
+    --pikos-fg: #f0efed;
+    --pikos-muted: #999893;
+    --pikos-rule: #272724;
+    --pikos-inset: #0f0f0d;
+    --pikos-check: #3a3a37;
+    --pikos-selection: rgba(45, 212, 168, 0.12);
+  }
+}
+
 :root[data-scheme="dark"] {
   --pikos-accent: #2dd4a8;
   --pikos-bg: #161613;
