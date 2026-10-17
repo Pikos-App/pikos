@@ -27,6 +27,8 @@ pikos-core = { path = "../pikos-core" }
 # a failed disconnect indistinguishable from a clean one.
 log = "0.4"
 pikos-db = { path = "../pikos-db" }
+# Device sync's record format, which the CloudKit adapter's records are built from.
+pikos-replica = { path = "../pikos-replica" }
 # The reminder horizon is placed on the phone's own clock, which arrives as an
 # IANA name and has to be resolved here; both are already what pikos-db uses.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

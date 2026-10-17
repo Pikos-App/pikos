@@ -2014,6 +2014,7 @@ dependencies = [
  "pikos-core",
  "pikos-db",
  "pikos-recurrence",
+ "pikos-replica",
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",

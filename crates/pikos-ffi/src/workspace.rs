@@ -969,7 +969,7 @@ fn quick_add_priority(
 /// writer; extensions get a [`ReadOnlyWorkspace`].
 #[derive(Debug, uniffi::Object)]
 pub struct Workspace {
-    pool: sqlx::SqlitePool,
+    pub(crate) pool: sqlx::SqlitePool,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
