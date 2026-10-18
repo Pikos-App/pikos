@@ -34,7 +34,7 @@ jobs:
   ios:
     name: Build + test
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     # Pinned, so a runner image rolling its default Xcode is a deliberate bump here. The image's
     # default is 16.4, whose Swift 6.1 rejects concurrency the 26 SDKs mark Sendable; 26.3 is the
     # newest it carries.
@@ -123,6 +123,27 @@ jobs:
             -project apps/ios/Pikos/Pikos.xcodeproj \
             -scheme Pikos \
             -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify
+
+      # On every push, unlike the flows below: the phone's half of the desktop's count gate, reads
+      # and rows rather than time. One simulator boot and one test, on the 20,000-page template the
+      # desktop's `@large` tests use.
+      - name: Build the 20,000-page workspace
+        run: |
+          cargo run --release --quiet -p pikos-cli -- --db "$RUNNER_TEMP/pikos-large.sqlite" \
+            stress seed --pages 20000 --large-pages 0 --shape mixed --json
+
+      - name: Read counts at 20,000 pages
+        env:
+          TEST_RUNNER_PIKOS_LARGE_TEMPLATE: ${{ runner.temp }}/pikos-large.sqlite
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project apps/ios/Pikos/Pikos.xcodeproj \
+            -scheme Pikos \
+            -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            -only-testing:PikosUITests/CountTests \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify
 

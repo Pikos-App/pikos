@@ -191,6 +191,9 @@ struct PageListScreen: View {
                     Divider()
                     Text("Last read in \(Int(read / .milliseconds(1))) ms")
                 }
+                if let count = store.readCount {
+                    Text("Reads so far: \(count.calls) calls, \(count.rows) rows")
+                }
             #endif
         } label: {
             Image(systemName: "arrow.up.arrow.down")
