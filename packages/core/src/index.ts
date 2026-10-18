@@ -266,6 +266,7 @@ export {
   isOpen,
   toPageSummary,
 } from "./utils/page";
+export { linkTargets } from "./utils/pageLinks";
 export {
   alignWeeklyRuleToAnchor,
   buildRrule,

@@ -24,6 +24,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
 import { useCaretAtEndOnFocus } from "../hooks/useCaretAtEndOnFocus";
+import { BacklinksButton } from "./BacklinksButton";
 import { Byline } from "./Byline";
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
 import { FocusTimer } from "./FocusTimer";
@@ -274,66 +275,71 @@ export function MetadataHeader({
             text={page.pendingDescription!}
           />
         )}
-        <div className={detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}>
-          {titleFocused && !titleLocked ? (
-            <textarea
-              aria-label="Page title"
-              autoCapitalize="off"
-              autoComplete="off"
-              autoCorrect="off"
-              className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
-              onBlur={() => {
-                setTitleFocused(false);
-                commitField();
-              }}
-              onChange={handleTitleChange}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
+        <div
+          className={`flex items-start gap-2 ${detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}`}
+        >
+          <div className="min-w-0 flex-1">
+            {titleFocused && !titleLocked ? (
+              <textarea
+                aria-label="Page title"
+                autoCapitalize="off"
+                autoComplete="off"
+                autoCorrect="off"
+                className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
+                onBlur={() => {
                   setTitleFocused(false);
                   commitField();
-                  handleSubtitleFocus();
-                }
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  onFocusEditor();
-                }
-              }}
-              placeholder="Untitled"
-              ref={titleRef}
-              rows={1}
-              value={titleValue}
-            />
-          ) : titleLocked ? (
-            <div className="flex items-center gap-2">
+                }}
+                onChange={handleTitleChange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    setTitleFocused(false);
+                    commitField();
+                    handleSubtitleFocus();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onFocusEditor();
+                  }
+                }}
+                placeholder="Untitled"
+                ref={titleRef}
+                rows={1}
+                value={titleValue}
+              />
+            ) : titleLocked ? (
+              <div className="flex items-center gap-2">
+                <div
+                  aria-label="Page title"
+                  className="type-display line-clamp-2 min-w-0 cursor-default bg-transparent outline-none"
+                  ref={titleDivRef}
+                >
+                  {titleValue || <span className="text-faint">Untitled</span>}
+                </div>
+                <SyncedLockHint size={14} />
+              </div>
+            ) : (
               <div
                 aria-label="Page title"
-                className="type-display line-clamp-2 min-w-0 cursor-default bg-transparent outline-none"
+                className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
+                onClick={handleTitleFocus}
+                onFocus={handleTitleFocus}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleTitleFocus();
+                  }
+                }}
                 ref={titleDivRef}
+                role="button"
+                tabIndex={0}
               >
                 {titleValue || <span className="text-faint">Untitled</span>}
               </div>
-              <SyncedLockHint size={14} />
-            </div>
-          ) : (
-            <div
-              aria-label="Page title"
-              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
-              onClick={handleTitleFocus}
-              onFocus={handleTitleFocus}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleTitleFocus();
-                }
-              }}
-              ref={titleDivRef}
-              role="button"
-              tabIndex={0}
-            >
-              {titleValue || <span className="text-faint">Untitled</span>}
-            </div>
-          )}
+            )}
+          </div>
+          <BacklinksButton pageId={page.id} />
         </div>
 
         {subtitleFocused ? (

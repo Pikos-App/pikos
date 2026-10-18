@@ -53,7 +53,6 @@ fn new_page(title: &str) -> NewPage {
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: vec![],
         parent_id: None,
         last_opened_at: None,
         created_at: None,
@@ -362,18 +361,23 @@ async fn assert_denorm_matches_join(pool: &SqlitePool, page_id: &str) {
     );
 }
 
-// ── 4. page links round-trip on save ─────────────────────────────────────────
+// ── 4. page links follow the body on save ───────────────────────────────────
 
-/// `links` is a plain JSON-array column on `pages` (there is no separate
-/// `page_links` table and no server-side reconciliation — wikilink resolution is
-/// a frontend concern). This pins the writer contract: links round-trip verbatim
-/// through create and are fully replaced on update.
+fn body_linking(ids: &[&str]) -> String {
+    let links: Vec<serde_json::Value> = ids
+        .iter()
+        .map(|id| serde_json::json!({ "type": "pageLink", "attrs": { "pageId": id, "title": "" } }))
+        .collect();
+    serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph", "content": links }] })
+        .to_string()
+}
+
 #[tokio::test]
-async fn page_links_round_trip_through_create_and_update() {
+async fn page_links_follow_the_body_through_create_and_update() {
     let pool = test_pool().await;
 
     let mut p = new_page("Linker");
-    p.links = vec!["page-a".to_string(), "page-b".to_string()];
+    p.content = body_linking(&["page-a", "page-b", "page-a"]);
     let page = create_page_impl(&pool, p).await.unwrap();
     assert_eq!(page.links, vec!["page-a".to_string(), "page-b".to_string()]);
 
@@ -381,19 +385,14 @@ async fn page_links_round_trip_through_create_and_update() {
         &pool,
         page.id.clone(),
         PageUpdate {
-            links: Some(vec!["page-c".to_string()]),
+            content: Some(body_linking(&["page-c"])),
             ..Default::default()
         },
     )
     .await
     .unwrap();
-    assert_eq!(
-        updated.links,
-        vec!["page-c".to_string()],
-        "update replaces the link set"
-    );
+    assert_eq!(updated.links, vec!["page-c".to_string()]);
 
-    // An update that doesn't touch links must leave them intact.
     let untouched = update_page_impl(
         &pool,
         page.id.clone(),

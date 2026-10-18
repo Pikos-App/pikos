@@ -23,9 +23,11 @@ import { onFlushPending } from "@/shared/pendingWrites";
 import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
+import { DesktopPageLink } from "../extensions/DesktopPageLink";
 import { PikosImage } from "../extensions/PikosImage";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
+import { usePageLinkTargets } from "../hooks/usePageLinkTargets";
 import { registerActiveEditor } from "../utils/imageDropBridge";
 import { looksLikeMarkdown } from "../utils/markdownPaste";
 import { FindContentPopover } from "./FindContentPopover";
@@ -33,6 +35,7 @@ import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
 import { PageInfoPopover } from "./PageInfoPopover";
+import { PageLinkPicker } from "./PageLinkPicker";
 import { SlashMenuExtension } from "./SlashMenu";
 import { TableToolbar } from "./TableToolbar";
 
@@ -52,6 +55,7 @@ export const editorExtensions = [
   ...createDocumentExtensions({
     image: PikosImage.configure({ allowBase64: false, inline: false }),
     onKeyHandled: (event) => Keyboard.markUsed(event),
+    pageLink: DesktopPageLink,
     resolveAssetUrl: assetUrl,
   }),
   Placeholder.configure({
@@ -60,6 +64,7 @@ export const editorExtensions = [
   }),
   Typography,
   SlashMenuExtension,
+  PageLinkPicker,
 ];
 
 // tiptap-markdown only converts pasted markdown when the clipboard has no
@@ -215,6 +220,7 @@ export function EditorPane() {
   }, [editor, page, isLoading]);
 
   const pageId = page?.id ?? null;
+  usePageLinkTargets(editor, pageId);
 
   const { flush, isSaving, saveError } = useAutosave(
     contentVersion,

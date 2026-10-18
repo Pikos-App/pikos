@@ -67,7 +67,7 @@ export type PagePriority = 0 | 1 | 2 | 3 | 4;
  * TypeScript from the same declaration the database uses rather than from a
  * hand-written copy of it.
  */
-export const CONTENT_SCHEMA_VERSION = 1;
+export const CONTENT_SCHEMA_VERSION = 2;
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
 // One explicit calendar block (from page_schedules table).

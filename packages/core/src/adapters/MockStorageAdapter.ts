@@ -63,6 +63,7 @@ import { CONTENT_SCHEMA_VERSION } from "../types";
 import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
+import { linkTargets } from "../utils/pageLinks";
 import { oldestOpenOccurrence, rawExpandRule } from "../utils/recurrence";
 import { ftsTokens, mirrorSearchText } from "../utils/search";
 import {
@@ -152,6 +153,14 @@ function deriveContentText(content: string): string {
     return extractText(JSON.parse(content));
   } catch {
     return "";
+  }
+}
+
+function deriveLinks(content: string): string[] {
+  try {
+    return linkTargets(JSON.parse(content));
+  } catch {
+    return [];
   }
 }
 
@@ -438,7 +447,6 @@ export class MockStorageAdapter implements StorageAdapter {
 
   private insertPage(data: NewPage): Page {
     const page: Page = {
-      links: [],
       ...data,
       // Also mirrors the Rust writer, which stamps the version it wrote with
       // rather than leaving it to the column default (pikos-db migration 023).
@@ -451,6 +459,7 @@ export class MockStorageAdapter implements StorageAdapter {
       detachIsReversible: false,
       id: uuid(),
       isRecurring: false,
+      links: deriveLinks(data.content),
       scheduleLocked: false,
       sortOrder: nextPageOrder(this.pages.values(), data.folderId ?? null),
       updatedAt: data.updatedAt ?? now(),
@@ -563,6 +572,7 @@ export class MockStorageAdapter implements StorageAdapter {
     if (updates.content !== undefined && updates.contentText === undefined) {
       updated.contentText = deriveContentText(updates.content);
     }
+    if (updates.content !== undefined) updated.links = deriveLinks(updates.content);
     this.pages.set(id, updated);
     return Promise.resolve(updated);
   }
@@ -792,6 +802,14 @@ export class MockStorageAdapter implements StorageAdapter {
         .filter((p) => isOpen(p) && p.lastOpenedAt != null && p.id !== exclude)
         .sort((a, b) => byText(b.lastOpenedAt!, a.lastOpenedAt!))
         .slice(0, limit)
+    );
+  }
+
+  listBacklinks(id: string): Promise<PageSummary[]> {
+    return Promise.resolve(
+      this.livePages()
+        .filter((p) => p.id !== id && (p.links ?? []).includes(id))
+        .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }))
     );
   }
 

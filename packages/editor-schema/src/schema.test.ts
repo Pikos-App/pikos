@@ -34,6 +34,7 @@ describe("document schema", () => {
       "image",
       "listItem",
       "orderedList",
+      "pageLink",
       "paragraph",
       "table",
       "tableCell",
@@ -137,7 +138,11 @@ describe("document schema", () => {
           content: [
             {
               content: [
-                { attrs: { indent: 0 }, content: [{ text: "item", type: "text" }], type: "paragraph" },
+                {
+                  attrs: { indent: 0 },
+                  content: [{ text: "item", type: "text" }],
+                  type: "paragraph",
+                },
               ],
               type: "listItem",
             },
@@ -149,7 +154,11 @@ describe("document schema", () => {
             {
               attrs: { checked: false },
               content: [
-                { attrs: { indent: 0 }, content: [{ text: "todo", type: "text" }], type: "paragraph" },
+                {
+                  attrs: { indent: 0 },
+                  content: [{ text: "todo", type: "text" }],
+                  type: "paragraph",
+                },
               ],
               type: "taskItem",
             },
@@ -202,6 +211,33 @@ describe("document schema", () => {
     const image = out.content?.[0];
     expect(image?.type).toBe("image");
     expect(image?.attrs?.["data-asset-path"]).toBe("assets/photo.png");
+  });
+
+  it("keeps a page link's target id and title through a round trip", () => {
+    const e = editor();
+    const link = { attrs: { pageId: "target-1", title: "Plans" }, type: "pageLink" };
+    e.commands.setContent({
+      content: [{ content: [{ text: "See ", type: "text" }, link], type: "paragraph" }],
+      type: "doc",
+    });
+
+    expect(e.getJSON().content?.[0]?.content?.[1]).toEqual(link);
+  });
+
+  it("writes a page link to Markdown as [[title]]", () => {
+    const e = editor();
+    e.commands.setContent({
+      content: [
+        {
+          content: [{ attrs: { pageId: "target-1", title: "Plans" }, type: "pageLink" }],
+          type: "paragraph",
+        },
+      ],
+      type: "doc",
+    });
+
+    const storage = e.storage as unknown as { markdown: { getMarkdown: () => string } };
+    expect(storage.markdown.getMarkdown()).toBe("[[Plans]]");
   });
 
   it("keeps the stored src free of platform-specific URLs", () => {

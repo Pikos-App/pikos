@@ -20,6 +20,7 @@ export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof St
   "getSyncStatus",
   "getUsageStats",
   "googleSyncAvailable",
+  "listBacklinks",
   "listBackups",
   "listCompletedPages",
   "listCompletedWindow",

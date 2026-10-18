@@ -181,6 +181,7 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ),
         ("list_recent_pages", json!({ "exclude": null, "limit": 10 })),
         ("list_tags", json!({})),
+        ("list_backlinks", json!({ "id": PROBE_PAGE })),
         ("change_state", json!({})),
     ]
 }
@@ -282,6 +283,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::windows::get_page_if_newer,
             super::windows::list_recent_pages,
             super::windows::list_tags,
+            super::windows::list_backlinks,
             super::windows::change_state,
             super::schedules::list_page_schedules,
             super::schedules::list_page_schedules_for_rules,

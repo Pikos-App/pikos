@@ -131,6 +131,15 @@ pub async fn plan_markdown_export(
     )
     .await?;
 
+    let titles: HashMap<String, String> = rows
+        .iter()
+        .map(|row| {
+            let id: String = row.try_get("id").unwrap_or_default();
+            let title: String = row.try_get("title").unwrap_or_default();
+            (id, title)
+        })
+        .collect();
+
     let mut plan = Vec::with_capacity(rows.len());
     for row in &rows {
         let title: String = row.try_get("title").unwrap_or_default();
@@ -182,7 +191,7 @@ pub async fn plan_markdown_export(
                 None => format!("{filename}.md"),
             },
             in_folder: directory.is_some(),
-            contents: format!("{frontmatter}{}", markdown_body(&content)),
+            contents: format!("{frontmatter}{}", markdown_body(&content, &titles)),
             assets,
         });
     }
@@ -266,15 +275,19 @@ pub fn build_frontmatter(
     frontmatter
 }
 
-/// Convert a page's stored ProseMirror JSON `content` to a Markdown body.
+/// Convert a page's stored ProseMirror JSON `content` to a Markdown body, naming each linked
+/// page by its title in `titles` where it has one.
 /// Empty (`""`), empty-doc (`"{}"`), and unparseable content all yield an
 /// empty string so a page always produces a valid (frontmatter-only) file.
-pub fn markdown_body(content: &str) -> String {
+pub fn markdown_body(content: &str, titles: &HashMap<String, String>) -> String {
     if content.is_empty() || content == "{}" {
         return String::new();
     }
     match serde_json::from_str::<serde_json::Value>(content) {
-        Ok(doc) => pikos_core::prosemirror_to_markdown(&doc),
+        Ok(mut doc) => {
+            pikos_core::page_links::refresh_link_titles(&mut doc, &|id| titles.get(id).cloned());
+            pikos_core::prosemirror_to_markdown(&doc)
+        }
         Err(_) => String::new(),
     }
 }

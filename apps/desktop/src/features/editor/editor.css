@@ -311,6 +311,20 @@
   opacity: 0.8;
 }
 
+/* A link to another page is tinted, not underlined, so it doesn't read as a web link. */
+.editor-content .page-link {
+  font: inherit;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+  cursor: pointer;
+}
+
+.editor-content .page-link:hover {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
 /* ─── Inline formatting ────────────────────────────────────────────────────── */
 
 .editor-content strong {

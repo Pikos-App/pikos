@@ -24,6 +24,7 @@ pub mod now;
 pub mod overdue;
 pub mod page;
 pub mod page_actions;
+pub mod page_links;
 pub mod schedule;
 pub mod search;
 pub mod text;

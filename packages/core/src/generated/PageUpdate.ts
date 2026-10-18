@@ -16,7 +16,6 @@ export type PageUpdate = {
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;
-  links?: Array<string> | null;
   parentId?: string | null;
   lastOpenedAt?: string | null;
 };

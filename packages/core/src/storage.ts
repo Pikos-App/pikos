@@ -287,6 +287,8 @@ export interface StorageAdapter {
   listRecentPages(exclude: string | null, limit: number): Promise<PageSummary[]>;
   /** Tags on open pages, most used first. */
   listTags(): Promise<TagCount[]>;
+  /** The pages, not trashed, whose bodies link to `id`, by title. */
+  listBacklinks(id: string): Promise<PageSummary[]>;
   /** Move `ids`, in that order, between two open neighbours in their folder's manual order.
    *  Rejects with a conflict when the neighbours aren't where they were. */
   movePages(ids: string[], place: Placement): Promise<MoveOutcome>;

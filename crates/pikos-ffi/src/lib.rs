@@ -566,7 +566,7 @@ pub fn content_schema_version() -> i64 {
 /// Kept in step with `pikos_db::CONTENT_SCHEMA_VERSION` by a test below —
 /// this crate does not depend on pikos-db, so the value is mirrored rather
 /// than re-exported.
-const CONTENT_SCHEMA_VERSION: i64 = 1;
+const CONTENT_SCHEMA_VERSION: i64 = 2;
 
 #[cfg(test)]
 mod tests {

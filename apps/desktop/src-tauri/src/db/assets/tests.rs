@@ -197,7 +197,6 @@ async fn page_showing(pool: &SqlitePool, title: &str, src: &str) -> String {
             scheduled_start: None,
             scheduled_end: None,
             completed_at: None,
-            links: vec![],
             parent_id: None,
             last_opened_at: None,
             created_at: None,

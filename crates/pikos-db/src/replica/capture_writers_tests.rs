@@ -18,7 +18,6 @@ fn page(title: &str) -> NewPage {
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: vec![],
         parent_id: None,
         last_opened_at: None,
         created_at: None,

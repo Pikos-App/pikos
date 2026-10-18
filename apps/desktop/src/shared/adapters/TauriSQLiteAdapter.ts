@@ -176,6 +176,7 @@ export const READ_COMMANDS = new Set([
   "count_views",
   "get_page_if_newer",
   "get_pages",
+  "list_backlinks",
   "list_completed_window",
   "list_range",
   "list_recent_pages",
@@ -393,6 +394,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   listTags(): Promise<TagCount[]> {
     return invoke<TagCount[]>("list_tags");
+  }
+
+  listBacklinks(id: string): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_backlinks", { id });
   }
 
   movePages(ids: string[], place: Placement): Promise<MoveOutcome> {

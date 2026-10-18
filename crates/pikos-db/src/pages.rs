@@ -89,7 +89,7 @@ pub struct Page {
     pub scheduled_end: Option<String>,
     /// Local wall-clock, set when the page was marked done.
     pub completed_at: Option<String>,
-    /// Ids of pages this one links to. Nothing writes these yet.
+    /// Ids of pages this one links to, derived from `content` on every write.
     #[ts(as = "Option<Vec<String>>", optional)]
     pub links: Vec<String>,
     /// The page this one is nested under, if any.
@@ -410,9 +410,6 @@ pub struct NewPage {
     pub scheduled_start: Option<String>,
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
-    #[serde(default)]
-    #[ts(as = "Option<Vec<String>>", optional)]
-    pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
     pub created_at: Option<String>,
@@ -449,7 +446,6 @@ pub struct PageUpdate {
     #[serde(default, deserialize_with = "deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub completed_at: Option<serde_json::Value>,
-    pub links: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub parent_id: Option<serde_json::Value>,
@@ -598,6 +594,22 @@ fn ensure_known_status(status: &str) -> AppResult<()> {
     )))
 }
 
+/// The `links` column for a body: the ids of the pages it links to, as a JSON array.
+///
+/// Derived here, in the one writer, rather than sent by each client, so the app, the CLI and
+/// the phone can't disagree about what a page links to.
+fn links_of(content: &str) -> String {
+    let has_no_links = !content.contains("\"pageLink\"");
+    if has_no_links {
+        return "[]".to_string();
+    }
+
+    let targets = serde_json::from_str::<serde_json::Value>(content)
+        .map(|doc| pikos_core::page_links::link_targets(&doc))
+        .unwrap_or_default();
+    serde_json::to_string(&targets).unwrap_or_else(|_| "[]".to_string())
+}
+
 pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResult<Page> {
     ensure_known_status(&data.status)?;
 
@@ -624,7 +636,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     let updated_at = data.updated_at.as_deref().unwrap_or(&now);
     let sort_order = next_sort_order(pool, data.folder_id.as_deref()).await?;
     let tags_json = serde_json::to_string(&data.tags).unwrap_or_else(|_| "[]".to_string());
-    let links_json = serde_json::to_string(&data.links).unwrap_or_else(|_| "[]".to_string());
+    let links_json = links_of(&data.content);
 
     // Transaction wraps the pages row + page_tags rows together. The FTS
     // index is driven from pages.tags text — if a crash splits these two
@@ -692,7 +704,6 @@ pub async fn update_page_impl(
         || updates.status.is_some()
         || updates.priority.is_some()
         || updates.tags.is_some()
-        || updates.links.is_some()
         || updates.folder_id.is_some()
         || updates.subtitle.is_some()
         || updates.scheduled_start.is_some()
@@ -778,6 +789,8 @@ async fn apply_page_update(
         // the content rather than stay at whatever wrote the row originally.
         fields.push("content_schema_version = ");
         fields.push_bind_unseparated(crate::CONTENT_SCHEMA_VERSION);
+        fields.push("links = ");
+        fields.push_bind_unseparated(links_of(v));
     }
     if let Some(v) = &updates.content_text {
         fields.push("content_text = ");
@@ -798,11 +811,6 @@ async fn apply_page_update(
     if let Some(v) = &updates.tags {
         let json = serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
         fields.push("tags = ");
-        fields.push_bind_unseparated(json);
-    }
-    if let Some(v) = &updates.links {
-        let json = serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
-        fields.push("links = ");
         fields.push_bind_unseparated(json);
     }
 

@@ -37,10 +37,11 @@ import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 
 import { createPikosImageNode, type ResolveAssetUrl } from "./image";
+import { PageLink } from "./pageLink";
 import { TabIndent } from "./tabIndent";
 import { PikosTable } from "./table";
 
-export { createPikosImageNode, PikosTable, TabIndent };
+export { createPikosImageNode, PageLink, PikosTable, TabIndent };
 export {
   getIndentLevel,
   isCursorAtLineStart,
@@ -77,6 +78,8 @@ export interface DocumentSchemaOptions {
    * `Markdown` so the attribute survives and only the parsing changes.
    */
   markdown?: Extensions[number];
+  /** Replaces the default page link node, as `image` does: pass `PageLink.extend({ ... })`. */
+  pageLink?: Extensions[number];
   /** See `TabIndentOptions.onKeyHandled`. */
   onKeyHandled?: (event: KeyboardEvent) => void;
 }
@@ -111,6 +114,7 @@ export function createDocumentExtensions(options: DocumentSchemaOptions): Extens
     }),
     options.image ?? createPikosImageNode(options.resolveAssetUrl),
     PikosTable,
+    options.pageLink ?? PageLink,
     // Schema-bearing despite appearances — see the note at the top of the file.
     // Markdown contributes `tight` to lists; TabIndent contributes `indent` to
     // paragraph and heading. Omitting either on one platform loses those

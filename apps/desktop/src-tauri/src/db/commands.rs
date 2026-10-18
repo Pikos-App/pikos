@@ -352,6 +352,7 @@ db_commands! {
         list_recent_pages(exclude: Option<String>, limit: u32) -> Vec<PageSummary>
             = reads::list_recent_pages(exclude.as_deref(), limit as usize);
         list_tags() -> Vec<TagCount> = reads::list_tags();
+        list_backlinks(id: String) -> Vec<PageSummary> = reads::list_backlinks(&id);
         move_pages(ids: Vec<String>, place: Placement) -> MoveOutcome
             = moves::move_pages(&ids, &place);
         change_state() -> ChangeState = changes::change_state();

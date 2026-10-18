@@ -41,7 +41,7 @@ export type Page = {
    */
   completedAt?: string | null;
   /**
-   * Ids of pages this one links to. Nothing writes these yet.
+   * Ids of pages this one links to, derived from `content` on every write.
    */
   links?: Array<string>;
   /**

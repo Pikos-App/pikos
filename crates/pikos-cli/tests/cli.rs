@@ -40,7 +40,6 @@ fn base_page(title: &str) -> NewPage {
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: Vec::new(),
         parent_id: None,
         last_opened_at: None,
         created_at: None,
@@ -189,6 +188,35 @@ async fn read_returns_page_json() {
     let out = cli(dbs, &["read", &ids[0], "--json"]);
     assert!(out.status.success());
     assert_eq!(json(&out)["title"], "Hello world");
+}
+
+#[tokio::test]
+async fn a_page_link_round_trips_through_read_and_update_by_title() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Plans"), base_page("Journal")]).await;
+    let (plans, journal) = (&ids[0], &ids[1]);
+
+    let linked = cli(
+        dbs,
+        &["update", journal, "--content", "See [[Plans]]", "--json"],
+    );
+    assert!(
+        linked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    assert_eq!(json(&linked)["links"], serde_json::json!([plans]));
+
+    cli(dbs, &["update", plans, "--title", "Spring plans"]);
+    let markdown = json(&cli(dbs, &["read", journal, "--json"]))["markdown"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(markdown, "See [[Spring plans]]\n");
+
+    let written_back = cli(dbs, &["update", journal, "--content", &markdown, "--json"]);
+    assert_eq!(json(&written_back)["links"], serde_json::json!([plans]));
 }
 
 #[tokio::test]

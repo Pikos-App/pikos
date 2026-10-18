@@ -12,7 +12,6 @@ export type NewPage = {
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;
-  links?: Array<string>;
   parentId?: string | null;
   lastOpenedAt?: string | null;
   createdAt?: string | null;
