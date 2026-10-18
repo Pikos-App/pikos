@@ -200,6 +200,57 @@ appTest("Arrow Up/Down navigates the page list off-list focus", async ({ app }) 
   expect(secondId).not.toBe(firstId);
 });
 
+async function deleteMiddlePageAndStep(app: Page, key: "ArrowDown" | "ArrowUp") {
+  const list = app.locator("[data-page-list-item]");
+  await expect(list).toHaveCount(3);
+  const before = await list.allTextContents();
+
+  await list.nth(1).click();
+  await app.getByRole("button", { name: "Page title" }).click();
+  await app.keyboard.press(mod("Mod+Shift+Backspace"));
+  await expect(list).toHaveCount(2);
+
+  await app.keyboard.press(key);
+  const expected = key === "ArrowDown" ? before[2] : before[0];
+  await expect(app.locator("[data-page-list-item][data-active='true']")).toHaveText(expected!);
+}
+
+appTest(
+  "after deleting the open page in a folder, Down opens the one that followed it",
+  async ({ app }) => {
+    await createFolder(app, "Steps");
+    await seedPages(app, ["step-a", "step-b", "step-c"]);
+    await deleteMiddlePageAndStep(app, "ArrowDown");
+  }
+);
+
+appTest(
+  "after deleting the open page in a folder, Up opens the one before it",
+  async ({ app }) => {
+    await createFolder(app, "Steps");
+    await seedPages(app, ["step-a", "step-b", "step-c"]);
+    await deleteMiddlePageAndStep(app, "ArrowUp");
+  }
+);
+
+appTest(
+  "after deleting the open page on Today, Down opens the one that followed it",
+  async ({ app }) => {
+    await seedPages(app, ["due-a @today", "due-b @today", "due-c @today"]);
+    await app.getByRole("button", { name: /^Today/ }).click();
+    await deleteMiddlePageAndStep(app, "ArrowDown");
+  }
+);
+
+appTest(
+  "after deleting the open page on Today, Up opens the one before it",
+  async ({ app }) => {
+    await seedPages(app, ["due-a @today", "due-b @today", "due-c @today"]);
+    await app.getByRole("button", { name: /^Today/ }).click();
+    await deleteMiddlePageAndStep(app, "ArrowUp");
+  }
+);
+
 appTest(
   "Space toggles completion of the active page off-list focus",
   async ({ app }) => {

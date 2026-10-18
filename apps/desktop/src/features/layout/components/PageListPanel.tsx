@@ -255,17 +255,51 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   }, [activePage?.id]);
 
+  /** Pages in rendered order: `rows` already encodes Today's overdue→today grouping, per-view
+   *  sort, and which sections are expanded. `visiblePages` would diverge from the screen on Today
+   *  (no sort applied in usePageList — grouping does the ordering) and would also miss the
+   *  overdueCollapsed / completedCollapsed gates. */
+  function navigablePages(): PageSummary[] {
+    return rows.flatMap((r) => (r.type === "page" ? [r.page] : []));
+  }
+
+  /** Where the open page last sat in this list. Deleting it closes it, and this is what the
+   *  arrows step from afterwards. */
+  const lastActiveRef = useRef<{ id: string; index: number; viewId: string } | null>(null);
+  useEffect(() => {
+    if (!activePage) return;
+    const index = navigablePages().findIndex((p) => p.id === activePage.id);
+    lastActiveRef.current =
+      index === -1 ? null : { id: activePage.id, index, viewId: activeViewId };
+  });
+
+  /** The row the deleted open page held, or null when no page was deleted from under the arrows.
+   *  A page closed with Mod+W is still in the list, so the arrows stay off as before. */
+  function deletedActiveIndex(navigable: PageSummary[]): number | null {
+    const last = lastActiveRef.current;
+    const isDeletedHere =
+      last !== null && last.viewId === activeViewId && !navigable.some((p) => p.id === last.id);
+    return isDeletedHere ? last.index : null;
+  }
+
   function navigatePage(direction: 1 | -1) {
-    // Walk pages in rendered order — `rows` already encodes Today's
-    // overdue→today grouping, per-view sort, and which sections are expanded.
-    // Using `visiblePages` here would diverge from the screen on Today (no sort
-    // applied in usePageList — grouping does the ordering) and would also miss
-    // the overdueCollapsed / completedCollapsed gates.
-    const navigable = rows.flatMap((r) => (r.type === "page" ? [r.page] : []));
+    const navigable = navigablePages();
     if (!navigable.length) return;
     if (sidebarCollapsed) setSidebarCollapsed(false);
     listRef.current?.setAttribute("data-keyboard-nav", "1");
-    const currentIdx = activePage ? navigable.findIndex((p) => p.id === activePage.id) : -1;
+
+    if (!activePage) {
+      const deletedIdx = deletedActiveIndex(navigable);
+      if (deletedIdx === null) return;
+
+      // The page that followed the deleted one has moved up into its row.
+      const stepIdx = direction === 1 ? deletedIdx : deletedIdx - 1;
+      const page = navigable[Math.max(0, Math.min(navigable.length - 1, stepIdx))];
+      if (page) handleSelectPage(page);
+      return;
+    }
+
+    const currentIdx = navigable.findIndex((p) => p.id === activePage.id);
     if (currentIdx === -1) {
       // Active page not in navigable list (e.g. it's inside a collapsed section).
       // Up → last visible page; down → do nothing (avoid jumping to top).
@@ -368,7 +402,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   // Stand down only when focus is on a control that natively consumes arrows
   // (popover trigger, listbox, etc.) so it owns the key press.
   function canNavigatePages() {
-    if (renamingId || activePage === null) return false;
+    if (renamingId) return false;
+
+    if (activePage === null && deletedActiveIndex(navigablePages()) === null) return false;
     return !isArrowKeyConsumer(document.activeElement);
   }
   // Discrete presses navigate immediately. Held-key auto-repeats (e.repeat) are
