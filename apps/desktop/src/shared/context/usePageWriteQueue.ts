@@ -317,7 +317,15 @@ export function usePageWriteQueue({
   // An update relaunch restarts the process without closing the window, so the
   // handler above never sees it. Registering here means the updater does not
   // have to know what a write queue is.
-  useEffect(() => onDrainPending(drainAll), [adapter]);
+  useEffect(() => {
+    const stopDraining = onDrainPending(drainAll);
+    return () => {
+      stopDraining();
+      // Waiting edits are written as the queue goes, to the workspace they were made in. A timer
+      // left running would write later, after a switch, and report into state that is gone.
+      void drainAll();
+    };
+  }, [adapter]);
 
   return {
     cancelPendingWrite,
