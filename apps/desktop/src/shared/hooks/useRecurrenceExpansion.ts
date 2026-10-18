@@ -32,6 +32,9 @@ interface UseRecurrenceExpansionParams {
   /** Days expanded beyond each side of `days`, so a step to the next or previous range
    *  shows its occurrences at once instead of fetching them after the first paint. */
   margin?: number;
+  /** A hold that outlives the component, so a remount draws the occurrences it last showed in its
+   *  first frame instead of a round trip after the grid. Without one, each mount starts empty. */
+  hold?: ExpansionHold | null;
 }
 
 /** Raw occurrences by rule for `start` to `end`, expanded for `rulesKey`. */
@@ -68,15 +71,22 @@ const sameOccurrences = (a: RawOccurrence[], b: RawOccurrence[]) =>
       o.originalDate === b[i]!.originalDate
   );
 
+/** Identity over every field a block reads, not just the id: an in-place move keeps the row id. */
+const scheduleIdentity = (s: PageSchedule): string =>
+  `${s.id}:${s.ruleId ?? ""}:${s.originalDate ?? ""}:${s.scheduledStart}:${s.scheduledEnd ?? ""}`;
+
+const NO_SCHEDULES: PageSchedule[] = [];
+
 /**
- * The expansion a surface holds, kept outside React state: a refill of the margin re-renders
- * nothing unless the occurrences on screen changed, where a state update re-rendered a whole
- * week to show the same blocks.
+ * The expansion and override rows a surface holds, kept outside React state: a refill of the
+ * margin re-renders nothing unless the occurrences on screen changed, where a state update
+ * re-rendered a whole week to show the same blocks.
  */
-class ExpansionHold {
+export class ExpansionHold {
   private held: HeldExpansion | null = null;
   private last: Map<string, RawOccurrence[]> | null = null;
   private listeners = new Set<() => void>();
+  private schedules = NO_SCHEDULES;
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -90,8 +100,25 @@ class ExpansionHold {
   /** Everything held, margin included; a new map each time the hold is refilled. */
   window = (): Map<string, RawOccurrence[]> | null => this.held?.byRule ?? null;
 
+  overrides = (): PageSchedule[] => this.schedules;
+
   set(held: HeldExpansion): void {
     this.held = held;
+    this.notify();
+  }
+
+  setOverrides(schedules: PageSchedule[]): void {
+    const prev = this.schedules;
+    const unchanged =
+      prev.length === schedules.length &&
+      prev.every((p, i) => scheduleIdentity(p) === scheduleIdentity(schedules[i]!));
+    if (unchanged) return;
+
+    this.schedules = schedules;
+    this.notify();
+  }
+
+  private notify(): void {
     for (const listener of this.listeners) listener();
   }
 
@@ -278,20 +305,21 @@ function toOverrideBlocks(
 export function useRecurrenceExpansion({
   days,
   expandRecurrenceRange,
+  hold,
   listOverridesForRules,
   margin = 0,
   overridesVersion = 0,
   pages,
   recurrenceRules,
 }: UseRecurrenceExpansionParams): (PageSummary | VirtualOccurrence)[] {
-  const [overrideSchedules, setOverrideSchedules] = useState<PageSchedule[]>([]);
   const schedulesAbortRef = useRef(0);
 
   // Empty until the first IPC batch resolves. Kept across a range change
   // (stale-while-revalidate) so an overlapping or day-step nav keeps showing
   // virtuals while the next batch is in flight; a jump past the margin still
   // renders without them for a frame (accepted).
-  const [expansion] = useState(() => new ExpansionHold());
+  const [ownHold] = useState(() => new ExpansionHold());
+  const expansion = hold ?? ownHold;
   const expandAbortRef = useRef(0);
 
   const rangeStartDate = days[0];
@@ -321,19 +349,7 @@ export function useRecurrenceExpansion({
     const token = ++schedulesAbortRef.current;
     void listOverridesForRules(ruleIds).then((schedules) => {
       if (token !== schedulesAbortRef.current) return;
-      setOverrideSchedules((prev) => {
-        // Identity spans every consumed field, not just the id — an in-place
-        // move keeps the row id, so an id-only compare kept the stale slot.
-        const identity = (s: PageSchedule): string =>
-          `${s.id}:${s.ruleId ?? ""}:${s.originalDate ?? ""}:${s.scheduledStart}:${s.scheduledEnd ?? ""}`;
-        if (
-          prev.length === schedules.length &&
-          prev.every((p, i) => identity(p) === identity(schedules[i]!))
-        ) {
-          return prev;
-        }
-        return schedules;
-      });
+      expansion.setOverrides(schedules);
     });
   }, [startStr, endStr, rulesKey, overridesVersion]);
 
@@ -341,6 +357,7 @@ export function useRecurrenceExpansion({
     startStr && endStr ? expansion.read(rulesKey, startStr, endStr) : null
   );
   const heldWindow = useSyncExternalStore(expansion.subscribe, expansion.window);
+  const overrideSchedules = useSyncExternalStore(expansion.subscribe, expansion.overrides);
 
   // With a margin, the weeks either side are built and their times parsed while idle, so a step
   // to one lays out occurrences it has already met.

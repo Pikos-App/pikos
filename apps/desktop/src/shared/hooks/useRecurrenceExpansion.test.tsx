@@ -14,7 +14,7 @@ import { parseLocalISO, rawExpandRule } from "@pikos/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useRecurrenceExpansion } from "./useRecurrenceExpansion";
+import { ExpansionHold, useRecurrenceExpansion } from "./useRecurrenceExpansion";
 
 // Stand-in for the batched Rust command: delegates to the same `rawExpandRule`
 // the backend mirrors (raw per-rule occurrences, rule EXDATEs only). The page
@@ -1056,6 +1056,43 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     expect(starts()).toEqual(["2026-03-16T09:00:00"]);
     await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
     expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-09", "2026-03-30");
+  });
+
+  it("a remount sharing a hold draws its occurrences and moved rows in the first frame", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00", ...SYNCED })];
+    const hold = new ExpansionHold();
+    const expand = vi.fn(EXPAND);
+    const listOverrides = vi.fn(() =>
+      Promise.resolve([makeOverride("2026-03-16", "2026-03-17T14:00:00")])
+    );
+    const renders: (PageSummary | VirtualOccurrence)[][] = [];
+    const mount = () =>
+      renderHook(() => {
+        const out = useRecurrenceExpansion({
+          days: weekDays(new Date(2026, 2, 16)),
+          expandRecurrenceRange: expand,
+          hold,
+          listOverridesForRules: listOverrides,
+          margin: 7,
+          pages,
+          recurrenceRules: [makeRule()],
+        });
+        renders.push(out);
+        return out;
+      });
+    const first = mount();
+    await waitFor(() =>
+      expect(movedBlock(first.result.current, "2026-03-17T14:00:00")).toBeDefined()
+    );
+    const settled = first.result.current;
+    first.unmount();
+    renders.length = 0;
+
+    mount();
+
+    expect(renders[0]).toEqual(settled);
+    await waitFor(() => expect(listOverrides).toHaveBeenCalledTimes(2));
+    expect(expand).toHaveBeenCalledTimes(1);
   });
 
   it("keeps an occurrence's object while its series is unchanged, and builds a new one when it changes", async () => {

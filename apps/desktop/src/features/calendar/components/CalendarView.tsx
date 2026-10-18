@@ -21,7 +21,7 @@ import {
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useCalendarExpansionHold, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import type { Range } from "@/shared/viewCache/controller";
 import { useCachedRange } from "@/shared/viewCache/useCachedRange";
@@ -114,9 +114,11 @@ export function CalendarView() {
   const cachedRange = useCachedRange(shown?.[0] ?? null, shown?.[1] ?? null, neighbours);
   const visiblePages = (cachedRange?.pages ?? NO_PAGES).filter((p) => !hiddenIds.has(p.id));
 
+  const expansionHold = useCalendarExpansionHold();
   const expandedPages = useRecurrenceExpansion({
     days,
     expandRecurrenceRange,
+    hold: expansionHold,
     listOverridesForRules,
     margin: stepDays,
     overridesVersion,

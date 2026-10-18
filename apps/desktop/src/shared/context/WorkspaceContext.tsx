@@ -24,6 +24,7 @@ import {
   type WorkspaceEventBus,
   type WorkspaceEventPayloadMap,
 } from "@/shared/events/workspaceEvents";
+import { ExpansionHold } from "@/shared/hooks/useRecurrenceExpansion";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 import { VIEW_CACHE } from "@/shared/viewCache/config";
@@ -63,6 +64,8 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
   adapter: StorageAdapter;
   /** Lists loaded a window at a time; null while the full in-memory list is the only path. */
   viewCache: ViewCacheController;
+  /** The calendar's recurring occurrences, held while it is unmounted. */
+  calendarExpansion: ExpansionHold;
   eventBus: WorkspaceEventBus;
   /** Register a data loader called during init/reload/resetAndSeed. Pass null to unregister. */
   registerDataLoader: (loader: DataLoader | null) => void;
@@ -75,7 +78,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
   // time this runs, and what it throws if it isn't. The bridge lane uses the
   // real adapter with its transport already repointed in main.tsx.
-  const [{ adapter, viewCache }] = useState(() => {
+  const [{ adapter, calendarExpansion, viewCache }] = useState(() => {
     const raw: StorageAdapter =
       STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter();
     // The controller needs the adapter, and the adapter reports to the controller.
@@ -85,7 +88,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       started: () => ref.controller?.writeStarted(),
     });
     ref.controller = new ViewCacheController(watched, VIEW_CACHE);
-    return { adapter: watched, viewCache: ref.controller };
+    return {
+      adapter: watched,
+      calendarExpansion: new ExpansionHold(),
+      viewCache: ref.controller,
+    };
   });
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -363,6 +370,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const value: WorkspaceInternalValue = {
     adapter,
+    calendarExpansion,
     consumePendingNavigation,
     eventBus,
     isLoading,
@@ -392,6 +400,12 @@ export function useWorkspace(): WorkspaceContextValue {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useViewCacheController(): ViewCacheController | null {
   return useContext(WorkspaceContext)?.viewCache ?? null;
+}
+
+/** The calendar's held occurrences; null outside a workspace. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCalendarExpansionHold(): ExpansionHold | null {
+  return useContext(WorkspaceContext)?.calendarExpansion ?? null;
 }
 
 /**
