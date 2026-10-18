@@ -11,7 +11,7 @@ appTest(
     await quickAdd(app, "my scheduled task @today");
     await quickAdd(app, "unscheduled task");
 
-    await app.getByRole("button", { name: /Today/ }).click();
+    await app.getByRole("button", { name: /^Today/ }).click();
 
     await expect(app.locator("[data-page-list-item]").getByText("my scheduled task")).toBeVisible();
     await expect(
