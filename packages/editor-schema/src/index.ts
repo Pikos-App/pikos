@@ -69,6 +69,11 @@ export interface DocumentSchemaOptions {
    */
   image?: Extensions[number];
   /**
+   * Replaces StarterKit's code block, as `image` does: pass an extension of
+   * `CodeBlock`, so the `language` attribute and its Markdown fence tag stay.
+   */
+  codeBlock?: Extensions[number];
+  /**
    * Replaces the default Markdown extension.
    *
    * Parsing options legitimately differ by context — the Obsidian importer
@@ -97,12 +102,13 @@ export interface DocumentSchemaOptions {
 export function createDocumentExtensions(options: DocumentSchemaOptions): Extensions {
   return [
     StarterKit.configure({
-      codeBlock: { HTMLAttributes: { class: "editor-code-block" } },
+      codeBlock: options.codeBlock ? false : { HTMLAttributes: { class: "editor-code-block" } },
       heading: { levels: [1, 2, 3] },
       // StarterKit ships its own link mark; disabled so the configured one
       // below is the only definition in the schema rather than one of two.
       link: false,
     }),
+    ...(options.codeBlock ? [options.codeBlock] : []),
     TaskList,
     TaskItem.configure({ nested: true }),
     Link.configure({

@@ -228,6 +228,15 @@ button,
   --status-open: #3b82f6;
   --status-done: #10b981;
 
+  /* ─── Code (each at least 4.5:1 on surface-inset, a code block's fill) ─── */
+  --code-keyword: #6d28d9;
+  --code-string: #166534;
+  --code-number: #9a3412;
+  --code-title: #1d4ed8;
+  --code-type: #115e59;
+  --code-comment: var(--text-secondary);
+  --code-deletion: #b91c1c;
+
   /* ─── Shadows (theme-aware — used via var(), not Tailwind utilities) ─── */
   --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-app-md: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -340,6 +349,15 @@ button,
   --status-due-soon: #f59e42;
   --status-open: #60a5fa;
   --status-done: #34d399;
+
+  /* ─── Code ─── */
+  --code-keyword: #c4b5fd;
+  --code-string: #86efac;
+  --code-number: #fdba74;
+  --code-title: #93c5fd;
+  --code-type: #5eead4;
+  --code-comment: var(--text-tertiary);
+  --code-deletion: #fca5a5;
 
   /* ─── Shadows ─── */
   --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.2);

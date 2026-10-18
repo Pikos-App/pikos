@@ -233,6 +233,73 @@
   line-height: 1.5;
 }
 
+.editor-content pre .code-block-language {
+  float: right;
+  margin: -0.25em -0.5em 0 0.5em;
+  padding: 0.1em 0.25em;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-ui-sm);
+  cursor: pointer;
+}
+
+.editor-content pre .code-block-language:hover,
+.editor-content pre .code-block-language:focus-visible {
+  background: var(--surface-hover);
+}
+
+.editor-content .hljs-keyword,
+.editor-content .hljs-selector-tag,
+.editor-content .hljs-meta .hljs-keyword,
+.editor-content .hljs-doctag {
+  color: var(--code-keyword);
+}
+
+.editor-content .hljs-string,
+.editor-content .hljs-regexp,
+.editor-content .hljs-addition,
+.editor-content .hljs-symbol {
+  color: var(--code-string);
+}
+
+.editor-content .hljs-number,
+.editor-content .hljs-literal,
+.editor-content .hljs-variable.language_ {
+  color: var(--code-number);
+}
+
+.editor-content .hljs-title,
+.editor-content .hljs-section,
+.editor-content .hljs-name,
+.editor-content .hljs-attr,
+.editor-content .hljs-selector-class,
+.editor-content .hljs-selector-id {
+  color: var(--code-title);
+}
+
+.editor-content .hljs-type,
+.editor-content .hljs-built_in,
+.editor-content .hljs-attribute,
+.editor-content .hljs-property {
+  color: var(--code-type);
+}
+
+.editor-content .hljs-comment,
+.editor-content .hljs-quote,
+.editor-content .hljs-meta {
+  color: var(--code-comment);
+}
+
+.editor-content .hljs-comment {
+  font-style: italic;
+}
+
+.editor-content .hljs-deletion {
+  color: var(--code-deletion);
+}
+
 /* ─── Tables ──────────────────────────────────────────────────────────────── */
 
 .editor-content table {

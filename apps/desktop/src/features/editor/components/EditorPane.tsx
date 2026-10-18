@@ -24,6 +24,7 @@ import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 import { DesktopPageLink } from "../extensions/DesktopPageLink";
+import { PikosCodeBlock } from "../extensions/PikosCodeBlock";
 import { PikosImage } from "../extensions/PikosImage";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
@@ -54,6 +55,7 @@ import { TableToolbar } from "./TableToolbar";
 // stored document.
 export const editorExtensions = [
   ...createDocumentExtensions({
+    codeBlock: PikosCodeBlock,
     image: PikosImage.configure({ allowBase64: false, inline: false }),
     onKeyHandled: (event) => Keyboard.markUsed(event),
     pageLink: DesktopPageLink,
@@ -79,7 +81,7 @@ function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): bool
   const text = event.clipboardData?.getData("text/plain");
   if (!text || !looksLikeMarkdown(text)) return false;
   // insertContent is overridden by tiptap-markdown to parse strings as markdown.
-  return editor.commands.insertContent(text);
+  return editor.chain().setMeta("paste", true).insertContent(text).run();
 }
 
 /**

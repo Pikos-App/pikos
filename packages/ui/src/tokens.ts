@@ -280,6 +280,19 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
     ],
   },
   {
+    comment: ["Code (each at least 4.5:1 on surface-inset, a code block's fill)"],
+    darkComment: ["Code"],
+    tokens: [
+      { dark: hex("#c4b5fd"), name: "code-keyword", value: hex("#6d28d9") },
+      { dark: hex("#86efac"), name: "code-string", value: hex("#166534") },
+      { dark: hex("#fdba74"), name: "code-number", value: hex("#9a3412") },
+      { dark: hex("#93c5fd"), name: "code-title", value: hex("#1d4ed8") },
+      { dark: hex("#5eead4"), name: "code-type", value: hex("#115e59") },
+      { dark: ref("text-tertiary"), name: "code-comment", value: ref("text-secondary") },
+      { dark: hex("#fca5a5"), name: "code-deletion", value: hex("#b91c1c") },
+    ],
+  },
+  {
     comment: ["Shadows (theme-aware — used via var(), not Tailwind utilities)"],
     darkComment: ["Shadows"],
     tokens: [
