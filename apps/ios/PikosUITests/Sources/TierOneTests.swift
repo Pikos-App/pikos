@@ -470,6 +470,25 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Reopen"].firstMatch.waitForExistence(timeout: 5), "a finished page's menu offers Reopen")
     }
 
+    // qa: IOS-55
+    func testOnlyACalendarOfSeveralDaysHeadsItsColumns() {
+        let calendar = app.buttons["Calendar"].firstMatch
+        XCTAssertTrue(calendar.waitForExistence(timeout: Self.timeout))
+        calendar.tap()
+        let todayHeader = Date().formatted(.dateTime.weekday(.wide).month(.wide).day())
+        let header = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", todayHeader)
+        ).firstMatch
+        XCTAssertTrue(app.otherElements["Week"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(header.exists, "one day needs no column header; the week strip names it")
+
+        let title = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Visible days'")).firstMatch
+        title.tap()
+        app.buttons["3 Days"].firstMatch.tap()
+
+        XCTAssertTrue(header.waitForExistence(timeout: Self.timeout), "three days head each column with its day")
+    }
+
     // qa: IOS-27
     func testTheWeekStripMarksTheDayItMovedTo() {
         app.buttons["Calendar"].firstMatch.tap()

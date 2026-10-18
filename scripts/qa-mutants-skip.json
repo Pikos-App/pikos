@@ -208,5 +208,19 @@
     "replacement": "<=",
     "original": "let text = |i: usize| (i < argc as usize).then(|| arg_text(argv, i)).flatten();",
     "why": "SQLite calls pikos_utc only with the two arguments it was registered with, so the bound on the argument index is never reached."
+  },
+  {
+    "file": "apps/ios/Pikos/Sources/Editor/RepeatSheet.swift",
+    "mutator": "GuardCondition",
+    "replacement": "true",
+    "original": "guard isEditable, repeats, page.scheduledStart != nil else { return }",
+    "why": "Nothing reaches the save past it unguarded: Custom is offered only on a dated page whose rule can be edited and always turns repeating on, and an end waits to save only on such a page. The guard holds the rule in one place for whoever widens the sheet next."
+  },
+  {
+    "file": "apps/ios/Pikos/Sources/Editor/EditorHeader.swift",
+    "mutator": "ArithmeticOperator",
+    "replacement": "-",
+    "original": ".alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }",
+    "why": "Lines the checkbox up with the title's first line. Only its look changes, and the screen tour is where alignment is judged."
   }
 ]
