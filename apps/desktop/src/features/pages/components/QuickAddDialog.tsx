@@ -16,6 +16,8 @@ import {
   localToday,
   NLP_PRIORITY_MAP,
   parseInput,
+  PRIORITY_COLORS,
+  quickAddHighlightTokens,
   snapScheduleToRule,
   storageErrorUserMessage,
   toStorageError,
@@ -38,6 +40,7 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
+import { QuickAddInput } from "./QuickAddInput";
 
 const log = createLogger("QuickAddDialog");
 
@@ -54,6 +57,11 @@ function bodyToTiptap(text: string): string {
       line ? { content: [{ text: line, type: "text" }], type: "paragraph" } : { type: "paragraph" }
     );
   return JSON.stringify({ content, type: "doc" });
+}
+
+/** The parse the chips preview: a finite run previews its first page. */
+function firstParsed(result: ParseResult): ParsedInput | undefined {
+  return result.type === "finite" ? result.inputs[0] : result.input;
 }
 
 /** How a parsed reminder lead reads on the preview chip. */
@@ -166,6 +174,12 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const placeholder = useQuickAddPlaceholder(true);
 
+  // Parsed every keystroke rather than on the chips' debounce, so a colour never trails its word.
+  const liveParse = inputValue.trim() ? firstParsed(parseInput(inputValue)) : undefined;
+  const highlightTokens = liveParse ? quickAddHighlightTokens(inputValue, liveParse.title) : [];
+  const highlightPriorityClass =
+    PRIORITY_COLORS[liveParse?.priority ? (NLP_PRIORITY_MAP[liveParse.priority] ?? 0) : 0];
+
   function refocusInput() {
     inputRef.current?.focus();
   }
@@ -210,12 +224,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       }
 
       const result = parseInput(inputValue);
-      const parsed =
-        result.type === "single"
-          ? result.input
-          : result.type === "finite"
-            ? result.inputs[0]
-            : result.input;
+      const parsed = firstParsed(result);
       if (!parsed) return;
 
       // Show recurrence / finite preview.
@@ -318,12 +327,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
   /** Actually creates the page(s) from a parse result (after any confirmation). */
   async function executeCreate(result: ParseResult): Promise<{ id: string; title: string } | null> {
-    const parsed =
-      result.type === "single"
-        ? result.input
-        : result.type === "finite"
-          ? result.inputs[0]
-          : result.input;
+    const parsed = firstParsed(result);
 
     // Folder: NLP folderQuery takes precedence over chip selection.
     let resolvedFolderId = folderValue;
@@ -502,18 +506,14 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             {addedFeedback}
           </p>
         ) : (
-          <input
+          <QuickAddInput
             aria-describedby="quick-add-error"
             aria-invalid={validationError !== null || submitError !== null}
             aria-label="Quick add input"
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className={cn(
-              "w-full bg-transparent text-base text-foreground outline-none",
-              "placeholder:text-muted-foreground/40",
-              shake && "animate-shake"
-            )}
+            className={cn("placeholder:text-muted-foreground/40", shake && "animate-shake")}
             onChange={(event) => {
               setInputValue(event.target.value);
               if (validationError !== null) setValidationError(null);
@@ -521,7 +521,9 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
+            priorityClass={highlightPriorityClass}
             ref={inputRef}
+            tokens={highlightTokens}
             value={inputValue}
           />
         )}

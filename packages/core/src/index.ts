@@ -200,6 +200,8 @@ export type {
 } from "./layout/buildPageListRows";
 export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
 export type { ParseResult, ParsedInput } from "./nlp/parser";
+export { quickAddHighlightTokens } from "./nlp/quickAddHighlight";
+export type { QuickAddHighlightKind, QuickAddHighlightToken } from "./nlp/quickAddHighlight";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
