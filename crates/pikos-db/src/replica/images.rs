@@ -126,7 +126,9 @@ pub(crate) async fn build(
 
 /// Puts an arrived image in the assets folder unless it's already there. Returns whether it
 /// arrived. The record's file is the transport's download, which may be gone once the apply
-/// returns, so it's copied rather than kept as a path.
+/// returns, so it's copied rather than kept as a path. With no folder set the apply fails, so the
+/// transport fetches the record again rather than moving past an image it couldn't keep; a
+/// download already gone, as a held record's is, drops the image rather than every other record.
 pub(crate) async fn apply(
     conn: &mut SqliteConnection,
     record: &Record,
@@ -138,11 +140,10 @@ pub(crate) async fn apply(
         return Ok(false);
     }
     let Some(dir) = assets_dir(conn).await? else {
-        log::warn!(
-            "replica: no images folder set, so {} wasn't kept",
+        return Err(crate::error::AppError::Internal(format!(
+            "no images folder set to keep {} in",
             record.name
-        );
-        return Ok(false);
+        )));
     };
 
     let target = dir.join(&record.name.key);
@@ -152,8 +153,14 @@ pub(crate) async fn apply(
         let Some(Value::Text(download)) = map.get(codec::FILE) else {
             return Ok(false);
         };
-        copy_in(Path::new(download), &target)?;
-        true
+        match copy_in(Path::new(download), &target) {
+            Ok(()) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                log::warn!("replica: the download of {} is gone: {e}", record.name);
+                return Ok(false);
+            }
+            Err(e) => return Err(e.into()),
+        }
     };
     mark_in_zone(conn, &record.name.key, record.row.born).await?;
     Ok(arrived)

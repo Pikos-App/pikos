@@ -400,7 +400,8 @@ pub async fn adopt_workspace_id(pool: &SqlitePool, workspace_id: &str) -> AppRes
 /// A device whose last fetch is older than [`RETENTION_DAYS`] can hold rows another device purged
 /// and has since forgotten the tombstones of, so nothing it fetches would tell it. It sends
 /// everything it holds again and fetches from the start: what it kept comes back everywhere,
-/// rather than living on one device alone.
+/// rather than living on one device alone. The transport's saved copies go too: the records they
+/// name may be long gone from its store, and saving over a gone copy is refused every time.
 async fn catch_up_after_absence(pool: &SqlitePool) -> AppResult<()> {
     let last_fetch: Option<String> =
         sqlx::query_scalar("SELECT last_fetch_at FROM replica_meta WHERE id = 1")
@@ -421,6 +422,9 @@ async fn catch_up_after_absence(pool: &SqlitePool) -> AppResult<()> {
         )
         .execute(&mut *tx)
         .await?;
+        sqlx::query("UPDATE replica_clocks SET system_fields = NULL")
+            .execute(&mut *tx)
+            .await?;
         queue_everything(&mut tx).await?;
         tx.commit().await?;
         Ok(())
@@ -530,6 +534,8 @@ pub async fn after_restore(pool: &SqlitePool, displaced: Displaced) -> AppResult
     sqlx::query("DELETE FROM replica_detached")
         .execute(tx.conn())
         .await?;
+    // The backup's marks of images already sent are as old as the backup.
+    images::forget_sent(tx.conn()).await?;
 
     let restored: std::collections::HashSet<String> = {
         let rows = state::synced_rows_conn(tx.conn()).await?;

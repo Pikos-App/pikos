@@ -65,7 +65,9 @@ public enum RecordCodec {
         let values = record.encryptedValues
         guard let name = values[nameField] as? String else { return nil }
         var fields: [String: SyncFieldValue] = [:]
-        for key in values.allKeys() where key != nameField {
+        // A file comes only as an asset: a text field naming a path would have this device copy
+        // whatever that path holds.
+        for key in values.allKeys() where key != nameField && key != fileField {
             switch values[key] {
             case let v as Int64: fields[key] = .integer(v)
             case let v as Double: fields[key] = .real(v)

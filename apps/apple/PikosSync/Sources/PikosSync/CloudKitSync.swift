@@ -197,6 +197,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         if !again.isEmpty {
             engine.state.add(pendingRecordZoneChanges: again.map { .saveRecord($0) })
         }
+        // Building a page's body queues the images it shows, which no local write announces.
+        await localChangesHappened()
     }
 
     private func handleZoneDeletions(
