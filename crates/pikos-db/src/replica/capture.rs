@@ -26,7 +26,7 @@
 use super::manifest::{watched_column, EntityMap, Lifecycle, Scope, ENTITIES, PURGE_NULLED};
 
 /// Where the generated triggers are checked in, relative to the crate.
-pub const MIGRATION: &str = "migrations/036_replica_capture_body_chunks.sql";
+pub const MIGRATION: &str = "migrations/039_replica_tomb_at_triggers.sql";
 
 /// Triggers an earlier capture migration made that the manifest no longer generates.
 const RETIRED: &[&str] = &["replica_page_delete", "replica_folder_delete"];
@@ -87,7 +87,39 @@ pub fn triggers() -> Vec<(String, String)> {
             folder_scope_leave_trigger(),
         ),
     ];
-    captures.chain(purges).chain(scope).collect()
+    captures
+        .chain(purges)
+        .chain(scope)
+        .chain(tomb_written_triggers())
+        .collect()
+}
+
+/// Stamps `tomb_at` with this device's wall time whenever a tombstone is written or replaced, by a
+/// capture, an apply or a restore alike, so expiry counts from when this device learned of the
+/// delete rather than from the tombstone's clock. They fire under the apply marker too: a tombstone
+/// arriving from another device starts its window here when it lands.
+fn tomb_written_triggers() -> [(String, String); 2] {
+    let stamp = "UPDATE replica_clocks SET tomb_at = \
+         CASE WHEN NEW.tomb IS NULL THEN NULL ELSE pikos_now_ms() END\n  \
+         WHERE entity = NEW.entity AND key = NEW.key;";
+    [
+        (
+            "replica_tomb_insert".to_owned(),
+            format!(
+                "CREATE TRIGGER replica_tomb_insert AFTER INSERT ON replica_clocks\n\
+                 WHEN NEW.tomb IS NOT NULL AND NEW.tomb_at IS NULL\n\
+                 BEGIN\n  {stamp}\nEND"
+            ),
+        ),
+        (
+            "replica_tomb_update".to_owned(),
+            format!(
+                "CREATE TRIGGER replica_tomb_update AFTER UPDATE OF tomb ON replica_clocks\n\
+                 WHEN NEW.tomb IS NOT OLD.tomb\n\
+                 BEGIN\n  {stamp}\nEND"
+            ),
+        ),
+    ]
 }
 
 /// A calendar page detaching from its calendar enters scope: it, everything hanging off it and the

@@ -272,10 +272,10 @@ pub async fn claim_device(pool: &SqlitePool, outside: Option<&str>) -> AppResult
 /// longer re-fetches everything, which can bring back what it never saw purged.
 pub const RETENTION_DAYS: i64 = 90;
 
-/// Forgets tombstones of rows long gone and records long held for a purged parent, by wall time so
-/// a clock running far ahead can't keep them. Returns the records whose tombstones went, for the
-/// transport to delete from its store too; a link still pointing at one of them now points at
-/// nothing, as it will on every device.
+/// Forgets tombstones this device wrote long ago and records long held for a purged parent, by wall
+/// time so a clock running far ahead can't keep them. Returns the records whose tombstones went,
+/// for the transport to delete from its store too; a link still pointing at one of them now points
+/// at nothing, as it will on every device.
 pub async fn expire(pool: &SqlitePool) -> AppResult<Vec<pikos_replica::RecordName>> {
     let cutoff_ms = chrono::Utc::now().timestamp_millis() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
     let cutoff = Hlc::new(cutoff_ms.max(0) as u64, 0).to_string();
@@ -288,15 +288,15 @@ pub async fn expire(pool: &SqlitePool) -> AppResult<Vec<pikos_replica::RecordNam
     for entity in manifest::ENTITIES {
         let covers = entity.covers.unwrap_or("1");
         let sql = format!(
-            "DELETE FROM replica_clocks WHERE entity = ? AND tomb < ? AND NOT EXISTS
-               (SELECT 1 FROM {} AS t WHERE ({covers}) AND {} = replica_clocks.key)
+            "DELETE FROM replica_clocks WHERE entity = ? AND tomb IS NOT NULL AND tomb_at < ?
+               AND NOT EXISTS (SELECT 1 FROM {} AS t WHERE ({covers}) AND {} = replica_clocks.key)
              RETURNING key",
             entity.table, entity.key
         )
         .replace("{row}", "t");
         let keys: Vec<String> = sqlx::query_scalar(&sql)
             .bind(entity.entity.prefix())
-            .bind(&cutoff)
+            .bind(cutoff_ms)
             .fetch_all(&mut *tx)
             .await?;
         if capture::is_purge_target(entity) {

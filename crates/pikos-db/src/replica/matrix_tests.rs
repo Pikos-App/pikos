@@ -1431,8 +1431,8 @@ async fn a_device_back_after_the_retention_window_sends_back_what_it_kept() {
     .unwrap();
     let past_retention = chrono::Utc::now().timestamp_millis()
         - (crate::replica::RETENTION_DAYS + 5) * 24 * 60 * 60 * 1000;
-    sqlx::query("UPDATE replica_clocks SET tomb = ? WHERE tomb IS NOT NULL")
-        .bind(pikos_replica::Hlc::new(past_retention as u64, 0).to_string())
+    sqlx::query("UPDATE replica_clocks SET tomb_at = ? WHERE tomb IS NOT NULL")
+        .bind(past_retention)
         .execute(&mac)
         .await
         .unwrap();
