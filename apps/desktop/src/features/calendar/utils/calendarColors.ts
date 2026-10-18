@@ -12,8 +12,10 @@ import type { CSSProperties } from "react";
  * the DOM and did nothing, which is why it read as a styling bug rather than a missing
  * one. `ALL_DAY_BAR_HEIGHT` still owns the number; these two must agree.
  */
+export const CHIP_HEIGHT_CLASS = "h-[calc(19px*var(--calendar-zoom,1))]";
+
 export const CHIP_BASE_CLASSES =
-  "type-body-sm h-[calc(19px*var(--calendar-zoom,1))] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
+  `type-body-sm ${CHIP_HEIGHT_CLASS} overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none` as const;
 
 /** Accepts #RRGGBB or RRGGBB; falls back to muted indigo if the hex cannot be parsed. */
 export function hexToRgba(hex: string, alpha: number): string {

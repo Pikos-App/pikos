@@ -1,3 +1,4 @@
+import { addDays } from "date-fns";
 import { describe, expect, it } from "vitest";
 
 import type { PageSummary } from "../types";
@@ -6,6 +7,7 @@ import {
   MONTH_CELL_MAX_EVENTS,
   monthGridDays,
   placeMonthCellEvents,
+  placeMonthWeek,
 } from "./monthGrid";
 
 function page(over: Partial<PageSummary> & { id: string }): PageSummary {
@@ -348,5 +350,69 @@ describe("placeMonthCellEvents — a synced event lands in the viewer's cell", (
 
     expect(placeMonthCellEvents([allDay], new Date(2026, 2, 10)).visible).toHaveLength(1);
     expect(placeMonthCellEvents([allDay], new Date(2026, 2, 9)).visible).toHaveLength(0);
+  });
+});
+
+describe("placeMonthWeek — one bar per event per week row", () => {
+  // Monday March 9 to Sunday March 15, 2026.
+  const week = Array.from({ length: 7 }, (_, i) => new Date(2026, 2, 9 + i));
+
+  it("draws a multi-day event once, in its first cell, spanning the days it covers", () => {
+    const offsite = page({
+      id: "offsite",
+      scheduledEnd: "2026-03-12",
+      scheduledStart: "2026-03-10",
+    });
+    const cells = placeMonthWeek([offsite], week);
+
+    expect(cells[1]?.lanes[0]?.spanCols).toBe(3);
+    expect(cells[2]?.lanes).toEqual([null]);
+    expect(cells[3]?.lanes).toEqual([null]);
+    expect(cells[4]?.lanes).toEqual([]);
+  });
+
+  it("cuts a bar at the week's edge and carries it on in the next row", () => {
+    const trip = page({ id: "trip", scheduledEnd: "2026-03-17", scheduledStart: "2026-03-14" });
+    const nextWeek = week.map((d) => addDays(d, 7));
+
+    const end = placeMonthWeek([trip], week)[5]?.lanes[0];
+    const start = placeMonthWeek([trip], nextWeek)[0]?.lanes[0];
+
+    expect(end).toMatchObject({
+      event: { continuesAfter: true, continuesBefore: false },
+      spanCols: 2,
+    });
+    expect(start).toMatchObject({
+      event: { continuesAfter: false, continuesBefore: true },
+      spanCols: 2,
+    });
+  });
+
+  it("keeps a bar on one lane across its days, below a bar that was there first", () => {
+    const long = page({ id: "long", scheduledEnd: "2026-03-11", scheduledStart: "2026-03-09" });
+    const later = page({ id: "later", scheduledEnd: "2026-03-12", scheduledStart: "2026-03-11" });
+    const cells = placeMonthWeek([later, long], week);
+
+    expect(cells[0]?.lanes[0]?.event.page.id).toBe("long");
+    expect(cells[2]?.lanes[1]?.event.page.id).toBe("later");
+    expect(cells[3]?.lanes).toEqual([null, null]);
+  });
+
+  it("fills a lane a bar left free with a single-day event", () => {
+    const bar = page({ id: "bar", scheduledEnd: "2026-03-10", scheduledStart: "2026-03-09" });
+    const standup = page({ id: "standup", scheduledStart: "2026-03-11T09:00:00" });
+
+    expect(placeMonthWeek([bar, standup], week)[2]?.lanes[0]?.event.page.id).toBe("standup");
+  });
+
+  it("hides a bar on a lane past the cap in every cell it covers, and counts it in each", () => {
+    const stack = Array.from({ length: 3 }, (_, i) =>
+      page({ id: `stack ${i}`, scheduledEnd: "2026-03-11", scheduledStart: "2026-03-09" })
+    );
+    const cells = placeMonthWeek(stack, week, 2);
+
+    expect(cells[0]?.lanes).toHaveLength(2);
+    expect(cells.slice(0, 3).map((c) => c.overflowCount)).toEqual([1, 1, 1]);
+    expect(cells[3]?.overflowCount).toBe(0);
   });
 });

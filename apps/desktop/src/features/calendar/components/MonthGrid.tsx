@@ -1,10 +1,11 @@
 import type { MonthCell, PageSummary } from "@pikos/core";
-import { MONTH_CELL_MAX_EVENTS, placeMonthCellEvents } from "@pikos/core";
+import { placeMonthWeek } from "@pikos/core";
 import { format } from "date-fns";
 
 import { cn } from "@/lib/utils";
 import { usePages } from "@/shared/context/PagesContext";
 
+import { CHIP_HEIGHT_CLASS } from "../utils/calendarColors";
 import { MonthEventChip } from "./MonthEventChip";
 
 interface MonthGridProps {
@@ -21,6 +22,19 @@ interface MonthGridProps {
 /** Weekday header labels, ordered from whatever day the grid's weeks start on. */
 function weekdayLabels(week: MonthCell[]): string[] {
   return week.map((cell) => format(cell.date, "EEE"));
+}
+
+/**
+ * Width of a bar drawn in its first cell and reaching across the next ones: each
+ * further cell adds its content width plus the gutter between two cells' contents,
+ * which is a cell's `px-1` on both sides and its `border-l`. Change those and this
+ * goes with them. The cell clips only vertically so the bar can cross; the bar is
+ * `relative` so the later cells' backgrounds paint under it.
+ */
+function barWidth(spanCols: number): string | undefined {
+  if (spanCols === 1) return undefined;
+
+  return `calc(${spanCols} * 100% + ${spanCols - 1} * (var(--spacing) * 2 + 1px))`;
 }
 
 /**
@@ -57,19 +71,18 @@ export function MonthGrid({ onOpenDay, onPageDoubleClick, pages, weeks }: MonthG
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {weeks.map((week) => (
           <div className="flex min-h-24 flex-1" key={week[0]?.key}>
-            {week.map((cell) => {
-              const { overflowCount, visible } = placeMonthCellEvents(
-                pages,
-                cell.date,
-                MONTH_CELL_MAX_EVENTS
-              );
+            {placeMonthWeek(
+              pages,
+              week.map((cell) => cell.date)
+            ).map(({ lanes, overflowCount }, col) => {
+              const cell = week[col]!;
               const weekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
               return (
                 // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- the cell is a pointer convenience surface, not a control: it must not take a button role because it contains real buttons (the day number, the chips, the overflow pill), and the day-number button is the keyboard-reachable equivalent of clicking it
                 <div
                   aria-label={`Events on ${format(cell.date, "EEEE MMMM d, yyyy")}`}
                   className={cn(
-                    "flex min-w-0 flex-1 cursor-pointer flex-col gap-px overflow-hidden border-t border-l border-border/40 px-1 pb-1",
+                    "flex min-w-0 flex-1 cursor-pointer flex-col gap-px overflow-x-visible overflow-y-clip border-t border-l border-border/40 px-1 pb-1",
                     weekend && "bg-muted/20",
                     !cell.inMonth && "bg-muted/40"
                   )}
@@ -96,16 +109,23 @@ export function MonthGrid({ onOpenDay, onPageDoubleClick, pages, weeks }: MonthG
                     {format(cell.date, "d")}
                   </button>
 
-                  {visible.map((event) => (
-                    <MonthEventChip
-                      event={event}
-                      folderColor={
-                        event.page.folderId ? folderColorMap.get(event.page.folderId) : undefined
-                      }
-                      key={event.key}
-                      onDoubleClick={onPageDoubleClick}
-                    />
-                  ))}
+                  {lanes.map((bar, lane) =>
+                    bar ? (
+                      <MonthEventChip
+                        event={bar.event}
+                        folderColor={
+                          bar.event.page.folderId
+                            ? folderColorMap.get(bar.event.page.folderId)
+                            : undefined
+                        }
+                        key={bar.event.key}
+                        onDoubleClick={onPageDoubleClick}
+                        width={barWidth(bar.spanCols)}
+                      />
+                    ) : (
+                      <div aria-hidden className={cn(CHIP_HEIGHT_CLASS, "shrink-0")} key={lane} />
+                    )
+                  )}
 
                   {overflowCount > 0 && (
                     <button

@@ -99,14 +99,9 @@ export {
   buildMonthGrid,
   MONTH_CELL_MAX_EVENTS,
   monthGridDays,
-  placeMonthCellEvents,
+  placeMonthWeek,
 } from "./calendar/monthGrid";
-export type {
-  CalendarViewMode,
-  MonthCell,
-  MonthCellEvent,
-  MonthCellPlacement,
-} from "./calendar/monthGrid";
+export type { CalendarViewMode, MonthCell, MonthCellEvent } from "./calendar/monthGrid";
 // ── Shared palettes and priority labels ──
 export {
   currentPaletteColor,
