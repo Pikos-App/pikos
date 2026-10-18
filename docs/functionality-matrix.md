@@ -5,7 +5,7 @@ Rows are operations at the granularity a user performs them; columns are the ori
 thing being operated on (does it come from Pikos or a calendar?) and the surface it's
 performed from.
 
-Scope: **0.4.1**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
+Scope: **0.4.2**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
 every Synced/Detached cell is unreachable there. The iOS column describes `apps/ios` — a
 native SwiftUI app over the same Rust, not a second implementation. Its tier-1 flows run in a
 simulator, and its speed tests run on an iPhone 16 at 200,000 pages.
@@ -601,9 +601,11 @@ whose whole job is to show what exists.
 | ------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------- | ---------------------- | ----------------------------------------- | --------------------------------- | ------------------------------------------------ |
 | Full-text search                                             | ✅                                                      | ✅ ⁵²                         | ✅                     | ✅ `search`, `--any`, `--after` ⁵²        | ✅ same ranking and rows          | ✅ indexed on arrival                            |
 | Recently opened pages, before a query is typed               | ✅                                                      | ✅                            | ✅                     | —                                         | ✅                                | 🚫 per device                                    |
+| Back / forward through opened pages                          | ✅ ⌘[ ⌘], View menu, mouse; skips trashed and done      | ✅ same                       | ✅ same                | —                                         | ○                                 | — held in memory, never stored                   |
 | Today / Inbox views                                          | ✅                                                      | ✅ ⁵³                         | ✅                     | ✅ `today` / `list` ⁵⁴                    | ✅ both, plus Upcoming            | ✅                                               |
-| Page linking (`[[`) + backlinks                              | ○ ⁵⁵                                                    | ○ ⁵⁵                          | ○ ⁵⁵                   | —                                         | ○                                 | ○                                                |
+| Page linking (`[[`) + backlinks                              | ✅ ⁵⁵                                                   | ✅ marks owned ⁵ ⁵⁵           | ✅ ⁵⁵                  | ⚠️ `[[Title]]` in and out; no backlinks   | ○ shown and kept, not followed    | ✅ travels with the body                         |
 | Markdown / CSV / SQLite export                               | ✅ ⁵⁶                                                   | ✅ ⁵⁶                         | ✅ ⁵⁶                  | —                                         | ✅ share sheet ⁵⁶                 | — a file on this device                          |
+| Export one page as Markdown                                  | ✅ ⁵⁶                                                   | ✅ ⁵⁶                         | ✅ ⁵⁶                  | —                                         | ○                                 | — a file on this device                          |
 | Import (Markdown / CSV)                                      | ⚠️ ⁵⁷                                                   | — ¹                           | —                      | —                                         | ○                                 | ✅ imported pages travel                         |
 | Daily summary notification                                   | ✅ ⁵⁸                                                   | ✅ same                       | ✅ same                | —                                         | ○ the Today widget instead        | — each device its own                            |
 | Quiet hours suppress a reminder                              | ✅ dropped, not deferred ⁵⁸                             | ✅ same                       | ✅ same                | —                                         | — a Focus mode is the control     | — a setting per device                           |
@@ -660,9 +662,22 @@ denorm. Both halves of its old disagreement with the app (UTC day boundary; the 
 same set still reaches both, with one difference in what a row is dated: the denorm holds the
 head, so a lapsed synced series prints its head's date here while the app shows it at today's
 occurrence (⁵³). `pikos list --due` was always denorm-based.
-⁵⁵ Not built. `pages.links` is a write-through JSON column nothing populates or renders;
-there's no `[[` editor affordance and no backlink computation anywhere (the only Tiptap link
-extension is external URLs). Markdown import preserves `[[wikilinks]]` as plain text.
+⁵⁵ A link is a `pageLink` node in the body that holds the target's page id, plus the title it
+had when linked as a fallback, so a rename never breaks it. Typing `[[` opens a picker: recent
+pages before anything is typed, then the pages whose titles match, never the open page itself
+and never inside a code block. It links only a page that exists; there is no create-on-link.
+The writer derives `pages.links`, the ids a body links to, from the body on every write, so the
+app, the CLI and the phone can't disagree about it, and backlinks read that column. The header
+shows how many pages outside the trash link here, hidden at none, and opens a list of them.
+The CLI and MCP speak Markdown, so a link comes out of `read` as `[[Title]]` under the target's
+current title, and a `[[Title]]` going in through `add` or `update --content` links the page of
+that title, matched without regard to case among pages outside the trash. A title no page has
+stays text, and so does one several pages share, unless one of them is the page the body
+already linked to, which is what keeps a link through a read and a write back. The CLI has no
+backlinks command. The Markdown export writes links the same way; Markdown import still keeps
+`[[wikilinks]]` as plain text. The phone's editor shares the document schema, so it shows a
+link under the title stored in it and keeps it through an edit, but a tap doesn't open it, and
+it offers no `[[` and no backlink count.
 ⁵⁶ The UI's three exports are Markdown, **CSV** and a SQLite backup. There is no JSON
 export, in the interface or behind it. Markdown/CSV read `pages` minus
 trash (done included) and drop a live mirror the user never actioned, on the same ownership
@@ -676,6 +691,13 @@ bookkeeping tables (`page_sync`, cursors; credentials stay in the OS keychain �
 desktop's Secret Service, which a session without GNOME Keyring, KWallet or KeePassXC does not
 have, and connecting says so rather than failing silently — never in the
 DB).
+
+One page exports on its own from its row menu, ⌘⇧E or the palette, to `~/Downloads`, and is
+revealed in Finder. A page with no images is a lone `<title>.md`; one with images becomes a
+`<title>/` directory holding the file and its `assets/`. Neither replaces an earlier export of
+the same page: the name takes the first free numeral. It carries no folder, and it exports
+whatever its origin, a live mirror included, because naming one page is the explicit action
+the workspace export's toggle stands in for. The phone has no single-page export.
 
 Every builder now lives in `pikos_db::export` (the `.ics` in `pikos_db::export_ics`), shared with
 iOS, which writes each one into a temporary directory and hands it to the system share sheet —
