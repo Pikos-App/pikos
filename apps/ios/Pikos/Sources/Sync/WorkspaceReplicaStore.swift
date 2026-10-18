@@ -52,6 +52,10 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
         try await workspace.setEngineState(state: state)
     }
 
+    func fetchFinished() async throws {
+        try await workspace.fetchFinished()
+    }
+
     func expire() async throws -> [PikosSync.RecordAddress] {
         try await workspace.expireSync().map(Self.address)
     }

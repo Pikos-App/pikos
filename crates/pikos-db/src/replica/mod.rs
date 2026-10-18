@@ -314,6 +314,17 @@ pub async fn set_engine_state(pool: &SqlitePool, state: &[u8]) -> AppResult<()> 
     Ok(())
 }
 
+/// Marks a fetch that finished and applied everything it brought. The transport saves its state
+/// only when that state changes, and a fetch that found nothing may not change it, so a device
+/// online every day in a zone quiet for the retention window would otherwise read as away.
+pub async fn fetch_finished(pool: &SqlitePool) -> AppResult<()> {
+    sqlx::query("UPDATE replica_meta SET last_fetch_at = ? WHERE id = 1")
+        .bind(crate::pool::now_iso())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Checks the device id kept outside the file, in the keychain with a this-device-only flag, against
 /// the one in it, and returns the id to keep there.
 ///

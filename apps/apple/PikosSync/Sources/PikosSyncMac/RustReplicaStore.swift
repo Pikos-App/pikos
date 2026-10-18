@@ -43,6 +43,10 @@
             let _: Empty? = try call("set_engine_state", ["state": [UInt8](state)])
         }
 
+        func fetchFinished() async throws {
+            let _: Empty? = try call("fetch_finished", [String: Int]())
+        }
+
         func expire() async throws -> [RecordAddress] {
             let addresses: [WireAddress] = try call("expire", [String: Int]())
             return addresses.map(\.address)

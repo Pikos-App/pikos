@@ -140,7 +140,10 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 handleAccountChange(change)
             case .willFetchChanges, .willSendChanges:
                 onStatus(.syncing)
-            case .didFetchChanges, .didSendChanges:
+            case .didFetchChanges:
+                try await coordinator.fetchFinished()
+                onStatus(.upToDate)
+            case .didSendChanges:
                 onStatus(.upToDate)
             default:
                 break
