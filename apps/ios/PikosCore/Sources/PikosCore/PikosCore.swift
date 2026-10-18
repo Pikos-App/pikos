@@ -497,6 +497,22 @@ fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -1449,6 +1465,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * chose to colour. A picker that reorders them loses that.
      */
     func paletteColors()  -> [PaletteColor]
+    
+    /**
+     * Every read since the workspace opened, for the phone's count check.
+     */
+    func readCount()  -> ReadCount
     
     /**
      * A read-only handle onto the same workspace, for passing to code that
@@ -3212,6 +3233,18 @@ open func paletteColors() -> [PaletteColor]  {
     return try!  FfiConverterSequenceTypePaletteColor.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_pikos_ffi_fn_method_workspace_palette_colors(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Every read since the workspace opened, for the phone's count check.
+     */
+open func readCount() -> ReadCount  {
+    return try!  FfiConverterTypeReadCount_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_method_workspace_read_count(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -6459,6 +6492,63 @@ public func FfiConverterTypeQuickAddInput_lift(_ buf: RustBuffer) throws -> Quic
 #endif
 public func FfiConverterTypeQuickAddInput_lower(_ value: QuickAddInput) -> RustBuffer {
     return FfiConverterTypeQuickAddInput.lower(value)
+}
+
+
+/**
+ * Every read since the workspace opened.
+ */
+public struct ReadCount: Equatable, Hashable {
+    public var calls: UInt64
+    public var rows: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(calls: UInt64, rows: UInt64) {
+        self.calls = calls
+        self.rows = rows
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ReadCount: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReadCount: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadCount {
+        return
+            try ReadCount(
+                calls: FfiConverterUInt64.read(from: &buf), 
+                rows: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReadCount, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.calls, into: &buf)
+        FfiConverterUInt64.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadCount_lift(_ buf: RustBuffer) throws -> ReadCount {
+    return try FfiConverterTypeReadCount.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadCount_lower(_ value: ReadCount) -> RustBuffer {
+    return FfiConverterTypeReadCount.lower(value)
 }
 
 
@@ -11737,6 +11827,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_palette_colors() != 35084) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_read_count() != 55488) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {

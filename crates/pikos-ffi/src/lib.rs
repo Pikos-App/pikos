@@ -37,6 +37,7 @@ use pikos_core::text::extract_text as core_extract_text;
 
 pub mod replica;
 pub mod rules;
+mod tally;
 pub mod workspace;
 
 pub use workspace::{

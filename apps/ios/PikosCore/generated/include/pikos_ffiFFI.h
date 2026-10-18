@@ -593,6 +593,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_page_repeat(uint64_t ptr, RustBuff
 RustBuffer uniffi_pikos_ffi_fn_method_workspace_palette_colors(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_COUNT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_COUNT
+RustBuffer uniffi_pikos_ffi_fn_method_workspace_read_count(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -1608,6 +1613,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_page_repeat(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_PALETTE_COLORS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_PALETTE_COLORS
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_palette_colors(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_COUNT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_COUNT
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_count(void
     
 );
 #endif

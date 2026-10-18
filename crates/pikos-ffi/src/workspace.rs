@@ -967,6 +967,7 @@ fn quick_add_priority(
 #[derive(Debug, uniffi::Object)]
 pub struct Workspace {
     pub(crate) pool: sqlx::SqlitePool,
+    reads: crate::tally::ReadTally,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -982,7 +983,10 @@ impl Workspace {
         let pool = pikos_db::open_pool(&path)
             .await
             .map_err(WorkspaceError::opening)?;
-        Ok(Arc::new(Workspace { pool }))
+        Ok(Arc::new(Workspace {
+            pool,
+            reads: Default::default(),
+        }))
     }
 
     /// The editor schema this build writes. A page whose
@@ -993,7 +997,8 @@ impl Workspace {
 
     pub async fn list_pages(&self, query: PageQuery) -> Result<Vec<PageSummary>, WorkspaceError> {
         let pages = pikos_db::list_pages_impl(&self.pool, Some(query.into())).await?;
-        Ok(pages.into_iter().map(Into::into).collect())
+        let pages: Vec<PageSummary> = pages.into_iter().map(Into::into).collect();
+        Ok(self.reads.noted(pages, Vec::len))
     }
 
     /// Hand-arrange a folder, or the Inbox when `folder_id` is `None`, in the order given.
@@ -1073,7 +1078,7 @@ impl Workspace {
         .map(Into::into)
         .collect();
 
-        Ok(
+        let days: Vec<UpcomingDay> =
             pikos_core::views::group_upcoming(pages, &today, &now, |page| {
                 page.scheduled_start.as_deref()
             })
@@ -1082,8 +1087,10 @@ impl Workspace {
                 date: day.date,
                 pages: day.pages,
             })
-            .collect(),
-        )
+            .collect();
+        Ok(self
+            .reads
+            .noted(days, |days| days.iter().map(|day| day.pages.len()).sum()))
     }
 
     /// The next window of the Inbox's or a folder's open pages, in the order `sort` puts them.
@@ -1111,7 +1118,8 @@ impl Workspace {
             zone: pikos_db::device_zone().name().to_string(),
             dates: None,
         };
-        window_of(&self.pool, &key, after, limit).await
+        let window = window_of(&self.pool, &key, after, limit).await?;
+        Ok(self.reads.noted(window, |w| w.pages.len()))
     }
 
     /// Today a window at a time: what slipped from earlier days, oldest first, read like a list,
@@ -1136,11 +1144,12 @@ impl Workspace {
         let first = after.is_none();
         let earlier = window_of(&self.pool, &key, after, limit).await?;
         if !first {
-            return Ok(TodayWindow {
+            let window = TodayWindow {
                 earlier,
                 slipped_today: Vec::new(),
                 today: Vec::new(),
-            });
+            };
+            return Ok(self.reads.noted(window, |w| w.earlier.pages.len()));
         }
         let todays: Vec<PageSummary> = pikos_db::list_pages_impl(
             &self.pool,
@@ -1158,11 +1167,14 @@ impl Workspace {
         let groups = pikos_core::views::group_today(todays, &today, &now, |page| {
             page.scheduled_start.as_deref()
         });
-        Ok(TodayWindow {
+        let window = TodayWindow {
             earlier,
             slipped_today: groups.overdue,
             today: groups.today,
-        })
+        };
+        Ok(self.reads.noted(window, |w| {
+            w.earlier.pages.len() + w.slipped_today.len() + w.today.len()
+        }))
     }
 
     /// Move `ids`, in that order, to land after `after` and before `before` in their folder's
@@ -1237,12 +1249,13 @@ impl Workspace {
         let today = chrono::Local::now().date_naive();
         let counts =
             pikos_db::reads::count_views(&self.pool, pikos_db::device_zone().name(), today).await?;
-        Ok(ViewCounts {
+        let counts = ViewCounts {
             today: counts.today,
             upcoming: counts.upcoming,
             inbox: counts.inbox,
             folders: counts.folders.into_iter().collect(),
-        })
+        };
+        Ok(self.reads.noted(counts, |_| 0))
     }
 
     /// Finished pages for one view, newest first.
@@ -1280,14 +1293,15 @@ impl Workspace {
             },
         )
         .await?;
-        Ok(CompletedPages {
+        let completed = CompletedPages {
             pages: response.pages.into_iter().map(Into::into).collect(),
             // The count comes from SQLite as a signed COUNT(*); it cannot be
             // negative, and saturating rather than casting means a number too
             // large to represent shows as "very many" instead of wrapping to
             // near zero and claiming there is nothing more to load.
             total: u32::try_from(response.total).unwrap_or(u32::MAX),
-        })
+        };
+        Ok(self.reads.noted(completed, |c| c.pages.len()))
     }
 
     pub async fn get_page(&self, id: String) -> Result<Page, WorkspaceError> {
@@ -1295,7 +1309,7 @@ impl Workspace {
         // easily hold an id that has since been deleted, and that is not an
         // error worth surfacing as one.
         match pikos_db::get_page(&self.pool, &id).await? {
-            Some(page) => Ok(page.into()),
+            Some(page) => Ok(self.reads.noted(page.into(), |_| 1)),
             None => Err(WorkspaceError::NotFound {
                 entity: "page".into(),
                 id,
@@ -2496,13 +2510,14 @@ impl Workspace {
         page_id: String,
     ) -> Result<Vec<PageReminder>, WorkspaceError> {
         let rows = pikos_db::list_page_reminders(&self.pool, &page_id).await?;
-        Ok(rows
+        let reminders: Vec<PageReminder> = rows
             .into_iter()
             .map(|r| PageReminder {
                 id: r.id,
                 minutes_before: r.minutes_before,
             })
-            .collect())
+            .collect();
+        Ok(self.reads.noted(reminders, Vec::len))
     }
 
     pub async fn delete_page_reminder(&self, id: String) -> Result<(), WorkspaceError> {
@@ -2528,7 +2543,7 @@ impl Workspace {
     /// one device most likely to produce one.
     pub async fn list_trashed_pages(&self) -> Result<Vec<TrashedPage>, WorkspaceError> {
         let rows = pikos_db::list_trashed_pages_impl(&self.pool).await?;
-        Ok(rows
+        let trashed: Vec<TrashedPage> = rows
             .into_iter()
             .map(|t| TrashedPage {
                 id: t.id,
@@ -2537,7 +2552,8 @@ impl Workspace {
                 deleted_at: t.deleted_at,
                 is_synced: t.is_synced,
             })
-            .collect())
+            .collect();
+        Ok(self.reads.noted(trashed, Vec::len))
     }
 
     /// How long the trash keeps a page before purging it.
@@ -2701,7 +2717,13 @@ impl Workspace {
         include_completed: bool,
         limit: u32,
     ) -> Result<SearchResults, WorkspaceError> {
-        search_in(&self.pool, query, include_completed, limit).await
+        let results = search_in(&self.pool, query, include_completed, limit).await?;
+        Ok(self.reads.noted(results, |r| r.hits.len()))
+    }
+
+    /// Every read since the workspace opened, for the phone's count check.
+    pub fn read_count(&self) -> crate::tally::ReadCount {
+        self.reads.count()
     }
 
     /// Note that a page was opened, which is what orders [`Workspace::recent_pages`].
@@ -3027,7 +3049,8 @@ impl Workspace {
 
     pub async fn list_folders(&self) -> Result<Vec<Folder>, WorkspaceError> {
         let folders = pikos_db::list_folders_impl(&self.pool).await?;
-        Ok(folders.into_iter().map(folder_of).collect())
+        let folders: Vec<Folder> = folders.into_iter().map(folder_of).collect();
+        Ok(self.reads.noted(folders, Vec::len))
     }
 
     /// Everything to draw for a visible range, in one call.
