@@ -1,3 +1,6 @@
+use pikos_replica::Entity;
+
+use super::manifest::entity;
 use super::{forget, holds_only_seed, meta, record_seed, set_paused, start, Uncaptured};
 use crate::{insert_test_folder, insert_test_page, insert_test_page_sync, test_pool, TestPage};
 
@@ -327,6 +330,10 @@ async fn tombstones_and_holds_past_retention_are_forgotten_and_newer_ones_kept()
         .await
         .unwrap();
     }
+    sqlx::query("UPDATE replica_clocks SET tomb_at = 1000 WHERE key = 'gone-long-ago'")
+        .execute(&pool)
+        .await
+        .unwrap();
     for (name, since) in [("remind:old", &old), ("remind:recent", &recent)] {
         sqlx::query(
             "INSERT INTO replica_pen (name, record, since, reason) VALUES (?, '{}', ?, 'deleted_parent')",
@@ -358,6 +365,63 @@ async fn tombstones_and_holds_past_retention_are_forgotten_and_newer_ones_kept()
         )],
         "the transport deletes the forgotten tombstone from its store too"
     );
+}
+
+#[tokio::test]
+async fn a_page_trashed_long_ago_and_emptied_today_keeps_its_tombstone_for_the_whole_window() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Old notes"))
+        .await
+        .unwrap();
+    crate::soft_delete_page_impl(&pool, "p1").await.unwrap();
+    let trashed_long_ago = pikos_replica::Hlc::new(1_000, 0).to_string();
+    sqlx::query("UPDATE replica_clocks SET clocks = ? WHERE entity = 'page' AND key = 'p1'")
+        .bind(trashed_long_ago.repeat(entity(Entity::Page).unwrap().fields.len() + 1))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    crate::hard_delete_page_impl(&pool, "p1").await.unwrap();
+    let forgotten = super::expire(&pool).await.unwrap();
+
+    let tomb: Option<String> =
+        sqlx::query_scalar("SELECT tomb FROM replica_clocks WHERE entity = 'page' AND key = 'p1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        tomb.as_deref(),
+        Some(trashed_long_ago.as_str()),
+        "the purge takes the trashing's clock, so a restore made since still wins"
+    );
+    assert!(
+        forgotten.is_empty(),
+        "an offline device has the whole window to hear of the purge"
+    );
+}
+
+#[tokio::test]
+async fn a_tombstone_from_another_device_is_kept_for_the_window_from_when_it_landed() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    let written_long_ago = pikos_replica::Hlc::new(1_000, 0).to_string();
+    sqlx::query("INSERT INTO replica_applying (id) VALUES (1)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO replica_clocks (entity, key, clocks, tomb) VALUES ('page', 'p1', ?, ?)")
+        .bind(written_long_ago.repeat(entity(Entity::Page).unwrap().fields.len() + 1))
+        .bind(&written_long_ago)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM replica_applying")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(super::expire(&pool).await.unwrap().is_empty());
 }
 
 #[tokio::test]
