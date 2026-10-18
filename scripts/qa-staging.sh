@@ -4,6 +4,8 @@
 #
 #   scripts/qa-staging.sh reset         remove the workspace, settings, caches and logs: a first launch
 #   scripts/qa-staging.sh seed [pages]  add a realistic workspace (default 2,000 pages) through the CLI
+#   scripts/qa-staging.sh import-real   replace it with a copy of the installed app's workspace and
+#                                       assets, for UPD-01; the installed app's data is only read
 #   scripts/qa-staging.sh paths         print where each lives
 #   scripts/qa-staging.sh accounts before|after
 #                                       around disconnecting a calendar account: pass or fail for
@@ -147,6 +149,34 @@ accounts() {
   esac
 }
 
+# workspaces.json is written fresh rather than copied: the installed app's names its own file by
+# absolute path, and Staging would refuse it.
+import_real() {
+  local real_id real_data
+  real_id=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').identifier")
+  real_data="$LIB/Application Support/$real_id"
+  if [ ! -f "$real_data/default.sqlite" ]; then
+    echo "[qa-staging] no installed workspace at $real_data/default.sqlite" >&2
+    exit 1
+  fi
+
+  mkdir -p "$DATA"
+  rm -rf "$DB" "$DB-wal" "$DB-shm" "$DATA/assets" "$DATA/workspaces.json"
+  sqlite3 -readonly "$real_data/default.sqlite" ".backup '$DB'"
+  log "copied $real_data/default.sqlite to $DB"
+  if [ -d "$real_data/assets" ]; then
+    cp -R "$real_data/assets" "$DATA/assets"
+    log "copied $real_data/assets"
+  fi
+
+  DB="$DB" node -e '
+    const now = new Date().toISOString();
+    const ws = { createdAt: now, dbPath: process.env.DB, id: crypto.randomUUID(), lastOpenedAt: now, name: "My Workspace" };
+    process.stdout.write(JSON.stringify({ workspaces: [ws] }));
+  ' > "$DATA/workspaces.json"
+  log "$NAME opens the copy now"
+}
+
 case "${1:-}" in
   reset)
     require_closed
@@ -167,6 +197,10 @@ case "${1:-}" in
       --pages "$pages" --large-pages 2 --large-words 5000
     log "done; open $NAME to see them"
     ;;
+  import-real)
+    require_closed
+    import_real
+    ;;
   paths)
     printf 'workspace  %s\nlogs       %s\nCLI        pikos --db "%s" <command>\n' \
       "$DB" "$LIB/Logs/$ID/pikos.log" "$DB"
@@ -175,7 +209,7 @@ case "${1:-}" in
     accounts "${2:-}"
     ;;
   *)
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

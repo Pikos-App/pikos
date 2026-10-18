@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
@@ -121,6 +121,28 @@ fn canonicalize_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+/// A build opens a workspace only inside its own data folder. `workspaces.json` stores an
+/// absolute path, so a data folder copied from another build still names that build's file, and
+/// opening it would migrate it out from under the build that owns it. Checked before the open,
+/// so a refused file is never touched. The bench build is exempt: it opens a scratch file named
+/// by its environment.
+#[cfg_attr(feature = "bench", allow(dead_code))]
+fn ensure_inside_data_dir(canonical: &Path, data_dir: &Path) -> AppResult<()> {
+    let data_dir = data_dir
+        .canonicalize()
+        .unwrap_or_else(|_| data_dir.to_path_buf());
+    let is_inside = canonical.starts_with(&data_dir);
+    if is_inside {
+        return Ok(());
+    }
+
+    Err(AppError::Invalid(format!(
+        "{} is outside this app's data folder {}, so it was not opened",
+        canonical.display(),
+        data_dir.display()
+    )))
+}
+
 /// Open (or create) the SQLite workspace at `path`, run migrations, and
 /// store the pool in shared state.
 ///
@@ -143,6 +165,14 @@ pub async fn connect_db(
     app: tauri::AppHandle,
 ) -> AppResult<()> {
     let canonical = canonicalize_path(&path);
+
+    #[cfg(not(feature = "bench"))]
+    {
+        let data_dir = tauri::Manager::path(&app)
+            .app_data_dir()
+            .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?;
+        ensure_inside_data_dir(&canonical, &data_dir)?;
+    }
 
     let mut guard = state.inner.lock().await;
     if let Some(existing) = guard.path.as_ref() {
@@ -224,3 +254,7 @@ mod workflows_tests;
 #[cfg(test)]
 #[path = "ipc_tests.rs"]
 mod ipc_tests;
+
+#[cfg(test)]
+#[path = "data_dir_tests.rs"]
+mod data_dir_tests;
