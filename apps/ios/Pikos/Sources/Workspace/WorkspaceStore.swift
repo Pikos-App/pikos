@@ -223,7 +223,7 @@ public final class WorkspaceStore {
     public private(set) var dataVersion = 0
 
     #if DEBUG
-        /// How long the last refresh took to read and group the view's rows, for the speed tests.
+        /// How long the list last took to catch up with a change, for the speed tests.
         public private(set) var lastRefresh: Duration?
     #endif
 
@@ -476,24 +476,66 @@ public final class WorkspaceStore {
             // queries measured in single-digit milliseconds; overlapping them
             // would buy nothing and put two readers on the pool for no reason.
             sections = try await load(scope)
-            folders = try await workspace.listFolders().map { folder in
-                var folder = folder
-                folder.color = CurrentPaletteColor.of(folder.color)
-                return folder
-            }
-            // An opened section re-reads its rows; a closed one re-reads only
-            // its count. The count is not decoration: the screen decides
-            // whether to show "nothing here yet" from it, and a view whose
-            // pages are all finished is not empty — it just has nothing open.
-            if hasLoadedCompleted {
-                await reloadCompleted()
-            } else {
-                await countCompleted()
-            }
-            isLoading = false
-            dataVersion += 1
+            try await refreshAroundTheList(workspace)
         } catch {
             isLoading = false
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Everything a refresh reads besides the list's own rows.
+    private func refreshAroundTheList(_ workspace: Workspace) async throws {
+        folders = try await workspace.listFolders().map { folder in
+            var folder = folder
+            folder.color = CurrentPaletteColor.of(folder.color)
+            return folder
+        }
+        // An opened section re-reads its rows; a closed one re-reads only
+        // its count. The count is not decoration: the screen decides
+        // whether to show "nothing here yet" from it, and a view whose
+        // pages are all finished is not empty — it just has nothing open.
+        if hasLoadedCompleted {
+            await reloadCompleted()
+        } else {
+            await countCompleted()
+        }
+        isLoading = false
+        dataVersion += 1
+    }
+
+    /// Takes the ticked rows out of the list instead of reading every loaded window again. A tick
+    /// on a plain page removes only its own row, and the rows after it keep their order, so the
+    /// list is what a re-read would return.
+    private func settleTicks() async {
+        guard let workspace else { return }
+        let removesRowsOnly = scope != .upcoming
+        guard removesRowsOnly else {
+            await refresh()
+            return
+        }
+
+        #if DEBUG
+            let started = ContinuousClock.now
+            defer { lastRefresh = started.duration(to: .now) }
+        #endif
+        let windowedId = scope == .today ? "overdue" : "all"
+        var removedFromWindow = 0
+        var settled = sections.map { section in
+            let open = section.pages.filter { $0.status != "done" }
+            if section.id == windowedId { removedFromWindow += section.pages.count - open.count }
+            return Section(id: section.id, title: section.title, pages: open)
+        }
+        if scope == .today {
+            settled = settled.filter { !$0.pages.isEmpty }
+            let onlyToday = settled.allSatisfy { $0.id == "today" }
+            if onlyToday { settled = [Section(id: "today", title: nil, pages: settled.first?.pages ?? [])] }
+        }
+        sections = settled
+        loadedRows -= removedFromWindow
+
+        do {
+            try await refreshAroundTheList(workspace)
+        } catch {
             errorMessage = error.localizedDescription
         }
     }
@@ -1452,7 +1494,7 @@ public final class WorkspaceStore {
         pendingHold = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(850))
             guard !Task.isCancelled else { return }
-            await self?.refresh()
+            await self?.settleTicks()
         }
     }
 
