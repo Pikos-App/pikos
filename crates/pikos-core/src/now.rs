@@ -35,10 +35,11 @@ pub struct Suggestion {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NowPlan {
-    /// The span in progress, the one ending soonest when spans overlap.
-    pub current: Option<String>,
-    /// The next timed page to start.
-    pub next: Option<String>,
+    /// Where in `items` the span in progress is, the one ending soonest when spans overlap. A
+    /// position rather than an id, since the caller's items can repeat an id.
+    pub current: Option<usize>,
+    /// Where in `items` the next timed page to start is.
+    pub next: Option<usize>,
     /// When the person is next busy; None while something is in progress or nothing else is timed.
     pub free_until: Option<i64>,
     /// Only offered while nothing is in progress.
@@ -51,18 +52,20 @@ pub struct NowPlan {
 pub fn plan(items: &[NowItem], now: i64) -> NowPlan {
     let current = items
         .iter()
-        .filter_map(|item| match (item.start, item.end) {
-            (Some(start), Some(end)) if start <= now && now < end => Some((end, item)),
+        .enumerate()
+        .filter_map(|(at, item)| match (item.start, item.end) {
+            (Some(start), Some(end)) if start <= now && now < end => Some((end, at)),
             _ => None,
         })
         .min_by_key(|(end, _)| *end)
-        .map(|(_, item)| item);
+        .map(|(_, at)| at);
     let next = items
         .iter()
-        .filter_map(|item| {
+        .enumerate()
+        .filter_map(|(at, item)| {
             item.start
                 .filter(|start| *start > now)
-                .map(|start| (start, item))
+                .map(|start| (start, at))
         })
         .min_by_key(|(start, _)| *start);
 
@@ -76,8 +79,8 @@ pub fn plan(items: &[NowItem], now: i64) -> NowPlan {
     changes.dedup();
 
     NowPlan {
-        current: current.map(|item| item.id.clone()),
-        next: next.map(|(_, item)| item.id.clone()),
+        current,
+        next: next.map(|(_, at)| at),
         free_until: if current.is_none() {
             next.map(|(start, _)| start)
         } else {

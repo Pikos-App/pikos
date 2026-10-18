@@ -33,8 +33,10 @@ fn wall_clock(day: &str, minute: i32) -> String {
     format!("{day}T{:02}:{:02}:00", minute / 60, minute % 60)
 }
 
+/// Bounded well past any day before the cast, so a nonsense minute clamps instead of overflowing.
 fn nearest_quarter(minute: f64) -> i32 {
-    (minute / f64::from(QUARTER)).round() as i32 * QUARTER
+    let quarters = (minute / f64::from(QUARTER)).round().clamp(-1e6, 1e6);
+    quarters as i32 * QUARTER
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

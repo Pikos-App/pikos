@@ -163,7 +163,7 @@ struct PageActionsMenu: View {
     private func offers(_ action: PageActionRules.Action) -> Bool {
         PageActionRules.offers(
             action, isRecurring: page.isRecurring, scheduleLocked: page.scheduleLocked,
-            hasDate: page.scheduledStart != nil)
+            hasDate: !(page.scheduledStart ?? "").isEmpty)
     }
 
     var body: some View {
