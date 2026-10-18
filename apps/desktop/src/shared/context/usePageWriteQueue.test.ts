@@ -41,6 +41,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 it("closing the window writes an edit still waiting in the editor's autosave before it goes", async () => {
@@ -113,4 +114,30 @@ it("a save the database merged with a newer body says what was typed and what wa
     page: { content: "merged", id: "p1" },
     typed: "typed",
   });
+});
+
+it("writes an edit still waiting on its debounce when the queue goes away", async () => {
+  vi.useFakeTimers();
+  const updatePage = vi.fn((id: string) => Promise.resolve({ id }));
+  const adapter = { updatePage } as unknown as StorageAdapter;
+  const hook = renderHook(() => usePageWriteQueue({ adapter, emit: vi.fn(), mirror }));
+
+  hook.result.current.updatePage("p1", { title: "Renamed" });
+  hook.unmount();
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(updatePage).toHaveBeenCalledWith("p1", { title: "Renamed" });
+});
+
+it("writes it once, not again when its timer would have fired", async () => {
+  vi.useFakeTimers();
+  const updatePage = vi.fn((id: string) => Promise.resolve({ id }));
+  const adapter = { updatePage } as unknown as StorageAdapter;
+  const hook = renderHook(() => usePageWriteQueue({ adapter, emit: vi.fn(), mirror }));
+
+  hook.result.current.updatePage("p1", { title: "Renamed" });
+  hook.unmount();
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  expect(updatePage).toHaveBeenCalledTimes(1);
 });

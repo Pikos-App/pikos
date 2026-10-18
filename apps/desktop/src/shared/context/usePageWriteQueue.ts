@@ -329,7 +329,15 @@ export function usePageWriteQueue({
 
   // The close above and an update relaunch both reach the queue through this, after
   // the editor has fed it, so neither has to know what a write queue is.
-  useEffect(() => onDrainPending(drainAll), [adapter]);
+  useEffect(() => {
+    const stopDraining = onDrainPending(drainAll);
+    return () => {
+      stopDraining();
+      // Waiting edits are written as the queue goes, to the workspace they were made in. A timer
+      // left running would write later, after a switch, and report into state that is gone.
+      void drainAll();
+    };
+  }, [adapter]);
 
   return {
     cancelPendingWrite,
