@@ -30,6 +30,9 @@ class PikosUITestCase: XCTestCase {
     /// Added to every launch, before the workspace is first opened.
     class var launchEnvironment: [String: String] { [:] }
 
+    /// A workspace file to start from instead of an empty one, copied in before the first launch.
+    class var startingWorkspace: URL? { nil }
+
     // The async pair rather than `setUpWithError`/`tearDownWithError`: an
     // override may add main-actor isolation only to an `async` method, and
     // everything below — the app handle included — is main-actor bound.
@@ -45,6 +48,10 @@ class PikosUITestCase: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: workspaceDirectory, withIntermediateDirectories: true)
+        if let template = Self.startingWorkspace {
+            try FileManager.default.copyItem(
+                at: template, to: workspaceDirectory.appendingPathComponent("pikos.sqlite"))
+        }
 
         app = XCUIApplication()
         app.launchEnvironment["PIKOS_WORKSPACE_DIRECTORY"] = workspaceDirectory.path

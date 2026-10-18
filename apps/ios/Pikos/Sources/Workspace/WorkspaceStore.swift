@@ -225,6 +225,8 @@ public final class WorkspaceStore {
     #if DEBUG
         /// How long the list last took to catch up with a change, for the speed tests.
         public private(set) var lastRefresh: Duration?
+        /// Every read since the workspace opened, as of the list's last catch-up, for the count check.
+        public private(set) var readCount: ReadCount?
     #endif
 
     public var scope: Scope = .today {
@@ -469,7 +471,10 @@ public final class WorkspaceStore {
         guard let workspace else { return }
         #if DEBUG
             let started = ContinuousClock.now
-            defer { lastRefresh = started.duration(to: .now) }
+            defer {
+                lastRefresh = started.duration(to: .now)
+                readCount = workspace.readCount()
+            }
         #endif
         do {
             // Sequential rather than concurrent. These are two local SQLite
@@ -516,7 +521,10 @@ public final class WorkspaceStore {
 
         #if DEBUG
             let started = ContinuousClock.now
-            defer { lastRefresh = started.duration(to: .now) }
+            defer {
+                lastRefresh = started.duration(to: .now)
+                readCount = workspace.readCount()
+            }
         #endif
         let windowedId = scope == .today ? "overdue" : "all"
         var removedFromWindow = 0
