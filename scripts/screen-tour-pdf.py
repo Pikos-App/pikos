@@ -70,9 +70,11 @@ def load_shots(source: Path):
             for item in test.get("attachments", []):
                 name = item.get("suggestedHumanReadableName", "")
                 path = source / item["exportedFileName"]
+                # The writing tour's measurements are named like a shot but are text.
+                is_image = path.suffix.lower() == ".png"
                 if name.startswith("missed"):
                     missed.extend(line for line in path.read_text().splitlines() if line.strip())
-                elif found := shot(name, path):
+                elif is_image and (found := shot(name, path)):
                     shots.append(found)
     else:
         for note in sorted(source.glob("missed*.txt")):

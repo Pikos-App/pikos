@@ -7,8 +7,8 @@ import XCTest
 /// PDF script sorts and captions by. A surface the tour cannot reach is recorded in a `missed`
 /// attachment and fails the run at the end, so one moved label does not cost the other sixty shots
 /// but does not pass either. Each surface also gets the system accessibility audit, its findings
-/// in an `accessibility` attachment: reported rather than failing until the first runs' findings
-/// are either fixed or judged.
+/// in an `accessibility` attachment and reported rather than failing: the first runs' touch-target
+/// and contrast findings were mostly the widget gallery and glass surfaces, too noisy to gate on.
 final class ScreenTour: PikosUITestCase {
     override class var launchEnvironment: [String: String] { ["PIKOS_DEMO": "1"] }
 
@@ -407,7 +407,8 @@ final class ScreenTour: PikosUITestCase {
         relaunch(["PIKOS_DEMO_SWITCHER": "1"])
         shot(section, 4, "Sideways: the view switcher")
         relaunch()
-        if tap(app.collectionViews.staticTexts["Order FlexiSpot E7 frame"].firstMatch, "row") {
+        // The sideways list is a few rows tall, so the row is one that sorts first: overdue.
+        if tap(app.collectionViews.staticTexts["Water the plants"].firstMatch, "row") {
             settle(1.5)
             shot(section, 5, "Sideways: a page open")
         }
@@ -598,13 +599,33 @@ final class ScreenTour: PikosUITestCase {
         audit(title)
     }
 
-    /// Notes what the system audit finds on the surface on screen, without failing on it.
+    /// Text size and clipping are left to the large-text tour a person reads, since the audit's own
+    /// check of them resizes text in place and reports every fixed-size calendar label.
+    private static let auditTypes = XCUIAccessibilityAuditType.all.subtracting([.dynamicType, .textClipped])
+
+    /// Notes what the system audit finds on the surface on screen, without failing on it. An alert
+    /// or action sheet is skipped: the audit resizes its text whatever types it is given, and on an
+    /// alert that crashes UIKit itself (an index out of range in the alert's flow layout), taking
+    /// the rest of the tour with it. Both are the system's own views.
     private func audit(_ surface: String) {
-        try? app.performAccessibilityAudit { issue in
-            let element = issue.element?.label ?? issue.element?.identifier ?? "?"
+        let isSystemDialog = app.alerts.firstMatch.exists || app.sheets.firstMatch.exists
+        guard !isSystemDialog else { return }
+
+        try? app.performAccessibilityAudit(for: Self.auditTypes) { issue in
+            let element = issue.element.map(Self.describe) ?? "?"
             self.accessibility.append("\(surface): \(issue.compactDescription) [\(element)]")
             return true
         }
+    }
+
+    /// An element's label, or, for one with neither label nor identifier, its type and frame so it
+    /// can be found at all.
+    private static func describe(_ element: XCUIElement) -> String {
+        let name = element.label.isEmpty ? element.identifier : element.label
+        guard name.isEmpty else { return name }
+
+        let frame = element.frame
+        return "\(element.elementType.rawValue) at \(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))×\(Int(frame.height))"
     }
 
     private func settle(_ seconds: TimeInterval) {
