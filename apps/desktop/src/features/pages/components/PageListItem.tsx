@@ -250,6 +250,12 @@ export function PageListItem({
                         ? formatPageRelativeTime(start, now)
                         : formatPageDate(start, now);
                     const dueSoon = !isCompleted && !isPast && isDueSoon(start, now);
+                    // Where someone looks after Move to today leaves a page behind;
+                    // the toast only has room for the count.
+                    const title = page.scheduleLocked
+                      ? `${tooltip} · Its calendar sets this date`
+                      : tooltip;
+
                     return (
                       <button
                         aria-label={`Toggle date format: ${label}`}
@@ -266,7 +272,7 @@ export function PageListItem({
                           onToggleDateFormat?.();
                         }}
                         tabIndex={-1}
-                        title={tooltip}
+                        title={title}
                         type="button"
                       >
                         {label}
