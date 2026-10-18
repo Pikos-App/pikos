@@ -1,17 +1,7 @@
 import type { PageSummary } from "@pikos/core";
-import {
-  buildCalendarDays,
-  buildMonthGrid,
-  clampDayCount,
-  getCalendarDayCount,
-  monthGridDays,
-  utcInstant,
-} from "@pikos/core";
-import { addDays, isSameDay, startOfDay } from "date-fns";
+import { isSameDay } from "date-fns";
 import { type CSSProperties, useEffect, useState } from "react";
 
-import { useLayoutMode } from "@/features/layout/breakpoints";
-import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import {
   calendarTextScale,
@@ -23,10 +13,10 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useCalendarExpansionHold, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
-import type { Range } from "@/shared/viewCache/controller";
 import { useCachedRange } from "@/shared/viewCache/useCachedRange";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
+import { useCalendarRange } from "../hooks/useCalendarRange";
 import { CALENDAR_GUTTER_VAR, CALENDAR_ZOOM_VAR, calendarGutterPx } from "../utils/gutterWidth";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
@@ -52,15 +42,9 @@ export function CalendarView() {
   } = usePages();
   const { on } = useWorkspace();
   const { openPage } = useUI();
-  const { referenceDate, setReferenceDate } = useCalendarDate();
+  const { setReferenceDate } = useCalendarDate();
   const { hiddenIds } = useUndoDelete();
-  const { weekStart } = useAppSettings();
-  const {
-    dayCount: preferredDayCount,
-    setViewMode,
-    textSize: calendarTextSize,
-    viewMode,
-  } = useCalendarSettings();
+  const { setViewMode, textSize: calendarTextSize } = useCalendarSettings();
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
   const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
@@ -82,35 +66,10 @@ export function CalendarView() {
     (document.activeElement as HTMLElement | null)?.blur();
   }, []);
 
-  const layoutMode = useLayoutMode();
-  // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
-  // would truncate day columns to unusable widths.
-  const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(layoutMode));
-  const isMonth = viewMode === "month";
-  // Month view's visible range is the padded grid (up to 42 days), not the
-  // month — recurrence expansion and the completed-page fetch below both key
-  // off `days`, so the padding rows get their occurrences too.
-  const monthWeeks = buildMonthGrid(referenceDate, weekStart);
-  const days = isMonth
-    ? monthGridDays(monthWeeks)
-    : buildCalendarDays(referenceDate, dayCount, weekStart);
+  const { days, isMonth, monthWeeks, neighbours, shown, stepDays } = useCalendarRange();
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
 
-  const rangeStart = days[0];
-  const rangeEnd = days[days.length - 1];
-  // A week or less also holds the range a step either side; a month's neighbours would be large.
-  const stepDays = days.length <= 7 ? days.length : 0;
-  const instants = (shift: number): Range | null =>
-    rangeStart && rangeEnd
-      ? [
-          utcInstant(startOfDay(addDays(rangeStart, shift))),
-          utcInstant(startOfDay(addDays(rangeEnd, shift + 1))),
-        ]
-      : null;
-  const shown = instants(0);
-  const neighbours =
-    stepDays > 0 ? [instants(-stepDays), instants(stepDays)].flatMap((r) => (r ? [r] : [])) : [];
   const cachedRange = useCachedRange(shown?.[0] ?? null, shown?.[1] ?? null, neighbours);
   const visiblePages = (cachedRange?.pages ?? NO_PAGES).filter((p) => !hiddenIds.has(p.id));
 

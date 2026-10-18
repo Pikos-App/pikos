@@ -2,7 +2,7 @@ import { clampDayCount, dayCountNavStep, getCalendarDayCount } from "@pikos/core
 import { addDays, addMonths, startOfMonth, subDays, subMonths } from "date-fns";
 import { Activity, useRef } from "react";
 
-import { CalendarHeader, CalendarView } from "@/features/calendar";
+import { CalendarHeader, CalendarView, usePreloadCalendarRange } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
 import { useLayoutMode } from "@/features/layout/breakpoints";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
@@ -28,6 +28,7 @@ export function EditorPanel() {
   const isMonth = viewMode === "month";
   const leftNav = useLeftNavToggle();
   const { clearSelection, selectedPageIds } = useSelection();
+  usePreloadCalendarRange();
 
   useKeyboardShortcut(
     "Mod+Shift+C",

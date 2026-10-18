@@ -234,6 +234,44 @@ describe("ViewCacheController calendar ranges", () => {
     await settle();
     expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
   });
+
+  it("loads a range ahead of the calendar's first showing, so it shows with no fetch", async () => {
+    const { adapter, controller, raw } = await setup(0);
+    const dentist = await adapter.createPage({
+      ...newPage("Dentist"),
+      scheduledStart: "2026-06-03T09:00:00",
+    });
+    await controller.loadSeriesHeads();
+    controller.preloadRange(start, end);
+    await settle();
+    const fetched: (string | null)[] = [];
+    const listRange = raw.listRange.bind(raw);
+    raw.listRange = (...args) => {
+      fetched.push(args[0]);
+      return listRange(...args);
+    };
+
+    controller.showRange(start, end);
+    expect(controller.rangeLoaded(start, end)).toBe(true);
+    expect(controller.rangePages(start, end).map((p) => p.id)).toEqual([dentist.id]);
+    await settle();
+    expect(fetched).toEqual([]);
+  });
+
+  it("leaves the preload to the calendar while it shows a range", async () => {
+    const { controller, raw } = await setup(0);
+    const fetched: (string | null)[] = [];
+    const listRange = raw.listRange.bind(raw);
+    raw.listRange = (...args) => {
+      fetched.push(args[0]);
+      return listRange(...args);
+    };
+
+    controller.showRange(start, end);
+    controller.preloadRange(start, end);
+    await settle();
+    expect(fetched).toEqual([start]);
+  });
 });
 
 describe("ViewCacheController series heads", () => {

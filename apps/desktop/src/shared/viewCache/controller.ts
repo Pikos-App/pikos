@@ -321,6 +321,15 @@ export class ViewCacheController {
     if (this.heads === null) void this.loadHeads();
   }
 
+  /** The calendar will show `start` to `end` when it opens: load it now unless it is held, so the
+   *  first open draws its pages with the grid. A calendar on screen loads its own range. */
+  preloadRange(start: string, end: string): void {
+    const isCalendarShown = this.shownRange !== null;
+    if (isCalendarShown || this.ranges.has(`${start}|${end}`)) return;
+
+    void this.loadRange(start, end);
+  }
+
   /** Whether `start` to `end` has loaded at least once, with the series heads its repeats come
    *  from. */
   rangeLoaded(start: string, end: string): boolean {
