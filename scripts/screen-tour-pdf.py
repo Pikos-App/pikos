@@ -37,7 +37,7 @@ LAYOUTS = {
         "page_height": "7.55in",
         "row": "flex: 1; display: flex; gap: 0.35in; justify-content: center; align-items: flex-start;",
         "figure": "width: 3.05in;",
-        "img": "height: 6.55in; width: auto; max-width: 100%; border-radius: 22px;",
+        "img": "height: auto; width: auto; max-height: 6.55in; max-width: 100%; border-radius: 22px;",
     },
     "window": {
         "per_page": 2,
