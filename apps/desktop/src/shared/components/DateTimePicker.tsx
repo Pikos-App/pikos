@@ -395,7 +395,7 @@ export function DateTimePicker({
                       className={cn(
                         "transition-colors",
                         isActive
-                          ? "font-medium text-primary"
+                          ? "font-medium text-action"
                           : "text-foreground/55 hover:text-foreground"
                       )}
                       onClick={() => quickPick(pickDate)}
@@ -438,7 +438,7 @@ export function DateTimePicker({
                 className={cn(
                   "self-start text-xs transition-colors",
                   selectedTime === null
-                    ? "font-medium text-primary"
+                    ? "font-medium text-action"
                     : "text-foreground/40 hover:text-foreground"
                 )}
                 onClick={clearTime}
@@ -483,7 +483,7 @@ export function DateTimePicker({
                       className={cn(
                         "flex w-full rounded px-1.5 py-[3px] text-left text-xs transition-colors",
                         isSelected
-                          ? "font-medium text-primary"
+                          ? "font-medium text-action"
                           : isFocused
                             ? "bg-accent text-foreground"
                             : "text-foreground/55 hover:text-foreground"
@@ -535,7 +535,7 @@ export function DateTimePicker({
                     className={cn(
                       "rounded px-1.5 py-0.5 text-xs transition-colors",
                       isActive
-                        ? "font-medium text-primary"
+                        ? "font-medium text-action"
                         : "text-foreground/55 hover:text-foreground"
                     )}
                     key={minutes}
@@ -582,7 +582,7 @@ export function DateTimePicker({
                     className={cn(
                       "group inline-flex h-6 w-full items-center gap-1 rounded px-1.5 text-xs transition-colors",
                       isCustomDuration
-                        ? "font-medium text-primary"
+                        ? "font-medium text-action"
                         : "text-foreground/55 hover:text-foreground"
                     )}
                     onClick={() => {
@@ -629,7 +629,7 @@ export function DateTimePicker({
                     className={cn(
                       "rounded px-1.5 py-0.5 text-xs transition-colors",
                       isActive
-                        ? "font-medium text-primary"
+                        ? "font-medium text-action"
                         : "text-foreground/55 hover:text-foreground"
                     )}
                     key={days}
@@ -658,7 +658,7 @@ export function DateTimePicker({
                     className={cn(
                       "group inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-xs transition-colors",
                       isCustomSpan
-                        ? "font-medium text-primary"
+                        ? "font-medium text-action"
                         : "text-foreground/55 hover:text-foreground"
                     )}
                   >

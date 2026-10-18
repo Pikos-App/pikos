@@ -8,7 +8,7 @@ const KIND_CLASS: Record<Exclude<QuickAddHighlightKind, "priority">, string> = {
   folder: "text-subtle",
   note: "text-subtle",
   tag: "text-subtle",
-  when: "text-[var(--text-action)]",
+  when: "text-action",
 };
 
 interface QuickAddInputProps extends React.ComponentProps<"input"> {

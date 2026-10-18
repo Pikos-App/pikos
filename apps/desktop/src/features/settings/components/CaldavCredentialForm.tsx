@@ -95,7 +95,7 @@ export function CaldavCredentialForm({
         />
       </label>
       <a
-        className="-mt-1.5 text-xs text-primary hover:underline"
+        className="-mt-1.5 text-xs text-action hover:underline"
         href={APP_PASSWORD_HELP}
         rel="noreferrer"
         target="_blank"

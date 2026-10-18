@@ -301,7 +301,7 @@
 /* ─── Links ────────────────────────────────────────────────────────────────── */
 
 .editor-content .editor-link {
-  color: var(--primary);
+  color: var(--text-action);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: text;
@@ -314,7 +314,7 @@
 /* A link to another page is tinted, not underlined, so it doesn't read as a web link. */
 .editor-content .page-link {
   font: inherit;
-  color: var(--primary);
+  color: var(--text-action);
   background: color-mix(in srgb, var(--primary) 10%, transparent);
   border-radius: 4px;
   padding: 0 3px;
@@ -473,7 +473,7 @@
 .link-popover-url {
   background: transparent;
   border: none;
-  color: var(--primary);
+  color: var(--text-action);
   cursor: pointer;
   font-size: 12px;
   line-height: 1.3;
@@ -520,11 +520,11 @@
 }
 
 .link-popover-btn-primary {
-  color: var(--primary);
+  color: var(--text-action);
 }
 
 .link-popover-btn-primary:hover {
-  color: var(--primary);
+  color: var(--text-action);
 }
 
 .link-popover-input {

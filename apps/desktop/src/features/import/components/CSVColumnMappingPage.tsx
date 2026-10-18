@@ -209,7 +209,7 @@ export function CSVColumnMappingPage({
                     className={cn(
                       "appearance-none rounded-md border border-border bg-background px-3 py-1.5 pr-8 text-sm transition-colors hover:bg-accent",
                       cm.pikosField === "skip" && "text-muted-foreground",
-                      cm.pikosField === "title" && "border-primary/50 text-primary"
+                      cm.pikosField === "title" && "border-primary/50 text-action"
                     )}
                     onChange={(e) =>
                       handleFieldChange(cm.csvHeader, e.target.value as PikosFieldKey)

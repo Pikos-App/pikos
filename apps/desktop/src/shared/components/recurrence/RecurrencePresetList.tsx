@@ -38,7 +38,7 @@ export function RecurrencePresetList({
               className={cn(
                 "flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
                 isActive
-                  ? "text-primary"
+                  ? "text-action"
                   : "text-foreground/80 hover:bg-accent hover:text-foreground"
               )}
               onClick={() => onSelectPreset(preset)}
@@ -50,7 +50,7 @@ export function RecurrencePresetList({
                   <span
                     className={cn(
                       "text-xs",
-                      isActive ? "text-primary/60" : "text-muted-foreground/60"
+                      isActive ? "text-action/60" : "text-muted-foreground/60"
                     )}
                   >
                     {preset.detail}
@@ -68,9 +68,7 @@ export function RecurrencePresetList({
         aria-expanded={customVisible}
         className={cn(
           "flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
-          isCustomShape
-            ? "text-primary"
-            : "text-foreground/70 hover:bg-accent hover:text-foreground"
+          isCustomShape ? "text-action" : "text-foreground/70 hover:bg-accent hover:text-foreground"
         )}
         onClick={onToggleCustom}
         type="button"

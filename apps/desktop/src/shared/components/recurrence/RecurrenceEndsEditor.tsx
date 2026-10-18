@@ -73,7 +73,7 @@ export function RecurrenceEndsEditor({
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors",
                 isActive
-                  ? "bg-primary/15 font-medium text-primary"
+                  ? "bg-primary/15 font-medium text-action"
                   : "text-foreground/55 hover:bg-accent hover:text-foreground"
               )}
               key={t}

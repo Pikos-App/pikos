@@ -405,6 +405,7 @@ button,
   --color-subtle: var(--text-tertiary);
   --color-faint: var(--text-disabled);
   --color-due-soon: var(--text-due-soon);
+  --color-action: var(--text-action);
 
   /* ── shadcn/ui backward-compatible aliases ── */
   --color-background: var(--background);

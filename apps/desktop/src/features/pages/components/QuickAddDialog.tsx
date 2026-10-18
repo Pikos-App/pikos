@@ -502,7 +502,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       <div className="px-4 pt-4 pb-3">
         {addedFeedback !== null ? (
           <p className="animate-in truncate text-base text-muted-foreground fade-in-0">
-            <span className="mr-1.5 text-primary">✓</span>
+            <span className="mr-1.5 text-action">✓</span>
             {addedFeedback}
           </p>
         ) : (

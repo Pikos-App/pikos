@@ -460,6 +460,7 @@ export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
       { from: "text-tertiary", name: "subtle" },
       { from: "text-disabled", name: "faint" },
       { from: "text-due-soon", name: "due-soon" },
+      { from: "text-action", name: "action" },
     ],
     comment: ["Short aliases (avoid double text- prefix)"],
   },
