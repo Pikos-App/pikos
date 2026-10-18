@@ -232,3 +232,33 @@ async fn a_native_page_is_read_in_the_device_zone_not_utc() {
     assert_eq!(new_york.len(), 1);
     assert_eq!(new_york[0].fire_at, "2026-05-25T08:55:00");
 }
+
+/// The phone plans the first 60 of these and drops the rest until its next pass, so past the
+/// system's cap the order is what decides which reminders ring.
+#[tokio::test]
+async fn more_reminders_than_the_phone_plans_come_soonest_first() {
+    let pool = test_pool().await;
+    for n in (0..80).rev() {
+        let page = format!("p{n:02}");
+        insert_page(&pool, &page, "not_started").await;
+        let day = 26 + n / 24;
+        let hour = n % 24;
+        insert_schedule(
+            &pool,
+            &format!("s{n:02}"),
+            &page,
+            &format!("2026-05-{day:02}T{hour:02}:30:00"),
+        )
+        .await;
+        insert_reminder(&pool, &page, 15).await;
+    }
+
+    let upcoming = horizon(&pool, utc(), 14).await;
+
+    assert_eq!(upcoming.len(), 80);
+    assert!(upcoming
+        .windows(2)
+        .all(|pair| pair[0].fire_at <= pair[1].fire_at));
+    assert_eq!(upcoming[0].page_id, "p00");
+    assert_eq!(upcoming[59].page_id, "p59");
+}
