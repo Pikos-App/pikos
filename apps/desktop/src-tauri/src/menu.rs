@@ -81,10 +81,22 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .accelerator("CmdOrCtrl+Shift+C")
         .build(handle)?;
 
+    let go_back = MenuItemBuilder::new("Back")
+        .id("go_back")
+        .accelerator("CmdOrCtrl+[")
+        .build(handle)?;
+    let go_forward = MenuItemBuilder::new("Forward")
+        .id("go_forward")
+        .accelerator("CmdOrCtrl+]")
+        .build(handle)?;
+
     let view_menu = SubmenuBuilder::new(handle, "View")
         .item(&toggle_sidebar)
         .separator()
         .item(&toggle_calendar)
+        .separator()
+        .item(&go_back)
+        .item(&go_forward)
         .build()?;
 
     // ── Window ───────────────────────────────────────────────────
@@ -161,7 +173,7 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     }
     match id.as_str() {
         "new_page" | "close_page" | "settings" | "toggle_sidebar" | "toggle_calendar"
-        | "check_updates" | "keyboard_shortcuts" => {
+        | "check_updates" | "keyboard_shortcuts" | "go_back" | "go_forward" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.eval(format!(
                     "window.__onMenuEvent && window.__onMenuEvent('{}')",

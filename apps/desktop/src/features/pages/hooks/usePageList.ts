@@ -141,8 +141,8 @@ export function usePageList() {
     handleRenameCancel,
     handleRenameChange,
     handleRenameCommit,
-    handleSelectPage: (page: PageSummary | string | null) => {
-      if (page !== null) openPage(page);
+    handleSelectPage: (page: PageSummary | string | null, options?: { browsed?: boolean }) => {
+      if (page !== null) openPage(page, options);
       else setActivePage(null);
     },
     handleToggleStatus,

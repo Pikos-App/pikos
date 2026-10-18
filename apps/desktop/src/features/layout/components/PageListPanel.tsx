@@ -305,7 +305,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       // Up → last visible page; down → do nothing (avoid jumping to top).
       if (direction === -1) {
         const page = navigable[navigable.length - 1];
-        if (page) handleSelectPage(page);
+        if (page) handleSelectPage(page, { browsed: true });
       }
       return;
     }
@@ -313,11 +313,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     if (cached && direction === 1 && newIdx === currentIdx) {
       // The last loaded row: the next one is in the list but not loaded yet.
       const next = cached.ids[cached.ids.indexOf(navigable[currentIdx]?.id ?? "") + 1];
-      if (next) void cached.rows([next]).then(() => handleSelectPage(next));
+      if (next) void cached.rows([next]).then(() => handleSelectPage(next, { browsed: true }));
       return;
     }
     const page = navigable[newIdx];
-    if (page) handleSelectPage(page);
+    if (page) handleSelectPage(page, { browsed: true });
   }
 
   useKeyboardShortcut(

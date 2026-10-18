@@ -69,7 +69,9 @@ type MenuEventId =
   | "toggle_sidebar"
   | "toggle_calendar"
   | "check_updates"
-  | "keyboard_shortcuts";
+  | "keyboard_shortcuts"
+  | "go_back"
+  | "go_forward";
 
 declare global {
   interface Window {
@@ -117,12 +119,43 @@ function useMenuEvents() {
           ui.setSettingsSection("shortcuts");
           ui.setSettingsOpen(true);
           break;
+        case "go_back":
+          void ui.stepHistory(-1);
+          break;
+        case "go_forward":
+          void ui.stepHistory(1);
+          break;
       }
     };
     return () => {
       delete window.__onMenuEvent;
     };
   }, [setSidebarCollapsed, setRightPanel]);
+}
+
+/** The mouse's back and forward buttons, by the number the browser gives them. */
+const HISTORY_BUTTONS: Partial<Record<number, -1 | 1>> = { 3: -1, 4: 1 };
+
+function useMouseHistoryButtons() {
+  const { stepHistory } = useUI();
+  const stepRef = useRef(stepHistory);
+
+  useEffect(() => {
+    stepRef.current = stepHistory;
+  });
+
+  useEffect(() => {
+    function onMouseUp(event: MouseEvent) {
+      const direction = HISTORY_BUTTONS[event.button];
+      if (direction === undefined) return;
+
+      event.preventDefault();
+      void stepRef.current(direction);
+    }
+
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  }, []);
 }
 
 function useGlobalShortcuts() {
@@ -133,6 +166,7 @@ function useGlobalShortcuts() {
     setSettingsOpen,
     setSettingsSection,
     settingsOpen,
+    stepHistory,
   } = useUI();
   const { folders } = usePages();
   const { setFontSize, stepFontSize } = useEditorSettings();
@@ -165,6 +199,16 @@ function useGlobalShortcuts() {
     allowInInputs: true,
     group: "Navigation",
     label: "Close page",
+  });
+  useKeyboardShortcut("Mod+[", () => void stepHistory(-1), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Back to the previous page",
+  });
+  useKeyboardShortcut("Mod+]", () => void stepHistory(1), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Forward to the next page",
   });
   // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
   // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
@@ -247,6 +291,7 @@ function AppShell() {
   useTrackPageOpened();
   useGlobalShortcuts();
   useMenuEvents();
+  useMouseHistoryButtons();
   useDeepLinkRouter();
   useExternalChangeReload();
   useSyncAppliedReload();
