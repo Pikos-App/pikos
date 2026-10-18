@@ -2027,6 +2027,53 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
+  describe("a time-of-day word with no date beside it is part of the title", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-15T20:00:00", title: "Evening review" },
+          type: "single",
+        },
+        input: "Evening review today 8pm",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00", title: "Morning pages" },
+          type: "single",
+        },
+        input: "Morning pages tomorrow 9am",
+      },
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-03-16T05:00:00",
+            scheduledStart: "2026-03-15T21:00:00",
+            title: "night shift",
+          },
+          type: "single",
+        },
+        input: "night shift today 9pm to 5am",
+      },
+      {
+        expected: {
+          input: { title: "Morning pages" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Morning pages",
+      },
+      {
+        expected: {
+          input: { title: "Stretch in the evening" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Stretch in the evening",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+  });
+
   // ─── time-without-date anchor — additional weekday cases ────────────────────
   describe("time-without-date weekday anchoring", () => {
     // NOW = 2026-03-15 (Sunday).

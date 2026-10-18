@@ -23,6 +23,21 @@ type PagePriority = "urgent" | "high" | "medium" | "low";
  */
 export const DAY_BEFORE_MINUTES = -2;
 
+/**
+ * What a chrono match has to pin to be read as the page's date. chrono also
+ * matches a bare "morning" or "evening", pinning only a meridiem, and that word
+ * belongs to the title ("Evening review today 8pm"), so the date is the first
+ * match that pins one of these.
+ */
+const DATE_OR_TIME_COMPONENTS: readonly chrono.Component[] = [
+  "year",
+  "month",
+  "day",
+  "weekday",
+  "hour",
+  "minute",
+];
+
 export interface ParsedInput {
   title: string;
   scheduledStart?: string; // ISO 8601 — date-only ("2026-03-16") or datetime ("2026-03-16T15:00:00")
@@ -677,9 +692,10 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // intentionally not supported (ambiguous semantics).
   let chronoEndDate: Date | undefined;
 
-  const chronoResults = chrono.parse(text, ref, { forwardDate: true });
-  if (chronoResults.length > 0) {
-    const result = chronoResults[0]!;
+  const result = chrono
+    .parse(text, ref, { forwardDate: true })
+    .find((r) => DATE_OR_TIME_COMPONENTS.some((c) => r.start.isCertain(c)));
+  if (result) {
     const parsed = result.date();
 
     if (result.end) {
@@ -748,17 +764,14 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   // When "every week" is used (FREQ=WEEKLY, no BYDAY) and chrono parsed a weekday,
   // inject BYDAY so the rrule is self-documenting ("every week on Monday" vs bare "every week").
-  // Hoist into a local so noUncheckedIndexedAccess narrowing applies — the
-  // length check alone doesn't narrow the element type.
-  const firstChrono = chronoResults[0];
   if (
     recurrenceSpec?.kind === "infinite" &&
     recurrenceSpec.freq === "WEEKLY" &&
     !recurrenceSpec.byday &&
-    firstChrono &&
-    firstChrono.start.isCertain("weekday")
+    result &&
+    result.start.isCertain("weekday")
   ) {
-    const jsDay = firstChrono.start.get("weekday");
+    const jsDay = result.start.get("weekday");
     // chrono weekday: 0=Sun … 6=Sat → map to the rrule 0=Mon … 6=Sun index.
     const JS_TO_RRULE: Record<number, Weekday> = {
       0: SU,
