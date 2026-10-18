@@ -13,7 +13,12 @@ import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
-import { useViewCacheController } from "@/shared/context/WorkspaceContext";
+import { usePages } from "@/shared/context/PagesContext";
+import {
+  useCalendarExpansionHold,
+  useViewCacheController,
+} from "@/shared/context/WorkspaceContext";
+import { usePreloadRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import type { Range } from "@/shared/viewCache/controller";
 
 /** The days the calendar shows, and the range of instants it reads them from. */
@@ -50,11 +55,23 @@ export function useCalendarRange() {
   return { days, isMonth, monthWeeks, neighbours, shown, stepDays };
 }
 
-/** Loads the calendar's range while it is hidden, where its own effects don't run, so its first
- *  open after launch draws the blocks with the grid rather than a fetch later. */
+/** Loads the calendar's range and its repeating occurrences while it is hidden, where its own
+ *  effects don't run, so its first open after launch draws the blocks with the grid rather than a
+ *  fetch later. */
 export function usePreloadCalendarRange(): void {
   const controller = useViewCacheController();
-  const { shown } = useCalendarRange();
+  const { days, shown, stepDays } = useCalendarRange();
+  const { expandRecurrenceRange, listOverridesForRules, overridesVersion, recurrenceRules } =
+    usePages();
+  usePreloadRecurrenceExpansion({
+    days,
+    expandRecurrenceRange,
+    hold: useCalendarExpansionHold(),
+    listOverridesForRules,
+    margin: stepDays,
+    overridesVersion,
+    recurrenceRules,
+  });
   const start = shown?.[0];
   const end = shown?.[1];
 

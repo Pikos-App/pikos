@@ -14,7 +14,11 @@ import { parseLocalISO, rawExpandRule } from "@pikos/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { ExpansionHold, useRecurrenceExpansion } from "./useRecurrenceExpansion";
+import {
+  ExpansionHold,
+  usePreloadRecurrenceExpansion,
+  useRecurrenceExpansion,
+} from "./useRecurrenceExpansion";
 
 // Stand-in for the batched Rust command: delegates to the same `rawExpandRule`
 // the backend mirrors (raw per-rule occurrences, rule EXDATEs only). The page
@@ -1093,6 +1097,60 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     expect(renders[0]).toEqual(settled);
     await waitFor(() => expect(listOverrides).toHaveBeenCalledTimes(2));
     expect(expand).toHaveBeenCalledTimes(1);
+  });
+
+  it("a hold preloaded while the surface was hidden draws its occurrences in the first frame", async () => {
+    const hold = new ExpansionHold();
+    const expand = vi.fn(EXPAND);
+    const loads = {
+      days: weekDays(new Date(2026, 2, 16)),
+      expandRecurrenceRange: expand,
+      hold,
+      listOverridesForRules: NOOP_LIST_SCHEDULES,
+      margin: 7,
+      recurrenceRules: [makeRule()],
+    };
+    renderHook(() => usePreloadRecurrenceExpansion(loads));
+    await waitFor(() => expect(hold.window()).not.toBeNull());
+    const renders: (PageSummary | VirtualOccurrence)[][] = [];
+
+    renderHook(() => {
+      const out = useRecurrenceExpansion({
+        ...loads,
+        pages: [makePage({ scheduledStart: "2026-03-02T09:00:00" })],
+      });
+      renders.push(out);
+      return out;
+    });
+
+    expect(renders[0]!.some((p) => "isVirtual" in p)).toBe(true);
+    expect(expand).toHaveBeenCalledTimes(1);
+  });
+
+  it("a preload beside the surface it fills fetches once", async () => {
+    const hold = new ExpansionHold();
+    const expand = vi.fn(EXPAND);
+    const listOverrides = vi.fn(NOOP_LIST_SCHEDULES);
+    const loads = {
+      days: weekDays(new Date(2026, 2, 16)),
+      expandRecurrenceRange: expand,
+      hold,
+      listOverridesForRules: listOverrides,
+      margin: 7,
+      recurrenceRules: [makeRule()],
+    };
+
+    const { result } = renderHook(() => {
+      usePreloadRecurrenceExpansion(loads);
+      return useRecurrenceExpansion({
+        ...loads,
+        pages: [makePage({ scheduledStart: "2026-03-02T09:00:00" })],
+      });
+    });
+
+    await waitFor(() => expect(result.current.some((p) => "isVirtual" in p)).toBe(true));
+    expect(expand).toHaveBeenCalledTimes(1);
+    expect(listOverrides).toHaveBeenCalledTimes(1);
   });
 
   it("keeps an occurrence's object while its series is unchanged, and builds a new one when it changes", async () => {

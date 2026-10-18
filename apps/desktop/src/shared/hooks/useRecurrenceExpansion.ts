@@ -8,24 +8,27 @@ import type {
 } from "@pikos/core";
 import { dateKey, formatDateOnly, warmBlockInstants } from "@pikos/core";
 import { addDays } from "date-fns";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
-interface UseRecurrenceExpansionParams {
-  pages: PageSummary[];
+type ExpandRange = (
+  rules: PageRecurrenceRule[],
+  rangeStart: string,
+  rangeEnd: string
+) => Promise<RawRuleExpansion[]>;
+
+type ListOverrides = (ruleIds: string[]) => Promise<PageSchedule[]>;
+
+interface ExpansionLoadParams {
   recurrenceRules: PageRecurrenceRule[];
   /** The days currently visible in the week grid. */
   days: Date[];
   /** Fetch the given rules' materialised override rows, regardless of where each
    *  was moved. Keyed by rule (not range) so an override moved out of the visible
    *  week still excludes its original slot — a range fetch misses it entirely. */
-  listOverridesForRules: (ruleIds: string[]) => Promise<PageSchedule[]>;
+  listOverridesForRules: ListOverrides;
   /** Batched raw rrule expansion via the Rust engine (rule EXDATEs applied;
    * completed/skip union NOT applied — that stays here, client-side). */
-  expandRecurrenceRange: (
-    rules: PageRecurrenceRule[],
-    rangeStart: string,
-    rangeEnd: string
-  ) => Promise<RawRuleExpansion[]>;
+  expandRecurrenceRange: ExpandRange;
   /** Refetch trigger for an override row that moved in place. Such a move leaves
    *  the range and the rule set identical, so nothing else below would refire. */
   overridesVersion?: number;
@@ -35,6 +38,10 @@ interface UseRecurrenceExpansionParams {
   /** A hold that outlives the component, so a remount draws the occurrences it last showed in its
    *  first frame instead of a round trip after the grid. Without one, each mount starts empty. */
   hold?: ExpansionHold | null;
+}
+
+interface UseRecurrenceExpansionParams extends ExpansionLoadParams {
+  pages: PageSummary[];
 }
 
 /** Raw occurrences by rule for `start` to `end`, expanded for `rulesKey`. */
@@ -77,16 +84,41 @@ const scheduleIdentity = (s: PageSchedule): string =>
 
 const NO_SCHEDULES: PageSchedule[] = [];
 
+/** One kind of fetch where only the latest started may land. */
+class LatestRequest {
+  private inFlight: string | null = null;
+  private token = 0;
+
+  run<T>(key: string, start: () => Promise<T>, land: (result: T) => void): void {
+    if (this.inFlight === key) return;
+
+    this.inFlight = key;
+    const token = ++this.token;
+    void start()
+      .then((result) => {
+        if (token === this.token) land(result);
+      })
+      .finally(() => {
+        if (token === this.token) this.inFlight = null;
+      });
+  }
+}
+
 /**
  * The expansion and override rows a surface holds, kept outside React state: a refill of the
  * margin re-renders nothing unless the occurrences on screen changed, where a state update
  * re-rendered a whole week to show the same blocks.
+ *
+ * Each fetch is skipped while the same one is in flight and dropped when a newer one supersedes
+ * it, across every caller: the calendar's preload and the calendar itself fill one hold.
  */
 export class ExpansionHold {
   private held: HeldExpansion | null = null;
   private last: Map<string, RawOccurrence[]> | null = null;
   private listeners = new Set<() => void>();
   private schedules = NO_SCHEDULES;
+  private expanding = new LatestRequest();
+  private listing = new LatestRequest();
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -116,6 +148,34 @@ export class ExpansionHold {
 
     this.schedules = schedules;
     this.notify();
+  }
+
+  expand(
+    run: ExpandRange,
+    rules: PageRecurrenceRule[],
+    rulesKey: string,
+    start: string,
+    end: string
+  ): void {
+    this.expanding.run(
+      `${rulesKey}|${start}|${end}`,
+      () => run(rules, start, end),
+      (result) =>
+        this.set({
+          byRule: new Map(result.map((r) => [r.ruleId, r.occurrences])),
+          end,
+          rulesKey,
+          start,
+        })
+    );
+  }
+
+  loadOverrides(run: ListOverrides, ruleIds: string[], key: string): void {
+    this.listing.run(
+      key,
+      () => run(ruleIds),
+      (schedules) => this.setOverrides(schedules)
+    );
   }
 
   private notify(): void {
@@ -293,35 +353,19 @@ function toOverrideBlocks(
   return out;
 }
 
-/**
- * Returns pages merged with virtual rrule occurrences for the visible range, so
- * a surface renders both identically — the calendar grid over its week, the
- * Today list over the one day it shows. Expansion runs in the Rust engine over
- * IPC (stale-while-revalidate); the completed/skip exclusion union and the head
- * suppression stay synchronous and client-side, so a completion reflects on the
- * next render without waiting for a round-trip. Virtual occurrences carry
- * `isVirtual: true` for downstream identification.
- */
-export function useRecurrenceExpansion({
-  days,
-  expandRecurrenceRange,
-  hold,
-  listOverridesForRules,
-  margin = 0,
-  overridesVersion = 0,
-  pages,
-  recurrenceRules,
-}: UseRecurrenceExpansionParams): (PageSummary | VirtualOccurrence)[] {
-  const schedulesAbortRef = useRef(0);
-
-  // Empty until the first IPC batch resolves. Kept across a range change
-  // (stale-while-revalidate) so an overlapping or day-step nav keeps showing
-  // virtuals while the next batch is in flight; a jump past the margin still
-  // renders without them for a frame (accepted).
-  const [ownHold] = useState(() => new ExpansionHold());
-  const expansion = hold ?? ownHold;
-  const expandAbortRef = useRef(0);
-
+/** Fetches a surface's override rows and its expansion into `expansion`, and says which range and
+ *  rule set it reads them for. */
+function useExpansionLoads(
+  {
+    days,
+    expandRecurrenceRange,
+    listOverridesForRules,
+    margin = 0,
+    overridesVersion = 0,
+    recurrenceRules,
+  }: ExpansionLoadParams,
+  expansion: ExpansionHold | null
+) {
   const rangeStartDate = days[0];
   const lastDay = days[days.length - 1];
   const rangeEndDate = lastDay ? addDays(lastDay, 1) : null;
@@ -343,15 +387,52 @@ export function useRecurrenceExpansion({
   // drives it. Range stays in the deps as a cheap refetch-on-nav safety net for
   // an override changed out-of-band since the last rule edit — one batched call.
   useEffect(() => {
-    if (!startStr || !endStr || ruleCount === 0) return;
+    if (!expansion || !startStr || !endStr || ruleCount === 0) return;
 
-    const ruleIds = recurrenceRules.map((r) => r.id);
-    const token = ++schedulesAbortRef.current;
-    void listOverridesForRules(ruleIds).then((schedules) => {
-      if (token !== schedulesAbortRef.current) return;
-      expansion.setOverrides(schedules);
-    });
+    expansion.loadOverrides(
+      listOverridesForRules,
+      recurrenceRules.map((r) => r.id),
+      `${rulesKey}|${overridesVersion}`
+    );
   }, [startStr, endStr, rulesKey, overridesVersion]);
+
+  useEffect(() => {
+    if (!expansion || !fetchStart || !fetchEnd || ruleCount === 0) return;
+    if (margin > 0 && expansion.holds(rulesKey, fetchStart, fetchEnd)) return;
+
+    expansion.expand(expandRecurrenceRange, recurrenceRules, rulesKey, fetchStart, fetchEnd);
+  }, [startStr, endStr, rulesKey]);
+
+  return { endStr, rulesKey, startStr };
+}
+
+/** Fills `hold` for a surface that is mounted but hidden, where its own effects don't run, so it
+ *  first shows with its occurrences already drawn. */
+export function usePreloadRecurrenceExpansion(params: ExpansionLoadParams): void {
+  useExpansionLoads(params, params.hold ?? null);
+}
+
+/**
+ * Returns pages merged with virtual rrule occurrences for the visible range, so
+ * a surface renders both identically — the calendar grid over its week, the
+ * Today list over the one day it shows. Expansion runs in the Rust engine over
+ * IPC (stale-while-revalidate); the completed/skip exclusion union and the head
+ * suppression stay synchronous and client-side, so a completion reflects on the
+ * next render without waiting for a round-trip. Virtual occurrences carry
+ * `isVirtual: true` for downstream identification.
+ */
+export function useRecurrenceExpansion(
+  params: UseRecurrenceExpansionParams
+): (PageSummary | VirtualOccurrence)[] {
+  const { days, hold, margin = 0, pages, recurrenceRules } = params;
+
+  // Empty until the first IPC batch resolves. Kept across a range change
+  // (stale-while-revalidate) so an overlapping or day-step nav keeps showing
+  // virtuals while the next batch is in flight; a jump past the margin still
+  // renders without them for a frame (accepted).
+  const [ownHold] = useState(() => new ExpansionHold());
+  const expansion = hold ?? ownHold;
+  const { endStr, rulesKey, startStr } = useExpansionLoads(params, expansion);
 
   const rawExpansion = useSyncExternalStore(expansion.subscribe, () =>
     startStr && endStr ? expansion.read(rulesKey, startStr, endStr) : null
@@ -374,22 +455,6 @@ export function useRecurrenceExpansion({
       }
     });
   }, [heldWindow, pages]);
-
-  useEffect(() => {
-    if (!fetchStart || !fetchEnd || ruleCount === 0) return;
-    if (margin > 0 && expansion.holds(rulesKey, fetchStart, fetchEnd)) return;
-
-    const token = ++expandAbortRef.current;
-    void expandRecurrenceRange(recurrenceRules, fetchStart, fetchEnd).then((result) => {
-      if (token !== expandAbortRef.current) return;
-      expansion.set({
-        byRule: new Map(result.map((r) => [r.ruleId, r.occurrences])),
-        end: fetchEnd,
-        rulesKey,
-        start: fetchStart,
-      });
-    });
-  }, [startStr, endStr, rulesKey]);
 
   // Suppress a recurring head block when its own date is completed or skipped. The
   // head only stays on such a date when nothing after it is open: a series ticked
