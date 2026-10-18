@@ -446,6 +446,13 @@ struct QuickAddSheet: View {
         }
     }
 
+    /// A save that made no page always says so, so a line can never seem to land and vanish.
+    private func sayNothingWasSaved() {
+        if store.errorMessage == nil {
+            store.errorMessage = String(localized: "Pikos couldn't save that page. Try again in a moment.")
+        }
+    }
+
     private func save() async {
         guard !savedTitle.isEmpty, !isSaving else { return }
         isSaving = true
@@ -474,6 +481,7 @@ struct QuickAddSheet: View {
             if priorityIsManual, let first = created.first, priority != parsed?.priority {
                 await store.setPriority(pageId: first.id, priority: priority)
             }
+            if created.isEmpty { sayNothingWasSaved() }
             dismiss()
             return
         }
@@ -491,6 +499,7 @@ struct QuickAddSheet: View {
                 scheduledEnd: manualEnd.map(Self.storedWallClock)
             ))
         guard let created else {
+            sayNothingWasSaved()
             dismiss()
             return
         }
