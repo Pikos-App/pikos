@@ -9,6 +9,7 @@ pub mod capture;
 pub mod compare;
 pub mod images;
 pub mod manifest;
+mod oversize;
 pub mod schema;
 pub mod state;
 

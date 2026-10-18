@@ -48,7 +48,8 @@ impl fmt::Display for DecodeError {
 
 impl std::error::Error for DecodeError {}
 
-fn column_key(field: &str, column: usize) -> String {
+/// The key a field's column is stored under.
+pub fn column_key(field: &str, column: usize) -> String {
     format!("{field}_{column}")
 }
 

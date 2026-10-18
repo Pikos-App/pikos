@@ -63,6 +63,7 @@ DEFINE SCHEMA
         "content_at" ENCRYPTED STRING,
         "content_0" ENCRYPTED STRING,
         "content_1" ENCRYPTED INT64,
+        "file" ASSET,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
