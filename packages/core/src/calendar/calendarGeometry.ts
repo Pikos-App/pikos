@@ -29,7 +29,7 @@ import {
   MIN_VISIBLE_HOURS,
   VISIBLE_HOURS,
 } from "./calendarConstants";
-import type { CalendarDayCount, CalendarDensity } from "./dayCount";
+import { type CalendarDayCount, type CalendarDensity, DEFAULT_CALENDAR_DENSITY } from "./dayCount";
 
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {
@@ -62,12 +62,6 @@ export interface CalendarMetrics {
    *  pixels can scale with it and mean the same thing at every zoom. */
   zoom: number;
 }
-
-const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
-  compact: 40,
-  normal: 64,
-  spacious: 88,
-};
 
 /** The tier heights the block layout was tuned to at the default zoom. */
 const TIME_ROW_MIN_HEIGHT = 40;
@@ -122,7 +116,7 @@ export function fallsShortOf(value: number, threshold: number): boolean {
  * `zoom` is 1 at the default text size, so the calendar a user opens is unchanged.
  */
 export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): CalendarMetrics {
-  const hourHeight = DENSITY_HOUR_HEIGHT[density] * zoom;
+  const hourHeight = density * zoom;
   return {
     allDayBarHeight: ALL_DAY_BAR_HEIGHT * zoom,
     allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
@@ -146,7 +140,7 @@ export function shortestBlockMinutes(metrics: CalendarMetrics): number {
 }
 
 /** Baseline metrics for tests + callers that don't have settings context. */
-export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
+export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics(DEFAULT_CALENDAR_DENSITY);
 
 // ─── Clock time ───────────────────────────────────────────────────────────────
 // The grid is drawn in clock hours: the 4 PM row is 16 hour-heights down on every

@@ -1,4 +1,4 @@
-import { toStorageError } from "@pikos/core";
+import { DEFAULT_CALENDAR_DENSITY, toStorageError } from "@pikos/core";
 import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -71,7 +71,10 @@ type MenuEventId =
   | "check_updates"
   | "keyboard_shortcuts"
   | "go_back"
-  | "go_forward";
+  | "go_forward"
+  | "calendar_density_up"
+  | "calendar_density_down"
+  | "calendar_density_reset";
 
 declare global {
   interface Window {
@@ -86,10 +89,13 @@ function useMenuEvents() {
   const { setRightPanel, setSidebarCollapsed } = ui;
   const stateRef = useRef({ rightPanel: ui.rightPanel });
   const updaterRef = useRef(updater);
+  const calendar = useCalendarSettings();
+  const calendarRef = useRef(calendar);
 
   useEffect(() => {
     stateRef.current = { rightPanel: ui.rightPanel };
     updaterRef.current = updater;
+    calendarRef.current = calendar;
   });
 
   useEffect(() => {
@@ -124,6 +130,15 @@ function useMenuEvents() {
           break;
         case "go_forward":
           void ui.stepHistory(1);
+          break;
+        case "calendar_density_up":
+          calendarRef.current.stepDensity(1);
+          break;
+        case "calendar_density_down":
+          calendarRef.current.stepDensity(-1);
+          break;
+        case "calendar_density_reset":
+          calendarRef.current.setDensity(DEFAULT_CALENDAR_DENSITY);
           break;
       }
     };
@@ -172,7 +187,12 @@ function useGlobalShortcuts() {
   const { setFontSize, stepFontSize } = useEditorSettings();
   const { setTextScale: setInterfaceScale, stepTextScale: stepInterfaceScale } =
     useInterfaceSettings();
-  const { setTextSize: setCalendarSize, stepTextSize: stepCalendarSize } = useCalendarSettings();
+  const {
+    setDensity: setCalendarDensity,
+    setTextSize: setCalendarSize,
+    stepDensity: stepCalendarDensity,
+    stepTextSize: stepCalendarSize,
+  } = useCalendarSettings();
 
   // The size keys act on the panel in front of you, not on whatever holds focus.
   // Settings is a full-window overlay, so while it is open it is that panel and
@@ -240,6 +260,21 @@ function useGlobalShortcuts() {
     allowInInputs: true,
     group: "View",
     label: "Reset text size",
+  });
+  useKeyboardShortcut("Mod+Alt+=", () => stepCalendarDensity(1), {
+    allowInInputs: true,
+    group: "View",
+    label: "Taller calendar hours",
+  });
+  useKeyboardShortcut("Mod+Alt+-", () => stepCalendarDensity(-1), {
+    allowInInputs: true,
+    group: "View",
+    label: "Shorter calendar hours",
+  });
+  useKeyboardShortcut("Mod+Alt+0", () => setCalendarDensity(DEFAULT_CALENDAR_DENSITY), {
+    allowInInputs: true,
+    group: "View",
+    label: "Reset calendar hours",
   });
 
   // ⌘1-9 — switch to folder by index (1-based).

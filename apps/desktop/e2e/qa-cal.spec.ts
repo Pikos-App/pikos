@@ -593,17 +593,25 @@ appTest("calendar density scales the hour rows", { tag: ["@CAL-18"] }, async ({ 
   const hourPitch = async () => (await hourLineY(app, 10)) - (await hourLineY(app, 9));
   const pitches: number[] = [];
 
-  for (const density of ["Compact", "Normal", "Spacious"]) {
-    await appTest.step(`CAL-18 ${density} sets its own hour height`, async () => {
-      await choose(app, "Calendar density", density);
+  const steps = ["1", "2", "3", "4", "5"];
+  for (const step of steps) {
+    await appTest.step(`CAL-18 step ${step} sets its own hour height`, async () => {
+      await choose(app, "Calendar density", step);
       await openCalendarMode(app);
       pitches.push(await hourPitch());
     });
   }
 
-  await appTest.step("CAL-18 the rows grow from compact to spacious", () => {
-    expect(new Set(pitches).size).toBe(3);
+  await appTest.step("CAL-18 the rows grow with each step", () => {
+    expect(new Set(pitches).size).toBe(steps.length);
     expect(pitches).toEqual([...pitches].sort((a, b) => a - b));
+  });
+
+  await appTest.step("CAL-18 the shortcuts step down and reset", async () => {
+    await app.keyboard.press(mod("Mod+Alt+-"));
+    await expect.poll(hourPitch).toBe(pitches[3]);
+    await app.keyboard.press(mod("Mod+Alt+0"));
+    await expect.poll(hourPitch).toBe(pitches[2]);
   });
 });
 

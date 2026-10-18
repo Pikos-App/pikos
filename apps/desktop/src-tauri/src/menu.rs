@@ -90,10 +90,26 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .accelerator("CmdOrCtrl+]")
         .build(handle)?;
 
+    let taller_hours = MenuItemBuilder::new("Taller Calendar Hours")
+        .id("calendar_density_up")
+        .accelerator("Alt+CmdOrCtrl+=")
+        .build(handle)?;
+    let shorter_hours = MenuItemBuilder::new("Shorter Calendar Hours")
+        .id("calendar_density_down")
+        .accelerator("Alt+CmdOrCtrl+-")
+        .build(handle)?;
+    let reset_hours = MenuItemBuilder::new("Reset Calendar Hours")
+        .id("calendar_density_reset")
+        .accelerator("Alt+CmdOrCtrl+0")
+        .build(handle)?;
+
     let view_menu = SubmenuBuilder::new(handle, "View")
         .item(&toggle_sidebar)
         .separator()
         .item(&toggle_calendar)
+        .item(&taller_hours)
+        .item(&shorter_hours)
+        .item(&reset_hours)
         .separator()
         .item(&go_back)
         .item(&go_forward)
@@ -172,8 +188,18 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         return;
     }
     match id.as_str() {
-        "new_page" | "close_page" | "settings" | "toggle_sidebar" | "toggle_calendar"
-        | "check_updates" | "keyboard_shortcuts" | "go_back" | "go_forward" => {
+        "new_page"
+        | "close_page"
+        | "settings"
+        | "toggle_sidebar"
+        | "toggle_calendar"
+        | "check_updates"
+        | "keyboard_shortcuts"
+        | "go_back"
+        | "go_forward"
+        | "calendar_density_up"
+        | "calendar_density_down"
+        | "calendar_density_reset" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.eval(format!(
                     "window.__onMenuEvent && window.__onMenuEvent('{}')",

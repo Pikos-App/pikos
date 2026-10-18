@@ -93,7 +93,16 @@ export {
 } from "./calendar/calendarLayout";
 export type { CalendarBlock, OverflowPill, RemappedBlocks } from "./calendar/calendarLayout";
 export { formatMultiDayTimeRange, formatTimeRange } from "./calendar/calendarTimeFormat";
-export { clampDayCount, dayCountColumns, dayCountNavStep } from "./calendar/dayCount";
+export {
+  CALENDAR_DENSITY_STEPS,
+  clampDayCount,
+  dayCountColumns,
+  dayCountNavStep,
+  DEFAULT_CALENDAR_DENSITY,
+  LEGACY_CALENDAR_DENSITIES,
+  stepCalendarDensity,
+  toCalendarDensity,
+} from "./calendar/dayCount";
 export type { CalendarDayCount, CalendarDensity } from "./calendar/dayCount";
 export {
   buildMonthGrid,

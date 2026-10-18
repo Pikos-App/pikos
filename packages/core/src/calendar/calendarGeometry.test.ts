@@ -20,6 +20,12 @@ import {
   weekStart,
   yToDate,
 } from "./calendarGeometry";
+import {
+  CALENDAR_DENSITY_STEPS,
+  DEFAULT_CALENDAR_DENSITY,
+  stepCalendarDensity,
+  toCalendarDensity,
+} from "./dayCount";
 
 // ─── weekStart / weekDays / weekEnd ──────────────────────────────────────────
 
@@ -356,11 +362,32 @@ describe("collapsedBandInnerOffset", () => {
   });
 });
 
+describe("density", () => {
+  it("reads a preset stored before the range existed as the hour it drew", () => {
+    expect(toCalendarDensity("compact")).toBe(40);
+    expect(toCalendarDensity("normal")).toBe(64);
+    expect(toCalendarDensity("spacious")).toBe(88);
+  });
+
+  it("keeps a stored step and falls back to the default for anything else", () => {
+    expect(toCalendarDensity(52)).toBe(52);
+    expect(toCalendarDensity(53)).toBe(DEFAULT_CALENDAR_DENSITY);
+    expect(toCalendarDensity(null)).toBe(DEFAULT_CALENDAR_DENSITY);
+  });
+
+  it("steps one rung at a time and stops at either end", () => {
+    expect(stepCalendarDensity(64, 1)).toBe(76);
+    expect(stepCalendarDensity(64, -1)).toBe(52);
+    expect(stepCalendarDensity(40, -1)).toBe(40);
+    expect(stepCalendarDensity(88, 1)).toBe(88);
+  });
+});
+
 describe("zoom", () => {
   it("leaves the calendar alone at the default zoom", () => {
-    expect(computeCalendarMetrics("normal").hourHeight).toBe(64);
-    expect(computeCalendarMetrics("compact").hourHeight).toBe(40);
-    expect(computeCalendarMetrics("spacious").hourHeight).toBe(88);
+    for (const density of CALENDAR_DENSITY_STEPS) {
+      expect(computeCalendarMetrics(density).hourHeight).toBe(density);
+    }
   });
 
   // The whole point: the hour grows by the factor the text grows by, so a block's
@@ -368,7 +395,7 @@ describe("zoom", () => {
   // block holding it did not, which is how a short block came to clip its own
   // checkbox down to two slivers.
   it("scales the hour by the same factor as the text", () => {
-    for (const density of ["compact", "normal", "spacious"] as const) {
+    for (const density of CALENDAR_DENSITY_STEPS) {
       const base = computeCalendarMetrics(density).hourHeight;
       expect(computeCalendarMetrics(density, 2).hourHeight).toBe(base * 2);
       expect(computeCalendarMetrics(density, 0.5).hourHeight).toBe(base / 2);
@@ -377,25 +404,25 @@ describe("zoom", () => {
 
   it("keeps a block's share of the hour fixed across zoom", () => {
     for (const zoom of [0.5, 1, 1.5, 2]) {
-      const m = computeCalendarMetrics("normal", zoom);
+      const m = computeCalendarMetrics(64, zoom);
       expect(m.timeRowMinHeight / m.hourHeight).toBeCloseTo(40 / 64);
       expect(m.twoLineTitleMinHeight / m.hourHeight).toBeCloseTo(52 / 64);
     }
   });
 
   it("floors a block at a normal quarter hour, scaled up with zoom but never down", () => {
-    expect(computeCalendarMetrics("normal").compactBlockHeight).toBe(16);
-    expect(computeCalendarMetrics("spacious").compactBlockHeight).toBe(22);
-    expect(computeCalendarMetrics("compact").compactBlockHeight).toBe(16);
-    expect(computeCalendarMetrics("compact", 2).compactBlockHeight).toBe(32);
-    expect(computeCalendarMetrics("compact", 10 / 14).compactBlockHeight).toBe(16);
-    expect(computeCalendarMetrics("normal", 10 / 14).compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics(64).compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics(88).compactBlockHeight).toBe(22);
+    expect(computeCalendarMetrics(40).compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics(40, 2).compactBlockHeight).toBe(32);
+    expect(computeCalendarMetrics(40, 10 / 14).compactBlockHeight).toBe(16);
+    expect(computeCalendarMetrics(64, 10 / 14).compactBlockHeight).toBe(16);
   });
 
   it("gives the shortest block in minutes: a quarter hour, until compact draws it longer", () => {
-    expect(shortestBlockMinutes(computeCalendarMetrics("normal"))).toBe(15);
-    expect(shortestBlockMinutes(computeCalendarMetrics("spacious"))).toBe(15);
-    expect(shortestBlockMinutes(computeCalendarMetrics("compact"))).toBeCloseTo(24);
-    expect(shortestBlockMinutes(computeCalendarMetrics("normal", 10 / 14))).toBeCloseTo(21);
+    expect(shortestBlockMinutes(computeCalendarMetrics(64))).toBe(15);
+    expect(shortestBlockMinutes(computeCalendarMetrics(88))).toBe(15);
+    expect(shortestBlockMinutes(computeCalendarMetrics(40))).toBeCloseTo(24);
+    expect(shortestBlockMinutes(computeCalendarMetrics(64, 10 / 14))).toBeCloseTo(21);
   });
 });
