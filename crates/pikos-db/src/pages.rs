@@ -1547,12 +1547,21 @@ pub async fn list_completed_pages_impl(
 
     let where_clause = where_parts.join(" AND ");
 
-    let count_sql = format!("SELECT COUNT(*) FROM pages WHERE {where_clause}");
-    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
-    for v in &bind_values {
-        count_query = count_query.bind(v);
-    }
-    let total = count_query.fetch_one(pool).await?;
+    let scope = match &filter.folder_id {
+        Some(serde_json::Value::Null) => Some(crate::views::ViewScope::Inbox),
+        Some(serde_json::Value::String(id)) => Some(crate::views::ViewScope::Folder(id.clone())),
+        _ => None,
+    };
+    let total = crate::views::list_completed(
+        pool,
+        scope.as_ref(),
+        filter.completed_since.as_deref(),
+        None,
+        0,
+    )
+    .await?
+    .total
+    .unwrap_or_default();
 
     let data_sql = format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE {where_clause} \
