@@ -608,6 +608,26 @@ appTest("calendar density scales the hour rows", { tag: ["@CAL-18"] }, async ({ 
   });
 });
 
+appTest("a block's time too wide for it is cut inside the block", async ({ app }) => {
+  await quickAdd(app, "Planning today at 10am for 2h");
+  await app.getByRole("button", { name: "Open settings" }).click();
+  await app.getByRole("button", { name: /^Calendar text size:/ }).click();
+  await app.getByRole("button", { exact: true, name: "28" }).click();
+  await expect(app.getByRole("button", { name: "Calendar text size: 28" })).toBeVisible();
+  await app.keyboard.press("Escape");
+  await openCalendarMode(app);
+  await app.setViewportSize({ height: 720, width: 1000 });
+  const block = calendarOf(app).getByRole("button", { name: /^Planning, 10/ });
+  const time = block.getByText(/AM–/);
+
+  const blockBox = await block.boundingBox();
+  const timeBox = await time.boundingBox();
+  if (!blockBox || !timeBox) throw new Error("block or its time is not drawn");
+
+  expect(timeBox.x + timeBox.width).toBeLessThanOrEqual(blockBox.x + blockBox.width);
+  expect(await time.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+});
+
 appTest(
   "the calendar's scroll position persists, and starts near the current hour",
   { tag: ["@CAL-19"] },

@@ -377,7 +377,7 @@ export function PageBlock({
             )}
             {showTimeLabel && (
               // Indent matches the title's own left edge: checkbox 3.5 + gap 1
-              <p className="type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] truncate pl-[calc(1.125rem*var(--calendar-zoom,1))] text-subtle">
+              <p className="type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] w-full truncate pl-[calc(1.125rem*var(--calendar-zoom,1))] text-subtle">
                 {timeLabel}
               </p>
             )}
