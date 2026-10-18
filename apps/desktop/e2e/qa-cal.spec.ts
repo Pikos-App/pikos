@@ -3,6 +3,7 @@ import { addDays, addMonths, format, parse } from "date-fns";
 
 import {
   test as appTest,
+  clickBlockCheckbox,
   expect,
   gutterLabel,
   hourLineY,
@@ -499,9 +500,7 @@ appTest(
     );
 
     await appTest.step("CAL-13 the continuation's checkbox completes the page", async () => {
-      const titleBox = await chip.getByText("Conference").boundingBox();
-      if (!titleBox) throw new Error("no title on the continuation");
-      await app.mouse.click(titleBox.x - 10, titleBox.y + titleBox.height / 2);
+      await clickBlockCheckbox(chip, "Conference");
       await expect(
         app.locator("[data-page-list-item]").filter({ hasText: "Conference" })
       ).not.toBeVisible();

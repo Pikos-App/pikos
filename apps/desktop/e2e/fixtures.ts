@@ -1,5 +1,5 @@
 import { test as base, expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { BRIDGE_ORIGIN } from "../bridge/origin";
 import { ensureLargeTemplate, LARGE_TOKEN_SUFFIX } from "./largeWorkspace";
@@ -153,6 +153,24 @@ export async function hourLineY(page: Page, hour: number) {
   const box = await gutterLabel(page, hour).boundingBox();
   if (!box) throw new Error(`no ${hourLabel(hour)} label`);
   return box.y + box.height / 2;
+}
+
+/** Click the checkbox left of a calendar block's title. The box has no role inside the block's
+ *  button, so the click goes through the block at an offset: a page-coordinate click on a block
+ *  still settling landed on the grid and created an untitled page, where this one waits for the
+ *  block to hold still and retries until the point hits it. */
+export async function clickBlockCheckbox(block: Locator, title: string) {
+  await block.hover();
+  const blockBox = await block.boundingBox();
+  const titleBox = await block.getByText(title).boundingBox();
+  if (!blockBox || !titleBox) throw new Error(`no block titled ${title}`);
+
+  await block.click({
+    position: {
+      x: titleBox.x - blockBox.x - 10,
+      y: titleBox.y - blockBox.y + titleBox.height / 2,
+    },
+  });
 }
 
 /** Open a page from the list and put the caret in its body. */
