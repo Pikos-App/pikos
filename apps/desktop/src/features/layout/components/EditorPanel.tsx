@@ -1,6 +1,6 @@
 import { clampDayCount, dayCountNavStep, getCalendarDayCount } from "@pikos/core";
 import { addDays, addMonths, startOfMonth, subDays, subMonths } from "date-fns";
-import { Activity } from "react";
+import { Activity, useRef } from "react";
 
 import { CalendarHeader, CalendarView } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
@@ -37,16 +37,30 @@ export function EditorPanel() {
     { allowInInputs: true, group: "Navigation", label: "Toggle calendar / editor" }
   );
 
+  const editorPaneRef = useRef<HTMLDivElement>(null);
+
   useKeyboardShortcut(
     "Escape",
     () => {
-      if (selectedPageIds.size > 0) clearSelection();
-      else ui.setRightPanel("calendar");
+      if (selectedPageIds.size > 0) {
+        clearSelection();
+        return;
+      }
+
+      const focused = document.activeElement;
+      const isEditorFocused =
+        focused instanceof HTMLElement && (editorPaneRef.current?.contains(focused) ?? false);
+      if (isEditorFocused) {
+        focused.blur();
+        return;
+      }
+
+      ui.setRightPanel("calendar");
     },
     {
       allowInInputs: true,
       group: "Navigation",
-      label: "Clear the selection, or go to the calendar",
+      label: "Clear the selection, leave the editor, or go to the calendar",
       unlessHandled: true,
       when: () =>
         (selectedPageIds.size > 0 || ui.rightPanel === "editor") && !Keyboard.isModalOpen(),
@@ -131,7 +145,11 @@ export function EditorPanel() {
           error stays contained — the other pane (and the rest of the shell)
           stays usable. The editor boundary is keyed on activePageId so
           navigating to a different page also clears any prior crash. */}
-      <div className="flex min-h-0 flex-1 flex-col" hidden={ui.rightPanel !== "editor"}>
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        hidden={ui.rightPanel !== "editor"}
+        ref={editorPaneRef}
+      >
         <ErrorBoundary
           fallback={({ error, reset }) => (
             <PaneErrorFallback error={error} label="Editor" onReset={reset} />
