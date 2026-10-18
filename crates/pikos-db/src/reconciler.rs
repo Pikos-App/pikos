@@ -90,7 +90,7 @@ pub async fn reconcile(
     ctx: &ReconcileContext,
     delta: &SyncDelta,
 ) -> AppResult<ReconcileOutcome> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let mut outcome = ReconcileOutcome::default();
 
     // Two-pass. Whole events/series first, so a master delivered in the same

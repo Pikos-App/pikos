@@ -782,13 +782,12 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
     .await
     .unwrap();
 
-    // Inside the retry, as the sync engine runs a reconcile: a deferred batch that loses the
-    // write lock to the completion fails its upgrade at once, and a bare one failed the test.
+    // Opened and retried as the sync engine runs a reconcile.
     let batch = tokio::spawn({
         let pool = pool.clone();
         async move {
             crate::tx::retry_on_busy(|| async {
-                let mut tx = pool.begin().await?;
+                let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
                 for i in 0..200 {
                     recompute_recurring_schedule(&mut tx, &format!("r{i}")).await?;
                 }
@@ -827,6 +826,46 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
         cached.as_deref(),
         Some("2026-05-22T09:00:00"),
         "completion advanced the head"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn heal_waits_out_a_write_lock_held_past_the_retry_deadline() {
+    let db = wal_test_pool().await;
+    let pool = db.pool.clone();
+    seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
+    sqlx::query("UPDATE pages SET scheduled_start = '2020-01-01T09:00:00' WHERE id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let held = std::sync::Arc::new(tokio::sync::Notify::new());
+    let holder = tokio::spawn({
+        let pool = pool.clone();
+        let held = held.clone();
+        async move {
+            let mut writer = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            held.notify_one();
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            sqlx::query("UPDATE pages SET title = 'held' WHERE id = 'head'")
+                .execute(&mut *writer)
+                .await
+                .unwrap();
+            writer.commit().await.unwrap();
+        }
+    });
+    held.notified().await;
+
+    recompute_recurring_schedule_pool(&pool, "head")
+        .await
+        .expect("the heal waits for the write lock instead of failing its upgrade");
+    holder.await.unwrap();
+
+    let derived = oldest_open_for_page(&pool, "head").await.unwrap();
+    let (cached, _) = head(&pool, "head").await;
+    assert_eq!(
+        cached.as_deref(),
+        derived.as_ref().map(|o| o.scheduled_start.as_str())
     );
 }
 
