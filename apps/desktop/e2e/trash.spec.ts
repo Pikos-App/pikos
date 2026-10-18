@@ -68,8 +68,6 @@ appTest("emptying the trash destroys what was in it", async ({ app }) => {
   await expect(app.getByRole("list", { name: "Deleted pages" })).toContainText("draft to abandon");
 
   await app.getByRole("button", { name: "Empty trash" }).click();
-  // Typed confirmation — the action names no page, so the phrase is the guard.
-  await app.getByRole("textbox").fill("delete");
   await app.getByRole("alertdialog").getByRole("button", { name: "Empty trash" }).click();
 
   await expect(app.getByText("The trash is empty.")).toBeVisible();

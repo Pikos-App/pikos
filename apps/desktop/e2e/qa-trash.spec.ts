@@ -123,7 +123,7 @@ appTest(
 );
 
 appTest(
-  "Empty trash needs delete typed, Delete Forever asks first, and both are for good",
+  "Empty trash and Delete Forever each ask once, and both are for good",
   { tag: ["@TRASH-06"] },
   async ({ app }) => {
     for (const title of ["first gone", "second gone", "third gone"]) {
@@ -140,14 +140,11 @@ appTest(
       await expect(trashList(app).getByText("first gone")).toHaveCount(0);
     });
 
-    await appTest.step("TRASH-06 Empty trash stays shut until delete is typed", async () => {
+    await appTest.step("TRASH-06 Empty trash asks once, with no word to type", async () => {
       await app.getByRole("button", { name: "Empty trash" }).click();
       const confirm = app.getByRole("alertdialog", { name: "Empty the trash?" });
-      const go = confirm.getByRole("button", { name: "Empty trash" });
-      await expect(go).toBeDisabled();
-      await confirm.getByLabel(/Type delete to confirm/).fill("delete");
-      await expect(go).toBeEnabled();
-      await go.click();
+      await expect(confirm.getByRole("textbox")).toHaveCount(0);
+      await confirm.getByRole("button", { name: "Empty trash" }).click();
       await expect(app.getByText("The trash is empty.")).toBeVisible();
     });
 

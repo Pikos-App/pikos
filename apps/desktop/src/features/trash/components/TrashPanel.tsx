@@ -21,7 +21,6 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { TypedConfirmDialog } from "@/components/ui/typed-confirm-dialog";
 import { EmptyState } from "@/shared/components/EmptyState";
 
 import { TRASH_RETENTION_DAYS } from "../constants";
@@ -193,10 +192,9 @@ export function TrashPanel({
         title={`Restore “${pendingRestore?.title || "Untitled"}”?`}
       />
 
-      <TypedConfirmDialog
+      <ConfirmDialog
         busy={busy}
         confirmLabel="Empty trash"
-        confirmPhrase="delete"
         description={
           entries.some((e) => e.isSynced)
             ? "Every page in the trash will be gone for good, except the ones a connected calendar still owns. Those stay so the calendar can't put them back."
@@ -206,6 +204,7 @@ export function TrashPanel({
         onOpenChange={setEmptyOpen}
         open={emptyOpen}
         title="Empty the trash?"
+        variant="destructive"
       />
     </div>
   );
