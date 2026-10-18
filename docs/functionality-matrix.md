@@ -7,8 +7,8 @@ performed from.
 
 Scope: **0.4.1**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
 every Synced/Detached cell is unreachable there. The iOS column describes `apps/ios` — a
-native SwiftUI app over the same Rust, not a second implementation. It compiles and its tier-1
-flows run in a simulator; nothing on it has been measured on a phone yet.
+native SwiftUI app over the same Rust, not a second implementation. Its tier-1 flows run in a
+simulator, and its speed tests run on an iPhone 16 at 200,000 pages.
 
 Use it for: checking a new feature covers every origin, and settling "what should this
 do?" for a case the app itself doesn't make obvious.
@@ -81,7 +81,7 @@ the surface exists, and five facts explain nearly every `○`:
 Sync is built but not shipped, and it's Apple-only for now: the Mac and the phone share one
 iCloud container through Apple's sync engine, which needs macOS 14 or iOS 17. A cell says what
 the person's other devices see once the change arrives. The CLI and MCP write through the same
-writer as the app, so their changes travel the same way. Six facts explain nearly every cell:
+writer as the app, so their changes travel the same way. These facts explain nearly every cell:
 
 - **A page travels with what hangs off it.** Title, subtitle, folder, priority, status, order,
   trash state, body, tags, schedule rows, the repeat rule, completed and skipped days, moved
@@ -104,8 +104,16 @@ writer as the app, so their changes travel the same way. Six facts explain nearl
   remove the page everywhere, dated from when it was trashed, so a restore made on another
   device after that still wins. An edit made elsewhere after the delete brings the page back
   with everything under it.
-- **Images in a body don't travel yet.** The page arrives and its images show the broken-image
-  placeholder.
+- **Images travel as files of their own.** Each image a page shows is sent once, beside its page,
+  and lands in the other device's images folder. A page that arrives before its image shows the
+  broken-image placeholder until the image lands.
+- **A device away for more than 90 days sends everything again.** Deletes are remembered for 90
+  days, so a device that missed one could hold pages the others no longer have; on its return it
+  sends what it kept, and those pages come back everywhere rather than living on it alone.
+- **It's off until the person turns it on.** Settings has a switch on the phone and the Mac, with a
+  line under it saying what sync is doing. Turned off, changes are still recorded and are sent once
+  it's back on. On a different iCloud account, or after the person deletes Pikos's data from
+  iCloud, sync pauses and Settings offers to sync with the new account or upload again.
 
 ## Row vocabulary (recurring)
 
@@ -124,21 +132,22 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 
 ## 1. Page lifecycle
 
-| Functionality                     | Native          | Synced                  | Detached                  | CLI                                                                          | iOS                                       | iCloud                                |
-| --------------------------------- | --------------- | ----------------------- | ------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------- |
-| Create page                       | ✅              | 🚫 ¹                    | 🚫 ¹                      | ✅ `add` ²                                                                   | ✅ quick add / new page                   | ✅ arrives whole                      |
-| Open in editor                    | ✅              | ✅ read-only mirror ³   | ✅                        | ✅ `read`                                                                    | ✅ same webview                           | —                                     |
-| Adjust page title                 | ✅              | 🚫 locked ⁴             | ✅                        | ⚠️ `update --title`, refused on synced ⁴                                     | ✅ header or long press                   | ✅                                    |
-| Edit body / content               | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --content`, markdown, replaces body                               | ✅                                        | ⚠️ the later save wins the whole body |
-| Adjust subtitle                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --subtitle`, `""` clears                                          | ✅ editor header                          | ✅                                    |
-| Adjust priority                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --priority`                                                       | ✅ long press                             | ✅                                    |
-| Add / remove tags                 | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --tag` / `--untag`                                                | ✅ long press                             | ✅ each tag on its own                |
-| Toggle status (non-recurring)     | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `done` / `status`; a status other than `not_started` or `done` is refused | ✅                                        | ✅                                    |
-| Move page to another folder       | ✅              | 🚫 locked ⁶             | ✅ ⁶                      | ✅ `update --folder` ⁶                                                       | ✅ long press → Move                      | ✅                                    |
-| Drag page from list onto a folder | ✅ ⁶            | 🚫 locked ⁶             | ✅ ⁶                      | —                                                                            | ✅ held over the title, onto the switcher | ✅                                    |
-| Reorder in page list              | ✅              | ✅ doesn't mark owned ⁵ | ✅                        | —                                                                            | ✅ select mode's handles                  | ✅                                    |
-| Delete page                       | ✅ soft → trash | ⚠️ soft + tombstone ⁷   | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹                                                       | ✅ long press; a series asks              | ✅ trashed everywhere                 |
-| Restore from trash                | ✅              | ✅ resumes sync ⁷       | ✅ stays detached ⁸       | ✅ `restore`                                                                 | ✅                                        | ✅                                    |
+| Functionality                     | Native          | Synced                  | Detached                  | CLI                                                                          | iOS                                       | iCloud                                    |
+| --------------------------------- | --------------- | ----------------------- | ------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| Create page                       | ✅              | 🚫 ¹                    | 🚫 ¹                      | ✅ `add` ²                                                                   | ✅ quick add / new page                   | ✅ arrives whole                          |
+| Open in editor                    | ✅              | ✅ read-only mirror ³   | ✅                        | ✅ `read`                                                                    | ✅ same webview                           | —                                         |
+| Adjust page title                 | ✅              | 🚫 locked ⁴             | ✅                        | ⚠️ `update --title`, refused on synced ⁴                                     | ✅ header or long press                   | ✅                                        |
+| Edit body / content               | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --content`, markdown, replaces body                               | ✅                                        | ⚠️ the later save wins the whole body     |
+| Add an image to a page            | ✅              | ✅ marks owned ⁵        | ✅                        | ○                                                                            | ✅ photo picker                           | ✅ the file travels once, beside its page |
+| Adjust subtitle                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --subtitle`, `""` clears                                          | ✅ editor header                          | ✅                                        |
+| Adjust priority                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --priority`                                                       | ✅ long press                             | ✅                                        |
+| Add / remove tags                 | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --tag` / `--untag`                                                | ✅ long press                             | ✅ each tag on its own                    |
+| Toggle status (non-recurring)     | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `done` / `status`; a status other than `not_started` or `done` is refused | ✅                                        | ✅                                        |
+| Move page to another folder       | ✅              | 🚫 locked ⁶             | ✅ ⁶                      | ✅ `update --folder` ⁶                                                       | ✅ long press → Move                      | ✅                                        |
+| Drag page from list onto a folder | ✅ ⁶            | 🚫 locked ⁶             | ✅ ⁶                      | —                                                                            | ✅ held over the title, onto the switcher | ✅                                        |
+| Reorder in page list              | ✅              | ✅ doesn't mark owned ⁵ | ✅                        | —                                                                            | ✅ select mode's handles                  | ✅                                        |
+| Delete page                       | ✅ soft → trash | ⚠️ soft + tombstone ⁷   | ⚠️ soft, stays detached ⁸ | ✅ soft; ⚠️ `--hard` ⁹                                                       | ✅ long press; a series asks              | ✅ trashed everywhere                     |
+| Restore from trash                | ✅              | ✅ resumes sync ⁷       | ✅ stays detached ⁸       | ✅ `restore`                                                                 | ✅                                        | ✅                                        |
 
 ¹ `create_page_impl` rejects any create targeting an external-calendar folder
 (`crates/pikos-db/src/pages.rs`). Only the reconciler seeds pages there, via raw SQL.
