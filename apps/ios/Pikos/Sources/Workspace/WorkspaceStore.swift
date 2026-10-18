@@ -222,6 +222,11 @@ public final class WorkspaceStore {
     /// still showing it undone is the symptom.
     public private(set) var dataVersion = 0
 
+    #if DEBUG
+        /// How long the last refresh took to read and group the view's rows, for the speed tests.
+        public private(set) var lastRefresh: Duration?
+    #endif
+
     public var scope: Scope = .today {
         didSet {
             guard scope != oldValue else { return }
@@ -462,6 +467,10 @@ public final class WorkspaceStore {
 
     public func refresh() async {
         guard let workspace else { return }
+        #if DEBUG
+            let started = ContinuousClock.now
+            defer { lastRefresh = started.duration(to: .now) }
+        #endif
         do {
             // Sequential rather than concurrent. These are two local SQLite
             // queries measured in single-digit milliseconds; overlapping them

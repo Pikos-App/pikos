@@ -50,6 +50,23 @@ final class SpeedTests: PikosUITestCase {
             stopMeasuring()
             list.swipeDown(velocity: .fast)
         }
+
+        // The app's own timing of each read, without the test's taps and queries around it.
+        print("SPEED Inbox switch: \(lastRead())")
+        app.buttons["Mark as done"].firstMatch.tap()
+        Thread.sleep(forTimeInterval: 2)
+        print("SPEED Inbox tick: \(lastRead())")
+    }
+
+    /// The store's timing of its last refresh, from the debug line in the Sort menu.
+    private func lastRead() -> String {
+        app.buttons["Sort"].firstMatch.tap()
+        let line = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Last read in'")).firstMatch
+        XCTAssertTrue(line.waitForExistence(timeout: 10), "the store timed its read")
+        let label = line.label
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap()
+        return label
     }
 
     /// Reads the editor's own timing for each keystroke, from the debug line in the page menu.
