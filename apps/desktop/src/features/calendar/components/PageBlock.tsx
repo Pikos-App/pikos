@@ -272,10 +272,6 @@ export function PageBlock({
     />
   );
 
-  // Synced provenance: an active mirror dims-on-detach (never strikethrough —
-  // it's still a real page). The source/broken-sync glyph is SyncSourceIcon.
-  const isDetached = page.syncState === "detached";
-
   const resizeHandle = resizeEnabled ? (
     // touch-none: the strip's only gesture is the resize, so the browser must
     // not claim a touch drag here for a scroll. The block body deliberately
@@ -299,7 +295,6 @@ export function PageBlock({
               "absolute select-none",
               CHIP_BASE_CLASSES,
               "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
-              isDetached && !done && "opacity-70",
               done && "opacity-50",
               isHighlighted && "animate-highlight-flash",
               (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
@@ -335,7 +330,6 @@ export function PageBlock({
               done
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
-              isDetached && !done && "opacity-70",
               isHighlighted && "animate-highlight-flash",
               isResizing
                 ? "cursor-row-resize!"

@@ -63,7 +63,6 @@ export function MonthEventChip({ event, folderColor, onDoubleClick, width }: Mon
           className={cn(
             "relative flex w-full cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
-            page.syncState === "detached" && !done && "opacity-70",
             done && "opacity-50",
             // Square ends say the event carries on into the previous or next week row.
             continuesBefore && "rounded-tl-none rounded-bl-none border-l-0",
