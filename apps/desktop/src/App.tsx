@@ -351,14 +351,24 @@ function WorkspaceLoadError({ error }: { error: unknown }) {
   // are opposite: relaunching fixes a locked or missing path and does nothing at
   // all for corruption, which needs a backup put back.
   const damaged = storageError.kind === "Corrupt";
+  const tooNew = storageError.kind === "TooNew";
 
   return (
     <div className="flex h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="w-full max-w-md">
         <p className="text-lg font-medium">
-          {damaged ? "Your workspace file is damaged" : "Couldn't open your workspace"}
+          {damaged
+            ? "Your workspace file is damaged"
+            : tooNew
+              ? "This workspace needs a newer Pikos"
+              : "Couldn't open your workspace"}
         </p>
-        {damaged ? (
+        {tooNew ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            A newer version of Pikos or the Pikos CLI has updated it. Your pages are fine. Update
+            this copy of Pikos to open them.
+          </p>
+        ) : damaged ? (
           <>
             <p className="mt-1 text-sm text-muted-foreground">
               Pikos keeps a snapshot before anything that rewrites your workspace. Putting one back

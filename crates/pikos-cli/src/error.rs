@@ -48,19 +48,12 @@ impl CliError {
 /// never surfaced — only a stable kind + generic text; NotFound/Conflict/Invalid
 /// carry our own safe messages.
 pub fn classify(err: AppError) -> CliError {
-    // open_pool's migrator returns VersionMissing when the DB has applied a
-    // migration this build doesn't know — i.e. the workspace is newer than the
-    // CLI. Surface that as a clear, actionable error rather than a generic Db one.
-    if let AppError::Db(sqlx::Error::Migrate(ref m)) = err {
-        if matches!(**m, sqlx::migrate::MigrateError::VersionMissing(_)) {
-            return CliError::new(
-                "SchemaTooNew",
-                "This workspace's database is newer than this Pikos CLI supports. Upgrade the CLI to match the desktop app.",
-                6,
-            );
-        }
-    }
     match err {
+        AppError::TooNew { .. } => CliError::new(
+            "SchemaTooNew",
+            "This workspace's database is newer than this Pikos CLI supports. Upgrade the CLI to match the desktop app.",
+            6,
+        ),
         AppError::NotFound(m) => CliError::not_found(m),
         AppError::Conflict(m) => CliError::conflict(m),
         AppError::Invalid(m) => CliError::usage(m),
@@ -99,10 +92,10 @@ mod tests {
 
     #[test]
     fn schema_too_new_maps_to_exit_6() {
-        let err = AppError::Db(sqlx::Error::Migrate(Box::new(
-            sqlx::migrate::MigrateError::VersionMissing(99),
-        )));
-        let cli = classify(err);
+        let cli = classify(AppError::TooNew {
+            applied: 99,
+            supported: 98,
+        });
         assert_eq!(cli.kind, "SchemaTooNew");
         assert_eq!(cli.code, 6);
     }

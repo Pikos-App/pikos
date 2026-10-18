@@ -953,6 +953,32 @@ async fn no_snapshot_for_empty_workspace() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[tokio::test]
+async fn a_workspace_a_newer_build_migrated_names_both_versions() {
+    let dir = unique_tmp_dir();
+    let path_str = dir.join("workspace.sqlite").to_str().unwrap().to_string();
+
+    let pool = open_pool(&path_str).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let opened = open_pool(&path_str).await;
+
+    let supported = embedded_migration_max();
+    assert!(
+        matches!(opened, Err(AppError::TooNew { applied: 9999, supported: s }) if s == supported),
+        "{opened:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn prune_keeps_newest_n_and_ignores_other_files() {
     let dir = unique_tmp_dir();

@@ -70,7 +70,7 @@ pub async fn require_migration_consent(path: &str, consented: bool) -> Result<()
 
 /// Resolve, gate and open the workspace — the prologue every entry point runs.
 ///
-/// `open_pool` runs the migrator, which fails closed (`VersionMissing` → mapped
+/// `open_pool` runs the migrator, which fails closed (`TooNew` → mapped
 /// to `SchemaTooNew` in [`classify`]) when the workspace schema is newer than
 /// this build, so a stale CLI can never write against an unknown schema.
 pub async fn open_workspace(

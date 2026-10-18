@@ -243,9 +243,17 @@ async fn open_pool_reporting_integrity(
         Ok(pool) => Ok(pool),
         Err(err) => Err(match integrity_failure(path).await {
             Some(detail) => AppError::Corrupt(detail),
-            None => err,
+            None => too_new(path).await.unwrap_or(err),
         }),
     }
+}
+
+/// [`AppError::TooNew`] when the workspace at `path` has applied a migration past this build's.
+async fn too_new(path: &str) -> Option<AppError> {
+    let (supported, applied) = migration_versions(path).await.ok()?;
+    let applied = applied.filter(|applied| *applied > supported)?;
+
+    Some(AppError::TooNew { applied, supported })
 }
 
 /// `PRAGMA quick_check` on the file, if it can be read at all. `Some` means the

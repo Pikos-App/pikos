@@ -102,15 +102,14 @@ pub enum WorkspaceError {
 
 impl WorkspaceError {
     fn opening(error: AppError) -> Self {
+        if let AppError::TooNew { .. } = error {
+            return WorkspaceError::TooNew;
+        }
         if let AppError::Db(sqlx::Error::Migrate(ref migrate)) = error {
-            match **migrate {
-                sqlx::migrate::MigrateError::VersionMismatch(_) => {
-                    return WorkspaceError::MadeByAnotherBuild {
-                        message: error.to_string(),
-                    }
-                }
-                sqlx::migrate::MigrateError::VersionMissing(_) => return WorkspaceError::TooNew,
-                _ => {}
+            if let sqlx::migrate::MigrateError::VersionMismatch(_) = **migrate {
+                return WorkspaceError::MadeByAnotherBuild {
+                    message: error.to_string(),
+                };
             }
         }
         WorkspaceError::Open {

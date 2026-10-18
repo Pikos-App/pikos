@@ -53,6 +53,11 @@ pub enum AppError {
     #[error("corrupt: {0}")]
     Corrupt(String),
 
+    /// A newer Pikos migrated the workspace past what this build carries. The
+    /// file is fine and only updating this copy opens it.
+    #[error("too new: the workspace is at schema v{applied}, this build reads up to v{supported}")]
+    TooNew { applied: i64, supported: i64 },
+
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -71,6 +76,7 @@ impl AppError {
             AppError::Invalid(_) => "Invalid",
             AppError::Network(_) => "Network",
             AppError::Corrupt(_) => "Corrupt",
+            AppError::TooNew { .. } => "TooNew",
             AppError::Internal(_) => "Internal",
         }
     }
