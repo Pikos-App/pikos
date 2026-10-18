@@ -1441,3 +1441,42 @@ async fn a_device_back_after_the_retention_window_sends_back_what_it_kept() {
     assert_converged(&mac, &phone).await;
     assert!(get_page(&mac, &id).await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_device_back_after_the_retention_window_forgets_the_transports_copies() {
+    let phone = device().await;
+    created(&phone, new_page("Old notes")).await;
+    let names = pending(&phone, 100).await.unwrap();
+    let built = build(&phone, &names).await.unwrap();
+    crate::replica::build::save_system_fields(
+        &phone,
+        &built
+            .iter()
+            .map(|b| (b.name.clone(), b"change tag".to_vec()))
+            .collect::<Vec<_>>(),
+    )
+    .await
+    .unwrap();
+    let long_ago = (chrono::Utc::now()
+        - chrono::Duration::days(crate::replica::RETENTION_DAYS + 10))
+    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+    .to_string();
+    sqlx::query("UPDATE replica_meta SET last_fetch_at = ? WHERE id = 1")
+        .bind(&long_ago)
+        .execute(&phone)
+        .await
+        .unwrap();
+    let zone =
+        pikos_replica::zone::zone_name(&crate::replica::meta(&phone).await.unwrap().workspace_id);
+
+    crate::replica::join(&phone, &[zone]).await.unwrap();
+
+    assert_eq!(
+        count(
+            &phone,
+            "SELECT COUNT(*) FROM replica_clocks WHERE system_fields IS NOT NULL"
+        )
+        .await,
+        0
+    );
+}

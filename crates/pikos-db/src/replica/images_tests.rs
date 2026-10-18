@@ -186,3 +186,85 @@ async fn a_device_that_moves_into_another_zone_sends_its_images_again() {
 
     assert_eq!(images_pending(&mac).await, vec![name]);
 }
+
+fn image_record(
+    name: &str,
+    download: &std::path::Path,
+) -> (RecordName, pikos_replica::codec::FieldMap) {
+    let record_name = RecordName::live(Entity::Asset, name.to_owned());
+    let mut fields = pikos_replica::codec::encode(
+        &pikos_replica::codec::Record {
+            name: record_name.clone(),
+            row: pikos_replica::merge::RowState {
+                born: pikos_replica::Hlc::new(1, 0),
+                fields: vec![],
+                tomb: None,
+            },
+        },
+        &[],
+    );
+    fields.insert(
+        FILE.into(),
+        Value::Text(download.to_string_lossy().into_owned()),
+    );
+    (record_name, fields)
+}
+
+#[tokio::test]
+async fn an_image_arriving_before_its_folder_is_set_fails_the_apply_so_it_is_fetched_again() {
+    let phone = device().await;
+    let download = std::env::temp_dir().join(format!("pkos_download_{}", uuid::Uuid::new_v4()));
+    std::fs::write(&download, b"photo").unwrap();
+    let name = format!("{}.png", uuid::Uuid::new_v4());
+
+    let applied = crate::replica::apply::apply(&phone, &[image_record(&name, &download)]).await;
+
+    assert!(applied.is_err());
+}
+
+#[tokio::test]
+async fn an_image_whose_download_is_gone_is_dropped_and_the_rest_still_apply() {
+    let (mac, _) = with_images().await;
+    let (phone, phone_images) = with_images().await;
+    let id = page_showing(&mac, "Harbour", &format!("{}.png", uuid::Uuid::new_v4())).await;
+    let names = pending(&mac, 1_000).await.unwrap();
+    let mut records: Vec<_> = build(&mac, &names)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|b| (b.name, b.fields))
+        .collect();
+    let gone = format!("{}.png", uuid::Uuid::new_v4());
+    records.push(image_record(
+        &gone,
+        &std::env::temp_dir().join("pkos_no_such_download"),
+    ));
+
+    crate::replica::apply::apply(&phone, &records)
+        .await
+        .unwrap();
+
+    assert!(get_page(&phone, &id).await.unwrap().is_some());
+    assert!(!phone_images.join(&gone).exists());
+}
+
+#[tokio::test]
+async fn a_restore_queues_again_the_images_its_backup_had_only_queued() {
+    let (mac, mac_images) = with_images().await;
+    let name = saved_image(&mac_images, b"queued, never sent");
+    page_showing(&mac, "Draft", &name).await;
+    build(&mac, &pending(&mac, 1_000).await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(images_pending(&mac).await, vec![name.clone()]);
+
+    let displaced = crate::replica::before_restore(&mac).await.unwrap().unwrap();
+    crate::replica::after_restore(&mac, displaced)
+        .await
+        .unwrap();
+    build(&mac, &pending(&mac, 100_000).await.unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(images_pending(&mac).await, vec![name]);
+}

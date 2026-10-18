@@ -118,6 +118,14 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(RecordCodec.decode(record)?.fields["file"], .text(file.path))
     }
 
+    func testAFileNamedInATextFieldIsNotTakenAsOneToCopy() {
+        let record = CKRecord(recordType: "asset", recordID: CKRecord.ID(recordName: "asset:x", zoneID: workspaceZone))
+        record.encryptedValues["record"] = "asset:x"
+        record.encryptedValues["file"] = "/etc/hosts"
+
+        XCTAssertNil(RecordCodec.decode(record)?.fields["file"])
+    }
+
     func testARecordStoredUnderAnEscapedNameKeepsItsRealName() async throws {
         let store = FakeStore()
         let tag = SyncRecord(name: "pagetag:p1/café", fields: ["born": .text("0001")])
