@@ -11,6 +11,7 @@ import {
   isDueSoon,
   isOpen,
   parseLocalISO,
+  PRIORITY_CHECKBOX_COLORS,
   viewerEnd,
   viewerStart,
 } from "@pikos/core";
@@ -152,15 +153,7 @@ export function PageListItem({
               floating to the middle, and on a one-line row that left it sitting high. */}
           <span className="type-body flex h-[1em] shrink-0 items-center leading-none">
             <TaskCheckbox
-              borderColor={
-                isOpen(page)
-                  ? page.priority === 1
-                    ? "var(--color-status-overdue)"
-                    : page.priority === 2
-                      ? "var(--color-status-due-soon)"
-                      : undefined
-                  : undefined
-              }
+              borderColor={isOpen(page) ? PRIORITY_CHECKBOX_COLORS[page.priority] : undefined}
               checked={isDone(page)}
               onChange={() => onToggleStatus()}
             />

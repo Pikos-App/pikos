@@ -157,7 +157,7 @@ appTest(
 
     await appTest.step("QADD-03 plain priority words stay in the title, not eaten", async () => {
       const dialog = await typeQuickAdd(app, "tidy desk low priority");
-      await expect(dialog.getByRole("button", { name: "Priority: Priority" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Priority: No priority" })).toBeVisible();
       await app.keyboard.press("Enter");
       await openRow(app, "tidy desk low priority");
     });
