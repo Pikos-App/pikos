@@ -36,6 +36,7 @@ import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
 import { PageInfoPopover } from "./PageInfoPopover";
 import { PageLinkPicker } from "./PageLinkPicker";
+import { SaveStatus } from "./SaveStatus";
 import { SlashMenuExtension } from "./SlashMenu";
 import { TableToolbar } from "./TableToolbar";
 
@@ -298,11 +299,9 @@ export function EditorPane() {
     <div className="group/editor relative flex flex-1 flex-col overflow-hidden bg-surface-primary">
       {page && (
         <MetadataHeader
-          contentSaveError={saveError}
           key={page.id}
           onAppendToBody={(text) => appendParagraphs(editorRef.current, text)}
           onFocusEditor={() => !editor?.isDestroyed && editor?.commands.focus()}
-          onRetryContent={() => void flush()}
           page={page}
         />
       )}
@@ -318,9 +317,6 @@ export function EditorPane() {
           onAddingLinkChange={setIsAddingLink}
         />
       )}
-      <div aria-atomic="true" aria-live="assertive" className="sr-only">
-        {saveError ? "Failed to save. Please try again." : isSaving ? "Saving…" : ""}
-      </div>
       <div className="relative flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- padding around the editor; clicks delegate focus to the ProseMirror surface which is the real keyboard target */}
@@ -338,7 +334,16 @@ export function EditorPane() {
         >
           <EditorContent editor={editor} />
         </div>
-        {editor && <PageInfoPopover editor={editor} page={page} />}
+        {/* Pinned to the right edge, so a status appearing grows leftward into the margin. */}
+        <div className="sticky right-3 bottom-3 z-10 ml-auto flex w-fit items-center gap-1">
+          <SaveStatus
+            contentSaveError={saveError}
+            isSaving={isSaving}
+            onRetryContent={() => void flush()}
+            pageId={page.id}
+          />
+          {editor && <PageInfoPopover editor={editor} page={page} />}
+        </div>
       </div>
     </div>
   );

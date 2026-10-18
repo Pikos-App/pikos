@@ -1,6 +1,6 @@
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
 import { isDone, isTimedIso, rruleToLabel, syncedScheduleLabel } from "@pikos/core";
-import { AlertTriangle, CalendarDays, CalendarSync } from "lucide-react";
+import { CalendarDays, CalendarSync } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
@@ -19,14 +19,11 @@ interface BylineProps {
   onTagToggle: (name: string) => void;
   onRecurrenceChange: (rrule: string | null) => void;
   onOpenInCalendar?: () => void;
-  saveError?: string | null;
-  onErrorClick?: () => void;
 }
 
 export function Byline({
   allTags,
   folders,
-  onErrorClick,
   onFolderChange,
   onOpenInCalendar,
   onPriorityChange,
@@ -34,7 +31,6 @@ export function Byline({
   onStatusChange,
   onTagToggle,
   page,
-  saveError,
 }: BylineProps) {
   const done = isDone(page);
   const { recurrenceRules } = usePages();
@@ -172,32 +168,6 @@ export function Byline({
               { kind: "tags", props: { allTags, onToggle: onTagToggle, selected: page.tags } },
             ],
             key: "tags",
-          },
-          saveError != null && {
-            chips: [
-              {
-                id: "save-error",
-                kind: "node",
-                node: (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        aria-label="Save failed. Click to retry"
-                        className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
-                        onClick={onErrorClick}
-                      >
-                        <AlertTriangle size={12} strokeWidth={2} />
-                        <span>Not saved</span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[260px]" side="bottom">
-                      {saveError}
-                    </TooltipContent>
-                  </Tooltip>
-                ),
-              },
-            ],
-            key: "save-error",
           },
         ]}
         layout="byline"

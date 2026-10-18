@@ -61,7 +61,7 @@ export function PageInfoPopover({ editor, page }: PageInfoPopoverProps) {
       <PopoverTrigger asChild>
         <button
           aria-label="Page info"
-          className="sticky right-3 bottom-3 z-10 ml-auto flex w-fit items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-surface-secondary"
+          className="flex items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-surface-secondary"
         >
           <Info className="size-3.5" />
           <span>

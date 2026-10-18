@@ -7,8 +7,6 @@ import {
   localToday,
   parseLocalISO,
   snapAnchorToRule,
-  storageErrorUserMessage,
-  toStorageError,
   viewerStart,
 } from "@pikos/core";
 import { CalendarOff } from "lucide-react";
@@ -35,25 +33,15 @@ interface MetadataHeaderProps {
   /** Appends text to the end of the body through the editor's own insert path,
    *  so the write marks the page owned exactly as typing would. */
   onAppendToBody: (text: string) => void;
-  contentSaveError?: Error | null;
-  onRetryContent?: () => void;
 }
 
-export function MetadataHeader({
-  contentSaveError,
-  onAppendToBody,
-  onFocusEditor,
-  onRetryContent,
-  page,
-}: MetadataHeaderProps) {
+export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: MetadataHeaderProps) {
   const {
-    clearPageError,
     clearPendingDescription,
     createRecurrence,
     deleteRecurrence,
     flushPage,
     folders,
-    pageErrors,
     recurrenceRules,
     scheduleOnce,
     tags,
@@ -65,20 +53,6 @@ export function MetadataHeader({
   const { flashPageBlock, requestCalendarScroll, setRightPanel } = useUI();
   const { setReferenceDate } = useCalendarDate();
   const allTagNames = tags.map((t) => t.name);
-
-  const metadataError = pageErrors.get(page.id) ?? null;
-  const hasError = !!(metadataError ?? contentSaveError);
-  // Friendly per-kind copy from @pikos/core — never echoes raw sqlx/Tauri text.
-  const errorMessage = metadataError
-    ? storageErrorUserMessage(metadataError, "saving page metadata")
-    : contentSaveError
-      ? storageErrorUserMessage(toStorageError(contentSaveError), "saving page content")
-      : null;
-
-  function handleErrorClick() {
-    clearPageError(page.id);
-    onRetryContent?.();
-  }
 
   function handleStatusChange(status: PageStatus) {
     togglePageStatus(page, status);
@@ -407,7 +381,6 @@ export function MetadataHeader({
             <Byline
               allTags={allTagNames}
               folders={folders}
-              onErrorClick={handleErrorClick}
               onFolderChange={handleFolderChange}
               {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
               onPriorityChange={handlePriorityChange}
@@ -415,7 +388,6 @@ export function MetadataHeader({
               onStatusChange={handleStatusChange}
               onTagToggle={handleTagToggle}
               page={page}
-              saveError={hasError ? (errorMessage ?? "Save failed") : null}
             />
           </div>
           <div className="pt-2 pb-4">
