@@ -1,15 +1,9 @@
 import Foundation
+import PikosCore
 
 /// What the Now widget says at one instant: what's happening, what's next, and what to do in the
-/// gap between.
-///
-/// The suggestion is a fixed rule, not a guess: priority first, then the order the day's list
-/// already has. Each one carries the reason it was picked, so the widget can say why. A widget
-/// that picks a page for unexplained reasons loses trust the first time it picks wrong.
-///
-/// A timed page with no end is a moment, not a span: it is never "happening now", and once its
-/// time passes it is due, like any page dated today. Assuming a length the person never typed
-/// would make the widget claim they're busy when they aren't.
+/// gap between. `now_plan` in pikos-core decides it; this carries the answer as the widget's
+/// pages and dates.
 public struct NowPlan: Equatable, Sendable {
     public struct Item: Equatable, Sendable {
         public let id: String
@@ -56,54 +50,35 @@ public struct NowPlan: Equatable, Sendable {
 
     /// `items` is today's open pages in the order the day's list shows them.
     public init(items: [Item], now: Date) {
-        current = items
-            .filter { item in
-                guard let start = item.start, let end = item.end else { return false }
-                return start <= now && now < end
-            }
-            .min { ($0.end ?? now) < ($1.end ?? now) }
+        let answer = nowPlan(
+            items: items.map {
+                NowPage(
+                    id: $0.id, start: $0.start.map(Self.millis), end: $0.end.map(Self.millis),
+                    priority: Int64($0.priority))
+            },
+            now: Self.millis(now))
+        let byId = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
-        next = items
-            .filter { ($0.start ?? now) > now }
-            .min { ($0.start ?? now) < ($1.start ?? now) }
-
-        freeUntil = current == nil ? next?.start : nil
-
-        if current != nil {
-            suggestion = nil
-        } else {
-            suggestion = Self.suggest(from: items, now: now)
+        current = answer.current.flatMap { byId[$0] }
+        next = answer.next.flatMap { byId[$0] }
+        freeUntil = answer.freeUntil.map(Self.date)
+        suggestion = answer.suggestion.map {
+            let reason: Reason =
+                switch $0.reason {
+                case .topPriority: .topPriority
+                case .overdue: .overdue
+                case .firstInList: .firstInList
+                }
+            return Suggestion(id: $0.id, reason: reason)
         }
-
-        let edges = items.flatMap { [$0.start, $0.end] }.compactMap { $0 }.filter { $0 > now }
-        changes = Array(Set(edges)).sorted()
+        changes = answer.changes.map(Self.date)
     }
 
-    /// Ranked by priority, then by list order. The reason names whichever of the two decided it.
-    private static func suggest(from items: [Item], now: Date) -> Suggestion? {
-        let candidates = items.enumerated().filter { _, item in
-            guard let start = item.start else { return true }
-            return start <= now && (item.end ?? start) <= now
-        }
-        func rank(_ priority: Int) -> Int { priority == 0 ? Int.max : priority }
-        guard
-            let best = candidates.min(by: { a, b in
-                rank(a.element.priority) != rank(b.element.priority)
-                    ? rank(a.element.priority) < rank(b.element.priority)
-                    : a.offset < b.offset
-            })
-        else { return nil }
+    private static func millis(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1000).rounded())
+    }
 
-        let item = best.element
-        let outranks = candidates.contains { rank($0.element.priority) > rank(item.priority) }
-        let reason: Reason =
-            if item.priority != 0 && outranks {
-                .topPriority
-            } else if item.start != nil {
-                .overdue
-            } else {
-                .firstInList
-            }
-        return Suggestion(id: item.id, reason: reason)
+    private static func date(_ millis: Int64) -> Date {
+        Date(timeIntervalSince1970: TimeInterval(millis) / 1000)
     }
 }

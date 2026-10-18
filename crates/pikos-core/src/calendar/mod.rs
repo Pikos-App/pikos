@@ -25,6 +25,7 @@
 //! cascades overlay their hosts; it is not layout.
 
 pub mod all_day;
+pub mod edits;
 pub mod occurrences;
 pub mod timed;
 
