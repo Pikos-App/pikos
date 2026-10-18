@@ -38,6 +38,7 @@ import { createLogger } from "@/shared/logger";
 import { flushPendingWrites } from "@/shared/pendingWrites";
 import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 
+import { type CommandMatch, matchCommand } from "../commandMatch";
 import { highlightText } from "../highlightText";
 
 const log = createLogger("SearchPalette");
@@ -53,17 +54,17 @@ const COMMAND_PREFILL = `${COMMAND_PREFIX} `;
 
 type SearchPagesFn = (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
 
-/** Substring first, then a subsequence pass so ">tgsb" still finds "Toggle sidebar". */
-function commandMatches(label: string, filter: string): boolean {
-  if (filter === "") return true;
-  const haystack = label.toLowerCase();
-  if (haystack.includes(filter)) return true;
-  let i = 0;
-  for (const ch of haystack) {
-    if (ch === filter[i]) i++;
-    if (i === filter.length) return true;
-  }
-  return false;
+function markMatched(label: string, indices: number[]): React.ReactNode {
+  const matched = new Set(indices);
+  return [...label].map((ch, i) =>
+    matched.has(i) ? (
+      <mark className="bg-transparent font-medium text-action" key={i}>
+        {ch}
+      </mark>
+    ) : (
+      ch
+    )
+  );
 }
 
 /** "2026-03-23" or "2026-03-23T10:00:00" → "Mar 23, 2026". */
@@ -222,7 +223,12 @@ export function SearchPalette() {
   }
 
   const commandItems = isCommandMode
-    ? commands.filter((c) => commandMatches(c.label ?? "", commandFilter))
+    ? commands
+        .flatMap((binding) => {
+          const match = matchCommand(binding.label ?? "", commandFilter);
+          return match ? [{ binding, match }] : [];
+        })
+        .sort((a, b) => a.match.rank - b.match.rank)
     : [];
 
   // Both open this palette, so both are inert once it is open. The guard is here
@@ -405,7 +411,7 @@ export function SearchPalette() {
       e.preventDefault();
       if (isCommandMode) {
         const command = commandItems[clampedIdx];
-        if (command) runCommand(command);
+        if (command) runCommand(command.binding);
         return;
       }
       const item = pageItems[clampedIdx];
@@ -475,7 +481,10 @@ export function SearchPalette() {
     );
   }
 
-  function renderCommand(binding: Binding, idx: number) {
+  function renderCommand(
+    { binding, match }: { binding: Binding; match: CommandMatch },
+    idx: number
+  ) {
     return (
       <button
         className={cn(
@@ -496,7 +505,9 @@ export function SearchPalette() {
         }}
       >
         <Command className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-        <span className="min-w-0 flex-1 truncate">{binding.label}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {markMatched(binding.label ?? "", match.indices)}
+        </span>
         <span className="flex shrink-0 items-center gap-1">
           {formatCombo(binding.combo).map((token, i) => (
             <kbd

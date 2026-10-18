@@ -207,7 +207,8 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
 
   // Cmd+Z — fire the most recent undoable toast's action. Skipped while the
   // user is in a text input or contentEditable so the editor's native undo
-  // (Tiptap history) keeps working unchanged.
+  // (Tiptap history) keeps working unchanged. Gated on there being one, so the
+  // palette doesn't offer an undo that has nothing to act on.
   useKeyboardShortcut(
     "Mod+z",
     () => {
@@ -219,7 +220,11 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    { group: "Navigation", label: "Undo delete" }
+    {
+      group: "Navigation",
+      label: "Undo delete",
+      when: () => toastItems.some((toast) => toast.action),
+    }
   );
 
   const value: UndoDeleteContextValue = {

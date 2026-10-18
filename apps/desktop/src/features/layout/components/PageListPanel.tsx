@@ -641,6 +641,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   }
 
+  const hasMultiSelection = selectedPageIds.size > 1;
+
   return (
     <div
       className="relative flex h-full shrink-0 flex-col border-r border-border-secondary bg-surface-secondary"
@@ -699,6 +701,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           </div>
         </SortableContext>
       </div>
+
+      {hasMultiSelection && (
+        <div
+          className="type-ui-sm mt-auto border-t border-border px-3 py-1.5 text-muted-foreground"
+          role="status"
+        >
+          <span className="tabular-nums">{selectedPageIds.size}</span> selected · right-click for
+          actions
+        </div>
+      )}
 
       {/* Drag handle — right edge */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only resize, kbd control deferred to the post-launch a11y backlog */}
