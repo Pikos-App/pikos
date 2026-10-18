@@ -24,6 +24,7 @@ import {
   getHours,
   getMinutes,
   isSameDay,
+  nextMonday,
   startOfDay,
 } from "date-fns";
 import { Calendar, Pencil } from "lucide-react";
@@ -35,6 +36,13 @@ import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useMonthNav } from "@/shared/hooks/useMonthNav";
 
 import { CAL_HEIGHT, MiniCalendar } from "./MiniCalendar";
+
+/** Next week is the coming Monday, as on the phone, so a Monday gives the Monday after. */
+const QUICK_PICKS: readonly (readonly [string, (today: Date) => Date])[] = [
+  ["Today", (today) => today],
+  ["Tomorrow", (today) => addDays(today, 1)],
+  ["Next week", (today) => nextMonday(today)],
+];
 
 export interface DateTimePickerProps {
   /** ISO 8601 date (date-only or datetime) or null (no schedule). */
@@ -176,8 +184,7 @@ export function DateTimePicker({
     }
   }
 
-  function quickPick(daysOffset: number) {
-    const date = startOfDay(addDays(new Date(), daysOffset));
+  function quickPick(date: Date) {
     if (selectedTime) {
       onChange(toISODateTime(date, selectedTime.hour24, selectedTime.minute));
     } else {
@@ -374,14 +381,8 @@ export function DateTimePicker({
         <div className="p-3">
           <div className="flex w-full items-start justify-between">
             <div className="mb-3 flex items-center gap-0.5 text-xs">
-              {(
-                [
-                  ["Today", 0],
-                  ["Tomorrow", 1],
-                  ["Next week", 7],
-                ] as const
-              ).map(([label, offset], idx) => {
-                const pickDate = startOfDay(addDays(new Date(), offset));
+              {QUICK_PICKS.map(([label, resolve], idx) => {
+                const pickDate = resolve(startOfDay(new Date()));
                 const isActive = selectedDate !== null && isSameDay(selectedDate, pickDate);
                 return (
                   <span className="flex items-center" key={label}>
@@ -397,7 +398,7 @@ export function DateTimePicker({
                           ? "font-medium text-primary"
                           : "text-foreground/55 hover:text-foreground"
                       )}
-                      onClick={() => quickPick(offset)}
+                      onClick={() => quickPick(pickDate)}
                     >
                       {label}
                     </button>
