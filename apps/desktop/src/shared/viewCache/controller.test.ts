@@ -179,7 +179,7 @@ describe("ViewCacheController calendar ranges", () => {
     expect(ids).toHaveLength(2);
   });
 
-  it("refetches the range on screen after a write, and drops every range when hidden", async () => {
+  it("refetches the range on screen after a write", async () => {
     const { adapter, controller } = await setup(0);
     controller.showRange(start, end);
     await settle();
@@ -189,8 +189,50 @@ describe("ViewCacheController calendar ranges", () => {
     });
     await settle();
     expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+  });
+
+  it("keeps the range on screen when hidden, so showing it again needs no fetch", async () => {
+    const { adapter, controller, raw } = await setup(0);
+    const later: [string, string] = ["2026-06-08T00:00:00Z", "2026-06-15T00:00:00Z"];
+    const dentist = await adapter.createPage({
+      ...newPage("Dentist"),
+      scheduledStart: "2026-06-03T09:00:00",
+    });
+    controller.showRange(...later);
+    await settle();
+    controller.showRange(start, end);
+    await settle();
     controller.hideRanges();
-    expect(controller.rangePages(start, end)).toEqual([]);
+    const fetched: (string | null)[] = [];
+    const listRange = raw.listRange.bind(raw);
+    raw.listRange = (...args) => {
+      fetched.push(args[0]);
+      return listRange(...args);
+    };
+
+    expect(controller.rangeLoaded(...later)).toBe(false);
+
+    controller.showRange(start, end);
+    expect(controller.rangeLoaded(start, end)).toBe(true);
+    expect(controller.rangePages(start, end).map((p) => p.id)).toEqual([dentist.id]);
+    await settle();
+    expect(fetched).toEqual([]);
+  });
+
+  it("reloads a kept range a write marked stale while the calendar was hidden", async () => {
+    const { adapter, controller } = await setup(0);
+    controller.showRange(start, end);
+    await settle();
+    controller.hideRanges();
+    const added = await adapter.createPage({
+      ...newPage("Added while away"),
+      scheduledStart: "2026-06-05T10:00:00",
+    });
+    await settle();
+
+    controller.showRange(start, end);
+    await settle();
+    expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
   });
 });
 

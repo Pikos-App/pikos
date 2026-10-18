@@ -351,10 +351,18 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** The calendar unmounted or was hidden: its ranges go; the series heads stay. */
+  /** The calendar unmounted or was hidden: every range but the one on screen goes, and the series
+   *  heads stay. Dropping that one too made going back to the calendar draw its grid empty and its
+   *  blocks a fetch later; kept, it shows at once and reloads behind it if a write marked it stale. */
   hideRanges(): void {
-    this.ranges.clear();
-    this.rangeRead.clear();
+    const shown = this.shownRange && `${this.shownRange.start}|${this.shownRange.end}`;
+    for (const name of [...this.ranges.keys()]) {
+      if (name === shown) continue;
+
+      this.ranges.delete(name);
+      this.rangeRead.delete(name);
+    }
+
     this.shownRange = null;
     this.bump();
   }
