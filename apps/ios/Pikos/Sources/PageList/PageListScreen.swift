@@ -83,7 +83,10 @@ struct PageListScreen: View {
                         selection = []
                     } else {
                         Task {
-                            await store.loadAllRows()
+                            guard await store.loadAllRows() else {
+                                store.errorMessage = String(localized: "Couldn't read the whole list, so nothing was selected.")
+                                return
+                            }
                             selection = Set(selectable.map(\.id))
                         }
                     }

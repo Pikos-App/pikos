@@ -3,7 +3,7 @@ import PikosSupport
 import SwiftUI
 import UIKit
 
-extension WhenChoice: Identifiable {
+extension WhenChoice: @retroactive Identifiable {
     public var id: String { rawValue }
 
     var label: String {

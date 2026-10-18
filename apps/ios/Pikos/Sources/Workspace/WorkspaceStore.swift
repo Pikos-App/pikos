@@ -296,8 +296,19 @@ public final class WorkspaceStore {
     ///
     /// Separate from `init` because it can fail and because it is async; a
     /// failing initialiser would leave the app with no store to show the error
-    /// with.
+    /// with. Goes through `ensureStarted`, so a create made while the shell is
+    /// still opening the workspace waits for the same open.
     public func start() async {
+        await ensureStarted()
+    }
+
+    private func open() async {
+        #if DEBUG
+            // A slow open on demand, so a test can act in the moment before the workspace opens.
+            if let delay = ProcessInfo.processInfo.environment["PIKOS_OPEN_DELAY_MS"].flatMap(Int.init) {
+                try? await Task.sleep(for: .milliseconds(delay))
+            }
+        #endif
         do {
             let url = try WorkspaceLocation.databaseURL()
             // Decided before the open, which creates the file. Whether this
@@ -464,7 +475,7 @@ public final class WorkspaceStore {
             await opening.value
             return
         }
-        let task = Task { await start() }
+        let task = Task { await open() }
         opening = task
         await task.value
         opening = nil
@@ -481,17 +492,31 @@ public final class WorkspaceStore {
                 readCount = workspace.readCount()
             }
         #endif
+        // A re-read takes ticked rows out itself, so a held settle has nothing left to do.
+        pendingHold?.cancel()
+        pendingTicks.removeAll()
+        refreshes += 1
+        let generation = refreshes
         do {
             // Sequential rather than concurrent. These are two local SQLite
             // queries measured in single-digit milliseconds; overlapping them
             // would buy nothing and put two readers on the pool for no reason.
-            sections = try await load(scope)
+            sections = try await load(scope, generation: generation)
             try await refreshAroundTheList(workspace)
+        } catch is StaleRead {
+            // The view or its order changed while this read was out; the change's own read follows.
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
         }
     }
+
+    /// A read that finished after its view or sort was left, or after a newer refresh started,
+    /// and so isn't put on screen.
+    private struct StaleRead: Error {}
+
+    /// Refreshes started; a read is current only while its own number is the latest.
+    private var refreshes = 0
 
     /// Everything a refresh reads besides the list's own rows.
     private func refreshAroundTheList(_ workspace: Workspace) async throws {
@@ -515,9 +540,13 @@ public final class WorkspaceStore {
 
     /// Takes the ticked rows out of the list instead of reading every loaded window again. A tick
     /// on a plain page removes only its own row, and the rows after it keep their order, so the
-    /// list is what a re-read would return.
+    /// list is what a re-read would return. Rows go by the ticks' ids rather than by a done status,
+    /// which a read that started before a tick may have put back. A window emptied with more rows
+    /// after it is read again, since nothing on screen would bring the next one in.
     private func settleTicks() async {
         guard let workspace else { return }
+        let ticked = pendingTicks
+        pendingTicks.removeAll()
         let removesRowsOnly = scope != .upcoming
         guard removesRowsOnly else {
             await refresh()
@@ -534,7 +563,7 @@ public final class WorkspaceStore {
         let windowedId = scope == .today ? "overdue" : "all"
         var removedFromWindow = 0
         var settled = sections.map { section in
-            let open = section.pages.filter { $0.status != "done" }
+            let open = section.pages.filter { !ticked.contains($0.id) }
             if section.id == windowedId { removedFromWindow += section.pages.count - open.count }
             return Section(id: section.id, title: section.title, pages: open)
         }
@@ -542,6 +571,11 @@ public final class WorkspaceStore {
             settled = settled.filter { !$0.pages.isEmpty }
             let onlyToday = settled.allSatisfy { $0.id == "today" }
             if onlyToday { settled = [Section(id: "today", title: nil, pages: settled.first?.pages ?? [])] }
+        }
+        let windowEmptied = !settled.contains { $0.id == windowedId && !$0.pages.isEmpty }
+        if windowEmptied && nextWindow != nil {
+            await refresh()
+            return
         }
         sections = settled
         loadedRows -= removedFromWindow
@@ -562,7 +596,7 @@ public final class WorkspaceStore {
     /// item dated today sorts at *now* so it lands between what has gone and
     /// what has not. A Swift copy of either would be a second definition that
     /// drifts from the one the desktop is graded against.
-    private func load(_ scope: Scope) async throws -> [Section] {
+    private func load(_ scope: Scope, generation: Int) async throws -> [Section] {
         guard let workspace else { return [] }
         switch scope {
         case .today:
@@ -570,6 +604,7 @@ public final class WorkspaceStore {
             // limit; today's own pages come whole with the first window.
             let window = try await workspace.listTodayWindow(
                 after: nil, limit: UInt32(max(Self.windowSize, loadedRows)))
+            guard self.scope == scope, refreshes == generation else { throw StaleRead() }
             nextWindow = window.earlier.next
             loadedRows = window.earlier.pages.count
             let todayPages = window.slippedToday + window.today
@@ -585,7 +620,9 @@ public final class WorkspaceStore {
 
         case .upcoming:
             let today = DayLabel.today()
-            return try await workspace.listUpcoming().map { day in
+            let days = try await workspace.listUpcoming()
+            guard self.scope == scope, refreshes == generation else { throw StaleRead() }
+            return days.map { day in
                 Section(
                     id: day.date,
                     title: DayLabel.relative(day.date, today: today),
@@ -594,9 +631,13 @@ public final class WorkspaceStore {
 
         case .inbox, .folder:
             guard let listScope = scope.listScope else { return [] }
+            let sort = listSort
             let window = try await workspace.listWindow(
-                scope: listScope, sort: listSort.listSort, after: nil,
+                scope: listScope, sort: sort.listSort, after: nil,
                 limit: UInt32(max(Self.windowSize, loadedRows)))
+            guard self.scope == scope, listSort == sort, refreshes == generation else {
+                throw StaleRead()
+            }
             nextWindow = window.next
             loadedRows = window.pages.count
             return [Section(id: "all", title: nil, pages: window.pages)]
@@ -609,9 +650,15 @@ public final class WorkspaceStore {
     }
 
     /// Read the rest of the list in one go, for Select All: every bulk verb keeps each page's
-    /// date and folder for its Undo, so it needs the rows, not just their ids.
-    public func loadAllRows() async {
+    /// date and folder for its Undo, so it needs the rows, not just their ids. Waits out a read
+    /// already going, and returns whether every row is now loaded: a selection of part of a list
+    /// would leave the rest out of whatever the person does next.
+    public func loadAllRows() async -> Bool {
+        while isLoadingMoreRows {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
         await readOn(windows: .max, limit: 5_000)
+        return nextWindow == nil
     }
 
     /// Read up to `windows` more windows after the last, and add them to the list at once.
@@ -700,9 +747,13 @@ public final class WorkspaceStore {
 
     /// Load the next page. The caller checks `hasMoreCompleted` first.
     public func loadMoreCompleted() async {
-        guard hasMoreCompleted else { return }
+        guard hasMoreCompleted, !isLoadingMoreCompleted else { return }
+        isLoadingMoreCompleted = true
+        defer { isLoadingMoreCompleted = false }
         await fetchCompleted(offset: UInt32(completedPages.count), replacing: false)
     }
+
+    private var isLoadingMoreCompleted = false
 
     public var hasMoreCompleted: Bool {
         completedPages.count < Int(completedTotal)
@@ -755,6 +806,8 @@ public final class WorkspaceStore {
     // MARK: - Reads
 
     public func page(id: String) async -> Page? {
+        // A link can open the editor at launch, before the workspace has.
+        await ensureStarted()
         guard let workspace else { return nil }
         do {
             return try await workspace.getPage(id: id)
@@ -885,6 +938,7 @@ public final class WorkspaceStore {
 
     @discardableResult
     public func createPage(_ page: NewPage) async -> Page? {
+        await ensureStarted()
         guard let workspace else { return nil }
         do {
             let created = try await workspace.createPage(page: page)
@@ -1392,6 +1446,9 @@ public final class WorkspaceStore {
         reference: Date = Date(),
         folderId: String? = nil
     ) async -> [Page] {
+        // A line typed in the moment after launch, before the workspace has opened, waits for it
+        // rather than being dropped.
+        await ensureStarted()
         guard let workspace else { return [] }
         do {
             let created = try await workspace.createFromQuickAdd(
@@ -1470,7 +1527,8 @@ public final class WorkspaceStore {
     /// documenting it.
     public func setStatus(pageId: String, done: Bool) async {
         guard let workspace else { return }
-        let isRecurring = pages.first { $0.id == pageId }?.isRecurring ?? false
+        // A page not on screen may be recurring, and only a re-read shows where its head went.
+        let isRecurring = pages.first { $0.id == pageId }?.isRecurring ?? true
 
         // Optimistic, but only for a plain page. A recurring one does not simply
         // become done — the head advances and a completed clone appears beside
@@ -1496,6 +1554,7 @@ public final class WorkspaceStore {
         do {
             try await workspace.setPageStatus(pageId: pageId, done: done)
             if done && !isRecurring {
+                pendingTicks.insert(pageId)
                 holdThenRefresh()
             } else {
                 await refresh()
@@ -1529,6 +1588,8 @@ public final class WorkspaceStore {
     }
 
     private var pendingHold: Task<Void, Never>?
+    /// Pages ticked during the current hold, taken out when it ends.
+    private var pendingTicks: Set<String> = []
 
     // MARK: - Several pages at once
 
