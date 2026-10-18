@@ -57,7 +57,13 @@ pub async fn cloudkit_schema(pool: &SqlitePool) -> AppResult<String> {
                 fields.push((format!("{}_{i}", field.name), declared_type(column)));
             }
         }
-        types.push(record_type(entity.entity.prefix(), &fields, &[]));
+        // A body too big for a record rides a file, as an image does.
+        let plain: &[(&str, &str)] = if entity.entity == Entity::Body {
+            &[(codec::FILE, "ASSET")]
+        } else {
+            &[]
+        };
+        types.push(record_type(entity.entity.prefix(), &fields, plain));
     }
     types.push(record_type(
         Entity::Asset.prefix(),

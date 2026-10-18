@@ -100,6 +100,11 @@ enum Outcome {
 /// Merges `records` into the workspace in one transaction, with any held record whose parent
 /// arrives among them.
 pub async fn apply(pool: &SqlitePool, records: &[(RecordName, FieldMap)]) -> AppResult<Applied> {
+    let records = records
+        .iter()
+        .map(|(name, map)| Ok((name.clone(), super::oversize::take_back(name, map.clone())?)))
+        .collect::<AppResult<Vec<_>>>()?;
+    let records = &records;
     crate::tx::retry_on_busy(|| async {
         let mut tx = Uncaptured::begin(pool).await?;
         let applied = apply_in(&mut tx, records, false).await?;

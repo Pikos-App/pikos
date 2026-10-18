@@ -115,9 +115,11 @@ pub async fn build(pool: &SqlitePool, names: &[RecordName]) -> AppResult<Vec<Bui
                     name: name.clone(),
                     row,
                 };
+                let mut fields = codec::encode(&record, &shape(entity));
+                super::oversize::set_aside(name, op_clock, &mut fields)?;
                 built.push(Built {
                     name: name.clone(),
-                    fields: codec::encode(&record, &shape(entity)),
+                    fields,
                     clock: op_clock,
                     system_fields: system_fields(pool, name).await?,
                 });
@@ -316,6 +318,7 @@ pub async fn save_system_fields(
 pub async fn sent(pool: &SqlitePool, records: &[(RecordName, Hlc)]) -> AppResult<Vec<RecordName>> {
     let mut still_pending = Vec::new();
     for (name, built_at) in records {
+        super::oversize::sent(name, *built_at);
         let removed =
             sqlx::query("DELETE FROM replica_ops WHERE entity = ? AND key = ? AND clock <= ?")
                 .bind(name.entity.prefix())
