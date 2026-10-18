@@ -5,7 +5,10 @@ import XCTest
 /// Not part of the tier-1 gate: run it on its own with `-only-testing:PikosUITests/ScreenTour`
 /// and export the attachments. Each screenshot is named `section|order|title`, which is what the
 /// PDF script sorts and captions by. A surface the tour cannot reach is recorded in a `missed`
-/// attachment instead of failing the run, so one moved label does not cost the other sixty shots.
+/// attachment and fails the run at the end, so one moved label does not cost the other sixty shots
+/// but does not pass either. Each surface also gets the system accessibility audit, its findings
+/// in an `accessibility` attachment: reported rather than failing until the first runs' findings
+/// are either fixed or judged.
 final class ScreenTour: PikosUITestCase {
     override class var launchEnvironment: [String: String] { ["PIKOS_DEMO": "1"] }
 
@@ -16,6 +19,7 @@ final class ScreenTour: PikosUITestCase {
     ]
 
     private var missed: [String] = []
+    private var accessibility: [String] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -25,11 +29,18 @@ final class ScreenTour: PikosUITestCase {
     }
 
     override func tearDown() async throws {
+        if !accessibility.isEmpty {
+            let report = XCTAttachment(string: accessibility.joined(separator: "\n"))
+            report.name = "accessibility"
+            report.lifetime = .keepAlways
+            add(report)
+        }
         if !missed.isEmpty {
             let note = XCTAttachment(string: missed.joined(separator: "\n"))
             note.name = "missed"
             note.lifetime = .keepAlways
             add(note)
+            XCTFail("surfaces the tour couldn't reach: \(missed.joined(separator: "; "))")
         }
         try await super.tearDown()
     }
@@ -595,6 +606,16 @@ final class ScreenTour: PikosUITestCase {
         attachment.name = "\(section)|\(String(format: "%02d", order))|\(title)"
         attachment.lifetime = .keepAlways
         add(attachment)
+        audit(title)
+    }
+
+    /// Notes what the system audit finds on the surface on screen, without failing on it.
+    private func audit(_ surface: String) {
+        try? app.performAccessibilityAudit { issue in
+            let element = issue.element?.label ?? issue.element?.identifier ?? "?"
+            self.accessibility.append("\(surface): \(issue.compactDescription) [\(element)]")
+            return true
+        }
     }
 
     private func settle(_ seconds: TimeInterval) {
