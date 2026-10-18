@@ -36,8 +36,8 @@ restore() {
 }
 trap restore EXIT
 
-# The tour records what it could not reach instead of failing, so a non-zero exit here is a build
-# or runner problem; the attachments are still exported if the bundle exists.
+# A surface the tour could not reach fails the run, which is not a reason to skip the PDF: the
+# attachments are exported whenever the bundle exists, and the PDF lists what was missed.
 xcodebuild test \
   -project "$ROOT/apps/ios/Pikos/Pikos.xcodeproj" \
   -scheme Pikos \
