@@ -99,6 +99,7 @@ fi
 
 # The app's own log, from the day the QA pass ran: a warning the app emits about itself
 # is a defect or a line that shouldn't be there, and both want a decision before a tag.
+# The QA pass runs on Pikos Staging (PKOS-0134), so its log is the one that judges this build.
 # SKIP_LOG_CHECK="<why>" lets a release through and records why.
 if [ -n "${SKIP_LOG_CHECK:-}" ]; then
   RECORD+=("Bypass: SKIP_LOG_CHECK, the app log wasn't checked: ${SKIP_LOG_CHECK}")
@@ -106,8 +107,10 @@ elif [ -n "${SKIP_QA:-}" ]; then
   RECORD+=("The app log wasn't checked either: without the QA copy there is no pass date.")
 else
   PASS_DATE=$(node "$ROOT/scripts/check-release-qa.mjs" "$NEW" ${HOTFIX:+"$HOTFIX"} --pass-date) || exit 1
-  bash "$ROOT/scripts/check-log-clean.sh" --since "$PASS_DATE" || exit 1
-  RECORD+=("App log clean since the QA pass on $PASS_DATE.")
+  STAGING_ID=$(node -p "require('$ROOT/apps/desktop/src-tauri/tauri.conf.staging.json').identifier") || exit 1
+  STAGING_LOG="$HOME/Library/Logs/$STAGING_ID/pikos.log"
+  bash "$ROOT/scripts/check-log-clean.sh" --since "$PASS_DATE" "$STAGING_LOG" || exit 1
+  RECORD+=("Staging log ($STAGING_ID) clean since the QA pass on $PASS_DATE.")
 fi
 
 # The marketing site, built the way its host builds it, which isn't the way CI does.
