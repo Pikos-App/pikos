@@ -186,6 +186,12 @@ struct PageListScreen: View {
                     Text(mode.label).tag(mode)
                 }
             }
+            #if DEBUG
+                if let read = store.lastRefresh {
+                    Divider()
+                    Text("Last read in \(Int(read / .milliseconds(1))) ms")
+                }
+            #endif
         } label: {
             Image(systemName: "arrow.up.arrow.down")
                 .font(.system(size: 16, weight: .regular))

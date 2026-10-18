@@ -643,6 +643,26 @@ pub async fn bench(
         })
         .await?,
     );
+    timings.push(
+        time_it(
+            runs,
+            "count the Inbox's done, as the phone does",
+            || async {
+                pikos_db::list_completed_pages_impl(
+                    &pool,
+                    pikos_db::CompletedPagesFilter {
+                        folder_id: Some(serde_json::Value::Null),
+                        completed_since: None,
+                        limit: 0,
+                        offset: 0,
+                    },
+                )
+                .await
+                .map_err(classify)
+            },
+        )
+        .await?,
+    );
     let top: Vec<String> = list_view(&pool, &inbox(ViewSort::Manual), None, 2)
         .await
         .map_err(classify)?

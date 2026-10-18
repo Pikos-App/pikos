@@ -81,5 +81,12 @@ xcrun devicectl device install app --device "$DEVICE" "$DERIVED/Build/Products/D
 step "copying the workspace onto the phone"
 xcrun devicectl device copy to --device "$DEVICE" --domain-type appDataContainer \
   --domain-identifier "$BUNDLE_ID" --source "$TEMPLATE" --destination "$DESTINATION_IN_CONTAINER" >/dev/null
+# devicectl can't delete, and a log left by an earlier run replays into the new file as corruption.
+empty="$(mktemp)"
+for side in wal shm; do
+  xcrun devicectl device copy to --device "$DEVICE" --domain-type appDataContainer \
+    --domain-identifier "$BUNDLE_ID" --source "$empty" --destination "$DESTINATION_IN_CONTAINER-$side" >/dev/null
+done
+rm -f "$empty"
 step "running the speed tests (keep the phone unlocked)"
 run_tests "platform=iOS,id=$UDID" DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic
