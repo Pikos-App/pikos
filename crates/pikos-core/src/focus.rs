@@ -31,7 +31,7 @@ pub enum FocusOutcome {
 pub fn finish_session(duration_s: i64) -> FocusOutcome {
     if duration_s < MIN_SESSION_S {
         return FocusOutcome::TooShort {
-            label: format!("Under {MIN_SESSION_S} seconds — not recorded"),
+            label: format!("Under {MIN_SESSION_S} seconds, not recorded"),
         };
     }
     FocusOutcome::Recorded {

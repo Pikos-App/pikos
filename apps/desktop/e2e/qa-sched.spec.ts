@@ -83,7 +83,7 @@ appTest(
     await appTest.step("SCHED-05 a timed page over midnight becomes an all-day span", async () => {
       await quickAdd(app, "server shift today 9pm to 5am");
       const picker = await openPicker(app, "server shift");
-      await picker.getByRole("button", { name: "All day — no specific time" }).click();
+      await picker.getByRole("button", { name: "All day, no specific time" }).click();
       await app.keyboard.press("Escape");
       await expect(chip).toHaveAccessibleName(/^Scheduled: \w{3} \d+ – (\w{3} )?\d+$/);
     });

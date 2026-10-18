@@ -42,8 +42,7 @@ export function NotificationHistory({ entries, onOpenPage }: NotificationHistory
   if (entries.length === 0) {
     return (
       <p className="py-3 text-xs text-muted-foreground">
-        Nothing yet. Reminders you receive — and any quiet hours silences — show up here for 30
-        days.
+        Nothing yet. Reminders you receive, and any quiet hours silences, show up here for 30 days.
       </p>
     );
   }

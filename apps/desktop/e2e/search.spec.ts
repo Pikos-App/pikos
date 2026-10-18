@@ -188,7 +188,7 @@ appTest(
 
     await expect(dialog.getByText("wallet archived", { exact: true })).toBeVisible();
     await expect(dialog.getByText("wallet active", { exact: true })).not.toBeVisible();
-    await expect(dialog.getByText("Showing completed — is:done")).toBeVisible();
+    await expect(dialog.getByText("Showing completed: is:done")).toBeVisible();
   }
 );
 

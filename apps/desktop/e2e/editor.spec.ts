@@ -480,7 +480,7 @@ appTest(
     await app.getByRole("button", { name: "Stop focus timer" }).click();
 
     await expect(
-      app.getByRole("status", { name: "Under 30 seconds — not recorded" })
+      app.getByRole("status", { name: "Under 30 seconds, not recorded" })
     ).toBeVisible();
   }
 );

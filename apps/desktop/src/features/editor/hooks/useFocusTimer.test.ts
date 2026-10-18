@@ -188,7 +188,7 @@ describe("end-of-session notice", () => {
   // qa: EDIT-20:4
   it("says so when a session was too short to record", async () => {
     await runSession(MIN_SESSION_S - 1);
-    expect(notices).toEqual([`Under ${MIN_SESSION_S} seconds — not recorded`]);
+    expect(notices).toEqual([`Under ${MIN_SESSION_S} seconds, not recorded`]);
   });
 
   it("carries the hour once a session passes one", async () => {

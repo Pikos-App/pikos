@@ -386,7 +386,7 @@ function WorkspaceLoadError({ error }: { error: unknown }) {
           </>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">
-            Quit and relaunch the app. If this keeps happening, file a bug — it is usually a path or
+            Quit and relaunch the app. If this keeps happening, file a bug. It is usually a path or
             permission problem on disk.
           </p>
         )}

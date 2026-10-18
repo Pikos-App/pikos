@@ -149,7 +149,7 @@ export function NotificationSettings() {
       <section className="mb-8">
         <h2 className="mb-1 text-base font-semibold">Notifications</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Desktop reminders for scheduled pages. Notifications are fully local — nothing leaves your
+          Desktop reminders for scheduled pages. Notifications are fully local. Nothing leaves your
           device.
         </p>
 

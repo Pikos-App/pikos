@@ -432,7 +432,7 @@ export function DateTimePicker({
               style={{ height: CAL_HEIGHT }}
             >
               <button
-                aria-label="All day — no specific time"
+                aria-label="All day, no specific time"
                 className={cn(
                   "self-start text-xs transition-colors",
                   selectedTime === null

@@ -96,7 +96,7 @@ export function ImportPreviewModal({ onCancel, onConfirm, plan }: ImportPreviewM
         <div className="min-w-0">
           <h2 className="text-lg font-semibold">Import Preview</h2>
           <p className="text-sm text-muted-foreground">
-            {sourceLabel} — {plan.pages.length} pages in {plan.folders.length} folder
+            {sourceLabel}: {plan.pages.length} pages in {plan.folders.length} folder
             {plan.folders.length !== 1 ? "s" : ""}
             {grouped.has(null) ? " + Inbox" : ""}
           </p>

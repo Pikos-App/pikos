@@ -603,7 +603,7 @@ export function SearchPalette() {
               {trimmedQuery &&
                 (showCompleted || completedCount > 0) &&
                 (parsed.status === "done" ? (
-                  <p className="px-4 py-1.5 text-xs text-subtle">Showing completed — is:done</p>
+                  <p className="px-4 py-1.5 text-xs text-subtle">Showing completed: is:done</p>
                 ) : (
                   <button
                     className="w-full px-4 py-1.5 text-left text-xs text-subtle transition-colors hover:text-muted-foreground"

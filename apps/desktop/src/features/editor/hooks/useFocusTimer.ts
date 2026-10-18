@@ -115,7 +115,7 @@ async function writeSession(
   const ended = new Date();
   const durationS = Math.round((ended.getTime() - startedAt.getTime()) / 1000);
   if (durationS < MIN_SESSION_S) {
-    postNotice(`Under ${MIN_SESSION_S} seconds — not recorded`);
+    postNotice(`Under ${MIN_SESSION_S} seconds, not recorded`);
     return;
   }
   const session: NewFocusSession = {

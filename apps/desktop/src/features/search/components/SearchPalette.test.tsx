@@ -289,7 +289,7 @@ describe("SearchPalette — is:done", () => {
 
     type("is:done");
 
-    expect(await screen.findByText("Showing completed — is:done")).toBeInTheDocument();
+    expect(await screen.findByText("Showing completed: is:done")).toBeInTheDocument();
     expect(screen.queryByText(/Show completed \(/)).toBeNull();
   });
 

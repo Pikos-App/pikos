@@ -75,7 +75,7 @@ export async function seedTutorial(
         `Click + above the page list to add a new page (or press ${MOD}+N)`,
         `Click the calendar icon in the right pane to flip between editor and calendar (or press ${MOD}+Shift+C)`,
         "Drag a page from the list onto a time slot to schedule it",
-        `Click the search icon above the page list to search every page — by content, not just titles (or press ${MOD}+K)`,
+        `Click the search icon above the page list to search every page by content, not just titles (or press ${MOD}+K)`,
         "Tick the checkbox beside a page to mark it done"
       ),
       h3("When you’re done"),
@@ -149,7 +149,7 @@ export async function seedTutorial(
   await createPage({
     content: doc(
       p(
-        "You don’t have to memorize any of these — everything’s reachable with the mouse. " +
+        "You don’t have to memorize any of these. Everything’s reachable with the mouse. " +
           "But if you like shortcuts, these are the ones worth learning first."
       ),
       h3("Moving around"),
