@@ -198,6 +198,7 @@ export function WeekGrid({
     defaultHeight: 60,
     max: 200,
     min: 30,
+    scale: metrics.zoom,
     storageKey: STORAGE_KEYS.calendarAllDayHeight,
   });
 
