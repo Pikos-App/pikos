@@ -844,6 +844,31 @@ RustBuffer uniffi_pikos_ffi_fn_func_parse_quick_add(RustBuffer input, RustBuffer
 RustBuffer uniffi_pikos_ffi_fn_func_plain_text_to_document(RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_DROP_SCHEDULE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_DROP_SCHEDULE
+RustBuffer uniffi_pikos_ffi_fn_func_drop_schedule(RustBuffer day, int32_t minute, RustBuffer previous_start, RustBuffer previous_end, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_NOW_PLAN
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_NOW_PLAN
+RustBuffer uniffi_pikos_ffi_fn_func_now_plan(RustBuffer items, int64_t now, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PAGE_ACTION_ANSWER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PAGE_ACTION_ANSWER
+RustBuffer uniffi_pikos_ffi_fn_func_page_action_answer(RustBuffer action, int8_t is_recurring, int8_t schedule_locked, int8_t has_date, uint32_t acts_on, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_RESIZE_SCHEDULE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_RESIZE_SCHEDULE
+RustBuffer uniffi_pikos_ffi_fn_func_resize_schedule(RustBuffer start, RustBuffer end, RustBuffer edge, int32_t minute, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_STRETCH_NEW_BLOCK
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_STRETCH_NEW_BLOCK
+RustBuffer uniffi_pikos_ffi_fn_func_stretch_new_block(int32_t pressed, double reached, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_FFI_PIKOS_FFI_RUSTBUFFER_ALLOC
 #define UNIFFI_FFIDEF_FFI_PIKOS_FFI_RUSTBUFFER_ALLOC
 RustBuffer ffi_pikos_ffi_rustbuffer_alloc(uint64_t size, RustCallStatus *_Nonnull out_status
@@ -1179,6 +1204,36 @@ uint16_t uniffi_pikos_ffi_checksum_func_parse_quick_add(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PLAIN_TEXT_TO_DOCUMENT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PLAIN_TEXT_TO_DOCUMENT
 uint16_t uniffi_pikos_ffi_checksum_func_plain_text_to_document(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_DROP_SCHEDULE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_DROP_SCHEDULE
+uint16_t uniffi_pikos_ffi_checksum_func_drop_schedule(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_NOW_PLAN
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_NOW_PLAN
+uint16_t uniffi_pikos_ffi_checksum_func_now_plan(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PAGE_ACTION_ANSWER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PAGE_ACTION_ANSWER
+uint16_t uniffi_pikos_ffi_checksum_func_page_action_answer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_RESIZE_SCHEDULE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_RESIZE_SCHEDULE
+uint16_t uniffi_pikos_ffi_checksum_func_resize_schedule(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_STRETCH_NEW_BLOCK
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_STRETCH_NEW_BLOCK
+uint16_t uniffi_pikos_ffi_checksum_func_stretch_new_block(void
     
 );
 #endif

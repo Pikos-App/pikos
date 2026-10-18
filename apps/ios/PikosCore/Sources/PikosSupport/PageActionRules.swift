@@ -1,7 +1,7 @@
+import PikosCore
+
 /// Which of the page actions both apps' menus share a page offers, and why one is withheld.
-///
-/// The desktop asks `pageActions` in `@pikos/core` the same question. Both are tested against
-/// `packages/core/src/pages/pageActions.cases.json`, so the two menus can't drift apart unnoticed.
+/// `page_actions` in pikos-core answers, graded against the desktop's table.
 public enum PageActionRules {
     public enum Action: String, CaseIterable, Sendable {
         case rename
@@ -14,13 +14,16 @@ public enum PageActionRules {
     public static func answer(
         _ action: Action, isRecurring: Bool, scheduleLocked: Bool, hasDate: Bool, actsOn: Int = 1
     ) -> String {
-        let owned = scheduleLocked ? "calendar-owned" : nil
-        switch action {
-        case .rename: return owned ?? (actsOn > 1 ? "several-pages" : "offered")
-        case .moveToFolder: return owned ?? "offered"
-        case .clearDate: return owned ?? (isRecurring ? "repeats" : hasDate ? "offered" : "no-date")
-        case .delete: return "offered"
-        }
+        let menuAction: MenuAction =
+            switch action {
+            case .rename: .rename
+            case .moveToFolder: .moveToFolder
+            case .clearDate: .clearDate
+            case .delete: .delete
+            }
+        return pageActionAnswer(
+            action: menuAction, isRecurring: isRecurring, scheduleLocked: scheduleLocked,
+            hasDate: hasDate, actsOn: UInt32(max(0, actsOn)))
     }
 
     public static func offers(

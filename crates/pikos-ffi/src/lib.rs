@@ -36,6 +36,7 @@ use pikos_core::schedule as core_schedule;
 use pikos_core::text::extract_text as core_extract_text;
 
 pub mod replica;
+pub mod rules;
 pub mod workspace;
 
 pub use workspace::{

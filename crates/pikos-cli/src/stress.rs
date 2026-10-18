@@ -702,6 +702,18 @@ pub async fn bench(
         })
         .await?,
     );
+    let latest: i64 = sqlx::query_scalar("SELECT seq FROM change_counter")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| classify(e.into()))?;
+    timings.push(
+        time_it(runs, "read pages changed lately", || async {
+            pikos_db::reads::pages_changed_since(&pool, latest - 50)
+                .await
+                .map_err(classify)
+        })
+        .await?,
+    );
     for (name, from, until) in [
         ("read Overdue's first 50", None, today),
         (

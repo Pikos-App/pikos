@@ -4668,6 +4668,60 @@ public func FfiConverterTypeCompletedPages_lower(_ value: CompletedPages) -> Rus
 }
 
 
+public struct DroppedSchedule: Equatable, Hashable {
+    public var start: String
+    public var end: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: String, end: String?) {
+        self.start = start
+        self.end = end
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DroppedSchedule: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDroppedSchedule: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DroppedSchedule {
+        return
+            try DroppedSchedule(
+                start: FfiConverterString.read(from: &buf), 
+                end: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DroppedSchedule, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.start, into: &buf)
+        FfiConverterOptionString.write(value.end, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDroppedSchedule_lift(_ buf: RustBuffer) throws -> DroppedSchedule {
+    return try FfiConverterTypeDroppedSchedule.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDroppedSchedule_lower(_ value: DroppedSchedule) -> RustBuffer {
+    return FfiConverterTypeDroppedSchedule.lower(value)
+}
+
+
 /**
  * One file of an export, ready to be written.
  */
@@ -5045,6 +5099,60 @@ public func FfiConverterTypeLayoutPage_lower(_ value: LayoutPage) -> RustBuffer 
 }
 
 
+public struct MinuteRange: Equatable, Hashable {
+    public var start: Int32
+    public var end: Int32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: Int32, end: Int32) {
+        self.start = start
+        self.end = end
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MinuteRange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMinuteRange: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MinuteRange {
+        return
+            try MinuteRange(
+                start: FfiConverterInt32.read(from: &buf), 
+                end: FfiConverterInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MinuteRange, into buf: inout [UInt8]) {
+        FfiConverterInt32.write(value.start, into: &buf)
+        FfiConverterInt32.write(value.end, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMinuteRange_lift(_ buf: RustBuffer) throws -> MinuteRange {
+    return try FfiConverterTypeMinuteRange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMinuteRange_lower(_ value: MinuteRange) -> RustBuffer {
+    return FfiConverterTypeMinuteRange.lower(value)
+}
+
+
 /**
  * One page's move, in the terms the undo needs.
  */
@@ -5188,6 +5296,194 @@ public func FfiConverterTypeNewPage_lift(_ buf: RustBuffer) throws -> NewPage {
 #endif
 public func FfiConverterTypeNewPage_lower(_ value: NewPage) -> RustBuffer {
     return FfiConverterTypeNewPage.lower(value)
+}
+
+
+public struct NowAnswer: Equatable, Hashable {
+    public var current: String?
+    public var next: String?
+    public var freeUntil: Int64?
+    public var suggestion: NowSuggestion?
+    public var changes: [Int64]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(current: String?, next: String?, freeUntil: Int64?, suggestion: NowSuggestion?, changes: [Int64]) {
+        self.current = current
+        self.next = next
+        self.freeUntil = freeUntil
+        self.suggestion = suggestion
+        self.changes = changes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NowAnswer: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNowAnswer: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NowAnswer {
+        return
+            try NowAnswer(
+                current: FfiConverterOptionString.read(from: &buf), 
+                next: FfiConverterOptionString.read(from: &buf), 
+                freeUntil: FfiConverterOptionInt64.read(from: &buf), 
+                suggestion: FfiConverterOptionTypeNowSuggestion.read(from: &buf), 
+                changes: FfiConverterSequenceInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NowAnswer, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.current, into: &buf)
+        FfiConverterOptionString.write(value.next, into: &buf)
+        FfiConverterOptionInt64.write(value.freeUntil, into: &buf)
+        FfiConverterOptionTypeNowSuggestion.write(value.suggestion, into: &buf)
+        FfiConverterSequenceInt64.write(value.changes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowAnswer_lift(_ buf: RustBuffer) throws -> NowAnswer {
+    return try FfiConverterTypeNowAnswer.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowAnswer_lower(_ value: NowAnswer) -> RustBuffer {
+    return FfiConverterTypeNowAnswer.lower(value)
+}
+
+
+public struct NowPage: Equatable, Hashable {
+    public var id: String
+    /**
+     * Milliseconds since the epoch; None for a page dated today with no time.
+     */
+    public var start: Int64?
+    public var end: Int64?
+    public var priority: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, 
+        /**
+         * Milliseconds since the epoch; None for a page dated today with no time.
+         */start: Int64?, end: Int64?, priority: Int64) {
+        self.id = id
+        self.start = start
+        self.end = end
+        self.priority = priority
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NowPage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNowPage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NowPage {
+        return
+            try NowPage(
+                id: FfiConverterString.read(from: &buf), 
+                start: FfiConverterOptionInt64.read(from: &buf), 
+                end: FfiConverterOptionInt64.read(from: &buf), 
+                priority: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NowPage, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterOptionInt64.write(value.start, into: &buf)
+        FfiConverterOptionInt64.write(value.end, into: &buf)
+        FfiConverterInt64.write(value.priority, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowPage_lift(_ buf: RustBuffer) throws -> NowPage {
+    return try FfiConverterTypeNowPage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowPage_lower(_ value: NowPage) -> RustBuffer {
+    return FfiConverterTypeNowPage.lower(value)
+}
+
+
+public struct NowSuggestion: Equatable, Hashable {
+    public var id: String
+    public var reason: NowReason
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, reason: NowReason) {
+        self.id = id
+        self.reason = reason
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NowSuggestion: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNowSuggestion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NowSuggestion {
+        return
+            try NowSuggestion(
+                id: FfiConverterString.read(from: &buf), 
+                reason: FfiConverterTypeNowReason.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NowSuggestion, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterTypeNowReason.write(value.reason, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowSuggestion_lift(_ buf: RustBuffer) throws -> NowSuggestion {
+    return try FfiConverterTypeNowSuggestion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowSuggestion_lower(_ value: NowSuggestion) -> RustBuffer {
+    return FfiConverterTypeNowSuggestion.lower(value)
 }
 
 
@@ -6490,6 +6786,60 @@ public func FfiConverterTypeRepeat_lift(_ buf: RustBuffer) throws -> Repeat {
 #endif
 public func FfiConverterTypeRepeat_lower(_ value: Repeat) -> RustBuffer {
     return FfiConverterTypeRepeat.lower(value)
+}
+
+
+public struct ResizedSchedule: Equatable, Hashable {
+    public var start: String
+    public var end: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: String, end: String) {
+        self.start = start
+        self.end = end
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ResizedSchedule: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeResizedSchedule: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResizedSchedule {
+        return
+            try ResizedSchedule(
+                start: FfiConverterString.read(from: &buf), 
+                end: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ResizedSchedule, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.start, into: &buf)
+        FfiConverterString.write(value.end, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeResizedSchedule_lift(_ buf: RustBuffer) throws -> ResizedSchedule {
+    return try FfiConverterTypeResizedSchedule.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeResizedSchedule_lower(_ value: ResizedSchedule) -> RustBuffer {
+    return FfiConverterTypeResizedSchedule.lower(value)
 }
 
 
@@ -7973,6 +8323,72 @@ public func FfiConverterTypeViewCounts_lower(_ value: ViewCounts) -> RustBuffer 
 }
 
 
+
+public enum BlockEdge: Equatable, Hashable {
+    
+    case top
+    case bottom
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BlockEdge: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlockEdge: FfiConverterRustBuffer {
+    typealias SwiftType = BlockEdge
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockEdge {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .top
+        
+        case 2: return .bottom
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BlockEdge, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .top:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .bottom:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockEdge_lift(_ buf: RustBuffer) throws -> BlockEdge {
+    return try FfiConverterTypeBlockEdge.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockEdge_lower(_ value: BlockEdge) -> RustBuffer {
+    return FfiConverterTypeBlockEdge.lower(value)
+}
+
+
+
 /**
  * What a conditional body save did.
  */
@@ -8731,6 +9147,159 @@ public func FfiConverterTypeListSort_lift(_ buf: RustBuffer) throws -> ListSort 
 #endif
 public func FfiConverterTypeListSort_lower(_ value: ListSort) -> RustBuffer {
     return FfiConverterTypeListSort.lower(value)
+}
+
+
+
+
+public enum MenuAction: Equatable, Hashable {
+    
+    case rename
+    case moveToFolder
+    case clearDate
+    case delete
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MenuAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMenuAction: FfiConverterRustBuffer {
+    typealias SwiftType = MenuAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MenuAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .rename
+        
+        case 2: return .moveToFolder
+        
+        case 3: return .clearDate
+        
+        case 4: return .delete
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MenuAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .rename:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .moveToFolder:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .clearDate:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .delete:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMenuAction_lift(_ buf: RustBuffer) throws -> MenuAction {
+    return try FfiConverterTypeMenuAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMenuAction_lower(_ value: MenuAction) -> RustBuffer {
+    return FfiConverterTypeMenuAction.lower(value)
+}
+
+
+
+
+public enum NowReason: Equatable, Hashable {
+    
+    case topPriority
+    case overdue
+    case firstInList
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NowReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNowReason: FfiConverterRustBuffer {
+    typealias SwiftType = NowReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NowReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .topPriority
+        
+        case 2: return .overdue
+        
+        case 3: return .firstInList
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NowReason, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .topPriority:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .overdue:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .firstInList:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowReason_lift(_ buf: RustBuffer) throws -> NowReason {
+    return try FfiConverterTypeNowReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNowReason_lower(_ value: NowReason) -> RustBuffer {
+    return FfiConverterTypeNowReason.lower(value)
 }
 
 
@@ -9773,6 +10342,30 @@ fileprivate struct FfiConverterOptionTypeIndexMark: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNowSuggestion: FfiConverterRustBuffer {
+    typealias SwiftType = NowSuggestion?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNowSuggestion.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNowSuggestion.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeOccurrence: FfiConverterRustBuffer {
     typealias SwiftType = Occurrence?
 
@@ -9789,6 +10382,30 @@ fileprivate struct FfiConverterOptionTypeOccurrence: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeOccurrence.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeResizedSchedule: FfiConverterRustBuffer {
+    typealias SwiftType = ResizedSchedule?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeResizedSchedule.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeResizedSchedule.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -10184,6 +10801,31 @@ fileprivate struct FfiConverterSequenceTypeMovedPage: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeMovedPage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeNowPage: FfiConverterRustBuffer {
+    typealias SwiftType = [NowPage]
+
+    public static func write(_ value: [NowPage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNowPage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NowPage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NowPage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNowPage.read(from: &buf))
         }
         return seq
     }
@@ -10905,6 +11547,73 @@ public func plainTextToDocument(text: String) -> String  {
     )
 })
 }
+/**
+ * The schedule a page dropped at `minute` of `day` (a `YYYY-MM-DD`) takes.
+ */
+public func dropSchedule(day: String, minute: Int32, previousStart: String?, previousEnd: String?) -> DroppedSchedule  {
+    return try!  FfiConverterTypeDroppedSchedule_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_drop_schedule(
+        FfiConverterString.lower(day),
+        FfiConverterInt32.lower(minute),
+        FfiConverterOptionString.lower(previousStart),
+        FfiConverterOptionString.lower(previousEnd),uniffiCallStatus
+    )
+})
+}
+/**
+ * What the Now widget says at `now`, from today's open pages in the day list's order.
+ */
+public func nowPlan(items: [NowPage], now: Int64) -> NowAnswer  {
+    return try!  FfiConverterTypeNowAnswer_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_now_plan(
+        FfiConverterSequenceTypeNowPage.lower(items),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+/**
+ * `"offered"`, or the reason the page menu withholds `action`, in the desktop's words.
+ */
+public func pageActionAnswer(action: MenuAction, isRecurring: Bool, scheduleLocked: Bool, hasDate: Bool, actsOn: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_page_action_answer(
+        FfiConverterTypeMenuAction_lower(action),
+        FfiConverterBool.lower(isRecurring),
+        FfiConverterBool.lower(scheduleLocked),
+        FfiConverterBool.lower(hasDate),
+        FfiConverterUInt32.lower(actsOn),uniffiCallStatus
+    )
+})
+}
+/**
+ * A timed page with one edge dragged to `minute`, or None for an all-day or overnight page.
+ */
+public func resizeSchedule(start: String, end: String?, edge: BlockEdge, minute: Int32) -> ResizedSchedule?  {
+    return try!  FfiConverterOptionTypeResizedSchedule.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_resize_schedule(
+        FfiConverterString.lower(start),
+        FfiConverterOptionString.lower(end),
+        FfiConverterTypeBlockEdge_lower(edge),
+        FfiConverterInt32.lower(minute),uniffiCallStatus
+    )
+})
+}
+/**
+ * The minutes a new block covers while a press at `pressed` is drawn to `reached`.
+ */
+public func stretchNewBlock(pressed: Int32, reached: Double) -> MinuteRange  {
+    return try!  FfiConverterTypeMinuteRange_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_stretch_new_block(
+        FfiConverterInt32.lower(pressed),
+        FfiConverterDouble.lower(reached),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -10958,6 +11667,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 58750) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_func_drop_schedule() != 19000) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_func_now_plan() != 58963) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_func_page_action_answer() != 41445) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_func_resize_schedule() != 33374) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_func_stretch_new_block() != 10031) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_calendar_range() != 3295) {
