@@ -66,6 +66,8 @@ public protocol ReplicaStore: Sendable {
     /// Saved only after the changes it records have been applied: the engine never hands back
     /// changes once its state has moved past them.
     func setEngineState(_ state: Data) async throws
+    /// A fetch finished and everything it brought is applied, whether or not the state moved.
+    func fetchFinished() async throws
     /// Forgets tombstones past retention and returns them, to delete from CloudKit too.
     func expire() async throws -> [RecordAddress]
     /// Keeps CloudKit's metadata for records it saved or sent, by record name.

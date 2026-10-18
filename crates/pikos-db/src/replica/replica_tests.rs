@@ -266,6 +266,41 @@ async fn the_transport_state_round_trips_and_marks_the_fetch() {
 }
 
 #[tokio::test]
+async fn a_device_fetching_from_a_zone_quiet_past_the_window_does_not_read_as_away() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    super::set_engine_state(&pool, b"engine bytes")
+        .await
+        .unwrap();
+    let state_saved_long_ago = (chrono::Utc::now()
+        - chrono::Duration::days(super::RETENTION_DAYS + 10))
+    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+    .to_string();
+    sqlx::query("UPDATE replica_meta SET last_fetch_at = ? WHERE id = 1")
+        .bind(&state_saved_long_ago)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM replica_ops")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    super::fetch_finished(&pool).await.unwrap();
+    let zone = pikos_replica::zone::zone_name(&meta(&pool).await.unwrap().workspace_id);
+    super::join(&pool, &[zone]).await.unwrap();
+
+    assert_eq!(pending(&pool).await, 0, "nothing is sent again");
+    assert_eq!(
+        super::engine_state(&pool).await.unwrap().as_deref(),
+        Some(&b"engine bytes"[..])
+    );
+}
+
+#[tokio::test]
 async fn the_device_that_started_sync_keeps_its_id() {
     let pool = test_pool().await;
     let id = start(&pool).await.unwrap().device_id.unwrap();

@@ -229,6 +229,7 @@ enum Request {
     SetEngineState {
         state: Vec<u8>,
     },
+    FetchFinished {},
     Expire {},
     SaveSystemFields {
         records: Vec<NamedData>,
@@ -311,6 +312,12 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
         }
         Request::SetEngineState { state } => {
             pikos_db::replica::set_engine_state(pool, &state)
+                .await
+                .map_err(failed)?;
+            Ok(serde_json::Value::Null)
+        }
+        Request::FetchFinished {} => {
+            pikos_db::replica::fetch_finished(pool)
                 .await
                 .map_err(failed)?;
             Ok(serde_json::Value::Null)

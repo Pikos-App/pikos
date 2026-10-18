@@ -54,6 +54,10 @@ private actor FakeStore: ReplicaStore {
 
     func setEngineState(_ state: Data) async throws { self.state = state }
 
+    private(set) var fetchesFinished = 0
+
+    func fetchFinished() async throws { fetchesFinished += 1 }
+
     var expiring: [RecordAddress] = []
 
     func expireLater(_ address: RecordAddress) { expiring.append(address) }
@@ -229,9 +233,23 @@ final class SyncCoordinatorTests: XCTestCase {
             XCTFail("the failure reaches the transport")
         } catch {}
         try await coordinator.stateUpdated(Data([2]))
+        try await coordinator.fetchFinished()
 
         let saved = await store.state
+        let fetchesFinished = await store.fetchesFinished
         XCTAssertEqual(saved, Data([1]))
+        XCTAssertEqual(fetchesFinished, 0, "a fetch that didn't apply isn't counted as one")
+    }
+
+    func testAFetchThatFoundNothingStillCountsAsOne() async throws {
+        let store = FakeStore()
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+
+        try await coordinator.fetched([])
+        try await coordinator.fetchFinished()
+
+        let fetchesFinished = await store.fetchesFinished
+        XCTAssertEqual(fetchesFinished, 1)
     }
 
     func testExpiredTombstonesBecomeCloudKitDeletions() async throws {

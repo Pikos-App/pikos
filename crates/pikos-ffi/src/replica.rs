@@ -293,6 +293,10 @@ impl Workspace {
         Ok(pikos_db::replica::set_engine_state(&self.pool, &state).await?)
     }
 
+    pub async fn fetch_finished(&self) -> Result<(), WorkspaceError> {
+        Ok(pikos_db::replica::fetch_finished(&self.pool).await?)
+    }
+
     pub async fn sync_summary(&self) -> Result<SyncSummary, WorkspaceError> {
         let summary = pikos_db::replica::summary(&self.pool).await?;
         Ok(SyncSummary {

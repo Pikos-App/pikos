@@ -338,6 +338,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_engine_state(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_expire_sync(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FETCH_FINISHED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FETCH_FINISHED
+uint64_t uniffi_pikos_ffi_fn_method_workspace_fetch_finished(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FORGET_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FORGET_SYNC
 uint64_t uniffi_pikos_ffi_fn_method_workspace_forget_sync(uint64_t ptr
@@ -1307,6 +1312,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_engine_state(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPIRE_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPIRE_SYNC
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_expire_sync(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_FETCH_FINISHED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_FETCH_FINISHED
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_fetch_finished(void
     
 );
 #endif

@@ -957,6 +957,8 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func expireSync() async throws  -> [RecordAddress]
     
+    func fetchFinished() async throws 
+    
     /**
      * Forget sync on this device: it joins again as a new one.
      */
@@ -2031,6 +2033,22 @@ open func expireSync()async throws  -> [RecordAddress]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeRecordAddress.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func fetchFinished()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_fetch_finished(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -11710,6 +11728,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_expire_sync() != 39385) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_fetch_finished() != 57264) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_forget_sync() != 48135) {

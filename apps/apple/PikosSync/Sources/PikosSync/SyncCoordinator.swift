@@ -132,4 +132,10 @@ public actor SyncCoordinator {
 
         try await store.setEngineState(state)
     }
+
+    public func fetchFinished() async throws {
+        guard !fetchUnapplied else { return }
+
+        try await store.fetchFinished()
+    }
 }
