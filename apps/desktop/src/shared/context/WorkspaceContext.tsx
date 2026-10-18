@@ -12,7 +12,11 @@ import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { requireMockStorage } from "@/shared/adapters/mockStorageChunk";
-import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
+import {
+  connectDb,
+  onWorkspaceDamaged,
+  TauriSQLiteAdapter,
+} from "@/shared/adapters/TauriSQLiteAdapter";
 import { STORAGE_BACKEND } from "@/shared/constants/testMode";
 import {
   createWorkspaceEventBus,
@@ -32,10 +36,11 @@ type DataLoader = () => Promise<void>;
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
   isLoading: boolean;
-  /** Set when the auto-init or selectWorkspace path fails. UI surfaces this
-   *  so the user sees the actual error + a guidance message instead of an
-   *  indefinite blank screen. No in-app retry — connect_db failure is
-   *  almost always a path/permission issue that needs a relaunch. */
+  /** Set when the auto-init or selectWorkspace path fails, or when any command
+   *  later finds the workspace file damaged. UI surfaces this so the user sees
+   *  the actual error + a guidance message instead of an indefinite blank
+   *  screen. No in-app retry — connect_db failure is almost always a
+   *  path/permission issue that needs a relaunch. */
   loadError: unknown;
   /** Reload pages + folders from the DB (e.g. after an external seed). */
   reload: () => Promise<void>;
@@ -120,6 +125,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // double-mount, HMR, anything that re-fires the effect) await the same
   // in-flight promise instead of racing. selectWorkspace() reuses the same ref.
   const initPromiseRef = useRef<Promise<void> | null>(null);
+
+  // Declared before init so a file found damaged while it loads is already heard.
+  useEffect(
+    () =>
+      onWorkspaceDamaged((error) => {
+        setLoadError(error);
+        setIsLoading(false);
+      }),
+    []
+  );
 
   useEffect(() => {
     initPromiseRef.current ??= runInit();

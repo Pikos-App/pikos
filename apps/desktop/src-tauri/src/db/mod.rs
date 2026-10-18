@@ -80,6 +80,16 @@ impl DbState {
         guard.pool.take()
     }
 
+    /// Close the pool and keep the path, so the backups beside the file can still be
+    /// listed and put back. Closing reaches every clone of the pool, so whatever else
+    /// holds one stops with it.
+    pub(crate) async fn close_keeping_path(&self) {
+        let pool = self.inner.lock().await.pool.take();
+        if let Some(pool) = pool {
+            pool.close().await;
+        }
+    }
+
     /// Test-only: build a state already holding `pool`, bypassing `connect_db`
     /// (which needs a `tauri::State`). Lets unit tests exercise the
     /// take_pool/get_pool lifecycle that `wipe_app_data` depends on.

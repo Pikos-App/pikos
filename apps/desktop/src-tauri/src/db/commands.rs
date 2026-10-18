@@ -272,6 +272,7 @@ db_commands! {
         crate::db::dev::backup_db_before_import,
         crate::db::dev::list_backups,
         crate::db::dev::restore_backup,
+        crate::db::dev::close_damaged_workspace,
         crate::db::dev::export_csv,
         crate::db::dev::export_ics,
         crate::db::dev::export_markdown,

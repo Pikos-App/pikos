@@ -6,7 +6,7 @@ import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapD
 import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
-import { SettingsPage } from "@/features/settings";
+import { RestoreSection, SettingsPage } from "@/features/settings";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { Toast } from "@/shared/components/Toast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
@@ -36,7 +36,7 @@ import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { UpdateProvider, useUpdate } from "@/shared/context/UpdateContext";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useWorkspace, useWorkspaceInternal } from "@/shared/context/WorkspaceContext";
 import { useDeepLinkRouter } from "@/shared/deep-link/useDeepLinkRouter";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useExternalChangeReload } from "@/shared/hooks/useExternalChangeReload";
@@ -300,11 +300,11 @@ function AppShell() {
 }
 
 function WorkspaceLoadError({ error }: { error: unknown }) {
+  const { adapter } = useWorkspaceInternal();
   const storageError = toStorageError(error);
   // A damaged file and a failed open read the same from here, and the answers
   // are opposite: relaunching fixes a locked or missing path and does nothing at
-  // all for corruption, which needs a backup put back. The backend tells them
-  // apart by running an integrity check on the failure path.
+  // all for corruption, which needs a backup put back.
   const damaged = storageError.kind === "Corrupt";
 
   return (
@@ -325,6 +325,9 @@ function WorkspaceLoadError({ error }: { error: unknown }) {
             >
               Show me the backups
             </button>
+            <div className="mt-6">
+              <RestoreSection storage={adapter} />
+            </div>
           </>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">

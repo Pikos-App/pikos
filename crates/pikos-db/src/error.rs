@@ -24,7 +24,7 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("db error: {0}")]
-    Db(#[from] sqlx::Error),
+    Db(#[source] sqlx::Error),
 
     #[error("not found: {0}")]
     NotFound(String),
@@ -48,7 +48,8 @@ pub enum AppError {
     /// check found it inconsistent. Separate from `Db` because the answer is
     /// different — no retry helps, and the app has a backups directory to point
     /// the user at. Nothing else can offer that if this arrives as a generic
-    /// storage failure.
+    /// storage failure. Any query can produce it, not only the open, which is why
+    /// the sorting happens in `From<sqlx::Error>`.
     #[error("corrupt: {0}")]
     Corrupt(String),
 
@@ -73,6 +74,34 @@ impl AppError {
             AppError::Internal(_) => "Internal",
         }
     }
+}
+
+impl From<sqlx::Error> for AppError {
+    fn from(err: sqlx::Error) -> Self {
+        if says_the_file_is_damaged(&err) {
+            AppError::Corrupt(err.to_string())
+        } else {
+            AppError::Db(err)
+        }
+    }
+}
+
+/// SQLITE_IOERR_SHORT_READ: the file is shorter than SQLite's own record of it, so it changed
+/// underneath SQLite. It arrived a second before the first CORRUPT on the one damaged workspace
+/// seen in use. The rest of IOERR, and FULL (13), stay `Db`: a full disk or a failed write is
+/// the machine rather than the file, and a restore offered over it would throw away good work.
+const SQLITE_IOERR_SHORT_READ: i32 = 522;
+
+/// CORRUPT (11) or NOTADB (26), in any extended form, or a short read. sqlx carries the
+/// extended result code as a decimal string; the primary code is its low byte.
+fn says_the_file_is_damaged(err: &sqlx::Error) -> bool {
+    let sqlx::Error::Database(db) = err else {
+        return false;
+    };
+
+    db.code()
+        .and_then(|c| c.parse::<i32>().ok())
+        .is_some_and(|code| matches!(code & 0xFF, 11 | 26) || code == SQLITE_IOERR_SHORT_READ)
 }
 
 impl Serialize for AppError {
