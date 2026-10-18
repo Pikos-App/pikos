@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 
-import { chipFolderStyle } from "../utils/calendarColors";
+import { BLOCK_TIME_TEXT_CLASS, chipFolderStyle } from "../utils/calendarColors";
 import { NowIndicator } from "./NowIndicator";
 import { OverflowPill } from "./OverflowPill";
 import { PageBlock } from "./PageBlock";
@@ -444,7 +444,7 @@ export function DayColumn({
                   </p>
                 </div>
                 {dragGhost.height >= 40 && (
-                  <p className="type-ui-sm mt-0.5 truncate text-subtle">
+                  <p className={cn("type-ui-sm mt-0.5 truncate", BLOCK_TIME_TEXT_CLASS)}>
                     {formatTimeRange(
                       mapYToDate(dragGhost.top, day, geometry),
                       mapYToDate(dragGhost.top + dragGhost.height, day, geometry)

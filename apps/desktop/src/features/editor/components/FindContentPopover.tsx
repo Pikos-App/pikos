@@ -201,7 +201,7 @@ export function FindContentPopover({ editor }: FindContentPopoverProps) {
         autoCapitalize="off"
         autoComplete="off"
         autoCorrect="off"
-        className="h-7 w-48 rounded border border-border/60 bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-ring/50"
+        className="h-7 w-48 rounded border border-border/60 bg-background px-2 text-sm text-foreground outline-none placeholder:text-subtle focus:border-ring/50"
         onChange={(e) => handleQueryChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Find…"

@@ -64,7 +64,7 @@ export function RecurrenceEndsEditor({
   return (
     <div className="space-y-1.5 border-t border-border/40 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
-        <span className="mr-1 text-xs text-muted-foreground/60">Ends</span>
+        <span className="mr-1 text-xs text-subtle">Ends</span>
         {(["never", "until", "count"] as const).map((t) => {
           const isActive = endType === t;
           return (
@@ -74,7 +74,7 @@ export function RecurrenceEndsEditor({
                 "rounded px-2 py-0.5 text-xs transition-colors",
                 isActive
                   ? "bg-primary/15 font-medium text-action"
-                  : "text-foreground/55 hover:bg-accent hover:text-foreground"
+                  : "text-subtle hover:bg-accent hover:text-foreground"
               )}
               key={t}
               onClick={() => onSelectEnd(t)}
@@ -129,7 +129,7 @@ export function RecurrenceEndsEditor({
           <span>after</span>
           <input
             aria-label="Occurrence count"
-            className="w-12 rounded border border-border/60 bg-transparent py-0.5 text-center text-xs text-foreground transition-colors outline-none placeholder:text-muted-foreground/30 focus:border-primary/60"
+            className="w-12 rounded border border-border/60 bg-transparent py-0.5 text-center text-xs text-foreground transition-colors outline-none placeholder:text-subtle focus:border-primary/60"
             inputMode="numeric"
             onBlur={onCountCommit}
             onChange={(event) => onCountChange(event.target.value.replace(/\D/g, "").slice(0, 4))}

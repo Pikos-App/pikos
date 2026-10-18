@@ -47,12 +47,7 @@ export function RecurrencePresetList({
               <span className="flex items-baseline gap-1.5">
                 <span>{preset.label}</span>
                 {preset.detail && (
-                  <span
-                    className={cn(
-                      "text-xs",
-                      isActive ? "text-action/60" : "text-muted-foreground/60"
-                    )}
-                  >
+                  <span className={cn("text-xs", isActive ? "text-action" : "text-subtle")}>
                     {preset.detail}
                   </span>
                 )}

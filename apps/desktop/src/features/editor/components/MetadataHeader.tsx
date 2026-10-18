@@ -348,7 +348,7 @@ export function MetadataHeader({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[1.643em] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[1.643] text-muted-foreground outline-none [border:none] placeholder:text-faint"
+            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[1.643em] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[1.643] text-muted-foreground outline-none [border:none] placeholder:text-subtle"
             onBlur={() => {
               setSubtitleFocused(false);
               commitField();
@@ -392,7 +392,7 @@ export function MetadataHeader({
             {subtitleValue ? (
               <span className="line-clamp-3">{subtitleValue}</span>
             ) : (
-              <span className="text-faint">Add a description…</span>
+              <span className="text-subtle">Add a description…</span>
             )}
           </div>
         )}

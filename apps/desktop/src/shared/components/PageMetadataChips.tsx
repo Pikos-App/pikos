@@ -145,7 +145,7 @@ export function PageMetadataChips({ groups, layout }: PageMetadataChipsProps) {
             {/* The label column scales with the interface. Fixed at `w-14` the label
                 outgrew its own box at a large text size and ran into the value beside
                 it, so the row read as one word. */}
-            <span className="type-ui-sm w-[calc(3.5rem*var(--ui-text-scale,1))] shrink-0 text-muted-foreground/50">
+            <span className="type-ui-sm w-[calc(3.5rem*var(--ui-text-scale,1))] shrink-0 text-subtle">
               {group.key}
             </span>
             {renderChips(group)}

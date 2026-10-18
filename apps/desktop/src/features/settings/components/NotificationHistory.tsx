@@ -59,7 +59,7 @@ export function NotificationHistory({ entries, onOpenPage }: NotificationHistory
             <Icon
               className={cn(
                 "h-3.5 w-3.5 shrink-0",
-                entry.kind === "suppressed" ? "text-muted-foreground/60" : "text-muted-foreground"
+                entry.kind === "suppressed" ? "text-subtle" : "text-muted-foreground"
               )}
             />
             <div className="min-w-0 flex-1">

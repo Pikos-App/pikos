@@ -142,7 +142,7 @@
   cursor: pointer;
   width: 1em;
   height: 1em;
-  border: 1.5px solid var(--border-primary);
+  border: 1.5px solid var(--border-control);
   border-radius: var(--radius-sm);
   background: transparent;
   display: block;

@@ -111,7 +111,7 @@ export function RecurringGapDialog() {
 
         <div className="flex items-center justify-between gap-3">
           {isDelete && pending?.syncedActive ? (
-            <p className="type-ui-xs text-muted-foreground/70">
+            <p className="type-ui-xs text-subtle">
               Removes the local copy. Your calendar isn't touched.
             </p>
           ) : (

@@ -394,9 +394,7 @@ export function DateTimePicker({
                     <button
                       className={cn(
                         "transition-colors",
-                        isActive
-                          ? "font-medium text-action"
-                          : "text-foreground/55 hover:text-foreground"
+                        isActive ? "font-medium text-action" : "text-subtle hover:text-foreground"
                       )}
                       onClick={() => quickPick(pickDate)}
                     >
@@ -408,7 +406,7 @@ export function DateTimePicker({
             </div>
             {hasDate && (
               <button
-                className="text-xs text-foreground/55 hover:text-foreground"
+                className="text-xs text-subtle hover:text-foreground"
                 onClick={handleClearAll}
               >
                 No date
@@ -439,7 +437,7 @@ export function DateTimePicker({
                   "self-start text-xs transition-colors",
                   selectedTime === null
                     ? "font-medium text-action"
-                    : "text-foreground/40 hover:text-foreground"
+                    : "text-subtle hover:text-foreground"
                 )}
                 onClick={clearTime}
               >
@@ -486,7 +484,7 @@ export function DateTimePicker({
                           ? "font-medium text-action"
                           : isFocused
                             ? "bg-accent text-foreground"
-                            : "text-foreground/55 hover:text-foreground"
+                            : "text-subtle hover:text-foreground"
                       )}
                       data-h={slot.hour24}
                       data-m={slot.minute}
@@ -505,7 +503,7 @@ export function DateTimePicker({
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
-                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/60"
+                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-subtle"
                 onBlur={applyCustomTimeInput}
                 onChange={(event) => setCustomTimeStr(event.target.value)}
                 onKeyDown={(event) => {
@@ -534,9 +532,7 @@ export function DateTimePicker({
                     aria-pressed={isActive}
                     className={cn(
                       "rounded px-1.5 py-0.5 text-xs transition-colors",
-                      isActive
-                        ? "font-medium text-action"
-                        : "text-foreground/55 hover:text-foreground"
+                      isActive ? "font-medium text-action" : "text-subtle hover:text-foreground"
                     )}
                     key={minutes}
                     onClick={() => selectDuration(isActive ? null : minutes)}
@@ -553,7 +549,7 @@ export function DateTimePicker({
                     autoComplete="off"
                     autoCorrect="off"
                     autoFocus
-                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/60"
+                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-subtle"
                     inputMode="text"
                     onBlur={applyCustomDuration}
                     onChange={(event) => setCustomDurationStr(event.target.value)}
@@ -583,7 +579,7 @@ export function DateTimePicker({
                       "group inline-flex h-6 w-full items-center gap-1 rounded px-1.5 text-xs transition-colors",
                       isCustomDuration
                         ? "font-medium text-action"
-                        : "text-foreground/55 hover:text-foreground"
+                        : "text-subtle hover:text-foreground"
                     )}
                     onClick={() => {
                       setCustomDurationStr(
@@ -628,9 +624,7 @@ export function DateTimePicker({
                     aria-pressed={isActive}
                     className={cn(
                       "rounded px-1.5 py-0.5 text-xs transition-colors",
-                      isActive
-                        ? "font-medium text-action"
-                        : "text-foreground/55 hover:text-foreground"
+                      isActive ? "font-medium text-action" : "text-subtle hover:text-foreground"
                     )}
                     key={days}
                     onClick={() => selectEndDays(isActive ? null : days)}
@@ -657,9 +651,7 @@ export function DateTimePicker({
                     aria-pressed={isCustomSpan}
                     className={cn(
                       "group inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-xs transition-colors",
-                      isCustomSpan
-                        ? "font-medium text-action"
-                        : "text-foreground/55 hover:text-foreground"
+                      isCustomSpan ? "font-medium text-action" : "text-subtle hover:text-foreground"
                     )}
                   >
                     <span>{isCustomSpan ? `${spanDays}d` : "Custom"}</span>

@@ -206,14 +206,14 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         // whose title cannot be typed over at all.
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-            {titleValue || <span className="text-muted-foreground/40">Untitled</span>}
+            {titleValue || <span className="text-subtle">Untitled</span>}
           </span>
           <SyncedLockHint />
         </div>
       ) : (
         <input
           autoFocus
-          className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+          className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-subtle"
           onBlur={handleTitleBlur}
           onChange={handleTitleChange}
           onFocus={(e) => {
@@ -338,7 +338,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
       <div className="flex items-center justify-between border-t border-border/40 pt-1">
         <button
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-foreground focus:outline-none"
+          className="inline-flex items-center gap-1.5 text-xs text-subtle transition-colors hover:text-foreground focus:outline-none"
           onClick={handleOpenPage}
         >
           <ExternalLink size={11} />
@@ -347,7 +347,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         <div className="flex items-center gap-2">
           {onRemoveDate && page.scheduledStart && !locked && (
             <TooltipIconButton
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-foreground focus:outline-none"
+              className="inline-flex items-center gap-1 text-xs text-subtle transition-colors hover:text-foreground focus:outline-none"
               icon={<CalendarX size={11} />}
               label="Remove date"
               onClick={() => {
@@ -358,7 +358,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           )}
           {onDelete && (
             <TooltipIconButton
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
+              className="inline-flex items-center gap-1 text-xs text-subtle transition-colors hover:text-destructive focus:outline-none"
               icon={isOccurrence ? <CalendarX size={11} /> : <Trash2 size={11} />}
               label={isOccurrence ? occurrenceDeleteLabel(locked) : "Delete page"}
               onClick={onDelete}

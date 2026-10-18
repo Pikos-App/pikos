@@ -21,7 +21,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
-import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BLOCK_TIME_TEXT_CLASS, CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -371,7 +371,12 @@ export function PageBlock({
             )}
             {showTimeLabel && (
               // Indent matches the title's own left edge: checkbox 3.5 + gap 1
-              <p className="type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] w-full truncate pl-[calc(1.125rem*var(--calendar-zoom,1))] text-subtle">
+              <p
+                className={cn(
+                  "type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] w-full truncate pl-[calc(1.125rem*var(--calendar-zoom,1))]",
+                  BLOCK_TIME_TEXT_CLASS
+                )}
+              >
                 {timeLabel}
               </p>
             )}

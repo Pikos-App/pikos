@@ -122,7 +122,7 @@ export function RecurrenceCustomEditor({
                   "h-6 w-6 rounded-full text-xs transition-colors",
                   isActive
                     ? "bg-primary/20 font-medium text-action"
-                    : "text-foreground/50 hover:bg-accent hover:text-foreground"
+                    : "text-subtle hover:bg-accent hover:text-foreground"
                 )}
                 key={value}
                 onClick={() => onToggleWeekday(value)}

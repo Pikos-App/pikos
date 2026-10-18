@@ -623,7 +623,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       case "load-more":
         return (
           <button
-            className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+            className="w-full px-3 py-1.5 text-left text-xs text-subtle transition-colors hover:text-muted-foreground"
             onClick={() => void loadMoreCompleted()}
           >
             Show more completed

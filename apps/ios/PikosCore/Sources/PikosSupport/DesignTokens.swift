@@ -24,6 +24,7 @@ public enum PikosToken {
     public static let borderSecondary = TokenColor(light: 0xE6E5E2FF, dark: 0x272724FF)
     public static let borderSubtle = TokenColor(light: 0xF0EFEDFF, dark: 0x1E1E1BFF)
     public static let borderFocus = TokenColor(light: 0x2DD4A8FF, dark: 0x2DD4A8FF)
+    public static let borderControl = TokenColor(light: 0xD5D4D0FF, dark: 0x7A7975FF)
     public static let interactivePrimary = TokenColor(light: 0x1AAE8AFF, dark: 0x2DD4A8FF)
     public static let interactivePrimaryHover = TokenColor(light: 0x14896CFF, dark: 0x4DDCB2FF)
     public static let interactiveFill = TokenColor(light: 0x117A60FF, dark: 0x117A60FF)

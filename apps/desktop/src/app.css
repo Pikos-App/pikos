@@ -212,6 +212,7 @@ button,
   --border-secondary: #e6e5e2;
   --border-subtle: #f0efed;
   --border-focus: #2dd4a8;
+  --border-control: #d5d4d0;
 
   /* ─── Interactive ─── */
   --interactive-primary: #1aae8a;
@@ -324,6 +325,7 @@ button,
   --border-secondary: #272724;
   --border-subtle: #1e1e1b;
   --border-focus: #2dd4a8;
+  --border-control: #7a7975;
 
   /* ─── Interactive ─── */
   --interactive-primary: #2dd4a8;
@@ -388,10 +390,12 @@ button,
   --color-border-secondary: var(--border-secondary);
   --color-border-subtle: var(--border-subtle);
   --color-border-focus: var(--border-focus);
+  --color-border-control: var(--border-control);
 
   /* ── Semantic interactive tokens ── */
   --color-interactive-primary: var(--interactive-primary);
   --color-interactive-primary-hover: var(--interactive-primary-hover);
+  --color-interactive-fill: var(--interactive-fill);
   --color-interactive-secondary: var(--interactive-secondary);
   --color-interactive-secondary-hover: var(--interactive-secondary-hover);
 

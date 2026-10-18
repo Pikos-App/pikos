@@ -513,7 +513,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className={cn("placeholder:text-muted-foreground/40", shake && "animate-shake")}
+            className={cn("placeholder:text-subtle", shake && "animate-shake")}
             onChange={(event) => {
               setInputValue(event.target.value);
               if (validationError !== null) setValidationError(null);
@@ -670,7 +670,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         />
 
         <button
-          className="ml-auto shrink-0 rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-auto shrink-0 rounded bg-interactive-fill px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-interactive-fill/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => void handleSubmit()}
         >
           Add

@@ -258,7 +258,7 @@ export function CSVColumnMappingPage({
           Cancel
         </button>
         <button
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          className="rounded-md bg-interactive-fill px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-fill/90 disabled:pointer-events-none disabled:opacity-50"
           disabled={!hasTitleMapped}
           onClick={handleConfirm}
         >

@@ -464,7 +464,7 @@ export function SearchPalette() {
                 : item.title || "Untitled"}
             </span>
             {isDone(item) && (
-              <span className="ml-auto shrink-0 text-3xs text-muted-foreground/40">Completed</span>
+              <span className="ml-auto shrink-0 text-3xs text-subtle">Completed</span>
             )}
           </span>
           {secondLine != null && (
@@ -544,7 +544,7 @@ export function SearchPalette() {
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/40"
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-subtle"
             onChange={(e) => {
               const val = e.target.value;
               setQuery(val);
@@ -592,12 +592,10 @@ export function SearchPalette() {
               {trimmedQuery &&
                 (showCompleted || completedCount > 0) &&
                 (parsed.status === "done" ? (
-                  <p className="px-4 py-1.5 text-xs text-muted-foreground/50">
-                    Showing completed — is:done
-                  </p>
+                  <p className="px-4 py-1.5 text-xs text-subtle">Showing completed — is:done</p>
                 ) : (
                   <button
-                    className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+                    className="w-full px-4 py-1.5 text-left text-xs text-subtle transition-colors hover:text-muted-foreground"
                     onClick={() => setShowCompleted((v) => !v)}
                     type="button"
                   >
