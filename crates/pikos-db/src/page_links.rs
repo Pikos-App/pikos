@@ -14,9 +14,17 @@ use crate::error::AppResult;
 /// Write each link's target's current title into `doc`, so Markdown made from it names the page
 /// as it is called now rather than as it was when linked.
 pub async fn refresh_titles(pool: &SqlitePool, doc: &mut Value) -> AppResult<()> {
+    let titles = target_titles(pool, doc).await?;
+
+    refresh_link_titles(doc, &|id| titles.get(id).cloned());
+    Ok(())
+}
+
+/// The current title of each page `doc` links to, by page id.
+pub async fn target_titles(pool: &SqlitePool, doc: &Value) -> AppResult<HashMap<String, String>> {
     let ids = link_targets(doc);
     if ids.is_empty() {
-        return Ok(());
+        return Ok(HashMap::new());
     }
 
     let mut builder = QueryBuilder::<Sqlite>::new("SELECT id, title FROM pages WHERE id IN (");
@@ -25,15 +33,13 @@ pub async fn refresh_titles(pool: &SqlitePool, doc: &mut Value) -> AppResult<()>
         list.push_bind(id.clone());
     }
     list.push_unseparated(")");
-    let titles: HashMap<String, String> = builder
+
+    Ok(builder
         .build_query_as::<(String, String)>()
         .fetch_all(pool)
         .await?
         .into_iter()
-        .collect();
-
-    refresh_link_titles(doc, &|id| titles.get(id).cloned());
-    Ok(())
+        .collect())
 }
 
 /// Turn each `[[title]]` in `doc` into a link to the page of that title.

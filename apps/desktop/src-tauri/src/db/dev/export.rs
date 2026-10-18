@@ -10,7 +10,8 @@
 //! the shape the export → re-import round-trip tests assert against, and the
 //! place to start from if a JSON export is ever offered again.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use sqlx::{Column, Row};
 use tauri::Manager;
@@ -154,37 +155,9 @@ pub(crate) async fn write_markdown_export(
     let plan = pikos_db::export::plan_markdown_export(pool, include_synced).await?;
     std::fs::create_dir_all(base_dir)?;
 
-    // Stored path → path relative to the export root, for assets that actually
-    // arrived. A page whose asset did not copy keeps its stored reference rather
-    // than pointing at a file that is not there.
-    let mut copied: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    let mut assets_dir_created = false;
-
+    let mut copied = HashMap::new();
     for page in &plan {
-        for stored in &page.assets {
-            if copied.contains_key(stored) {
-                continue;
-            }
-            let source = crate::db::assets::resolve_asset_path(assets_dir, stored);
-            if !source.exists() {
-                continue;
-            }
-            if !assets_dir_created {
-                std::fs::create_dir_all(base_dir.join("assets"))?;
-                assets_dir_created = true;
-            }
-            let filename = source
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("asset.bin")
-                .to_string();
-            if let Err(e) = std::fs::copy(&source, base_dir.join("assets").join(&filename)) {
-                // The source is a user asset path — log only the io::ErrorKind, not the path.
-                log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
-                continue;
-            }
-            copied.insert(stored.clone(), format!("assets/{filename}"));
-        }
+        copy_page_assets(page, assets_dir, base_dir, &mut copied)?;
 
         let destination = base_dir.join(&page.path);
         if let Some(parent) = destination.parent() {
@@ -197,6 +170,126 @@ pub(crate) async fn write_markdown_export(
     }
 
     Ok((plan.len(), copied.len()))
+}
+
+/// Copy a page's images into `base_dir/assets/`, recording each that arrived in
+/// `copied` as stored path → path relative to `base_dir`. A page whose asset did
+/// not copy keeps its stored reference rather than pointing at a file that is
+/// not there.
+fn copy_page_assets(
+    page: &pikos_db::export::MarkdownPage,
+    assets_dir: &Path,
+    base_dir: &Path,
+    copied: &mut HashMap<String, String>,
+) -> AppResult<()> {
+    for stored in &page.assets {
+        if copied.contains_key(stored) {
+            continue;
+        }
+
+        let source = crate::db::assets::resolve_asset_path(assets_dir, stored);
+        if !source.exists() {
+            continue;
+        }
+
+        std::fs::create_dir_all(base_dir.join("assets"))?;
+        let filename = source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("asset.bin")
+            .to_string();
+        if let Err(e) = std::fs::copy(&source, base_dir.join("assets").join(&filename)) {
+            // The source is a user asset path — log only the io::ErrorKind, not the path.
+            log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
+            continue;
+        }
+        copied.insert(stored.clone(), format!("assets/{filename}"));
+    }
+
+    Ok(())
+}
+
+/// Export one page as Markdown to ~/Downloads, for sharing it on its own.
+/// Returns the `.md` file's path.
+#[tauri::command]
+pub async fn export_page_markdown<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, DbState>,
+    page_id: String,
+) -> AppResult<String> {
+    let pool = state.get_pool().await?;
+    let assets_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?
+        .join(crate::db::assets::ASSET_DIR);
+    let home = home_dir()?;
+
+    let dest = write_page_markdown(
+        &pool,
+        &page_id,
+        &Path::new(&home).join("Downloads"),
+        &assets_dir,
+    )
+    .await?;
+
+    let dest = dest.to_string_lossy().to_string();
+    log::info!("export_page_markdown dest={}", dest.replacen(&home, "~", 1));
+    Ok(dest)
+}
+
+/// One page written into `dir`, split from [`export_page_markdown`] so it runs
+/// against a temp directory.
+///
+/// A page with no images is a lone `<title>.md`, the file a chat app takes. One
+/// with images needs them beside it, so it becomes a `<title>/` directory holding
+/// the `.md` and an `assets/` folder, the workspace export's layout. Neither
+/// replaces an earlier export of the same page: the name takes the first free
+/// numeral, as Finder does.
+pub(crate) async fn write_page_markdown(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+    dir: &Path,
+    assets_dir: &Path,
+) -> AppResult<PathBuf> {
+    let page = pikos_db::export::plan_markdown_page(pool, page_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("page {page_id}")))?;
+    let stem = page.path.trim_end_matches(".md");
+
+    let has_images = page
+        .assets
+        .iter()
+        .any(|stored| crate::db::assets::resolve_asset_path(assets_dir, stored).exists());
+    let (base_dir, file) = if has_images {
+        let base_dir = unused_path(dir, stem, "");
+        (base_dir.clone(), base_dir.join(&page.path))
+    } else {
+        (dir.to_path_buf(), unused_path(dir, stem, ".md"))
+    };
+
+    std::fs::create_dir_all(&base_dir)?;
+    let mut copied = HashMap::new();
+    copy_page_assets(&page, assets_dir, &base_dir, &mut copied)?;
+    std::fs::write(
+        &file,
+        pikos_db::export::render_markdown_page(&page, &copied),
+    )?;
+
+    Ok(file)
+}
+
+/// `dir/<stem><ext>`, or `dir/<stem> 2<ext>` and up when that is taken.
+fn unused_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
+    let first = dir.join(format!("{stem}{ext}"));
+    if !first.exists() {
+        return first;
+    }
+
+    (2..)
+        .map(|n| dir.join(format!("{stem} {n}{ext}")))
+        .find(|candidate| !candidate.exists())
+        .expect("an unbounded range always finds a free name")
 }
 
 /// Export all pages as a CSV file to ~/Downloads/.

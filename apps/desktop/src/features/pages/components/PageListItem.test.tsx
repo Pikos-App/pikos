@@ -149,12 +149,18 @@ describe("PageListItem menu", () => {
       .map((item) => item.textContent ?? "");
   }
 
-  it("lists Rename, Move to folder, No date and Delete, in that order", () => {
+  it("lists Rename, Move to folder, No date, Export as Markdown and Delete, in that order", () => {
     renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(menuItems()).toEqual(["Rename", "Move to folder", "No date", "Delete"]);
+    expect(menuItems()).toEqual([
+      "Rename",
+      "Move to folder",
+      "No date",
+      "Export as Markdown",
+      "Delete",
+    ]);
   });
 
   it("drops Rename and counts the pages when it acts on a selection", () => {

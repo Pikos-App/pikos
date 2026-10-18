@@ -211,6 +211,7 @@ export const READ_COMMANDS = new Set([
   "export_csv",
   "export_ics",
   "export_markdown",
+  "export_page_markdown",
   "get_usage_stats",
   "list_backups",
 ]);
@@ -663,6 +664,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
       case "markdown":
         return invoke<string>("export_markdown", { includeSynced });
     }
+  }
+
+  exportPageMarkdown(id: string): Promise<string> {
+    return invoke<string>("export_page_markdown", { pageId: id });
   }
 
   getUsageStats(weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats> {

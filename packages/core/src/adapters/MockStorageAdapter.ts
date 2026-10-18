@@ -2019,6 +2019,10 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(`/mock/pikos-export.${format}`);
   }
 
+  exportPageMarkdown(id: string): Promise<string> {
+    return Promise.resolve(`/mock/${id}.md`);
+  }
+
   /** Counted from the in-memory maps so the panel shows the seeded workspace
    *  rather than zeroes. The activity chart has no source here and stays empty. */
   getUsageStats(_weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats> {

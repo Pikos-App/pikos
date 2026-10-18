@@ -104,6 +104,7 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
         ("export_csv", json!({ "includeSynced": false })),
         ("export_ics", json!({ "includeSynced": false })),
         ("export_markdown", json!({ "includeSynced": false })),
+        ("export_page_markdown", json!({ "pageId": "missing" })),
         (
             "create_focus_session",
             json!({
@@ -297,6 +298,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::dev::export_csv,
             super::dev::export_ics,
             super::dev::export_markdown,
+            super::dev::export_page_markdown,
             super::pages::get_page,
             super::pages::list_pages,
             super::pages::list_pages_today,

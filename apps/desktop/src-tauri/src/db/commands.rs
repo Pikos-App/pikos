@@ -276,6 +276,7 @@ db_commands! {
         crate::db::dev::export_csv,
         crate::db::dev::export_ics,
         crate::db::dev::export_markdown,
+        crate::db::dev::export_page_markdown,
         crate::db::dev::get_usage_stats,
         crate::db::dev::wipe_app_data,
     ];

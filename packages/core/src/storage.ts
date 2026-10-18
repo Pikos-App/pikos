@@ -444,6 +444,8 @@ export interface StorageAdapter {
   backupBeforeImport(): Promise<void>;
   /** Render the workspace into `format`; resolves to where it landed. */
   exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string>;
+  /** Write one page as Markdown, for sharing on its own; resolves to its `.md` file. */
+  exportPageMarkdown(id: string): Promise<string>;
   /** Aggregate counts for the Data settings panel. `weekStartsOn` buckets the
    *  activity chart, since the counting happens where the rows are and the
    *  preference lives with the user. */
