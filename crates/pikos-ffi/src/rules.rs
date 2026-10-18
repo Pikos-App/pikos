@@ -96,8 +96,10 @@ pub struct NowSuggestion {
 
 #[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
 pub struct NowAnswer {
-    pub current: Option<String>,
-    pub next: Option<String>,
+    /// Where in the items passed the span in progress is.
+    pub current: Option<u32>,
+    /// Where in the items passed the next timed page to start is.
+    pub next: Option<u32>,
     pub free_until: Option<i64>,
     pub suggestion: Option<NowSuggestion>,
     pub changes: Vec<i64>,
@@ -117,8 +119,8 @@ pub fn now_plan(items: Vec<NowPage>, now: i64) -> NowAnswer {
         .collect();
     let plan = now::plan(&items, now);
     NowAnswer {
-        current: plan.current,
-        next: plan.next,
+        current: plan.current.map(|at| at as u32),
+        next: plan.next.map(|at| at as u32),
         free_until: plan.free_until,
         suggestion: plan.suggestion.map(|s| NowSuggestion {
             id: s.id,

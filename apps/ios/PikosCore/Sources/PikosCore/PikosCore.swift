@@ -5333,15 +5333,27 @@ public func FfiConverterTypeNewPage_lower(_ value: NewPage) -> RustBuffer {
 
 
 public struct NowAnswer: Equatable, Hashable {
-    public var current: String?
-    public var next: String?
+    /**
+     * Where in the items passed the span in progress is.
+     */
+    public var current: UInt32?
+    /**
+     * Where in the items passed the next timed page to start is.
+     */
+    public var next: UInt32?
     public var freeUntil: Int64?
     public var suggestion: NowSuggestion?
     public var changes: [Int64]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(current: String?, next: String?, freeUntil: Int64?, suggestion: NowSuggestion?, changes: [Int64]) {
+    public init(
+        /**
+         * Where in the items passed the span in progress is.
+         */current: UInt32?, 
+        /**
+         * Where in the items passed the next timed page to start is.
+         */next: UInt32?, freeUntil: Int64?, suggestion: NowSuggestion?, changes: [Int64]) {
         self.current = current
         self.next = next
         self.freeUntil = freeUntil
@@ -5365,8 +5377,8 @@ public struct FfiConverterTypeNowAnswer: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NowAnswer {
         return
             try NowAnswer(
-                current: FfiConverterOptionString.read(from: &buf), 
-                next: FfiConverterOptionString.read(from: &buf), 
+                current: FfiConverterOptionUInt32.read(from: &buf), 
+                next: FfiConverterOptionUInt32.read(from: &buf), 
                 freeUntil: FfiConverterOptionInt64.read(from: &buf), 
                 suggestion: FfiConverterOptionTypeNowSuggestion.read(from: &buf), 
                 changes: FfiConverterSequenceInt64.read(from: &buf)
@@ -5374,8 +5386,8 @@ public struct FfiConverterTypeNowAnswer: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: NowAnswer, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.current, into: &buf)
-        FfiConverterOptionString.write(value.next, into: &buf)
+        FfiConverterOptionUInt32.write(value.current, into: &buf)
+        FfiConverterOptionUInt32.write(value.next, into: &buf)
         FfiConverterOptionInt64.write(value.freeUntil, into: &buf)
         FfiConverterOptionTypeNowSuggestion.write(value.suggestion, into: &buf)
         FfiConverterSequenceInt64.write(value.changes, into: &buf)
@@ -10283,6 +10295,30 @@ public func FfiConverterTypeWorkspaceError_lift(_ buf: RustBuffer) throws -> Wor
 #endif
 public func FfiConverterTypeWorkspaceError_lower(_ value: WorkspaceError) -> RustBuffer {
     return FfiConverterTypeWorkspaceError.lower(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
 }
 
 #if swift(>=5.8)

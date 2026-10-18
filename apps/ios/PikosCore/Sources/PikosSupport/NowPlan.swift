@@ -57,10 +57,8 @@ public struct NowPlan: Equatable, Sendable {
                     priority: Int64($0.priority))
             },
             now: Self.millis(now))
-        let byId = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-
-        current = answer.current.flatMap { byId[$0] }
-        next = answer.next.flatMap { byId[$0] }
+        current = answer.current.map { items[Int($0)] }
+        next = answer.next.map { items[Int($0)] }
         freeUntil = answer.freeUntil.map(Self.date)
         suggestion = answer.suggestion.map {
             let reason: Reason =
