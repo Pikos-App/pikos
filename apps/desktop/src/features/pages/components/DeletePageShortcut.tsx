@@ -12,7 +12,8 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { usePageListContext } from "../PageListContext";
 
 export function DeletePageShortcut() {
-  const { activePage, cached, completedPages, requestDelete, visiblePages } = usePageListContext();
+  const { activePage, cached, completedPages, requestDelete, requestDeleteMany, visiblePages } =
+    usePageListContext();
   const { clearSelection, selectedPageIds } = useSelection();
 
   function deleteSelectedOrActive() {
@@ -21,12 +22,14 @@ export function DeletePageShortcut() {
       const held = new Set(loaded.map((p) => p.id));
       const missing = cached ? [...selectedPageIds].filter((id) => !held.has(id)) : [];
       const actsOn = selectedPageIds.size;
-      for (const page of loaded) requestDelete(page, actsOn);
       clearSelection();
+
       if (cached && missing.length > 0) {
-        void cached.rows(missing).then((fetched) => {
-          for (const page of fetched) requestDelete(page, actsOn);
-        });
+        void cached
+          .rows(missing)
+          .then((fetched) => requestDeleteMany([...loaded, ...fetched], actsOn));
+      } else {
+        requestDeleteMany(loaded, actsOn);
       }
     } else if (activePage) {
       requestDelete(activePage);

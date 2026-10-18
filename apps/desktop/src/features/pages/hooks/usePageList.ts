@@ -33,7 +33,7 @@ export function usePageList() {
   const togglePageStatus = useRecurringStatusToggle();
   const { activeViewId, openPage, setActivePage } = useUI();
   const sortMode = useActiveSortMode();
-  const { hiddenIds, requestDeletePage } = useUndoDelete();
+  const { hiddenIds, requestDeletePage, requestDeletePages } = useUndoDelete();
   const activePage = useActivePage();
   const { selectedPageIds } = useSelection();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -83,6 +83,13 @@ export function usePageList() {
   function requestDelete(page: PageSummary, actsOn = 1) {
     if (deleteAsksWhichDates(page, actsOn)) setDeletingSeries(page);
     else requestDeletePage(page);
+  }
+
+  /** Delete what a gesture acts on: a lone page as requestDelete, several under one undo. */
+  function requestDeleteMany(pages: PageSummary[], actsOn: number) {
+    const [only] = pages;
+    if (only && pages.length === 1) requestDelete(only, actsOn);
+    else requestDeletePages(pages);
   }
 
   function handleRenameChange(id: string, title: string) {
@@ -143,6 +150,7 @@ export function usePageList() {
     onExpandCompleted: completed.onExpand,
     renamingId,
     requestDelete,
+    requestDeleteMany,
     setRenamingId,
     visiblePages,
   };

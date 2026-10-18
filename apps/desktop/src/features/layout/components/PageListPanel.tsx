@@ -67,7 +67,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     loadMoreCompleted,
     onExpandCompleted,
     renamingId,
-    requestDelete,
+    requestDeleteMany,
     setRenamingId,
     visiblePages,
   } = usePageListContext();
@@ -470,20 +470,26 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     return Math.max(loadedSelection().length, 1);
   }
 
-  /** Run an action on all selected pages (if page is selected), or just the given page. */
-  function batchAction(page: PageSummary, action: (p: PageSummary) => void) {
+  /** Run an action on the selected pages (if page is selected), or just the given page. */
+  function onMenuTargets(page: PageSummary, action: (pages: PageSummary[]) => void) {
     if (menuActsOn(page.id) === 1) {
-      action(page);
+      action([page]);
       return;
     }
     if (!cached) {
-      for (const p of loadedSelection()) action(p);
+      action(loadedSelection());
       clearSelection();
       return;
     }
     void selectedPages().then((batch) => {
-      for (const p of batch) action(p);
+      action(batch);
       clearSelection();
+    });
+  }
+
+  function batchAction(page: PageSummary, action: (p: PageSummary) => void) {
+    onMenuTargets(page, (pages) => {
+      for (const p of pages) action(p);
     });
   }
 
@@ -497,7 +503,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         key={page.id}
         menuActsOn={menuActsOn(page.id)}
         onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
-        onDelete={() => batchAction(page, (p) => requestDelete(p, menuActsOn(page.id)))}
+        onDelete={() => onMenuTargets(page, (ps) => requestDeleteMany(ps, menuActsOn(page.id)))}
         onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}
         onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         onRenameCancel={handleRenameCancel}
