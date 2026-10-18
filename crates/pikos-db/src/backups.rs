@@ -451,8 +451,9 @@ mod tests {
             .await
             .unwrap();
         pool.close().await;
-        // Written after the close: under an open pool, whether a checkpoint gets to it first is a race.
-        std::fs::write(format!("{path}-wal"), b"stale").unwrap();
+        // Written after the close, since under an open pool a checkpoint may get to it first. Empty,
+        // the one log SQLite reads as valid and blank: a few junk bytes sometimes fail the read.
+        std::fs::write(format!("{path}-wal"), b"").unwrap();
 
         restore_backup(&path, backup_name).await.unwrap();
 
