@@ -3517,6 +3517,38 @@ describe("NL Page Creation Parser", () => {
   });
 });
 
+describe("a rename leaves the date to the page's slot", () => {
+  const rename = (s: string) => parseInput(s, NOW, { rename: true });
+
+  it("reads tags, folder and priority out of the title", () => {
+    expect(rename("standup #work ~projects !high")).toEqual({
+      input: { folderQuery: "projects", priority: "high", tags: ["work"], title: "standup" },
+      type: "single",
+    });
+  });
+
+  it("reads a repeat without dating it", () => {
+    const r = rename("standup every weekday");
+    expect(r.type).toBe("recurring");
+    if (r.type !== "recurring") return;
+    expect(r.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    expect(r.input).toEqual({ tags: [], title: "standup" });
+  });
+
+  it.each([
+    ["a date", "prep for tomorrow"],
+    ["a time", "call at 3pm"],
+    ["a month name", "review March plan"],
+    ["a duration", "focus for 30m"],
+    ["a reminder", "pay rent remind me 1d before"],
+    ["a body", "buy a gift // the blue one"],
+    ["days without every", "gym m/w/f"],
+    ["bare weekdays", "weekdays meeting"],
+  ])("keeps %s in the title", (_, title) => {
+    expect(rename(title)).toEqual({ input: { tags: [], title }, type: "single" });
+  });
+});
+
 // ─── property tests ──────────────────────────────────────────────────────────
 //
 // Invariants the parser must hold for ANY input we generate. Each property

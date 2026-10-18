@@ -173,27 +173,11 @@ function untilFromLocalDate(d: Date, endOfDay: boolean): string {
   return `${date}T${time}`;
 }
 
-export function parseInput(raw: string, now?: Date): ParseResult {
-  const ref = now ?? new Date();
-
-  if (!raw || !raw.trim()) {
-    return { input: { tags: [], title: "" }, type: "single" };
-  }
-
-  // --- -2. Body split: "buy a gift // she likes the blue one" ────────────────
-  // Everything after the FIRST whitespace-delimited "//" is the page body, kept
-  // verbatim: no tag, folder, date or cadence is read out of it, so a "#word" in
-  // a note stays literal text. The separator has to sit on a whitespace boundary
-  // (or a string edge) on both sides, which is what keeps "https://example.com"
-  // a URL and a later "//" part of the body it belongs to.
-  let content: string | undefined;
-  let text = raw;
-  const bodySplit = /(?:^|\s)\/\/(?:\s|$)/.exec(raw);
-  if (bodySplit) {
-    text = raw.slice(0, bodySplit.index);
-    const body = raw.slice(bodySplit.index + bodySplit[0].length).trim();
-    if (body) content = body;
-  }
+/**
+ * Date phrases chrono misreads or can't read, rewritten into forms it can.
+ */
+function rewriteDatePhrases(input: string, ref: Date): string {
+  let text = input;
 
   // --- -1. Casual time-of-day mapping ───────────────────────────────────────
   // chrono sets a meridiem for "morning" / "afternoon" / "evening" / "night"
@@ -322,6 +306,45 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       m2 ? `${m1} ${d1} to ${m2}${d2}` : `${m1} ${d1} to ${d2}`
   );
 
+  return text;
+}
+
+export interface ParseOptions {
+  /**
+   * The input renames a page that already has its date and body, such as a block
+   * dragged onto the calendar, whose slot wins over a date typed in its title.
+   * Only tags, folder, priority and a repeat are read; words for a date, time,
+   * duration, reminder or body stay in the title, so a rename can't lose a word
+   * nothing was done with. A repeat still applies, anchored on the page's slot.
+   */
+  rename?: boolean;
+}
+
+export function parseInput(raw: string, now?: Date, options: ParseOptions = {}): ParseResult {
+  const ref = now ?? new Date();
+  const { rename = false } = options;
+
+  if (!raw || !raw.trim()) {
+    return { input: { tags: [], title: "" }, type: "single" };
+  }
+
+  // --- -2. Body split: "buy a gift // she likes the blue one" ────────────────
+  // Everything after the FIRST whitespace-delimited "//" is the page body, kept
+  // verbatim: no tag, folder, date or cadence is read out of it, so a "#word" in
+  // a note stays literal text. The separator has to sit on a whitespace boundary
+  // (or a string edge) on both sides, which is what keeps "https://example.com"
+  // a URL and a later "//" part of the body it belongs to.
+  let content: string | undefined;
+  let text = raw;
+  const bodySplit = rename ? null : /(?:^|\s)\/\/(?:\s|$)/.exec(raw);
+  if (bodySplit) {
+    text = raw.slice(0, bodySplit.index);
+    const body = raw.slice(bodySplit.index + bodySplit[0].length).trim();
+    if (body) content = body;
+  }
+
+  if (!rename) text = rewriteDatePhrases(text, ref);
+
   // --- 1. Tags: #word ---
   const tags: string[] = [];
   text = text.replace(/#(\w+)/g, (_, tag: string) => {
@@ -415,7 +438,8 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   let durationMinutes: number | undefined;
   text = text.replace(
     /\bfor\s+(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)\b/gi,
-    (_, num: string, unit: string) => {
+    (match, num: string, unit: string) => {
+      if (rename) return match;
       const n = parseFloat(num);
       const u = unit.toLowerCase();
       if (u === "h" || u === "hr" || u === "hrs" || u === "hour" || u === "hours") {
@@ -613,7 +637,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   const SLASH_DAY =
     "(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|mo|tu|we|th|fr|sa|su|m|t|w|f)";
   const slashDaysRe = new RegExp(`(\\bevery\\s+)?\\b((?:${SLASH_DAY}\\/)+${SLASH_DAY})\\b`, "gi");
-  text = text.replace(slashDaysRe, (_, everyPrefix: string | undefined, slashStr: string) => {
+  text = text.replace(slashDaysRe, (match, everyPrefix: string | undefined, slashStr: string) => {
     const parts = slashStr.toLowerCase().split("/");
     const days: Weekday[] = [];
     for (const part of parts) {
@@ -629,6 +653,8 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
     if (everyPrefix || isInfiniteWeeklyNoByday) {
       recurrenceSpec = { byday: days, freq: "WEEKLY", kind: "infinite" };
+    } else if (rename) {
+      return match;
     } else {
       recurrenceSpec = { days, kind: "finite-slash" };
     }
@@ -670,16 +696,18 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   }
 
   // bare "weekdays" (without "every")
-  text = text.replace(/\bweekdays\b/gi, () => {
-    if (!recurrenceSpec) {
-      recurrenceSpec = { kind: "finite-weekdays" };
-    }
-    return " ";
-  });
+  if (!rename) {
+    text = text.replace(/\bweekdays\b/gi, () => {
+      if (!recurrenceSpec) {
+        recurrenceSpec = { kind: "finite-weekdays" };
+      }
+      return " ";
+    });
+  }
 
   // --- 7 & 8. Date and time (combined via chrono-node) ---
   // Replace @ prefix markers for chrono
-  text = text.replace(/@(\S+)/g, (_, token: string) => token);
+  if (!rename) text = text.replace(/@(\S+)/g, (_, token: string) => token);
 
   let scheduledStart: string | undefined;
   let hasTime = false;
@@ -692,9 +720,11 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // intentionally not supported (ambiguous semantics).
   let chronoEndDate: Date | undefined;
 
-  const result = chrono
-    .parse(text, ref, { forwardDate: true })
-    .find((r) => DATE_OR_TIME_COMPONENTS.some((c) => r.start.isCertain(c)));
+  const result = rename
+    ? undefined
+    : chrono
+        .parse(text, ref, { forwardDate: true })
+        .find((r) => DATE_OR_TIME_COMPONENTS.some((c) => r.start.isCertain(c)));
   if (result) {
     const parsed = result.date();
 
@@ -790,6 +820,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // When recurrence has a byday but chrono found no date at all, anchor scheduledStart
   // to the next occurrence of the first specified weekday.
   if (
+    !rename &&
     !scheduledStart &&
     recurrenceSpec?.kind === "infinite" &&
     recurrenceSpec.byday &&
