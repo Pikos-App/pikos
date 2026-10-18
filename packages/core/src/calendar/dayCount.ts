@@ -5,10 +5,13 @@
  * Calendar density is the hour height in px at the default text size, picked from
  * unnamed steps. It was three named presets, and the names stopped meaning
  * anything once the text size multiplies the hour: "compact" at 28px showed fewer
- * hours than the default. The dense end stays at 40 until a short block drops its
- * time line and truncates its title rather than flooring its height.
+ * hours than the default.
+ *
+ * The densest step is 30 rather than the evenly spaced 28: at 28 a block running
+ * into the collapsed evening band gains the band's fixed inset, which doesn't
+ * scale with the text, and crosses its time-row tier at some text sizes only.
  */
-export const CALENDAR_DENSITY_STEPS = [40, 52, 64, 76, 88] as const;
+export const CALENDAR_DENSITY_STEPS = [30, 40, 52, 64, 76, 88] as const;
 
 export type CalendarDensity = (typeof CALENDAR_DENSITY_STEPS)[number];
 

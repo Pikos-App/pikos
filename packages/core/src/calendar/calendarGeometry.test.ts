@@ -378,7 +378,8 @@ describe("density", () => {
   it("steps one rung at a time and stops at either end", () => {
     expect(stepCalendarDensity(64, 1)).toBe(76);
     expect(stepCalendarDensity(64, -1)).toBe(52);
-    expect(stepCalendarDensity(40, -1)).toBe(40);
+    expect(stepCalendarDensity(40, -1)).toBe(30);
+    expect(stepCalendarDensity(30, -1)).toBe(30);
     expect(stepCalendarDensity(88, 1)).toBe(88);
   });
 });
@@ -410,19 +411,15 @@ describe("zoom", () => {
     }
   });
 
-  it("floors a block at a normal quarter hour, scaled up with zoom but never down", () => {
-    expect(computeCalendarMetrics(64).compactBlockHeight).toBe(16);
+  it("draws the shortest block a quarter hour tall at every density and zoom", () => {
+    expect(computeCalendarMetrics(30).compactBlockHeight).toBe(7.5);
+    expect(computeCalendarMetrics(40).compactBlockHeight).toBe(10);
     expect(computeCalendarMetrics(88).compactBlockHeight).toBe(22);
-    expect(computeCalendarMetrics(40).compactBlockHeight).toBe(16);
-    expect(computeCalendarMetrics(40, 2).compactBlockHeight).toBe(32);
-    expect(computeCalendarMetrics(40, 10 / 14).compactBlockHeight).toBe(16);
-    expect(computeCalendarMetrics(64, 10 / 14).compactBlockHeight).toBe(16);
-  });
-
-  it("gives the shortest block in minutes: a quarter hour, until compact draws it longer", () => {
-    expect(shortestBlockMinutes(computeCalendarMetrics(64))).toBe(15);
-    expect(shortestBlockMinutes(computeCalendarMetrics(88))).toBe(15);
-    expect(shortestBlockMinutes(computeCalendarMetrics(40))).toBeCloseTo(24);
-    expect(shortestBlockMinutes(computeCalendarMetrics(64, 10 / 14))).toBeCloseTo(21);
+    expect(computeCalendarMetrics(40, 2).compactBlockHeight).toBe(20);
+    for (const density of CALENDAR_DENSITY_STEPS) {
+      for (const zoom of [10 / 14, 1, 2]) {
+        expect(shortestBlockMinutes(computeCalendarMetrics(density, zoom))).toBeCloseTo(15);
+      }
+    }
   });
 });

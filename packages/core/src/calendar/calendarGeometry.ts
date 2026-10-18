@@ -34,8 +34,15 @@ import { type CalendarDayCount, type CalendarDensity, DEFAULT_CALENDAR_DENSITY }
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {
   hourHeight: number;
-  /** The shortest a timed block renders: a 15-minute slot, or `MIN_BLOCK_HEIGHT`
-   *  where the slot is shorter than that. */
+  /**
+   * The shortest a timed block renders: a 15-minute slot, however few pixels that is.
+   *
+   * It was floored at 16px so a quarter hour at compact density stayed easy to hit.
+   * The floor drew a block taller than its time, so short items cascaded beside
+   * neighbours they don't overlap, and it is what kept density from going denser
+   * than 40px an hour. A short block drops its time line and then cuts its title
+   * instead, as TickTick does.
+   */
   compactBlockHeight: number;
   gridHeight: number;
   minResizeHeight: number;
@@ -66,19 +73,6 @@ export interface CalendarMetrics {
 /** The tier heights the block layout was tuned to at the default zoom. */
 const TIME_ROW_MIN_HEIGHT = 40;
 const TWO_LINE_TITLE_MIN_HEIGHT = 52;
-
-/**
- * The floor on a timed block's height at the default zoom: a quarter hour at
- * normal density, the shortest chip that holds the body type and a checkbox.
- *
- * A block was as tall as its duration, so at compact density an item with no end
- * time was a 10px sliver with 10px type, and 7px zoomed out — too small to hit.
- * It scales up with zoom but never below this, because zooming out is for seeing
- * more of the day, not for making a target smaller than a pointer can land on.
- * The layout reserves the extra height, so a floored block cascades beside its
- * neighbour rather than covering it.
- */
-const MIN_BLOCK_HEIGHT = 16;
 
 /** Far below a visible pixel or a millisecond, far above the rounding a zoomed
  *  position carries. */
@@ -121,7 +115,7 @@ export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): Cale
     allDayBarHeight: ALL_DAY_BAR_HEIGHT * zoom,
     allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
     allDayTopPadding: ALL_DAY_TOP_PADDING * zoom,
-    compactBlockHeight: Math.max(hourHeight / 4, MIN_BLOCK_HEIGHT * Math.max(zoom, 1)),
+    compactBlockHeight: hourHeight / 4,
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,

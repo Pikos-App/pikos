@@ -589,11 +589,11 @@ appTest(
 
 appTest("calendar density scales the hour rows", { tag: ["@CAL-18"] }, async ({ app }) => {
   // Short enough that no density stretches its hours to fill the grid.
-  await app.setViewportSize({ height: 600, width: 1280 });
+  await app.setViewportSize({ height: 480, width: 1280 });
   const hourPitch = async () => (await hourLineY(app, 10)) - (await hourLineY(app, 9));
   const pitches: number[] = [];
 
-  const steps = ["1", "2", "3", "4", "5"];
+  const steps = ["1", "2", "3", "4", "5", "6"];
   for (const step of steps) {
     await appTest.step(`CAL-18 step ${step} sets its own hour height`, async () => {
       await choose(app, "Calendar density", step);
@@ -609,9 +609,9 @@ appTest("calendar density scales the hour rows", { tag: ["@CAL-18"] }, async ({ 
 
   await appTest.step("CAL-18 the shortcuts step down and reset", async () => {
     await app.keyboard.press(mod("Mod+Alt+-"));
-    await expect.poll(hourPitch).toBe(pitches[3]);
+    await expect.poll(hourPitch).toBe(pitches[4]);
     await app.keyboard.press(mod("Mod+Alt+0"));
-    await expect.poll(hourPitch).toBe(pitches[2]);
+    await expect.poll(hourPitch).toBe(pitches[3]);
   });
 });
 
