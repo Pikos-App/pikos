@@ -60,8 +60,9 @@
             return addresses.map(\.address)
         }
 
-        func retryHeld() async throws {
-            let _: WireApplied = try call("retry_held", [String: Int]())
+        func retryHeld() async throws -> [RecordAddress] {
+            let applied: WireApplied = try call("retry_held", [String: Int]())
+            return applied.refetch.map(\.address)
         }
 
         func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {
@@ -241,5 +242,6 @@
     private struct WireApplied: Decodable {
         let changed: Int
         let held: Int
+        let refetch: [WireAddress]
     }
 #endif

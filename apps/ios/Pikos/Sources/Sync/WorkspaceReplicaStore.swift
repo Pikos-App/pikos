@@ -68,11 +68,13 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
         try await workspace.expireSync().map(Self.address)
     }
 
-    func retryHeld() async throws {
+    func retryHeld() async throws -> [PikosSync.RecordAddress] {
         let applied = try await workspace.retryHeldRecords()
         if applied.changed > 0 {
             await onApplied()
         }
+
+        return applied.refetch.map(Self.address)
     }
 
     func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {

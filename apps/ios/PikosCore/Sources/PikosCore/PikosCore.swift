@@ -7475,6 +7475,10 @@ public struct SyncApplied: Equatable, Hashable {
      * Records waiting for a parent or a newer Pikos.
      */
     public var held: UInt32
+    /**
+     * Held images to fetch again, since only a fresh download can land them.
+     */
+    public var refetch: [RecordAddress]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7484,9 +7488,13 @@ public struct SyncApplied: Equatable, Hashable {
          */changed: UInt32, 
         /**
          * Records waiting for a parent or a newer Pikos.
-         */held: UInt32) {
+         */held: UInt32, 
+        /**
+         * Held images to fetch again, since only a fresh download can land them.
+         */refetch: [RecordAddress]) {
         self.changed = changed
         self.held = held
+        self.refetch = refetch
     }
 
     
@@ -7506,13 +7514,15 @@ public struct FfiConverterTypeSyncApplied: FfiConverterRustBuffer {
         return
             try SyncApplied(
                 changed: FfiConverterUInt32.read(from: &buf), 
-                held: FfiConverterUInt32.read(from: &buf)
+                held: FfiConverterUInt32.read(from: &buf), 
+                refetch: FfiConverterSequenceTypeRecordAddress.read(from: &buf)
         )
     }
 
     public static func write(_ value: SyncApplied, into buf: inout [UInt8]) {
         FfiConverterUInt32.write(value.changed, into: &buf)
         FfiConverterUInt32.write(value.held, into: &buf)
+        FfiConverterSequenceTypeRecordAddress.write(value.refetch, into: &buf)
     }
 }
 

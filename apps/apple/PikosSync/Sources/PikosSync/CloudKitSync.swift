@@ -216,11 +216,23 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         guard let engine else { return }
 
         do {
-            let expired = try await coordinator.upkeepIfDue()
-            engine.state.add(pendingRecordZoneChanges: expired.map { .deleteRecord($0) })
+            let upkeep = try await coordinator.upkeepIfDue()
+            engine.state.add(pendingRecordZoneChanges: upkeep.expired.map { .deleteRecord($0) })
+            if !upkeep.refetch.isEmpty {
+                try await refetch(upkeep.refetch)
+            }
         } catch {
             Self.log.error("sync upkeep failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Apple's engine hands back a record only when it changes, and an image never does, so a held
+    /// one is asked for by id. One that doesn't come stays held until the next upkeep.
+    private func refetch(_ ids: [CKRecord.ID]) async throws {
+        let results = try await database.records(for: ids)
+        let records = results.values.compactMap { try? $0.get() }
+        Self.log.info("fetched \(records.count) of \(ids.count) held images again")
+        try await coordinator.fetched(records)
     }
 
     private func handleSent(
