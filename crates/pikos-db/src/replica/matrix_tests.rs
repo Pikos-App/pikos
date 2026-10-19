@@ -942,6 +942,216 @@ async fn a_done_copy_moved_and_deleted_follows_on_the_other_device() {
     assert_converged(&mac, &phone).await;
 }
 
+// ─── Detached calendar series ────────────────────────────────────────────────
+
+/// A calendar's daily series that detaches from it, after the provider pinned `pins` (an
+/// occurrence date and the time it was moved to) while it was still a mirror.
+async fn detached_series(
+    pool: &SqlitePool,
+    title: &str,
+    first: &str,
+    pins: &[(&str, &str)],
+) -> (String, String) {
+    let (id, rule) = repeating(pool, title, first, "FREQ=DAILY").await;
+    insert_test_page_sync(pool, &id, "active").await.unwrap();
+    for (date, start) in pins {
+        sqlx::query(
+            "INSERT INTO page_schedules
+             (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+             VALUES (?, ?, ?, NULL, 'UTC', ?, ?, 'not_started', ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&id)
+        .bind(start)
+        .bind(&rule)
+        .bind(format!("{date}T09:00:00"))
+        .bind(now_iso())
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+    link_state(pool, &id, "detached").await;
+    (id, rule)
+}
+
+/// Where the occurrence of `date` is pinned, one start per override row.
+async fn pinned_at(pool: &SqlitePool, page: &str, date: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT scheduled_start FROM page_schedules
+         WHERE page_id = ? AND rule_id IS NOT NULL AND substr(original_date, 1, 10) = ?",
+    )
+    .bind(page)
+    .bind(date)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+async fn complete_occurrence(pool: &SqlitePool, id: &str, date: &str, start: &str) -> String {
+    complete_recurring_page_impl(
+        pool,
+        CompleteRecurringInput {
+            page_id: id.to_owned(),
+            occurrence_date: Some(date.to_owned()),
+            scheduled_start: Some(start.to_owned()),
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap()
+    .clone
+    .id
+}
+
+async fn move_occurrence(pool: &SqlitePool, rule: &str, date: &str, start: &str) {
+    reschedule_virtual_occurrence_impl(
+        pool,
+        RescheduleVirtualInput {
+            rule_id: rule.to_owned(),
+            original_date: date.to_owned(),
+            scheduled_start: start.to_owned(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+// qa: CLOUD-57
+#[tokio::test]
+async fn an_occurrence_completed_in_a_detached_series_is_done_on_the_other_device() {
+    let (mac, phone) = (device().await, device().await);
+    let (id, _) = detached_series(&mac, "Standup", "2030-01-07", &[]).await;
+    converge(&mac, &phone).await;
+
+    let clone = complete_occurrence(&mac, &id, "2030-01-09", "2030-01-09T09:00:00").await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(done_dates(&phone, &id).await, vec!["2030-01-09"]);
+    let done = page(&phone, &clone).await;
+    assert_eq!(
+        (done.status.as_str(), done.scheduled_start.as_deref()),
+        ("done", Some("2030-01-09T09:00:00"))
+    );
+    assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-58
+#[tokio::test]
+async fn ticking_a_detached_series_with_a_backlog_shows_the_same_ticks_on_the_other_device() {
+    let (mac, phone) = (device().await, device().await);
+    let (id, _) = detached_series(&mac, "Journal", &day(-3), &[]).await;
+    converge(&mac, &phone).await;
+
+    complete_head(&mac, &id).await;
+    complete_head(&mac, &id).await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(done_dates(&phone, &id).await, vec![day(-3), day(-2)]);
+    assert_eq!(
+        page(&phone, &id).await.scheduled_start,
+        page(&mac, &id).await.scheduled_start
+    );
+    assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-59
+#[tokio::test]
+async fn a_detached_series_arrives_with_its_pinned_occurrence_where_it_was_pinned() {
+    let (mac, phone) = (device().await, device().await);
+    let pins = [("2030-01-09", "2030-01-09T15:00:00")];
+    let (id, _) = detached_series(&mac, "Review", "2030-01-07", &pins).await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(
+        pinned_at(&phone, &id, "2030-01-09").await,
+        vec!["2030-01-09T15:00:00"]
+    );
+    assert_eq!(
+        page(&phone, &id).await.scheduled_start,
+        page(&mac, &id).await.scheduled_start
+    );
+    assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-60
+#[tokio::test]
+async fn a_moved_pinned_occurrence_is_at_its_new_time_on_the_other_device() {
+    let (mac, phone) = (device().await, device().await);
+    let pins = [("2030-01-09", "2030-01-09T15:00:00")];
+    let (id, rule) = detached_series(&mac, "Review", "2030-01-07", &pins).await;
+    converge(&mac, &phone).await;
+
+    move_occurrence(&mac, &rule, "2030-01-09", "2030-01-10T08:00:00").await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(
+        pinned_at(&phone, &id, "2030-01-09").await,
+        vec!["2030-01-10T08:00:00"]
+    );
+    assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-61
+#[tokio::test]
+async fn a_deleted_pinned_occurrence_is_gone_on_the_other_device() {
+    let (mac, phone) = (device().await, device().await);
+    let pins = [("2030-01-09", "2030-01-09T15:00:00")];
+    let (id, _) = detached_series(&mac, "Review", "2030-01-07", &pins).await;
+    converge(&mac, &phone).await;
+
+    skip(&mac, &id, "2030-01-09").await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(skipped_dates(&phone, &id).await, vec!["2030-01-09"]);
+    assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-62
+#[tokio::test]
+async fn a_completed_pinned_occurrence_is_done_on_the_other_device() {
+    let (mac, phone) = (device().await, device().await);
+    let pins = [("2030-01-09", "2030-01-09T15:00:00")];
+    let (id, _) = detached_series(&mac, "Review", "2030-01-07", &pins).await;
+    converge(&mac, &phone).await;
+
+    let clone = complete_occurrence(&mac, &id, "2030-01-09", "2030-01-09T15:00:00").await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(done_dates(&phone, &id).await, vec!["2030-01-09"]);
+    let done = page(&phone, &clone).await;
+    assert_eq!(
+        (done.status.as_str(), done.scheduled_start.as_deref()),
+        ("done", Some("2030-01-09T15:00:00"))
+    );
+    assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-63
+#[tokio::test]
+async fn a_detached_series_relinked_after_a_move_leaves_the_other_device() {
+    let (mac, phone) = (device().await, device().await);
+    let (id, rule) = detached_series(&mac, "Planning", "2030-01-07", &[]).await;
+    move_occurrence(&mac, &rule, "2030-01-09", "2030-01-09T17:00:00").await;
+    converge(&mac, &phone).await;
+    let arrived = pinned_at(&phone, &id, "2030-01-09").await;
+
+    link_state(&mac, &id, "active").await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(arrived, vec!["2030-01-09T17:00:00"]);
+    assert!(get_page(&phone, &id).await.unwrap().is_none());
+    let left_behind = count(
+        &phone,
+        &format!("SELECT COUNT(*) FROM page_schedules WHERE page_id = '{id}'"),
+    )
+    .await;
+    assert_eq!(left_behind, 0);
+    assert!(get_page(&mac, &id).await.unwrap().is_some());
+}
+
 // ─── Folders ─────────────────────────────────────────────────────────────────
 
 async fn folder_name_and_color(pool: &SqlitePool, id: &str) -> (Option<String>, Option<String>) {
