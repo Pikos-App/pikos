@@ -4,11 +4,15 @@ import babel from "@rolldown/plugin-babel";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+import { define } from "./vite.config";
+
 // Pin a deterministic timezone so wall-clock-sensitive logic expands identically
 // across machines and CI.
 process.env["TZ"] = "UTC";
 
 export default defineConfig({
+  // The build's own flags, so a test sees the features a build made without them has.
+  define,
   // Tests run the compiled components for the same reason production does; the
   // shape of this is explained in vite.config.ts.
   plugins: [react(), babel({ presets: [reactCompilerPreset()] })],

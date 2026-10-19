@@ -176,6 +176,12 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.listSort(for: "work"), .manual, "another view is untouched")
     }
 
+    // qa: CLOUD-71:2
+    func testACalendarFolderSortIsKeptInThisDevicesOwnDefaultsNotTheWorkspace() {
+        preferences.setListSort(.title, for: "calendar-folder")
+        XCTAssertEqual(suite.string(forKey: "pikos.listSort.calendar-folder"), "title")
+    }
+
     /// A mode this build does not know reads as the fallback, not as a crash
     /// or as manual when the caller wanted date.
     func testAnUnknownStoredSortReadsAsTheFallback() {

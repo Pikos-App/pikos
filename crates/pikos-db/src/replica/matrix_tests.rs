@@ -1463,6 +1463,55 @@ async fn notifications_fired_on_one_device_arent_in_the_other_devices_history() 
     );
 }
 
+// qa: CLOUD-80
+#[tokio::test]
+async fn a_reminder_fired_on_one_device_fires_once_on_the_other_and_not_again_on_the_first() {
+    let (mac, phone) = (device().await, device().await);
+    let id = created(&mac, new_page("Pills")).await;
+    schedule(&mac, &id, "2030-01-10T09:00:00", None).await;
+    create_page_reminder(&mac, &id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+    let fire = chrono::NaiveDateTime::parse_from_str("2030-01-10T08:45:30", "%Y-%m-%dT%H:%M:%S")
+        .unwrap();
+    let tick = ReminderWindow::for_test(fire, fire.and_utc());
+
+    let fired = due_explicit_reminders(&mac, &tick).await.unwrap();
+    for reminder in &fired {
+        log_reminder_fired(&mac, &id, &reminder.schedule_id, "2030-01-10T08:45:00")
+            .await
+            .unwrap();
+    }
+    edit(
+        &phone,
+        &id,
+        PageUpdate {
+            title: Some("Pills, with food".into()),
+            ..Default::default()
+        },
+    )
+    .await;
+    converge(&mac, &phone).await;
+
+    let planned = upcoming_reminders(
+        &phone,
+        (fire - chrono::Duration::hours(1)).and_utc(),
+        chrono_tz::UTC,
+        chrono::Duration::days(1),
+        10,
+    )
+    .await
+    .unwrap();
+    assert_eq!(fired.len(), 1);
+    assert!(due_explicit_reminders(&mac, &tick).await.unwrap().is_empty());
+    assert_eq!(
+        planned
+            .iter()
+            .map(|r| (r.page_id.as_str(), r.fire_at.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(id.as_str(), "2030-01-10T08:45:00")]
+    );
+}
+
 // qa: CLOUD-93
 #[tokio::test]
 async fn a_finished_focus_session_reaches_the_other_device() {

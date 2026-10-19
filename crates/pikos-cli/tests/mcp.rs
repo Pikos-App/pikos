@@ -280,6 +280,47 @@ async fn tools_drive_the_page_through_its_whole_life() {
     server.shutdown();
 }
 
+// qa: CLOUD-94
+#[tokio::test]
+async fn a_page_created_edited_and_completed_through_the_tools_reaches_the_other_device() {
+    let (mac, phone) = (unique_db(), unique_db());
+    let (mac, phone) = (mac.to_str().unwrap(), phone.to_str().unwrap());
+    for db in [mac, phone] {
+        pikos_db::replica::start(&open_pool(db).await.unwrap())
+            .await
+            .unwrap();
+    }
+
+    let mut server = Server::start(mac);
+    handshake(&mut server);
+    let created = server.call(2, "create_page", json!({ "text": "Water the plants" }));
+    let id = created["created"][0]["id"].as_str().unwrap().to_string();
+    server.call(
+        3,
+        "update_page",
+        json!({ "id": id, "title": "Water the ferns", "priority": 2 }),
+    );
+    server.call(4, "complete_page", json!({ "id": id }));
+    server.shutdown();
+
+    let (mac, phone) = (open_pool(mac).await.unwrap(), open_pool(phone).await.unwrap());
+    let names = pikos_db::replica::build::pending(&mac, 1000).await.unwrap();
+    let built = pikos_db::replica::build::build(&mac, &names).await.unwrap();
+    let records: Vec<_> = built
+        .iter()
+        .map(|b| (b.name.clone(), b.fields.clone()))
+        .collect();
+    pikos_db::replica::apply::apply(&phone, &records)
+        .await
+        .unwrap();
+
+    let arrived = pikos_db::get_page(&phone, &id).await.unwrap().unwrap();
+    assert_eq!(
+        (arrived.title.as_str(), arrived.priority, arrived.status.as_str()),
+        ("Water the ferns", 2, "done")
+    );
+}
+
 /// A failing tool must not end the session: the agent reads the error and keeps
 /// going, so the same connection has to answer the next call.
 // qa: CLI-04:2

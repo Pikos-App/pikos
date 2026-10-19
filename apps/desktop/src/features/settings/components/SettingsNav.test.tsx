@@ -5,9 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { SettingsNav } from "./SettingsNav";
 
-// Vite defines the build flag, which vitest's config doesn't, and the nav reads it on import.
-vi.hoisted(() => vi.stubGlobal("__PIKOS_ICLOUD_SYNC__", false));
-
 afterEach(cleanup);
 
 function renderNav(isLocked: boolean) {
@@ -35,5 +32,13 @@ describe("SettingsNav", () => {
     expect(screen.getByRole("button", { name: "General" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Data" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Close settings" })).toBeEnabled();
+  });
+
+  // qa: CLOUD-124:2
+  it("offers no iCloud section in a build without iCloud sync, which the release build is", () => {
+    renderNav(false);
+
+    expect(screen.getByRole("button", { name: "Calendar sync" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "iCloud" })).not.toBeInTheDocument();
   });
 });

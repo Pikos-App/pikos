@@ -8,15 +8,17 @@ import { defineConfig } from "vite";
 const host = process.env["TAURI_DEV_HOST"];
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8")) as { version: string };
 
+export const define = {
+  __APP_VERSION__: JSON.stringify(pkg.version),
+  // A literal, unlike `import.meta.env`, so a normal build drops the benchmark's code entirely.
+  __PIKOS_BENCH__: JSON.stringify(process.env["VITE_BENCH"] === "true"),
+  __PIKOS_ICLOUD_SYNC__: JSON.stringify(process.env["VITE_ICLOUD_SYNC"] === "true"),
+  __PIKOS_NO_UPDATER__: JSON.stringify(process.env["VITE_NO_UPDATER"] === "true"),
+};
+
 export default defineConfig({
   clearScreen: false,
-  define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-    // A literal, unlike `import.meta.env`, so a normal build drops the benchmark's code entirely.
-    __PIKOS_BENCH__: JSON.stringify(process.env["VITE_BENCH"] === "true"),
-    __PIKOS_ICLOUD_SYNC__: JSON.stringify(process.env["VITE_ICLOUD_SYNC"] === "true"),
-    __PIKOS_NO_UPDATER__: JSON.stringify(process.env["VITE_NO_UPDATER"] === "true"),
-  },
+  define,
   // The compiler is a separate plugin, not an option on react(). plugin-react v6
   // dropped its `babel` key, and an unknown key there is ignored rather than
   // rejected — which is how this config ran with the compiler silently off.

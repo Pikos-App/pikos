@@ -3,6 +3,7 @@
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -76,6 +77,21 @@ describe("useActiveSortMode", () => {
     const { folderId, result } = await setupInFolder("calendar");
     act(() => result.current.ui.setSortMode(folderId, "title"));
     expect(result.current.sortMode).toBe("title");
+  });
+
+  // qa: CLOUD-71:2
+  it("keeps a calendar folder's sort on this device and leaves the synced folder as it was", async () => {
+    const { folderId, result } = await setupInFolder("calendar");
+    const storage = result.current.workspace.storage!;
+    const before = structuredClone(await storage.getFolder(folderId));
+
+    act(() => result.current.ui.setSortMode(folderId, "title"));
+
+    expect(result.current.sortMode).toBe("title");
+    expect(await storage.getFolder(folderId)).toEqual(before);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.sortModes)!)).toEqual({
+      [folderId]: "title",
+    });
   });
 
   it("always date-orders Today, which has no manual order to fall back to", async () => {
