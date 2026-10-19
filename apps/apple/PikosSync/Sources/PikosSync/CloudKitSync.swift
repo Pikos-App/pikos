@@ -51,7 +51,9 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         async throws -> String
     {
         let database = container.privateCloudDatabase
-        let zones = try await database.allRecordZones().map(\.zoneID.zoneName)
+        let zones = try await accountZones(store: store) {
+            try await database.allRecordZones().map(\.zoneID.zoneName)
+        }
         let zone = try await store.join(zones: zones)
         log.info("account zones \(zones, privacy: .public), syncing in \(zone, privacy: .public)")
 
@@ -63,6 +65,28 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         }
 
         return zone
+    }
+
+    private static let unreachable: Set<CKError.Code> = [
+        .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited,
+    ]
+
+    /// The account's zones, or none when iCloud can't be reached and this device has synced before:
+    /// joining with none keeps the zone it already has, so sync starts offline and Apple's engine
+    /// sends and fetches once the network is back. A device that has never synced has no zone to
+    /// keep, so it still fails. Zones made elsewhere meanwhile are settled at the next launch.
+    static func accountZones(
+        store: ReplicaStore,
+        list: () async throws -> [String]
+    ) async throws -> [String] {
+        do {
+            return try await list()
+        } catch let error as CKError where unreachable.contains(error.code) {
+            guard try await store.engineState() != nil else { throw error }
+
+            log.info("iCloud unreachable, starting in the zone already joined")
+            return []
+        }
     }
 
     public func start() async throws {

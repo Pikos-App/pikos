@@ -378,4 +378,26 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(rebuilt.recordID, sent.recordID)
         XCTAssertEqual(rebuilt.encryptedValues["title_0"] as? String, "Groceries")
     }
+
+    func testADeviceThatHasSyncedStartsInItsOwnZoneWhenICloudIsUnreachable() async throws {
+        let store = FakeStore()
+        try await store.setEngineState(Data("saved".utf8))
+
+        let zones = try await CloudKitSync.accountZones(store: store) {
+            throw CKError(.networkUnavailable)
+        }
+
+        XCTAssertEqual(zones, [])
+    }
+
+    func testADeviceThatHasNeverSyncedStillFailsWhenICloudIsUnreachable() async {
+        let store = FakeStore()
+
+        do {
+            _ = try await CloudKitSync.accountZones(store: store) { throw CKError(.networkUnavailable) }
+            XCTFail("started with no zone settled")
+        } catch {
+            XCTAssertEqual((error as? CKError)?.code, .networkUnavailable)
+        }
+    }
 }
