@@ -262,6 +262,68 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(ids, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
     }
 
+    // qa: CLOUD-122
+    func testAnotherAccountSigningInPausesSyncUntilThePersonChoosesToSyncWithIt() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let queued = try await coordinator.pending()
+        let theirs = RecordCodec.encode(
+            OutgoingRecord(record: page("p2", title: "Their page"), storeName: "page:p2", builtAt: ""),
+            zone: workspaceZone
+        )
+
+        let status = await coordinator.accountChanged(
+            .switchAccounts(
+                previousUser: CKRecord.ID(recordName: "_alex"),
+                currentUser: CKRecord.ID(recordName: "_someone")))
+        let pendingWhilePaused = try await coordinator.pending()
+        let built = try await coordinator.record(for: queued[0])
+        try await coordinator.fetched([theirs])
+        try await coordinator.stateUpdated(Data([1]))
+
+        let line = SyncStatusLine(status: status, queue: .init(toSend: 1, needsUpdate: false, lastFetch: nil))
+        XCTAssertEqual(line.text, "This device is signed in to a different iCloud account, so sync is paused.")
+        XCTAssertEqual(line.action, .useThisAccount)
+        XCTAssertEqual(pendingWhilePaused, [], "nothing is sent into the other account")
+        XCTAssertNil(built)
+        let applied = await store.applied
+        XCTAssertEqual(applied, [], "nothing of the other account's is applied here")
+        let saved = await store.state
+        XCTAssertNil(saved)
+
+        let afterChoosing = SyncCoordinator(store: store, zone: workspaceZone)
+        let sentAfterChoosing = try await afterChoosing.pending()
+        XCTAssertEqual(sentAfterChoosing, queued)
+    }
+
+    // qa: CLOUD-123
+    func testDeletingTheWorkspacesICloudDataPausesSyncUntilThePersonChoosesToUploadAgain() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let queued = try await coordinator.pending()
+        let otherZone = CKRecordZone.ID(zoneName: "ws-other", ownerName: CKCurrentUserDefaultName)
+
+        let otherStatus = await coordinator.zoneDeleted(otherZone, reason: .purged)
+        let stillSending = try await coordinator.pending()
+        let status = await coordinator.zoneDeleted(workspaceZone, reason: .purged)
+        let pendingWhilePaused = try await coordinator.pending()
+        let built = try await coordinator.record(for: queued[0])
+
+        XCTAssertNil(otherStatus, "another zone's deletion leaves sync going")
+        XCTAssertEqual(stillSending, queued)
+        let line = SyncStatusLine(status: status, queue: .init(toSend: 1, needsUpdate: false, lastFetch: nil))
+        XCTAssertEqual(line.text, "Pikos's data was deleted from iCloud, so sync is paused.")
+        XCTAssertEqual(line.action, .uploadAgain)
+        XCTAssertEqual(pendingWhilePaused, [], "nothing goes back up on its own")
+        XCTAssertNil(built)
+
+        let afterChoosing = SyncCoordinator(store: store, zone: workspaceZone)
+        let sentAfterChoosing = try await afterChoosing.pending()
+        XCTAssertEqual(sentAfterChoosing, queued)
+    }
+
     func testASavedRecordsCloudKitMetadataIsKeptAndANewCoordinatorBuildsOnIt() async throws {
         let store = FakeStore()
         await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")

@@ -114,6 +114,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     /// Fetches now rather than waiting for a push: on launch, on foreground and focus, and every few
     /// minutes while focused, since push to an app outside the App Store is unproven.
     public func fetchNow() async {
+        guard await coordinator.paused == nil else { return }
+
         do {
             try await engine?.fetchChanges()
         } catch {
@@ -124,6 +126,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     public func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
         Self.log.info("event: \(String(describing: event), privacy: .public)")
         defer { Self.log.info("event handled") }
+        guard await coordinator.paused == nil else { return }
+
         do {
             switch event {
             case .stateUpdate(let update):
@@ -135,9 +139,15 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             case .sentRecordZoneChanges(let sent):
                 try await handleSent(sent, engine: syncEngine)
             case .fetchedDatabaseChanges(let changes):
-                handleZoneDeletions(changes.deletions)
+                for deletion in changes.deletions {
+                    if let status = await coordinator.zoneDeleted(deletion.zoneID, reason: deletion.reason) {
+                        onStatus(status)
+                    }
+                }
             case .accountChange(let change):
-                handleAccountChange(change)
+                if let status = await coordinator.accountChanged(change.changeType) {
+                    onStatus(status)
+                }
             case .willFetchChanges, .willSendChanges:
                 onStatus(.syncing)
             case .didFetchChanges:
@@ -185,7 +195,11 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 if let server = failure.error.serverRecord {
                     again.append(try await coordinator.refused(over: server))
                 }
-            case .zoneNotFound, .userDeletedZone:
+            case .userDeletedZone:
+                if let status = await coordinator.zoneDeleted(id.zoneID, reason: .purged) {
+                    onStatus(status)
+                }
+            case .zoneNotFound:
                 engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: id.zoneID))])
                 await coordinator.forgetServerCopy(id)
                 again.append(id)
@@ -202,31 +216,5 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         }
         // Building a page's body queues the images it shows, which no local write announces.
         await localChangesHappened()
-    }
-
-    private func handleZoneDeletions(
-        _ deletions: [CKDatabase.DatabaseChange.Deletion]
-    ) {
-        for deletion in deletions where deletion.zoneID == coordinator.zone {
-            switch deletion.reason {
-            case .encryptedDataReset:
-                onStatus(.encryptionReset)
-            default:
-                onStatus(.zoneDeleted)
-            }
-        }
-    }
-
-    private func handleAccountChange(_ change: CKSyncEngine.Event.AccountChange) {
-        switch change.changeType {
-        case .signIn:
-            onStatus(.syncing)
-        case .signOut:
-            onStatus(.noAccount)
-        case .switchAccounts:
-            onStatus(.accountChanged)
-        @unknown default:
-            break
-        }
     }
 }
