@@ -70,6 +70,10 @@ enum Hold {
     /// Retried by [`retry_held`] once an update can read it.
     NewerFormat,
     Unreadable,
+    /// Its write here failed, with the error: an image file that couldn't be written, say. Failing
+    /// the batch instead would roll back every other record in it, and the next launch would fetch
+    /// the same batch and fail the same way.
+    Failed(String),
 }
 
 impl Hold {
@@ -79,13 +83,21 @@ impl Hold {
             Hold::DeletedParent(_) => "deleted_parent",
             Hold::NewerFormat => "newer_format",
             Hold::Unreadable => "unreadable",
+            Hold::Failed(_) => "failed",
         }
     }
 
     fn awaits(&self) -> Option<&str> {
         match self {
             Hold::UnknownParent(parent) | Hold::DeletedParent(parent) => Some(parent),
-            Hold::NewerFormat | Hold::Unreadable => None,
+            Hold::NewerFormat | Hold::Unreadable | Hold::Failed(_) => None,
+        }
+    }
+
+    fn error(&self) -> Option<&str> {
+        match self {
+            Hold::Failed(error) => Some(error),
+            _ => None,
         }
     }
 }
@@ -166,13 +178,15 @@ async fn apply_in(
                             newest = newest
                                 .max(record.row.newest())
                                 .max(record.row.tomb.unwrap_or(Hlc::ZERO));
-                            apply_record(tx, entity, &record, &mut touched, &mut applied)
-                                .await
-                                .map_err(|e| naming(e, name))?
+                            apply_alone(tx, entity, &record, &mut touched, &mut applied).await?
                         }
                         None => match super::images::apply(tx.conn(), &record, map).await {
-                            Ok(true) => Outcome::Changed,
-                            Ok(false) => Outcome::Unchanged,
+                            Ok(Ok(true)) => Outcome::Changed,
+                            Ok(Ok(false)) => Outcome::Unchanged,
+                            Ok(Err(e)) => {
+                                log::warn!("replica: holding {name}: {e}");
+                                Outcome::Held(Hold::Failed(e.to_string()))
+                            }
                             Err(e) => return Err(naming(e, name)),
                         },
                     },
@@ -206,6 +220,37 @@ async fn apply_in(
         revive(tx.conn(), &name).await?;
     }
     Ok(applied)
+}
+
+/// Applies one record inside a savepoint, so a write that fails partway is undone and the record
+/// is held rather than failing the batch. A busy database still fails it, so the whole apply is
+/// retried.
+async fn apply_alone(
+    tx: &mut Uncaptured<'_>,
+    entity: &EntityMap,
+    record: &Record,
+    touched: &mut Touched,
+    applied: &mut Applied,
+) -> AppResult<Outcome> {
+    sqlx::query("SAVEPOINT apply_record")
+        .execute(tx.conn())
+        .await?;
+    let outcome = match apply_record(tx, entity, record, touched, applied).await {
+        Err(e) if crate::tx::is_retryable_busy(&e) => return Err(e),
+        Err(e) => {
+            sqlx::query("ROLLBACK TO apply_record")
+                .execute(tx.conn())
+                .await?;
+            log::warn!("replica: holding {}: {e}", record.name);
+            Outcome::Held(Hold::Failed(e.to_string()))
+        }
+        Ok(outcome) => outcome,
+    };
+
+    sqlx::query("RELEASE apply_record")
+        .execute(tx.conn())
+        .await?;
+    Ok(outcome)
 }
 
 /// Names the record an apply failed on. A busy database stays as it is, so the write is retried.
@@ -420,15 +465,16 @@ async fn hold_record(
     let map = merged.as_ref().unwrap_or(map);
 
     sqlx::query(
-        "INSERT INTO replica_pen (name, record, reason, awaits, since)
-         VALUES (?, ?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
+        "INSERT INTO replica_pen (name, record, reason, awaits, error, since)
+         VALUES (?, ?, ?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
          ON CONFLICT (name) DO UPDATE SET record = excluded.record, reason = excluded.reason,
-           awaits = excluded.awaits",
+           awaits = excluded.awaits, error = excluded.error",
     )
     .bind(name.to_string())
     .bind(map_to_json(map))
     .bind(hold.reason())
     .bind(hold.awaits())
+    .bind(hold.error())
     .bind(since)
     .execute(&mut *conn)
     .await?;
