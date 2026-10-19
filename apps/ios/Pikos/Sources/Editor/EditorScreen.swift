@@ -33,6 +33,8 @@ struct EditorScreen: View {
     /// Owned here rather than by the editor view, which is a value type
     /// recreated on every update and so cannot hold a live reference.
     @State private var controller = EditorController()
+    /// Made once the page has loaded, from the body and clock it loaded with.
+    @State private var saves: BodySaves?
 
     var body: some View {
         Group {
@@ -101,11 +103,9 @@ struct EditorScreen: View {
                 // invoked from WebKit delegate callbacks, and whether those are
                 // main-actor-isolated depends on the SDK's audit state — hopping
                 // is correct either way and costs nothing.
-                onDocumentChanged: { pageId, json, plainText in
+                onDocumentChanged: { _, json, _ in
                     guard editable else { return }
-                    Task { @MainActor in
-                        await store.saveDocument(pageId: pageId, json: json, plainText: plainText)
-                    }
+                    Task { @MainActor in await saves?.save(json) }
                 },
                 onSelectionChanged: { marks, nodeType, isEmpty in
                     Task { @MainActor in
@@ -208,9 +208,23 @@ struct EditorScreen: View {
             loadFailed = true
             return
         }
+        let clock = await store.bodyClock(pageId: pageId)
         page = await store.page(id: pageId)
         loadFailed = page == nil
-        if page != nil { await store.markOpened(pageId: pageId) }
+        guard let page else { return }
+
+        let store = store
+        let controller = controller
+        let pageId = pageId
+        saves = BodySaves(
+            stored: page.content, clock: clock,
+            save: { content, loadedClock in
+                await store.saveBody(pageId: pageId, content: content, loadedClock: loadedClock)
+            },
+            moved: { base, stored in
+                controller.bodyMoved(pageId: pageId, base: base, stored: stored)
+            })
+        await store.markOpened(pageId: pageId)
     }
 
     /// Write a picked photo into the workspace and put it in the document.

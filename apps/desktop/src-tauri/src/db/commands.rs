@@ -416,6 +416,10 @@ db_commands! {
 
     mod replica {
         record_first_run_seed() -> () = pikos_db::replica::record_seed();
+        body_clock(id: String) -> Option<String> = pikos_db::replica::body_clock(&id);
+        save_page_body(id: String, content: String, loaded_clock: Option<String>)
+            -> pikos_db::replica::PageBodySave
+            = pikos_db::replica::save_page_body(&id, content, loaded_clock.as_deref());
     }
 
     /// Per-page reminder CRUD. The write/read logic lives in

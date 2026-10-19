@@ -10,7 +10,7 @@
 // talks to the database. It reports what changed; Swift decides what to store.
 
 import { extractText } from "@pikos/core";
-import { createDocumentExtensions, createPikosImageNode } from "@pikos/editor-schema";
+import { createDocumentExtensions, createPikosImageNode, foldBodyJSON } from "@pikos/editor-schema";
 import { Editor } from "@tiptap/core";
 
 import { resolveAssetUrl } from "./assetUrl";
@@ -36,24 +36,24 @@ let applyingHostDocument = false;
 
 const inputTimings = createInputTimings();
 
+const sendDocChanged = debounce((editor: Editor) => {
+  if (currentPageId === null) return;
+  const doc = editor.getJSON();
+  send("docChanged", {
+    doc: JSON.stringify(doc),
+    pageId: currentPageId,
+    // Extracted here rather than on the host: it is the same function the
+    // desktop app uses for the FTS column, so search behaves identically for
+    // a page typed on the phone.
+    plainText: extractText(doc),
+  });
+  const timing = inputTimings.drain();
+  if (timing) send("inputTiming", timing);
+}, DOC_CHANGE_DEBOUNCE_MS);
+
 function mount(): Editor {
   const element = document.querySelector<HTMLElement>("#editor");
   if (!element) throw new Error("#editor element is missing from the document");
-
-  const sendDocChanged = debounce((editor: Editor) => {
-    if (currentPageId === null) return;
-    const doc = editor.getJSON();
-    send("docChanged", {
-      doc: JSON.stringify(doc),
-      pageId: currentPageId,
-      // Extracted here rather than on the host: it is the same function the
-      // desktop app uses for the FTS column, so search behaves identically for
-      // a page typed on the phone.
-      plainText: extractText(doc),
-    });
-    const timing = inputTimings.drain();
-    if (timing) send("inputTiming", timing);
-  }, DOC_CHANGE_DEBOUNCE_MS);
 
   element.addEventListener("beforeinput", () => inputTimings.start());
 
@@ -180,6 +180,15 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
       } finally {
         applyingHostDocument = false;
       }
+      return;
+    }
+    case "bodyMoved": {
+      const { base, doc, pageId } = parsed.payload as { base: string; doc: string; pageId: string };
+      if (pageId !== currentPageId) return;
+      // Typing that touched the same words stays as typed, and the host saves it over the new body.
+      foldBodyJSON(editor, base, doc);
+      sendDocChanged(editor);
+      sendDocChanged.flush();
       return;
     }
     case "setTheme": {

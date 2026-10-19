@@ -49,6 +49,10 @@ export const HOST_TO_WEBVIEW = {
     doc: "Release focus and dismiss the keyboard.",
     fields: {},
   },
+  bodyMoved: {
+    doc: "The host's save was refused because an edit from another device moved the stored body on. `base` is the body the host last stored and `doc` the one stored now. The webview merges what was typed onto `doc` and reports the result as a docChanged, which the host saves.",
+    fields: { base: "json", doc: "json", pageId: "string" },
+  },
   focus: {
     doc: "Put the caret in the editor and raise the keyboard.",
     fields: {},

@@ -84,6 +84,12 @@ public final class EditorController {
         send(.insertImage(.init(assetPath: assetPath)))
     }
 
+    /// Another device's edit moved the stored body on from `base` to `stored`, and a save was
+    /// refused. The editor merges what was typed onto it and reports the result as a change.
+    public func bodyMoved(pageId: String, base: String, stored: String) {
+        send(.bodyMoved(.init(base: base, doc: stored, pageId: pageId)))
+    }
+
     private func send(_ message: EditorBridge.Outgoing) {
         guard let sink, sink.isReady else { return }
         sink.deliver(message)

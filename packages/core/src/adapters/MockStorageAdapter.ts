@@ -2,6 +2,7 @@
 
 import { StorageError } from "../errors";
 import type {
+  BodySave,
   FolderUpdate,
   NewCaldavConnection,
   NewFocusSession,
@@ -313,6 +314,9 @@ export class MockStorageAdapter implements StorageAdapter {
   // `page_sync.user_modified`: set by the editor path, never by sync. One half of
   // the ownership predicate teardown and export share — see `_isOwned`.
   private userModified = new Set<string>();
+  /** Each body's sync clock. Empty, as with sync off, until `applyRemoteBody` gives a page one. */
+  private bodyClocks = new Map<string, string>();
+  private bodyClockSeq = 0;
   private stagedCaldavCalendars: StagedCalendar[] | null = null;
   // What the provider holds for each discovered calendar, keyed by sync_calendar row id.
   private providerEvents = new Map<string, StagedProviderEvent[]>();
@@ -565,6 +569,36 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     this.pages.set(id, updated);
     return Promise.resolve(updated);
+  }
+
+  bodyClock(id: string): Promise<string | null> {
+    return Promise.resolve(this.bodyClocks.get(id) ?? null);
+  }
+
+  async savePageBody(id: string, content: string, loadedClock: string | null): Promise<BodySave> {
+    const existing = this.pages.get(id);
+    if (!existing) throw new StorageError("NotFound", `page ${id}`);
+
+    const stored = this.bodyClocks.get(id) ?? null;
+    if (this.softDeleted.has(id)) return { clock: stored, kind: "saved", page: existing };
+    if (stored !== loadedClock) return { clock: stored, content: existing.content, kind: "moved" };
+
+    const page = await this.updatePage(id, { content });
+    if (stored !== null) this.bodyClocks.set(id, this.nextBodyClock());
+    return { clock: this.bodyClocks.get(id) ?? null, kind: "saved", page };
+  }
+
+  /** Test-only (NOT on `StorageAdapter`): another device's edit to a body, arriving through sync. */
+  applyRemoteBody(id: string, content: string): void {
+    const page = this.pages.get(id);
+    if (!page) return;
+    this.pages.set(id, { ...page, content, contentText: deriveContentText(content) });
+    this.bodyClocks.set(id, this.nextBodyClock());
+  }
+
+  private nextBodyClock(): string {
+    this.bodyClockSeq += 1;
+    return String(this.bodyClockSeq).padStart(20, "0");
   }
 
   deletePage(id: string): Promise<void> {

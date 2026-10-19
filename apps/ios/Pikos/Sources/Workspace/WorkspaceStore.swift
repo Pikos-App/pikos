@@ -888,22 +888,33 @@ public final class WorkspaceStore {
 
     // MARK: - Writes
 
-    /// Save an edited document.
+    /// A body's sync clock as stored now, or nil while sync has never started. Read before the
+    /// body, so a remote edit landing between the two reads shows up as a refused save, never as one
+    /// written over.
+    public func bodyClock(pageId: String) async -> String? {
+        guard let workspace else { return nil }
+        return try? await workspace.bodyClock(pageId: pageId)
+    }
+
+    /// Save an edited body, unless another device's edit moved it on since `loadedClock`; nil when
+    /// the save failed.
     ///
     /// Deliberately does not refresh the list: this is called on every debounced
     /// keystroke while the editor is open, and reloading the page list under the
     /// user on each one would be both wasteful and visibly janky. The list
     /// refreshes when the editor closes.
-    public func saveDocument(pageId: String, json: String, plainText: String) async {
-        guard let workspace else { return }
+    public func saveBody(pageId: String, content: String, loadedClock: String?) async -> BodySave? {
+        guard let workspace else { return nil }
+        var saved: BodySave?
         await untilWritten {
             do {
-                _ = try await workspace.updatePage(
-                    id: pageId, edit: PageEdit(content: json, contentText: plainText))
+                saved = try await workspace.saveBodyIfUnchanged(
+                    pageId: pageId, content: content, loadedClock: loadedClock)
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
+        return saved
     }
 
     /// Asks iOS for time to finish the write if the app is put away while it runs. The editor and

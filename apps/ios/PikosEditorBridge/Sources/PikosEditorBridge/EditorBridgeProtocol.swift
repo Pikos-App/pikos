@@ -26,6 +26,22 @@ public enum EditorBridge {
         public init() {}
     }
 
+    /// The host's save was refused because an edit from another device moved the
+    /// stored body on. `base` is the body the host last stored and `doc` the one
+    /// stored now. The webview merges what was typed onto `doc` and reports the
+    /// result as a docChanged, which the host saves.
+    public struct OutgoingBodyMovedPayload: Codable, Equatable {
+        public let base: String
+        public let doc: String
+        public let pageId: String
+
+        public init(base: String, doc: String, pageId: String) {
+            self.base = base
+            self.doc = doc
+            self.pageId = pageId
+        }
+    }
+
     /// Put the caret in the editor and raise the keyboard.
     public struct OutgoingFocusPayload: Codable, Equatable {
         public init() {}
@@ -104,6 +120,7 @@ public enum EditorBridge {
     /// Encodes to `{ "v": 1, "type": "...", "payload": { ... } }`.
     public enum Outgoing {
         case blur(OutgoingBlurPayload)
+        case bodyMoved(OutgoingBodyMovedPayload)
         case focus(OutgoingFocusPayload)
         case insertImage(OutgoingInsertImagePayload)
         case load(OutgoingLoadPayload)
@@ -115,6 +132,7 @@ public enum EditorBridge {
         var messageType: String {
             switch self {
             case .blur: return "blur"
+            case .bodyMoved: return "bodyMoved"
             case .focus: return "focus"
             case .insertImage: return "insertImage"
             case .load: return "load"
@@ -135,6 +153,7 @@ public enum EditorBridge {
             let payloadData: Data
             switch self {
             case .blur(let p): payloadData = try encoder.encode(p)
+            case .bodyMoved(let p): payloadData = try encoder.encode(p)
             case .focus(let p): payloadData = try encoder.encode(p)
             case .insertImage(let p): payloadData = try encoder.encode(p)
             case .load(let p): payloadData = try encoder.encode(p)

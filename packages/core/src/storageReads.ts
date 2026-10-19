@@ -8,6 +8,7 @@ import type { StorageAdapter } from "./storage";
 export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof StorageAdapter>([
   "backupDatabase",
   "backupBeforeImport",
+  "bodyClock",
   "changeState",
   "countViews",
   "expandRecurrenceRange",

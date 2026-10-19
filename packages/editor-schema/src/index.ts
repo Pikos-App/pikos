@@ -41,6 +41,7 @@ import { TabIndent } from "./tabIndent";
 import { PikosTable } from "./table";
 
 export { createPikosImageNode, PikosTable, TabIndent };
+export { foldBodyJSON, mergeBodies, mergeBodyJSON } from "./mergeBodies";
 export {
   getIndentLevel,
   isCursorAtLineStart,

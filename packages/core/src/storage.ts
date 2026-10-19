@@ -155,6 +155,12 @@ export interface RecurrenceRuleUpdate {
 
 // ─── StorageAdapter ───────────────────────────────────────────────────────────
 
+/** What a conditional body save did. `clock` is the one to save with next time. */
+export type BodySave =
+  | { kind: "saved"; clock: string | null; page: Page }
+  /** Another device's edit moved the stored body on; nothing was written, and this is that body. */
+  | { kind: "moved"; clock: string | null; content: string };
+
 // ─── Workspace data lifecycle ─────────────────────────────────────────────────
 
 /** Formats the Export panel offers. A SQLite backup is `backupDatabase`, not
@@ -207,6 +213,13 @@ export interface StorageAdapter {
   getPage(id: string): Promise<Page | null>;
   createPage(data: NewPage): Promise<Page>;
   updatePage(id: string, updates: PageUpdate): Promise<Page>;
+  /** A body's sync clock as stored now, or null while sync has never started. Read before the
+   *  body: a remote edit landing between the two reads then shows up as a moved save, never as
+   *  one written over. */
+  bodyClock(id: string): Promise<string | null>;
+  /** Save a body only if it is still the one stored at `loadedClock`, so one keystroke on a page
+   *  open here can't write over an edit another device made meanwhile. */
+  savePageBody(id: string, content: string, loadedClock: string | null): Promise<BodySave>;
   deletePage(id: string): Promise<void>;
   /**
    * Drop a withheld upstream description once the user has resolved its notice,

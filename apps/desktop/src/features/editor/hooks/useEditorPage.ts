@@ -32,13 +32,13 @@ function withSummary(loaded: Page, summary: PageSummary): Page {
 interface EditorPageState {
   /** Full page with content, or null if no page selected / still loading. */
   page: Page | null;
-  /** True while getPage() is in flight. */
+  /** True while openBody() is in flight. */
   isLoading: boolean;
 }
 
 export function useEditorPage(): EditorPageState {
   const { activePageId } = useUI();
-  const { getPage } = usePages();
+  const { openBody } = usePages();
   const { on } = useWorkspace();
   const [loadedPage, setLoadedPage] = useState<Page | null>(null);
 
@@ -59,7 +59,7 @@ export function useEditorPage(): EditorPageState {
 
     function load(id: string) {
       if (loadingIdRef.current !== id) return;
-      void getPage(id).then((loaded) => {
+      void openBody(id).then((loaded) => {
         // Only apply if this is still the page we want
         if (loadingIdRef.current === id) {
           setLoadedPage(loaded);

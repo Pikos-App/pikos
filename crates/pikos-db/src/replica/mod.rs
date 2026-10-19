@@ -254,7 +254,8 @@ pub enum BodySave {
 
 /// Saves a page body only if it is still the one the editor loaded, as told by `loaded_clock`, in
 /// one statement so an apply can't land between the check and the write. With sync off the clock
-/// is always None and every save goes through.
+/// is always None and every save goes through. Otherwise it writes as the editor's plain page
+/// update does: a trashed page is left alone, and an edited calendar copy becomes the user's.
 pub async fn save_body_if_unchanged(
     pool: &SqlitePool,
     page_id: &str,
@@ -262,35 +263,101 @@ pub async fn save_body_if_unchanged(
     loaded_clock: Option<&str>,
 ) -> AppResult<BodySave> {
     let text = crate::pool::extract_text_from_tiptap(&content);
-    // sql-ok: BODY_CLOCK_SQL is a constant
-    let written = sqlx::query(&format!(
-        "UPDATE pages SET content = ?2, content_text = ?3, updated_at = ?4
-         WHERE id = ?1 AND ({BODY_CLOCK_SQL}) IS ?5"
-    ))
-    .bind(page_id)
-    .bind(&content)
-    .bind(&text)
-    .bind(crate::pool::now_iso())
-    .bind(loaded_clock)
-    .execute(pool)
-    .await?
-    .rows_affected();
+    let written = crate::tx::retry_on_busy(|| {
+        write_body_if_unchanged(pool, page_id, &content, &text, loaded_clock)
+    })
+    .await?;
     if written == 0 {
-        let stored: Option<String> = sqlx::query_scalar("SELECT content FROM pages WHERE id = ?")
-            .bind(page_id)
-            .fetch_optional(pool)
-            .await?;
-        let Some(stored) = stored else {
+        let stored: Option<(String, bool)> =
+            sqlx::query_as("SELECT content, deleted_at IS NOT NULL FROM pages WHERE id = ?")
+                .bind(page_id)
+                .fetch_optional(pool)
+                .await?;
+        let Some((stored, trashed)) = stored else {
             return Err(AppError::NotFound(format!("page {page_id}")));
         };
-        return Ok(BodySave::Moved {
-            content: stored,
-            clock: body_clock(pool, page_id).await?,
-        });
+        // Refused for being in the trash, not for having moved: nothing to merge into.
+        if !trashed {
+            return Ok(BodySave::Moved {
+                content: stored,
+                clock: body_clock(pool, page_id).await?,
+            });
+        }
     }
     Ok(BodySave::Saved {
         clock: body_clock(pool, page_id).await?,
     })
+}
+
+async fn write_body_if_unchanged(
+    pool: &SqlitePool,
+    page_id: &str,
+    content: &str,
+    text: &str,
+    loaded_clock: Option<&str>,
+) -> AppResult<u64> {
+    let mut tx = pool.begin().await?;
+    // sql-ok: BODY_CLOCK_SQL is a constant
+    let written = sqlx::query(&format!(
+        "UPDATE pages SET content = ?2, content_text = ?3, updated_at = ?4, content_schema_version = ?6
+         WHERE id = ?1 AND deleted_at IS NULL AND ({BODY_CLOCK_SQL}) IS ?5"
+    ))
+    .bind(page_id)
+    .bind(content)
+    .bind(text)
+    .bind(crate::pool::now_iso())
+    .bind(loaded_clock)
+    .bind(crate::CONTENT_SCHEMA_VERSION)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if written > 0 {
+        sqlx::query(
+            "UPDATE page_sync SET user_modified = 1 WHERE page_id = ? AND user_modified = 0",
+        )
+        .bind(page_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(written)
+}
+
+/// A conditional body save as the desktop editor takes it: [`BodySave`], with the saved page so the
+/// app can show what was stored without a second read.
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PageBodySave {
+    Saved {
+        clock: Option<String>,
+        page: Box<crate::Page>,
+    },
+    Moved {
+        content: String,
+        clock: Option<String>,
+    },
+}
+
+pub async fn save_page_body(
+    pool: &SqlitePool,
+    page_id: &str,
+    content: String,
+    loaded_clock: Option<&str>,
+) -> AppResult<PageBodySave> {
+    Ok(
+        match save_body_if_unchanged(pool, page_id, content, loaded_clock).await? {
+            BodySave::Saved { clock } => {
+                let page = crate::get_page(pool, page_id)
+                    .await?
+                    .ok_or_else(|| AppError::NotFound(format!("page {page_id}")))?;
+                PageBodySave::Saved {
+                    clock,
+                    page: Box::new(page),
+                }
+            }
+            BodySave::Moved { content, clock } => PageBodySave::Moved { content, clock },
+        },
+    )
 }
 
 /// The transport's own state, saved with the workspace: CloudKit's sync engine state, or a folder

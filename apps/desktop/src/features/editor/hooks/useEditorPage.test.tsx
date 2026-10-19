@@ -35,7 +35,7 @@ afterEach(() => {
 describe("useEditorPage", () => {
   it("loads a page the moment it's opened", async () => {
     const { hook, ids } = await setup(["A"]);
-    const load = vi.spyOn(MockStorageAdapter.prototype, "getPage");
+    const load = vi.spyOn(MockStorageAdapter.prototype, "bodyClock");
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
 
     act(() => hook.result.current.ui.openPage(ids[0]!));
@@ -45,7 +45,7 @@ describe("useEditorPage", () => {
 
   it("loads only the first and last page of a quick run of opens", async () => {
     const { hook, ids } = await setup(["A", "B", "C", "D", "E"]);
-    const load = vi.spyOn(MockStorageAdapter.prototype, "getPage");
+    const load = vi.spyOn(MockStorageAdapter.prototype, "bodyClock");
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
 
     for (const id of ids) {

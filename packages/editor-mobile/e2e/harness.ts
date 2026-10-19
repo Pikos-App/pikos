@@ -88,3 +88,11 @@ export function docWithLink(text: string, href: string): string {
     type: "doc",
   });
 }
+
+/** A document with one paragraph per text. */
+export function docWithParagraphs(...texts: string[]): string {
+  return JSON.stringify({
+    content: texts.map((text) => ({ content: [{ text, type: "text" }], type: "paragraph" })),
+    type: "doc",
+  });
+}

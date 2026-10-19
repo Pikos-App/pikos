@@ -38,6 +38,7 @@ import type {
   ViewWindow,
 } from "@pikos/core";
 import type {
+  BodySave,
   FolderUpdate,
   NewCaldavConnection,
   NewFocusSession,
@@ -119,6 +120,7 @@ export const WRITE_COMMANDS = new Set([
   "move_pages",
   "create_page",
   "update_page",
+  "save_page_body",
   "clear_pending_description",
   "delete_page",
   "soft_delete_page",
@@ -183,6 +185,7 @@ export const READ_COMMANDS = new Set([
   "list_view_ids",
   "connect_db",
   "get_page",
+  "body_clock",
   "list_pages",
   "list_pages_today",
   "list_trashed_pages",
@@ -256,6 +259,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   updatePage(id: string, updates: PageUpdate): Promise<Page> {
     return invoke<Page>("update_page", { id, updates });
+  }
+
+  bodyClock(id: string): Promise<string | null> {
+    return invoke<string | null>("body_clock", { id });
+  }
+
+  savePageBody(id: string, content: string, loadedClock: string | null): Promise<BodySave> {
+    return invoke<BodySave>("save_page_body", { content, id, loadedClock });
   }
 
   deletePage(id: string): Promise<void> {

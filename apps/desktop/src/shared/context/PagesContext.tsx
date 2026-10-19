@@ -59,8 +59,12 @@ export interface PagesContextValue {
   tags: Tag[];
   /** All recurrence rules (one per recurring page). */
   recurrenceRules: PageRecurrenceRule[];
-  /** Load full page with content — use when opening the editor. */
+  /** Load full page with content. */
   getPage: (id: string) => Promise<Page | null>;
+  /** Load a page into the editor: `getPage`, with its body remembered for `saveBody` to check. */
+  openBody: (id: string) => Promise<Page | null>;
+  /** See `PageWriteQueue.saveBody`. */
+  saveBody: (id: string, content: string) => Promise<string | undefined>;
   createPage: (opts: NewPageFields) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
@@ -215,6 +219,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     flushPage,
     optimistic,
     pageErrors,
+    saveBody,
+    trackBody,
     updatePage,
   } = usePageWriteQueue({ adapter, emit, mirror: viewCache.mirror });
 
@@ -290,6 +296,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return viewCache.body(id);
   }
 
+  async function openBody(id: string): Promise<Page | null> {
+    const held = await viewCache.heldBody(id);
+    if (held) trackBody(id, held.page.content, held.clock);
+    return held?.page ?? null;
+  }
+
   function listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
     return adapter.listCompletedPages(filter);
   }
@@ -360,6 +372,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     maybeUncompleteRecurringClone,
     mergePages,
     movePages,
+    openBody,
     overridesVersion,
     pageErrors,
     patchFolderColor,
@@ -370,6 +383,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     rescheduleVirtualOccurrence,
     restoreFolder,
     restorePage,
+    saveBody,
     scheduleOnce,
     searchPages,
     searchTags,

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   clearMessages,
   docWithLink,
+  docWithParagraphs,
   docWithText,
   installFakeHost,
   messagesOfType,
@@ -496,5 +497,31 @@ test.describe("refusing bad messages", () => {
     await sendToEditor(page, "load", { pageId: "p2" });
     await page.waitForTimeout(200);
     await expect(page.locator(".ProseMirror")).toContainText("Original");
+  });
+});
+
+test.describe("a save refused because another device edited the page", () => {
+  test("reports what was typed merged onto the other device's edit, and shows it", async ({
+    page,
+  }) => {
+    const loaded = docWithParagraphs("Milk", "Eggs");
+    await sendToEditor(page, "load", { doc: loaded, pageId: "p1" });
+    await page.locator(".ProseMirror p").first().click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" please");
+    await expect.poll(async () => (await messagesOfType(page, "docChanged")).length).toBeGreaterThan(0);
+    await clearMessages(page);
+
+    await sendToEditor(page, "bodyMoved", {
+      base: loaded,
+      doc: docWithParagraphs("Milk", "Eggs and bread"),
+      pageId: "p1",
+    });
+
+    await expect.poll(async () => (await messagesOfType(page, "docChanged")).length).toBeGreaterThan(0);
+    const [change] = await messagesOfType(page, "docChanged");
+    expect(change?.payload["plainText"]).toContain("Milk please");
+    expect(change?.payload["plainText"]).toContain("Eggs and bread");
+    await expect(page.locator(".ProseMirror")).toContainText("Eggs and bread");
   });
 });

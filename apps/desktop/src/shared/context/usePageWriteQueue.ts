@@ -1,7 +1,8 @@
 // usePageWriteQueue — the write half of PagesContext: the per-page mutation
-// queue, the 800ms debounce that batches editor typing into one DB write, and
-// the `pageErrors` map the UI reads when one fails. Every edit is a pending
-// write on the view cache's store until its write lands or fails.
+// queue, the 800ms debounce that batches a field's typing into one DB write, the
+// editor's body saves, and the `pageErrors` map the UI reads when one fails.
+// Every edit is a pending write on the view cache's store until its write lands
+// or fails.
 //
 // It also owns the ONE optimistic-write shape every mutation in the context
 // uses — patch state now, write, and on failure put the state back and surface
@@ -9,8 +10,15 @@
 // out by hand at every call site, which is how the same rollback could be
 // subtly wrong in three of them at once.
 
-import type { PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
-import { storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
+import type { PageUpdate, StorageAdapter } from "@pikos/core";
+import {
+  extractText,
+  StorageError,
+  storageErrorUserMessage,
+  toPageSummary,
+  toStorageError,
+} from "@pikos/core";
+import { mergeBodyJSON } from "@pikos/editor-schema";
 import { useEffect, useRef, useState } from "react";
 
 import { postNotice } from "@/shared/events/noticeBus";
@@ -21,8 +29,18 @@ import type { WriteMirror } from "@/shared/viewCache/writeMirror";
 
 const log = createLogger("PageWriteQueue");
 
-/** Editor typing coalesces into one DB write this long after the last keystroke. */
+/** Typing in a field coalesces into one DB write this long after the last keystroke. */
 const WRITE_DEBOUNCE_MS = 800;
+
+/** Merges a body save may go through before giving up. Each one means another device saved the
+ *  same page in the moment since the last, so running out is a stuck save, never a busy page. */
+const BODY_SAVE_ATTEMPTS = 5;
+
+/** A body as last stored, and the clock it was stored at: what the next save is checked against. */
+interface StoredBody {
+  content: string;
+  clock: string | null;
+}
 
 /** One optimistic mutation: what it displaces, what it writes, how it undoes. */
 export interface OptimisticWrite<T> {
@@ -78,6 +96,11 @@ export interface PageWriteQueue {
   flushPage: (id: string) => Promise<void>;
   optimistic: <T>(spec: OptimisticWrite<T>) => Promise<T | undefined>;
   pageErrors: Map<string, StorageError>;
+  /** The editor loaded this body, stored at this clock. */
+  trackBody: (id: string, content: string, clock: string | null) => void;
+  /** Save an edited body. If another device's edit moved the stored body on, the two are merged
+   *  and the merge is saved; resolves to what was stored, or undefined when the save failed. */
+  saveBody: (id: string, content: string) => Promise<string | undefined>;
   /** Optimistic patch now, one coalesced DB write ~800ms after the last call.
    *  Status changes bypass the debounce (see below). */
   updatePage: (id: string, patch: PageUpdate) => void;
@@ -98,6 +121,10 @@ export function usePageWriteQueue({
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
   /** Each page's debounced edits, as the mirror recorded them, for the write that carries them. */
   const debouncedWrites = useRef<Map<string, number[]>>(new Map());
+  /** Each body the editor has opened or saved, as last stored. */
+  const storedBodies = useRef<Map<string, StoredBody>>(new Map());
+  /** Body saves queued and not yet settled, per page. */
+  const bodySavesPending = useRef<Map<string, number>>(new Map());
 
   function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
     // A patch still in its debounce was made first, so it is written first. Left
@@ -243,6 +270,55 @@ export function usePageWriteQueue({
     debounceTimers.current.set(id, timer);
   }
 
+  function trackBody(id: string, content: string, clock: string | null): void {
+    // A save still queued stores a newer body than this read did.
+    if (bodySavesPending.current.has(id)) return;
+    storedBodies.current.set(id, { clock, content });
+  }
+
+  function saveBody(id: string, content: string): Promise<string | undefined> {
+    bodySavesPending.current.set(id, (bodySavesPending.current.get(id) ?? 0) + 1);
+    const edit: PageUpdate = { content, contentText: extractText(content) };
+    return optimistic({
+      apply: () => mirror.patch(id, edit),
+      errorIds: [id],
+      keepOnFailure: true,
+      label: `body write for ${id}`,
+      queueOn: id,
+      rollback: () => {},
+      write: () => writeBody(id, content),
+    }).finally(() => {
+      const left = (bodySavesPending.current.get(id) ?? 1) - 1;
+      if (left > 0) bodySavesPending.current.set(id, left);
+      else bodySavesPending.current.delete(id);
+    });
+  }
+
+  async function writeBody(id: string, content: string): Promise<string> {
+    const stored = storedBodies.current.get(id);
+    let base = stored?.content ?? null;
+    let clock = stored?.clock ?? null;
+    let local = content;
+
+    for (let attempt = 0; attempt < BODY_SAVE_ATTEMPTS; attempt += 1) {
+      const saved = await adapter.savePageBody(id, local, clock);
+      if (saved.kind === "saved") {
+        storedBodies.current.set(id, { clock: saved.clock, content: local });
+        mirror.confirmRow(toPageSummary(saved.page));
+        emit("page:updated", saved.page);
+        return local;
+      }
+
+      // Edits to the same words keep this one, which saved over the clock just read then wins.
+      const merged = base === null ? null : mergeBodyJSON(base, local, saved.content);
+      local = merged ?? local;
+      base = saved.content;
+      clock = saved.clock;
+    }
+
+    throw new StorageError("Conflict", "Another device kept saving this page at the same time.");
+  }
+
   /** Take a page's debounced patch off its timer, or undefined when none waits. */
   function takePendingPatch(id: string): PageUpdate | undefined {
     const timer = debounceTimers.current.get(id);
@@ -334,6 +410,8 @@ export function usePageWriteQueue({
     flushPage,
     optimistic,
     pageErrors,
+    saveBody,
+    trackBody,
     updatePage,
   };
 }

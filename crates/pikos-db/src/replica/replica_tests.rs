@@ -568,6 +568,76 @@ async fn with_sync_off_every_body_save_goes_through() {
 }
 
 #[tokio::test]
+async fn a_conditional_body_save_stamps_the_schema_version_it_was_written_with() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 0 WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), None)
+        .await
+        .unwrap();
+
+    let version: i64 =
+        sqlx::query_scalar("SELECT content_schema_version FROM pages WHERE id = 'p1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(version, crate::CONTENT_SCHEMA_VERSION);
+}
+
+#[tokio::test]
+async fn a_conditional_body_save_leaves_a_trashed_page_alone() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    crate::soft_delete_page_impl(&pool, "p1").await.unwrap();
+    let before: String = sqlx::query_scalar("SELECT content FROM pages WHERE id = 'p1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let saved = super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), None)
+        .await
+        .unwrap();
+
+    let after: String = sqlx::query_scalar("SELECT content FROM pages WHERE id = 'p1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before);
+    assert_eq!(saved, super::BodySave::Saved { clock: None });
+}
+
+#[tokio::test]
+async fn a_conditional_body_save_makes_a_calendar_copy_the_users() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Standup"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&pool, "p1", "active").await.unwrap();
+
+    super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), None)
+        .await
+        .unwrap();
+
+    let owned: bool =
+        sqlx::query_scalar("SELECT user_modified FROM page_sync WHERE page_id = 'p1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        owned,
+        "an edited body is the user's, so an upstream delete detaches it"
+    );
+}
+
+#[tokio::test]
 async fn starting_gives_a_page_timed_only_in_its_cache_a_schedule_row_to_sync() {
     let pool = test_pool().await;
     let page = crate::create_page_impl(

@@ -1,8 +1,7 @@
 // Reuses a single ProseMirror instance across page switches
 // (setContent instead of destroy/recreate) for instant switching.
 
-import { extractText } from "@pikos/core";
-import { createDocumentExtensions } from "@pikos/editor-schema";
+import { createDocumentExtensions, foldBodyJSON } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
@@ -113,7 +112,7 @@ function appendParagraphs(editor: Editor | null, text: string): void {
 
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
-  const { updatePage } = usePages();
+  const { saveBody } = usePages();
   const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
   const { takeBodyFocus } = useUI();
@@ -178,8 +177,7 @@ export function EditorPane() {
     if (page === null) {
       // Flush pending content for the outgoing page before clearing
       if (currentPageIdRef.current && contentJsonRef.current !== "") {
-        const content = contentJsonRef.current;
-        updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
+        void saveBody(currentPageIdRef.current, contentJsonRef.current);
       }
       currentPageIdRef.current = null;
       if (!editor.isDestroyed) editor.commands.clearContent();
@@ -191,8 +189,7 @@ export function EditorPane() {
 
     // Flush pending content for the outgoing page before switching
     if (currentPageIdRef.current && contentJsonRef.current !== "") {
-      const content = contentJsonRef.current;
-      updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
+      void saveBody(currentPageIdRef.current, contentJsonRef.current);
     }
 
     currentPageIdRef.current = page.id;
@@ -220,8 +217,12 @@ export function EditorPane() {
     contentVersion,
     (_version: number) => {
       if (!pageId || contentJsonRef.current === "") return Promise.resolve();
-      const contentText = extractText(contentJsonRef.current);
-      updatePage(pageId, { content: contentJsonRef.current, contentText });
+      const sent = contentJsonRef.current;
+      void saveBody(pageId, sent).then((stored) => {
+        const isMergedHere =
+          stored !== undefined && stored !== sent && currentPageIdRef.current === pageId;
+        if (isMergedHere && editorRef.current) foldBodyJSON(editorRef.current, sent, stored);
+      });
       return Promise.resolve();
     },
     { delay: 800 }
@@ -235,8 +236,8 @@ export function EditorPane() {
     return () => window.removeEventListener("blur", handleBlur);
   }, [flush]);
 
-  // Body text sits behind two debounces: this one, then the write queue's. Both
-  // have to run, in that order, before anything ends the process.
+  // Body text sits behind this debounce, then the write queue. Both have to
+  // drain, in that order, before anything ends the process.
   useEffect(() => onFlushPending(flush), [flush]);
 
   const [isAddingLink, setIsAddingLink] = useState(false);

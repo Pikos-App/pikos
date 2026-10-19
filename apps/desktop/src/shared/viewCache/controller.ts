@@ -25,12 +25,23 @@ const log = createLogger("viewCache");
 /** Fields no list orders, groups, filters or counts by: a write of only these refetches its row. */
 const ROW_ONLY_FIELDS = new Set(["content", "contentText", "lastOpenedAt"]);
 
-/** The page an `updatePage` of only row-only fields wrote, else null. */
-function rowOnlyWrite(method: string, args: unknown[]): string | null {
-  if (method !== "updatePage") return null;
-  const [id, patch] = args;
-  if (typeof id !== "string" || !patch || typeof patch !== "object") return null;
-  return Object.keys(patch).every((field) => ROW_ONLY_FIELDS.has(field)) ? id : null;
+/** The page and fields a write to one page's own row set, else null. */
+function writtenFields(method: string, args: unknown[]): { id: string; patch: object } | null {
+  const [id, written] = args;
+  if (typeof id !== "string") return null;
+  if (method === "savePageBody" && typeof written === "string") {
+    return { id, patch: { content: written } };
+  }
+  if (method === "updatePage" && written && typeof written === "object") {
+    return { id, patch: written };
+  }
+  return null;
+}
+
+/** A full page as the cache holds it, with the body clock read just before it. */
+export interface HeldBody {
+  page: Page;
+  clock: string | null;
 }
 
 const QUIET_POLL_MS = 10;
@@ -84,12 +95,12 @@ export class ViewCacheController {
    * it was read: while the counter hasn't moved, the copy is current. Not other writers' changes
    * alone: calendar sync writes from inside the app's own process, so it counts as the app's.
    */
-  private bodies = new Map<string, { page: Page; seen: number; bytes: number }>();
+  private bodies = new Map<string, HeldBody & { seen: number; bytes: number }>();
   private bodyBytes = 0;
   /** The change counter, as the last read found it. */
   private seen = 0;
   /** Body reads in flight, so a click joins the prefetch its hover started. */
-  private bodyReads = new Map<string, Promise<Page | null>>();
+  private bodyReads = new Map<string, Promise<HeldBody | null>>();
   /** The one prefetch allowed to wait for the one in flight; a later hover replaces it. */
   private waitingPrefetch: string | null = null;
   /** Body reads that found a current copy, and that had to ask the database: the hit rate. */
@@ -145,12 +156,11 @@ export class ViewCacheController {
   writeSettled(method: string, args: unknown[]): void {
     this.writesInFlight -= 1;
     this.writeEpoch += 1;
-    const [id, patch] = args;
-    if (method === "updatePage" && typeof id === "string" && patch && typeof patch === "object") {
-      this.patchBody(id, patch);
-    }
-    const rowOnly = rowOnlyWrite(method, args);
-    if (rowOnly) void this.refetchRow(rowOnly);
+    const written = writtenFields(method, args);
+    if (written) this.patchBody(written.id, written.patch);
+    const isRowOnly =
+      written !== null && Object.keys(written.patch).every((field) => ROW_ONLY_FIELDS.has(field));
+    if (isRowOnly) void this.refetchRow(written.id);
     else void this.checkCounter();
   }
 
@@ -205,6 +215,11 @@ export class ViewCacheController {
   /** The full page: from memory with no database call while nothing has changed since it was
    *  read, else only a newer copy is fetched. A read already in flight is joined. */
   body(id: string): Promise<Page | null> {
+    return this.heldBody(id).then((held) => held?.page ?? null);
+  }
+
+  /** [`body`], with the clock the editor saves it against. */
+  heldBody(id: string): Promise<HeldBody | null> {
     const answer = this.openBody(id);
     if (this.config.shadow) {
       window.__PIKOS_BODY_READS__ = { hits: this.bodyHits, misses: this.bodyMisses };
@@ -212,12 +227,12 @@ export class ViewCacheController {
     return answer;
   }
 
-  private openBody(id: string): Promise<Page | null> {
+  private openBody(id: string): Promise<HeldBody | null> {
     const held = this.bodies.get(id);
     if (held && held.seen === this.seen) {
       this.bodyHits += 1;
       this.touchBody(id, held);
-      return Promise.resolve(held.page);
+      return Promise.resolve({ clock: held.clock, page: held.page });
     }
     const reading = this.bodyReads.get(id);
     if (reading) {
@@ -244,22 +259,28 @@ export class ViewCacheController {
     if (this.waitingPrefetch === id) this.waitingPrefetch = null;
   }
 
-  private readBody(id: string): Promise<Page | null> {
+  private readBody(id: string): Promise<HeldBody | null> {
     const held = this.bodies.get(id);
     const seen = this.seen;
     const read = (async () => {
       try {
+        // Read ahead of the body, so a remote edit landing between the two makes the clock old,
+        // which costs a merge, never new, which would let a save write over that edit.
+        const clock = await this.adapter.bodyClock(id);
         if (held) {
           const answer = await this.adapter.getPageIfNewer(id, held.page.rowSeq ?? null);
           if (answer.kind === "missing") return this.dropBody(id);
-          const page = answer.kind === "newer" ? answer.page : held.page;
-          this.holdBody(page, seen);
-          return page;
+          const body =
+            answer.kind === "newer"
+              ? { clock, page: answer.page }
+              : { clock: held.clock, page: held.page };
+          this.holdBody(body, seen);
+          return body;
         }
         const page = await this.adapter.getPage(id);
         if (!page) return this.dropBody(id);
-        this.holdBody(page, seen);
-        return page;
+        this.holdBody({ clock, page }, seen);
+        return { clock, page };
       } catch {
         // Errors aren't kept: the next open reads again.
         return null;
@@ -274,13 +295,13 @@ export class ViewCacheController {
     return read;
   }
 
-  private holdBody(page: Page, seen: number): void {
+  private holdBody({ clock, page }: HeldBody, seen: number): void {
     this.store.confirm([toPageSummary(page)]);
     const old = this.bodies.get(page.id);
     if (old) this.bodyBytes -= old.bytes;
     const bytes = (page.content?.length ?? 0) * 2 + summaryBytes(page);
     this.bodies.delete(page.id);
-    this.bodies.set(page.id, { bytes, page, seen });
+    this.bodies.set(page.id, { bytes, clock, page, seen });
     this.bodyBytes += bytes;
     for (const [id, entry] of this.bodies) {
       if (this.bodyBytes <= this.config.bodyBudgetBytes || id === page.id) break;
@@ -289,7 +310,7 @@ export class ViewCacheController {
     }
   }
 
-  private touchBody(id: string, entry: { page: Page; seen: number; bytes: number }): void {
+  private touchBody(id: string, entry: HeldBody & { seen: number; bytes: number }): void {
     this.bodies.delete(id);
     this.bodies.set(id, entry);
   }
@@ -304,7 +325,7 @@ export class ViewCacheController {
   /** The app wrote `patch` to `id`: the held body takes it, so it stays current. */
   private patchBody(id: string, patch: object): void {
     const held = this.bodies.get(id);
-    if (held) this.holdBody({ ...held.page, ...patch }, held.seen);
+    if (held) this.holdBody({ clock: held.clock, page: { ...held.page, ...patch } }, held.seen);
   }
 
   /**

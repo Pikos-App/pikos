@@ -184,9 +184,11 @@ final class EditorControllerTests: XCTestCase {
         controller.focus()
         controller.blur()
         controller.insertImage(assetPath: "assets/a.png")
+        controller.bodyMoved(pageId: "p1", base: "{}", stored: "{}")
 
         XCTAssertEqual(
-            sink.types, ["toggleMark", "toggleBlock", "focus", "blur", "insertImage"])
+            sink.types,
+            ["toggleMark", "toggleBlock", "focus", "blur", "insertImage", "bodyMoved"])
     }
 
     /// `dismantleUIView` detaches when the screen goes away. A controller that
