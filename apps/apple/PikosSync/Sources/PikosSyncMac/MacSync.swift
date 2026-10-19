@@ -16,7 +16,7 @@
         private static let fetchEvery: Duration = .seconds(120)
 
         private let store = RustReplicaStore()
-        private var engine: CloudKitSync?
+        private var starter: SyncStarter<CloudKitSync>?
         private var timers: [Task<Void, Never>] = []
         private var focusObserver: NSObjectProtocol?
 
@@ -36,53 +36,54 @@
         }
 
         func start(container: String, zone: String) async {
-            guard engine == nil else { return }
+            guard starter == nil else { return }
             let container = CKContainer(identifier: container)
-            let joined: String
-            let engine: CloudKitSync
-            do {
+            let store = store
+            let report: @Sendable (SyncStatus) async -> Void = { [weak self] in await self?.report($0) }
+            let starter = SyncStarter<CloudKitSync> {
                 if let held = try await CloudKitSync.held(store: store) {
                     let line = SyncStatusLine(
                         status: held, queue: .init(toSend: 0, needsUpdate: false, lastFetch: nil))
                     try await store.report(line)
-                    return
+                    return nil
                 }
 
-                joined = try await CloudKitSync.join(store: store, container: container, ownZone: zone)
-                engine = CloudKitSync(store: store, container: container, zoneName: joined) {
-                    [weak self] status in
+                let joined = try await CloudKitSync.join(store: store, container: container, ownZone: zone)
+                let engine = CloudKitSync(store: store, container: container, zoneName: joined) {
+                    status in
                     Self.log.info("status: \(String(describing: status), privacy: .public)")
-                    Task { await self?.report(status) }
+                    Task { await report(status) }
                 }
-                self.engine = engine
                 try await engine.start()
-            } catch {
+                Self.log.info("started in \(joined, privacy: .public)")
+                return engine
+            } failed: { error in
                 Self.log.error("start failed: \(error.localizedDescription, privacy: .public)")
                 await report(.failed(error.localizedDescription))
-                return
             }
-            Self.log.info("started in \(joined, privacy: .public)")
+            self.starter = starter
+
             await MainActor.run {
                 NSApplication.shared.registerForRemoteNotifications()
                 focusObserver = NotificationCenter.default.addObserver(
                     forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
                 ) { _ in
-                    Task { await engine.fetchNow() }
+                    Task { await starter.fetchNow() }
                 }
             }
-            await engine.fetchNow()
+            await starter.fetchNow()
 
             timers = [
                 Task.detached {
                     while !Task.isCancelled {
                         try? await Task.sleep(for: Self.sendEvery)
-                        await engine.localChangesHappened()
+                        await starter.localChangesHappened()
                     }
                 },
                 Task.detached {
                     while !Task.isCancelled {
                         try? await Task.sleep(for: Self.fetchEvery)
-                        await engine.fetchNow()
+                        await starter.fetchNow()
                     }
                 },
             ]
@@ -95,12 +96,12 @@
                 await MainActor.run { NotificationCenter.default.removeObserver(focusObserver) }
             }
             focusObserver = nil
-            await engine?.stop()
-            engine = nil
+            await starter?.stop()
+            starter = nil
         }
 
         private func report(_ status: SyncStatus) async {
-            guard engine != nil else { return }
+            guard starter != nil else { return }
 
             let summary = try? await store.summary()
             let line = SyncStatusLine(
