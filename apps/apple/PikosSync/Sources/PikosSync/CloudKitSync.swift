@@ -99,23 +99,13 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         }
     }
 
-    /// Deletes tombstones past retention from CloudKit and from the workspace. Run now and then,
-    /// such as on launch.
-    public func expireTombstones() async {
-        guard let engine else { return }
-        do {
-            let ids = try await coordinator.expired()
-            engine.state.add(pendingRecordZoneChanges: ids.map { .deleteRecord($0) })
-        } catch {
-            Self.log.error("expiring tombstones failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     /// Fetches now rather than waiting for a push: on launch, on foreground and focus, and every few
-    /// minutes while focused, since push to an app outside the App Store is unproven.
+    /// minutes while focused, since push to an app outside the App Store is unproven. Runs the
+    /// daily upkeep first when it's due.
     public func fetchNow() async {
         guard await coordinator.paused == nil else { return }
 
+        await upkeep()
         do {
             try await engine?.fetchChanges()
         } catch {
@@ -180,6 +170,17 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 Self.log.error("building \(id.recordName) failed: \(error.localizedDescription, privacy: .public)")
                 return nil
             }
+        }
+    }
+
+    private func upkeep() async {
+        guard let engine else { return }
+
+        do {
+            let expired = try await coordinator.upkeepIfDue()
+            engine.state.add(pendingRecordZoneChanges: expired.map { .deleteRecord($0) })
+        } catch {
+            Self.log.error("sync upkeep failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

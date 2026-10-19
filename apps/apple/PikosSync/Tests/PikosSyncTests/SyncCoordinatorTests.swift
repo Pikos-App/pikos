@@ -59,13 +59,17 @@ private actor FakeStore: ReplicaStore {
     func fetchFinished() async throws { fetchesFinished += 1 }
 
     var expiring: [RecordAddress] = []
+    private(set) var upkeepSteps: [String] = []
 
     func expireLater(_ address: RecordAddress) { expiring.append(address) }
 
     func expire() async throws -> [RecordAddress] {
+        upkeepSteps.append("expire")
         defer { expiring = [] }
         return expiring
     }
+
+    func retryHeld() async throws { upkeepSteps.append("retryHeld") }
 
     private(set) var systemFields: [String: Data] = [:]
 
@@ -260,6 +264,37 @@ final class SyncCoordinatorTests: XCTestCase {
         let ids = try await coordinator.expired()
 
         XCTAssertEqual(ids, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
+    }
+
+    func testUpkeepExpiresThenRetriesHeldRecordsAtLaunchAndThenOnceADay() async throws {
+        let store = FakeStore()
+        await store.expireLater(RecordAddress(name: "page:old", storeName: "page:old"))
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let launch = Date(timeIntervalSince1970: 1_000_000)
+
+        let atLaunch = try await coordinator.upkeepIfDue(now: launch)
+        let anHourLater = try await coordinator.upkeepIfDue(now: launch.addingTimeInterval(3_600))
+        let stepsWithinTheDay = await store.upkeepSteps
+        _ = try await coordinator.upkeepIfDue(now: launch.addingTimeInterval(24 * 3_600))
+
+        XCTAssertEqual(atLaunch, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
+        XCTAssertEqual(anHourLater, [])
+        XCTAssertEqual(stepsWithinTheDay, ["expire", "retryHeld"])
+        let steps = await store.upkeepSteps
+        XCTAssertEqual(steps, ["expire", "retryHeld", "expire", "retryHeld"])
+    }
+
+    func testUpkeepWaitsWhileSyncIsPausedSoNothingIsDeletedFromAnotherAccount() async throws {
+        let store = FakeStore()
+        await store.expireLater(RecordAddress(name: "page:old", storeName: "page:old"))
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        _ = await coordinator.zoneDeleted(workspaceZone, reason: .purged)
+
+        let ids = try await coordinator.upkeepIfDue()
+
+        XCTAssertEqual(ids, [])
+        let steps = await store.upkeepSteps
+        XCTAssertEqual(steps, [])
     }
 
     // qa: CLOUD-122

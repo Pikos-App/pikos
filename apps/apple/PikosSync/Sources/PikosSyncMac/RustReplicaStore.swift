@@ -52,6 +52,10 @@
             return addresses.map(\.address)
         }
 
+        func retryHeld() async throws {
+            let _: WireApplied = try call("retry_held", [String: Int]())
+        }
+
         func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {
             let records = fields.map { WireNamedData(name: $0.name, data: [UInt8]($0.data)) }
             let _: Empty? = try call("save_system_fields", ["records": records])

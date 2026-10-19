@@ -70,6 +70,8 @@ public protocol ReplicaStore: Sendable {
     func fetchFinished() async throws
     /// Forgets tombstones past retention and returns them, to delete from CloudKit too.
     func expire() async throws -> [RecordAddress]
+    /// Applies every held record this build can now read.
+    func retryHeld() async throws
     /// Keeps CloudKit's metadata for records it saved or sent, by record name.
     func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws
     /// The zone to sync in, given every zone the account holds. When another device's zone wins,

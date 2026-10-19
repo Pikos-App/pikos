@@ -25,6 +25,9 @@ public actor SyncCoordinator {
     /// coordinator.
     public private(set) var paused: SyncStatus?
 
+    static let upkeepEvery: TimeInterval = 24 * 60 * 60
+    private var lastUpkeep: Date?
+
     private var savesState: Bool { !fetchUnapplied && paused == nil }
 
     public init(store: ReplicaStore, zone: CKRecordZone.ID) {
@@ -127,9 +130,23 @@ public actor SyncCoordinator {
         }
     }
 
+    /// On the first call of a launch and then a day apart: forgets tombstones past retention, then
+    /// tries held records again, since an update may read them now. Returns the expired ids to
+    /// delete from CloudKit, or none when it isn't due. Paused, it waits, so nothing is deleted from
+    /// an account the person hasn't chosen.
+    public func upkeepIfDue(now: Date = Date()) async throws -> [CKRecord.ID] {
+        let isDue = lastUpkeep.map { now.timeIntervalSince($0) >= Self.upkeepEvery } ?? true
+        guard paused == nil, isDue else { return [] }
+
+        lastUpkeep = now
+        let gone = try await expired()
+        try await store.retryHeld()
+        return gone
+    }
+
     /// Tombstones past retention, as ids to delete from CloudKit. Every device deletes them, and a
     /// delete of a record already gone changes nothing.
-    public func expired() async throws -> [CKRecord.ID] {
+    func expired() async throws -> [CKRecord.ID] {
         let gone = try await store.expire()
         for address in gone {
             serverCopies[address.storeName] = nil

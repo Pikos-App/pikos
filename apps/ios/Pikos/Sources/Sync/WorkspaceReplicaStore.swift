@@ -60,6 +60,13 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
         try await workspace.expireSync().map(Self.address)
     }
 
+    func retryHeld() async throws {
+        let applied = try await workspace.retryHeldRecords()
+        if applied.changed > 0 {
+            await onApplied()
+        }
+    }
+
     func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {
         try await workspace.saveSystemFields(
             records: fields.map { SystemFields(name: $0.name, data: $0.data) })
