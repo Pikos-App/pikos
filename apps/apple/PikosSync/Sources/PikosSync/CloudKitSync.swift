@@ -15,6 +15,8 @@ public enum SyncStatus: Equatable, Sendable {
     /// The iCloud Keychain was reset, so the encrypted fields can't be read: the zone is deleted and
     /// everything uploaded again from this device.
     case encryptionReset
+    /// The account's iCloud storage is full: changes wait on this device until there's room.
+    case storageFull
     case failed(String)
 }
 
@@ -114,9 +116,13 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     /// Call after any local write, the app's own or one another process made: queues what's waiting
     /// to send, and Apple's engine sends it when it next can.
     public func localChangesHappened() async {
+        await queuePending(retryingFull: false)
+    }
+
+    private func queuePending(retryingFull: Bool) async {
         guard let engine else { return }
         do {
-            let ids = try await coordinator.pending()
+            let ids = try await coordinator.pending(retryingFull: retryingFull)
             engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
         } catch {
             Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
@@ -125,11 +131,12 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
 
     /// Fetches now rather than waiting for a push: on launch, on foreground and focus, and every few
     /// minutes while focused, since push to an app outside the App Store is unproven. Runs the
-    /// daily upkeep first when it's due.
+    /// daily upkeep first when it's due, and tries a full iCloud again.
     public func fetchNow() async {
         guard await coordinator.paused == nil else { return }
 
         await upkeep()
+        await queuePending(retryingFull: true)
         do {
             try await engine?.fetchChanges()
         } catch {
@@ -166,9 +173,9 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 onStatus(.syncing)
             case .didFetchChanges:
                 try await coordinator.fetchFinished()
-                onStatus(.upToDate)
+                onStatus(await coordinator.settled)
             case .didSendChanges:
-                onStatus(.upToDate)
+                onStatus(await coordinator.settled)
             default:
                 break
             }
@@ -232,8 +239,9 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 await coordinator.forgetServerCopy(id)
                 again.append(id)
             default:
-                await coordinator.failed(id)
-                again.append(id)
+                if await coordinator.failed(id, code: failure.error.code) {
+                    again.append(id)
+                }
             }
         }
         if !again.isEmpty {
