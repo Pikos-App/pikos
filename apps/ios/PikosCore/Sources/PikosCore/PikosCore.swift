@@ -970,6 +970,8 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func forgetSync() async throws 
     
+    func holdSync(reason: String) async throws 
+    
     /**
      * The zone to sync in, given every zone the account holds; moves this workspace into it when
      * another device's zone wins.
@@ -1019,6 +1021,8 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * device only, straight away: `claim_device` reads it back.
      */
     func startSync() async throws  -> SyncState
+    
+    func syncHeldFor() async throws  -> String?
     
     func syncState() async throws  -> SyncState
     
@@ -2103,6 +2107,22 @@ open func forgetSync()async throws   {
         )
 }
     
+open func holdSync(reason: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_hold_sync(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(reason)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
     /**
      * The zone to sync in, given every zone the account holds; moves this workspace into it when
      * another device's zone wins.
@@ -2303,6 +2323,22 @@ open func startSync()async throws  -> SyncState  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncState_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func syncHeldFor()async throws  -> String?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_sync_held_for(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -11876,6 +11912,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_forget_sync() != 48135) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_hold_sync() != 27147) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_join_sync() != 64877) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11907,6 +11946,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_start_sync() != 9428) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_sync_held_for() != 63771) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_sync_state() != 41248) {

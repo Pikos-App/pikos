@@ -69,6 +69,12 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         return zone
     }
 
+    /// Why sync waits on the person, kept from an earlier launch, or nil. Checked before `join`,
+    /// which would otherwise list and settle zones in an account the person hasn't chosen.
+    public static func held(store: ReplicaStore) async throws -> SyncStatus? {
+        try await store.heldFor().flatMap { SyncCoordinator.holds[$0] }
+    }
+
     private static let unreachable: Set<CKError.Code> = [
         .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited,
     ]
@@ -161,12 +167,12 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 try await handleSent(sent, engine: syncEngine)
             case .fetchedDatabaseChanges(let changes):
                 for deletion in changes.deletions {
-                    if let status = await coordinator.zoneDeleted(deletion.zoneID, reason: deletion.reason) {
+                    if let status = try await coordinator.zoneDeleted(deletion.zoneID, reason: deletion.reason) {
                         onStatus(status)
                     }
                 }
             case .accountChange(let change):
-                if let status = await coordinator.accountChanged(change.changeType) {
+                if let status = try await coordinator.accountChanged(change.changeType) {
                     onStatus(status)
                 }
             case .willFetchChanges, .willSendChanges:
@@ -228,7 +234,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                     again.append(try await coordinator.refused(over: server))
                 }
             case .userDeletedZone:
-                if let status = await coordinator.zoneDeleted(id.zoneID, reason: .purged) {
+                if let status = try await coordinator.zoneDeleted(id.zoneID, reason: .purged) {
                     onStatus(status)
                 }
             case .zoneNotFound:

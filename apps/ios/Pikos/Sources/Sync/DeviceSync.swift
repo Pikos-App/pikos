@@ -109,6 +109,12 @@ final class DeviceSync {
             let store = WorkspaceReplicaStore(workspace: workspace) { [weak self] in
                 await self?.applied()
             }
+            if let held = try await CloudKitSync.held(store: store) {
+                isOn = true
+                show(held)
+                return
+            }
+
             let cloud = CKContainer(identifier: container)
             let zone = try await CloudKitSync.join(store: store, container: cloud, ownZone: state.zone)
             let engine = CloudKitSync(store: store, container: cloud, zoneName: zone) {

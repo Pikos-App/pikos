@@ -68,6 +68,10 @@ public protocol ReplicaStore: Sendable {
     func setEngineState(_ state: Data) async throws
     /// A fetch finished and everything it brought is applied, whether or not the state moved.
     func fetchFinished() async throws
+    /// Why sync waits on the person, saved with the workspace so a relaunch keeps waiting, or nil
+    /// while it runs. Forgetting sync on the device clears it.
+    func heldFor() async throws -> String?
+    func hold(_ reason: String) async throws
     /// Forgets tombstones past retention and returns them, to delete from CloudKit too.
     func expire() async throws -> [RecordAddress]
     /// Applies every held record this build can now read.

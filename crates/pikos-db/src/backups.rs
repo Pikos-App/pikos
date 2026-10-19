@@ -502,6 +502,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+        crate::replica::hold(&pool, "accountChanged").await.unwrap();
         let before = crate::replica::meta(&pool).await.unwrap();
         pool.close().await;
 
@@ -511,6 +512,7 @@ mod tests {
 
         let pool = crate::pool::open_pool(&path).await.unwrap();
         let after = crate::replica::meta(&pool).await.unwrap();
+        let held_for = crate::replica::held_for(&pool).await.unwrap();
         let title: String = sqlx::query_scalar("SELECT title FROM pages WHERE id = 'kept'")
             .fetch_one(&pool)
             .await
@@ -528,6 +530,11 @@ mod tests {
         assert_eq!(title, "Groceries");
         assert!(after.started);
         assert_eq!(after.device_id, device, "this device carries on as itself");
+        assert_eq!(
+            held_for.as_deref(),
+            Some("accountChanged"),
+            "a restore doesn't settle what iCloud waits on the person for"
+        );
         assert!(after.hlc > before.hlc);
         assert_eq!(
             pending(&path).await,

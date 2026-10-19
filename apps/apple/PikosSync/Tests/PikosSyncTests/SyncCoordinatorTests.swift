@@ -78,6 +78,14 @@ private actor FakeStore: ReplicaStore {
     }
 
     func join(zones: [String]) async throws -> String { zones.min() ?? "" }
+
+    private var held: String?
+
+    func heldFor() async throws -> String? { held }
+
+    func hold(_ reason: String) async throws { held = reason }
+
+    func forget() { held = nil }
 }
 
 private let workspaceZone = CKRecordZone.ID(zoneName: "ws-test", ownerName: CKCurrentUserDefaultName)
@@ -288,7 +296,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let store = FakeStore()
         await store.expireLater(RecordAddress(name: "page:old", storeName: "page:old"))
         let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
-        _ = await coordinator.zoneDeleted(workspaceZone, reason: .purged)
+        _ = try await coordinator.zoneDeleted(workspaceZone, reason: .purged)
 
         let ids = try await coordinator.upkeepIfDue()
 
@@ -308,10 +316,11 @@ final class SyncCoordinatorTests: XCTestCase {
             zone: workspaceZone
         )
 
-        let status = await coordinator.accountChanged(
+        let status = try await coordinator.accountChanged(
             .switchAccounts(
                 previousUser: CKRecord.ID(recordName: "_alex"),
                 currentUser: CKRecord.ID(recordName: "_someone")))
+        let heldAtRelaunch = try await CloudKitSync.held(store: store)
         let pendingWhilePaused = try await coordinator.pending()
         let built = try await coordinator.record(for: queued[0])
         try await coordinator.fetched([theirs])
@@ -326,7 +335,11 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(applied, [], "nothing of the other account's is applied here")
         let saved = await store.state
         XCTAssertNil(saved)
+        XCTAssertEqual(heldAtRelaunch, .accountChanged, "a relaunch before choosing stays paused")
 
+        await store.forget()
+        let heldAfterChoosing = try await CloudKitSync.held(store: store)
+        XCTAssertNil(heldAfterChoosing)
         let afterChoosing = SyncCoordinator(store: store, zone: workspaceZone)
         let sentAfterChoosing = try await afterChoosing.pending()
         XCTAssertEqual(sentAfterChoosing, queued)
@@ -340,9 +353,11 @@ final class SyncCoordinatorTests: XCTestCase {
         let queued = try await coordinator.pending()
         let otherZone = CKRecordZone.ID(zoneName: "ws-other", ownerName: CKCurrentUserDefaultName)
 
-        let otherStatus = await coordinator.zoneDeleted(otherZone, reason: .purged)
+        let otherStatus = try await coordinator.zoneDeleted(otherZone, reason: .purged)
         let stillSending = try await coordinator.pending()
-        let status = await coordinator.zoneDeleted(workspaceZone, reason: .purged)
+        let heldForAnotherZone = try await CloudKitSync.held(store: store)
+        let status = try await coordinator.zoneDeleted(workspaceZone, reason: .purged)
+        let heldAtRelaunch = try await CloudKitSync.held(store: store)
         let pendingWhilePaused = try await coordinator.pending()
         let built = try await coordinator.record(for: queued[0])
 
@@ -353,7 +368,10 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(line.action, .uploadAgain)
         XCTAssertEqual(pendingWhilePaused, [], "nothing goes back up on its own")
         XCTAssertNil(built)
+        XCTAssertNil(heldForAnotherZone)
+        XCTAssertEqual(heldAtRelaunch, .zoneDeleted, "a relaunch before choosing stays paused")
 
+        await store.forget()
         let afterChoosing = SyncCoordinator(store: store, zone: workspaceZone)
         let sentAfterChoosing = try await afterChoosing.pending()
         XCTAssertEqual(sentAfterChoosing, queued)
