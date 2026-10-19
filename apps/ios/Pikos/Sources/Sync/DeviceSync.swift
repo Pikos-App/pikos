@@ -33,7 +33,7 @@ final class DeviceSync {
     private var batchesApplied = 0
     private let workspace: () -> Workspace?
     private let onApplied: @MainActor () async -> Void
-    private var engine: CloudKitSync?
+    private var starter: SyncStarter<CloudKitSync>?
     private nonisolated static let log = Logger(subsystem: "app.pikos", category: "sync")
 
     init(workspace: @escaping () -> Workspace?, onApplied: @escaping @MainActor () async -> Void) {
@@ -68,8 +68,8 @@ final class DeviceSync {
 
     /// Pausing keeps recording changes, so turning sync back on sends what was made meanwhile.
     func turnOff() async {
-        await engine?.stop()
-        engine = nil
+        await starter?.stop()
+        starter = nil
         try? await workspace()?.setSyncPaused(paused: true)
         isOn = false
         show(nil)
@@ -80,60 +80,65 @@ final class DeviceSync {
     func perform(_ action: SyncAction) async {
         guard action != .none, let workspace = workspace() else { return }
 
-        await engine?.stop()
-        engine = nil
+        await starter?.stop()
+        starter = nil
         try? await workspace.forgetSync()
         await turnOn()
     }
 
     func localChangesHappened() async {
-        await engine?.localChangesHappened()
+        await starter?.localChangesHappened()
     }
 
     func fetchNow() async {
-        await engine?.fetchNow()
+        await starter?.fetchNow()
     }
 
+    /// On from here even when this start can't reach iCloud, since the starter keeps trying.
     private func connect(_ workspace: Workspace) async {
-        guard engine == nil, let container = Self.container else { return }
+        guard starter == nil, let container = Self.container else { return }
 
-        do {
-            let state = try await workspace.startSync()
-            try await workspace.setSyncAssetsDir(path: WorkspaceLocation.assetsURL().path)
-            #if STAGING
-                if UserDefaults.standard.bool(forKey: Self.refetchKey) {
-                    UserDefaults.standard.removeObject(forKey: Self.refetchKey)
-                    try await workspace.setEngineState(state: Data())
-                }
-            #endif
-            let store = WorkspaceReplicaStore(workspace: workspace) { [weak self] in
-                await self?.applied()
-            }
-            if let held = try await CloudKitSync.held(store: store) {
-                isOn = true
-                show(held)
-                return
-            }
-
-            let cloud = CKContainer(identifier: container)
-            let zone = try await CloudKitSync.join(store: store, container: cloud, ownZone: state.zone)
-            let engine = CloudKitSync(store: store, container: cloud, zoneName: zone) {
-                [weak self] status in
-                Self.log.info("status: \(String(describing: status), privacy: .public)")
-                Task { @MainActor in self?.show(status) }
-            }
-            self.engine = engine
-            self.zone = zone
-            isOn = true
-            try await engine.start()
-            UIApplication.shared.registerForRemoteNotifications()
-            Self.log.info("started in \(zone, privacy: .public)")
-            show(.syncing)
-            await engine.fetchNow()
-        } catch {
+        isOn = true
+        let starter = SyncStarter<CloudKitSync> { [weak self] in
+            try await self?.start(workspace, container: container)
+        } failed: { [weak self] error in
             Self.log.error("start failed: \(error.localizedDescription, privacy: .public)")
-            show(.failed(error.localizedDescription))
+            await self?.show(.failed(error.localizedDescription))
         }
+        self.starter = starter
+        await starter.fetchNow()
+    }
+
+    private func start(_ workspace: Workspace, container: String) async throws -> CloudKitSync? {
+        let state = try await workspace.startSync()
+        try await workspace.setSyncAssetsDir(path: WorkspaceLocation.assetsURL().path)
+        #if STAGING
+            if UserDefaults.standard.bool(forKey: Self.refetchKey) {
+                UserDefaults.standard.removeObject(forKey: Self.refetchKey)
+                try await workspace.setEngineState(state: Data())
+            }
+        #endif
+        let store = WorkspaceReplicaStore(workspace: workspace) { [weak self] in
+            await self?.applied()
+        }
+        if let held = try await CloudKitSync.held(store: store) {
+            show(held)
+            return nil
+        }
+
+        let cloud = CKContainer(identifier: container)
+        let zone = try await CloudKitSync.join(store: store, container: cloud, ownZone: state.zone)
+        let engine = CloudKitSync(store: store, container: cloud, zoneName: zone) {
+            [weak self] status in
+            Self.log.info("status: \(String(describing: status), privacy: .public)")
+            Task { @MainActor in self?.show(status) }
+        }
+        self.zone = zone
+        try await engine.start()
+        UIApplication.shared.registerForRemoteNotifications()
+        Self.log.info("started in \(zone, privacy: .public)")
+        show(.syncing)
+        return engine
     }
 
     private func show(_ status: SyncStatus?) {
