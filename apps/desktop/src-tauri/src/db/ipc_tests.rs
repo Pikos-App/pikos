@@ -114,6 +114,10 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
                 "durationS": 1500,
             }),
         ),
+        (
+            "save_page_body",
+            json!({ "content": "", "id": "p1", "loadedClock": null }),
+        ),
     ]
 }
 
@@ -185,6 +189,7 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ("list_tags", json!({})),
         ("list_backlinks", json!({ "id": PROBE_PAGE })),
         ("change_state", json!({})),
+        ("body_clock", json!({ "id": PROBE_PAGE })),
     ]
 }
 
@@ -313,6 +318,8 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::sync::get_sync_status,
             super::sync::google_sync_available,
             super::dev::get_usage_stats,
+            super::replica::body_clock,
+            super::replica::save_page_body,
         ])
         .build(ctx)
         .unwrap();
