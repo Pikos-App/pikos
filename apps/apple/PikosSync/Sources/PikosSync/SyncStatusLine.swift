@@ -57,7 +57,9 @@ public struct SyncStatusLine: Equatable, Sendable {
         case .syncing:
             self.init(text: Self.withReassurance(Self.syncing(queue), queue), action: .none)
         case .upToDate:
-            self.init(text: Self.withReassurance(Self.settled(queue, now: now), queue), action: .none)
+            self.init(text: Self.withReassurance(Self.settled(queue, unsent: 0, now: now), queue), action: .none)
+        case .unsent(let count):
+            self.init(text: Self.withReassurance(Self.settled(queue, unsent: count, now: now), queue), action: .none)
         }
     }
 
@@ -85,12 +87,15 @@ public struct SyncStatusLine: Equatable, Sendable {
         }
     }
 
-    private static func settled(_ queue: Queue, now: Date) -> String {
+    private static func settled(_ queue: Queue, unsent: Int, now: Date) -> String {
         var parts: [String] = []
         if queue.toSend > 0 {
             parts.append(queue.toSend == 1 ? "1 change waiting to send" : "\(queue.toSend.formatted()) changes waiting to send")
         } else {
             parts.append("Up to date")
+        }
+        if unsent > 0 {
+            parts.append("\(unsent) couldn't be sent")
         }
         if queue.needsUpdate {
             parts.append("some changes need a newer Pikos")

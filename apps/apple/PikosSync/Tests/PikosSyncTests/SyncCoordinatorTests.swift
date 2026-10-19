@@ -22,8 +22,13 @@ private actor FakeStore: ReplicaStore {
 
     func pendingRecords(limit: Int) async throws -> [RecordAddress] { Array(pending.prefix(limit)) }
 
+    var unbuildable: Set<String> = []
+
+    func failBuilding(_ name: String) { unbuildable.insert(name) }
+
     func buildRecords(names: [String]) async throws -> [OutgoingRecord] {
-        names.compactMap { name in
+        if names.contains(where: unbuildable.contains) { throw CocoaError(.fileReadCorruptFile) }
+        return names.compactMap { name in
             guard let record = records[name],
                 let address = pending.first(where: { $0.name == name })
             else { return nil }
@@ -380,24 +385,34 @@ final class SyncCoordinatorTests: XCTestCase {
     // qa: CLOUD-138
     func testARecordICloudRefusesForGoodIsNotSentAgainWhileATransientFailureIs() async throws {
         let store = FakeStore()
-        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
-        await store.queue(page("p2", title: "Laundry"), storeName: "page:p2")
+        let refusals: [CKError.Code] = [.limitExceeded, .invalidArguments, .serverRejectedRequest]
+        for (index, title) in ["Groceries", "Laundry", "Taxes", "Dentist", "Garden"].enumerated() {
+            await store.queue(page("p\(index)", title: title), storeName: "page:p\(index)")
+        }
         let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
         let ids = try await coordinator.pending()
-        _ = try await coordinator.record(for: ids[0])
-        _ = try await coordinator.record(for: ids[1])
+        for id in ids.prefix(4) {
+            _ = try await coordinator.record(for: id)
+        }
+        await store.failBuilding("page:p4")
 
-        let tooBigAgain = await coordinator.failed(ids[0], code: .limitExceeded)
-        let busyAgain = await coordinator.failed(ids[1], code: .zoneBusy)
+        var sentAgain: [Bool] = []
+        for (id, code) in zip(ids, refusals) {
+            sentAgain.append(await coordinator.failed(id, code: code))
+        }
+        let busyAgain = await coordinator.failed(ids[3], code: .zoneBusy)
+        let unbuilt = try? await coordinator.record(for: ids[4])
         let stillPending = try await coordinator.pending()
-        let rebuilt = try await coordinator.record(for: ids[0])
+        let rebuilt = try await coordinator.record(for: ids[1])
         let status = await coordinator.settled
 
-        XCTAssertFalse(tooBigAgain)
+        XCTAssertEqual(sentAgain, [false, false, false])
         XCTAssertTrue(busyAgain)
-        XCTAssertEqual(stillPending, [ids[1]])
+        XCTAssertNil(unbuilt)
+        XCTAssertEqual(stillPending, [ids[3]], "neither a refused record nor one that can't be built goes again")
         XCTAssertNil(rebuilt)
-        XCTAssertEqual(status, .upToDate)
+        let line = SyncStatusLine(status: status, queue: .init(toSend: 5, needsUpdate: false, lastFetch: nil))
+        XCTAssertEqual(line.text, "5 changes waiting to send · 4 couldn't be sent. \(SyncStatusLine.reassurance)")
 
         let afterRelaunch = SyncCoordinator(store: store, zone: workspaceZone)
         let pendingAfterRelaunch = try await afterRelaunch.pending()

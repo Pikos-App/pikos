@@ -17,6 +17,8 @@ public enum SyncStatus: Equatable, Sendable {
     case encryptionReset
     /// The account's iCloud storage is full: changes wait on this device until there's room.
     case storageFull
+    /// Settled, except for this many records iCloud refused or this device couldn't build.
+    case unsent(Int)
     case failed(String)
 }
 
