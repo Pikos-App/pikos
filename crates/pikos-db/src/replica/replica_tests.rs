@@ -463,12 +463,14 @@ async fn a_tombstone_from_another_device_is_kept_for_the_window_from_when_it_lan
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO replica_clocks (entity, key, clocks, tomb) VALUES ('page', 'p1', ?, ?)")
-        .bind(written_long_ago.repeat(entity(Entity::Page).unwrap().fields.len() + 1))
-        .bind(&written_long_ago)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO replica_clocks (entity, key, clocks, tomb) VALUES ('page', 'p1', ?, ?)",
+    )
+    .bind(written_long_ago.repeat(entity(Entity::Page).unwrap().fields.len() + 1))
+    .bind(&written_long_ago)
+    .execute(&pool)
+    .await
+    .unwrap();
     sqlx::query("DELETE FROM replica_applying")
         .execute(&pool)
         .await

@@ -304,7 +304,10 @@ async fn a_page_created_edited_and_completed_through_the_tools_reaches_the_other
     server.call(4, "complete_page", json!({ "id": id }));
     server.shutdown();
 
-    let (mac, phone) = (open_pool(mac).await.unwrap(), open_pool(phone).await.unwrap());
+    let (mac, phone) = (
+        open_pool(mac).await.unwrap(),
+        open_pool(phone).await.unwrap(),
+    );
     let names = pikos_db::replica::build::pending(&mac, 1000).await.unwrap();
     let built = pikos_db::replica::build::build(&mac, &names).await.unwrap();
     let records: Vec<_> = built
@@ -317,7 +320,11 @@ async fn a_page_created_edited_and_completed_through_the_tools_reaches_the_other
 
     let arrived = pikos_db::get_page(&phone, &id).await.unwrap().unwrap();
     assert_eq!(
-        (arrived.title.as_str(), arrived.priority, arrived.status.as_str()),
+        (
+            arrived.title.as_str(),
+            arrived.priority,
+            arrived.status.as_str()
+        ),
         ("Water the ferns", 2, "done")
     );
 }
