@@ -10,10 +10,15 @@ use crate::replica::build::{build, pending};
 use crate::replica::two_devices::*;
 use crate::*;
 
-async fn with_images() -> (SqlitePool, PathBuf) {
-    let pool = device().await;
+fn images_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("pkos_sync_images_{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+async fn with_images() -> (SqlitePool, PathBuf) {
+    let pool = device().await;
+    let dir = images_dir();
     set_assets_dir(&pool, &dir).await.unwrap();
     (pool, dir)
 }
@@ -62,6 +67,48 @@ async fn an_image_a_page_shows_reaches_the_other_device_with_the_page() {
         std::fs::read(phone_images.join(&name)).unwrap(),
         b"a photo of the harbour"
     );
+}
+
+// qa: CLOUD-134
+#[tokio::test]
+async fn a_photo_landing_after_its_page_counts_as_a_change_so_an_open_page_redraws() {
+    let (phone, phone_images) = with_images().await;
+    let (mac, mac_images) = with_images().await;
+    let name = saved_image(&phone_images, b"a photo of the tram");
+    page_showing(&phone, "Lisbon", &name).await;
+
+    send(&phone, &mac).await;
+    let before = mac_images.join(&name).exists();
+    let landed = send(&phone, &mac).await;
+
+    assert!(!before);
+    assert_eq!(landed.changed, 1);
+    assert_eq!(
+        std::fs::read(mac_images.join(&name)).unwrap(),
+        b"a photo of the tram"
+    );
+}
+
+// qa: CLOUD-128
+#[tokio::test]
+async fn turning_sync_on_over_pages_that_already_show_photos_sends_every_photo() {
+    let mac = test_pool().await;
+    let mac_images = images_dir();
+    set_assets_dir(&mac, &mac_images).await.unwrap();
+    let harbour = saved_image(&mac_images, b"harbour");
+    let tram = saved_image(&mac_images, b"tram");
+    page_showing(&mac, "Harbour", &harbour).await;
+    page_showing(&mac, "Tram", &tram).await;
+    let (phone, phone_images) = with_images().await;
+
+    crate::replica::start(&mac).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_eq!(
+        std::fs::read(phone_images.join(&harbour)).unwrap(),
+        b"harbour"
+    );
+    assert_eq!(std::fs::read(phone_images.join(&tram)).unwrap(), b"tram");
 }
 
 #[tokio::test]
