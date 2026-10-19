@@ -70,7 +70,10 @@ function listTests(config) {
     const tests = [];
     const walk = (suite) => {
       for (const spec of suite.specs ?? []) {
-        tests.push({ id: `${spec.file}:${spec.line} ${spec.title}`, tags: spec.tags });
+        tests.push({
+          id: `apps/desktop/e2e/${spec.file}:${spec.line} ${spec.title}`,
+          tags: spec.tags,
+        });
       }
       for (const child of suite.suites ?? []) walk(child);
     };
