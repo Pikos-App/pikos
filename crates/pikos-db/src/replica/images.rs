@@ -127,9 +127,9 @@ pub(crate) async fn build(
 /// Puts an arrived image in the assets folder unless it's already there. Returns whether it
 /// arrived. The record's file is the transport's download, which may be gone once the apply
 /// returns, so it's copied rather than kept as a path. With no folder set the apply fails, so the
-/// transport fetches the record again rather than moving past an image it couldn't keep; a
-/// download already gone, as a held record's is, drops the image rather than every other record.
-/// A file that can't be written, on a full disk say, is the inner error: that image's alone.
+/// transport fetches the record again rather than moving past an image it couldn't keep. A file
+/// that can't be kept is the inner error, that image's alone: `NotFound` when the download is
+/// already gone, as a held record's is, otherwise a file that can't be written, on a full disk say.
 pub(crate) async fn apply(
     conn: &mut SqliteConnection,
     record: &Record,
@@ -154,16 +154,19 @@ pub(crate) async fn apply(
         let Some(Value::Text(download)) = map.get(codec::FILE) else {
             return Ok(Ok(false));
         };
-        match copy_in(Path::new(download), &target) {
-            Ok(()) => true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                log::warn!("replica: the download of {} is gone: {e}", record.name);
-                return Ok(Ok(false));
-            }
-            Err(e) => return Ok(Err(e)),
+        if let Err(e) = copy_in(Path::new(download), &target) {
+            return Ok(Err(e));
         }
+
+        true
     };
     mark_in_zone(conn, &record.name.key, record.row.born).await?;
+
+    // A copy held from an earlier attempt is spent once the file is here, fetched again or not.
+    sqlx::query("DELETE FROM replica_pen WHERE name = ?")
+        .bind(record.name.to_string())
+        .execute(&mut *conn)
+        .await?;
     Ok(Ok(arrived))
 }
 

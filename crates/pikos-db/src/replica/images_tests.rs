@@ -270,7 +270,7 @@ async fn an_image_arriving_before_its_folder_is_set_fails_the_apply_so_it_is_fet
 }
 
 #[tokio::test]
-async fn an_image_whose_download_is_gone_is_dropped_and_the_rest_still_apply() {
+async fn an_image_whose_download_is_gone_waits_to_be_fetched_again_and_the_rest_still_apply() {
     let (mac, _) = with_images().await;
     let (phone, phone_images) = with_images().await;
     let id = page_showing(&mac, "Harbour", &format!("{}.png", uuid::Uuid::new_v4())).await;
@@ -282,17 +282,54 @@ async fn an_image_whose_download_is_gone_is_dropped_and_the_rest_still_apply() {
         .map(|b| (b.name, b.fields))
         .collect();
     let gone = format!("{}.png", uuid::Uuid::new_v4());
-    records.push(image_record(
-        &gone,
-        &std::env::temp_dir().join("pkos_no_such_download"),
-    ));
+    let image = image_record(&gone, &std::env::temp_dir().join("pkos_no_such_download"));
+    records.push(image.clone());
 
-    crate::replica::apply::apply(&phone, &records)
+    let applied = crate::replica::apply::apply(&phone, &records)
         .await
         .unwrap();
 
     assert!(get_page(&phone, &id).await.unwrap().is_some());
     assert!(!phone_images.join(&gone).exists());
+    assert_eq!(applied.refetch, vec![image.0]);
+}
+
+#[tokio::test]
+async fn an_image_held_for_a_write_failure_lands_once_fetched_again_after_its_download_is_gone() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (phone, phone_images) = with_images().await;
+    let name = format!("{}.png", uuid::Uuid::new_v4());
+    let download = std::env::temp_dir().join(format!("pkos_download_{}", uuid::Uuid::new_v4()));
+    std::fs::write(&download, b"photo").unwrap();
+    let image = image_record(&name, &download);
+    let set_mode = |mode| {
+        std::fs::set_permissions(&phone_images, std::fs::Permissions::from_mode(mode)).unwrap()
+    };
+    set_mode(0o555);
+    crate::replica::apply::apply(&phone, std::slice::from_ref(&image))
+        .await
+        .unwrap();
+    set_mode(0o755);
+    std::fs::remove_file(&download).unwrap();
+
+    let retried = crate::replica::apply::retry_held(&phone).await.unwrap();
+
+    assert_eq!(retried.held, 1);
+    assert_eq!(retried.refetch, vec![image.0.clone()]);
+
+    let fresh = std::env::temp_dir().join(format!("pkos_download_{}", uuid::Uuid::new_v4()));
+    std::fs::write(&fresh, b"photo").unwrap();
+    crate::replica::apply::apply(&phone, &[image_record(&name, &fresh)])
+        .await
+        .unwrap();
+
+    assert_eq!(std::fs::read(phone_images.join(&name)).unwrap(), b"photo");
+    let still_held: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM replica_pen")
+        .fetch_one(&phone)
+        .await
+        .unwrap();
+    assert_eq!(still_held, 0);
 }
 
 #[tokio::test]

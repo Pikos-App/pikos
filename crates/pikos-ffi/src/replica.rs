@@ -65,6 +65,8 @@ pub struct SyncApplied {
     pub changed: u32,
     /// Records waiting for a parent or a newer Pikos.
     pub held: u32,
+    /// Held images to fetch again, since only a fresh download can land them.
+    pub refetch: Vec<RecordAddress>,
 }
 
 #[derive(uniffi::Record, Clone, Debug, PartialEq)]
@@ -126,6 +128,21 @@ fn parse_name(name: &str) -> Result<RecordName, WorkspaceError> {
     name.parse().map_err(|e| WorkspaceError::InvalidInput {
         message: format!("{e}"),
     })
+}
+
+fn address(name: &RecordName) -> RecordAddress {
+    RecordAddress {
+        store_name: name.store_name(),
+        name: name.to_string(),
+    }
+}
+
+fn applied(applied: pikos_db::replica::apply::Applied) -> SyncApplied {
+    SyncApplied {
+        changed: applied.changed as u32,
+        held: applied.held as u32,
+        refetch: applied.refetch.iter().map(address).collect(),
+    }
 }
 
 fn parse_clock(clock: &str) -> Result<Hlc, WorkspaceError> {
@@ -215,13 +232,7 @@ impl Workspace {
     /// The records waiting to send, oldest change first.
     pub async fn pending_records(&self, limit: u32) -> Result<Vec<RecordAddress>, WorkspaceError> {
         let names = pikos_db::replica::build::pending(&self.pool, i64::from(limit)).await?;
-        Ok(names
-            .into_iter()
-            .map(|name| RecordAddress {
-                store_name: name.store_name(),
-                name: name.to_string(),
-            })
-            .collect())
+        Ok(names.iter().map(address).collect())
     }
 
     pub async fn build_records(
@@ -274,11 +285,9 @@ impl Workspace {
                 Ok((parse_name(&r.name)?, map))
             })
             .collect::<Result<Vec<_>, WorkspaceError>>()?;
-        let applied = pikos_db::replica::apply::apply(&self.pool, &records).await?;
-        Ok(SyncApplied {
-            changed: applied.changed as u32,
-            held: applied.held as u32,
-        })
+        Ok(applied(
+            pikos_db::replica::apply::apply(&self.pool, &records).await?,
+        ))
     }
 
     /// Keeps CloudKit's metadata for records it saved or fetched.
@@ -320,24 +329,16 @@ impl Workspace {
     /// Tries every held record again. Call after an update, which may read a format the old build
     /// couldn't.
     pub async fn retry_held_records(&self) -> Result<SyncApplied, WorkspaceError> {
-        let applied = pikos_db::replica::apply::retry_held(&self.pool).await?;
-        Ok(SyncApplied {
-            changed: applied.changed as u32,
-            held: applied.held as u32,
-        })
+        Ok(applied(
+            pikos_db::replica::apply::retry_held(&self.pool).await?,
+        ))
     }
 
     /// Forgets tombstones and holds past retention. Run now and then, such as on launch. Returns the
     /// records whose tombstones went, to delete from CloudKit as well.
     pub async fn expire_sync(&self) -> Result<Vec<RecordAddress>, WorkspaceError> {
         let forgotten = pikos_db::replica::expire(&self.pool).await?;
-        Ok(forgotten
-            .into_iter()
-            .map(|name| RecordAddress {
-                store_name: name.store_name(),
-                name: name.to_string(),
-            })
-            .collect())
+        Ok(forgotten.iter().map(address).collect())
     }
 }
 

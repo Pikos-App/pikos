@@ -307,7 +307,7 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
             if applied.changed > 0 {
                 let _ = app.emit(super::sync_loop::SYNC_APPLIED_EVENT, ());
             }
-            Ok(serde_json::json!({ "changed": applied.changed, "held": applied.held }))
+            Ok(applied_reply(&applied))
         }
         Request::EngineState {} => {
             let state = pikos_db::replica::engine_state(pool)
@@ -348,7 +348,7 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
             if applied.changed > 0 {
                 let _ = app.emit(super::sync_loop::SYNC_APPLIED_EVENT, ());
             }
-            Ok(serde_json::json!({ "changed": applied.changed, "held": applied.held }))
+            Ok(applied_reply(&applied))
         }
         Request::SaveSystemFields { records } => {
             let records = records
@@ -391,6 +391,14 @@ fn address(name: &RecordName) -> Address {
         name: name.to_string(),
         store_name: name.store_name(),
     }
+}
+
+fn applied_reply(applied: &pikos_db::replica::apply::Applied) -> serde_json::Value {
+    serde_json::json!({
+        "changed": applied.changed,
+        "held": applied.held,
+        "refetch": applied.refetch.iter().map(address).collect::<Vec<_>>(),
+    })
 }
 
 fn parse_name(name: &str) -> Result<RecordName, String> {

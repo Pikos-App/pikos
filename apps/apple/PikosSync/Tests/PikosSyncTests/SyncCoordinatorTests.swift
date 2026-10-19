@@ -74,7 +74,14 @@ private actor FakeStore: ReplicaStore {
         return expiring
     }
 
-    func retryHeld() async throws { upkeepSteps.append("retryHeld") }
+    var downloadsGone: [RecordAddress] = []
+
+    func loseDownload(_ address: RecordAddress) { downloadsGone.append(address) }
+
+    func retryHeld() async throws -> [RecordAddress] {
+        upkeepSteps.append("retryHeld")
+        return downloadsGone
+    }
 
     private(set) var systemFields: [String: Data] = [:]
 
@@ -290,8 +297,8 @@ final class SyncCoordinatorTests: XCTestCase {
         let stepsWithinTheDay = await store.upkeepSteps
         _ = try await coordinator.upkeepIfDue(now: launch.addingTimeInterval(24 * 3_600))
 
-        XCTAssertEqual(atLaunch, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
-        XCTAssertEqual(anHourLater, [])
+        XCTAssertEqual(atLaunch.expired, [CKRecord.ID(recordName: "page:old", zoneID: workspaceZone)])
+        XCTAssertEqual(anHourLater, SyncCoordinator.Upkeep())
         XCTAssertEqual(stepsWithinTheDay, ["expire", "retryHeld"])
         let steps = await store.upkeepSteps
         XCTAssertEqual(steps, ["expire", "retryHeld", "expire", "retryHeld"])
@@ -303,11 +310,21 @@ final class SyncCoordinatorTests: XCTestCase {
         let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
         _ = try await coordinator.zoneDeleted(workspaceZone, reason: .purged)
 
-        let ids = try await coordinator.upkeepIfDue()
+        let upkeep = try await coordinator.upkeepIfDue()
 
-        XCTAssertEqual(ids, [])
+        XCTAssertEqual(upkeep, SyncCoordinator.Upkeep())
         let steps = await store.upkeepSteps
         XCTAssertEqual(steps, [])
+    }
+
+    func testAHeldImageWhoseDownloadIsGoneIsFetchedAgainAtUpkeep() async throws {
+        let store = FakeStore()
+        await store.loseDownload(RecordAddress(name: "asset:a.png", storeName: "asset:a.png"))
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+
+        let upkeep = try await coordinator.upkeepIfDue()
+
+        XCTAssertEqual(upkeep.refetch, [CKRecord.ID(recordName: "asset:a.png", zoneID: workspaceZone)])
     }
 
     // qa: CLOUD-122

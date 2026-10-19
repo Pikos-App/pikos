@@ -188,18 +188,28 @@ public actor SyncCoordinator {
         }
     }
 
+    /// What the transport does after an upkeep: delete the expired ids from CloudKit, and fetch the
+    /// refetch ids again, held images whose download was gone before they could be kept.
+    public struct Upkeep: Equatable, Sendable {
+        public var expired: [CKRecord.ID] = []
+        public var refetch: [CKRecord.ID] = []
+    }
+
     /// On the first call of a launch and then a day apart: forgets tombstones past retention, then
-    /// tries held records again, since an update may read them now. Returns the expired ids to
-    /// delete from CloudKit, or none when it isn't due. Paused, it waits, so nothing is deleted from
-    /// an account the person hasn't chosen.
-    public func upkeepIfDue(now: Date = Date()) async throws -> [CKRecord.ID] {
+    /// tries held records again, since an update may read them now or the cause of a failed write
+    /// may have cleared. Does nothing when it isn't due. Paused, it waits, so nothing is deleted
+    /// from an account the person hasn't chosen.
+    public func upkeepIfDue(now: Date = Date()) async throws -> Upkeep {
         let isDue = lastUpkeep.map { now.timeIntervalSince($0) >= Self.upkeepEvery } ?? true
-        guard paused == nil, isDue else { return [] }
+        guard paused == nil, isDue else { return Upkeep() }
 
         lastUpkeep = now
         let gone = try await expired()
-        try await store.retryHeld()
-        return gone
+        let refetch = try await store.retryHeld()
+        return Upkeep(
+            expired: gone,
+            refetch: refetch.map { CKRecord.ID(recordName: $0.storeName, zoneID: zone) }
+        )
     }
 
     /// Tombstones past retention, as ids to delete from CloudKit. Every device deletes them, and a

@@ -49,6 +49,10 @@ pub struct Applied {
     /// Records this device sends again whole, re-stamped, because a write here outlived another
     /// device's purge of them.
     pub resent: BTreeSet<String>,
+    /// Images held because the transport's download was gone before the file could be kept, as a
+    /// retry's is: a held record keeps only the download's path. Only the transport can fetch them
+    /// again with a fresh one.
+    pub refetch: Vec<RecordName>,
 }
 
 pub fn shape(entity: &EntityMap) -> Vec<(&'static str, usize)> {
@@ -184,6 +188,11 @@ async fn apply_in(
                             Ok(Ok(true)) => Outcome::Changed,
                             Ok(Ok(false)) => Outcome::Unchanged,
                             Ok(Err(e)) => {
+                                let download_gone = e.kind() == std::io::ErrorKind::NotFound;
+                                if download_gone {
+                                    applied.refetch.push(name.clone());
+                                }
+
                                 log::warn!("replica: holding {name}: {e}");
                                 Outcome::Held(Hold::Failed(e.to_string()))
                             }
