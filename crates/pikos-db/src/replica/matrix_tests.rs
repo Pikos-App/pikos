@@ -150,6 +150,26 @@ async fn count(pool: &SqlitePool, sql: &str) -> i64 {
     sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
 }
 
+/// What a device plans to fire over the day from 07:00 UTC on 2030-01-10, at its own default lead.
+async fn planned(pool: &SqlitePool, default_minutes: i64) -> Vec<(String, String)> {
+    let now = chrono::NaiveDateTime::parse_from_str("2030-01-10T07:00:00", "%Y-%m-%dT%H:%M:%S")
+        .unwrap()
+        .and_utc();
+
+    upcoming_reminders(
+        pool,
+        now,
+        chrono_tz::UTC,
+        chrono::Duration::days(1),
+        default_minutes,
+    )
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|r| (r.page_id, r.fire_at))
+    .collect()
+}
+
 // ─── Pages ───────────────────────────────────────────────────────────────────
 
 // qa: CLOUD-03
@@ -455,6 +475,25 @@ async fn reminders_set_changed_and_removed_reach_the_other_device() {
     assert_eq!(leads(&phone, &id).await, vec![15]);
 }
 
+// qa: CLOUD-21
+#[tokio::test]
+async fn a_page_with_no_lead_of_its_own_fires_at_each_devices_own_default() {
+    let (mac, phone) = (device().await, device().await);
+    let id = created(&mac, new_page("Standup")).await;
+    schedule(&mac, &id, "2030-01-10T09:00:00", None).await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(
+        planned(&mac, 10).await,
+        vec![(id.clone(), "2030-01-10T08:50:00".to_owned())]
+    );
+    assert_eq!(
+        planned(&phone, 30).await,
+        vec![(id.clone(), "2030-01-10T08:30:00".to_owned())]
+    );
+    assert!(leads(&phone, &id).await.is_empty());
+}
+
 // qa: CLOUD-24
 #[tokio::test]
 async fn a_floating_time_reads_the_same_on_the_other_device() {
@@ -580,6 +619,20 @@ async fn an_all_day_pages_reminder_and_its_day_before_lead_reach_the_other_devic
     converge(&mac, &phone).await;
 
     assert_eq!(leads(&phone, &id).await, vec![0, 24 * 60]);
+}
+
+// qa: CLOUD-34
+#[tokio::test]
+async fn an_all_day_page_for_today_is_counted_in_the_other_devices_daily_summary() {
+    let (mac, phone) = (device().await, device().await);
+    let id = created(&mac, new_page("Passport renewal")).await;
+    schedule(&mac, &id, "2030-01-10", None).await;
+    converge(&mac, &phone).await;
+
+    assert_eq!(
+        today_scheduled_count(&phone, "2030-01-10").await.unwrap(),
+        1
+    );
 }
 
 // qa: CLOUD-35, CLOUD-75
@@ -940,6 +993,19 @@ async fn a_done_copy_moved_and_deleted_follows_on_the_other_device() {
     assert_eq!(renamed, "Swim, 40 lengths");
     assert!(trashed(&phone, &clone).await);
     assert_converged(&mac, &phone).await;
+}
+
+// qa: CLOUD-132
+#[tokio::test]
+async fn an_occurrences_reminder_is_planned_for_the_same_time_on_both_devices() {
+    let (mac, phone) = (device().await, device().await);
+    let (id, _) = repeating(&mac, "Pills", "2030-01-08", "FREQ=DAILY").await;
+    create_page_reminder(&mac, &id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+
+    let expected = vec![(id, "2030-01-10T08:45:00".to_owned())];
+    assert_eq!(planned(&mac, 10).await, expected);
+    assert_eq!(planned(&phone, 30).await, expected);
 }
 
 // ─── Detached calendar series ────────────────────────────────────────────────
@@ -1463,6 +1529,29 @@ async fn notifications_fired_on_one_device_arent_in_the_other_devices_history() 
     );
 }
 
+// qa: CLOUD-133
+#[tokio::test]
+async fn an_arriving_page_is_handed_to_the_other_devices_system_search_and_a_trashed_one_taken_out()
+{
+    let (mac, phone) = (device().await, device().await);
+    let old = created(&mac, new_page("Old flat")).await;
+    converge(&mac, &phone).await;
+    let indexed = crate::changes::change_state(&phone).await.unwrap().seq;
+
+    let new = created(&mac, new_page("Dentist")).await;
+    soft_delete_page_impl(&mac, &old).await.unwrap();
+    converge(&mac, &phone).await;
+    let (written, trashed) = crate::reads::pages_changed_since(&phone, indexed)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        written.into_iter().map(|p| p.id).collect::<Vec<_>>(),
+        vec![new]
+    );
+    assert_eq!(trashed, vec![old]);
+}
+
 // qa: CLOUD-80
 #[tokio::test]
 async fn a_reminder_fired_on_one_device_fires_once_on_the_other_and_not_again_on_the_first() {
@@ -1471,8 +1560,8 @@ async fn a_reminder_fired_on_one_device_fires_once_on_the_other_and_not_again_on
     schedule(&mac, &id, "2030-01-10T09:00:00", None).await;
     create_page_reminder(&mac, &id, 15).await.unwrap();
     converge(&mac, &phone).await;
-    let fire = chrono::NaiveDateTime::parse_from_str("2030-01-10T08:45:30", "%Y-%m-%dT%H:%M:%S")
-        .unwrap();
+    let fire =
+        chrono::NaiveDateTime::parse_from_str("2030-01-10T08:45:30", "%Y-%m-%dT%H:%M:%S").unwrap();
     let tick = ReminderWindow::for_test(fire, fire.and_utc());
 
     let fired = due_explicit_reminders(&mac, &tick).await.unwrap();
@@ -1502,7 +1591,10 @@ async fn a_reminder_fired_on_one_device_fires_once_on_the_other_and_not_again_on
     .await
     .unwrap();
     assert_eq!(fired.len(), 1);
-    assert!(due_explicit_reminders(&mac, &tick).await.unwrap().is_empty());
+    assert!(due_explicit_reminders(&mac, &tick)
+        .await
+        .unwrap()
+        .is_empty());
     assert_eq!(
         planned
             .iter()
