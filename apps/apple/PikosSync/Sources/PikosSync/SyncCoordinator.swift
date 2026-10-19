@@ -19,6 +19,13 @@ public actor SyncCoordinator {
     /// saved for the rest of this launch: the next one starts from the last state saved before
     /// them and fetches them again.
     private var fetchUnapplied = false
+    /// Set when iCloud changed under this device in a way only the person settles: another Apple ID
+    /// signed in, or the workspace's zone was deleted. From then on nothing is sent or applied, no
+    /// state is saved, and the status line keeps saying so. Their choice starts sync over with a new
+    /// coordinator.
+    public private(set) var paused: SyncStatus?
+
+    private var savesState: Bool { !fetchUnapplied && paused == nil }
 
     public init(store: ReplicaStore, zone: CKRecordZone.ID) {
         self.store = store
@@ -27,6 +34,8 @@ public actor SyncCoordinator {
 
     /// The records waiting to send, as CloudKit ids for the engine's pending list.
     public func pending(limit: Int = 1_000) async throws -> [CKRecord.ID] {
+        guard paused == nil else { return [] }
+
         let addresses = try await store.pendingRecords(limit: limit)
         for address in addresses {
             names[address.storeName] = address.name
@@ -37,7 +46,7 @@ public actor SyncCoordinator {
     /// The record to send for a pending id, built now from the live row, or nil when it no longer
     /// needs sending.
     public func record(for id: CKRecord.ID) async throws -> CKRecord? {
-        guard let name = names[id.recordName],
+        guard paused == nil, let name = names[id.recordName],
             let outgoing = try await store.buildRecords(names: [name]).first
         else { return nil }
         inFlight[outgoing.storeName] = outgoing
@@ -93,6 +102,8 @@ public actor SyncCoordinator {
     }
 
     public func fetched(_ records: [CKRecord]) async throws {
+        guard paused == nil else { return }
+
         var decoded: [SyncRecord] = []
         var metadata: [(name: String, data: Data)] = []
         for record in records {
@@ -128,14 +139,41 @@ public actor SyncCoordinator {
     }
 
     public func stateUpdated(_ state: Data) async throws {
-        guard !fetchUnapplied else { return }
+        guard savesState else { return }
 
         try await store.setEngineState(state)
     }
 
     public func fetchFinished() async throws {
-        guard !fetchUnapplied else { return }
+        guard savesState else { return }
 
         try await store.fetchFinished()
+    }
+
+    /// What an account change puts on the status line. Another Apple ID signing in pauses sync.
+    public func accountChanged(_ change: CKSyncEngine.Event.AccountChange.ChangeType) -> SyncStatus? {
+        switch change {
+        case .signIn:
+            return .syncing
+        case .signOut:
+            return .noAccount
+        case .switchAccounts:
+            paused = .accountChanged
+            return .accountChanged
+        @unknown default:
+            return nil
+        }
+    }
+
+    /// Pauses sync when the deleted zone is this workspace's, and says why. Nil for any other zone.
+    public func zoneDeleted(
+        _ id: CKRecordZone.ID,
+        reason: CKDatabase.DatabaseChange.Deletion.Reason
+    ) -> SyncStatus? {
+        guard id == zone else { return nil }
+
+        let status: SyncStatus = reason == .encryptedDataReset ? .encryptionReset : .zoneDeleted
+        paused = status
+        return status
     }
 }
