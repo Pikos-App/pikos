@@ -52,6 +52,14 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
         try await workspace.setEngineState(state: state)
     }
 
+    func heldFor() async throws -> String? {
+        try await workspace.syncHeldFor()
+    }
+
+    func hold(_ reason: String) async throws {
+        try await workspace.holdSync(reason: reason)
+    }
+
     func fetchFinished() async throws {
         try await workspace.fetchFinished()
     }

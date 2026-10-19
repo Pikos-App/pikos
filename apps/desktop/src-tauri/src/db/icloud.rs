@@ -230,6 +230,10 @@ enum Request {
         state: Vec<u8>,
     },
     FetchFinished {},
+    HeldFor {},
+    Hold {
+        reason: String,
+    },
     Expire {},
     RetryHeld {},
     SaveSystemFields {
@@ -319,6 +323,16 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
         }
         Request::FetchFinished {} => {
             pikos_db::replica::fetch_finished(pool)
+                .await
+                .map_err(failed)?;
+            Ok(serde_json::Value::Null)
+        }
+        Request::HeldFor {} => {
+            let reason = pikos_db::replica::held_for(pool).await.map_err(failed)?;
+            json(&reason)
+        }
+        Request::Hold { reason } => {
+            pikos_db::replica::hold(pool, &reason)
                 .await
                 .map_err(failed)?;
             Ok(serde_json::Value::Null)

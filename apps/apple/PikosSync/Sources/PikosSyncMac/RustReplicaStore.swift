@@ -47,6 +47,14 @@
             let _: Empty? = try call("fetch_finished", [String: Int]())
         }
 
+        func heldFor() async throws -> String? {
+            try call("held_for", [String: Int]())
+        }
+
+        func hold(_ reason: String) async throws {
+            let _: Empty? = try call("hold", ["reason": reason])
+        }
+
         func expire() async throws -> [RecordAddress] {
             let addresses: [WireAddress] = try call("expire", [String: Int]())
             return addresses.map(\.address)

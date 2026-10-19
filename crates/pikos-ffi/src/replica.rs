@@ -160,6 +160,14 @@ impl Workspace {
         Ok(pikos_db::replica::set_paused(&self.pool, paused).await?)
     }
 
+    pub async fn sync_held_for(&self) -> Result<Option<String>, WorkspaceError> {
+        Ok(pikos_db::replica::held_for(&self.pool).await?)
+    }
+
+    pub async fn hold_sync(&self, reason: String) -> Result<(), WorkspaceError> {
+        Ok(pikos_db::replica::hold(&self.pool, &reason).await?)
+    }
+
     /// Forget sync on this device: it joins again as a new one.
     pub async fn forget_sync(&self) -> Result<(), WorkspaceError> {
         Ok(pikos_db::replica::forget(&self.pool).await?)

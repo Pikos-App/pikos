@@ -1,7 +1,9 @@
 use pikos_replica::Entity;
 
 use super::manifest::entity;
-use super::{forget, holds_only_seed, meta, record_seed, set_paused, start, Uncaptured};
+use super::{
+    forget, held_for, hold, holds_only_seed, meta, record_seed, set_paused, start, Uncaptured,
+};
 use crate::{insert_test_folder, insert_test_page, insert_test_page_sync, test_pool, TestPage};
 
 async fn seeded_workspace() -> sqlx::SqlitePool {
@@ -135,6 +137,22 @@ async fn a_paused_device_keeps_capturing() {
 
     assert!(meta(&pool).await.unwrap().paused);
     assert!(pending(&pool).await > 0);
+}
+
+#[tokio::test]
+async fn a_hold_outlasts_turning_sync_off_and_on_until_sync_is_forgotten() {
+    let pool = test_pool().await;
+    start(&pool).await.unwrap();
+    hold(&pool, "zoneDeleted").await.unwrap();
+
+    set_paused(&pool, true).await.unwrap();
+    start(&pool).await.unwrap();
+    set_paused(&pool, false).await.unwrap();
+    let kept = held_for(&pool).await.unwrap();
+    forget(&pool).await.unwrap();
+
+    assert_eq!(kept.as_deref(), Some("zoneDeleted"));
+    assert_eq!(held_for(&pool).await.unwrap(), None);
 }
 
 #[tokio::test]

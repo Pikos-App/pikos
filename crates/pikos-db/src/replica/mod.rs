@@ -165,7 +165,7 @@ pub async fn forget(pool: &SqlitePool) -> AppResult<()> {
         sqlx::query(
             "UPDATE replica_meta
              SET started = 0, paused = 0, device_id = NULL, base_clock = NULL,
-                 engine_state = NULL, last_fetch_at = NULL, epoch_seen = NULL
+                 engine_state = NULL, last_fetch_at = NULL, epoch_seen = NULL, held_for = NULL
              WHERE id = 1",
         )
         .execute(&mut *tx)
@@ -235,6 +235,25 @@ pub async fn set_engine_state(pool: &SqlitePool, state: &[u8]) -> AppResult<()> 
     sqlx::query("UPDATE replica_meta SET engine_state = ?, last_fetch_at = ? WHERE id = 1")
         .bind(state)
         .bind(crate::pool::now_iso())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Why the transport waits on the person, in its own words, or None while it runs.
+pub async fn held_for(pool: &SqlitePool) -> AppResult<Option<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT held_for FROM replica_meta WHERE id = 1")
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
+/// Stops the transport until the person chooses, across relaunches. Only [`forget`] clears it,
+/// since every choice the person can make starts this device over.
+pub async fn hold(pool: &SqlitePool, reason: &str) -> AppResult<()> {
+    sqlx::query("UPDATE replica_meta SET held_for = ? WHERE id = 1")
+        .bind(reason)
         .execute(pool)
         .await?;
     Ok(())
@@ -475,6 +494,7 @@ pub struct Displaced {
     hlc: Hlc,
     base_clock: Option<Hlc>,
     paused: bool,
+    held_for: Option<String>,
     engine_state: Option<Vec<u8>>,
     workspace_id: String,
     names: Vec<pikos_replica::RecordName>,
@@ -500,6 +520,7 @@ pub async fn before_restore(pool: &SqlitePool) -> AppResult<Option<Displaced>> {
         hlc: current.hlc,
         base_clock: current.base_clock,
         paused: current.paused,
+        held_for: held_for(pool).await?,
         engine_state: engine_state(pool).await?,
         workspace_id: current.workspace_id,
         names: state::synced_rows(pool)
@@ -519,11 +540,12 @@ pub async fn after_restore(pool: &SqlitePool, displaced: Displaced) -> AppResult
     let mut tx = Uncaptured::begin(pool).await?;
     sqlx::query(
         "UPDATE replica_meta
-         SET started = 1, paused = ?, device_id = ?, base_clock = ?, engine_state = ?,
-             workspace_id = ?, hlc = max(hlc, ?)
+         SET started = 1, paused = ?, held_for = ?, device_id = ?, base_clock = ?,
+             engine_state = ?, workspace_id = ?, hlc = max(hlc, ?)
          WHERE id = 1",
     )
     .bind(displaced.paused)
+    .bind(&displaced.held_for)
     .bind(&displaced.device_id)
     .bind(displaced.base_clock.map(|c| c.to_string()))
     .bind(&displaced.engine_state)

@@ -348,6 +348,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_fetch_finished(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_forget_sync(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_HOLD_SYNC
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_HOLD_SYNC
+uint64_t uniffi_pikos_ffi_fn_method_workspace_hold_sync(uint64_t ptr, RustBuffer reason
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_JOIN_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_JOIN_SYNC
 uint64_t uniffi_pikos_ffi_fn_method_workspace_join_sync(uint64_t ptr, RustBuffer zones
@@ -396,6 +401,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_set_sync_paused(uint64_t ptr, int8
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_START_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_START_SYNC
 uint64_t uniffi_pikos_ffi_fn_method_workspace_start_sync(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_HELD_FOR
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_HELD_FOR
+uint64_t uniffi_pikos_ffi_fn_method_workspace_sync_held_for(uint64_t ptr
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SYNC_STATE
@@ -1327,6 +1337,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_forget_sync(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_HOLD_SYNC
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_HOLD_SYNC
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_hold_sync(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_JOIN_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_JOIN_SYNC
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_join_sync(void
@@ -1384,6 +1400,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_sync_paused(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_START_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_START_SYNC
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_start_sync(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SYNC_HELD_FOR
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SYNC_HELD_FOR
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_sync_held_for(void
     
 );
 #endif

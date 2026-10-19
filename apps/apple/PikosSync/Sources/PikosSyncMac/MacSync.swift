@@ -41,6 +41,13 @@
             let joined: String
             let engine: CloudKitSync
             do {
+                if let held = try await CloudKitSync.held(store: store) {
+                    let line = SyncStatusLine(
+                        status: held, queue: .init(toSend: 0, needsUpdate: false, lastFetch: nil))
+                    try await store.report(line)
+                    return
+                }
+
                 joined = try await CloudKitSync.join(store: store, container: container, ownZone: zone)
                 engine = CloudKitSync(store: store, container: container, zoneName: joined) {
                     [weak self] status in

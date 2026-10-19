@@ -21,9 +21,16 @@ public actor SyncCoordinator {
     private var fetchUnapplied = false
     /// Set when iCloud changed under this device in a way only the person settles: another Apple ID
     /// signed in, or the workspace's zone was deleted. From then on nothing is sent or applied, no
-    /// state is saved, and the status line keeps saying so. Their choice starts sync over with a new
+    /// state is saved, and the status line keeps saying so. Kept in the workspace too, so a relaunch
+    /// before the person chooses doesn't start sync again. Their choice starts sync over with a new
     /// coordinator.
     public private(set) var paused: SyncStatus?
+    /// The pauses kept in the workspace, by the name stored there.
+    static let holds: [String: SyncStatus] = [
+        "accountChanged": .accountChanged,
+        "zoneDeleted": .zoneDeleted,
+        "encryptionReset": .encryptionReset,
+    ]
     /// Records iCloud refused for good, by store name. They aren't queued again for the rest of
     /// this launch, so an edit that fixes one goes at the next.
     private var refusedForGood: Set<String> = []
@@ -203,14 +210,16 @@ public actor SyncCoordinator {
     }
 
     /// What an account change puts on the status line. Another Apple ID signing in pauses sync.
-    public func accountChanged(_ change: CKSyncEngine.Event.AccountChange.ChangeType) -> SyncStatus? {
+    public func accountChanged(_ change: CKSyncEngine.Event.AccountChange.ChangeType) async throws
+        -> SyncStatus?
+    {
         switch change {
         case .signIn:
             return .syncing
         case .signOut:
             return .noAccount
         case .switchAccounts:
-            paused = .accountChanged
+            try await pause(.accountChanged)
             return .accountChanged
         @unknown default:
             return nil
@@ -221,11 +230,18 @@ public actor SyncCoordinator {
     public func zoneDeleted(
         _ id: CKRecordZone.ID,
         reason: CKDatabase.DatabaseChange.Deletion.Reason
-    ) -> SyncStatus? {
+    ) async throws -> SyncStatus? {
         guard id == zone else { return nil }
 
         let status: SyncStatus = reason == .encryptedDataReset ? .encryptionReset : .zoneDeleted
-        paused = status
+        try await pause(status)
         return status
+    }
+
+    private func pause(_ status: SyncStatus) async throws {
+        paused = status
+        if let name = Self.holds.first(where: { $0.value == status })?.key {
+            try await store.hold(name)
+        }
     }
 }
