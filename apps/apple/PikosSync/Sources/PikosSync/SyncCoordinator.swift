@@ -24,6 +24,17 @@ public actor SyncCoordinator {
     /// state is saved, and the status line keeps saying so. Their choice starts sync over with a new
     /// coordinator.
     public private(set) var paused: SyncStatus?
+    /// Records iCloud refused for good, by store name. They aren't queued again for the rest of
+    /// this launch, so an edit that fixes one goes at the next.
+    private var refusedForGood: Set<String> = []
+    /// Set when a save was refused because the account's iCloud storage is full, and cleared by
+    /// the next save that goes through. Meanwhile only a fetch queues records again, so a full
+    /// account is tried every few minutes rather than after every send.
+    private var storageFull = false
+
+    /// Save failures that sending the same record again can't fix: it's too big, or an image it
+    /// carries is gone. Apple's sample retries only the transient codes.
+    static let permanentFailures: Set<CKError.Code> = [.limitExceeded, .assetFileNotFound]
 
     static let upkeepEvery: TimeInterval = 24 * 60 * 60
     private var lastUpkeep: Date?
@@ -36,10 +47,12 @@ public actor SyncCoordinator {
     }
 
     /// The records waiting to send, as CloudKit ids for the engine's pending list.
-    public func pending(limit: Int = 1_000) async throws -> [CKRecord.ID] {
-        guard paused == nil else { return [] }
+    public func pending(limit: Int = 1_000, retryingFull: Bool = false) async throws -> [CKRecord.ID] {
+        let isHeldBack = paused != nil || (storageFull && !retryingFull)
+        guard !isHeldBack else { return [] }
 
         let addresses = try await store.pendingRecords(limit: limit)
+            .filter { !refusedForGood.contains($0.storeName) }
         for address in addresses {
             names[address.storeName] = address.name
         }
@@ -49,7 +62,7 @@ public actor SyncCoordinator {
     /// The record to send for a pending id, built now from the live row, or nil when it no longer
     /// needs sending.
     public func record(for id: CKRecord.ID) async throws -> CKRecord? {
-        guard paused == nil, let name = names[id.recordName],
+        guard paused == nil, !refusedForGood.contains(id.recordName), let name = names[id.recordName],
             let outgoing = try await store.buildRecords(names: [name]).first
         else { return nil }
         inFlight[outgoing.storeName] = outgoing
@@ -65,6 +78,10 @@ public actor SyncCoordinator {
     public func saved(_ records: [CKRecord]) async throws -> [CKRecord.ID] {
         var sent: [(name: String, builtAt: String)] = []
         var metadata: [(name: String, data: Data)] = []
+        if !records.isEmpty {
+            storageFull = false
+        }
+
         for record in records {
             let storeName = record.recordID.recordName
             serverCopies[storeName] = record
@@ -93,9 +110,27 @@ public actor SyncCoordinator {
         return server.recordID
     }
 
-    /// A save that failed for a reason worth trying again later: the record stays pending.
-    public func failed(_ id: CKRecord.ID) {
+    /// A save failed for a reason the transport doesn't handle itself. Returns whether to queue the
+    /// record again now.
+    public func failed(_ id: CKRecord.ID, code: CKError.Code) -> Bool {
         inFlight[id.recordName] = nil
+        if code == .quotaExceeded {
+            storageFull = true
+            return false
+        }
+
+        let isPermanent = Self.permanentFailures.contains(code)
+        if isPermanent {
+            Self.log.error("iCloud refused \(id.recordName, privacy: .public) for good: \(code.rawValue)")
+            refusedForGood.insert(id.recordName)
+        }
+
+        return !isPermanent
+    }
+
+    /// What the status line says once a send or fetch finishes.
+    public var settled: SyncStatus {
+        storageFull ? .storageFull : .upToDate
     }
 
     /// The server no longer has a record this device built on: the next send starts fresh.

@@ -48,6 +48,10 @@ public struct SyncStatusLine: Equatable, Sendable {
             self.init(
                 text: "iCloud can no longer read what this device sent, so sync is paused.",
                 action: .uploadAgain)
+        case .storageFull:
+            self.init(
+                text: "Your iCloud storage is full, so sync is paused. Changes send once there's room.",
+                action: .none)
         case .failed(let message):
             self.init(text: "Couldn't sync: \(message)", action: .none)
         case .syncing:

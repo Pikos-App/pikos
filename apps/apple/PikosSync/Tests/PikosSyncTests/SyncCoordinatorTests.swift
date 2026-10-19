@@ -359,6 +359,58 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(sentAfterChoosing, queued)
     }
 
+    // qa: CLOUD-138
+    func testARecordICloudRefusesForGoodIsNotSentAgainWhileATransientFailureIs() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        await store.queue(page("p2", title: "Laundry"), storeName: "page:p2")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let ids = try await coordinator.pending()
+        _ = try await coordinator.record(for: ids[0])
+        _ = try await coordinator.record(for: ids[1])
+
+        let tooBigAgain = await coordinator.failed(ids[0], code: .limitExceeded)
+        let busyAgain = await coordinator.failed(ids[1], code: .zoneBusy)
+        let stillPending = try await coordinator.pending()
+        let rebuilt = try await coordinator.record(for: ids[0])
+        let status = await coordinator.settled
+
+        XCTAssertFalse(tooBigAgain)
+        XCTAssertTrue(busyAgain)
+        XCTAssertEqual(stillPending, [ids[1]])
+        XCTAssertNil(rebuilt)
+        XCTAssertEqual(status, .upToDate)
+
+        let afterRelaunch = SyncCoordinator(store: store, zone: workspaceZone)
+        let pendingAfterRelaunch = try await afterRelaunch.pending()
+        XCTAssertEqual(pendingAfterRelaunch, ids)
+    }
+
+    // qa: CLOUD-139
+    func testAFullICloudSaysSoAndIsTriedAgainOnlyByAFetchUntilASaveGoesThrough() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let ids = try await coordinator.pending()
+        _ = try await coordinator.record(for: ids[0])
+
+        let sendAgain = await coordinator.failed(ids[0], code: .quotaExceeded)
+        let status = await coordinator.settled
+        let afterASend = try await coordinator.pending()
+        let onAFetch = try await coordinator.pending(retryingFull: true)
+        let retriedBuilt = try await coordinator.record(for: onAFetch[0])
+        let retried = try XCTUnwrap(retriedBuilt)
+        _ = try await coordinator.saved([retried])
+        let statusOnceSaved = await coordinator.settled
+
+        XCTAssertFalse(sendAgain)
+        let line = SyncStatusLine(status: status, queue: .init(toSend: 1, needsUpdate: false, lastFetch: nil))
+        XCTAssertEqual(line.text, "Your iCloud storage is full, so sync is paused. Changes send once there's room.")
+        XCTAssertEqual(afterASend, [], "a full account isn't sent to after every send")
+        XCTAssertEqual(onAFetch, ids)
+        XCTAssertEqual(statusOnceSaved, .upToDate)
+    }
+
     func testASavedRecordsCloudKitMetadataIsKeptAndANewCoordinatorBuildsOnIt() async throws {
         let store = FakeStore()
         await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
