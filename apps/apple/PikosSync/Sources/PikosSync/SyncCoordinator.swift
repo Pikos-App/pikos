@@ -31,17 +31,22 @@ public actor SyncCoordinator {
         "zoneDeleted": .zoneDeleted,
         "encryptionReset": .encryptionReset,
     ]
-    /// Records iCloud refused for good, by store name. They aren't queued again for the rest of
-    /// this launch, so an edit that fixes one goes at the next.
+    /// Records iCloud refused for good or that couldn't be built, by store name. They aren't queued
+    /// again for the rest of this launch, so an edit or update that fixes one goes at the next.
     private var refusedForGood: Set<String> = []
     /// Set when a save was refused because the account's iCloud storage is full, and cleared by
     /// the next save that goes through. Meanwhile only a fetch queues records again, so a full
     /// account is tried every few minutes rather than after every send.
     private var storageFull = false
 
-    /// Save failures that sending the same record again can't fix: it's too big, or an image it
-    /// carries is gone. Apple's sample retries only the transient codes.
-    static let permanentFailures: Set<CKError.Code> = [.limitExceeded, .assetFileNotFound]
+    /// Save failures that sending the same record again can fix, as in Apple's sync-engine sample,
+    /// plus a record held back only because another in its batch failed. Every other code is
+    /// refused for good: listing the permanent ones instead let a code nobody named, such as a
+    /// field the deployed schema rejects, resend every few seconds until the app quit.
+    static let transientFailures: Set<CKError.Code> = [
+        .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable, .requestRateLimited,
+        .notAuthenticated, .operationCancelled, .batchRequestFailed,
+    ]
 
     static let upkeepEvery: TimeInterval = 24 * 60 * 60
     private var lastUpkeep: Date?
@@ -69,9 +74,18 @@ public actor SyncCoordinator {
     /// The record to send for a pending id, built now from the live row, or nil when it no longer
     /// needs sending.
     public func record(for id: CKRecord.ID) async throws -> CKRecord? {
-        guard paused == nil, !refusedForGood.contains(id.recordName), let name = names[id.recordName],
-            let outgoing = try await store.buildRecords(names: [name]).first
+        guard paused == nil, !refusedForGood.contains(id.recordName), let name = names[id.recordName]
         else { return nil }
+
+        let built: OutgoingRecord?
+        do {
+            built = try await store.buildRecords(names: [name]).first
+        } catch {
+            refusedForGood.insert(id.recordName)
+            throw error
+        }
+        guard let outgoing = built else { return nil }
+
         inFlight[outgoing.storeName] = outgoing
         let saved = outgoing.systemFields.flatMap(RecordCodec.record(fromSystemFields:))
         if let copy = serverCopies[outgoing.storeName] ?? saved {
@@ -126,18 +140,20 @@ public actor SyncCoordinator {
             return false
         }
 
-        let isPermanent = Self.permanentFailures.contains(code)
-        if isPermanent {
+        let isTransient = Self.transientFailures.contains(code)
+        if !isTransient {
             Self.log.error("iCloud refused \(id.recordName, privacy: .public) for good: \(code.rawValue)")
             refusedForGood.insert(id.recordName)
         }
 
-        return !isPermanent
+        return isTransient
     }
 
     /// What the status line says once a send or fetch finishes.
     public var settled: SyncStatus {
-        storageFull ? .storageFull : .upToDate
+        if storageFull { return .storageFull }
+
+        return refusedForGood.isEmpty ? .upToDate : .unsent(refusedForGood.count)
     }
 
     /// The server no longer has a record this device built on: the next send starts fresh.
