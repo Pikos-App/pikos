@@ -231,6 +231,7 @@ enum Request {
     },
     FetchFinished {},
     Expire {},
+    RetryHeld {},
     SaveSystemFields {
         records: Vec<NamedData>,
     },
@@ -325,6 +326,15 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
         Request::Expire {} => {
             let forgotten = pikos_db::replica::expire(pool).await.map_err(failed)?;
             json(&forgotten.iter().map(address).collect::<Vec<_>>())
+        }
+        Request::RetryHeld {} => {
+            let applied = pikos_db::replica::apply::retry_held(pool)
+                .await
+                .map_err(failed)?;
+            if applied.changed > 0 {
+                let _ = app.emit(super::sync_loop::SYNC_APPLIED_EVENT, ());
+            }
+            Ok(serde_json::json!({ "changed": applied.changed, "held": applied.held }))
         }
         Request::SaveSystemFields { records } => {
             let records = records
