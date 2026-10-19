@@ -22,11 +22,12 @@
 // Reads the master from the working tree, so it runs where the release is cut,
 // not in CI.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { pnpm } from "./lib/qa-rows.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MASTER = process.argv[2] ?? join(ROOT, ".agent/qa/full-qa-checklist.md");
@@ -46,8 +47,7 @@ function listTests(config) {
   const dir = mkdtempSync(join(tmpdir(), "qa-marks-"));
   const out = join(dir, "list.json");
   try {
-    execFileSync(
-      "pnpm",
+    pnpm(
       [
         "--filter",
         "@pikos/desktop",
@@ -68,7 +68,10 @@ function listTests(config) {
     const tests = [];
     const walk = (suite) => {
       for (const spec of suite.specs ?? []) {
-        tests.push({ id: `${spec.file}:${spec.line} ${spec.title}`, tags: spec.tags });
+        tests.push({
+          id: `apps/desktop/e2e/${spec.file}:${spec.line} ${spec.title}`,
+          tags: spec.tags,
+        });
       }
       for (const child of suite.suites ?? []) walk(child);
     };

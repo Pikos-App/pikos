@@ -31,8 +31,11 @@ export const NO_BEHAVIOUR = [
   "**/*.{test,testHelpers}.{ts,tsx}",
   "**/*_tests.rs",
   "**/tests/**",
+  "apps/{ios,apple}/*/Tests/**",
+  "apps/ios/PikosUITests/**",
   "apps/desktop/{e2e,seeds,bridge}/**",
   "apps/desktop/playwright.*",
+  "packages/editor-mobile/{e2e/**,playwright.*}",
   "apps/desktop/src/test/**",
   "packages/core/src/adapters/{MockStorage,Noop,mockViews}*",
   "apps/desktop/src/shared/adapters/{inMemoryStorage,mockStorageChunk}*",
@@ -46,6 +49,12 @@ export const NO_BEHAVIOUR = [
 
 export function git(...args) {
   return execFileSync("git", ["-C", ROOT, ...args], { encoding: "utf8" }).trim();
+}
+
+/** pnpm through `sh`: until its native binary replaces it, an installed pnpm is a shebang-less
+ *  script, which a shell runs and a direct spawn refuses with ENOEXEC. */
+export function pnpm(args, options) {
+  return execFileSync("sh", ["-c", 'exec pnpm "$@"', "pnpm", ...args], options);
 }
 
 /** Sections in master order, each with its globs and rows. Lines are kept so the copy
@@ -78,8 +87,7 @@ export function automatedRows() {
 }
 
 export function importGraph() {
-  const out = execFileSync(
-    "pnpm",
+  const out = pnpm(
     [
       "exec",
       "depcruise",
@@ -231,7 +239,7 @@ export function touches({ automated, graph, range, sections, waive }) {
   const testsByFile = new Map();
   for (const [row, tests] of Object.entries(automated)) {
     for (const test of tests) {
-      const file = `apps/desktop/e2e/${test.split(":")[0]}`;
+      const file = test.split(":")[0];
       (testsByFile.get(file) ?? testsByFile.set(file, new Set()).get(file)).add(row);
     }
   }
