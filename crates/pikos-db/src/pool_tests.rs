@@ -94,6 +94,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "033",
         include_str!("../migrations/033_replica_tomb_at_triggers.sql"),
     ),
+    (
+        "034",
+        include_str!("../migrations/034_replica_held_for.sql"),
+    ),
+    (
+        "035",
+        include_str!("../migrations/035_replica_pen_failed.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while

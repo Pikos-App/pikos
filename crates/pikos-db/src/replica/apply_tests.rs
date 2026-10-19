@@ -352,6 +352,43 @@ async fn a_record_from_a_newer_pikos_waits_rather_than_being_dropped() {
 }
 
 #[tokio::test]
+async fn a_record_whose_write_fails_waits_and_the_rest_of_its_batch_still_applies() {
+    let (mac, phone) = (device().await, device().await);
+    let kept = create_page_impl(&mac, new_page("Kept")).await.unwrap();
+    let refused = create_page_impl(&mac, new_page("Refused")).await.unwrap();
+    let refused_name = RecordName::live(Entity::Page, refused.id.clone());
+    let names = pending(&mac, 100).await.unwrap();
+    let records: Vec<_> = build(&mac, &names)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|b| {
+            let mut fields = b.fields;
+            if b.name == refused_name {
+                fields.insert(
+                    pikos_replica::codec::column_key("status", 0),
+                    Value::Text("someday".into()),
+                );
+            }
+            (b.name, fields)
+        })
+        .collect();
+
+    apply(&phone, &records).await.unwrap();
+
+    assert!(get_page(&phone, &kept.id).await.unwrap().is_some());
+    assert!(get_page(&phone, &refused.id).await.unwrap().is_none());
+    let (reason, error): (String, Option<String>) =
+        sqlx::query_as("SELECT reason, error FROM replica_pen WHERE name = ?")
+            .bind(refused_name.to_string())
+            .fetch_one(&phone)
+            .await
+            .unwrap();
+    assert_eq!(reason, "failed");
+    assert!(error.unwrap().contains("pages.status"));
+}
+
+#[tokio::test]
 async fn applying_a_batch_twice_changes_nothing_the_second_time() {
     let (mac, phone) = (device().await, device().await);
     create_page_impl(

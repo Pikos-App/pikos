@@ -129,15 +129,16 @@ pub(crate) async fn build(
 /// returns, so it's copied rather than kept as a path. With no folder set the apply fails, so the
 /// transport fetches the record again rather than moving past an image it couldn't keep; a
 /// download already gone, as a held record's is, drops the image rather than every other record.
+/// A file that can't be written, on a full disk say, is the inner error: that image's alone.
 pub(crate) async fn apply(
     conn: &mut SqliteConnection,
     record: &Record,
     map: &FieldMap,
-) -> AppResult<bool> {
+) -> AppResult<std::io::Result<bool>> {
     // The name becomes a path here, so anything but a name Pikos makes is refused outright.
     let refused = record.name.tombstone || !is_pikos_asset_name(&record.name.key);
     if refused {
-        return Ok(false);
+        return Ok(Ok(false));
     }
     let Some(dir) = assets_dir(conn).await? else {
         return Err(crate::error::AppError::Internal(format!(
@@ -151,19 +152,19 @@ pub(crate) async fn apply(
         false
     } else {
         let Some(Value::Text(download)) = map.get(codec::FILE) else {
-            return Ok(false);
+            return Ok(Ok(false));
         };
         match copy_in(Path::new(download), &target) {
             Ok(()) => true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 log::warn!("replica: the download of {} is gone: {e}", record.name);
-                return Ok(false);
+                return Ok(Ok(false));
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Ok(Err(e)),
         }
     };
     mark_in_zone(conn, &record.name.key, record.row.born).await?;
-    Ok(arrived)
+    Ok(Ok(arrived))
 }
 
 /// Copies through a temporary name, so a half-written image never shows under the real one.

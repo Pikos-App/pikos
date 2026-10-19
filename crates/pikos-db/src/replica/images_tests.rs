@@ -296,6 +296,47 @@ async fn an_image_whose_download_is_gone_is_dropped_and_the_rest_still_apply() {
 }
 
 #[tokio::test]
+async fn an_image_that_cannot_be_written_waits_and_the_rest_of_its_batch_still_applies() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (mac, _) = with_images().await;
+    let (phone, phone_images) = with_images().await;
+    let name = format!("{}.png", uuid::Uuid::new_v4());
+    let id = page_showing(&mac, "Harbour", &name).await;
+    let names = pending(&mac, 1_000).await.unwrap();
+    let mut records: Vec<_> = build(&mac, &names)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|b| (b.name, b.fields))
+        .collect();
+    let download = std::env::temp_dir().join(format!("pkos_download_{}", uuid::Uuid::new_v4()));
+    std::fs::write(&download, b"photo").unwrap();
+    let image = image_record(&name, &download);
+    records.push(image.clone());
+    let set_mode = |mode| {
+        std::fs::set_permissions(&phone_images, std::fs::Permissions::from_mode(mode)).unwrap()
+    };
+
+    set_mode(0o555);
+    let applied = crate::replica::apply::apply(&phone, &records).await;
+    set_mode(0o755);
+
+    assert_eq!(applied.unwrap().held, 1);
+    assert!(get_page(&phone, &id).await.unwrap().is_some());
+    let reason: String = sqlx::query_scalar("SELECT reason FROM replica_pen WHERE name = ?")
+        .bind(image.0.to_string())
+        .fetch_one(&phone)
+        .await
+        .unwrap();
+    assert_eq!(reason, "failed");
+
+    crate::replica::apply::retry_held(&phone).await.unwrap();
+
+    assert_eq!(std::fs::read(phone_images.join(&name)).unwrap(), b"photo");
+}
+
+#[tokio::test]
 async fn a_restore_queues_again_the_images_its_backup_had_only_queued() {
     let (mac, mac_images) = with_images().await;
     let name = saved_image(&mac_images, b"queued, never sent");
