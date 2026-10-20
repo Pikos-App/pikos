@@ -155,8 +155,8 @@ describe("Markdown export re-import", () => {
     expect(paris.priority).toBe(2);
     expect(packing.folderKey).toBeNull();
     for (const page of [paris, packing]) {
-      const { body, warnings } = await resolveImportImages(page.body, page.imageRefs, vault);
-      expect(warnings).toEqual([]);
+      const { body, missing } = await resolveImportImages(page.body, page.imageRefs, vault);
+      expect(missing).toEqual([]);
       expect(body).toContain("Day one");
       for (const name of readdirSync(join(vault, "assets"))) {
         expect(body).toContain(`(<assets/${name}>)`);

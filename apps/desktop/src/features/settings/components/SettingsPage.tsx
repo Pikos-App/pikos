@@ -120,8 +120,10 @@ export function SettingsPage() {
                   pages: importState.plan.pages.filter(isOpen),
                 }
               : importState.plan;
-            void executeImport(plan).then((ok) => {
-              if (!ok) return;
+            void executeImport(plan).then((missingImages) => {
+              const staysToListMissing = missingImages === null || missingImages.length > 0;
+              if (staysToListMissing) return;
+
               reset();
               setActiveViewId("inbox");
               setSettingsOpen(false);
