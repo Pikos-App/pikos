@@ -1125,7 +1125,7 @@ async fn first_sync_seeds_description_into_body() {
     assert_ne!(page_content(&pool, &page_id).await, "{}");
     let (hash, version, pending) = seed_meta(&pool, &page_id).await;
     assert!(hash.is_some(), "seed hash recorded");
-    assert_eq!(version, Some(1));
+    assert_eq!(version, Some(CONTENT_TEXT_PROJECTION_VERSION));
     assert_eq!(pending, None);
 }
 
@@ -1181,7 +1181,7 @@ async fn description_change_silently_refreshes_an_untouched_body() {
     assert_eq!(page_content_text(&pool, &page_id).await, "Updated notes");
     let (second_hash, version, pending) = seed_meta(&pool, &page_id).await;
     assert_ne!(first_hash, second_hash, "hash tracks the refreshed body");
-    assert_eq!(version, Some(1));
+    assert_eq!(version, Some(CONTENT_TEXT_PROJECTION_VERSION));
     assert_eq!(
         pending, None,
         "untouched body refreshes silently — nothing parked"
@@ -1260,7 +1260,7 @@ async fn projection_version_bump_reseeds_a_pristine_body() {
         "version bump re-seeds the pristine body instead of mis-classifying it"
     );
     let (_, version, pending) = seed_meta(&pool, &page_id).await;
-    assert_eq!(version, Some(1), "hash re-stamped at the current version");
+    assert_eq!(version, Some(CONTENT_TEXT_PROJECTION_VERSION), "hash re-stamped at the current version");
     assert_eq!(pending, None);
 }
 
@@ -4788,7 +4788,7 @@ async fn upgrading_links_the_addresses_in_a_seed_left_as_written() {
         .await
         .unwrap();
 
-    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    rebuild_seeded_bodies(&pool).await.unwrap();
     assert_eq!(hrefs(&page_content(&pool, &untouched).await).len(), 3);
     assert_eq!(page_content_text(&pool, &untouched).await, INVITE);
     let updated: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = ?")
@@ -4819,7 +4819,7 @@ async fn upgrading_a_seed_is_not_sent_to_other_devices_as_an_edit() {
         .await
         .unwrap();
 
-    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    rebuild_seeded_bodies(&pool).await.unwrap();
 
     let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM replica_ops")
         .fetch_one(&pool)
@@ -4842,7 +4842,143 @@ async fn upgrading_leaves_a_body_the_person_edited_as_it_is() {
         .unwrap();
     simulate_user_body_edit(&pool, &page_id, "Mine: https://example.com/plan").await;
 
-    link_addresses_in_seeded_bodies(&pool).await.unwrap();
+    rebuild_seeded_bodies(&pool).await.unwrap();
+    assert_eq!(page_content(&pool, &page_id).await, edited);
+}
+
+const AGENDA: &str = "Agenda\n- Roadmap\n- Hiring: https://example.com/roles\nThanks";
+
+fn block_types(content: &str) -> Vec<String> {
+    let doc: serde_json::Value = serde_json::from_str(content).unwrap();
+    doc["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|block| block["type"].as_str().unwrap().to_string())
+        .collect()
+}
+
+fn agenda(etag: &str, desc: &str) -> SyncDelta {
+    delta(vec![single_full(
+        "/ev.ics",
+        "uid-1",
+        etag,
+        "Weekly",
+        Some(desc),
+        None,
+        &[],
+    )])
+}
+
+#[tokio::test]
+async fn a_seeded_agenda_arrives_as_a_bullet_list() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &agenda("v1", AGENDA)).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    let content = page_content(&pool, &page_id).await;
+    assert_eq!(
+        block_types(&content),
+        ["paragraph", "bulletList", "paragraph"]
+    );
+    assert_eq!(hrefs(&content), ["https://example.com/roles"]);
+    assert_eq!(
+        page_content_text(&pool, &page_id).await,
+        "Agenda\nRoadmap\nHiring: https://example.com/roles\nThanks"
+    );
+
+    reconcile(&pool, &ctx(), &agenda("v2", "Agenda\n- Roadmap"))
+        .await
+        .unwrap();
+    assert_eq!(page_content_text(&pool, &page_id).await, "Agenda\nRoadmap");
+    assert_eq!(seed_meta(&pool, &page_id).await.2, None);
+}
+
+#[tokio::test]
+async fn a_withheld_agenda_is_parked_as_written_and_appends_as_a_list() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &agenda("v1", "Seed")).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    reconcile(&pool, &ctx(), &agenda("v2", AGENDA)).await.unwrap();
+
+    assert_eq!(seed_meta(&pool, &page_id).await.2.as_deref(), Some(AGENDA));
+    let appended = crate::sync_commands::pending_description_document_impl(&pool, &page_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        block_types(&appended),
+        ["paragraph", "bulletList", "paragraph"]
+    );
+}
+
+async fn seed_agenda_as_dashed_paragraphs(pool: &sqlx::SqlitePool) -> String {
+    reconcile(pool, &ctx(), &agenda("v1", AGENDA)).await.unwrap();
+    let (page_id, _, _) = only_page_sync(pool).await;
+    sqlx::query(
+        "UPDATE pages SET content = ?, content_text = ?, updated_at = '2026-01-01T00:00:00Z'
+         WHERE id = ?",
+    )
+    .bind(crate::build_tiptap_doc(AGENDA))
+    .bind(AGENDA)
+    .bind(&page_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = 1
+         WHERE page_id = ?",
+    )
+    .bind(fnv_hex(AGENDA))
+    .bind(&page_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    page_id
+}
+
+#[tokio::test]
+async fn upgrading_turns_an_agenda_left_as_seeded_into_a_list() {
+    let pool = setup().await;
+    let page_id = seed_agenda_as_dashed_paragraphs(&pool).await;
+
+    rebuild_seeded_bodies(&pool).await.unwrap();
+
+    let content = page_content(&pool, &page_id).await;
+    assert_eq!(
+        block_types(&content),
+        ["paragraph", "bulletList", "paragraph"]
+    );
+    assert_eq!(hrefs(&content), ["https://example.com/roles"]);
+    let updated: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = ?")
+        .bind(&page_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(updated, "2026-01-01T00:00:00Z");
+
+    reconcile(&pool, &ctx(), &agenda("v2", "Agenda\n- Hiring"))
+        .await
+        .unwrap();
+    assert_eq!(page_content_text(&pool, &page_id).await, "Agenda\nHiring");
+    assert_eq!(
+        seed_meta(&pool, &page_id).await.2,
+        None,
+        "the rebuilt body still reads as seeded"
+    );
+}
+
+#[tokio::test]
+async fn upgrading_leaves_an_edited_agenda_as_dashes() {
+    let pool = setup().await;
+    let page_id = seed_agenda_as_dashed_paragraphs(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "Agenda\n- Roadmap\n- mine").await;
+    let edited = page_content(&pool, &page_id).await;
+
+    rebuild_seeded_bodies(&pool).await.unwrap();
+
     assert_eq!(page_content(&pool, &page_id).await, edited);
 }
 

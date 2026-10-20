@@ -23,7 +23,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 /// how a seeded body is built. A workspace opened at an older version gets each pass it missed and
 /// an index rebuild, once. A change to the indexed columns or tokenizer needs no bump; the index
 /// rebuilds when its definition changes.
-const DERIVED_TEXT_VERSION: i64 = 3;
+const DERIVED_TEXT_VERSION: i64 = 4;
 
 /// How many pre-migration snapshots to retain. Older ones are pruned so they
 /// don't accumulate; recovery only ever needs the most recent few.
@@ -457,8 +457,8 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         if stored < 2 {
             rederive_line_breaks(&pool).await?;
         }
-        if stored < 3 {
-            crate::reconciler::link_addresses_in_seeded_bodies(&pool).await?;
+        if stored < 4 {
+            crate::reconciler::rebuild_seeded_bodies(&pool).await?;
         }
 
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
@@ -647,8 +647,20 @@ async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
 /// pristine, so a builder that drifted from the projection would classify every
 /// synced page as user-edited. Links are marks, so they leave the text alone.
 pub fn build_tiptap_doc(text: &str) -> String {
-    let content: Vec<serde_json::Value> = text
-        .split('\n')
+    serde_json::json!({ "type": "doc", "content": text_paragraphs(text) }).to_string()
+}
+
+/// A calendar event's description → the document its page is seeded with: [`build_tiptap_doc`],
+/// with each run of lines starting "- " made a bullet list. Google's converter writes a list item
+/// that way, and in a plain-text description a person typed, the dashes mean the same.
+pub(crate) fn build_description_doc(text: &str) -> String {
+    let mut blocks = text_paragraphs(text);
+    bullet_dashed_paragraphs(&mut blocks);
+    serde_json::json!({ "type": "doc", "content": blocks }).to_string()
+}
+
+fn text_paragraphs(text: &str) -> Vec<serde_json::Value> {
+    text.split('\n')
         .map(|line| {
             if line.is_empty() {
                 serde_json::json!({ "type": "paragraph" })
@@ -656,8 +668,60 @@ pub fn build_tiptap_doc(text: &str) -> String {
                 serde_json::json!({ "type": "paragraph", "content": linked_runs(line, &[]) })
             }
         })
-        .collect();
-    serde_json::json!({ "type": "doc", "content": content }).to_string()
+        .collect()
+}
+
+/// Gather each run of paragraphs whose text starts "- " into a bullet list, without the dash.
+/// Returns whether anything changed.
+pub(crate) fn bullet_dashed_paragraphs(blocks: &mut Vec<serde_json::Value>) -> bool {
+    let mut changed = false;
+    let mut out: Vec<serde_json::Value> = Vec::with_capacity(blocks.len());
+    for mut block in blocks.drain(..) {
+        if !strip_list_dash(&mut block) {
+            out.push(block);
+            continue;
+        }
+
+        changed = true;
+        let item = serde_json::json!({ "type": "listItem", "content": [block] });
+        match out.last_mut() {
+            Some(list) if list["type"] == "bulletList" => {
+                list["content"].as_array_mut().unwrap().push(item);
+            }
+            _ => out.push(serde_json::json!({ "type": "bulletList", "content": [item] })),
+        }
+    }
+    *blocks = out;
+    changed
+}
+
+/// Drop the leading "- " from a paragraph that starts with one. Returns whether it did.
+fn strip_list_dash(block: &mut serde_json::Value) -> bool {
+    if block["type"] != "paragraph" {
+        return false;
+    }
+
+    let Some(runs) = block.get_mut("content").and_then(|c| c.as_array_mut()) else {
+        return false;
+    };
+    let Some(rest) = runs
+        .first()
+        .and_then(|run| run["text"].as_str())
+        .and_then(|text| text.strip_prefix("- "))
+        .map(str::to_string)
+    else {
+        return false;
+    };
+
+    if rest.is_empty() {
+        runs.remove(0);
+    } else {
+        runs[0]["text"] = rest.into();
+    }
+    if runs.is_empty() {
+        block.as_object_mut().unwrap().remove("content");
+    }
+    true
 }
 
 /// Turn every web address in the document's unlinked text into a link, keeping each run's other

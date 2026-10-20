@@ -291,7 +291,7 @@ pub async fn pending_description_document_impl(
             .await?
             .flatten();
 
-    Ok(pending.map(|text| crate::pool::build_tiptap_doc(&text)))
+    Ok(pending.map(|text| crate::pool::build_description_doc(&text)))
 }
 
 /// Drop a withheld upstream description once the user has dealt with it — they
