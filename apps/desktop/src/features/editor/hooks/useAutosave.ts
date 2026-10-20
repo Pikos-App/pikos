@@ -4,27 +4,28 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface AutosaveState {
-  /** True when the local value differs from the last successfully saved value. */
-  isDirty: boolean;
   /** True while the saveFn promise is in flight. */
   isSaving: boolean;
   /** Set on saveFn rejection; cleared on next successful save. */
   saveError: Error | null;
+  /** Mark unsaved input and restart the debounce. Renders nothing, so it can run on every key. */
+  schedule: () => void;
   /** Immediately flush any pending debounced save. Returns when the save completes. */
   flush: () => Promise<void>;
 }
 
 /**
- * Debounces calls to `saveFn` whenever `value` changes.
+ * Debounces calls to `saveFn` after each `schedule()`.
  *
- * - Compares by reference (===). For objects, the caller should produce a new
- *   reference only when the value has actually changed.
+ * The caller holds the unsaved input itself and reads it when `saveFn` runs, so
+ * marking a change costs nothing: no state update, no re-render, no copy of the
+ * value per keystroke.
+ *
  * - Flushes on unmount so page switches and app close never lose data.
- * - The `flush()` returned in state can be called imperatively for blur/close handlers.
+ * - A failed save stays pending, so the next flush or schedule retries it.
  */
-export function useAutosave<T>(
-  value: T,
-  saveFn: (val: T) => Promise<void>,
+export function useAutosave(
+  saveFn: () => Promise<void>,
   options: { delay?: number } = {}
 ): AutosaveState {
   const delay = options.delay ?? 800;
@@ -32,33 +33,27 @@ export function useAutosave<T>(
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<Error | null>(null);
 
-  // Refs to avoid stale closures in the timer callback
-  const latestValue = useRef(value);
-  const savedValue = useRef(value);
+  const isPendingRef = useRef(false);
   const saveFnRef = useRef(saveFn);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
   const mountedRef = useRef(true);
 
-  latestValue.current = value;
   saveFnRef.current = saveFn;
-
-  const isDirty = value !== savedValue.current;
 
   // Core save logic — shared by debounce timer, flush, and unmount
   const doSave = useRef(async () => {
-    const val = latestValue.current;
-    if (val === savedValue.current) return;
-    if (isSavingRef.current) return;
+    if (!isPendingRef.current || isSavingRef.current) return;
 
+    isPendingRef.current = false;
     isSavingRef.current = true;
     if (mountedRef.current) setIsSaving(true);
 
     try {
-      await saveFnRef.current(val);
-      savedValue.current = val;
+      await saveFnRef.current();
       if (mountedRef.current) setSaveError(null);
     } catch (err) {
+      isPendingRef.current = true;
       if (mountedRef.current) setSaveError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       isSavingRef.current = false;
@@ -66,22 +61,21 @@ export function useAutosave<T>(
     }
   });
 
-  useEffect(() => {
-    if (value === savedValue.current) return;
+  function clearTimer(): void {
+    if (timerRef.current === null) return;
 
-    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+
+  const schedule = useRef(() => {
+    isPendingRef.current = true;
+    clearTimer();
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       void doSave.current();
     }, delay);
-
-    return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [value, delay]);
+  });
 
   // Flush on unmount (covers page switch + app close).
   // mountedRef is reset to true on each mount so StrictMode's remount cycle
@@ -93,21 +87,15 @@ export function useAutosave<T>(
     const save = doSave.current;
     return () => {
       mountedRef.current = false;
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      clearTimer();
       void save();
     };
   }, []);
 
   const flush = useRef(async () => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    clearTimer();
     await doSave.current();
   });
 
-  return { flush: flush.current, isDirty, isSaving, saveError };
+  return { flush: flush.current, isSaving, saveError, schedule: schedule.current };
 }

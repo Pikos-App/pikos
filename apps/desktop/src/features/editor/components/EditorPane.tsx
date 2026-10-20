@@ -120,9 +120,11 @@ function reloadInPlace(editor: Editor, doc: JSONContent, scroller: HTMLElement |
 }
 
 /** Typing not yet handed to the write queue, and the page it was typed into. Only this is ever
- *  saved: writing back a body nobody edited would put it over a newer one from outside. */
+ *  saved: writing back a body nobody edited would put it over a newer one from outside.
+ *  Holds the immutable document rather than its JSON, so a keystroke copies nothing on a long
+ *  page; it is serialised once, when the save fires. */
 interface PendingEdit {
-  content: string;
+  doc: Editor["state"]["doc"];
   pageId: string;
 }
 
@@ -156,10 +158,7 @@ export function EditorPane() {
   // are created before useEditor returns). Assigned in an effect below.
   const editorRef = useRef<Editor | null>(null);
 
-  // Content stored in a ref (not state) to avoid triggering React re-renders
-  // on every keystroke. A version counter drives the autosave schedule.
   const pendingEditRef = useRef<PendingEdit | null>(null);
-  const [contentVersion, setContentVersion] = useState(0);
 
   /** The open page's body as last loaded or saved: what typing is saved over, and how a change
    *  from outside is told from our own. */
@@ -170,14 +169,23 @@ export function EditorPane() {
     if (!edit) return;
 
     pendingEditRef.current = null;
+    const content = JSON.stringify(edit.doc.toJSON());
     const baseContent = shownContentRef.current;
-    shownContentRef.current = edit.content;
+    shownContentRef.current = content;
     updatePage(edit.pageId, {
       baseContent,
-      content: edit.content,
-      contentText: extractText(edit.content),
+      content,
+      contentText: extractText(content),
     });
   }
+
+  const { flush, isSaving, saveError, schedule } = useAutosave(
+    () => {
+      savePendingEdit();
+      return Promise.resolve();
+    },
+    { delay: 800 }
+  );
 
   const editor = useEditor({
     editorProps: {
@@ -194,8 +202,8 @@ export function EditorPane() {
       const pageId = currentPageIdRef.current;
       if (pageId === null) return;
 
-      pendingEditRef.current = { content: JSON.stringify(e.getJSON()), pageId };
-      setContentVersion((v) => v + 1);
+      pendingEditRef.current = { doc: e.state.doc, pageId };
+      schedule();
     },
   });
 
@@ -300,15 +308,6 @@ export function EditorPane() {
     if (!editor || editor.isDestroyed) return;
     editor.setEditable(!isReadOnly, false);
   }, [editor, isReadOnly]);
-
-  const { flush, isSaving, saveError } = useAutosave(
-    contentVersion,
-    (_version: number) => {
-      savePendingEdit();
-      return Promise.resolve();
-    },
-    { delay: 800 }
-  );
 
   useEffect(() => {
     function handleBlur() {

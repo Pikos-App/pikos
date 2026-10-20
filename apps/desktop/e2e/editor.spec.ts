@@ -249,6 +249,36 @@ appTest("formatted content persists across page switches @smoke", async ({ app }
   await expect(editor.locator("em")).toHaveText("italic");
 });
 
+// Search drains pending writes through the same flush a quit and a window close run.
+appTest("words typed a moment ago are written before a flush returns", async ({ app }) => {
+  await quickAdd(app, "Field notes");
+  await openEditorForPage(app, "Field notes");
+
+  await app.keyboard.type("heron");
+  await app.keyboard.press(mod("Mod+k"));
+  const dialog = app.getByRole("dialog", { name: "Search pages" });
+  await app.keyboard.type("heron");
+
+  await expect(
+    dialog.getByRole("button", { exact: true, name: "Field notes heron" })
+  ).toBeVisible();
+});
+
+appTest("leaving the window writes what was typed", async ({ app, storage }) => {
+  appTest.skip(storage !== "bridge", "reloads, and the mock keeps nothing across a reload");
+  await quickAdd(app, "Field notes");
+  const body = await openEditorForPage(app, "Field notes");
+
+  await app.keyboard.type("heron at dusk");
+  await app.evaluate(() => window.dispatchEvent(new Event("blur")));
+  // Past the write queue's debounce but short of the editor's on top of it.
+  await app.waitForTimeout(1.25 * WRITE_QUEUE_DEBOUNCE_MS);
+  await app.reload();
+  await app.locator("[data-page-list-item]").filter({ hasText: "Field notes" }).click();
+
+  await expect(body).toHaveText("heron at dusk");
+});
+
 // ─── Table toolbar ──────────────────────────────────────────────────────────
 
 appTest("table toolbar appears when cursor is in table", async ({ app }) => {

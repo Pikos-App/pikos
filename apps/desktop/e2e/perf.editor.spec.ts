@@ -38,25 +38,25 @@ interface Ceiling {
 const CEILINGS: Record<Shape, Record<number, Ceiling>> = {
   log: {
     20_000: { enter: 55, findFirst: 370, findLater: 150, findNext: 35, key: 30, open: 150 },
-    100_000: { enter: 240, findFirst: 3_300, findLater: 1_300, findNext: 250, key: 50, open: 400 },
+    100_000: { enter: 240, findFirst: 3_300, findLater: 1_300, findNext: 250, key: 20, open: 400 },
     500_000: {
       enter: 1_200,
       findFirst: 76_000,
       findLater: 25_000,
       findNext: 4_900,
-      key: 230,
+      key: 90,
       open: 1_600,
     },
   },
   prose: {
     20_000: { enter: 40, findFirst: 350, findLater: 180, findNext: 25, key: 30, open: 240 },
-    100_000: { enter: 140, findFirst: 2_200, findLater: 1_000, findNext: 120, key: 60, open: 700 },
+    100_000: { enter: 140, findFirst: 2_200, findLater: 1_000, findNext: 120, key: 28, open: 700 },
     500_000: {
       enter: 800,
       findFirst: 32_000,
       findLater: 16_000,
       findNext: 1_700,
-      key: 350,
+      key: 150,
       open: 3_200,
     },
   },
