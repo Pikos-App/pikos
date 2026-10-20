@@ -380,7 +380,7 @@ export function EditorPane() {
           page={page}
         />
       )}
-      {editor && <FindContentPopover editor={editor} />}
+      {editor && <FindContentPopover editor={editor} scroller={scrollContainerRef} />}
       {editor && !isAddingLink && (
         <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
       )}
