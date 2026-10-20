@@ -8,6 +8,10 @@ export default defineConfig({
   integrations: [sitemap()],
   vite: {
     plugins: [tailwindcss()],
+    build: {
+      // Vite's default target strips -webkit-backdrop-filter, which Safari before 18 needs for the blur.
+      cssTarget: "safari16",
+    },
   },
   build: {
     assets: "_assets",
