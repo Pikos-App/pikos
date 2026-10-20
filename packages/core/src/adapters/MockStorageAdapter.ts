@@ -535,7 +535,9 @@ export class MockStorageAdapter implements StorageAdapter {
     if (page) this.pages.set(pageId, { ...page, scheduledStart });
   }
 
-  updatePage(id: string, updates: PageUpdate): Promise<Page> {
+  updatePage(id: string, update: PageUpdate): Promise<Page> {
+    // One window writes the mock, so a body never changes under the editor that typed over it.
+    const { baseContent: _typedOver, ...updates } = update;
     const existing = this.pages.get(id);
     if (!existing) return Promise.reject(new Error(`Page not found: ${id}`));
     // Placement lock, keyed on the live sync link rather than the folder: nothing

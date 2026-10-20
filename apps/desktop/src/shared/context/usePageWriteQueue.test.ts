@@ -61,3 +61,30 @@ it("closing the window writes an edit still waiting in the editor's autosave bef
     destroy.mock.invocationCallOrder[0]!
   );
 });
+
+it("typing that coalesces with a body still waiting is saved over the body stored, not the waiting one", async () => {
+  const updatePage = vi.fn((id: string) => Promise.resolve({ id }));
+  const adapter = { updatePage } as unknown as StorageAdapter;
+  const { result } = renderHook(() => usePageWriteQueue({ adapter, emit: vi.fn(), mirror }));
+
+  result.current.updatePage("p1", { baseContent: "stored", content: "first" });
+  result.current.updatePage("p1", { baseContent: "first", content: "second" });
+  await act(() => result.current.flushPage("p1"));
+
+  expect(updatePage).toHaveBeenCalledWith("p1", { baseContent: "stored", content: "second" });
+});
+
+it("a save the database merged with a newer body says what was typed and what was saved", async () => {
+  const updatePage = vi.fn((id: string) => Promise.resolve({ content: "merged", id }));
+  const adapter = { updatePage } as unknown as StorageAdapter;
+  const emit = vi.fn();
+  const { result } = renderHook(() => usePageWriteQueue({ adapter, emit, mirror }));
+
+  result.current.updatePage("p1", { baseContent: "loaded", content: "typed" });
+  await act(() => result.current.flushPage("p1"));
+
+  expect(emit).toHaveBeenCalledWith("page:merged", {
+    page: { content: "merged", id: "p1" },
+    typed: "typed",
+  });
+});

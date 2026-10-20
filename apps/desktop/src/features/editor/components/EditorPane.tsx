@@ -17,7 +17,7 @@ import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useViewCacheController } from "@/shared/context/WorkspaceContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { onFlushPending } from "@/shared/pendingWrites";
@@ -143,6 +143,7 @@ export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { getPageAfterWrites, updatePage } = usePages();
   const viewCache = useViewCacheController();
+  const { on } = useWorkspace();
   const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
   const { takeBodyFocus } = useUI();
@@ -159,7 +160,8 @@ export function EditorPane() {
   const pendingEditRef = useRef<PendingEdit | null>(null);
   const [contentVersion, setContentVersion] = useState(0);
 
-  /** The open page's body as last loaded or saved, to tell a change from outside from our own. */
+  /** The open page's body as last loaded or saved: what typing is saved over, and how a change
+   *  from outside is told from our own. */
   const shownContentRef = useRef<string>("");
 
   function savePendingEdit(): void {
@@ -167,8 +169,13 @@ export function EditorPane() {
     if (!edit) return;
 
     pendingEditRef.current = null;
+    const baseContent = shownContentRef.current;
     shownContentRef.current = edit.content;
-    updatePage(edit.pageId, { content: edit.content, contentText: extractText(edit.content) });
+    updatePage(edit.pageId, {
+      baseContent,
+      content: edit.content,
+      contentText: extractText(edit.content),
+    });
   }
 
   const editor = useEditor({
@@ -194,6 +201,16 @@ export function EditorPane() {
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  /** Show a body newer than the one on screen, if this page is still open with nothing typed. */
+  function showNewerBody(pageId: string, content: string): void {
+    const isClean = currentPageIdRef.current === pageId && pendingEditRef.current === null;
+    if (!editor || editor.isDestroyed || !isClean) return;
+
+    const doc = tryParseTiptapJson(content, `EditorPane reload page=${pageId}`);
+    reloadInPlace(editor, doc ?? EMPTY_TIPTAP_DOC, scrollContainerRef.current);
+    shownContentRef.current = content;
+  }
 
   // Links are rendered as <a> by Tiptap but clicking should only place the cursor
   // (the LinkPopover handles opening links explicitly via its Open button).
@@ -259,18 +276,20 @@ export function EditorPane() {
       if (pageId === null || pendingEditRef.current !== null) return;
 
       void getPageAfterWrites(pageId).then((newer) => {
-        const stillClean = currentPageIdRef.current === pageId && pendingEditRef.current === null;
-        if (!newer || !stillClean || editor.isDestroyed) return;
-
-        const isNewer = newer.content !== shownContentRef.current;
-        if (!isNewer) return;
-
-        const doc = tryParseTiptapJson(newer.content, `EditorPane reload page=${pageId}`);
-        reloadInPlace(editor, doc ?? EMPTY_TIPTAP_DOC, scrollContainerRef.current);
-        shownContentRef.current = newer.content;
+        const isNewer = newer !== null && newer.content !== shownContentRef.current;
+        if (isNewer) showNewerBody(pageId, newer.content);
       });
     });
   }, [viewCache, editor]);
+
+  // A save that found a newer body stored saved a merge of the two; it replaces what was typed,
+  // unless more has been typed since, whose save merges again.
+  useEffect(() => {
+    return on("page:merged", ({ page: merged, typed }) => {
+      const isShowingTyped = shownContentRef.current === typed;
+      if (isShowingTyped) showNewerBody(merged.id, merged.content);
+    });
+  }, [editor]);
 
   const pageId = page?.id ?? null;
   usePageLinkTargets(editor, pageId);

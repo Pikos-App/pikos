@@ -78,7 +78,10 @@ export type PageUpdate = Partial<
     | "detachIsReversible"
     | "contentSchemaVersion"
   >
->;
+> & {
+  /** The body `content` was typed over: a body changed elsewhere since is merged, not overwritten. */
+  baseContent?: string | null;
+};
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),
 // never via createFolder/updateFolder — so it's excluded from both input shapes.
 export type NewFolder = Omit<

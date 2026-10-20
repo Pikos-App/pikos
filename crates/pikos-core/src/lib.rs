@@ -12,6 +12,7 @@
 //! which is what makes it testable against a fixture corpus and cheap to bind
 //! from Swift.
 
+pub mod body_merge;
 pub mod calendar;
 pub mod colors;
 pub mod dates;

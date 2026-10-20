@@ -430,6 +430,11 @@ pub struct PageUpdate {
     pub subtitle: Option<serde_json::Value>,
     pub content: Option<String>,
     pub content_text: Option<String>,
+    /// The body an editor's `content` was typed over. Given, the content lands only over that
+    /// body; over any other it is merged against it first, so an edit made elsewhere since the
+    /// editor loaded is never overwritten. A body rather than the sync clock, because a write from
+    /// the CLI with sync off moves no clock.
+    pub base_content: Option<String>,
     #[ts(type = "'not_started' | 'done'", optional)]
     pub status: Option<String>,
     #[ts(type = "number", optional)]
@@ -685,6 +690,10 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     fetch_page(pool, &id).await
 }
 
+/// How many times a body typed over an older one is merged and tried again. Each retry means
+/// another write landed between the merge and the save, so even a second is rare.
+const BODY_MERGE_ATTEMPTS: usize = 5;
+
 pub async fn update_page_impl(
     pool: &sqlx::SqlitePool,
     id: String,
@@ -694,14 +703,62 @@ pub async fn update_page_impl(
         ensure_known_status(status)?;
     }
 
-    if let Some(content) = &updates.content {
-        let is_unchanged = is_stored_body(pool, &id, content).await?;
-        if is_unchanged {
-            updates.content = None;
-            updates.content_text = None;
+    for _ in 0..BODY_MERGE_ATTEMPTS {
+        if let Some(content) = &updates.content {
+            let is_unchanged = is_stored_body(pool, &id, content).await?;
+            if is_unchanged {
+                updates.content = None;
+                updates.content_text = None;
+            }
+        }
+
+        let is_written = write_page_update(pool, &id, &updates).await?;
+        let has_merged = !is_written && merge_over_stored_body(pool, &id, &mut updates).await?;
+        if !has_merged {
+            return fetch_page(pool, &id).await;
         }
     }
 
+    Err(AppError::Conflict(format!(
+        "page {id} kept changing while its body was being saved"
+    )))
+}
+
+/// Merges `updates`' body over the one stored now, which it was not typed over, and makes the
+/// stored body its new base. False when there is nothing to merge: no base was given, or the page
+/// is gone or in the trash.
+async fn merge_over_stored_body(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &mut PageUpdate,
+) -> AppResult<bool> {
+    let (Some(base), Some(mine)) = (&updates.base_content, &updates.content) else {
+        return Ok(false);
+    };
+    let Some(stored) = live_body(pool, id).await? else {
+        return Ok(false);
+    };
+
+    let not_a_document = |_| AppError::Invalid(format!("page {id}'s body is not a document"));
+    let stored_doc = serde_json::from_str(&stored).map_err(not_a_document)?;
+    let my_doc = serde_json::from_str(mine).map_err(not_a_document)?;
+    // An unreadable base reads as an empty page, so both sides are kept whole.
+    let base_doc = serde_json::from_str(base).unwrap_or(serde_json::Value::Null);
+
+    let merged = pikos_core::body_merge::merge_bodies(&base_doc, &stored_doc, &my_doc).to_string();
+    updates.content_text = Some(crate::pool::extract_text_from_tiptap(&merged));
+    updates.content = Some(merged);
+    updates.base_content = Some(stored);
+    Ok(true)
+}
+
+/// Writes `updates`, true unless a body typed over an older one found a newer one stored, or the
+/// page is gone or in the trash.
+async fn write_page_update(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &PageUpdate,
+) -> AppResult<bool> {
     // Editing any authored field claims ownership (the reconciler never calls this
     // path, so sync can't trip it). `last_opened_at`/`sort_order` are excluded —
     // reading and arranging don't author — and ownership decides whether an
@@ -738,7 +795,7 @@ pub async fn update_page_impl(
                 "Pages cannot be moved into an external calendar folder".to_string(),
             ));
         }
-        if crate::sync::page_schedule_locked(pool, &id).await? {
+        if crate::sync::page_schedule_locked(pool, id).await? {
             return Err(AppError::Conflict(
                 crate::sync::SYNCED_PLACEMENT_MSG.to_string(),
             ));
@@ -751,18 +808,26 @@ pub async fn update_page_impl(
         || updates.scheduled_start.is_some()
         || updates.scheduled_end.is_some()
     {
-        crate::sync::ensure_page_schedule_unlocked(pool, &id).await?;
+        crate::sync::ensure_page_schedule_unlocked(pool, id).await?;
     }
 
     let has_updates =
         marks_ownership || updates.sort_order.is_some() || updates.last_opened_at.is_some();
     if !has_updates {
-        return fetch_page(pool, &id).await;
+        return Ok(true);
     }
 
-    crate::tx::retry_on_busy(|| apply_page_update(pool, &id, &updates, marks_ownership)).await?;
+    crate::tx::retry_on_busy(|| apply_page_update(pool, id, updates, marks_ownership)).await
+}
 
-    fetch_page(pool, &id).await
+/// The body of a page not in the trash.
+async fn live_body(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT content FROM pages WHERE id = ? AND deleted_at IS NULL")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 /// Whether `incoming` is the body the page already has. Writing it back must change
@@ -771,12 +836,7 @@ pub async fn update_page_impl(
 /// calendar page for the person. Compared as parsed JSON because a body round-tripped
 /// through markdown by the CLI or MCP comes back with its keys reordered.
 async fn is_stored_body(pool: &sqlx::SqlitePool, id: &str, incoming: &str) -> AppResult<bool> {
-    let stored: Option<String> =
-        sqlx::query_scalar("SELECT content FROM pages WHERE id = ? AND deleted_at IS NULL")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
-    let Some(stored) = stored else {
+    let Some(stored) = live_body(pool, id).await? else {
         return Ok(false);
     };
 
@@ -791,7 +851,7 @@ async fn is_stored_body(pool: &sqlx::SqlitePool, id: &str, incoming: &str) -> Ap
     Ok(matches!(parsed, (Ok(a), Ok(b)) if a == b))
 }
 
-/// The write half of [`update_page_impl`], retried as a unit because it can lose
+/// The write half of [`write_page_update`], retried as a unit because it can lose
 /// the WAL write race to any concurrent writer (a sync poll, a calendar teardown).
 ///
 /// It is **not** exempt from that race for being write-first: SQLite starts the
@@ -807,7 +867,7 @@ async fn apply_page_update(
     id: &str,
     updates: &PageUpdate,
     marks_ownership: bool,
-) -> AppResult<()> {
+) -> AppResult<bool> {
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
     let mut fields = builder.separated(", ");
 
@@ -878,11 +938,18 @@ async fn apply_page_update(
     builder.push(" WHERE id = ");
     builder.push_bind(id);
     builder.push(" AND deleted_at IS NULL");
+    if let (Some(_), Some(base)) = (&updates.content, &updates.base_content) {
+        builder.push(" AND content = ");
+        builder.push_bind(base.clone());
+    }
 
     // Transaction wraps the pages row + (optional) page_tags rewrite so the
     // pages.tags JSON denorm and the page_tags join table cannot diverge.
     let mut tx = pool.begin().await?;
-    builder.build().execute(&mut *tx).await?;
+    let is_written = builder.build().execute(&mut *tx).await?.rows_affected() > 0;
+    if !is_written {
+        return Ok(false);
+    }
 
     if marks_ownership {
         // No page_sync row for native pages → no-op.
@@ -899,7 +966,7 @@ async fn apply_page_update(
     }
     tx.commit().await?;
 
-    Ok(())
+    Ok(true)
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {

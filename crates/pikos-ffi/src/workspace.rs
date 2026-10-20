@@ -816,6 +816,9 @@ pub struct PageEdit {
     /// document a second time.
     #[uniffi(default = None)]
     pub content_text: Option<String>,
+    /// The body `content` was typed over: an edit made elsewhere since is merged, not overwritten.
+    #[uniffi(default = None)]
+    pub base_content: Option<String>,
     #[uniffi(default = None)]
     pub status: Option<String>,
     #[uniffi(default = None)]
@@ -1908,6 +1911,7 @@ impl Workspace {
                 }),
                 content: edit.content,
                 content_text: edit.content_text,
+                base_content: edit.base_content,
                 status: edit.status,
                 priority: edit.priority,
                 tags: edit.tags,

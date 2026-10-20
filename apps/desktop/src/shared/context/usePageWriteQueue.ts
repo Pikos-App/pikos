@@ -199,6 +199,10 @@ export function usePageWriteQueue({
           mirror.confirmRow(summary);
         }
         emit("page:updated", updated);
+
+        const typed = patch.content;
+        const isMerged = patch.baseContent != null && typed != null && updated.content !== typed;
+        if (isMerged) emit("page:merged", { page: updated, typed });
       },
     }).then(() => undefined);
   }
@@ -210,7 +214,13 @@ export function usePageWriteQueue({
     debouncedWrites.current.set(id, [...(debouncedWrites.current.get(id) ?? []), ...edits]);
 
     const existing = pendingPatches.current.get(id) ?? {};
-    pendingPatches.current.set(id, { ...existing, ...patch });
+    // Typing that coalesces with a body still waiting was typed over that body's base, the one
+    // stored; its own base is the waiting body, which never was.
+    const isBodyWaiting = existing.content !== undefined;
+    const coalesced = isBodyWaiting
+      ? { ...existing, ...patch, baseContent: existing.baseContent ?? null }
+      : { ...existing, ...patch };
+    pendingPatches.current.set(id, coalesced);
 
     const prevTimer = debounceTimers.current.get(id);
     if (prevTimer !== undefined) clearTimeout(prevTimer);

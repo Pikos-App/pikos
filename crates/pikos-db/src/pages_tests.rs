@@ -2681,6 +2681,49 @@ async fn writing_a_page_its_own_body_with_keys_reordered_changes_nothing() {
     assert!(!user_modified(&pool, "p").await);
 }
 
+#[tokio::test]
+async fn typing_over_a_body_the_cli_changed_since_it_loaded_merges_and_keeps_its_links() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Plans"))
+        .await
+        .unwrap();
+    let paragraph =
+        |inline: serde_json::Value| serde_json::json!({ "type": "paragraph", "content": [inline] });
+    let text = |t: &str| paragraph(serde_json::json!({ "type": "text", "text": t }));
+    let doc = |blocks: Vec<serde_json::Value>| {
+        serde_json::json!({ "type": "doc", "content": blocks }).to_string()
+    };
+    let loaded = doc(vec![text("one"), text("two")]);
+    let link = paragraph(
+        serde_json::json!({ "type": "pageLink", "attrs": { "pageId": "trip", "title": "Trip" } }),
+    );
+    let from_cli = doc(vec![text("one"), text("two"), link.clone()]);
+    for body in [&loaded, &from_cli] {
+        sqlx::query("UPDATE pages SET content = ?, content_schema_version = 1 WHERE id = 'p'")
+            .bind(body)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let saved = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(doc(vec![text("ONE"), text("two")])),
+            base_content: Some(loaded),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(saved.content, doc(vec![text("ONE"), text("two"), link]));
+    assert_eq!(saved.content_text.as_deref(), Some("ONE\ntwo"));
+    assert_eq!(saved.links, vec!["trip"]);
+    assert_eq!(saved.content_schema_version, crate::CONTENT_SCHEMA_VERSION);
+}
+
 /// Priority is the one `marks_ownership` field with no second signal behind it —
 /// `PAGE_OWNED_SQL` reads completions, tags, reminders and the occurrence sets, none
 /// of which a priority-only edit touches. Drop it from the list and a page the user
