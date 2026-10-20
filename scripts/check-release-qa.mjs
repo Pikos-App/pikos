@@ -4,14 +4,15 @@
 //   pnpm qa:gate <version> [--kind patch|minor|major] [--hotfix]   check; prints the record line
 //   node scripts/check-release-qa.mjs <version> [--hotfix] --pass-date   the day the pass ran
 //   node scripts/check-release-qa.mjs <version> --record "<line>"   add a line to the record
+//   node scripts/check-release-qa.mjs <version> --ledger   date every row the pass drove
 //
 // A copy is finished when it was written for this commit (or nothing since reaches a row),
 // holds every row of the master with a mark, every row a person drives is ticked, every row
 // marked both or deferred says why, every automated row still has its tests, and the sign-off
 // names who ran the pass. A deferred row needs no tick, so the record names each one. A hotfix signs the copy's hotfix block instead of driving the rows.
 //
-// `release.sh` runs the check before it bumps the version and writes the record after it
-// tags, so an aborted release records nothing.
+// `release.sh` runs the check before it bumps the version and writes the record and the ledger
+// after it tags, so an aborted release records nothing.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,7 +21,10 @@ import {
   automatedRows,
   git,
   importGraph,
+  LEDGER,
+  reachesAnyRow,
   readCopy,
+  readLedger,
   readMaster,
   ROOT,
   touches,
@@ -31,10 +35,18 @@ const UNFILLED = /___/;
 const PASS_DATE = /on (\d{4}-\d{2}-\d{2})\s*$/;
 
 function parseArgs(argv) {
-  const opts = { hotfix: false, kind: null, passDate: false, record: null, version: null };
+  const opts = {
+    hotfix: false,
+    kind: null,
+    ledger: false,
+    passDate: false,
+    record: null,
+    version: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--hotfix") opts.hotfix = true;
+    else if (arg === "--ledger") opts.ledger = true;
     else if (arg === "--record") opts.record = argv[++i];
     else if (arg === "--pass-date") opts.passDate = true;
     else if (arg === "--kind") opts.kind = argv[++i];
@@ -59,6 +71,20 @@ function record(version, line) {
   while (end > heading + 1 && lines[end - 1] === "") end--;
   lines.splice(end, 0, ...(lines[end - 1]?.startsWith("- ") ? [] : [""]), `- ${line}`);
   writeFileSync(page, lines.join("\n"));
+}
+
+/** Every row the signed-off pass ticked as driven by a person now carries the pass's date. */
+function writeLedger(version) {
+  const copy = readCopy(join(ROOT, ".agent/releases", version, "qa.md"));
+  const date = PASS_DATE.exec(copy.signOff.find((l) => l.startsWith("- Run by")) ?? "")?.[1];
+  if (!date) throw new Error("the sign-off has no date the pass ran");
+  const ledger = readLedger();
+  for (const [id, row] of copy.rows) {
+    const driven = row.ticked && (row.mark === "manual" || row.mark === "both");
+    if (driven) ledger[id] = date;
+  }
+  const sorted = Object.fromEntries(Object.entries(ledger).sort(([a], [b]) => a.localeCompare(b)));
+  writeFileSync(LEDGER, `${JSON.stringify(sorted, null, 2)}\n`);
 }
 
 /** The lines of the sign-off block after `heading`, up to the next blank line. */
@@ -113,9 +139,8 @@ function check(opts) {
       graph: importGraph(),
       range: `${copy.sha}..${head}`,
       sections,
-      waive: copy.waiver,
     });
-    if (since.reasons.size > 0 || since.unmapped.length > 0) {
+    if (reachesAnyRow(since.reasons, sections) || since.unmapped.length > 0) {
       problems.push(
         `commits since the copy (${copy.sha}) reach rows; run pnpm qa:release ${opts.version} again`
       );
@@ -177,6 +202,8 @@ try {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.record) {
     record(opts.version, opts.record);
+  } else if (opts.ledger) {
+    writeLedger(opts.version);
   } else if (opts.passDate) {
     const copy = readCopy(join(ROOT, ".agent/releases", opts.version, "qa.md"));
     const prefix = opts.hotfix ? "- Hotfix run by" : "- Run by";
