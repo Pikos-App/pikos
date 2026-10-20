@@ -206,6 +206,10 @@ for LINE in ${RECORD[@]+"${RECORD[@]}"}; do
   node "$ROOT/scripts/check-release-qa.mjs" "$NEW" --record "$LINE" \
     || echo "Warning: couldn't write to the release record: $LINE"
 done
+if [ -z "${SKIP_QA:-}" ] && [ -z "${HOTFIX:-}" ]; then
+  node "$ROOT/scripts/check-release-qa.mjs" "$NEW" --ledger \
+    || echo "Warning: couldn't date the rows this pass drove in the QA ledger"
+fi
 
 # Reset release notes for next cycle
 cat > "$RELEASE_NOTES" << 'RESET'
