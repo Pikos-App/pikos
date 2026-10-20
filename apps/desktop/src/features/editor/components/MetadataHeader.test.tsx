@@ -138,6 +138,32 @@ describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own
 // calendar: the folder carries the same name and stays in the sidebar, so a
 // notice saying only "Removed from Work" reads as contradicting the folder chip
 // beside it. Two screen reviews filed that as a bug.
+describe("MetadataHeader — pages linking here", () => {
+  const linker = (id: string) => makePage({ id, title: `Linker ${id}` });
+
+  it("shows the count in the byline, after the tags", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "listBacklinks").mockResolvedValue([
+      linker("a"),
+      linker("b"),
+    ]);
+    await renderHeader(makePage({ tags: ["work"] }));
+
+    const links = await screen.findByRole("button", { name: "Linked from 2 pages" });
+    const tags = screen.getByRole("button", { name: /^Tags:/ });
+    expect(tags.compareDocumentPosition(links) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText("Page title")).not.toContainElement(links);
+  });
+
+  it("leaves the byline ending at the tags when nothing links here", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "listBacklinks").mockResolvedValue([]);
+    await renderHeader(makePage({ tags: ["work"] }));
+
+    const tags = screen.getByRole("button", { name: /^Tags:/ });
+    expect(screen.queryByRole("button", { name: /^Linked from/ })).not.toBeInTheDocument();
+    expect(tags.closest(".flex-wrap")?.lastElementChild).toContainElement(tags);
+  });
+});
+
 describe("MetadataHeader — detached notice", () => {
   it("says a page can rejoin when its calendar is only switched off", async () => {
     await renderHeader(

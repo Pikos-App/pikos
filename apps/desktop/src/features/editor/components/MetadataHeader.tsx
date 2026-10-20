@@ -22,7 +22,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
 import { useCaretAtEndOnFocus } from "../hooks/useCaretAtEndOnFocus";
-import { BacklinksButton } from "./BacklinksButton";
 import { Byline } from "./Byline";
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
 import { FocusTimer } from "./FocusTimer";
@@ -313,7 +312,6 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
               </div>
             )}
           </div>
-          <BacklinksButton pageId={page.id} />
         </div>
 
         {subtitleFocused ? (

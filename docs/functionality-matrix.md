@@ -667,8 +667,9 @@ had when linked as a fallback, so a rename never breaks it. Typing `[[` opens a 
 pages before anything is typed, then the pages whose titles match, never the open page itself
 and never inside a code block. It links only a page that exists; there is no create-on-link.
 The writer derives `pages.links`, the ids a body links to, from the body on every write, so the
-app, the CLI and the phone can't disagree about it, and backlinks read that column. The header
-shows how many pages outside the trash link here, hidden at none, and opens a list of them.
+app, the CLI and the phone can't disagree about it, and backlinks read that column. The page's
+byline, after its tags, shows how many pages outside the trash link here, hidden at none, and
+opens a list of them.
 The CLI and MCP speak Markdown, so a link comes out of `read` as `[[Title]]` under the target's
 current title, and a `[[Title]]` going in through `add` or `update --content` links the page of
 that title, matched without regard to case among pages outside the trash. A title no page has

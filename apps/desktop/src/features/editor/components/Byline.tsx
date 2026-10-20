@@ -7,6 +7,8 @@ import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { type MetadataChip, PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { usePages } from "@/shared/context/PagesContext";
 
+import { useBacklinks } from "../hooks/useBacklinks";
+import { BacklinksButton } from "./BacklinksButton";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
 interface BylineProps {
@@ -35,6 +37,8 @@ export function Byline({
   const done = isDone(page);
   const { recurrenceRules } = usePages();
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
+  const backlinks = useBacklinks(page.id);
+  const hasBacklinks = backlinks.length > 0;
 
   // Synced events lock title, folder placement, schedule, and recurrence to the
   // mirror; body, status, reminders, priority, and tags stay user-editable.
@@ -168,6 +172,16 @@ export function Byline({
               { kind: "tags", props: { allTags, onToggle: onTagToggle, selected: page.tags } },
             ],
             key: "tags",
+          },
+          hasBacklinks && {
+            chips: [
+              {
+                id: "backlinks",
+                kind: "node",
+                node: <BacklinksButton backlinks={backlinks} />,
+              },
+            ],
+            key: "backlinks",
           },
         ]}
         layout="byline"
