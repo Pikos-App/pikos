@@ -191,8 +191,9 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "read_page",
-            "Read one page's metadata and its body as markdown, by id. Edit the markdown and pass \
-             it to update_page's content to change the body.",
+            "Read one page's metadata and its body as markdown, by id. To change part of the body, \
+             pass update_page an append, insert or replaceSection under a heading; to rewrite it \
+             all, edit the markdown and pass it as content.",
             json!({ "id": string_prop("The page id.") }),
             &["id"],
         ),
@@ -233,7 +234,11 @@ fn tool_definitions() -> Vec<Value> {
             json!({
                 "id": string_prop("The page id."),
                 "title": string_prop("New title."),
-                "content": string_prop("New body, as markdown: headings, lists, - [ ] tasks, links, **bold**, `code`, quotes, tables. It replaces the whole body. Raw HTML is refused."),
+                "content": string_prop("New body, as markdown: headings, lists, - [ ] tasks, links, **bold**, `code`, quotes, tables. It replaces the whole body. Raw HTML is refused. To change one part, use append, insert or replaceSection instead."),
+                "append": string_prop("Markdown to add at the end of the page, or at the end of section when one is named. The rest of the body is left as it is."),
+                "insert": string_prop("Markdown to add straight under section's heading."),
+                "replaceSection": string_prop("Markdown that replaces everything under section's heading, up to the next heading of the same or a higher level. The heading stays."),
+                "section": string_prop("The heading append, insert or replaceSection works under, by its text, e.g. \"Notes\". A heading that isn't on the page, or is there twice, is refused."),
                 "status": { "type": "string", "enum": ["not_started", "done"], "description": "New state." },
                 "due": string_prop("Move the page: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it is not already timed."),
                 "allDay": string_prop("Make the page all-day on YYYY-MM-DD — the only way to drop an existing time."),
@@ -466,6 +471,10 @@ async fn call_tool(
                 PageEdit {
                     title: text(args, "title"),
                     content: text(args, "content"),
+                    append: text(args, "append"),
+                    insert: text(args, "insert"),
+                    replace_section: text(args, "replaceSection"),
+                    section: text(args, "section"),
                     status: text(args, "status"),
                     due: text(args, "due"),
                     all_day: text(args, "allDay"),

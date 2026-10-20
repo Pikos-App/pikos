@@ -105,8 +105,33 @@ pub enum CliCommand {
         id: String,
         #[arg(long)]
         title: Option<String>,
-        #[arg(long)]
+        #[arg(long, help = "Replace the whole body with this markdown")]
         content: Option<String>,
+        #[arg(
+            long,
+            conflicts_with_all = ["content", "insert", "replace_section"],
+            help = "Add markdown at the end of the page, or of --section"
+        )]
+        append: Option<String>,
+        #[arg(
+            long,
+            requires = "section",
+            conflicts_with_all = ["content", "replace_section"],
+            help = "Add markdown straight under --section's heading"
+        )]
+        insert: Option<String>,
+        #[arg(
+            long = "replace-section",
+            requires = "section",
+            conflicts_with = "content",
+            help = "Replace everything under --section's heading with this markdown"
+        )]
+        replace_section: Option<String>,
+        #[arg(
+            long,
+            help = "The heading --append, --insert or --replace-section works under, by its text"
+        )]
+        section: Option<String>,
         #[arg(long)]
         status: Option<String>,
         #[arg(

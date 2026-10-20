@@ -2711,6 +2711,75 @@ async fn writing_a_page_its_own_body_with_keys_reordered_changes_nothing() {
     assert!(!user_modified(&pool, "p").await);
 }
 
+/// Blocks in the editor's key order, which encoding a parsed body would sort.
+const SECTIONED_BEFORE: &str = r#"{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Notes"}]},{"type":"paragraph","content":[{"type":"text","text":"kept"}]}"#;
+const SECTIONED_AFTER: &str = r#"{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Later"}]},{"type":"paragraph","content":[{"type":"text","text":"also kept"}]}"#;
+
+async fn sectioned_page(pool: &sqlx::SqlitePool) {
+    insert_test_page(pool, TestPage::new("p", "Plans"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content = ? WHERE id = 'p'")
+        .bind(format!(
+            r#"{{"type":"doc","content":[{SECTIONED_BEFORE},{SECTIONED_AFTER}]}}"#
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn editing_a_section_leaves_every_block_outside_it_byte_identical() {
+    let pool = test_pool().await;
+    sectioned_page(&pool).await;
+    let added =
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": "new" }] });
+
+    let page = edit_page_section_impl(
+        &pool,
+        "p",
+        &pikos_core::body_section::SectionEdit::AppendTo("Notes".into()),
+        std::slice::from_ref(&added),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        page.content,
+        format!(r#"{{"type":"doc","content":[{SECTIONED_BEFORE},{added},{SECTIONED_AFTER}]}}"#)
+    );
+}
+
+#[tokio::test]
+async fn a_section_edit_that_changes_nothing_moves_no_clock() {
+    let pool = test_pool().await;
+    sectioned_page(&pool).await;
+    mark_synced(&pool, "p", "active").await;
+    crate::replica::start(&pool).await.unwrap();
+    let stamps = || {
+        sqlx::query_as::<_, (Option<String>, String)>(
+            "SELECT (SELECT clocks FROM replica_clocks WHERE entity = 'body' AND key = 'p'),
+                    updated_at FROM pages WHERE id = 'p'",
+        )
+        .fetch_one(&pool)
+    };
+    let before = stamps().await.unwrap();
+    let same =
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": "kept" }] });
+
+    edit_page_section_impl(
+        &pool,
+        "p",
+        &pikos_core::body_section::SectionEdit::Replace("Notes".into()),
+        &[same],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(stamps().await.unwrap(), before);
+    assert!(!user_modified(&pool, "p").await);
+}
+
 #[tokio::test]
 async fn typing_over_a_body_the_cli_changed_since_it_loaded_merges_and_keeps_its_links() {
     let pool = test_pool().await;

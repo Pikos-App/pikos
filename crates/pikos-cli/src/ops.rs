@@ -7,16 +7,18 @@
 use std::collections::HashMap;
 
 use chrono::{Local, NaiveDate, NaiveTime, TimeZone, Utc};
+use pikos_core::body_section::SectionEdit;
 use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
-    create_recurrence_rule_impl, delete_page_reminder, delete_page_schedule_impl, fts_tokens,
-    fuzzy_match_folder, get_folder_impl, get_page, get_recurrence_rule_impl, list_folders_impl,
-    list_page_reminders, list_page_schedules_impl, list_pages_impl, list_pages_window,
-    list_trashed_pages_impl, now_local_iso, restore_folder_impl, restore_page_impl, search_page,
-    soft_delete_folder_impl, soft_delete_page_impl, today_local, update_folder_impl,
-    update_page_impl, CompleteRecurringInput, Folder, FolderUpdate, ListExtras, NewFolder,
-    NewRecurrenceRule, Page, PageFilter, PageOrder, PageReminder, PageSummary, PageUpdate,
-    SearchCursor, SearchPage, Terms, TrashedPage,
+    create_recurrence_rule_impl, delete_page_reminder, delete_page_schedule_impl,
+    edit_page_section_impl, fts_tokens, fuzzy_match_folder, get_folder_impl, get_page,
+    get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
+    list_pages_impl, list_pages_window, list_trashed_pages_impl, now_local_iso,
+    restore_folder_impl, restore_page_impl, search_page, soft_delete_folder_impl,
+    soft_delete_page_impl, today_local, update_folder_impl, update_page_impl,
+    CompleteRecurringInput, Folder, FolderUpdate, ListExtras, NewFolder, NewRecurrenceRule, Page,
+    PageFilter, PageOrder, PageReminder, PageSummary, PageUpdate, SearchCursor, SearchPage, Terms,
+    TrashedPage,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -26,8 +28,8 @@ use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
 use crate::schedule::{parse_day_range, parse_due, resolve_schedule_change, ScheduleChange};
 use crate::write::{
-    apply_patch, local_tz, markdown_to_doc, markdown_to_tiptap, page_with_body, priority_num,
-    resolve_folder, schedule_once, write_reminders,
+    apply_patch, local_tz, markdown_to_doc, markdown_to_linked_doc, markdown_to_tiptap,
+    page_with_body, priority_num, resolve_folder, schedule_once, write_reminders,
 };
 
 /// A page as `read` shows it: everything the writer stores, plus the body as markdown,
@@ -700,6 +702,14 @@ pub async fn search(
 pub struct PageEdit {
     pub title: Option<String>,
     pub content: Option<String>,
+    /// Markdown added at the end of the page, or of `section` when one is named.
+    pub append: Option<String>,
+    /// Markdown added straight under `section`'s heading.
+    pub insert: Option<String>,
+    /// Markdown that replaces everything under `section`'s heading.
+    pub replace_section: Option<String>,
+    /// A heading, by its text, for the three edits above.
+    pub section: Option<String>,
     pub status: Option<String>,
     pub due: Option<String>,
     pub all_day: Option<String>,
@@ -758,6 +768,40 @@ fn edited_tags(
         }
     }
     Ok(Some(tags))
+}
+
+/// The section edit `edit` asks for, with the markdown it places.
+fn section_edit(edit: &PageEdit) -> Result<Option<(SectionEdit, String)>, CliError> {
+    let body_writes = [
+        &edit.content,
+        &edit.append,
+        &edit.insert,
+        &edit.replace_section,
+    ]
+    .iter()
+    .filter(|field| field.is_some())
+    .count();
+    if body_writes > 1 {
+        return Err(CliError::usage(
+            "content, append, insert and replaceSection each write the body — pass one.",
+        ));
+    }
+
+    let heading = edit.section.clone();
+    match (&edit.append, &edit.insert, &edit.replace_section, heading) {
+        (Some(md), _, _, None) => Ok(Some((SectionEdit::Append, md.clone()))),
+        (Some(md), _, _, Some(h)) => Ok(Some((SectionEdit::AppendTo(h), md.clone()))),
+        (_, Some(md), _, Some(h)) => Ok(Some((SectionEdit::InsertAfter(h), md.clone()))),
+        (_, _, Some(md), Some(h)) => Ok(Some((SectionEdit::Replace(h), md.clone()))),
+        (None, None, None, None) => Ok(None),
+        (None, None, None, Some(_)) => Err(CliError::usage(
+            "section names the heading an append, insert or replaceSection goes under — pass one \
+             of them with it.",
+        )),
+        _ => Err(CliError::usage(
+            "insert and replaceSection need a section: the heading they go under.",
+        )),
+    }
 }
 
 /// Apply an edit, settling every rejection before the first write so a bad field
@@ -838,6 +882,28 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         None => None,
     };
     let tags = edited_tags(&page.tags, &edit.add_tags, &edit.remove_tags)?;
+    let section = match section_edit(&edit)? {
+        Some((place, markdown)) => {
+            let doc = markdown_to_linked_doc(pool, &markdown, &page.links).await?;
+            let blocks = doc["content"].as_array().cloned().unwrap_or_default();
+            Some((place, blocks))
+        }
+        None => None,
+    };
+    if let Some(s) = &edit.status {
+        validate_status(s)?;
+    }
+    if let Some(p) = edit.priority {
+        validate_priority(p)?;
+    }
+
+    // The one rejection only the write can find, a heading that isn't there, lands before any
+    // other field is written.
+    if let Some((place, blocks)) = &section {
+        edit_page_section_impl(pool, id, place, blocks)
+            .await
+            .map_err(classify)?;
+    }
 
     let mut upd = PageUpdate {
         folder_id,
@@ -852,7 +918,6 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         upd.content = Some(markdown_to_tiptap(pool, &c, &page.links).await?);
     }
     if let Some(s) = &edit.status {
-        validate_status(s)?;
         upd.status = Some(s.clone());
         upd.completed_at = Some(if s == "done" {
             Value::String(now_local_iso())
@@ -861,7 +926,6 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         });
     }
     if let Some(p) = edit.priority {
-        validate_priority(p)?;
         upd.priority = Some(p);
     }
     write_patch(pool, id, upd).await?;

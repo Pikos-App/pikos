@@ -922,6 +922,61 @@ async fn update_page_with_the_body_read_page_gave_leaves_it_unedited() {
 }
 
 #[tokio::test]
+async fn update_page_edits_one_section_by_its_heading() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Trip")]).await;
+    let id = &ids[0];
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    server.call(
+        2,
+        "update_page",
+        json!({ "id": id, "content": "## Packing\n\n- passport\n\n## Route\n\nNorth first" }),
+    );
+    server.call(
+        3,
+        "update_page",
+        json!({ "id": id, "section": "Packing", "append": "- charger" }),
+    );
+    server.call(
+        4,
+        "update_page",
+        json!({ "id": id, "section": "Route", "insert": "Leave at six" }),
+    );
+    server.call(
+        5,
+        "update_page",
+        json!({ "id": id, "section": "route", "replaceSection": "South instead" }),
+    );
+    server.call(
+        6,
+        "update_page",
+        json!({ "id": id, "append": "Back on Sunday" }),
+    );
+    let read = server.call(7, "read_page", json!({ "id": id }));
+    let missing = server.call_expecting_error(
+        8,
+        "update_page",
+        json!({ "id": id, "section": "Budget", "append": "x", "priority": 1 }),
+    );
+    let after_refusal = server.call(9, "read_page", json!({ "id": id }));
+    server.shutdown();
+
+    assert_eq!(
+        read["markdown"],
+        "## Packing\n\n- passport\n\n* charger\n\n\n## Route\n\nSouth instead\n\nBack on Sunday\n"
+    );
+    let message = missing["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("\"## Packing\", \"## Route\""),
+        "{message}"
+    );
+    assert_eq!(after_refusal["priority"], 0);
+}
+
+#[tokio::test]
 async fn complete_page_ticks_off_a_named_occurrence_of_a_calendar_series() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();

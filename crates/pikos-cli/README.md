@@ -84,6 +84,16 @@ than half-written: raw HTML, an image inside a line of text, a list mixing tasks
 and plain items, a numbered task list, a heading inside a list item, and code
 inside a link.
 
+To change part of a page, `update --section <heading>` names a heading by its
+text, and `--append`, `--insert` or `--replace-section` takes the markdown that
+goes at the end of that section, straight under its heading, or in place of what
+is under it, up to the next heading of the same or a higher level. `--append`
+alone adds to the end of the page. Only the new markdown is converted; every
+other block is kept exactly as stored, so a part markdown can't carry survives,
+and an edit that changes nothing writes nothing. A heading that isn't on the page,
+or is there twice, is refused with the headings it found. Over MCP the same edits
+are `update_page`'s `section`, `append`, `insert` and `replaceSection`.
+
 `add --dry-run` runs the parser and prints what it made of the text — the exact
 shape `add` would then persist — without writing. It is the agent-preview mode:
 show the parse, then re-issue the same text to commit it.

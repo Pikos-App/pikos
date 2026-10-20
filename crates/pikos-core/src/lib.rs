@@ -13,6 +13,7 @@
 //! from Swift.
 
 pub mod body_merge;
+pub mod body_section;
 pub mod calendar;
 pub mod colors;
 pub mod dates;

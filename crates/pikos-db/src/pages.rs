@@ -725,6 +725,34 @@ pub async fn update_page_impl(
     )))
 }
 
+/// Places `blocks` in a page's body by `edit`, from the CLI and MCP. Written over the body it was
+/// spliced into, so a save landing between the read and the write is merged with the edit, not
+/// overwritten; an edit that leaves the body as it was writes nothing.
+pub async fn edit_page_section_impl(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    edit: &pikos_core::body_section::SectionEdit,
+    blocks: &[serde_json::Value],
+) -> AppResult<Page> {
+    let Some(stored) = live_body(pool, id).await? else {
+        return Err(AppError::NotFound(format!("page {id}")));
+    };
+
+    let content = pikos_core::body_section::edit_section(&stored, edit, blocks)
+        .map_err(|pikos_core::body_section::Unplaced(why)| AppError::Invalid(why))?;
+
+    update_page_impl(
+        pool,
+        id.to_string(),
+        PageUpdate {
+            content: Some(content),
+            base_content: Some(stored),
+            ..Default::default()
+        },
+    )
+    .await
+}
+
 /// Merges `updates`' body over the one stored now, which it was not typed over, and makes the
 /// stored body its new base. False when there is nothing to merge: no base was given, or the page
 /// is gone or in the trash.

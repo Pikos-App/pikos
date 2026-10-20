@@ -164,11 +164,21 @@ pub async fn markdown_to_tiptap(
     markdown: &str,
     linked: &[String],
 ) -> Result<String, CliError> {
+    Ok(markdown_to_linked_doc(pool, markdown, linked)
+        .await?
+        .to_string())
+}
+
+pub async fn markdown_to_linked_doc(
+    pool: &SqlitePool,
+    markdown: &str,
+    linked: &[String],
+) -> Result<Value, CliError> {
     let mut doc = markdown_to_doc(markdown)?;
     pikos_db::page_links::link_titles(pool, &mut doc, linked)
         .await
         .map_err(crate::error::classify)?;
-    Ok(doc.to_string())
+    Ok(doc)
 }
 
 #[cfg(test)]
