@@ -735,6 +735,9 @@ keeping them apart also leaves every dedup predicate (all of which read `type = 
 matching exactly the rows it matched before, so suppression stays bookkeeping and not a
 re-timing. Both halves still precede every query, so origin can't enter into it; no dedup row
 is written either, leaving the reminder armed if the event is later moved to a non-quiet time.
+A reminder due while macOS has notifications turned off for Pikos is handled the same way, as
+`type = 'refused'`, rendered "Not shown: notifications are off for Pikos" with a link to the
+system setting. Only an explicit denial counts; Linux and Windows have no authorization to read.
 
 ⁵⁹ The trash is a view in the page-list column, not a dialog: restoring several pages one at a
 time is the normal case, and a modal makes that a sequence of reopenings. It is a smart view
