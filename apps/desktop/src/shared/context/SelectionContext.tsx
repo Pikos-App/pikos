@@ -11,8 +11,9 @@ export interface SelectionContextValue {
   selectedPageIds: ReadonlySet<string>;
   /** Toggle a single page in/out of the selection (Cmd+Click). */
   togglePageSelection: (pageId: string) => void;
-  /** Select a range from the last-clicked anchor to targetId using the visible list order. */
-  setRangeSelection: (visibleIds: string[], targetId: string, anchorOverride?: string) => void;
+  /** Select a range from the last-clicked anchor to targetId in the order given, as Finder does.
+   *  `fallbackAnchor` is used only when nothing has been clicked since the view opened. */
+  setRangeSelection: (visibleIds: string[], targetId: string, fallbackAnchor?: string) => void;
   selectAll: (visibleIds: string[]) => void;
   clearSelection: () => void;
   /** The last-clicked page ID used as the anchor for Shift+Click range selection. */
@@ -54,6 +55,13 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     setSelectionAnchorId(null);
   }
 
+  // Opening a page by any route, arrows included, moves the Shift-click anchor to it, as in Finder.
+  const [prevActivePageId, setPrevActivePageId] = useState(activePageId);
+  if (prevActivePageId !== activePageId) {
+    setPrevActivePageId(activePageId);
+    if (activePageId) setSelectionAnchorId(activePageId);
+  }
+
   function togglePageSelection(pageId: string) {
     setSelectedPageIds((prev) => {
       const next = new Set(prev);
@@ -68,8 +76,8 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     setSelectionAnchorId(pageId);
   }
 
-  function setRangeSelection(visibleIds: string[], targetId: string, anchorOverride?: string) {
-    const anchor = anchorOverride ?? selectionAnchorId;
+  function setRangeSelection(visibleIds: string[], targetId: string, fallbackAnchor?: string) {
+    const anchor = selectionAnchorId ?? fallbackAnchor;
     if (!anchor) {
       setSelectedPageIds(new Set([targetId]));
       setSelectionAnchorId(targetId);

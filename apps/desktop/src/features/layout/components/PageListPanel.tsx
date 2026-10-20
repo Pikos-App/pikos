@@ -436,9 +436,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   });
 
   function handlePageClick(page: (typeof visiblePages)[0], e: React.MouseEvent) {
-    const allIds = visiblePages.map((p) => p.id);
     if (e.shiftKey) {
-      setRangeSelection(allIds, page.id, activePage?.id ?? undefined);
+      const onScreenIds = navigablePages().map((p) => p.id);
+      setRangeSelection(onScreenIds, page.id, activePage?.id);
       return;
     }
     if (e.metaKey || e.ctrlKey) {

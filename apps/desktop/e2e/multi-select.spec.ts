@@ -62,6 +62,50 @@ appTest(
   }
 );
 
+appTest(
+  "Shift+Click in a folder ranges from the last Cmd-clicked page, not the open one",
+  { tag: ["@LIST-09:10"] },
+  async ({ app }) => {
+    await createFolder(app, "Range QA");
+    await createPages(app, ["anchor-a", "anchor-b", "anchor-c", "anchor-d"]);
+    const list = app.locator("[data-page-list-item]");
+    const [a, b, c, d] = ["anchor-a", "anchor-b", "anchor-c", "anchor-d"].map((t) =>
+      list.filter({ hasText: t })
+    );
+
+    await a!.click();
+    await c!.click({ modifiers: ["Meta"] });
+    await d!.click({ modifiers: ["Shift"] });
+
+    await expect(c!).toHaveAttribute("data-selected", "true");
+    await expect(d!).toHaveAttribute("data-selected", "true");
+    await expect(b!).not.toHaveAttribute("data-selected");
+  }
+);
+
+appTest(
+  "Shift+Click ranges into the expanded Completed section",
+  { tag: ["@LIST-09:10"] },
+  async ({ app }) => {
+    await createPages(app, ["done-range-a", "done-range-b", "done-range-c"]);
+    const list = app.locator("[data-page-list-item]");
+    await list
+      .filter({ hasText: "done-range-c" })
+      .getByRole("checkbox", { name: /Mark done/i })
+      .click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
+    const [a, b, c] = ["done-range-a", "done-range-b", "done-range-c"].map((t) =>
+      list.filter({ hasText: t })
+    );
+    await expect(c!).toBeVisible();
+
+    await a!.click();
+    await c!.click({ modifiers: ["Shift"] });
+
+    for (const page of [a, b, c]) await expect(page!).toHaveAttribute("data-selected", "true");
+  }
+);
+
 // ─── Escape clears selection ───────────────────────────────────────────────
 
 appTest(
