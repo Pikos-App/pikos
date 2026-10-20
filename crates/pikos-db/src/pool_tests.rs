@@ -979,6 +979,42 @@ async fn a_workspace_a_newer_build_migrated_names_both_versions() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[tokio::test]
+async fn a_pool_open_before_a_newer_build_migrates_refuses_to_write_naming_both_versions() {
+    let dir = unique_tmp_dir();
+    let path_str = dir.join("workspace.sqlite").to_str().unwrap().to_string();
+    let running = open_pool(&path_str).await.unwrap();
+    insert_test_page(&running, TestPage::new("before", "Written before"))
+        .await
+        .unwrap();
+
+    let newer = open_pool(&path_str).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&newer)
+    .await
+    .unwrap();
+    newer.close().await;
+
+    let written = insert_test_page(&running, TestPage::new("after", "Written after")).await;
+
+    let supported = embedded_migration_max();
+    assert!(
+        matches!(written, Err(AppError::TooNew { applied: 9999, supported: s }) if s == supported),
+        "{written:?}"
+    );
+    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
+        .fetch_one(&running)
+        .await
+        .unwrap();
+    assert_eq!(pages, 1);
+
+    running.close().await;
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn prune_keeps_newest_n_and_ignores_other_files() {
     let dir = unique_tmp_dir();

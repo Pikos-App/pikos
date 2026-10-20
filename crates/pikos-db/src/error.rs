@@ -85,10 +85,27 @@ impl AppError {
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
         if says_the_file_is_damaged(&err) {
-            AppError::Corrupt(err.to_string())
-        } else {
-            AppError::Db(err)
+            return AppError::Corrupt(err.to_string());
         }
+
+        match migrated_past(&err) {
+            Some((applied, supported)) => AppError::TooNew { applied, supported },
+            None => AppError::Db(err),
+        }
+    }
+}
+
+/// The versions in a write refused because a newer Pikos migrated the workspace.
+fn migrated_past(err: &sqlx::Error) -> Option<(i64, i64)> {
+    let sqlx::Error::Database(db) = err else {
+        return None;
+    };
+
+    let versions = db.message().strip_prefix(crate::pool::MIGRATED_PAST_MARK)?;
+    let mut versions = versions.split_whitespace().map(str::parse::<i64>);
+    match (versions.next(), versions.next()) {
+        (Some(Ok(applied)), Some(Ok(supported))) => Some((applied, supported)),
+        _ => None,
     }
 }
 

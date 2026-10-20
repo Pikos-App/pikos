@@ -161,7 +161,16 @@ with the installed desktop app and `open_pool` migrates on connect.
 
 - **DB newer than the CLI**: the embedded migrator fails closed
   (`VersionMissing` → `SchemaTooNew`, exit 6), so a stale CLI never writes
-  against an unknown schema.
+  against an unknown schema. A long-lived `pikos mcp` that opened the file
+  before a newer Pikos migrated it refuses every write from then on, with the
+  same kind and both versions named.
+
+Never copy or move another file over the workspace while anything has it open,
+whether the app, the CLI or an MCP server. The open process reads the new file
+through its old write-ahead log and memory map: the next read reports the file
+malformed, or the process crashes. A raw `sqlite3` write alongside is safe for
+the file, but cannot touch pages: their triggers call functions only Pikos
+registers. Restore through the app's backups instead.
 - **DB older than the CLI**: refused up front (exit 8) unless `--migrate` is
   passed. Migrating is one-way and would leave the installed app unable to open
   its own workspace until it is updated too.

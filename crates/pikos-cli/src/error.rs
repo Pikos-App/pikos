@@ -49,9 +49,9 @@ impl CliError {
 /// carry our own safe messages.
 pub fn classify(err: AppError) -> CliError {
     match err {
-        AppError::TooNew { .. } => CliError::new(
+        AppError::TooNew { applied, supported } => CliError::new(
             "SchemaTooNew",
-            "This workspace's database is newer than this Pikos CLI supports. Upgrade the CLI to match the desktop app.",
+            format!("This workspace's database is at schema v{applied}, newer than the v{supported} this Pikos CLI supports. Upgrade the CLI to match the desktop app."),
             6,
         ),
         AppError::NotFound(m) => CliError::not_found(m),

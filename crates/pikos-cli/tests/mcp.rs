@@ -353,6 +353,37 @@ async fn a_workspace_needing_migration_fails_the_tool_not_the_handshake() {
     server.shutdown();
 }
 
+#[tokio::test]
+async fn a_running_server_refuses_to_write_once_a_newer_build_migrates_the_file() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed(dbs, vec![base_page("Standup")]).await.remove(0);
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    server.call(2, "update_page", json!({ "id": id, "priority": 1 }));
+
+    let newer = open_pool(dbs).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&newer)
+    .await
+    .unwrap();
+    newer.close().await;
+
+    let refused = server.call_expecting_error(3, "update_page", json!({ "id": id, "priority": 2 }));
+    assert_eq!(refused["error"]["kind"], "SchemaTooNew");
+    let message = refused["error"]["message"].as_str().unwrap();
+    assert!(message.contains("9999"), "{message}");
+
+    server.shutdown();
+
+    let pool = open_pool(dbs).await;
+    assert!(pool.is_err(), "the newer file must still refuse an open");
+}
+
 /// Listening TCP sockets held by one pid, lsof's own tabular output. `None` when
 /// lsof isn't installed; lsof exits 1 on no match, so the status is not an error.
 ///
