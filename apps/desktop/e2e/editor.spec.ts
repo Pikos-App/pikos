@@ -515,6 +515,25 @@ appTest(
   }
 );
 
+appTest(
+  "select all and typing on a long page still arriving replace the whole page @mock-only",
+  async ({ page }) => {
+    await page.goto("/?seedPages=2&bodyWords=200000&bodyShape=log");
+    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible({ timeout: 60_000 });
+
+    await page.getByLabel("Seeded page 1", { exact: true }).click();
+    const body = page.getByRole("textbox", { name: "Page content" });
+    await expect(body).toHaveAttribute("aria-busy", "true");
+
+    await body.locator(":scope > p").first().click();
+    await page.keyboard.press(mod("Mod+a"));
+    await page.keyboard.type("only this");
+
+    await expect(body).not.toHaveAttribute("aria-busy", "true");
+    await expect(body).toHaveText("only this");
+  }
+);
+
 // ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
 
 // The editor's insert-link and the command palette both claim it. The editor's is

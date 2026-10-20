@@ -2,7 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { Editor } from "@tiptap/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { editorExtensions, loadPageContent } from "../components/EditorPane";
+import { editorExtensions } from "../components/EditorPane";
+import { loadPageContent } from "../utils/pageLoad";
 import { useIdleWordCount } from "./useIdleWordCount";
 
 function paragraph(text: string) {

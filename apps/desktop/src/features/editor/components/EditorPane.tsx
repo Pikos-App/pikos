@@ -33,6 +33,7 @@ import { useEditorPage } from "../hooks/useEditorPage";
 import { usePageLinkTargets } from "../hooks/usePageLinkTargets";
 import { registerActiveEditor } from "../utils/imageDropBridge";
 import { looksLikeMarkdown } from "../utils/markdownPaste";
+import { loadPageContent, openPageContent, type RestOfPage } from "../utils/pageLoad";
 import { saveDelayFor } from "../utils/saveDelay";
 import { FindContentPopover } from "./FindContentPopover";
 import { FormatToolbar } from "./FormatToolbar";
@@ -85,27 +86,6 @@ function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): bool
   if (!text || !looksLikeMarkdown(text)) return false;
   // insertContent is overridden by tiptap-markdown to parse strings as markdown.
   return editor.chain().setMeta("paste", true).insertContent(text).run();
-}
-
-/**
- * Put a page's content into the editor.
- *
- * Exported so the behaviour below can be tested directly rather than through a
- * React effect — and so there is exactly one load path to get right.
- *
- * Two flags, both load-bearing:
- *
- * - `emitUpdate: false` stops the load being reported as a change, which would
- *   trigger autosave for content the user has not touched.
- * - `addToHistory: false` keeps the load out of the undo stack. Without it the
- *   load is an undoable step, so undo on a freshly-opened page reverts to the
- *   empty document the editor was constructed with — and because onUpdate then
- *   fires, autosave persists that empty document. Typing within ProseMirror's
- *   ~500ms grouping window has the same effect, as the keystroke is grouped
- *   with the load and one undo reverts both.
- */
-export function loadPageContent(editor: Editor, doc: JSONContent): void {
-  editor.chain().setMeta("addToHistory", false).setContent(doc, { emitUpdate: false }).run();
 }
 
 /** Load a newer body into the page already open, keeping the caret and the scroll where they were. */
@@ -165,6 +145,25 @@ export function EditorPane() {
    *  from outside is told from our own. */
   const shownContentRef = useRef<string>("");
 
+  const restOfPageRef = useRef<RestOfPage | null>(null);
+
+  /** Draw what a long page has left before anything that edits it or moves to its end. */
+  function finishOpening(): void {
+    restOfPageRef.current?.finish();
+    restOfPageRef.current = null;
+  }
+
+  function cancelOpening(): void {
+    restOfPageRef.current?.cancel();
+    restOfPageRef.current = null;
+  }
+
+  /** An input handler that lets ProseMirror handle the event, on the whole page. */
+  function finishOpeningFirst(): boolean {
+    finishOpening();
+    return false;
+  }
+
   function savePendingEdit(): void {
     const edit = pendingEditRef.current;
     if (!edit) return;
@@ -187,6 +186,14 @@ export function EditorPane() {
   const editor = useEditor({
     editorProps: {
       attributes: EDITOR_ATTRIBUTES,
+      handleDOMEvents: {
+        beforeinput: finishOpeningFirst,
+        compositionstart: finishOpeningFirst,
+        cut: finishOpeningFirst,
+        drop: finishOpeningFirst,
+        keydown: finishOpeningFirst,
+        paste: finishOpeningFirst,
+      },
       handlePaste: (_view, event) => handleMarkdownPaste(editorRef.current, event),
     },
     extensions: editorExtensions,
@@ -199,6 +206,8 @@ export function EditorPane() {
       const pageId = currentPageIdRef.current;
       if (pageId === null) return;
 
+      // An edit from a command rather than input, such as the toolbar, still saves the whole page.
+      finishOpening();
       pendingEditRef.current = { doc: e.state.doc, pageId };
       schedule(saveDelayFor(e.state.doc.content.size));
     },
@@ -213,6 +222,7 @@ export function EditorPane() {
     const isClean = currentPageIdRef.current === pageId && pendingEditRef.current === null;
     if (!editor || editor.isDestroyed || !isClean) return;
 
+    cancelOpening();
     const doc = tryParseTiptapJson(content, `EditorPane reload page=${pageId}`);
     reloadInPlace(editor, doc ?? EMPTY_TIPTAP_DOC, scrollContainerRef.current);
     shownContentRef.current = content;
@@ -244,6 +254,7 @@ export function EditorPane() {
 
     if (page === null) {
       savePendingEdit();
+      cancelOpening();
       currentPageIdRef.current = null;
       if (!editor.isDestroyed) editor.commands.clearContent();
       shownContentRef.current = "";
@@ -253,12 +264,13 @@ export function EditorPane() {
     if (page.id === currentPageIdRef.current) return;
 
     savePendingEdit();
+    cancelOpening();
     currentPageIdRef.current = page.id;
 
     const doc = tryParseTiptapJson(page.content, `EditorPane page=${page.id}`);
 
     if (!editor.isDestroyed) {
-      loadPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
+      restOfPageRef.current = openPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
       // Which page the editor holds, for tests and the in-app benchmark to wait on.
       editor.view.dom.setAttribute("data-page-id", page.id);
     }
@@ -268,7 +280,10 @@ export function EditorPane() {
     // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
     requestAnimationFrame(() => {
       scrollContainerRef.current?.scrollTo({ top: 0 });
-      if (focusBody && !editor.isDestroyed) editor.commands.focus("end");
+      if (focusBody && !editor.isDestroyed) {
+        finishOpening();
+        editor.commands.focus("end");
+      }
     });
   }, [editor, page, isLoading]);
 
@@ -372,7 +387,10 @@ export function EditorPane() {
       {page && (
         <MetadataHeader
           key={page.id}
-          onAppendToBody={(text) => appendParagraphs(editorRef.current, text)}
+          onAppendToBody={(text) => {
+            finishOpening();
+            appendParagraphs(editorRef.current, text);
+          }}
           onFocusEditor={() => !editor?.isDestroyed && editor?.commands.focus()}
           page={page}
         />
@@ -399,7 +417,12 @@ export function EditorPane() {
             // not after drag-selections that end outside text bounds.
             if (e.target === e.currentTarget && !editor?.isFocused) {
               // Defer so the mousedown doesn't interfere with ProseMirror's own handling
-              requestAnimationFrame(() => !editor?.isDestroyed && editor?.commands.focus("end"));
+              requestAnimationFrame(() => {
+                if (!editor || editor.isDestroyed) return;
+
+                finishOpening();
+                editor.commands.focus("end");
+              });
             }
           }}
           style={{ "--editor-font-size": `${fontSize}px` } as CSSProperties}

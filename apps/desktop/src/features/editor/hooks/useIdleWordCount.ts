@@ -2,6 +2,7 @@ import type { Transaction } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
 
+import { REST_OF_PAGE_META } from "../utils/pageLoad";
 import { pageStats } from "../utils/pageStats";
 
 /** How long typing pauses before the count catches up. Counting walks the whole page, which at
@@ -23,7 +24,9 @@ export function useIdleWordCount(editor: Editor): number {
 
       clearTimeout(timer);
       // How `loadPageContent` marks a load, so a page just opened never shows the last one's count.
-      const isPageLoad = transaction.getMeta("addToHistory") === false;
+      // A long page's later slices wait like typing, or every slice would walk all that is drawn.
+      const isPageLoad =
+        transaction.getMeta("addToHistory") === false && !transaction.getMeta(REST_OF_PAGE_META);
       if (isPageLoad) {
         recount();
         return;

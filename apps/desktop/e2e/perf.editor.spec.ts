@@ -37,14 +37,14 @@ interface Ceiling {
 
 const CEILINGS: Record<Shape, Record<number, Ceiling>> = {
   log: {
-    20_000: { enter: 55, findFirst: 45, findLater: 35, findNext: 15, key: 30, open: 150 },
-    100_000: { enter: 240, findFirst: 90, findLater: 60, findNext: 45, key: 20, open: 400 },
-    500_000: { enter: 1_200, findFirst: 300, findLater: 240, findNext: 190, key: 90, open: 1_600 },
+    20_000: { enter: 55, findFirst: 45, findLater: 35, findNext: 15, key: 30, open: 72 },
+    100_000: { enter: 240, findFirst: 90, findLater: 60, findNext: 45, key: 20, open: 110 },
+    500_000: { enter: 1_200, findFirst: 300, findLater: 240, findNext: 190, key: 90, open: 140 },
   },
   prose: {
-    20_000: { enter: 40, findFirst: 60, findLater: 40, findNext: 20, key: 30, open: 240 },
-    100_000: { enter: 140, findFirst: 180, findLater: 110, findNext: 80, key: 28, open: 700 },
-    500_000: { enter: 800, findFirst: 800, findLater: 650, findNext: 420, key: 150, open: 3_200 },
+    20_000: { enter: 40, findFirst: 60, findLater: 40, findNext: 20, key: 30, open: 115 },
+    100_000: { enter: 140, findFirst: 180, findLater: 110, findNext: 80, key: 28, open: 150 },
+    500_000: { enter: 800, findFirst: 800, findLater: 650, findNext: 420, key: 150, open: 180 },
   },
 };
 
@@ -130,6 +130,7 @@ for (const shape of SHAPES) {
       // A body the editor can't parse opens empty and times as instant, which the first version of
       // this spec reported as a result.
       const editor = page.locator(EDITOR);
+      await expect(editor).not.toHaveAttribute("aria-busy", "true", { timeout: 30_000 });
       const blocks = await editor.locator(":scope > p").count();
       const held = await editor.evaluate((el) =>
         [...el.querySelectorAll("p, h2, h3, pre code")].reduce(
