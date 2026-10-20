@@ -2636,6 +2636,51 @@ async fn editing_a_synced_page_marks_it_user_modified() {
     );
 }
 
+#[tokio::test]
+async fn writing_a_page_its_own_body_with_keys_reordered_changes_nothing() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"UPDATE pages SET content = '{"type":"doc","content":[{"type":"paragraph"}]}',
+           content_schema_version = 1 WHERE id = 'p'"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    mark_synced(&pool, "p", "active").await;
+    crate::replica::start(&pool).await.unwrap();
+    let body_clock = || {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT clocks FROM replica_clocks WHERE entity = 'body' AND key = 'p'",
+        )
+        .fetch_optional(&pool)
+    };
+    let clock_before = body_clock().await.unwrap();
+
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(r#"{"content":[{"type":"paragraph"}],"type":"doc"}"#.into()),
+            content_text: Some(String::new()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let version: i64 =
+        sqlx::query_scalar("SELECT content_schema_version FROM pages WHERE id = 'p'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(version, 1);
+    assert_eq!(body_clock().await.unwrap(), clock_before);
+    assert!(!user_modified(&pool, "p").await);
+}
+
 /// Priority is the one `marks_ownership` field with no second signal behind it —
 /// `PAGE_OWNED_SQL` reads completions, tags, reminders and the occurrence sets, none
 /// of which a priority-only edit touches. Drop it from the list and a page the user

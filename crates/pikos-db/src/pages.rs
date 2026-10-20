@@ -688,10 +688,18 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
 pub async fn update_page_impl(
     pool: &sqlx::SqlitePool,
     id: String,
-    updates: PageUpdate,
+    mut updates: PageUpdate,
 ) -> AppResult<Page> {
     if let Some(status) = &updates.status {
         ensure_known_status(status)?;
+    }
+
+    if let Some(content) = &updates.content {
+        let is_unchanged = is_stored_body(pool, &id, content).await?;
+        if is_unchanged {
+            updates.content = None;
+            updates.content_text = None;
+        }
     }
 
     // Editing any authored field claims ownership (the reconciler never calls this
@@ -755,6 +763,32 @@ pub async fn update_page_impl(
     crate::tx::retry_on_busy(|| apply_page_update(pool, &id, &updates, marks_ownership)).await?;
 
     fetch_page(pool, &id).await
+}
+
+/// Whether `incoming` is the body the page already has. Writing it back must change
+/// nothing: a content write re-stamps the schema version, which stamps the body's sync
+/// clock and lets the no-op beat a real edit from another device, and it claims a
+/// calendar page for the person. Compared as parsed JSON because a body round-tripped
+/// through markdown by the CLI or MCP comes back with its keys reordered.
+async fn is_stored_body(pool: &sqlx::SqlitePool, id: &str, incoming: &str) -> AppResult<bool> {
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT content FROM pages WHERE id = ? AND deleted_at IS NULL")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    let Some(stored) = stored else {
+        return Ok(false);
+    };
+
+    if stored == incoming {
+        return Ok(true);
+    }
+
+    let parsed = (
+        serde_json::from_str::<serde_json::Value>(&stored),
+        serde_json::from_str::<serde_json::Value>(incoming),
+    );
+    Ok(matches!(parsed, (Ok(a), Ok(b)) if a == b))
 }
 
 /// The write half of [`update_page_impl`], retried as a unit because it can lose

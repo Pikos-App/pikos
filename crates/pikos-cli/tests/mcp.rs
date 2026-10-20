@@ -845,6 +845,53 @@ async fn read_page_hands_back_markdown_that_update_page_takes_unchanged() {
 }
 
 #[tokio::test]
+async fn update_page_with_the_body_read_page_gave_leaves_it_unedited() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let corpus: Value = serde_json::from_str(include_str!(
+        "../../pikos-core/tests/corpus/markdown-import.json"
+    ))
+    .unwrap();
+    let doc = corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "a page an agent edits")
+        .unwrap()["doc"]
+        .to_string();
+    let ids = seed(
+        dbs,
+        vec![NewPage {
+            content: doc.clone(),
+            ..base_page("Trip")
+        }],
+    )
+    .await;
+    let pool = open_pool(dbs).await.unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 1")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    let read = server.call(2, "read_page", json!({ "id": ids[0] }));
+    let updated = server.call(
+        3,
+        "update_page",
+        json!({ "id": ids[0], "content": read["markdown"] }),
+    );
+    server.shutdown();
+
+    assert_eq!(updated["content"], doc.as_str());
+    let version: i64 = sqlx::query_scalar("SELECT content_schema_version FROM pages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(version, 1);
+}
+
+#[tokio::test]
 async fn complete_page_ticks_off_a_named_occurrence_of_a_calendar_series() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
