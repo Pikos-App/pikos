@@ -1,12 +1,5 @@
 [
   {
-    "id": "GHSA-j95f-988m-3j2f",
-    "package": "@tiptap/core",
-    "severity": "high",
-    "why": "Quadratic parsing, or a prototype key, in markdown a person pastes or imports into their own workspace; the worst case is the editor stalling on hostile text. Fixed upstream; upgrading the editor is its own change.",
-    "until": "2026-11-15"
-  },
-  {
     "id": "GHSA-26w7-cxv4-gfx2",
     "package": "astro",
     "severity": "critical",
@@ -89,20 +82,6 @@
     "severity": "high",
     "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code.",
     "until": "2027-04-01"
-  },
-  {
-    "id": "GHSA-22p9-wv53-3rq4",
-    "package": "linkify-it",
-    "severity": "high",
-    "why": "Quadratic parsing, or a prototype key, in markdown a person pastes or imports into their own workspace; the worst case is the editor stalling on hostile text. Fixed upstream; upgrading the editor is its own change.",
-    "until": "2026-11-15"
-  },
-  {
-    "id": "GHSA-v245-v573-v5vm",
-    "package": "linkify-it",
-    "severity": "high",
-    "why": "Quadratic parsing, or a prototype key, in markdown a person pastes or imports into their own workspace; the worst case is the editor stalling on hostile text. Fixed upstream; upgrading the editor is its own change.",
-    "until": "2026-11-15"
   },
   {
     "id": "GHSA-28wg-ghj8-5hjv",
