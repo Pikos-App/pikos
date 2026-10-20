@@ -17,6 +17,7 @@ import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useViewCacheController } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { onFlushPending } from "@/shared/pendingWrites";
@@ -105,6 +106,25 @@ export function loadPageContent(editor: Editor, doc: JSONContent): void {
   editor.chain().setMeta("addToHistory", false).setContent(doc, { emitUpdate: false }).run();
 }
 
+/** Load a newer body into the page already open, keeping the caret and the scroll where they were. */
+function reloadInPlace(editor: Editor, doc: JSONContent, scroller: HTMLElement | null): void {
+  const { from, to } = editor.state.selection;
+  const scrollTop = scroller?.scrollTop ?? 0;
+  loadPageContent(editor, doc);
+  editor.commands.setTextSelection({ from, to });
+
+  requestAnimationFrame(() => {
+    if (scroller) scroller.scrollTop = scrollTop;
+  });
+}
+
+/** Typing not yet handed to the write queue, and the page it was typed into. Only this is ever
+ *  saved: writing back a body nobody edited would put it over a newer one from outside. */
+interface PendingEdit {
+  content: string;
+  pageId: string;
+}
+
 // Append at the very end of the doc, never at the cursor: the caller is a banner
 // above the editor, so wherever the caret happens to sit is not where the user
 // asked for this. Inserted as plain paragraphs — the text is an invite
@@ -121,7 +141,8 @@ function appendParagraphs(editor: Editor | null, text: string): void {
 
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
-  const { updatePage } = usePages();
+  const { getPageAfterWrites, updatePage } = usePages();
+  const viewCache = useViewCacheController();
   const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
   const { takeBodyFocus } = useUI();
@@ -135,8 +156,20 @@ export function EditorPane() {
 
   // Content stored in a ref (not state) to avoid triggering React re-renders
   // on every keystroke. A version counter drives the autosave schedule.
-  const contentJsonRef = useRef<string>("");
+  const pendingEditRef = useRef<PendingEdit | null>(null);
   const [contentVersion, setContentVersion] = useState(0);
+
+  /** The open page's body as last loaded or saved, to tell a change from outside from our own. */
+  const shownContentRef = useRef<string>("");
+
+  function savePendingEdit(): void {
+    const edit = pendingEditRef.current;
+    if (!edit) return;
+
+    pendingEditRef.current = null;
+    shownContentRef.current = edit.content;
+    updatePage(edit.pageId, { content: edit.content, contentText: extractText(edit.content) });
+  }
 
   const editor = useEditor({
     editorProps: {
@@ -150,7 +183,10 @@ export function EditorPane() {
       if (selectedPageIds.size > 0) clearSelection();
     },
     onUpdate: ({ editor: e }) => {
-      contentJsonRef.current = JSON.stringify(e.getJSON());
+      const pageId = currentPageIdRef.current;
+      if (pageId === null) return;
+
+      pendingEditRef.current = { content: JSON.stringify(e.getJSON()), pageId };
       setContentVersion((v) => v + 1);
     },
   });
@@ -184,25 +220,16 @@ export function EditorPane() {
     if (!editor || editor.isDestroyed || isLoading) return;
 
     if (page === null) {
-      // Flush pending content for the outgoing page before clearing
-      if (currentPageIdRef.current && contentJsonRef.current !== "") {
-        const content = contentJsonRef.current;
-        updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
-      }
+      savePendingEdit();
       currentPageIdRef.current = null;
       if (!editor.isDestroyed) editor.commands.clearContent();
-      contentJsonRef.current = "";
+      shownContentRef.current = "";
       return;
     }
 
     if (page.id === currentPageIdRef.current) return;
 
-    // Flush pending content for the outgoing page before switching
-    if (currentPageIdRef.current && contentJsonRef.current !== "") {
-      const content = contentJsonRef.current;
-      updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
-    }
-
+    savePendingEdit();
     currentPageIdRef.current = page.id;
 
     const doc = tryParseTiptapJson(page.content, `EditorPane page=${page.id}`);
@@ -212,7 +239,7 @@ export function EditorPane() {
       // Which page the editor holds, for tests and the in-app benchmark to wait on.
       editor.view.dom.setAttribute("data-page-id", page.id);
     }
-    contentJsonRef.current = doc ? page.content : "";
+    shownContentRef.current = page.content;
 
     const focusBody = takeBodyFocus(page.id);
     // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
@@ -222,15 +249,36 @@ export function EditorPane() {
     });
   }, [editor, page, isLoading]);
 
+  // A newer body from another process or a sync replaces the open one only while nothing typed
+  // waits to be saved, checked again once the read lands.
+  useEffect(() => {
+    if (!viewCache || !editor) return;
+
+    return viewCache.onOutsideChange(() => {
+      const pageId = currentPageIdRef.current;
+      if (pageId === null || pendingEditRef.current !== null) return;
+
+      void getPageAfterWrites(pageId).then((newer) => {
+        const stillClean = currentPageIdRef.current === pageId && pendingEditRef.current === null;
+        if (!newer || !stillClean || editor.isDestroyed) return;
+
+        const isNewer = newer.content !== shownContentRef.current;
+        if (!isNewer) return;
+
+        const doc = tryParseTiptapJson(newer.content, `EditorPane reload page=${pageId}`);
+        reloadInPlace(editor, doc ?? EMPTY_TIPTAP_DOC, scrollContainerRef.current);
+        shownContentRef.current = newer.content;
+      });
+    });
+  }, [viewCache, editor]);
+
   const pageId = page?.id ?? null;
   usePageLinkTargets(editor, pageId);
 
   const { flush, isSaving, saveError } = useAutosave(
     contentVersion,
     (_version: number) => {
-      if (!pageId || contentJsonRef.current === "") return Promise.resolve();
-      const contentText = extractText(contentJsonRef.current);
-      updatePage(pageId, { content: contentJsonRef.current, contentText });
+      savePendingEdit();
       return Promise.resolve();
     },
     { delay: 800 }

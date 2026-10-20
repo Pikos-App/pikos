@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 import {
@@ -5,6 +6,7 @@ import {
   bridgeCall,
   createFolder,
   mod,
+  openEditorForPage,
   quickAdd,
   ringDoorbell,
   WRITE_QUEUE_DEBOUNCE_MS,
@@ -242,6 +244,76 @@ appTest(
         return list.getByText("made outside").count();
       })
       .toBe(1);
+  }
+);
+
+function paragraphDoc(text: string): string {
+  return JSON.stringify({
+    content: [{ content: [{ text, type: "text" }], type: "paragraph" }],
+    type: "doc",
+  });
+}
+
+async function writeBodyOutside(app: Page, id: string, text: string) {
+  await bridgeCall(app, "update_page", {
+    id,
+    updates: { content: paragraphDoc(text), contentText: text },
+  });
+}
+
+async function storedBody(app: Page, id: string): Promise<string> {
+  const answer = await bridgeCall<{ page: { contentText: string } }>(app, "get_page_if_newer", {
+    id,
+    known: null,
+  });
+  return answer.page.contentText;
+}
+
+appTest(
+  "a body written outside the app replaces the open page's once the doorbell rings",
+  { tag: ["@CLI-17:1"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "Agent notes");
+    await quickAdd(app, "Elsewhere");
+    const body = await openEditorForPage(app, "Agent notes");
+    await app.keyboard.type("typed in the app");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    const id = (await body.getAttribute("data-page-id")) ?? "";
+
+    await writeBodyOutside(app, id, "written by an agent");
+    await expect
+      .poll(async () => {
+        await ringDoorbell(app);
+        return body.textContent();
+      })
+      .toContain("written by an agent");
+
+    await app.locator("[data-page-list-item]").getByText("Elsewhere").click();
+    await app.locator("[data-page-list-item]").getByText("Agent notes").click();
+    await expect(body).toContainText("written by an agent");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    expect(await storedBody(app, id)).toBe("written by an agent");
+  }
+);
+
+appTest(
+  "switching away from a page with nothing typed since its save leaves an outside change alone",
+  { tag: ["@CLI-17:2"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "Agent notes");
+    await quickAdd(app, "Elsewhere");
+    const body = await openEditorForPage(app, "Agent notes");
+    await app.keyboard.type("typed in the app");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    const id = (await body.getAttribute("data-page-id")) ?? "";
+
+    await writeBodyOutside(app, id, "written by an agent");
+    await app.locator("[data-page-list-item]").getByText("Elsewhere").click();
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+
+    expect(await storedBody(app, id)).toBe("written by an agent");
   }
 );
 
