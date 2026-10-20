@@ -218,6 +218,9 @@ export interface StorageAdapter {
    * the user's and the next upstream change parks rather than overwrites.
    */
   clearPendingDescription(id: string): Promise<void>;
+  /** The withheld description as Tiptap JSON shaped like a seed, addresses linked, or null once
+   *  nothing is parked. */
+  pendingDescriptionDocument(id: string): Promise<string | null>;
   /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
   softDeletePage(id: string): Promise<void>;
   restorePage(id: string): Promise<void>;

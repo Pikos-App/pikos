@@ -292,6 +292,8 @@ db_commands! {
         get_page(id: String) -> Option<Page> = pikos_db::get_page(&id);
         create_page(data: NewPage) -> Page = create_page_impl(data);
         update_page(id: String, updates: PageUpdate) -> Page = update_page_impl(id, updates);
+        pending_description_document(id: String) -> Option<String>
+            = pending_description_document_impl(&id);
         clear_pending_description(id: String) -> () = clear_pending_description_impl(&id);
         delete_page(id: String) -> () = delete_page_impl(&id);
         soft_delete_page(id: String) -> () = soft_delete_page_impl(&id);

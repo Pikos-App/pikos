@@ -186,6 +186,7 @@ export const READ_COMMANDS = new Set([
   "list_view_ids",
   "connect_db",
   "get_page",
+  "pending_description_document",
   "list_pages",
   "list_pages_today",
   "list_trashed_pages",
@@ -301,6 +302,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   clearPendingDescription(id: string): Promise<void> {
     return invoke<void>("clear_pending_description", { id });
+  }
+
+  pendingDescriptionDocument(id: string): Promise<string | null> {
+    return invoke<string | null>("pending_description_document", { id });
   }
 
   softDeletePage(id: string): Promise<void> {

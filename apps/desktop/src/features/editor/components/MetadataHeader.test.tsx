@@ -6,6 +6,7 @@ import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import type { JSONContent } from "@tiptap/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -55,7 +56,7 @@ function Harness({
   page,
 }: {
   onApi: (api: PagesApi, ws: WorkspaceApi) => void;
-  onAppendToBody: (text: string) => void;
+  onAppendToBody: (doc: JSONContent) => boolean;
   page: Page;
 }) {
   const pages = usePages();
@@ -72,7 +73,10 @@ function Harness({
   );
 }
 
-async function renderHeader(page: Page, onAppendToBody: (text: string) => void = vi.fn()) {
+async function renderHeader(
+  page: Page,
+  onAppendToBody: (doc: JSONContent) => boolean = vi.fn(() => true)
+) {
   let pagesApi!: PagesApi;
   let workspaceApi!: WorkspaceApi;
   const utils = renderWithProviders(
@@ -214,8 +218,15 @@ describe("MetadataHeader — calendar description-changed notice", () => {
     expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
   });
 
-  it("hands the parked text to the editor on Append", async () => {
-    const append = vi.fn();
+  async function clickAppend(appended: boolean) {
+    const doc = { content: [{ type: "paragraph" }], type: "doc" };
+    vi.spyOn(MockStorageAdapter.prototype, "pendingDescriptionDocument").mockResolvedValue(
+      JSON.stringify(doc)
+    );
+    const clear = vi
+      .spyOn(MockStorageAdapter.prototype, "clearPendingDescription")
+      .mockResolvedValue();
+    const append = vi.fn(() => appended);
     await renderHeader(
       makePage({
         detachIsReversible: false,
@@ -226,12 +237,29 @@ describe("MetadataHeader — calendar description-changed notice", () => {
       append
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Append" }));
-    expect(append).toHaveBeenCalledWith("New agenda for the meeting.");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Append" }));
+      await Promise.resolve();
+    });
+
+    return { append, clear, doc };
+  }
+
+  it("hands the parked description's document to the editor on Append, then clears it", async () => {
+    const { append, clear, doc } = await clickAppend(true);
+
+    expect(append).toHaveBeenCalledWith(doc);
+    expect(clear).toHaveBeenCalledWith("p1");
+  });
+
+  it("keeps the description parked when the editor took nothing", async () => {
+    const { clear } = await clickAppend(false);
+
+    expect(clear).not.toHaveBeenCalled();
   });
 
   it("leaves the body alone on Dismiss", async () => {
-    const append = vi.fn();
+    const append = vi.fn(() => true);
     await renderHeader(
       makePage({
         detachIsReversible: false,

@@ -111,16 +111,10 @@ interface PendingEdit {
 
 // Append at the very end of the doc, never at the cursor: the caller is a banner
 // above the editor, so wherever the caret happens to sit is not where the user
-// asked for this. Inserted as plain paragraphs — the text is an invite
-// description, and running it through the markdown parser would let stray
-// asterisks or a "#" line restyle it.
-function appendParagraphs(editor: Editor | null, text: string): void {
-  if (!editor || editor.isDestroyed || !editor.isEditable) return;
-  const content = text.split(/\n{2,}/).map((block) => ({
-    content: [{ text: block.replace(/\n/g, " "), type: "text" }],
-    type: "paragraph",
-  }));
-  editor.chain().focus("end").insertContent(content).run();
+// asked for this.
+function appendDocument(editor: Editor | null, doc: JSONContent): boolean {
+  if (!editor || editor.isDestroyed || !editor.isEditable || !doc.content) return false;
+  return editor.chain().focus("end").insertContent(doc.content).run();
 }
 
 export function EditorPane() {
@@ -387,9 +381,12 @@ export function EditorPane() {
       {page && (
         <MetadataHeader
           key={page.id}
-          onAppendToBody={(text) => {
+          onAppendToBody={(doc) => {
+            const isStillOpen = currentPageIdRef.current === page.id;
+            if (!isStillOpen) return false;
+
             finishOpening();
-            appendParagraphs(editorRef.current, text);
+            return appendDocument(editorRef.current, doc);
           }}
           onFocusEditor={() => !editor?.isDestroyed && editor?.commands.focus()}
           page={page}

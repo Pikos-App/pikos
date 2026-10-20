@@ -690,6 +690,21 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  /** One paragraph per line like the writer's seed builder, without its address linking. */
+  pendingDescriptionDocument(id: string): Promise<string | null> {
+    const pending = this.pages.get(id)?.pendingDescription;
+    if (pending == null) return Promise.resolve(null);
+
+    const content = pending
+      .split("\n")
+      .map((line) =>
+        line
+          ? { content: [{ text: line, type: "text" }], type: "paragraph" }
+          : { type: "paragraph" }
+      );
+    return Promise.resolve(JSON.stringify({ content, type: "doc" }));
+  }
+
   /** Trash a page or bring it back, touching its row as the writer's `deleted_at` update does, so
    *  the change counter moves and a cache reading it refreshes. Guarded like the writer: a second
    *  delete must not overwrite the original stamp and hand the page another 30 days. */
