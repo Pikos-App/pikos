@@ -125,29 +125,108 @@ function now(): string {
   return new Date().toISOString();
 }
 
-/** Best-effort plain-text extraction from a Tiptap JSON string. Mirrors the
- *  Rust adapter's contentText denorm so the mock's FTS surface matches prod. */
-const SEED_WORDS = ["meeting", "draft", "review", "garden", "budget", "travel", "notes", "design"];
+/** One word in twenty is "the", about its share of English, so Find on it matches as often as it
+ *  would on a real page. */
+const SEED_WORDS = [
+  "the",
+  "meeting",
+  "draft",
+  "review",
+  "garden",
+  "budget",
+  "travel",
+  "notes",
+  "design",
+  "plan",
+  "call",
+  "week",
+  "about",
+  "from",
+  "project",
+  "after",
+  "morning",
+  "list",
+  "idea",
+  "follow",
+];
 
-/** An editor document of about `words` words in paragraphs of sixty, varied enough that text
- *  shaping can't serve one repeated run from cache, and its plain text for search. */
-function seededDocument(words: number, page: number): { content: string; text: string } {
-  const paragraphs: string[] = [];
-  for (let at = 0; at < words; at += 60) {
-    const count = Math.min(60, words - at);
-    paragraphs.push(
-      Array.from({ length: count }, (_, k) => SEED_WORDS[(at + k + page) % SEED_WORDS.length]).join(
-        " "
-      )
-    );
-  }
-  const doc = {
-    content: paragraphs.map((text) => ({ content: [{ text, type: "text" }], type: "paragraph" })),
-    type: "doc",
+type SeedShape = "prose" | "log";
+
+const SEED_MARKS = [
+  { type: "bold" },
+  { type: "italic" },
+  { type: "code" },
+  { attrs: { href: "https://example.com" }, type: "link" },
+];
+
+/**
+ * An editor document of exactly `words` words in one of the two shapes the large-page research
+ * measured: prose mixing headings, bullet and task lists, quotes, code blocks, and marks on a third
+ * of its paragraphs; or a log of one short line per paragraph under a heading every 20 lines, as a dated journal runs.
+ * Words vary by page so text shaping can't serve one repeated run from cache.
+ */
+function seededDocument(
+  words: number,
+  page: number,
+  shape: SeedShape
+): { content: string; text: string } {
+  const runs: string[] = [];
+  let used = 0;
+
+  // ProseMirror rejects an empty text node, so a run past the last word is no node at all.
+  const run = (n: number, marks?: object[]): object[] => {
+    const count = Math.min(n, words - used);
+    if (count <= 0) return [];
+
+    const text = Array.from(
+      { length: count },
+      (_, k) => SEED_WORDS[(used + k + page) % SEED_WORDS.length]
+    ).join(" ");
+    used += count;
+    runs.push(text);
+
+    return [{ text, type: "text", ...(marks ? { marks } : {}) }];
   };
-  return { content: JSON.stringify(doc), text: paragraphs.join("\n") };
+  const paragraph = (content: object[]) => ({ content, type: "paragraph" });
+  const space = { text: " ", type: "text" };
+  const markedParagraph = (mark: object) =>
+    paragraph([...run(20), space, ...run(6, [mark]), space, ...run(24)]);
+  const list = (type: "bulletList" | "taskList", items: number, n: number) => ({
+    content: Array.from({ length: items }, (_, k) => ({
+      content: [paragraph(run(n))],
+      type: type === "taskList" ? "taskItem" : "listItem",
+      ...(type === "taskList" ? { attrs: { checked: k % 2 === 0 } } : {}),
+    })),
+    type,
+  });
+
+  const blocks: object[] = [];
+  for (let cycle = 0; used < words; cycle += 1) {
+    if (shape === "log") {
+      blocks.push({ attrs: { level: 3 }, content: run(3), type: "heading" });
+      for (let line = 0; line < 20; line += 1) blocks.push(paragraph(run(10)));
+      continue;
+    }
+
+    blocks.push(
+      { attrs: { level: 2 }, content: run(5), type: "heading" },
+      markedParagraph(SEED_MARKS[cycle % SEED_MARKS.length] ?? {}),
+      paragraph(run(50)),
+      list("bulletList", 3, 10),
+      paragraph(run(50)),
+      list("taskList", 3, 8),
+      { content: [paragraph(run(25))], type: "blockquote" }
+    );
+    if (cycle % SEED_MARKS.length === 0) {
+      blocks.push({ attrs: { language: null }, content: run(12), type: "codeBlock" });
+    }
+  }
+
+  return { content: JSON.stringify({ content: blocks, type: "doc" }), text: runs.join("\n") };
 }
 
+/** Best-effort plain-text extraction from a Tiptap JSON string. Mirrors the
+ *  Rust adapter's contentText denorm so the mock's FTS surface matches prod. */
 function deriveContentText(content: string): string {
   try {
     return extractText(JSON.parse(content));
@@ -410,13 +489,16 @@ export class MockStorageAdapter implements StorageAdapter {
    * Bodies are short and varied rather than identical: a list of one repeated string lets the
    * renderer and the browser's text shaping cache in ways a real workspace never would.
    */
-  seedPages(count: number, opts: { completedEvery?: number; bodyWords?: number } = {}): void {
+  seedPages(
+    count: number,
+    opts: { completedEvery?: number; bodyWords?: number; bodyShape?: SeedShape } = {}
+  ): void {
     const completedEvery = opts.completedEvery ?? 0;
     const stamp = now();
     for (let i = 0; i < count; i += 1) {
       const done = completedEvery > 0 && i % completedEvery === 0;
       const body = opts.bodyWords
-        ? seededDocument(opts.bodyWords, i)
+        ? seededDocument(opts.bodyWords, i, opts.bodyShape ?? "prose")
         : {
             content: `Seeded body ${i} with a little text so the row has something to measure.`,
             text: "",
