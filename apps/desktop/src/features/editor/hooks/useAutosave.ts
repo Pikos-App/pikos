@@ -8,8 +8,9 @@ export interface AutosaveState {
   isSaving: boolean;
   /** Set on saveFn rejection; cleared on next successful save. */
   saveError: Error | null;
-  /** Mark unsaved input and restart the debounce. Renders nothing, so it can run on every key. */
-  schedule: () => void;
+  /** Mark unsaved input and restart the debounce, for `delay` ms when given. Renders nothing, so
+   *  it can run on every key. */
+  schedule: (delay?: number) => void;
   /** Immediately flush any pending debounced save. Returns when the save completes. */
   flush: () => Promise<void>;
 }
@@ -68,13 +69,13 @@ export function useAutosave(
     timerRef.current = null;
   }
 
-  const schedule = useRef(() => {
+  const schedule = useRef((delayOverride?: number) => {
     isPendingRef.current = true;
     clearTimer();
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       void doSave.current();
-    }, delay);
+    }, delayOverride ?? delay);
   });
 
   // Flush on unmount (covers page switch + app close).

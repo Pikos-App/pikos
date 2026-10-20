@@ -33,6 +33,7 @@ import { useEditorPage } from "../hooks/useEditorPage";
 import { usePageLinkTargets } from "../hooks/usePageLinkTargets";
 import { registerActiveEditor } from "../utils/imageDropBridge";
 import { looksLikeMarkdown } from "../utils/markdownPaste";
+import { saveDelayFor } from "../utils/saveDelay";
 import { FindContentPopover } from "./FindContentPopover";
 import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
@@ -178,13 +179,10 @@ export function EditorPane() {
     });
   }
 
-  const { flush, isSaving, saveError, schedule } = useAutosave(
-    () => {
-      savePendingEdit();
-      return Promise.resolve();
-    },
-    { delay: 800 }
-  );
+  const { flush, isSaving, saveError, schedule } = useAutosave(() => {
+    savePendingEdit();
+    return Promise.resolve();
+  });
 
   const editor = useEditor({
     editorProps: {
@@ -202,7 +200,7 @@ export function EditorPane() {
       if (pageId === null) return;
 
       pendingEditRef.current = { doc: e.state.doc, pageId };
-      schedule();
+      schedule(saveDelayFor(e.state.doc.content.size));
     },
   });
 

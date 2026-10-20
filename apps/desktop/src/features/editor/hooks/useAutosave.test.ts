@@ -59,6 +59,24 @@ describe("debounce", () => {
     expect(saveFn).toHaveBeenCalledOnce();
   });
 
+  it("waits the delay a schedule names instead of the hook's", async () => {
+    const saveFn = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useAutosave(saveFn, { delay: 500 }));
+
+    act(() => result.current.schedule(3000));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2999);
+    });
+
+    expect(saveFn).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(saveFn).toHaveBeenCalledOnce();
+  });
+
   it("re-renders nothing when scheduled", () => {
     const saveFn = vi.fn().mockResolvedValue(undefined);
     let renders = 0;
