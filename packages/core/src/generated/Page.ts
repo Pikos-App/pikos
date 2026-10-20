@@ -15,10 +15,6 @@ export type Page = {
    * A Tiptap document, JSON-encoded — not markdown.
    */
   content: string;
-  /**
-   * Plain text extracted from `content` so search can index it. Not for display.
-   */
-  contentText?: string | null;
   status: "not_started" | "done";
   priority: 0 | 1 | 2 | 3 | 4;
   tags: Array<string>;

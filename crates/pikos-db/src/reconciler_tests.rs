@@ -2865,7 +2865,7 @@ async fn teardown_heals_a_racing_editor_write() {
             &edit_pool,
             edit_page,
             crate::PageUpdate {
-                content_text: Some("edited".into()),
+                content: Some(crate::build_tiptap_doc("edited")),
                 ..Default::default()
             },
         )

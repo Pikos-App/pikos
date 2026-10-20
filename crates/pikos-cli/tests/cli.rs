@@ -33,7 +33,6 @@ fn base_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: String::new(),
-        content_text: Some(String::new()),
         status: "not_started".into(),
         priority: 0,
         tags: Vec::new(),
@@ -321,7 +320,7 @@ async fn search_finds_body_text() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let mut p = base_page("Groceries");
-    p.content_text = Some("remember the avocado".into());
+    p.content = pikos_db::build_tiptap_doc("remember the avocado");
     seed(dbs, vec![p]).await;
     let out = cli(dbs, &["search", "avocado", "--json"]);
     assert!(out.status.success());
@@ -336,7 +335,7 @@ async fn search_pages_through_every_match_with_its_cursor() {
     let pages = (0..5)
         .map(|i| {
             let mut p = base_page(&format!("Note {i}"));
-            p.content_text = Some("remember the avocado".into());
+            p.content = pikos_db::build_tiptap_doc("remember the avocado");
             p
         })
         .collect();
@@ -1726,7 +1725,7 @@ async fn list_filters_by_priority_query_and_schedule() {
     let mut urgent = base_page("Urgent thing");
     urgent.priority = 1;
     let mut noted = base_page("Notes");
-    noted.content_text = Some("mentions an avocado".into());
+    noted.content = pikos_db::build_tiptap_doc("mentions an avocado");
     let ids = seed(dbs, vec![urgent, noted, base_page("Plain")]).await;
 
     let by_priority = json(&cli(dbs, &["list", "--priority", "1", "--json"]));
@@ -2308,11 +2307,14 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
     assert!(v["created"][0]["tags"].as_array().unwrap().is_empty());
     let id = v["created"][0]["id"].as_str().unwrap().to_string();
 
+    let text: String = scalar(
+        dbs,
+        &format!("SELECT content_text FROM pages WHERE id = '{id}'"),
+    )
+    .await;
+    assert_eq!(text, "she likes the #blue one\nask her sister");
+
     let page = json(&cli(dbs, &["read", &id, "--json"]));
-    assert_eq!(
-        page["contentText"],
-        "she likes the #blue one\nask her sister"
-    );
     let doc: Value = serde_json::from_str(page["content"].as_str().unwrap()).unwrap();
     let line = &doc["content"][0]["content"];
     assert_eq!(line[0]["text"], "she likes the #blue one");

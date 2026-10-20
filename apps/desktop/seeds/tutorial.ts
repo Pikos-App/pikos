@@ -2,7 +2,7 @@
 // Teaches Pikos concepts through real pages that showcase key features.
 // Called automatically in selectWorkspace() for new workspaces.
 
-import { extractText, getLocalTimezone } from "@pikos/core";
+import { getLocalTimezone } from "@pikos/core";
 import type { StorageAdapter } from "@pikos/core";
 import { addDays, addHours, format, getHours, isSameDay, set, startOfHour } from "date-fns";
 
@@ -42,11 +42,6 @@ export async function seedTutorial(
   const tz = getLocalTimezone();
   const MOD = modKey();
 
-  /** Create a page with contentText auto-extracted from content. */
-  async function createPage(data: Parameters<StorageAdapter["createPage"]>[0]) {
-    return adapter.createPage({ ...data, contentText: extractText(data.content) });
-  }
-
   // ── Single tutorial folder ──────────────────────────────────────────────
   // Named "Start here" (not "Tutorial") so it reads as something to work
   // through and delete, not a folder to keep around.
@@ -64,7 +59,7 @@ export async function seedTutorial(
   const welcomeStart = pickFutureSlot(now);
   const welcomeEnd = addHours(welcomeStart, 1);
 
-  const welcome = await createPage({
+  const welcome = await adapter.createPage({
     content: doc(
       p(
         "Every page is something you can write in, schedule, and check off when it’s done. " +
@@ -101,7 +96,7 @@ export async function seedTutorial(
   const howStart = set(addDays(now, 1), { hours: 9, milliseconds: 0, minutes: 0, seconds: 0 });
   const howEnd = addHours(howStart, 1);
 
-  const howItWorks = await createPage({
+  const howItWorks = await adapter.createPage({
     content: doc(
       p("Most of Pikos is three steps: add, schedule, complete."),
       h3("1. Add"),
@@ -146,7 +141,7 @@ export async function seedTutorial(
     timezone: tz,
   });
 
-  await createPage({
+  await adapter.createPage({
     content: doc(
       p(
         "You don’t have to memorize any of these. Everything’s reachable with the mouse. " +

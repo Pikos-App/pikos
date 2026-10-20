@@ -71,7 +71,9 @@ pub struct Page {
     pub subtitle: Option<String>,
     /// A Tiptap document, JSON-encoded — not markdown.
     pub content: String,
-    /// Plain text extracted from `content` so search can index it. Not for display.
+    /// Plain text the writer extracts from `content` so search can index it. Not for display,
+    /// and never serialized: at 500,000 words it is 2.5 MB no reader of a page needs.
+    #[serde(skip)]
     pub content_text: Option<String>,
     #[ts(type = "'not_started' | 'done'")]
     pub status: String,
@@ -401,7 +403,6 @@ pub struct NewPage {
     pub title: String,
     pub subtitle: Option<String>,
     pub content: String,
-    pub content_text: Option<String>,
     pub status: String,
     #[ts(type = "number")]
     pub priority: i64,
@@ -429,7 +430,6 @@ pub struct PageUpdate {
     #[ts(type = "string | null", optional)]
     pub subtitle: Option<serde_json::Value>,
     pub content: Option<String>,
-    pub content_text: Option<String>,
     /// The body an editor's `content` was typed over. Given, the content lands only over that
     /// body; over any other it is merged against it first, so an edit made elsewhere since the
     /// editor loaded is never overwritten. A body rather than the sync clock, because a write from
@@ -661,7 +661,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         .bind(&data.title)
         .bind(&data.subtitle)
         .bind(&data.content)
-        .bind(data.content_text.as_deref().unwrap_or(""))
+        .bind(crate::pool::extract_text_from_tiptap(&data.content))
         .bind(&data.status)
         .bind(data.priority)
         .bind(&tags_json)
@@ -708,7 +708,6 @@ pub async fn update_page_impl(
             let is_unchanged = is_stored_body(pool, &id, content).await?;
             if is_unchanged {
                 updates.content = None;
-                updates.content_text = None;
             } else {
                 ensure_body_from_this_build(pool, &id).await?;
             }
@@ -748,7 +747,6 @@ async fn merge_over_stored_body(
     let base_doc = serde_json::from_str(base).unwrap_or(serde_json::Value::Null);
 
     let merged = pikos_core::body_merge::merge_bodies(&base_doc, &stored_doc, &my_doc).to_string();
-    updates.content_text = Some(crate::pool::extract_text_from_tiptap(&merged));
     updates.content = Some(merged);
     updates.base_content = Some(stored);
     Ok(true)
@@ -767,7 +765,6 @@ async fn write_page_update(
     // upstream delete removes the page or detaches it permanently.
     let marks_ownership = updates.title.is_some()
         || updates.content.is_some()
-        || updates.content_text.is_some()
         || updates.status.is_some()
         || updates.priority.is_some()
         || updates.tags.is_some()
@@ -910,10 +907,8 @@ async fn apply_page_update(
         fields.push_bind_unseparated(crate::CONTENT_SCHEMA_VERSION);
         fields.push("links = ");
         fields.push_bind_unseparated(links_of(v));
-    }
-    if let Some(v) = &updates.content_text {
         fields.push("content_text = ");
-        fields.push_bind_unseparated(v.clone());
+        fields.push_bind_unseparated(crate::pool::extract_text_from_tiptap(v));
     }
     if let Some(v) = &updates.status {
         fields.push("status = ");

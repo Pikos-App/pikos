@@ -131,7 +131,7 @@ export interface SearchResponse {
 // above) is the shape now, and the running one lives in the timer's own state.
 
 // ─── PageSummary ─────────────────────────────────────────────────────────
-// Lightweight projection for list views — excludes content and contentText.
+// Lightweight projection for list views — excludes the body.
 // Used by listPages / listPagesToday to avoid pulling large Tiptap JSON
 // blobs over IPC for every page in a folder.
 

@@ -5763,12 +5763,6 @@ public struct PageEdit: Equatable, Hashable {
      */
     public var content: String?
     /**
-     * Plain text for the search index. Supply it alongside `content` — the
-     * editor extracts it already, and re-deriving it here would parse the
-     * document a second time.
-     */
-    public var contentText: String?
-    /**
      * The body `content` was typed over: an edit made elsewhere since is merged, not overwritten.
      */
     public var baseContent: String?
@@ -5790,11 +5784,6 @@ public struct PageEdit: Equatable, Hashable {
          * Tiptap JSON. Setting this re-stamps `content_schema_version`.
          */content: String? = nil, 
         /**
-         * Plain text for the search index. Supply it alongside `content` — the
-         * editor extracts it already, and re-deriving it here would parse the
-         * document a second time.
-         */contentText: String? = nil, 
-        /**
          * The body `content` was typed over: an edit made elsewhere since is merged, not overwritten.
          */baseContent: String? = nil, status: String? = nil, priority: Int64? = nil, tags: [String]? = nil, 
         /**
@@ -5803,7 +5792,6 @@ public struct PageEdit: Equatable, Hashable {
         self.title = title
         self.subtitle = subtitle
         self.content = content
-        self.contentText = contentText
         self.baseContent = baseContent
         self.status = status
         self.priority = priority
@@ -5830,7 +5818,6 @@ public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
                 title: FfiConverterOptionString.read(from: &buf), 
                 subtitle: FfiConverterOptionString.read(from: &buf), 
                 content: FfiConverterOptionString.read(from: &buf), 
-                contentText: FfiConverterOptionString.read(from: &buf), 
                 baseContent: FfiConverterOptionString.read(from: &buf), 
                 status: FfiConverterOptionString.read(from: &buf), 
                 priority: FfiConverterOptionInt64.read(from: &buf), 
@@ -5843,7 +5830,6 @@ public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.title, into: &buf)
         FfiConverterOptionString.write(value.subtitle, into: &buf)
         FfiConverterOptionString.write(value.content, into: &buf)
-        FfiConverterOptionString.write(value.contentText, into: &buf)
         FfiConverterOptionString.write(value.baseContent, into: &buf)
         FfiConverterOptionString.write(value.status, into: &buf)
         FfiConverterOptionInt64.write(value.priority, into: &buf)

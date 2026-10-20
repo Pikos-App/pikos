@@ -424,12 +424,11 @@ async fn call_tool(
             to_value(&resp)
         }
         "read_page" => {
-            // The editor's JSON and its plain-text shadow are both the body again, and
-            // neither can be written back; markdown alone is what update_page takes.
+            // The editor's JSON is the body again and can't be written back; markdown alone is
+            // what update_page takes.
             let mut read = to_value(&read_page(pool, &require_str(args, "id")?).await?)?;
             if let Some(fields) = read.as_object_mut() {
                 fields.remove("content");
-                fields.remove("contentText");
             }
             Ok(read)
         }

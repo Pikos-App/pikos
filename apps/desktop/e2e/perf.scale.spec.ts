@@ -93,7 +93,6 @@ for (const size of SIZES) {
       };
       const created = await store.createPage({
         content: "bench",
-        contentText: "bench",
         folderId: null,
         links: [],
         priority: 0,
@@ -106,7 +105,6 @@ for (const size of SIZES) {
         create: await time(() =>
           store.createPage({
             content: "bench",
-            contentText: "bench",
             folderId: null,
             links: [],
             priority: 0,

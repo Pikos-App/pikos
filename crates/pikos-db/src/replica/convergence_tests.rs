@@ -309,7 +309,6 @@ fn page(title: String) -> NewPage {
         title,
         subtitle: None,
         content: "{}".into(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],

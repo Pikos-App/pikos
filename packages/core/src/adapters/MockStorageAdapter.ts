@@ -226,7 +226,7 @@ function seededDocument(
 }
 
 /** Best-effort plain-text extraction from a Tiptap JSON string. Mirrors the
- *  Rust adapter's contentText denorm so the mock's FTS surface matches prod. */
+ *  search text the Rust writer stores, so the mock's FTS surface matches prod. */
 function deriveContentText(content: string): string {
   try {
     return extractText(JSON.parse(content));
@@ -289,11 +289,11 @@ function excerptAround(text: string, terms: string[]): string {
 }
 
 function toSummary(page: Page): PageSummary {
-  const { content: _, contentText: _ct, ...summary } = page;
+  const { content: _, ...summary } = page;
   return summary;
 }
 
-function matchesFilter(page: Page, filter: PageFilter): boolean {
+function matchesFilter(page: Page, text: string, filter: PageFilter): boolean {
   if (filter.folderId !== undefined) {
     if (page.folderId !== filter.folderId) return false;
   }
@@ -314,7 +314,7 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
     // Title and extracted text only, matching the writer's `title LIKE … OR
     // content_text LIKE …`. Searching the raw Tiptap JSON instead made "paragraph"
     // and "doc" match every page here and nothing in the real database.
-    const haystack = `${page.title} ${page.contentText ?? ""}`.toLowerCase();
+    const haystack = `${page.title} ${text}`.toLowerCase();
     if (!haystack.includes(q)) return false;
   }
   return true;
@@ -325,6 +325,23 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
 class CountedPages extends Map<string, Page> {
   seq = 0;
   readonly rowSeq = new Map<string, number>();
+  private readonly texts = new Map<string, { content: string; text: string }>();
+
+  /** The search text the Rust writer stores beside a body, derived again only once the body
+   *  differs from the one it was derived from. */
+  textOf(page: Page): string {
+    const cached = this.texts.get(page.id);
+    if (cached?.content === page.content) return cached.text;
+
+    const text = deriveContentText(page.content);
+    this.texts.set(page.id, { content: page.content, text });
+    return text;
+  }
+
+  /** Seeds a page's search text without parsing its body. */
+  primeText(page: Page, text: string): void {
+    this.texts.set(page.id, { content: page.content, text });
+  }
 
   override set(id: string, page: Page): this {
     this.seq += 1;
@@ -335,6 +352,7 @@ class CountedPages extends Map<string, Page> {
 
   override delete(id: string): boolean {
     this.seq += 1;
+    this.texts.delete(id);
     return super.delete(id);
   }
 }
@@ -507,7 +525,6 @@ export class MockStorageAdapter implements StorageAdapter {
         completedAt: done ? stamp : null,
         content: body.content,
         contentSchemaVersion: CONTENT_SCHEMA_VERSION,
-        contentText: body.text || body.content,
         createdAt: stamp,
         detachIsReversible: false,
         folderId: null,
@@ -524,6 +541,7 @@ export class MockStorageAdapter implements StorageAdapter {
         updatedAt: stamp,
       };
       this.pages.set(page.id, page);
+      this.pages.primeText(page, body.text || body.content);
     }
   }
 
@@ -533,9 +551,6 @@ export class MockStorageAdapter implements StorageAdapter {
       // Also mirrors the Rust writer, which stamps the version it wrote with
       // rather than leaving it to the column default (pikos-db migration 023).
       contentSchemaVersion: CONTENT_SCHEMA_VERSION,
-      // Mirror the Rust adapter, which extracts plain text from Tiptap JSON on
-      // every save so FTS indexes the visible body, not the structural tokens.
-      contentText: data.contentText ?? deriveContentText(data.content),
       // Supplied by an import, and kept, as the Rust writer keeps them.
       createdAt: data.createdAt ?? now(),
       detachIsReversible: false,
@@ -652,10 +667,6 @@ export class MockStorageAdapter implements StorageAdapter {
       this.userModified.add(id);
     }
     const updated: Page = { ...existing, ...updates, id, updatedAt: now() };
-    // Keep contentText in sync with content unless the caller explicitly set it.
-    if (updates.content !== undefined && updates.contentText === undefined) {
-      updated.contentText = deriveContentText(updates.content);
-    }
     if (updates.content !== undefined) updated.links = deriveLinks(updates.content);
     this.pages.set(id, updated);
     return Promise.resolve(updated);
@@ -740,7 +751,9 @@ export class MockStorageAdapter implements StorageAdapter {
 
   listPages(filter?: PageFilter): Promise<PageSummary[]> {
     const all = [...this.pages.values()].filter((p) => !this.softDeleted.has(p.id));
-    const filtered = filter ? all.filter((p) => matchesFilter(p, filter)) : all;
+    const filtered = filter
+      ? all.filter((p) => matchesFilter(p, this.pages.textOf(p), filter))
+      : all;
     return Promise.resolve(filtered.sort((a, b) => a.sortOrder - b.sortOrder).map(toSummary));
   }
 
@@ -1002,7 +1015,7 @@ export class MockStorageAdapter implements StorageAdapter {
       // Extracted text, never the raw Tiptap JSON — the index never returns a
       // page because the user typed "paragraph".
       const subtitle = page.subtitle ?? "";
-      const body = page.contentText ?? "";
+      const body = this.pages.textOf(page);
       const mirror = mirrorSearchText(page.mirrorLocation, page.mirrorAttendees) ?? "";
       if (!ftsMatches(terms, [page.title, subtitle, body, page.tags.join(" "), mirror].join(" "))) {
         continue;
@@ -1032,7 +1045,7 @@ export class MockStorageAdapter implements StorageAdapter {
               ? "subtitle"
               : "content";
       const meta = {
-        contentPreview: (page.contentText ?? "").slice(0, 80),
+        contentPreview: body.slice(0, 80),
         priority: page.priority,
         scheduledDate: page.scheduledStart ?? null,
         status: page.status,
@@ -2135,7 +2148,7 @@ export class MockStorageAdapter implements StorageAdapter {
       total_schedules: pages.filter((p) => p.scheduledStart != null).length,
       // Same count as `get_usage_stats`: spaces plus one, per non-empty body.
       total_words: pages
-        .map((p) => p.contentText ?? "")
+        .map((p) => this.pages.textOf(p))
         .filter((text) => text !== "")
         .reduce((sum, text) => sum + text.split(" ").length, 0),
       weekly_activity: [],

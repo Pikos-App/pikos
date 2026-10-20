@@ -22,9 +22,9 @@ export function isBodyFromNewerBuild(page: Pick<Page, "contentSchemaVersion">): 
   return page.contentSchemaVersion > CONTENT_SCHEMA_VERSION;
 }
 
-/** Drop the heavy content fields — list state holds summaries, never full pages. */
+/** Drop the body — list state holds summaries, never full pages. */
 export function toPageSummary(page: Page): PageSummary {
-  const { content: _, contentText: _ct, ...summary } = page;
+  const { content: _, ...summary } = page;
   return summary;
 }
 

@@ -4,7 +4,6 @@ import {
   ASSET_DIR,
   cleanTitle,
   detectUniqueValues,
-  extractText,
   imageRefCandidates,
   parseMarkdownVault,
   prepareCSVRows,
@@ -424,12 +423,10 @@ export function useImport() {
         const parsedRaw = tryParseTiptapJson(rawContent, "useImport.executeImport");
         const parsed = addAssetPathsToJson(parsedRaw ?? EMPTY_TIPTAP_DOC);
         const content = JSON.stringify(parsed);
-        const contentText = extractText(parsed);
 
         batchPages.push({
           completedAt: p.completedAt,
           content,
-          contentText,
           createdAt: p.createdAt,
           folderKey: p.folderKey,
           priority: p.priority,

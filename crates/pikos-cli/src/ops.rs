@@ -849,9 +849,7 @@ pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<
         upd.title = Some(t);
     }
     if let Some(c) = edit.content {
-        let (doc, txt) = markdown_to_tiptap(pool, &c, &page.links).await?;
-        upd.content = Some(doc);
-        upd.content_text = Some(txt);
+        upd.content = Some(markdown_to_tiptap(pool, &c, &page.links).await?);
     }
     if let Some(s) = &edit.status {
         validate_status(s)?;

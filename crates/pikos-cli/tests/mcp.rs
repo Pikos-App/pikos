@@ -31,7 +31,6 @@ fn base_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: String::new(),
-        content_text: Some(String::new()),
         status: "not_started".into(),
         priority: 0,
         tags: Vec::new(),

@@ -366,7 +366,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     // the page shows the note already typed out.
     if (parsed?.content) {
       patch.content = bodyToTiptap(parsed.content);
-      patch.contentText = parsed.content;
     }
 
     /** The parsed reminder leads, written as rows on a page that now exists. */
@@ -428,7 +427,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         if (finTags.length > 0) finPatch.tags = finTags;
         if (inp.content) {
           finPatch.content = bodyToTiptap(inp.content);
-          finPatch.contentText = inp.content;
         }
         const pg = await createPage({
           folderId: resolvedFolderId,

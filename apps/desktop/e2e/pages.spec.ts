@@ -219,7 +219,6 @@ appTest(
       data: {
         completedAt: null,
         content: "",
-        contentText: "",
         folderId: null,
         lastOpenedAt: null,
         parentId: null,
@@ -257,16 +256,20 @@ function paragraphDoc(text: string): string {
 async function writeBodyOutside(app: Page, id: string, text: string) {
   await bridgeCall(app, "update_page", {
     id,
-    updates: { content: paragraphDoc(text), contentText: text },
+    updates: { content: paragraphDoc(text) },
   });
 }
 
+/** The stored body's text, one line per paragraph. */
 async function storedBody(app: Page, id: string): Promise<string> {
-  const answer = await bridgeCall<{ page: { contentText: string } }>(app, "get_page_if_newer", {
+  const answer = await bridgeCall<{ page: { content: string } }>(app, "get_page_if_newer", {
     id,
     known: null,
   });
-  return answer.page.contentText;
+  const doc = JSON.parse(answer.page.content) as { content?: { content?: { text?: string }[] }[] };
+  return (doc.content ?? [])
+    .map((block) => (block.content ?? []).map((run) => run.text ?? "").join(""))
+    .join("\n");
 }
 
 appTest(

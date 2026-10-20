@@ -190,7 +190,6 @@ async fn page_showing(pool: &SqlitePool, title: &str, src: &str) -> String {
             title: title.into(),
             subtitle: None,
             content: content.to_string(),
-            content_text: None,
             status: "not_started".into(),
             priority: 0,
             tags: vec![],

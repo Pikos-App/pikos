@@ -56,8 +56,12 @@ async function seed(pages: SeedPage[]) {
   if (!storage) throw new Error("storage should be available after selectWorkspace");
   for (const p of pages) {
     await storage.createPage({
-      content: "",
-      contentText: p.body ?? "",
+      content: p.body
+        ? JSON.stringify({
+            content: [{ content: [{ text: p.body, type: "text" }], type: "paragraph" }],
+            type: "doc",
+          })
+        : "",
       folderId: p.folderId ?? null,
       priority: p.priority ?? 0,
       status: p.done ? "done" : "not_started",

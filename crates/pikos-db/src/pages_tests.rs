@@ -761,7 +761,6 @@ pub(crate) fn new_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: "{}".into(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],
@@ -846,6 +845,38 @@ async fn update_page_applies_partial_changes_only() {
 
     assert_eq!(updated.status, "done");
     assert_eq!(updated.title, "Before", "untouched fields preserved");
+}
+
+#[tokio::test]
+async fn search_finds_the_words_of_a_body_written_alone() {
+    let pool = test_pool().await;
+    let page = create_page_impl(
+        &pool,
+        NewPage {
+            content: crate::build_tiptap_doc("buy oat milk"),
+            ..new_page("Groceries")
+        },
+    )
+    .await
+    .unwrap();
+
+    update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(crate::build_tiptap_doc("buy almond milk")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let hits = |query: &str| crate::search_pages_impl(&pool, query.into(), None);
+    let almond = hits("almond").await.unwrap().results;
+    let oat = hits("oat").await.unwrap().results;
+    assert_eq!(almond.len(), 1);
+    assert_eq!(almond[0].id, page.id);
+    assert!(oat.is_empty(), "the replaced word is no longer found");
 }
 
 fn is_status_input_error(err: &AppError) -> bool {
@@ -1721,7 +1752,7 @@ async fn fts_index_reflects_title_after_update() {
     let page = create_page_impl(
         &pool,
         NewPage {
-            content_text: Some("body content".into()),
+            content: crate::build_tiptap_doc("body content"),
             ..new_page("Original title")
         },
     )
@@ -1767,7 +1798,7 @@ async fn fts_index_drops_page_after_hard_delete() {
     let page = create_page_impl(
         &pool,
         NewPage {
-            content_text: Some("findable body".into()),
+            content: crate::build_tiptap_doc("findable body"),
             ..new_page("Doomed")
         },
     )
@@ -2664,7 +2695,6 @@ async fn writing_a_page_its_own_body_with_keys_reordered_changes_nothing() {
         "p".into(),
         PageUpdate {
             content: Some(r#"{"content":[{"type":"paragraph"}],"type":"doc"}"#.into()),
-            content_text: Some(String::new()),
             ..Default::default()
         },
     )
@@ -3168,7 +3198,6 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
             title: "Sneaky".into(),
             subtitle: None,
             content: "{}".into(),
-            content_text: None,
             status: "not_started".into(),
             priority: 0,
             tags: vec![],

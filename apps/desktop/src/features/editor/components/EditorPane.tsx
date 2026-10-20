@@ -1,7 +1,7 @@
 // Reuses a single ProseMirror instance across page switches
 // (setContent instead of destroy/recreate) for instant switching.
 
-import { extractText, isBodyFromNewerBuild } from "@pikos/core";
+import { isBodyFromNewerBuild } from "@pikos/core";
 import { createDocumentExtensions } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -175,7 +175,6 @@ export function EditorPane() {
     updatePage(edit.pageId, {
       baseContent,
       content,
-      contentText: extractText(content),
     });
   }
 
