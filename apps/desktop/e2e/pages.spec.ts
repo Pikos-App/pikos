@@ -318,6 +318,28 @@ appTest(
 );
 
 appTest(
+  "a body from a newer Pikos opens read-only and no write reaches it",
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "From the future");
+    const row = app.locator("[data-page-list-item]").filter({ hasText: "From the future" });
+    const id = (await row.getAttribute("data-page-id")) ?? "";
+    await writeBodyOutside(app, id, "written by a newer Pikos");
+    await bridgeCall(app, "bridge_mark_body_newer", { id });
+    await app.reload();
+
+    const body = await openEditorForPage(app, "From the future");
+    await expect(app.getByRole("status").getByText(/edited in a newer version/)).toBeVisible();
+    await expect(body).toHaveAttribute("contenteditable", "false");
+    await app.keyboard.type("typed anyway");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    expect(await storedBody(app, id)).toBe("written by a newer Pikos");
+
+    await expect(writeBodyOutside(app, id, "from the CLI")).rejects.toThrow(/newer version/);
+  }
+);
+
+appTest(
   "the list reads answer over the real writer with the adapter's argument names",
   async ({ app, storage }) => {
     appTest.skip(storage !== "bridge", "reads the real writer's commands");

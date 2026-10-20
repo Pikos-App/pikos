@@ -1,13 +1,14 @@
 // Reuses a single ProseMirror instance across page switches
 // (setContent instead of destroy/recreate) for instant switching.
 
-import { extractText } from "@pikos/core";
+import { extractText, isBodyFromNewerBuild } from "@pikos/core";
 import { createDocumentExtensions } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { TriangleAlert } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/shared/components/EmptyState";
@@ -131,7 +132,7 @@ interface PendingEdit {
 // description, and running it through the markdown parser would let stray
 // asterisks or a "#" line restyle it.
 function appendParagraphs(editor: Editor | null, text: string): void {
-  if (!editor || editor.isDestroyed) return;
+  if (!editor || editor.isDestroyed || !editor.isEditable) return;
   const content = text.split(/\n{2,}/).map((block) => ({
     content: [{ text: block.replace(/\n/g, " "), type: "text" }],
     type: "paragraph",
@@ -294,6 +295,12 @@ export function EditorPane() {
   const pageId = page?.id ?? null;
   usePageLinkTargets(editor, pageId);
 
+  const isReadOnly = page !== null && isBodyFromNewerBuild(page);
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.setEditable(!isReadOnly, false);
+  }, [editor, isReadOnly]);
+
   const { flush, isSaving, saveError } = useAutosave(
     contentVersion,
     (_version: number) => {
@@ -401,6 +408,17 @@ export function EditorPane() {
           }}
           style={{ "--editor-font-size": `${fontSize}px` } as CSSProperties}
         >
+          {isReadOnly && (
+            <p
+              className="mb-3 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90"
+              role="status"
+            >
+              <TriangleAlert aria-hidden="true" className="shrink-0" size={14} />
+              <span className="type-ui-sm">
+                This page was edited in a newer version of Pikos. Update to edit it.
+              </span>
+            </p>
+          )}
           <EditorContent editor={editor} />
         </div>
         {/* Pinned to the right edge, so a status appearing grows leftward into the margin. */}

@@ -4402,3 +4402,96 @@ async fn updating_other_fields_leaves_the_version_alone() {
     .unwrap();
     assert_eq!(updated.content_schema_version, 99);
 }
+
+async fn page_from_a_newer_build(pool: &sqlx::SqlitePool) -> Page {
+    let page = create_page_impl(pool, new_page("From the future"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 99 WHERE id = ?")
+        .bind(&page.id)
+        .execute(pool)
+        .await
+        .unwrap();
+    fetch_page(pool, &page.id).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_body_from_a_newer_build_refuses_a_content_write_and_names_the_version() {
+    let pool = test_pool().await;
+    let page = page_from_a_newer_build(&pool).await;
+
+    let err = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(r#"{"type":"doc","content":[]}"#.to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        matches!(&err, AppError::Conflict(msg) if msg.contains("99")),
+        "{err:?}"
+    );
+    let stored = fetch_page(&pool, &page.id).await.unwrap();
+    assert_eq!(stored.content, page.content);
+    assert_eq!(stored.content_schema_version, 99);
+}
+
+#[tokio::test]
+async fn a_body_from_a_newer_build_takes_its_own_body_back_and_other_fields() {
+    let pool = test_pool().await;
+    let page = page_from_a_newer_build(&pool).await;
+
+    let updated = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(page.content.clone()),
+            title: Some("renamed".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(updated.title, "renamed");
+    assert_eq!(updated.content_schema_version, 99);
+}
+
+#[tokio::test]
+async fn completing_a_head_from_a_newer_build_keeps_the_clone_at_its_version() {
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("head", "Newer head")
+        },
+    )
+    .await
+    .unwrap();
+    add_daily_rule(&pool, "head", "2026-05-21").await;
+    sqlx::query("UPDATE pages SET content_schema_version = 99 WHERE id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let result = complete_recurring_page_impl(
+        &pool,
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let clone = fetch_page(&pool, &result.clone.id).await.unwrap();
+    assert_eq!(clone.content_schema_version, 99);
+}

@@ -709,6 +709,8 @@ pub async fn update_page_impl(
             if is_unchanged {
                 updates.content = None;
                 updates.content_text = None;
+            } else {
+                ensure_body_from_this_build(pool, &id).await?;
             }
         }
 
@@ -818,6 +820,29 @@ async fn write_page_update(
     }
 
     crate::tx::retry_on_busy(|| apply_page_update(pool, id, updates, marks_ownership)).await
+}
+
+/// Refuses to write over a body a newer Pikos wrote. This build's editor may not know its nodes,
+/// so the write would drop them, and the re-stamp it carries would label the loss as current and
+/// give it a fresh sync clock that beats the newer device's copy.
+async fn ensure_body_from_this_build(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    let stored: Option<i64> = sqlx::query_scalar(
+        "SELECT content_schema_version FROM pages WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    let newer_version = stored.filter(|v| *v > crate::CONTENT_SCHEMA_VERSION);
+    if let Some(version) = newer_version {
+        return Err(AppError::Conflict(format!(
+            "page {id} was written by a newer version of Pikos (content schema {version}, this \
+             build writes {}); update Pikos to edit it",
+            crate::CONTENT_SCHEMA_VERSION
+        )));
+    }
+
+    Ok(())
 }
 
 /// The body of a page not in the trash.
@@ -938,6 +963,11 @@ async fn apply_page_update(
     builder.push(" WHERE id = ");
     builder.push_bind(id);
     builder.push(" AND deleted_at IS NULL");
+    if updates.content.is_some() {
+        // Closes the race with a sync landing a newer body after the check in `update_page_impl`.
+        builder.push(" AND content_schema_version <= ");
+        builder.push_bind(crate::CONTENT_SCHEMA_VERSION);
+    }
     if let (Some(_), Some(base)) = (&updates.content, &updates.base_content) {
         builder.push(" AND content = ");
         builder.push_bind(base.clone());
@@ -1826,11 +1856,9 @@ async fn insert_head_clone_tx(
     .bind(spec.completed_at)
     .bind(now) // created_at
     .bind(now) // updated_at
-    // The clone copies head.content verbatim, so it inherits the head's
-    // schema — but the head was readable by this build (it was just fetched),
-    // so stamping the current version is correct and keeps the clone from
-    // looking staler than it is.
-    .bind(crate::CONTENT_SCHEMA_VERSION)
+    // The clone copies head.content verbatim: an older head's body reads fine in this build, so it
+    // comes forward, and a newer one's keeps its version so no editor here writes over it.
+    .bind(head.content_schema_version.max(crate::CONTENT_SCHEMA_VERSION))
     .execute(&mut **tx)
     .await?;
 

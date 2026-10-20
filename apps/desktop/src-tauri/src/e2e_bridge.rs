@@ -241,6 +241,17 @@ impl Bridge {
             "dev_seed_synced_calendar" => {
                 return reply(db::dev::dev_seed_synced_calendar_impl(&pool).await);
             }
+            // Stands in for a body a newer Pikos synced here, which no command of this build writes.
+            "bridge_mark_body_newer" => {
+                let id: String = arg(&mut args, "id")?;
+                return sqlx::query("UPDATE pages SET content_schema_version = ? WHERE id = ?")
+                    .bind(pikos_db::CONTENT_SCHEMA_VERSION + 1)
+                    .bind(id)
+                    .execute(&pool)
+                    .await
+                    .map(|_| Value::Null)
+                    .map_err(|e| app_error(AppError::from(e)));
+            }
             // A spec runs the real CLI against the file the app is using.
             "bridge_workspace_path" => return to_value(self.workspace_path(&db)),
             "bridge_daily_summary" => {
