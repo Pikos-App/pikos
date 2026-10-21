@@ -1,15 +1,14 @@
 import rss from "@astrojs/rss";
 import type { APIContext } from "astro";
 import { published } from "../content/posts";
+import { publishedVersion } from "../content/published";
 
-
-
-export function GET(context: APIContext) {
+export async function GET(context: APIContext) {
   return rss({
     title: "Pikos Blog",
     description: "Articles about Pikos: the app, the architecture, the philosophy.",
     site: context.site!.toString(),
-    items: published().map((post) => ({
+    items: published(await publishedVersion()).map((post) => ({
       title: post.title,
       description: post.description,
       pubDate: new Date(post.date),

@@ -4,10 +4,12 @@ import { getCollection, render } from "astro:content";
 import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 import { formatDate } from "../content/posts";
+import { isOut, publishedVersion } from "../content/published";
 
-const entries = (await getCollection("releaseNotes")).sort(
-  (a, b) => b.data.date.getTime() - a.data.date.getTime(),
-);
+const released = await publishedVersion();
+const entries = (await getCollection("releaseNotes"))
+  .filter((entry) => isOut(entry.id, released))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 const releases = await Promise.all(
   entries.map(async (entry) => {
     const { Content } = await render(entry);
