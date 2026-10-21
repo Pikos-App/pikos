@@ -257,6 +257,15 @@ appTest(
         await expect(app.getByPlaceholder("Find…")).toBeVisible();
         await app.keyboard.press("Escape");
       },
+      "Forward to the next page": async () => {
+        const before = await title.textContent();
+        await run("Select next page");
+        await run("Back to the previous page");
+        await expect(title).toHaveText(before ?? "");
+        await run("Forward to the next page");
+        await expect(title).not.toHaveText(before ?? "");
+        await run("Back to the previous page");
+      },
       "Increase text size": async () => {
         await run("Increase text size");
         await expect.poll(fontSize).toBe("16px");
@@ -271,15 +280,6 @@ appTest(
         await run("New page");
         await expect(app.getByRole("dialog", { name: "Quick add" })).toBeVisible();
         await app.keyboard.press("Escape");
-      },
-      "Forward to the next page": async () => {
-        const before = await title.textContent();
-        await run("Select next page");
-        await run("Back to the previous page");
-        await expect(title).toHaveText(before ?? "");
-        await run("Forward to the next page");
-        await expect(title).not.toHaveText(before ?? "");
-        await run("Back to the previous page");
       },
       // Each calendar-hours check ends on "Reset calendar hours" and checks it restored the height.
       "Reset calendar hours": async () => {
@@ -311,6 +311,11 @@ appTest(
         await run("Select previous page");
         await expect(title).not.toHaveText(after ?? "");
       },
+      Settings: async () => {
+        await run("Settings");
+        await expect(app.getByRole("region", { name: "Settings" })).toBeVisible();
+        await app.keyboard.press("Escape");
+      },
       "Shorter calendar hours": async () => {
         const { after, before } = await calendarHoursAfter("Shorter calendar hours");
         expect(after).toBeLessThan(before);
@@ -318,11 +323,6 @@ appTest(
       "Taller calendar hours": async () => {
         const { after, before } = await calendarHoursAfter("Taller calendar hours");
         expect(after).toBeGreaterThan(before);
-      },
-      Settings: async () => {
-        await run("Settings");
-        await expect(app.getByRole("region", { name: "Settings" })).toBeVisible();
-        await app.keyboard.press("Escape");
       },
       "Toggle calendar / editor": async () => {
         await run("Toggle calendar / editor");

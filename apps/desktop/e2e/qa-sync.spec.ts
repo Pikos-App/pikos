@@ -3,7 +3,6 @@ import type { Locator, Page } from "@playwright/test";
 import {
   test as appTest,
   bridgeCall,
-  dayFrom,
   expect,
   mod,
   openCalendarMode,
@@ -114,7 +113,8 @@ appTest(
 
     await appTest.step("SYNC-11 an all-day event stays on its date", async () => {
       await openCalendarFolder(app, "Personal");
-      await expect(rows(app, "Company offsite")).toContainText((await dayFrom(app, 0)).monthDay);
+      // Seeded for today, which a list writes as "Today" rather than the date.
+      await expect(rows(app, "Company offsite")).toContainText("Today");
     });
   }
 );
