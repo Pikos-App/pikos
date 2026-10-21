@@ -225,12 +225,16 @@ export function EditorPane() {
   const pageId = page?.id ?? null;
   usePageLinkTargets(editor, pageId);
 
+  function saveContent() {
+    if (!pageId || contentJsonRef.current === "") return;
+    const contentText = extractText(contentJsonRef.current);
+    updatePage(pageId, { content: contentJsonRef.current, contentText });
+  }
+
   const { flush, isSaving, saveError } = useAutosave(
     contentVersion,
     (_version: number) => {
-      if (!pageId || contentJsonRef.current === "") return Promise.resolve();
-      const contentText = extractText(contentJsonRef.current);
-      updatePage(pageId, { content: contentJsonRef.current, contentText });
+      saveContent();
       return Promise.resolve();
     },
     { delay: 800 }
@@ -341,7 +345,7 @@ export function EditorPane() {
           <SaveStatus
             contentSaveError={saveError}
             isSaving={isSaving}
-            onRetryContent={() => void flush()}
+            onRetryContent={saveContent}
             pageId={page.id}
           />
           {editor && <PageInfoPopover editor={editor} page={page} />}
