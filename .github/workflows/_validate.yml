@@ -403,7 +403,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install -y curl build-essential pkg-config tzdata libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
+          apt-get install -y curl build-essential pkg-config tzdata sqlite3 libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
 
       - uses: dtolnay/rust-toolchain@stable
 
