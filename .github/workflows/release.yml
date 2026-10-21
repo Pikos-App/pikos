@@ -377,8 +377,11 @@ jobs:
           for f in **/*.dmg; do
             mv "$f" "$(dirname "$f")/Pikos-macos-universal.dmg"
           done
+          # The AppImage is also the Linux updater bundle. Tauri's own name is
+          # kept for the updater and the stable name is a copy for the site, so
+          # GitHub counts an update apart from a fresh download.
           for f in **/*.AppImage; do
-            mv "$f" "$(dirname "$f")/Pikos-linux-x86_64.AppImage"
+            cp "$f" "$(dirname "$f")/Pikos-linux-x86_64.AppImage"
           done
           for f in **/*.deb; do
             mv "$f" "$(dirname "$f")/Pikos-linux-x86_64.deb"
@@ -462,10 +465,8 @@ jobs:
           done
 
           # Linux: Tauri v2 updater uses the bare .AppImage + .AppImage.sig
-          # (the .AppImage.tar.gz wrapper was the v1 format). The AppImage was
-          # renamed to its stable name above; the .sig keeps its original name
-          # but only its contents matter.
-          for f in artifacts/**/*.AppImage; do
+          # (the .AppImage.tar.gz wrapper was the v1 format).
+          for f in artifacts/**/Pikos_*.AppImage; do
             [ -f "$f" ] && LINUX_URL="${BASE}/$(basename "$f")"
           done
           for f in artifacts/**/*.AppImage.sig; do
