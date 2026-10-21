@@ -507,8 +507,12 @@ jobs:
           }
           MANIFEST
 
+      # `draft: true` again, or the action publishes the draft it updates. It did for 0.4.0 and
+      # 0.4.1: the release went public as the build ended, before anyone smoke-tested it, and a
+      # publish by this job's token starts no other workflow, so the tap and the site never moved.
       - name: Upload latest.json to release
         if: ${{ !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: latest.json
