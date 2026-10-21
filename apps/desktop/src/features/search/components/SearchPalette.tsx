@@ -529,6 +529,7 @@ export function SearchPalette() {
       <DialogContent
         aria-label="Search pages"
         className="top-[15%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
+        data-command-palette=""
         // Radix's focus scope selects an input's contents when it autofocuses,
         // which makes the first keystroke replace a prefill rather than extend
         // it. Focus it here instead, caret collapsed to the end.
