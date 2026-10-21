@@ -366,3 +366,79 @@ appTest(
     });
   }
 );
+
+/** Each run of text Quick Add draws over its field, with the colour it is drawn in. */
+function drawnColours(app: Page) {
+  return quickAddParts(app).input.evaluate((input) => {
+    const backdrop = input.previousElementSibling;
+    if (!backdrop) return { input: getComputedStyle(input).color, runs: [] };
+    const runs: { colour: string; text: string }[] = [];
+    const walker = document.createTreeWalker(backdrop, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent?.trim();
+      if (text) runs.push({ colour: getComputedStyle(node.parentElement!).color, text });
+    }
+    return { input: getComputedStyle(input).color, runs };
+  });
+}
+
+appTest(
+  "the words Quick Add reads are coloured where they were typed, and the title's stay plain",
+  { tag: ["@QADD-12"] },
+  async ({ app }) => {
+    const line = "Call dentist tomorrow 3pm !high #health ~work // bring forms";
+    await typeQuickAdd(app, line);
+    const plain = await quickAddParts(app).dialog.evaluate(
+      (dialog) => getComputedStyle(dialog).color
+    );
+
+    await appTest.step("QADD-12 the coloured text sits exactly over what was typed", async () => {
+      const drawn = await drawnColours(app);
+      expect(drawn.input).toBe("rgba(0, 0, 0, 0)");
+      expect(drawn.runs.map((run) => run.text).join(" ")).toBe(line);
+    });
+
+    await appTest.step("QADD-12 date and time, priority, tag, folder and note are coloured", async () => {
+      const { runs } = await drawnColours(app);
+      const colourOf = (word: string) =>
+        runs.find((run) => run.text.split(" ").includes(word))?.colour;
+      for (const word of ["tomorrow", "3pm", "!high", "#health", "~work", "//", "forms"]) {
+        expect(colourOf(word), word).toBeDefined();
+        expect(colourOf(word), word).not.toBe(plain);
+      }
+      expect(colourOf("Call")).toBe(plain);
+      expect(colourOf("dentist")).toBe(plain);
+    });
+  }
+);
+
+appTest(
+  "a title starting with morning or evening keeps it, and the date after it schedules the page",
+  { tag: ["@QADD-13"] },
+  async ({ app }) => {
+    const schedule = app.getByRole("button", { name: /^(Scheduled: |Set schedule)/ });
+
+    await appTest.step("QADD-13 Morning pages tomorrow 9am lands at 9 AM tomorrow", async () => {
+      await quickAdd(app, "Morning pages tomorrow 9am");
+      await openRow(app, "Morning pages");
+      await expect(schedule).toHaveAccessibleName(/^Scheduled: Tomorrow.*9(:00)?\s?AM/i);
+    });
+
+    await appTest.step("QADD-13 Evening review today 8pm lands at 8 PM today", async () => {
+      await quickAdd(app, "Evening review today 8pm");
+      await openRow(app, "Evening review");
+      await expect(schedule).toHaveAccessibleName(/^Scheduled: Today.*8(:00)?\s?PM/i);
+    });
+
+    await appTest.step("QADD-13 Morning pages alone gets no date", async () => {
+      await quickAdd(app, "Morning pages");
+      const undated = row(app, "Morning pages").filter({
+        hasNot: app.getByRole("button", { name: /^Toggle date format: / }),
+      });
+      await expect(undated).toHaveCount(1);
+      await undated.click();
+      await expect(app.getByLabel("Page title")).toHaveText("Morning pages");
+      await expect(schedule).toHaveAccessibleName(/^Set schedule/);
+    });
+  }
+);

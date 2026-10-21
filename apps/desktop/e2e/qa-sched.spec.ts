@@ -102,3 +102,41 @@ appTest(
     });
   }
 );
+
+appTest(
+  "Next week in the date picker picks the coming Monday and keeps the time set",
+  { tag: ["@SCHED-06:2"] },
+  async ({ app }) => {
+    await quickAdd(app, "dentist today 3pm");
+    const picker = await openPicker(app, "dentist");
+    await picker.getByRole("button", { exact: true, name: "Next week" }).click();
+    await app.keyboard.press("Escape");
+    await expect(picker).not.toBeVisible();
+
+    const comingMonday = await app.evaluate(() => {
+      const d = new Date();
+      d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+      const month = d.toLocaleDateString("en-US", { month: "long" });
+      return `All-day events, Monday ${month} ${d.getDate()}`;
+    });
+
+    await appTest.step("SCHED-06 the page sits on the coming Monday at 3 PM", async () => {
+      await openCalendarMode(app);
+      const calendar = app.getByRole("region", { name: "Week calendar" });
+      const column = calendar.getByLabel(comingMonday, { exact: true });
+      if ((await column.count()) === 0) {
+        await app.getByRole("button", { exact: true, name: "Next week" }).click();
+      }
+      await gutterLabel(app, 15).scrollIntoViewIfNeeded();
+      const block = calendar.getByRole("button", { name: /^dentist, 3/ });
+      await expect(block).toHaveCount(1);
+      const blockBox = await block.boundingBox();
+      const columnBox = await column.boundingBox();
+      if (!blockBox || !columnBox) throw new Error("no block or no Monday column");
+      const x = blockBox.x + blockBox.width / 2;
+      expect(x).toBeGreaterThan(columnBox.x);
+      expect(x).toBeLessThan(columnBox.x + columnBox.width);
+      expect(Math.abs(blockBox.y - (await hourLineY(app, 15)))).toBeLessThan(4);
+    });
+  }
+);

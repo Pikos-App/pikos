@@ -3,13 +3,17 @@ import { addDays, addMonths, format, parse } from "date-fns";
 
 import {
   test as appTest,
+  bridgeCall,
   clickBlockCheckbox,
+  createFolder,
   expect,
   gutterLabel,
   hourLineY,
   mod,
   openCalendarMode,
   quickAdd,
+  seedSynced,
+  stamp,
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
 
@@ -615,7 +619,10 @@ appTest("calendar density scales the hour rows", { tag: ["@CAL-18"] }, async ({ 
   });
 });
 
-appTest("a block's time too wide for it is cut inside the block", async ({ app }) => {
+appTest(
+  "at text size 28 a narrow block's time ends in an ellipsis inside the block",
+  { tag: ["@CAL-25"] },
+  async ({ app }) => {
   await quickAdd(app, "Planning today at 10am for 2h");
   await app.getByRole("button", { name: "Open settings" }).click();
   await app.getByRole("button", { name: /^Calendar text size:/ }).click();
@@ -625,7 +632,9 @@ appTest("a block's time too wide for it is cut inside the block", async ({ app }
   await openCalendarMode(app);
   await app.setViewportSize({ height: 720, width: 1000 });
   const block = calendarOf(app).getByRole("button", { name: /^Planning, 10/ });
-  const time = block.getByText(/AM–/);
+  const time = block.getByText(/^10.*–/);
+  await gutterLabel(app, 10).scrollIntoViewIfNeeded();
+  await expect(time).toBeVisible();
 
   const blockBox = await block.boundingBox();
   const timeBox = await time.boundingBox();
@@ -633,7 +642,9 @@ appTest("a block's time too wide for it is cut inside the block", async ({ app }
 
   expect(timeBox.x + timeBox.width).toBeLessThanOrEqual(blockBox.x + blockBox.width);
   expect(await time.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
-});
+  expect(await time.evaluate((el) => getComputedStyle(el).textOverflow)).toBe("ellipsis");
+  }
+);
 
 appTest(
   "the calendar's scroll position persists, and starts near the current hour",
@@ -728,5 +739,347 @@ appTest(
         calendarOf(app).getByRole("button", { exact: true, name: "Shift change, 12 AM" })
       ).toBeVisible();
     }
+  }
+);
+
+appTest(
+  "a block's typed title reads tags, priority, folder and a repeat, and keeps its slot",
+  { tag: ["@CAL-27"] },
+  async ({ app }) => {
+    await createFolder(app, "Team");
+    await openCalendarMode(app);
+    const wednesday = calendarOf(app).getByLabel(/^All-day events, Wednesday /);
+    await gutterLabel(app, 14).scrollIntoViewIfNeeded();
+    await app.mouse.click(await centerX(wednesday), (await hourLineY(app, 14)) + INTO_THE_HOUR);
+    await nameTitle(app, "Standup tomorrow #work !high ~Team every weekday");
+    const blocks = calendarOf(app).getByRole("button", { name: /^Standup tomorrow, 2/ });
+
+    await appTest.step("CAL-27 it's titled Standup tomorrow, on its slot's day and time", async () => {
+      await expect(blocks.first()).toBeVisible();
+      const x = await centerX(blocks.first());
+      const column = await wednesday.boundingBox();
+      expect(x).toBeGreaterThan(column!.x);
+      expect(x).toBeLessThan(column!.x + column!.width);
+    });
+
+    await appTest.step("CAL-27 it repeats every weekday from its slot", async () => {
+      await expect(blocks).toHaveCount(3);
+    });
+
+    await appTest.step("CAL-27 it takes the tag, priority and folder", async () => {
+      await app.waitForTimeout(2 * CLICK_EATEN_AFTER_RELEASE_MS);
+      await app.getByRole("button", { name: "Editor view" }).click();
+      await app
+        .getByRole("group", { name: "Views and folders" })
+        .getByRole("button", { exact: true, name: "Team" })
+        .click();
+      await app.locator("[data-page-list-item]").filter({ hasText: "Standup tomorrow" }).click();
+      await expect(app.getByLabel("Page title")).toHaveText("Standup tomorrow");
+      await expect(app.getByRole("button", { name: "Tags: work" })).toBeVisible();
+      await expect(app.getByRole("button", { name: "Priority: High" })).toBeVisible();
+      await expect(app.getByRole("button", { name: "Folder: Team" })).toBeVisible();
+      await expect(app.getByRole("button", { name: /^Recurrence: .*weekday/i })).toBeVisible();
+    });
+  }
+);
+
+appTest(
+  "the current-time line sits at the time on the grid and moves with it",
+  { tag: ["@CAL-14"] },
+  async ({ app }) => {
+    appTest.setTimeout(100_000);
+    const startsAt = await app.evaluate(() => {
+      const now = new Date();
+      return { hour: now.getHours(), minute: now.getMinutes() };
+    });
+    appTest.skip(startsAt.hour === 23 && startsAt.minute >= 58, "the line would wrap to tomorrow");
+    await openCalendarMode(app);
+    for (const band of [/^Expand 12 AM to/, /^Expand .* to 12 AM$/]) {
+      await app.getByRole("button", { name: band }).first().click();
+    }
+    const line = calendarOf(app).getByRole("separator", { name: "Current time" });
+    await gutterLabel(app, startsAt.hour).scrollIntoViewIfNeeded();
+    const lineY = async () => {
+      const box = await line.boundingBox();
+      if (!box) throw new Error("no current-time line");
+      return box.y;
+    };
+    let first = 0;
+
+    await appTest.step("CAL-14 it sits on the line for the current time", async () => {
+      const now = await app.evaluate(() => {
+        const d = new Date();
+        return d.getHours() + d.getMinutes() / 60;
+      });
+      const hour = Math.floor(now);
+      const top = await hourLineY(app, hour);
+      const pitch = hour < 23 ? (await hourLineY(app, hour + 1)) - top : top - (await hourLineY(app, hour - 1));
+      first = await lineY();
+      expect(Math.abs(first - (top + (now - hour) * pitch))).toBeLessThan(3);
+    });
+
+    await appTest.step("CAL-14 it moves down as the minutes pass", async () => {
+      await expect.poll(lineY, { intervals: [2_000], timeout: 75_000 }).toBeGreaterThan(first);
+    });
+  }
+);
+
+async function setCalendarTextSize(app: Page, size: number) {
+  await app.getByRole("button", { name: "Open settings" }).click();
+  await app.getByRole("button", { name: /^Calendar text size:/ }).click();
+  await app.getByRole("button", { exact: true, name: String(size) }).click();
+  await expect(app.getByRole("button", { name: `Calendar text size: ${size}` })).toBeVisible();
+  await app.keyboard.press("Escape");
+  await openCalendarMode(app);
+}
+
+appTest(
+  "the all-day strip grows with the calendar text size, and a dragged height shows the same rows",
+  { tag: ["@CAL-22"] },
+  async ({ app }) => {
+    for (const title of ["Alpha day", "Bravo day", "Charlie day"]) await quickAdd(app, `${title} today`);
+    await openCalendarMode(app);
+    const strip = calendarOf(app).getByRole("group", { name: "All-day events" });
+    const handle = calendarOf(app).getByRole("separator", { name: "Resize all-day section" });
+    const bars = ["Alpha day", "Bravo day", "Charlie day"].map((name) =>
+      calendarOf(app).getByRole("button", { exact: true, name })
+    );
+    const stripHeight = async () => (await strip.boundingBox())!.height;
+    async function rowsShown() {
+      const box = (await strip.boundingBox())!;
+      let shown = 0;
+      for (const bar of bars) {
+        const b = await bar.boundingBox();
+        if (b && b.y >= box.y - 1 && b.y + b.height <= box.y + box.height + 1) shown++;
+      }
+      return shown;
+    }
+    async function dragHandle(dy: number) {
+      const box = (await handle.boundingBox())!;
+      await drag(app, { x: box.x + box.width / 2, y: box.y + 1 }, { x: box.x + box.width / 2, y: box.y + 1 + dy });
+    }
+
+    await dragHandle(-400);
+    const smallest = await stripHeight();
+    await dragHandle(600);
+    const tallest = await stripHeight();
+    await expect.poll(rowsShown).toBe(3);
+
+    await appTest.step("CAL-22 at the largest text size every all-day row still shows", async () => {
+      await setCalendarTextSize(app, 28);
+      await expect.poll(stripHeight).toBeGreaterThan(tallest);
+      await expect.poll(rowsShown).toBe(3);
+    });
+
+    await appTest.step("CAL-22 its drag limits grow with it", async () => {
+      await dragHandle(600);
+      expect(await stripHeight()).toBeGreaterThan(tallest);
+      await dragHandle(-800);
+      expect(await stripHeight()).toBeGreaterThan(smallest);
+    });
+
+    await appTest.step("CAL-22 a height dragged at one size shows the same rows at another", async () => {
+      await dragHandle(600);
+      const bottoms: number[] = [];
+      for (const bar of bars) {
+        const b = (await bar.boundingBox())!;
+        bottoms.push(b.y + b.height);
+      }
+      bottoms.sort((a, b) => a - b);
+      const box = (await strip.boundingBox())!;
+      await dragHandle((bottoms[1]! + bottoms[2]!) / 2 - (box.y + box.height));
+      await expect.poll(rowsShown).toBe(2);
+      await setCalendarTextSize(app, 14);
+      await expect.poll(rowsShown).toBe(2);
+    });
+  }
+);
+
+appTest(
+  "at the densest step a 15- and a 30-minute page back to back are as tall as their time and stack",
+  { tag: ["@CAL-23"] },
+  async ({ app }) => {
+    await app.setViewportSize({ height: 480, width: 1280 });
+    await choose(app, "Calendar density", "1");
+    await quickAdd(app, "Coffee today 9am for 15m");
+    await quickAdd(app, "Sync today 9:15am for 30m");
+    await openCalendarMode(app);
+    await gutterLabel(app, 9).scrollIntoViewIfNeeded();
+    const coffee = calendarOf(app).getByRole("button", { name: /^Coffee, / });
+    const sync = calendarOf(app).getByRole("button", { name: /^Sync, / });
+    const pitch = (await hourLineY(app, 10)) - (await hourLineY(app, 9));
+    const coffeeBox = (await coffee.boundingBox())!;
+    const syncBox = (await sync.boundingBox())!;
+
+    await appTest.step("CAL-23 each block is as tall as its time", () => {
+      expect(Math.abs(coffeeBox.height - pitch / 4)).toBeLessThan(2);
+      expect(Math.abs(syncBox.height - pitch / 2)).toBeLessThan(2);
+    });
+
+    await appTest.step("CAL-23 they stack rather than sit side by side", () => {
+      expect(Math.abs(syncBox.x - coffeeBox.x)).toBeLessThan(2);
+      expect(Math.abs(syncBox.width - coffeeBox.width)).toBeLessThan(2);
+      expect(Math.abs(syncBox.y - (coffeeBox.y + coffeeBox.height))).toBeLessThan(2);
+    });
+
+    await appTest.step("CAL-23 a short block drops its time line, then cuts its title", async () => {
+      await expect(sync.getByText("Sync", { exact: true })).toBeVisible();
+      await expect(sync.getByText(/–/)).toHaveCount(0);
+      const title = (await coffee.getByText("Coffee", { exact: true }).boundingBox())!;
+      expect(title.y + title.height).toBeGreaterThan(coffeeBox.y + coffeeBox.height);
+    });
+  }
+);
+
+appTest(
+  "a density stored by the last release as Compact or Spacious keeps its hour height and step",
+  { tag: ["@CAL-24"] },
+  async ({ app }) => {
+    await app.setViewportSize({ height: 480, width: 1280 });
+    const hourPitch = async () => (await hourLineY(app, 10)) - (await hourLineY(app, 9));
+    const density = app
+      .getByRole("region", { name: "Settings" })
+      .getByRole("group", { name: "Calendar density" });
+
+    for (const [preset, height, step] of [
+      ["compact", 40, "2"],
+      ["spacious", 88, "6"],
+    ] as const) {
+      await appTest.step(`CAL-24 ${preset} keeps ${height}px an hour and reads as step ${step}`, async () => {
+        await app.evaluate((stored) => {
+          localStorage.setItem("pikos:calendarDensity", JSON.stringify(stored));
+        }, preset);
+        await app.reload();
+        await openCalendarMode(app);
+        await expect.poll(async () => Math.round(await hourPitch())).toBe(height);
+        await app.getByRole("button", { name: "Open settings" }).click();
+        await expect(density.getByRole("button", { exact: true, name: step })).toHaveAttribute(
+          "aria-pressed",
+          "true"
+        );
+        await app.keyboard.press("Escape");
+      });
+    }
+  }
+);
+
+/** Whether the pointer shows a resize cursor just above a block's bottom edge. */
+function resizeCursorAtBottom(block: Locator) {
+  return block.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const target = document.elementFromPoint(box.x + box.width / 2, box.bottom - 2);
+    return target ? getComputedStyle(target).cursor === "row-resize" : false;
+  });
+}
+
+const opacity = (locator: Locator) => locator.evaluate((el) => getComputedStyle(el).opacity);
+
+appTest(
+  "a page cut off from its calendar is drawn at full strength; a synced one keeps its icon and no handles",
+  { tag: ["@CAL-26"] },
+  async ({ app }) => {
+    await seedSynced(app);
+    await bridgeCall(app, "upstream_discover", {
+      calendars: [
+        { calendarId: "mock-personal", displayName: "Personal" },
+        { calendarId: "mock-work", displayName: "Work" },
+        { calendarId: "mock-family", displayName: "Family" },
+      ],
+    });
+    await app.reload();
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { exact: true, name: "Calendar sync" }).click();
+    await app.getByRole("switch", { name: "Sync Family" }).click();
+    await expect(app.getByRole("switch", { name: "Sync Family" })).toBeChecked();
+    await app.keyboard.press("Escape");
+    // A Saturday three weeks out, clear of the seeded calendar's crowded weekdays.
+    const out = await app.evaluate(() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 21);
+      return 21 + ((6 - d.getDay() + 7) % 7);
+    });
+    const day = (await stamp(app, out, "00:00")).slice(0, 10);
+    const dayAfter = (await stamp(app, out + 1, "00:00")).slice(0, 10);
+    await bridgeCall(app, "upstream_sync", {
+      calendar: "Family",
+      events: [
+        {
+          end: await stamp(app, out, "21:00"),
+          start: await stamp(app, out, "20:00"),
+          timezone: "America/New_York",
+          title: "Swim meet",
+        },
+        { end: dayAfter, start: day, title: "Field day" },
+      ],
+    });
+    await bridgeCall(app, "upstream_sync", {
+      calendar: "Personal",
+      events: [
+        {
+          end: await stamp(app, out + 1, "21:00"),
+          start: await stamp(app, out + 1, "20:00"),
+          timezone: "America/New_York",
+          title: "Garden club",
+        },
+      ],
+    });
+    await app.reload();
+    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    const folder = app
+      .getByRole("group", { name: "Views and folders" })
+      .locator('[aria-label="Family"]:not([aria-roledescription="sortable"])');
+    await folder.click();
+    for (const title of ["Swim meet", "Field day"]) {
+      await app.locator("[data-page-list-item]").filter({ hasText: title }).click();
+      await app.getByRole("textbox", { name: "Page content" }).click();
+      await app.keyboard.type("Ours now.");
+      await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    }
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { exact: true, name: "Calendar sync" }).click();
+    await app.getByRole("switch", { name: "Sync Family" }).click();
+    await app
+      .getByRole("alertdialog", { name: "Turn Family off?" })
+      .getByRole("button", { name: "Turn off" })
+      .click();
+    await expect(app.getByRole("switch", { name: "Sync Family" })).not.toBeChecked();
+    await app.keyboard.press("Escape");
+
+    await openCalendarMode(app);
+    const block = calendarOf(app).getByRole("button", { name: /^Swim meet, / });
+    const bar = calendarOf(app).getByRole("button", { exact: true, name: "Field day" });
+    const synced = calendarOf(app).getByRole("button", { name: /^Garden club, / });
+    for (let i = 0; i < 4 && (await block.count()) === 0; i++) {
+      await app.getByRole("button", { exact: true, name: "Next week" }).click();
+      await expect(calendarOf(app)).toHaveAttribute("aria-busy", "false");
+    }
+    await app.mouse.move(0, 0);
+    await gutterLabel(app, 20).scrollIntoViewIfNeeded();
+
+    await appTest.step("CAL-26 on the week grid and as an all-day bar it's at full strength", async () => {
+      await expect(block).toBeVisible();
+      expect(await opacity(block)).toBe("1");
+      expect(await opacity(bar)).toBe("1");
+      expect(await resizeCursorAtBottom(block)).toBe(true);
+    });
+
+    await appTest.step("CAL-26 a synced page keeps its sync icon and no drag handles", async () => {
+      await synced.scrollIntoViewIfNeeded();
+      await expect(synced.getByRole("img", { name: "Synced from external calendar" })).toBeVisible();
+      expect(await resizeCursorAtBottom(synced)).toBe(false);
+    });
+
+    await appTest.step("CAL-26 as a month chip it's at full strength", async () => {
+      await app.keyboard.press("m");
+      const month = app.getByRole("region", { name: "Month calendar" });
+      await expect(month).toBeVisible();
+      for (const chip of [
+        month.getByRole("button", { name: /^Swim meet/ }).first(),
+        month.getByRole("button", { name: /^Field day/ }).first(),
+      ]) {
+        await expect(chip).toBeVisible();
+        expect(await opacity(chip)).toBe("1");
+      }
+    });
   }
 );

@@ -168,7 +168,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch
       if (STORAGE_BACKEND === "bridge") {
-        await initBridgeWorkspace();
+        await initBridgeWorkspace().catch((e: unknown) => {
+          log.error("auto-init failed", e);
+          setLoadError(e);
+          setIsLoading(false);
+        });
         return;
       }
 

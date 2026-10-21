@@ -308,3 +308,48 @@ appTest(
     });
   }
 );
+
+appTest(
+  "a command starting with what's typed ranks first with its letters marked, and Undo delete shows only while it can undo",
+  { tag: ["@SRCH-07"] },
+  async ({ app }) => {
+    await quickAdd(app, "scratch page");
+    const commandLabels = async (palette: ReturnType<typeof paletteOf>) =>
+      (await palette.getByRole("button").allInnerTexts()).map((text) => text.split("\n")[0]!);
+
+    await appTest.step("SRCH-07 a label or word starting with the letters ranks first", async () => {
+      const palette = await search(app, ">si");
+      const labels = await commandLabels(palette);
+      const startsWord = (label: string) =>
+        label.toLowerCase().split(" ").some((word) => word.startsWith("si"));
+      const firstOther = labels.findIndex((label) => !startsWord(label));
+      expect(labels.filter(startsWord).length).toBeGreaterThan(0);
+      expect(firstOther).toBeGreaterThan(0);
+      expect(labels.slice(firstOther).some(startsWord)).toBe(false);
+    });
+
+    await appTest.step("SRCH-07 the matched letters are marked", async () => {
+      const first = paletteOf(app).getByRole("button").first();
+      const label = (await first.innerText()).split("\n")[0]!;
+      const at = label.toLowerCase().split(" ").findIndex((word) => word.startsWith("si"));
+      const word = label.split(" ")[at]!;
+      await expect(first.locator("mark")).toHaveText([word[0]!, word[1]!]);
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step("SRCH-07 Undo delete is missing with no delete banner up", async () => {
+      const palette = await search(app, ">undo");
+      await expect(palette.getByRole("button", { name: /^Undo delete/ })).toHaveCount(0);
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step("SRCH-07 Undo delete is listed while a delete's banner is up", async () => {
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "scratch page" });
+      await row.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Delete" }).click();
+      await expect(app.getByRole("alert", { name: /scratch page/ })).toBeVisible();
+      const palette = await search(app, ">undo");
+      await expect(palette.getByRole("button", { name: /^Undo delete/ })).toHaveCount(1);
+    });
+  }
+);

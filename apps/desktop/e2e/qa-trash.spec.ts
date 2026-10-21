@@ -212,3 +212,42 @@ appTest(
     });
   }
 );
+
+appTest(
+  "deleting three selected pages shows one banner whose Undo, or Cmd+Z, brings all three back",
+  { tag: ["@TRASH-11"] },
+  async ({ app }) => {
+    const titles = ["sweep one", "sweep two", "sweep three"];
+    for (const title of titles) await quickAdd(app, title);
+    const banner = app.getByRole("alert", { name: "3 pages moved to Trash" });
+    async function deleteAll() {
+      for (const title of titles) {
+        await listRow(app, title).click({ modifiers: ["ControlOrMeta"] });
+      }
+      await expect(app.locator("[data-page-list-item][data-selected=true]")).toHaveCount(3);
+      await app.keyboard.press(mod("Mod+Backspace"));
+      for (const title of titles) await expect(listRow(app, title)).toHaveCount(0);
+      await expect(banner).toHaveCount(1);
+      await expect(app.getByRole("alert")).toHaveCount(1);
+    }
+
+    await appTest.step("TRASH-11 one banner, and its Undo restores all three", async () => {
+      await deleteAll();
+      await banner.getByRole("button", { name: "Undo" }).click();
+      for (const title of titles) await expect(listRow(app, title)).toHaveCount(1);
+    });
+
+    await appTest.step("TRASH-11 Cmd+Z does the same", async () => {
+      await app.locator("body").click({ position: { x: 0, y: 0 } });
+      await deleteAll();
+      await app.keyboard.press(mod("Mod+z"));
+      await expect(banner).toHaveCount(0);
+      for (const title of titles) await expect(listRow(app, title)).toHaveCount(1);
+    });
+
+    await appTest.step("TRASH-11 none of them is left in the trash", async () => {
+      await openTrash(app);
+      await expect(app.getByText("The trash is empty.")).toBeVisible();
+    });
+  }
+);

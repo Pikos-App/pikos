@@ -869,6 +869,7 @@ async fn a_page_without_images_exports_as_one_md_file_that_never_replaces_an_ear
     let _ = std::fs::remove_dir_all(&root);
 }
 
+// qa: EXP-12:2
 #[tokio::test]
 async fn a_page_with_images_exports_as_a_directory_holding_them_beside_its_md() {
     let pool = test_pool().await;

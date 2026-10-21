@@ -201,6 +201,23 @@ export async function bridgeCall<T>(
   return payload.value as T;
 }
 
+/** Quit the app: leave the page, and have the writer close this test's database as the
+ *  process exiting would. `page.goto("/")` relaunches it, opening the file afresh. Returns
+ *  the workspace file's path, for changing it while the app is closed. */
+export async function quitApp(page: Page): Promise<string> {
+  const path = await bridgeCall<string>(page, "bridge_workspace_path");
+  const db = await page.evaluate(
+    () => (globalThis as unknown as { __PIKOS_E2E_DB__?: string }).__PIKOS_E2E_DB__
+  );
+  await page.goto("about:blank");
+  await fetch(`${BRIDGE_ORIGIN}/command`, {
+    body: JSON.stringify({ args: {}, command: "bridge_quit", db }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  return path;
+}
+
 /** Ring the bell sync and the CLI ring after writing the database, as Rust would. The test
  *  build listens on an in-page emitter for it (`appEvents.ts`). */
 export async function ringDoorbell(
