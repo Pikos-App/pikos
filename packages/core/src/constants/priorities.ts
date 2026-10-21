@@ -26,11 +26,13 @@ export const PRIORITY_COLORS: Record<PagePriority, string> = {
   4: "text-subtle",
 };
 
-// A checkbox's outline, where High takes the bright amber: dark amber is for text only.
+// A checkbox's outline, where High takes the bright amber: dark amber is for text only. These go
+// in an inline style, so they name the raw tokens: `--color-status-*` live in `@theme inline`,
+// which Tailwind folds into its classes without defining them on the page.
 export const PRIORITY_CHECKBOX_COLORS: Record<PagePriority, string | undefined> = {
   0: undefined,
-  1: "var(--color-status-overdue)",
-  2: "var(--color-status-due-soon)",
+  1: "var(--status-overdue)",
+  2: "var(--status-due-soon)",
   3: undefined,
   4: undefined,
 };
