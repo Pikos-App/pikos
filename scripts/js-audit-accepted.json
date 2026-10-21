@@ -168,6 +168,13 @@
     "until": "2027-04-01"
   },
   {
+    "id": "GHSA-587h-7wmj-h5pm",
+    "package": "vite",
+    "severity": "high",
+    "why": "pikos.app is a static site built at deploy time from our own content: no server runs it and no visitor input reaches this code. The flaw is in the dev server's open-in-editor route, on Windows only.",
+    "until": "2027-04-01"
+  },
+  {
     "id": "GHSA-fx2h-pf6j-xcff",
     "package": "vite",
     "severity": "high",
