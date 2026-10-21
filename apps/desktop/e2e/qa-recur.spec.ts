@@ -716,7 +716,9 @@ appTest(
       const box = await block.boundingBox();
       if (!box) throw new Error("no standup block");
       expect(Math.abs(box.y - (await hourLineY(app, 9)))).toBeLessThan(4);
-      await app.getByRole("button", { name: "Jump to current week" }).click();
+      // In the week before a clock change, that week is this one and the button is off.
+      const thisWeek = app.getByRole("button", { name: "Jump to current week" });
+      if (await thisWeek.isEnabled()) await thisWeek.click();
     }
 
     await appTest.step("RECUR-16 the week before the change it is at 9 AM", async () => {
