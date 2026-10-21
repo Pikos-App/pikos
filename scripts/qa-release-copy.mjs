@@ -146,6 +146,7 @@ function main() {
   let reset = 0;
 
   const marks = new Map();
+  const owed = [];
   for (const s of sections) {
     for (const row of s.rows) {
       const touched = isTouched(reasons, s, row);
@@ -159,7 +160,11 @@ function main() {
       let ticked = mark !== "manual";
 
       const before = previous?.rows.get(row.id);
-      if (mark === "manual" && before?.mark === "deferred") {
+      if (mark === "manual" && s.deferred) {
+        mark = "deferred";
+        tail = s.deferred;
+        ticked = false;
+      } else if (mark === "manual" && before?.mark === "deferred") {
         // Nothing since can undo a drive that never happened, so the deferral holds.
         mark = "deferred";
         tail = before.tail;
@@ -189,6 +194,7 @@ function main() {
         }
       }
       marks.set(row.id, mark);
+      if (mark === "manual" && !row.manualForGood) owed.push(row.id);
       const box = ticked ? "- [x]" : "- [ ]";
       lines[row.line] =
         `${lines[row.line].replace(/^- \[[ x]\]/, box)} · **${mark}**${tail ? ` ${tail}` : ""}`;
@@ -236,10 +242,12 @@ function main() {
     `| In the master | ${marks.size} |`,
     `| Touched | ${touchedCount} |`,
     `| Automated, so nobody drives them | ${count("automated")} |`,
-    `| For a person to drive | ${count("manual") + count("both")} |`,
+    `| For a person to drive | ${count("manual") + count("both") - owed.length} |`,
+    `| Owed a test, which blocks the tag (\`PKOS-0193\`) | ${owed.length} |`,
     `| Deferred | ${count("deferred")} |`,
     `| Untouched | ${count("untouched")} |`,
     "",
+    ...(owed.length > 0 ? [`Owed a test: ${owed.join(", ")}.`, ""] : []),
     librariesLine,
     "",
     "## Changed files no row covers",
@@ -258,7 +266,7 @@ function main() {
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, copy);
   console.log(
-    `${dest}\n${touchedCount} of ${marks.size} rows touched: ${count("automated")} automated, ${count("manual") + count("both")} to drive, ${unmapped.length} changed file(s) map to no row.`
+    `${dest}\n${touchedCount} of ${marks.size} rows touched: ${count("automated")} automated, ${count("manual") + count("both") - owed.length} to drive, ${owed.length} owed a test, ${unmapped.length} changed file(s) map to no row.`
   );
   if (previous) {
     console.log(`Kept ${carried} row(s) a person had driven; ${reset} need driving again.`);

@@ -122,8 +122,9 @@ function rowPath(entry) {
 }
 
 /** Sections in master order, each with its globs and rows, and a row with its own `paths:`
- *  line, indented under it, with those. Lines are kept so the copy can be written back with
- *  only the marks added. */
+ *  line, indented under it, with those. A section's `deferred:` line defers its manual rows on
+ *  every release until the line goes, with that reason. Lines are kept so the copy can be written
+ *  back with only the marks added. */
 export function readMaster() {
   const lines = readFileSync(MASTER, "utf8").split("\n");
   const sections = [];
@@ -135,6 +136,7 @@ export function readMaster() {
     if (line.startsWith("paths: ")) {
       section.globs = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
     }
+    if (line.startsWith("deferred: ")) section.deferred = line.slice("deferred: ".length);
     const lastRow = section.rows.at(-1);
     const isRowPaths = line.startsWith("  paths: ") && lastRow?.line === i - 1;
     if (isRowPaths) lastRow.paths = [...line.matchAll(/`([^`]+)`/g)].map((m) => rowPath(m[1]));

@@ -106,6 +106,11 @@ run_check "migrations"        bash scripts/check-migrations-frozen.sh &
 # cannot, since the collisions that matter are the ones where two owners rarely
 # mount together.
 run_check "shortcut-conflicts" node scripts/check-shortcut-conflicts.mjs &
+# A behaviour lands with a test claiming its QA row (PKOS-0193). The master is gitignored, so CI
+# has none to read and this gate is local, which is where rows are added.
+if [ -f .agent/qa/full-qa-checklist.md ]; then
+  run_check "qa-rows"         node scripts/qa-marks.mjs --owed &
+fi
 
 # SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
 # runs the same desktop+core suite, with thresholds) is the single test pass.
@@ -128,7 +133,7 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations shortcut-conflicts tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations shortcut-conflicts qa-rows tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then

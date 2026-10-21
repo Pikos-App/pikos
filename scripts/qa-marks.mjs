@@ -19,6 +19,10 @@
 // counting as a person's; the count stops a deleted test from leaving its
 // partner claiming the whole row.
 //
+// With `--owed`, it also fails on a row that is neither claimed nor manual for good, unless
+// `qa-owed-tests.json` lists it, and on a listed row that is claimed now or gone, so the list
+// only shrinks (`PKOS-0193`). `pnpm verify` runs it that way.
+//
 // Reads the master from the working tree, so it runs where the release is cut,
 // not in CI.
 
@@ -29,7 +33,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MASTER = process.argv[2] ?? join(ROOT, ".agent/qa/full-qa-checklist.md");
+const args = process.argv.slice(2);
+const checkOwed = args.includes("--owed");
+const MASTER =
+  args.find((a) => !a.startsWith("--")) ?? join(ROOT, ".agent/qa/full-qa-checklist.md");
+const OWED = join(ROOT, "scripts/qa-owed-tests.json");
 const ROW_TAG = /^([A-Z]+-\d+)(?::(\d+))?$/;
 
 function readMaster(path) {
@@ -41,26 +49,19 @@ function readMaster(path) {
   return rows;
 }
 
-/** Every test a config would run, with its tags, without running anything. */
+/** Every test a config would run, with its tags, without running anything. Calls the package's
+ *  own Playwright rather than `pnpm exec`: a pnpm launcher without a shebang, as Homebrew's is
+ *  until its first run replaces it, can't be spawned outside a shell. */
 function listTests(config) {
   const dir = mkdtempSync(join(tmpdir(), "qa-marks-"));
   const out = join(dir, "list.json");
+  const desktop = join(ROOT, "apps/desktop");
   try {
     execFileSync(
-      "pnpm",
-      [
-        "--filter",
-        "@pikos/desktop",
-        "exec",
-        "playwright",
-        "test",
-        "--config",
-        config,
-        "--list",
-        "--reporter=json",
-      ],
+      join(desktop, "node_modules/.bin/playwright"),
+      ["test", "--config", config, "--list", "--reporter=json"],
       {
-        cwd: ROOT,
+        cwd: desktop,
         env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: out },
         stdio: ["ignore", "ignore", "inherit"],
       }
@@ -245,8 +246,29 @@ for (const [row, counts] of declared) {
   delete automated[row];
 }
 
+if (checkOwed) {
+  const owed = new Set(JSON.parse(readFileSync(OWED, "utf8")).rows);
+  for (const [row, { manualForGood }] of rows) {
+    const isUnproven = !manualForGood && !automated[row];
+    if (isUnproven && !owed.has(row))
+      failures.push(
+        `${row} has no test claiming it and isn't marked 🧑 with a reason; a behaviour lands with its test (PKOS-0193)`
+      );
+  }
+  for (const row of owed) {
+    if (!rows.has(row))
+      failures.push(
+        `${row} is owed a test but isn't in the master; take it off scripts/qa-owed-tests.json`
+      );
+    else if (automated[row])
+      failures.push(`${row} is claimed now; take it off scripts/qa-owed-tests.json`);
+    else if (rows.get(row).manualForGood)
+      failures.push(`${row} is manual for good now; take it off scripts/qa-owed-tests.json`);
+  }
+}
+
 console.log(JSON.stringify({ automated }, null, 2));
 if (failures.length > 0) {
-  console.error(`${failures.length} row claim(s) can't hold:\n  ${failures.join("\n  ")}`);
+  console.error(`${failures.length} problem(s) with QA row claims:\n  ${failures.join("\n  ")}`);
   process.exit(1);
 }

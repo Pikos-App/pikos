@@ -7,7 +7,8 @@
 //   node scripts/check-release-qa.mjs <version> --ledger   date every row the pass drove
 //
 // A copy is finished when it was written for this commit (or nothing since reaches a row),
-// holds every row of the master with a mark, every row a person drives is ticked, every row
+// holds every row of the master with a mark, no manual row is one a test could take
+// (`PKOS-0193`), every row a person drives is ticked, every row
 // marked both or deferred says why, every automated row still has its tests, and the sign-off
 // names who ran the pass. A deferred row needs no tick, so the record names each one. A hotfix signs the copy's hotfix block instead of driving the rows.
 //
@@ -149,6 +150,9 @@ function check(opts) {
 
   const { sections } = readMaster();
   const master = new Set(sections.flatMap((s) => s.rows.map((r) => r.id)));
+  const manualForGood = new Set(
+    sections.flatMap((s) => s.rows.filter((r) => r.manualForGood).map((r) => r.id))
+  );
   for (const id of master)
     if (!copy.rows.has(id)) problems.push(`${id} is in the master but not the copy`);
   for (const id of copy.rows.keys())
@@ -167,6 +171,9 @@ function check(opts) {
       count.automated++;
       if (!automated[id]) problems.push(`${id} is marked automated, but no test claims it now`);
     }
+    const isOwedATest = row.mark === "manual" && !manualForGood.has(id);
+    if (isOwedATest)
+      problems.push(`${id} is owed a test (PKOS-0193): automate it, or defer it with its reason`);
     if (row.mark === "manual" || row.mark === "both") {
       if (row.ticked) count.driven++;
       else
