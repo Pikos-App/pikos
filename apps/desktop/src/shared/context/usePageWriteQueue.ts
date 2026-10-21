@@ -259,9 +259,15 @@ export function usePageWriteQueue({
     if (accumulated) void commitPatch(id, accumulated, false, false);
   }
 
+  /** With nothing waiting, still settles once the writes already in flight have: a write queued
+   *  ahead of the flush (a recurrence enqueued on Enter) takes the debounced patch with it, and a
+   *  read that followed a bare return saw the page as it was before that patch. */
   async function flushPage(id: string): Promise<void> {
     const accumulated = takePendingPatch(id);
-    if (!accumulated) return;
+    if (!accumulated) {
+      await mutationQueues.current.get(id)?.catch(() => undefined);
+      return;
+    }
     return commitPatch(id, accumulated, true);
   }
 
