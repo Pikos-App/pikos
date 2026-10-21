@@ -390,8 +390,16 @@ jobs:
       - name: Read release notes
         id: notes
         run: |
-          # Read RELEASE_NOTES.md from the tagged commit (before it was reset)
-          NOTES=$(git show ${{ github.ref_name }}:RELEASE_NOTES.md | grep -v '^<!--' || true)
+          set -euo pipefail
+          # The version's own notes file, the one the site renders, without its front matter. A beta
+          # reads the file of the release it leads up to.
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="apps/marketing/src/content/release-notes/${VERSION%%-*}.md"
+          NOTES=$(git show "${GITHUB_REF_NAME}:${FILE}" | awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm')
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::${FILE} is missing or empty at ${GITHUB_REF_NAME}"
+            exit 1
+          fi
           # Store as multiline output
           {
             echo "body<<NOTES_EOF"

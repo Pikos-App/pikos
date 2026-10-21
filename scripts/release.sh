@@ -23,16 +23,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_PKG="$ROOT/apps/desktop/package.json"
 CARGO_TOML="$ROOT/apps/desktop/src-tauri/Cargo.toml"
-RELEASE_NOTES="$ROOT/RELEASE_NOTES.md"
-MARKETING_NOTES="$ROOT/apps/marketing/src/pages/release-notes.astro"
-
-# Validate release notes — strip HTML comments and whitespace, must have content
-NOTES_CONTENT=$(sed 's/<!--.*-->//g' "$RELEASE_NOTES" | tr -d '[:space:]')
-if [ -z "$NOTES_CONTENT" ]; then
-  echo "Error: RELEASE_NOTES.md is empty or only has comments."
-  echo "Write release notes before running a release."
-  exit 1
-fi
 
 # Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
@@ -59,13 +49,13 @@ esac
 NEW="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${NEW}"
 
-# The website changelog must already carry an entry for this version. It's
-# hand-authored (styled HTML, user-facing voice — not auto-generated from the
-# terse RELEASE_NOTES.md) and ships in the same commit as the version bump so
-# the site updates the moment the release is cut.
-if ! grep -q ">${NEW}<" "$MARKETING_NOTES"; then
-  echo "Error: $MARKETING_NOTES has no entry for ${NEW}."
-  echo "Add the release-notes <article> (version + release date + notes) before releasing."
+# One notes file per version, which the site, the GitHub release and the update dialog all show
+# (PKOS-0194). The release workflow reads it from the tag.
+NOTES_FILE="$ROOT/apps/marketing/src/content/release-notes/${NEW}.md"
+notes_body() { awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$NOTES_FILE"; }
+if [ ! -f "$NOTES_FILE" ] || [ -z "$(notes_body | tr -d '[:space:]')" ]; then
+  echo "Error: no release notes for ${NEW}. Write them in ${NOTES_FILE#"$ROOT"/},"
+  echo "with a date: line in its front matter, before releasing."
   exit 1
 fi
 
@@ -132,31 +122,26 @@ fi
 
 # ── Release-notes sign-off ───────────────────────────────────────────────────
 # Tagging triggers the publish pipeline and is irreversible, so require an
-# explicit human review of BOTH notes surfaces before proceeding.
+# explicit human review of the notes before proceeding.
 echo "Bumping $CURRENT → $NEW"
 echo ""
-echo "In-app + GitHub notes (RELEASE_NOTES.md):"
+echo "Release notes (site, GitHub and the update dialog):"
 echo "───────────────────────────────────"
-grep -v '^<!--' "$RELEASE_NOTES" | grep -v '^$'
-echo "───────────────────────────────────"
-echo ""
-echo "Website changelog (release-notes.astro entry for ${NEW}):"
-echo "───────────────────────────────────"
-grep -A 12 ">${NEW}<" "$MARKETING_NOTES" || true
+notes_body
 echo "───────────────────────────────────"
 echo ""
-read -rp "Release notes reviewed and correct on both surfaces? Sign off to tag ${TAG} [y/N] " CONFIRM
+read -rp "Release notes reviewed and correct? Sign off to tag ${TAG} [y/N] " CONFIRM
 if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
   echo "Aborted — no sign-off."
   exit 0
 fi
 
-# Check for uncommitted changes. RELEASE_NOTES.md and the marketing
-# release-notes page are exempt: both are written right before cutting and get
-# committed by the version-bump commit below, so requiring a separate commit
-# (plus its own green CI run) adds nothing.
-if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro' \
-  || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro'; then
+# Check for uncommitted changes. The version's notes file is exempt: it may be
+# written right before cutting and is committed by the version-bump commit below,
+# so requiring a separate commit (plus its own green CI run) adds nothing.
+NOTES_REL="${NOTES_FILE#"$ROOT"/}"
+if ! git diff --quiet -- . ":(exclude)$NOTES_REL" \
+  || ! git diff --cached --quiet -- . ":(exclude)$NOTES_REL"; then
   echo "Error: uncommitted changes. Commit or stash first."
   exit 1
 fi
@@ -164,8 +149,8 @@ fi
 # Release gate — require a green ci.yml run for HEAD. The release pipeline no
 # longer re-validates; CI on `main` is the single authoritative gate, so we
 # only cut a release from a commit CI has already passed. The version-bump
-# commits below only touch version strings + Cargo.lock + RELEASE_NOTES and
-# re-enter CI when pushed, so they need no separate validation — hence
+# commit below only touches version strings, Cargo.lock and the notes file and
+# re-enters CI when pushed, so it needs no separate validation — hence
 # --no-verify to skip the (now-redundant) pre-commit/pre-push hooks.
 # SKIP_CI_CHECK=1 bypasses the gate; in that case keep hooks on as a fallback.
 HOOK_FLAG="--no-verify"
@@ -195,9 +180,8 @@ fi
 # version line; anything more means something else moved and wants looking at.
 (cd "$ROOT/apps/desktop/src-tauri" && cargo metadata --format-version 1 >/dev/null 2>&1 || true)
 
-# Commit and tag (include release notes so the workflow can read them, and the
-# website changelog so the marketing site ships the entry with the release).
-git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES" "$MARKETING_NOTES"
+# Commit and tag, with the notes file, which the workflow reads from the tag.
+git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$NOTES_FILE"
 git commit $HOOK_FLAG -m "release: v${NEW}"
 git tag "$TAG"
 
@@ -210,20 +194,6 @@ if [ -z "${SKIP_QA:-}" ] && [ -z "${HOTFIX:-}" ]; then
   node "$ROOT/scripts/check-release-qa.mjs" "$NEW" --ledger \
     || echo "Warning: couldn't date the rows this pass drove in the QA ledger"
 fi
-
-# Reset release notes for next cycle
-cat > "$RELEASE_NOTES" << 'RESET'
-<!-- Write release notes for the next version here. No need to commit them: -->
-<!-- the release script folds this file into the version-bump commit. -->
-<!-- The script fails if this file only contains comments or is empty. -->
-<!-- After release, this file is automatically reset. -->
-RESET
-git add "$RELEASE_NOTES"
-# [skip ci] — the release push is two trivial commits (version bump + this
-# reset). GitHub evaluates skip-ci against the push HEAD (this commit), so it
-# skips CI for the whole push. Neither commit needs validation: the tag build
-# validates the released code, and CI on `main` re-runs on the next real commit.
-git commit $HOOK_FLAG -m "chore: reset release notes [skip ci]"
 
 echo ""
 echo "Created tag $TAG"
