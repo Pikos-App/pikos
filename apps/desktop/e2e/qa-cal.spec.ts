@@ -812,8 +812,11 @@ appTest(
         return d.getHours() + d.getMinutes() / 60;
       });
       const hour = Math.floor(now);
-      const top = await hourLineY(app, hour);
-      const pitch = hour < 23 ? (await hourLineY(app, hour + 1)) - top : top - (await hourLineY(app, hour - 1));
+      // Measured off labels clear of the grid's top: "12 AM" sits below its line so it isn't cut off.
+      const ref = hour < 22 ? hour + 1 : hour - 1;
+      const refY = await hourLineY(app, ref);
+      const pitch = (await hourLineY(app, ref + 1)) - refY;
+      const top = refY + (hour - ref) * pitch;
       first = await lineY();
       expect(Math.abs(first - (top + (now - hour) * pitch))).toBeLessThan(3);
     });
