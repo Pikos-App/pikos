@@ -5,7 +5,7 @@ Rows are operations at the granularity a user performs them; columns are the ori
 thing being operated on (does it come from Pikos or a calendar?) and the surface it's
 performed from.
 
-Scope: **0.4.2**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
+Scope: **0.5.0**. 0.3.1 (shipped) has the Native column only. No `page_sync` table, so
 every Synced/Detached cell is unreachable there. The iOS column describes `apps/ios` — a
 native SwiftUI app over the same Rust, not a second implementation. Its tier-1 flows run in a
 simulator, and its speed tests run on an iPhone 16 at 200,000 pages.
