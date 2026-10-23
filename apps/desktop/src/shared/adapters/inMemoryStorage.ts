@@ -13,13 +13,15 @@ export function createInMemoryStorage(): MockStorageAdapter {
   // `?seedPages=20000` fills the workspace before anything renders, so a perf run can time the
   // interface against a realistic row count. Test-mode only: this module is behind an import()
   // that a production build never reaches, and the parameter is ignored without a number.
-  const seed = Number(new URLSearchParams(window.location.search).get("seedPages"));
+  const params = new URLSearchParams(window.location.search);
+  const seed = Number(params.get("seedPages"));
   if (Number.isFinite(seed) && seed > 0) {
-    // `?bodyWords=` sizes each seeded page, so the editor can be timed against a real document
-    // rather than a one-line one. Storage handles large bodies fine (0.5 ms to read a
-    // 200,000-word page); what is unmeasured is what ProseMirror does with them.
-    const bodyWords = Number(new URLSearchParams(window.location.search).get("bodyWords"));
+    // `?bodyWords=` sizes each seeded page and `?bodyShape=log` picks a journal's shape over prose,
+    // so the editor can be timed against a real document rather than a one-line one.
+    const bodyWords = Number(params.get("bodyWords"));
+    const bodyShape = params.get("bodyShape") === "log" ? "log" : "prose";
     adapter.seedPages(seed, {
+      bodyShape,
       completedEvery: 5,
       ...(Number.isFinite(bodyWords) && bodyWords > 0 ? { bodyWords } : {}),
     });

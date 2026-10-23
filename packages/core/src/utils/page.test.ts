@@ -43,16 +43,14 @@ describe("isDone", () => {
 });
 
 describe("toPageSummary", () => {
-  it("drops content and contentText, keeping every other field", () => {
+  it("drops the body, keeping every other field", () => {
     const page: Page = {
       ...makeSummary({ tags: ["a"], title: "Full" }),
       content: '{"type":"doc"}',
       contentSchemaVersion: CONTENT_SCHEMA_VERSION,
-      contentText: "body text",
     };
     const summary = toPageSummary(page);
     expect(summary).not.toHaveProperty("content");
-    expect(summary).not.toHaveProperty("contentText");
     expect(summary.title).toBe("Full");
     expect(summary.tags).toEqual(["a"]);
   });

@@ -74,6 +74,8 @@ export interface PlatformAdapter {
   checkNotificationPermission(): Promise<boolean | null>;
   /** Prompt the user. Rejects if the request itself could not be made. */
   requestNotificationPermission(): Promise<boolean>;
+  /** Open the OS's notification settings for Pikos. No-op where there are none. */
+  openNotificationSettings(): Promise<void>;
   /** Push the reminder settings to the host's scheduler. */
   applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void>;
   /** Tell the host the app can be navigated now. It holds a notification clicked

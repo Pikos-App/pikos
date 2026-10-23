@@ -144,6 +144,67 @@ async fn edits_to_different_fields_on_two_devices_both_survive() {
     assert_eq!(merged.status, "done");
 }
 
+fn body_of(lines: &[&str]) -> String {
+    let blocks: Vec<serde_json::Value> = lines
+        .iter()
+        .map(|t| serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": t }] }))
+        .collect();
+    serde_json::json!({ "type": "doc", "content": blocks }).to_string()
+}
+
+#[tokio::test]
+async fn typing_over_a_body_another_device_changed_since_it_loaded_keeps_both_edits() {
+    let (mac, phone) = (device().await, device().await);
+    let loaded = body_of(&["milk", "eggs", "bread"]);
+    let page = create_page_impl(
+        &mac,
+        NewPage {
+            content: loaded.clone(),
+            ..new_page("Groceries")
+        },
+    )
+    .await
+    .unwrap();
+    converge(&mac, &phone).await;
+
+    let edit_body = |pool: &SqlitePool, typed: String, base: String| {
+        let (pool, id) = (pool.clone(), page.id.clone());
+        async move {
+            update_page_impl(
+                &pool,
+                id,
+                PageUpdate {
+                    content: Some(typed),
+                    base_content: Some(base),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+    };
+    edit_body(
+        &phone,
+        body_of(&["milk", "eggs", "rye bread"]),
+        loaded.clone(),
+    )
+    .await;
+    converge(&mac, &phone).await;
+    edit_body(&mac, body_of(&["oat milk", "eggs", "bread"]), loaded).await;
+    converge(&mac, &phone).await;
+
+    assert_converged(&mac, &phone).await;
+    let on_phone = get_page(&phone, &page.id).await.unwrap().unwrap();
+    assert_eq!(
+        on_phone.content,
+        body_of(&["oat milk", "eggs", "rye bread"])
+    );
+    assert_eq!(
+        on_phone.content_text.as_deref(),
+        Some("oat milk\neggs\nrye bread")
+    );
+}
+
 // qa: CLOUD-02
 #[tokio::test]
 async fn the_later_edit_to_one_field_wins_on_both() {

@@ -200,7 +200,6 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
       if (world.pages.has(step.uid!)) return;
       const page = await adapter.seedMirrorPage({
         content: "",
-        contentText: "",
         folderId,
         priority: 0,
         status: "not_started",
@@ -217,7 +216,9 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
     }
 
     case "own": {
-      await adapter.updatePage(world.pages.get(step.uid!)!, { contentText: "edited" });
+      await adapter.updatePage(world.pages.get(step.uid!)!, {
+        content: JSON.stringify({ type: "doc" }),
+      });
       return;
     }
 
@@ -234,7 +235,6 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
     case "nativePage": {
       const page = await adapter.createPage({
         content: "",
-        contentText: "",
         folderId: null,
         priority: 0,
         status: "not_started",
@@ -255,7 +255,6 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
       const folderId = step.target === "calendarFolder" ? [...world.folders.values()][0]! : null;
       const created = adapter.createPage({
         content: "",
-        contentText: "",
         folderId,
         priority: 0,
         status: "not_started",

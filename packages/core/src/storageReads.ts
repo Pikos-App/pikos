@@ -41,6 +41,7 @@ export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof St
   "listTrashedPages",
   "listView",
   "listViewIds",
+  "pendingDescriptionDocument",
   "searchPages",
   "searchTags",
 ]);

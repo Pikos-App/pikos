@@ -5,7 +5,6 @@ export type NewPage = {
   title: string;
   subtitle?: string | null;
   content: string;
-  contentText?: string | null;
   status: string;
   priority: number;
   tags: Array<string>;

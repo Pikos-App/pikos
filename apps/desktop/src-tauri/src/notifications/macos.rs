@@ -211,6 +211,43 @@ pub fn setup(app: &AppHandle) -> bool {
     .is_ok()
 }
 
+/// How long a tick waits for the system to report the authorization status.
+const AUTHORIZATION_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Whether the system has notifications turned off for Pikos, read fresh so a
+/// change in System Settings counts from the next tick. Only an explicit denial
+/// counts: an unbundled build, a read that fails or times out, and every other
+/// status answer `false`, so delivery goes ahead as before. Authorized with the
+/// alert style set to None is not a denial either, since macOS still lists the
+/// notification in Notification Center.
+pub async fn notifications_off() -> bool {
+    if !is_bundled() {
+        return false;
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let tx = std::sync::Mutex::new(Some(tx));
+    let read_failed = objc2::exception::catch(AssertUnwindSafe(|| {
+        let handler = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+            let status = unsafe { settings.as_ref() }.authorizationStatus();
+            if let Some(tx) = tx.lock().ok().and_then(|mut tx| tx.take()) {
+                let _ = tx.send(status);
+            }
+        });
+        UNUserNotificationCenter::currentNotificationCenter()
+            .getNotificationSettingsWithCompletionHandler(&handler);
+    }))
+    .is_err();
+    if read_failed {
+        return false;
+    }
+
+    matches!(
+        tokio::time::timeout(AUTHORIZATION_READ_TIMEOUT, rx).await,
+        Ok(Ok(status)) if status == UNAuthorizationStatus::Denied
+    )
+}
+
 /// Deliver a notification immediately via UserNotifications. Returns `true` on
 /// success; `false` (e.g. unbundled dev binary) means the caller should fall
 /// back to the plugin.

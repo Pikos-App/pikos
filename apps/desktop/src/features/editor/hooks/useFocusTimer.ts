@@ -6,18 +6,20 @@
 // Two deliberate limits, both so the number stays something the user can
 // account for:
 //
-//   * Nothing is persisted while a session runs. The elapsed count lives in
-//     React state; quit the app mid-session and it is gone, because a session
-//     the app cannot see the end of is a guess, and a guess in a total is worse
-//     than a missing session. The row is written on stop, once, from real
-//     wall-clock timestamps.
+//   * Nothing is persisted while a session runs. The row is written once, from
+//     real wall-clock timestamps, when the session ends: on stop, on leaving the
+//     page, or when the app quits or relaunches to update. A session the app
+//     never sees the end of, a crash or a force quit, is lost rather than closed
+//     out on the next launch, because its end would be a guess, and a guess in a
+//     total is worse than a missing session.
 //   * Sessions under `MIN_SESSION_S` are discarded rather than written. Opening
 //     a page, tapping play and moving on is not focus time; without a floor the
 //     card fills with one-second rows that inflate the session count while
 //     adding nothing to the minutes.
 //
-// Switching pages banks a running session rather than dropping it — the editor
-// remounts this hook per page (`key={page.id}`), so the flush happens on unmount.
+// Switching pages banks a running session rather than dropping it: the editor
+// remounts this hook per page (`key={page.id}`), so it is banked on unmount. A
+// quit never unmounts, so it is banked from the app's pending-write flush too.
 
 import type { NewFocusSession, StorageAdapter } from "@pikos/core";
 import { formatElapsed, formatLocalISO, formatSessionLength, MIN_SESSION_S } from "@pikos/core";
@@ -25,6 +27,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { postNotice } from "@/shared/events/noticeBus";
 import { createLogger } from "@/shared/logger";
+import { onFlushPending } from "@/shared/pendingWrites";
 
 const log = createLogger("useFocusTimer");
 
@@ -53,10 +56,10 @@ export function useFocusTimer(storage: StorageAdapter | null, pageId: string): F
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [elapsedS, setElapsedS] = useState(0);
 
-  // The unmount flush below runs from a cleanup registered once, so its closure
+  // The quit and unmount flushes below are registered once, so their closures
   // can't see the current session. This ref carries it across — kept up to date
-  // from an effect rather than during render, and cleared by `stop` so a stop
-  // immediately followed by an unmount can't bank the same session twice.
+  // from an effect rather than during render, and cleared by whichever ends the
+  // session first so no two of them can bank it twice.
   const pendingRef = useRef<PendingSession | null>(null);
 
   useEffect(() => {
@@ -65,21 +68,36 @@ export function useFocusTimer(storage: StorageAdapter | null, pageId: string): F
 
   useEffect(() => {
     if (!startedAt) return;
+
     // Recomputed from the start time on each tick rather than incremented, so a
-    // throttled background tab (or a missed interval) still shows real elapsed
-    // time instead of the number of ticks that happened to fire.
-    const id = setInterval(() => {
-      setElapsedS(Math.floor((Date.now() - startedAt.getTime()) / 1000));
-    }, 1000);
-    return () => clearInterval(id);
+    // throttled background tab still shows real elapsed time. Each tick is aimed
+    // at the next whole second since the start: a fixed interval drifts against
+    // it, and two ticks inside one second hold the number, then skip one.
+    const startMs = startedAt.getTime();
+    let id: ReturnType<typeof setTimeout>;
+    function tick() {
+      const elapsedMs = Date.now() - startMs;
+      setElapsedS(Math.floor(elapsedMs / 1000));
+      id = setTimeout(tick, 1000 - (elapsedMs % 1000));
+    }
+
+    id = setTimeout(tick, 1000);
+    return () => clearTimeout(id);
   }, [startedAt]);
 
   useEffect(() => {
-    return () => {
-      // Leaving the page (or closing the editor) ends the session where it is.
+    function bank() {
       const pending = pendingRef.current;
       pendingRef.current = null;
-      if (pending) void writeSession(pending.storage, pending.pageId, pending.startedAt);
+      if (!pending) return;
+
+      return writeSession(pending.storage, pending.pageId, pending.startedAt);
+    }
+
+    const unregister = onFlushPending(bank);
+    return () => {
+      unregister();
+      void bank();
     };
   }, []);
 

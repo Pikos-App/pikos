@@ -61,6 +61,9 @@ export interface PagesContextValue {
   recurrenceRules: PageRecurrenceRule[];
   /** Load full page with content — use when opening the editor. */
   getPage: (id: string) => Promise<Page | null>;
+  /** The full page once every write of it from this window has landed, so a read after an
+   *  outside change never sees the database without a save of ours that is still on its way. */
+  getPageAfterWrites: (id: string) => Promise<Page | null>;
   createPage: (opts: NewPageFields) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
@@ -290,6 +293,10 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return viewCache.body(id);
   }
 
+  function getPageAfterWrites(id: string): Promise<Page | null> {
+    return enqueue(id, () => viewCache.body(id));
+  }
+
   function listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
     return adapter.listCompletedPages(filter);
   }
@@ -355,6 +362,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     flushPage,
     folders,
     getPage,
+    getPageAfterWrites,
     listCompletedPages,
     listOverridesForRules,
     maybeUncompleteRecurringClone,

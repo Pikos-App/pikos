@@ -78,7 +78,10 @@ export type PageUpdate = Partial<
     | "detachIsReversible"
     | "contentSchemaVersion"
   >
->;
+> & {
+  /** The body `content` was typed over: a body changed elsewhere since is merged, not overwritten. */
+  baseContent?: string | null;
+};
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),
 // never via createFolder/updateFolder — so it's excluded from both input shapes.
 export type NewFolder = Omit<
@@ -215,6 +218,9 @@ export interface StorageAdapter {
    * the user's and the next upstream change parks rather than overwrites.
    */
   clearPendingDescription(id: string): Promise<void>;
+  /** The withheld description as Tiptap JSON shaped like a seed, addresses linked, or null once
+   *  nothing is parked. */
+  pendingDescriptionDocument(id: string): Promise<string | null>;
   /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
   softDeletePage(id: string): Promise<void>;
   restorePage(id: string): Promise<void>;

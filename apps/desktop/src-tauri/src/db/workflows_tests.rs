@@ -46,7 +46,6 @@ fn new_page(title: &str) -> NewPage {
         title: title.to_string(),
         subtitle: None,
         content: "{}".to_string(),
-        content_text: None,
         status: "not_started".to_string(),
         priority: 0,
         tags: vec![],
@@ -82,7 +81,7 @@ async fn recurring_completion_clone_is_searchable() {
 
     // A recurring "Standup" task with content text + a tag.
     let mut head = new_page("Standup");
-    head.content_text = Some("daily standup notes".to_string());
+    head.content = pikos_db::build_tiptap_doc("daily standup notes");
     head.tags = vec!["work".to_string()];
     head.scheduled_start = Some("2026-05-29T09:00:00".to_string());
     let head = create_page_impl(&pool, head).await.unwrap();

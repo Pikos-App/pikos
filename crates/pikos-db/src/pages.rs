@@ -71,7 +71,9 @@ pub struct Page {
     pub subtitle: Option<String>,
     /// A Tiptap document, JSON-encoded — not markdown.
     pub content: String,
-    /// Plain text extracted from `content` so search can index it. Not for display.
+    /// Plain text the writer extracts from `content` so search can index it. Not for display,
+    /// and never serialized: at 500,000 words it is 2.5 MB no reader of a page needs.
+    #[serde(skip)]
     pub content_text: Option<String>,
     #[ts(type = "'not_started' | 'done'")]
     pub status: String,
@@ -401,7 +403,6 @@ pub struct NewPage {
     pub title: String,
     pub subtitle: Option<String>,
     pub content: String,
-    pub content_text: Option<String>,
     pub status: String,
     #[ts(type = "number")]
     pub priority: i64,
@@ -429,7 +430,11 @@ pub struct PageUpdate {
     #[ts(type = "string | null", optional)]
     pub subtitle: Option<serde_json::Value>,
     pub content: Option<String>,
-    pub content_text: Option<String>,
+    /// The body an editor's `content` was typed over. Given, the content lands only over that
+    /// body; over any other it is merged against it first, so an edit made elsewhere since the
+    /// editor loaded is never overwritten. A body rather than the sync clock, because a write from
+    /// the CLI with sync off moves no clock.
+    pub base_content: Option<String>,
     #[ts(type = "'not_started' | 'done'", optional)]
     pub status: Option<String>,
     #[ts(type = "number", optional)]
@@ -656,7 +661,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         .bind(&data.title)
         .bind(&data.subtitle)
         .bind(&data.content)
-        .bind(data.content_text.as_deref().unwrap_or(""))
+        .bind(crate::pool::extract_text_from_tiptap(&data.content))
         .bind(&data.status)
         .bind(data.priority)
         .bind(&tags_json)
@@ -685,22 +690,109 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     fetch_page(pool, &id).await
 }
 
+/// How many times a body typed over an older one is merged and tried again. Each retry means
+/// another write landed between the merge and the save, so even a second is rare.
+const BODY_MERGE_ATTEMPTS: usize = 5;
+
 pub async fn update_page_impl(
     pool: &sqlx::SqlitePool,
     id: String,
-    updates: PageUpdate,
+    mut updates: PageUpdate,
 ) -> AppResult<Page> {
     if let Some(status) = &updates.status {
         ensure_known_status(status)?;
     }
 
+    for _ in 0..BODY_MERGE_ATTEMPTS {
+        if let Some(content) = &updates.content {
+            let is_unchanged = is_stored_body(pool, &id, content).await?;
+            if is_unchanged {
+                updates.content = None;
+            } else {
+                ensure_body_from_this_build(pool, &id).await?;
+            }
+        }
+
+        let is_written = write_page_update(pool, &id, &updates).await?;
+        let has_merged = !is_written && merge_over_stored_body(pool, &id, &mut updates).await?;
+        if !has_merged {
+            return fetch_page(pool, &id).await;
+        }
+    }
+
+    Err(AppError::Conflict(format!(
+        "page {id} kept changing while its body was being saved"
+    )))
+}
+
+/// Places `blocks` in a page's body by `edit`, from the CLI and MCP. Written over the body it was
+/// spliced into, so a save landing between the read and the write is merged with the edit, not
+/// overwritten; an edit that leaves the body as it was writes nothing.
+pub async fn edit_page_section_impl(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    edit: &pikos_core::body_section::SectionEdit,
+    blocks: &[serde_json::Value],
+) -> AppResult<Page> {
+    let Some(stored) = live_body(pool, id).await? else {
+        return Err(AppError::NotFound(format!("page {id}")));
+    };
+
+    let content = pikos_core::body_section::edit_section(&stored, edit, blocks)
+        .map_err(|pikos_core::body_section::Unplaced(why)| AppError::Invalid(why))?;
+
+    update_page_impl(
+        pool,
+        id.to_string(),
+        PageUpdate {
+            content: Some(content),
+            base_content: Some(stored),
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+/// Merges `updates`' body over the one stored now, which it was not typed over, and makes the
+/// stored body its new base. False when there is nothing to merge: no base was given, or the page
+/// is gone or in the trash.
+async fn merge_over_stored_body(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &mut PageUpdate,
+) -> AppResult<bool> {
+    let (Some(base), Some(mine)) = (&updates.base_content, &updates.content) else {
+        return Ok(false);
+    };
+    let Some(stored) = live_body(pool, id).await? else {
+        return Ok(false);
+    };
+
+    let not_a_document = |_| AppError::Invalid(format!("page {id}'s body is not a document"));
+    let stored_doc = serde_json::from_str(&stored).map_err(not_a_document)?;
+    let my_doc = serde_json::from_str(mine).map_err(not_a_document)?;
+    // An unreadable base reads as an empty page, so both sides are kept whole.
+    let base_doc = serde_json::from_str(base).unwrap_or(serde_json::Value::Null);
+
+    let merged = pikos_core::body_merge::merge_bodies(&base_doc, &stored_doc, &my_doc).to_string();
+    updates.content = Some(merged);
+    updates.base_content = Some(stored);
+    Ok(true)
+}
+
+/// Writes `updates`, true unless a body typed over an older one found a newer one stored, or the
+/// page is gone or in the trash.
+async fn write_page_update(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &PageUpdate,
+) -> AppResult<bool> {
     // Editing any authored field claims ownership (the reconciler never calls this
     // path, so sync can't trip it). `last_opened_at`/`sort_order` are excluded —
     // reading and arranging don't author — and ownership decides whether an
     // upstream delete removes the page or detaches it permanently.
     let marks_ownership = updates.title.is_some()
         || updates.content.is_some()
-        || updates.content_text.is_some()
         || updates.status.is_some()
         || updates.priority.is_some()
         || updates.tags.is_some()
@@ -730,7 +822,7 @@ pub async fn update_page_impl(
                 "Pages cannot be moved into an external calendar folder".to_string(),
             ));
         }
-        if crate::sync::page_schedule_locked(pool, &id).await? {
+        if crate::sync::page_schedule_locked(pool, id).await? {
             return Err(AppError::Conflict(
                 crate::sync::SYNCED_PLACEMENT_MSG.to_string(),
             ));
@@ -743,21 +835,73 @@ pub async fn update_page_impl(
         || updates.scheduled_start.is_some()
         || updates.scheduled_end.is_some()
     {
-        crate::sync::ensure_page_schedule_unlocked(pool, &id).await?;
+        crate::sync::ensure_page_schedule_unlocked(pool, id).await?;
     }
 
     let has_updates =
         marks_ownership || updates.sort_order.is_some() || updates.last_opened_at.is_some();
     if !has_updates {
-        return fetch_page(pool, &id).await;
+        return Ok(true);
     }
 
-    crate::tx::retry_on_busy(|| apply_page_update(pool, &id, &updates, marks_ownership)).await?;
-
-    fetch_page(pool, &id).await
+    crate::tx::retry_on_busy(|| apply_page_update(pool, id, updates, marks_ownership)).await
 }
 
-/// The write half of [`update_page_impl`], retried as a unit because it can lose
+/// Refuses to write over a body a newer Pikos wrote. This build's editor may not know its nodes,
+/// so the write would drop them, and the re-stamp it carries would label the loss as current and
+/// give it a fresh sync clock that beats the newer device's copy.
+async fn ensure_body_from_this_build(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    let stored: Option<i64> = sqlx::query_scalar(
+        "SELECT content_schema_version FROM pages WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    let newer_version = stored.filter(|v| *v > crate::CONTENT_SCHEMA_VERSION);
+    if let Some(version) = newer_version {
+        return Err(AppError::Conflict(format!(
+            "page {id} was written by a newer version of Pikos (content schema {version}, this \
+             build writes {}); update Pikos to edit it",
+            crate::CONTENT_SCHEMA_VERSION
+        )));
+    }
+
+    Ok(())
+}
+
+/// The body of a page not in the trash.
+async fn live_body(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT content FROM pages WHERE id = ? AND deleted_at IS NULL")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?,
+    )
+}
+
+/// Whether `incoming` is the body the page already has. Writing it back must change
+/// nothing: a content write re-stamps the schema version, which stamps the body's sync
+/// clock and lets the no-op beat a real edit from another device, and it claims a
+/// calendar page for the person. Compared as parsed JSON because a body round-tripped
+/// through markdown by the CLI or MCP comes back with its keys reordered.
+async fn is_stored_body(pool: &sqlx::SqlitePool, id: &str, incoming: &str) -> AppResult<bool> {
+    let Some(stored) = live_body(pool, id).await? else {
+        return Ok(false);
+    };
+
+    if stored == incoming {
+        return Ok(true);
+    }
+
+    let parsed = (
+        serde_json::from_str::<serde_json::Value>(&stored),
+        serde_json::from_str::<serde_json::Value>(incoming),
+    );
+    Ok(matches!(parsed, (Ok(a), Ok(b)) if a == b))
+}
+
+/// The write half of [`write_page_update`], retried as a unit because it can lose
 /// the WAL write race to any concurrent writer (a sync poll, a calendar teardown).
 ///
 /// It is **not** exempt from that race for being write-first: SQLite starts the
@@ -773,7 +917,7 @@ async fn apply_page_update(
     id: &str,
     updates: &PageUpdate,
     marks_ownership: bool,
-) -> AppResult<()> {
+) -> AppResult<bool> {
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
     let mut fields = builder.separated(", ");
 
@@ -791,10 +935,8 @@ async fn apply_page_update(
         fields.push_bind_unseparated(crate::CONTENT_SCHEMA_VERSION);
         fields.push("links = ");
         fields.push_bind_unseparated(links_of(v));
-    }
-    if let Some(v) = &updates.content_text {
         fields.push("content_text = ");
-        fields.push_bind_unseparated(v.clone());
+        fields.push_bind_unseparated(crate::pool::extract_text_from_tiptap(v));
     }
     if let Some(v) = &updates.status {
         fields.push("status = ");
@@ -844,11 +986,23 @@ async fn apply_page_update(
     builder.push(" WHERE id = ");
     builder.push_bind(id);
     builder.push(" AND deleted_at IS NULL");
+    if updates.content.is_some() {
+        // Closes the race with a sync landing a newer body after the check in `update_page_impl`.
+        builder.push(" AND content_schema_version <= ");
+        builder.push_bind(crate::CONTENT_SCHEMA_VERSION);
+    }
+    if let (Some(_), Some(base)) = (&updates.content, &updates.base_content) {
+        builder.push(" AND content = ");
+        builder.push_bind(base.clone());
+    }
 
     // Transaction wraps the pages row + (optional) page_tags rewrite so the
     // pages.tags JSON denorm and the page_tags join table cannot diverge.
     let mut tx = pool.begin().await?;
-    builder.build().execute(&mut *tx).await?;
+    let is_written = builder.build().execute(&mut *tx).await?.rows_affected() > 0;
+    if !is_written {
+        return Ok(false);
+    }
 
     if marks_ownership {
         // No page_sync row for native pages → no-op.
@@ -865,7 +1019,7 @@ async fn apply_page_update(
     }
     tx.commit().await?;
 
-    Ok(())
+    Ok(true)
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
@@ -1725,11 +1879,9 @@ async fn insert_head_clone_tx(
     .bind(spec.completed_at)
     .bind(now) // created_at
     .bind(now) // updated_at
-    // The clone copies head.content verbatim, so it inherits the head's
-    // schema — but the head was readable by this build (it was just fetched),
-    // so stamping the current version is correct and keeps the clone from
-    // looking staler than it is.
-    .bind(crate::CONTENT_SCHEMA_VERSION)
+    // The clone copies head.content verbatim: an older head's body reads fine in this build, so it
+    // comes forward, and a newer one's keeps its version so no editor here writes over it.
+    .bind(head.content_schema_version.max(crate::CONTENT_SCHEMA_VERSION))
     .execute(&mut **tx)
     .await?;
 

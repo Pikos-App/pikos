@@ -761,7 +761,6 @@ pub(crate) fn new_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: "{}".into(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],
@@ -846,6 +845,38 @@ async fn update_page_applies_partial_changes_only() {
 
     assert_eq!(updated.status, "done");
     assert_eq!(updated.title, "Before", "untouched fields preserved");
+}
+
+#[tokio::test]
+async fn search_finds_the_words_of_a_body_written_alone() {
+    let pool = test_pool().await;
+    let page = create_page_impl(
+        &pool,
+        NewPage {
+            content: crate::build_tiptap_doc("buy oat milk"),
+            ..new_page("Groceries")
+        },
+    )
+    .await
+    .unwrap();
+
+    update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(crate::build_tiptap_doc("buy almond milk")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let hits = |query: &str| crate::search_pages_impl(&pool, query.into(), None);
+    let almond = hits("almond").await.unwrap().results;
+    let oat = hits("oat").await.unwrap().results;
+    assert_eq!(almond.len(), 1);
+    assert_eq!(almond[0].id, page.id);
+    assert!(oat.is_empty(), "the replaced word is no longer found");
 }
 
 fn is_status_input_error(err: &AppError) -> bool {
@@ -1721,7 +1752,7 @@ async fn fts_index_reflects_title_after_update() {
     let page = create_page_impl(
         &pool,
         NewPage {
-            content_text: Some("body content".into()),
+            content: crate::build_tiptap_doc("body content"),
             ..new_page("Original title")
         },
     )
@@ -1767,7 +1798,7 @@ async fn fts_index_drops_page_after_hard_delete() {
     let page = create_page_impl(
         &pool,
         NewPage {
-            content_text: Some("findable body".into()),
+            content: crate::build_tiptap_doc("findable body"),
             ..new_page("Doomed")
         },
     )
@@ -2636,6 +2667,162 @@ async fn editing_a_synced_page_marks_it_user_modified() {
     );
 }
 
+#[tokio::test]
+async fn writing_a_page_its_own_body_with_keys_reordered_changes_nothing() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"UPDATE pages SET content = '{"type":"doc","content":[{"type":"paragraph"}]}',
+           content_schema_version = 1 WHERE id = 'p'"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    mark_synced(&pool, "p", "active").await;
+    crate::replica::start(&pool).await.unwrap();
+    let body_clock = || {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT clocks FROM replica_clocks WHERE entity = 'body' AND key = 'p'",
+        )
+        .fetch_optional(&pool)
+    };
+    let clock_before = body_clock().await.unwrap();
+
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(r#"{"content":[{"type":"paragraph"}],"type":"doc"}"#.into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let version: i64 =
+        sqlx::query_scalar("SELECT content_schema_version FROM pages WHERE id = 'p'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(version, 1);
+    assert_eq!(body_clock().await.unwrap(), clock_before);
+    assert!(!user_modified(&pool, "p").await);
+}
+
+/// Blocks in the editor's key order, which encoding a parsed body would sort.
+const SECTIONED_BEFORE: &str = r#"{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Notes"}]},{"type":"paragraph","content":[{"type":"text","text":"kept"}]}"#;
+const SECTIONED_AFTER: &str = r#"{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Later"}]},{"type":"paragraph","content":[{"type":"text","text":"also kept"}]}"#;
+
+async fn sectioned_page(pool: &sqlx::SqlitePool) {
+    insert_test_page(pool, TestPage::new("p", "Plans"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content = ? WHERE id = 'p'")
+        .bind(format!(
+            r#"{{"type":"doc","content":[{SECTIONED_BEFORE},{SECTIONED_AFTER}]}}"#
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn editing_a_section_leaves_every_block_outside_it_byte_identical() {
+    let pool = test_pool().await;
+    sectioned_page(&pool).await;
+    let added =
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": "new" }] });
+
+    let page = edit_page_section_impl(
+        &pool,
+        "p",
+        &pikos_core::body_section::SectionEdit::AppendTo("Notes".into()),
+        std::slice::from_ref(&added),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        page.content,
+        format!(r#"{{"type":"doc","content":[{SECTIONED_BEFORE},{added},{SECTIONED_AFTER}]}}"#)
+    );
+}
+
+#[tokio::test]
+async fn a_section_edit_that_changes_nothing_moves_no_clock() {
+    let pool = test_pool().await;
+    sectioned_page(&pool).await;
+    mark_synced(&pool, "p", "active").await;
+    crate::replica::start(&pool).await.unwrap();
+    let stamps = || {
+        sqlx::query_as::<_, (Option<String>, String)>(
+            "SELECT (SELECT clocks FROM replica_clocks WHERE entity = 'body' AND key = 'p'),
+                    updated_at FROM pages WHERE id = 'p'",
+        )
+        .fetch_one(&pool)
+    };
+    let before = stamps().await.unwrap();
+    let same =
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": "kept" }] });
+
+    edit_page_section_impl(
+        &pool,
+        "p",
+        &pikos_core::body_section::SectionEdit::Replace("Notes".into()),
+        &[same],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(stamps().await.unwrap(), before);
+    assert!(!user_modified(&pool, "p").await);
+}
+
+#[tokio::test]
+async fn typing_over_a_body_the_cli_changed_since_it_loaded_merges_and_keeps_its_links() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Plans"))
+        .await
+        .unwrap();
+    let paragraph =
+        |inline: serde_json::Value| serde_json::json!({ "type": "paragraph", "content": [inline] });
+    let text = |t: &str| paragraph(serde_json::json!({ "type": "text", "text": t }));
+    let doc = |blocks: Vec<serde_json::Value>| {
+        serde_json::json!({ "type": "doc", "content": blocks }).to_string()
+    };
+    let loaded = doc(vec![text("one"), text("two")]);
+    let link = paragraph(
+        serde_json::json!({ "type": "pageLink", "attrs": { "pageId": "trip", "title": "Trip" } }),
+    );
+    let from_cli = doc(vec![text("one"), text("two"), link.clone()]);
+    for body in [&loaded, &from_cli] {
+        sqlx::query("UPDATE pages SET content = ?, content_schema_version = 1 WHERE id = 'p'")
+            .bind(body)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let saved = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(doc(vec![text("ONE"), text("two")])),
+            base_content: Some(loaded),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(saved.content, doc(vec![text("ONE"), text("two"), link]));
+    assert_eq!(saved.content_text.as_deref(), Some("ONE\ntwo"));
+    assert_eq!(saved.links, vec!["trip"]);
+    assert_eq!(saved.content_schema_version, crate::CONTENT_SCHEMA_VERSION);
+}
+
 /// Priority is the one `marks_ownership` field with no second signal behind it —
 /// `PAGE_OWNED_SQL` reads completions, tags, reminders and the occurrence sets, none
 /// of which a priority-only edit touches. Drop it from the list and a page the user
@@ -3080,7 +3267,6 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
             title: "Sneaky".into(),
             subtitle: None,
             content: "{}".into(),
-            content_text: None,
             status: "not_started".into(),
             priority: 0,
             tags: vec![],
@@ -4313,4 +4499,97 @@ async fn updating_other_fields_leaves_the_version_alone() {
     .await
     .unwrap();
     assert_eq!(updated.content_schema_version, 99);
+}
+
+async fn page_from_a_newer_build(pool: &sqlx::SqlitePool) -> Page {
+    let page = create_page_impl(pool, new_page("From the future"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 99 WHERE id = ?")
+        .bind(&page.id)
+        .execute(pool)
+        .await
+        .unwrap();
+    fetch_page(pool, &page.id).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_body_from_a_newer_build_refuses_a_content_write_and_names_the_version() {
+    let pool = test_pool().await;
+    let page = page_from_a_newer_build(&pool).await;
+
+    let err = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(r#"{"type":"doc","content":[]}"#.to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        matches!(&err, AppError::Conflict(msg) if msg.contains("99")),
+        "{err:?}"
+    );
+    let stored = fetch_page(&pool, &page.id).await.unwrap();
+    assert_eq!(stored.content, page.content);
+    assert_eq!(stored.content_schema_version, 99);
+}
+
+#[tokio::test]
+async fn a_body_from_a_newer_build_takes_its_own_body_back_and_other_fields() {
+    let pool = test_pool().await;
+    let page = page_from_a_newer_build(&pool).await;
+
+    let updated = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(page.content.clone()),
+            title: Some("renamed".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(updated.title, "renamed");
+    assert_eq!(updated.content_schema_version, 99);
+}
+
+#[tokio::test]
+async fn completing_a_head_from_a_newer_build_keeps_the_clone_at_its_version() {
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("head", "Newer head")
+        },
+    )
+    .await
+    .unwrap();
+    add_daily_rule(&pool, "head", "2026-05-21").await;
+    sqlx::query("UPDATE pages SET content_schema_version = 99 WHERE id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let result = complete_recurring_page_impl(
+        &pool,
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let clone = fetch_page(&pool, &result.clone.id).await.unwrap();
+    assert_eq!(clone.content_schema_version, 99);
 }

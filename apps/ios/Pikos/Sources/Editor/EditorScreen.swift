@@ -101,10 +101,10 @@ struct EditorScreen: View {
                 // invoked from WebKit delegate callbacks, and whether those are
                 // main-actor-isolated depends on the SDK's audit state — hopping
                 // is correct either way and costs nothing.
-                onDocumentChanged: { pageId, json, plainText in
+                onDocumentChanged: { pageId, json, _ in
                     guard editable else { return }
                     Task { @MainActor in
-                        await store.saveDocument(pageId: pageId, json: json, plainText: plainText)
+                        await store.saveDocument(pageId: pageId, json: json)
                     }
                 },
                 onSelectionChanged: { marks, nodeType, isEmpty in

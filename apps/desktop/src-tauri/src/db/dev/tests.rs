@@ -52,7 +52,6 @@ fn bare_page(title: &str) -> NewPage {
         title: title.to_string(),
         subtitle: None,
         content: "{}".to_string(),
-        content_text: None,
         status: "not_started".to_string(),
         priority: 0,
         tags: vec![],
@@ -588,7 +587,6 @@ fn page_from_export(v: &serde_json::Value, folder_map: &HashMap<String, String>)
             .get("content")
             .map(|c| c.to_string())
             .unwrap_or_else(|| "{}".to_string()),
-        content_text: s("content_text"),
         status: s("status").unwrap_or_else(|| "not_started".to_string()),
         priority: v.get("priority").and_then(|p| p.as_i64()).unwrap_or(0),
         tags: str_array("tags"),
@@ -657,7 +655,6 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     let mut page = NewPage {
         folder_id: Some(folder.id.clone()),
         content,
-        content_text: Some("hello world".to_string()),
         tags: vec!["Work".to_string(), "urgent".to_string()],
         ..bare_page("Has image")
     };

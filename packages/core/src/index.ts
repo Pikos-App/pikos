@@ -273,6 +273,7 @@ export { fuzzyMatchFolder } from "./utils/fuzzyMatchFolder";
 export {
   deriveTags,
   findRecurringOccurrenceClone,
+  isBodyFromNewerBuild,
   isDone,
   isOpen,
   toPageSummary,

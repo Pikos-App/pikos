@@ -4,6 +4,8 @@
 //! plugins, state and windows, and 100-odd lines of menu construction in the
 //! middle of it buried that.
 
+use std::time::Duration;
+
 use tauri::menu::{
     AboutMetadataBuilder, Menu, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder,
 };
@@ -17,6 +19,10 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build(handle)?;
     let check_updates = MenuItemBuilder::new("Check for Updates…")
         .id("check_updates")
+        .build(handle)?;
+    let quit = MenuItemBuilder::new("Quit Pikos")
+        .id(QUIT)
+        .accelerator("CmdOrCtrl+Q")
         .build(handle)?;
     let app_menu = SubmenuBuilder::new(handle, "Pikos")
         .about(Some(
@@ -43,7 +49,7 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .hide_others()
         .show_all()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
 
     // ── File ──────────────────────────────────────────────────────
@@ -154,6 +160,32 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()
 }
 
+const QUIT: &str = "quit";
+
+/// How long Quit waits for the window to save before the app exits anyway, so a stuck
+/// write can't keep Pikos open.
+const QUIT_DEADLINE: Duration = Duration::from_secs(3);
+
+/// Quit by closing the window, whose close handler saves every pending edit first and
+/// whose closing ends the app. The predefined Quit ended the process at once and lost
+/// up to two debounces of typing.
+fn quit<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        app.exit(0);
+        return;
+    };
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(QUIT_DEADLINE);
+        handle.exit(0);
+    });
+
+    if window.close().is_err() {
+        app.exit(0);
+    }
+}
+
 const HELP_DOCS: &str = "help_docs";
 const HELP_RELEASE_NOTES: &str = "help_release_notes";
 const HELP_BUG: &str = "help_bug";
@@ -185,6 +217,10 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let id = event.id().0.clone();
     if let Some(url) = help_url(&id) {
         let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
+        return;
+    }
+    if id == QUIT {
+        quit(app);
         return;
     }
     match id.as_str() {

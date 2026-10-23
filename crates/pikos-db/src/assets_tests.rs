@@ -14,7 +14,6 @@ fn page_with_images(title: &str, srcs: &[&str]) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: serde_json::json!({ "type": "doc", "content": images }).to_string(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],

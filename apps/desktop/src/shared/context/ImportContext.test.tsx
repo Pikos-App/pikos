@@ -39,7 +39,6 @@ function item(overrides: Partial<ImportBatchItem> = {}): ImportBatchItem {
   return {
     completedAt: null,
     content: "<p>body</p>",
-    contentText: "body",
     createdAt: null,
     folderKey: null,
     priority: 0,

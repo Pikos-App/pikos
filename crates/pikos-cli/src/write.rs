@@ -2,8 +2,8 @@
 //! indistinguishable from one the desktop app wrote.
 
 use pikos_db::{
-    extract_text_from_tiptap, fuzzy_match_folder, list_folders_impl, list_page_schedules_impl,
-    update_page_impl, update_page_schedule_impl, AppError, NewPage, NewPageSchedule, PageUpdate,
+    fuzzy_match_folder, list_folders_impl, list_page_schedules_impl, update_page_impl,
+    update_page_schedule_impl, AppError, NewPage, NewPageSchedule, PageUpdate,
 };
 use serde_json::Value;
 
@@ -20,7 +20,6 @@ pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
         title,
         subtitle: None,
         content: String::new(),
-        content_text: Some(String::new()),
         status: "not_started".to_string(),
         priority: 0,
         tags: Vec::new(),
@@ -44,9 +43,7 @@ pub async fn page_with_body(
 ) -> Result<NewPage, CliError> {
     let mut page = base_page(folder_id, title);
     if let Some(text) = body.filter(|t| !t.is_empty()) {
-        let (doc, plain) = markdown_to_tiptap(pool, text, &[]).await?;
-        page.content = doc;
-        page.content_text = Some(plain);
+        page.content = markdown_to_tiptap(pool, text, &[]).await?;
     }
     Ok(page)
 }
@@ -160,20 +157,28 @@ pub fn markdown_to_doc(markdown: &str) -> Result<Value, CliError> {
         .map_err(|pikos_core::Refused(why)| CliError::usage(why))
 }
 
-/// A markdown body → the (Tiptap doc, `content_text`) pair a page write takes, with each
-/// `[[title]]` linked to its page. `linked` is what the page linked to before this write.
+/// A markdown body → the Tiptap doc a page write takes, with each `[[title]]` linked to its
+/// page. `linked` is what the page linked to before this write.
 pub async fn markdown_to_tiptap(
     pool: &SqlitePool,
     markdown: &str,
     linked: &[String],
-) -> Result<(String, String), CliError> {
+) -> Result<String, CliError> {
+    Ok(markdown_to_linked_doc(pool, markdown, linked)
+        .await?
+        .to_string())
+}
+
+pub async fn markdown_to_linked_doc(
+    pool: &SqlitePool,
+    markdown: &str,
+    linked: &[String],
+) -> Result<Value, CliError> {
     let mut doc = markdown_to_doc(markdown)?;
     pikos_db::page_links::link_titles(pool, &mut doc, linked)
         .await
         .map_err(crate::error::classify)?;
-    let doc = doc.to_string();
-    let plain = extract_text_from_tiptap(&doc);
-    Ok((doc, plain))
+    Ok(doc)
 }
 
 #[cfg(test)]

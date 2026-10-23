@@ -4,7 +4,6 @@ import {
   ASSET_DIR,
   cleanTitle,
   detectUniqueValues,
-  extractText,
   imageRefCandidates,
   parseMarkdownVault,
   prepareCSVRows,
@@ -132,16 +131,17 @@ function wrapPlainText(text: string): string {
 
 /**
  * Resolve image references in a markdown body, copy files to workspace assets,
- * and rewrite the body with their stored paths.
+ * and rewrite the body with their stored paths. `missing` is each image path, as
+ * written, that no candidate resolved; its reference is dropped from the body.
  */
 export async function resolveImportImages(
   body: string,
   imageRefs: ImageRef[],
   vaultRoot: string
-): Promise<{ body: string; warnings: string[] }> {
-  if (imageRefs.length === 0) return { body, warnings: [] };
+): Promise<{ body: string; missing: string[] }> {
+  if (imageRefs.length === 0) return { body, missing: [] };
 
-  const warnings: string[] = [];
+  const missing: string[] = [];
   let rewritten = body;
 
   // Deduplicate by sourcePath — same image referenced multiple times should copy once
@@ -186,14 +186,13 @@ export async function resolveImportImages(
         // Speculative ref (extensionless wiki-embed) — leave as-is in the body.
         // It's probably a note transclusion, not an image.
       } else {
-        // Definite image ref that couldn't be resolved — warn and strip
-        warnings.push(`Image not found: ${ref.sourcePath}`);
+        missing.push(ref.sourcePath);
         rewritten = rewritten.replace(ref.fullMatch, "");
       }
     }
   }
 
-  return { body: rewritten, warnings };
+  return { body: rewritten, missing };
 }
 
 function rewriteImageRef(body: string, ref: ImageRef, savedPath: string): string {
@@ -287,6 +286,11 @@ async function readVaultFiles(dirPath: string): Promise<VaultReadResult> {
 
 // ─── State machine ────────────────────────────────────────────────────────────
 
+export interface MissingImage {
+  page: string;
+  image: string;
+}
+
 export type ImportState =
   | { step: "idle" }
   | { step: "parsing" }
@@ -304,6 +308,7 @@ export type ImportState =
       folderCount: number;
       pageIds: string[];
       folderIds: string[];
+      missingImages: MissingImage[];
     }
   | { step: "error"; message: string };
 
@@ -391,7 +396,8 @@ export function useImport() {
     }
   }
 
-  async function executeImport(plan: ImportPlan): Promise<boolean> {
+  /** Resolves to the images the import couldn't find, or null when it failed. */
+  async function executeImport(plan: ImportPlan): Promise<MissingImage[] | null> {
     setState({ step: "importing" });
 
     try {
@@ -408,13 +414,15 @@ export function useImport() {
       const convert = getMarkdownConverter();
 
       const batchPages: ImportBatchItem[] = [];
+      const missingImages: MissingImage[] = [];
       for (const p of plan.pages) {
         let bodyToConvert = p.body;
+        const title = cleanTitle(p.title);
 
         if (p.imageRefs.length > 0 && plan.vaultRoot) {
           const result = await resolveImportImages(bodyToConvert, p.imageRefs, plan.vaultRoot);
           bodyToConvert = result.body;
-          // Image warnings are informational — don't block import
+          for (const image of result.missing) missingImages.push({ image, page: title });
         }
 
         const rawContent = bodyToConvert ? convert(bodyToConvert) : wrapPlainText("");
@@ -424,12 +432,10 @@ export function useImport() {
         const parsedRaw = tryParseTiptapJson(rawContent, "useImport.executeImport");
         const parsed = addAssetPathsToJson(parsedRaw ?? EMPTY_TIPTAP_DOC);
         const content = JSON.stringify(parsed);
-        const contentText = extractText(parsed);
 
         batchPages.push({
           completedAt: p.completedAt,
           content,
-          contentText,
           createdAt: p.createdAt,
           folderKey: p.folderKey,
           priority: p.priority,
@@ -441,7 +447,7 @@ export function useImport() {
           sourceParentId: p.sourceParentId,
           status: p.status,
           tags: p.tags,
-          title: cleanTitle(p.title),
+          title,
           updatedAt: p.updatedAt,
         });
       }
@@ -455,11 +461,12 @@ export function useImport() {
       setState({
         folderCount: result.folderIds.length,
         folderIds: result.folderIds,
+        missingImages,
         pageCount: plan.pages.length,
         pageIds: result.pageIds,
         step: "done",
       });
-      return true;
+      return missingImages;
     } catch (e) {
       // Surface the raw cause — the import catch used to swallow it entirely
       // (only a generic user-facing message reached the UI), which is why
@@ -469,7 +476,7 @@ export function useImport() {
         message: storageErrorUserMessage(toStorageError(e), "running the import"),
         step: "error",
       });
-      return false;
+      return null;
     }
   }
 

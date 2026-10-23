@@ -1,100 +1,25 @@
-// A shared ref holds the current query + activeIndex. The
-// ProseMirror plugin reads from that ref in its decorations() callback —
-// no plugin state, no meta transactions. React owns the search state;
-// event handlers update the ref and kick a no-op transaction so ProseMirror
-// re-reads decorations.
-
 import type { Editor } from "@tiptap/core";
-import type { Node as PmNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { useEditorState } from "@tiptap/react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
 
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
-interface FindParams {
-  query: string;
-  activeIndex: number;
-}
-
-const findPluginKey = new PluginKey("findContentPopover");
-
-function buildDecorations(doc: PmNode, { activeIndex, query }: FindParams): DecorationSet {
-  if (!query) return DecorationSet.empty;
-
-  const decos: Decoration[] = [];
-  const lowerQuery = query.toLowerCase();
-  let matchIdx = 0;
-
-  doc.descendants((node, pos) => {
-    if (!node.isText || !node.text) return;
-    const text = node.text.toLowerCase();
-    let idx = 0;
-    while (idx < text.length) {
-      const found = text.indexOf(lowerQuery, idx);
-      if (found === -1) break;
-      const from = pos + found;
-      const to = from + query.length;
-      const cls = matchIdx === activeIndex ? "find-match find-match-active" : "find-match";
-      decos.push(Decoration.inline(from, to, { class: cls }));
-      matchIdx++;
-      idx = found + 1;
-    }
-  });
-
-  return DecorationSet.create(doc, decos);
-}
-
-function createFindPlugin(paramsRef: React.RefObject<FindParams>): Plugin {
-  return new Plugin({
-    key: findPluginKey,
-    props: {
-      decorations(state) {
-        return buildDecorations(state.doc, paramsRef.current);
-      },
-    },
-  });
-}
-
-function countMatches(doc: PmNode, query: string): number {
-  if (!query) return 0;
-  const lowerQuery = query.toLowerCase();
-  let count = 0;
-  doc.descendants((node) => {
-    if (!node.isText || !node.text) return;
-    const text = node.text.toLowerCase();
-    let idx = 0;
-    while (idx < text.length) {
-      const found = text.indexOf(lowerQuery, idx);
-      if (found === -1) break;
-      count++;
-      idx = found + 1;
-    }
-  });
-  return count;
-}
+import { useFindDecorations } from "../hooks/useFindDecorations";
+import { docMatches } from "../utils/findDecorations";
 
 interface FindContentPopoverProps {
   editor: Editor;
+  scroller: RefObject<HTMLElement | null>;
 }
 
-export function FindContentPopover({ editor }: FindContentPopoverProps) {
+export function FindContentPopover({ editor, scroller }: FindContentPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const paramsRef = useRef<FindParams>({ activeIndex: 0, query: "" });
-
-  useEffect(() => {
-    const plugin = createFindPlugin(paramsRef);
-    editor.registerPlugin(plugin);
-    return () => {
-      editor.unregisterPlugin(findPluginKey);
-    };
-  }, [editor]);
+  const drawMatches = useFindDecorations(editor, scroller, isOpen);
 
   useKeyboardShortcut(
     "Mod+F",
@@ -130,18 +55,16 @@ export function FindContentPopover({ editor }: FindContentPopoverProps) {
   const { totalMatches } = useEditorState({
     editor,
     selector: (ctx) => ({
-      totalMatches: countMatches(ctx.editor.state.doc, query),
+      totalMatches: docMatches(ctx.editor.state.doc, query).length,
     }),
   });
 
   const clamped = totalMatches > 0 ? activeIndex % totalMatches : 0;
 
-  // Push current search params into the ref and kick ProseMirror to redraw.
   // Called from event handlers only — never from effects or render.
   function syncDecorations(q: string, idx: number) {
     if (editor.isDestroyed) return;
-    paramsRef.current = { activeIndex: idx, query: q };
-    editor.view.dispatch(editor.state.tr);
+    drawMatches(q, idx);
     if (q) {
       requestAnimationFrame(() => {
         document

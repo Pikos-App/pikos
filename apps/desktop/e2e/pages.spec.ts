@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 import {
@@ -5,6 +6,7 @@ import {
   bridgeCall,
   createFolder,
   mod,
+  openEditorForPage,
   quickAdd,
   ringDoorbell,
   WRITE_QUEUE_DEBOUNCE_MS,
@@ -217,7 +219,6 @@ appTest(
       data: {
         completedAt: null,
         content: "",
-        contentText: "",
         folderId: null,
         lastOpenedAt: null,
         parentId: null,
@@ -242,6 +243,102 @@ appTest(
         return list.getByText("made outside").count();
       })
       .toBe(1);
+  }
+);
+
+function paragraphDoc(text: string): string {
+  return JSON.stringify({
+    content: [{ content: [{ text, type: "text" }], type: "paragraph" }],
+    type: "doc",
+  });
+}
+
+async function writeBodyOutside(app: Page, id: string, text: string) {
+  await bridgeCall(app, "update_page", {
+    id,
+    updates: { content: paragraphDoc(text) },
+  });
+}
+
+/** The stored body's text, one line per paragraph. */
+async function storedBody(app: Page, id: string): Promise<string> {
+  const answer = await bridgeCall<{ page: { content: string } }>(app, "get_page_if_newer", {
+    id,
+    known: null,
+  });
+  const doc = JSON.parse(answer.page.content) as { content?: { content?: { text?: string }[] }[] };
+  return (doc.content ?? [])
+    .map((block) => (block.content ?? []).map((run) => run.text ?? "").join(""))
+    .join("\n");
+}
+
+appTest(
+  "a body written outside the app replaces the open page's once the doorbell rings",
+  { tag: ["@CLI-17:2"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "Agent notes");
+    await quickAdd(app, "Elsewhere");
+    const body = await openEditorForPage(app, "Agent notes");
+    await app.keyboard.type("typed in the app");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    const id = (await body.getAttribute("data-page-id")) ?? "";
+
+    await writeBodyOutside(app, id, "written by an agent");
+    await expect
+      .poll(async () => {
+        await ringDoorbell(app);
+        return body.textContent();
+      })
+      .toContain("written by an agent");
+
+    await app.locator("[data-page-list-item]").getByText("Elsewhere").click();
+    await app.locator("[data-page-list-item]").getByText("Agent notes").click();
+    await expect(body).toContainText("written by an agent");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    expect(await storedBody(app, id)).toBe("written by an agent");
+  }
+);
+
+appTest(
+  "switching away from a page with nothing typed since its save leaves an outside change alone",
+  { tag: ["@CLI-17:2"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "Agent notes");
+    await quickAdd(app, "Elsewhere");
+    const body = await openEditorForPage(app, "Agent notes");
+    await app.keyboard.type("typed in the app");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    const id = (await body.getAttribute("data-page-id")) ?? "";
+
+    await writeBodyOutside(app, id, "written by an agent");
+    await app.locator("[data-page-list-item]").getByText("Elsewhere").click();
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+
+    expect(await storedBody(app, id)).toBe("written by an agent");
+  }
+);
+
+appTest(
+  "a body from a newer Pikos opens read-only and no write reaches it",
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
+    await quickAdd(app, "From the future");
+    const row = app.locator("[data-page-list-item]").filter({ hasText: "From the future" });
+    const id = (await row.getAttribute("data-page-id")) ?? "";
+    await writeBodyOutside(app, id, "written by a newer Pikos");
+    await bridgeCall(app, "bridge_mark_body_newer", { id });
+    await app.reload();
+
+    const body = await openEditorForPage(app, "From the future");
+    await expect(app.getByRole("status").getByText(/edited in a newer version/)).toBeVisible();
+    await expect(body).toHaveAttribute("contenteditable", "false");
+    await app.keyboard.type("typed anyway");
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    expect(await storedBody(app, id)).toBe("written by a newer Pikos");
+
+    await expect(writeBodyOutside(app, id, "from the CLI")).rejects.toThrow(/newer version/);
   }
 );
 
@@ -406,7 +503,7 @@ appTest.describe("with lists loaded a window at a time", () => {
 
   appTest(
     "a selected page trashed outside the app leaves the list and the selection when the bell rings",
-    { tag: ["@LIST-09:10"] },
+    { tag: ["@LIST-09:12"] },
     async ({ app, storage }) => {
       appTest.skip(storage !== "bridge", "needs the bridge to write outside the app");
       for (const title of ["keep me", "trash me", "leave me"]) await quickAdd(app, title);

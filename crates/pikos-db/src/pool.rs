@@ -5,11 +5,13 @@
 //! and rebuilds the FTS index when its definition or the derived text changes.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use pikos_recurrence::WallClock;
 use sqlx::migrate::Migrator;
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::error::{AppError, AppResult};
 
@@ -21,7 +23,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 /// how a seeded body is built. A workspace opened at an older version gets each pass it missed and
 /// an index rebuild, once. A change to the indexed columns or tokenizer needs no bump; the index
 /// rebuilds when its definition changes.
-const DERIVED_TEXT_VERSION: i64 = 3;
+const DERIVED_TEXT_VERSION: i64 = 4;
 
 /// How many pre-migration snapshots to retain. Older ones are pruned so they
 /// don't accumulate; recovery only ever needs the most recent few.
@@ -256,6 +258,58 @@ async fn too_new(path: &str) -> Option<AppError> {
     Some(AppError::TooNew { applied, supported })
 }
 
+/// Starts the message of a write refused by [`refuse_writes_once_migrated_past`], followed by the
+/// applied and supported versions, which [`AppError`]'s `From<sqlx::Error>` reads back out.
+pub(crate) const MIGRATED_PAST_MARK: &str = "pikos: migrated past this build";
+
+/// Refuse every write on `conn` once a newer Pikos has migrated the workspace past this build.
+///
+/// The open refuses a newer file, but a process that opened it first, a long-lived MCP server or
+/// the app, would go on writing with the old schema in mind. So each connection checks when the
+/// pool hands it out, and on a newer file installs a temp trigger on every table that aborts the
+/// write. Temp triggers belong to this connection alone, cost nothing until a newer build has
+/// migrated, and reach writers that issue raw SQL, which a check in each writer would not.
+///
+/// A write already waiting on the migration's lock when it commits gets through: the check runs
+/// before the statement, not inside it.
+async fn refuse_writes_once_migrated_past(conn: &mut SqliteConnection) -> Result<(), sqlx::Error> {
+    let applied: Option<i64> = sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations")
+        .fetch_one(&mut *conn)
+        .await?;
+    let supported = embedded_migration_max();
+
+    let Some(applied) = applied.filter(|applied| *applied > supported) else {
+        return Ok(());
+    };
+
+    let already_refusing: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM temp.sqlite_master WHERE type = 'trigger' AND name LIKE 'pikos_migrated_past_%')",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    if already_refusing {
+        return Ok(());
+    }
+
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM pragma_table_list WHERE schema = 'main' AND type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    for table in &tables {
+        let quoted = table.replace('"', "\"\"");
+        for op in ["INSERT", "UPDATE", "DELETE"] {
+            let sql = format!(
+                "CREATE TEMP TRIGGER \"pikos_migrated_past_{quoted}_{op}\" BEFORE {op} ON main.\"{quoted}\" \
+                 BEGIN SELECT RAISE(ABORT, '{MIGRATED_PAST_MARK} {applied} {supported}'); END"
+            );
+            sqlx::query(&sql).execute(&mut *conn).await?;
+        }
+    }
+
+    Ok(())
+}
+
 /// `PRAGMA quick_check` on the file, if it can be read at all. `Some` means the
 /// workspace is damaged and names how; `None` means the file is structurally
 /// fine and whatever went wrong upstream is the real error.
@@ -300,11 +354,13 @@ async fn integrity_failure(path: &str) -> Option<String> {
 
 /// Registers [`crate::sql_functions`] on each connection the pool opens. Any pool that runs the
 /// migrations or writes pages needs it.
+#[cfg(test)]
 pub fn with_functions(options: sqlx::sqlite::SqlitePoolOptions) -> sqlx::sqlite::SqlitePoolOptions {
     with_functions_on(options, crate::sql_functions::Clock::System)
 }
 
 /// [`with_functions`] reading the time from `clock`.
+#[cfg(any(test, feature = "test-support"))]
 pub fn with_functions_on(
     options: sqlx::sqlite::SqlitePoolOptions,
     clock: crate::sql_functions::Clock,
@@ -323,7 +379,37 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         std::fs::create_dir_all(parent)?;
     }
 
-    let pool = with_functions(sqlx::sqlite::SqlitePoolOptions::new())
+    // Before this open's own migrations have run there may be no `_sqlx_migrations` to read, and a
+    // newer file fails the migrator anyway.
+    let migrated = Arc::new(AtomicBool::new(false));
+
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .after_connect({
+            let migrated = Arc::clone(&migrated);
+            move |conn, _| {
+                let migrated = Arc::clone(&migrated);
+                Box::pin(async move {
+                    crate::sql_functions::register(conn, crate::sql_functions::Clock::System)
+                        .await?;
+                    if migrated.load(Ordering::Acquire) {
+                        refuse_writes_once_migrated_past(conn).await?;
+                    }
+                    Ok(())
+                })
+            }
+        })
+        .before_acquire({
+            let migrated = Arc::clone(&migrated);
+            move |conn, _| {
+                let migrated = Arc::clone(&migrated);
+                Box::pin(async move {
+                    if migrated.load(Ordering::Acquire) {
+                        refuse_writes_once_migrated_past(conn).await?;
+                    }
+                    Ok(true)
+                })
+            }
+        })
         .max_connections(5)
         .connect_with(
             sqlx::sqlite::SqliteConnectOptions::new()
@@ -355,6 +441,7 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         .run(&pool)
         .await
         .map_err(|e| AppError::Db(sqlx::Error::Migrate(Box::new(e))))?;
+    migrated.store(true, Ordering::Release);
 
     backfill_content_text(&pool).await?;
     crate::changes::prune_writers(&pool).await?;
@@ -370,8 +457,8 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         if stored < 2 {
             rederive_line_breaks(&pool).await?;
         }
-        if stored < 3 {
-            crate::reconciler::link_addresses_in_seeded_bodies(&pool).await?;
+        if stored < 4 {
+            crate::reconciler::rebuild_seeded_bodies(&pool).await?;
         }
 
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
@@ -560,8 +647,20 @@ async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
 /// pristine, so a builder that drifted from the projection would classify every
 /// synced page as user-edited. Links are marks, so they leave the text alone.
 pub fn build_tiptap_doc(text: &str) -> String {
-    let content: Vec<serde_json::Value> = text
-        .split('\n')
+    serde_json::json!({ "type": "doc", "content": text_paragraphs(text) }).to_string()
+}
+
+/// A calendar event's description → the document its page is seeded with: [`build_tiptap_doc`],
+/// with each run of lines starting "- " made a bullet list. Google's converter writes a list item
+/// that way, and in a plain-text description a person typed, the dashes mean the same.
+pub(crate) fn build_description_doc(text: &str) -> String {
+    let mut blocks = text_paragraphs(text);
+    bullet_dashed_paragraphs(&mut blocks);
+    serde_json::json!({ "type": "doc", "content": blocks }).to_string()
+}
+
+fn text_paragraphs(text: &str) -> Vec<serde_json::Value> {
+    text.split('\n')
         .map(|line| {
             if line.is_empty() {
                 serde_json::json!({ "type": "paragraph" })
@@ -569,8 +668,60 @@ pub fn build_tiptap_doc(text: &str) -> String {
                 serde_json::json!({ "type": "paragraph", "content": linked_runs(line, &[]) })
             }
         })
-        .collect();
-    serde_json::json!({ "type": "doc", "content": content }).to_string()
+        .collect()
+}
+
+/// Gather each run of paragraphs whose text starts "- " into a bullet list, without the dash.
+/// Returns whether anything changed.
+pub(crate) fn bullet_dashed_paragraphs(blocks: &mut Vec<serde_json::Value>) -> bool {
+    let mut changed = false;
+    let mut out: Vec<serde_json::Value> = Vec::with_capacity(blocks.len());
+    for mut block in blocks.drain(..) {
+        if !strip_list_dash(&mut block) {
+            out.push(block);
+            continue;
+        }
+
+        changed = true;
+        let item = serde_json::json!({ "type": "listItem", "content": [block] });
+        match out.last_mut() {
+            Some(list) if list["type"] == "bulletList" => {
+                list["content"].as_array_mut().unwrap().push(item);
+            }
+            _ => out.push(serde_json::json!({ "type": "bulletList", "content": [item] })),
+        }
+    }
+    *blocks = out;
+    changed
+}
+
+/// Drop the leading "- " from a paragraph that starts with one. Returns whether it did.
+fn strip_list_dash(block: &mut serde_json::Value) -> bool {
+    if block["type"] != "paragraph" {
+        return false;
+    }
+
+    let Some(runs) = block.get_mut("content").and_then(|c| c.as_array_mut()) else {
+        return false;
+    };
+    let Some(rest) = runs
+        .first()
+        .and_then(|run| run["text"].as_str())
+        .and_then(|text| text.strip_prefix("- "))
+        .map(str::to_string)
+    else {
+        return false;
+    };
+
+    if rest.is_empty() {
+        runs.remove(0);
+    } else {
+        runs[0]["text"] = rest.into();
+    }
+    if runs.is_empty() {
+        block.as_object_mut().unwrap().remove("content");
+    }
+    true
 }
 
 /// Turn every web address in the document's unlinked text into a link, keeping each run's other

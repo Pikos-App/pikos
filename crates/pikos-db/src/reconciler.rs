@@ -1399,14 +1399,13 @@ async fn insert_schedule_row(
 /// `seeded_description_hash` so a projection change re-seeds pristine bodies
 /// instead of reading the whole synced corpus as "user edited".
 ///
-/// Bump when [`crate::pool::build_tiptap_doc`] or the projection starts producing
-/// different output
-/// for a document the editor can hold — not on every edit to them, since a bump
-/// discards a precise signal for the coarse `user_modified` fallback on every synced
-/// page. The projection is two implementations, not one: the hash below is compared
-/// against `pages.content_text`, which the editor writes through TypeScript
-/// `extractText`. Both answer to `tests/fixtures/content-text-projection.json`.
-const CONTENT_TEXT_PROJECTION_VERSION: i64 = 1;
+/// Bump when [`crate::pool::build_description_doc`] or the projection starts producing
+/// different output for a document the editor can hold — not on every edit to them, since a
+/// bump discards a precise signal for the coarse `user_modified` fallback on every synced page
+/// that [`rebuild_seeded_bodies`] can't restamp. The projection is two implementations, not
+/// one: the hash below is compared against `pages.content_text`, which the editor writes
+/// through TypeScript `extractText`. Both answer to `tests/fixtures/content-text-projection.json`.
+const CONTENT_TEXT_PROJECTION_VERSION: i64 = 2;
 
 /// Seed the external description into the body, conflict-aware: (over)write only
 /// while the body is pristine, else park the withheld text in
@@ -1459,8 +1458,9 @@ async fn apply_seeded_description(
     if body_pristine {
         write_seeded_body(tx, page_id, &content_json, &projected_text, &new_hash, now).await?;
     } else {
+        // As written rather than projected, so Append builds the same list a seed would.
         sqlx::query("UPDATE page_sync SET pending_description = ? WHERE page_id = ?")
-            .bind(&projected_text)
+            .bind(desc)
             .bind(page_id)
             .execute(&mut **tx)
             .await?;
@@ -1468,16 +1468,16 @@ async fn apply_seeded_description(
     Ok(())
 }
 
-/// Link the web addresses in seeded bodies written before seeds carried links. Only a body still as
-/// seeded, its text hashing to the stored seed, since any other is the person's. Links are marks, so
-/// the text, and with it search and the seed hash, is unchanged, and `updated_at` stays put.
-pub(crate) async fn link_addresses_in_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
+/// Rebuild each body still as seeded, its text hashing to the stored seed, the way a seed is built
+/// now: web addresses linked and "- " lines a bullet list. Any other body is the person's. The hash
+/// is restamped at the current projection version, so the next description change still sees the
+/// body as untouched, and `updated_at` stays put.
+pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let rows: Vec<(String, String, String, String)> = sqlx::query_as(
         "SELECT p.id, p.content, p.content_text, ps.seeded_description_hash
          FROM pages p JOIN page_sync ps ON ps.page_id = p.id
-         WHERE ps.seeded_description_hash_version = ? AND p.content LIKE '%http%'",
+         WHERE ps.seeded_description_hash IS NOT NULL",
     )
-    .bind(CONTENT_TEXT_PROJECTION_VERSION)
     .fetch_all(pool)
     .await?;
     let mut tx = crate::replica::Uncaptured::begin(pool).await?;
@@ -1488,13 +1488,36 @@ pub(crate) async fn link_addresses_in_seeded_bodies(pool: &sqlx::SqlitePool) -> 
         let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&content) else {
             continue;
         };
-        if crate::pool::link_addresses(&mut doc) {
-            sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
-                .bind(doc.to_string())
+
+        let linked = crate::pool::link_addresses(&mut doc);
+        let listed = doc
+            .get_mut("content")
+            .and_then(|c| c.as_array_mut())
+            .is_some_and(crate::pool::bullet_dashed_paragraphs);
+        let content = doc.to_string();
+        let text = if listed {
+            crate::pool::extract_text_from_tiptap(&content)
+        } else {
+            text
+        };
+
+        if linked || listed {
+            sqlx::query("UPDATE pages SET content = ?, content_text = ? WHERE id = ?")
+                .bind(&content)
+                .bind(&text)
                 .bind(&id)
                 .execute(tx.conn())
                 .await?;
         }
+        sqlx::query(
+            "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = ?
+             WHERE page_id = ?",
+        )
+        .bind(fnv_hex(&text))
+        .bind(CONTENT_TEXT_PROJECTION_VERSION)
+        .bind(&id)
+        .execute(tx.conn())
+        .await?;
     }
     tx.commit().await?;
     Ok(())
@@ -1551,7 +1574,7 @@ async fn write_seeded_body(
 /// identically whether the editor or reconciler last wrote it — which is why the
 /// hash is over `content_text`, not the ProseMirror JSON.
 fn project_description(text: &str) -> (String, String) {
-    let doc = crate::pool::build_tiptap_doc(text);
+    let doc = crate::pool::build_description_doc(text);
     let projected = crate::pool::extract_text_from_tiptap(&doc);
     (doc, projected)
 }

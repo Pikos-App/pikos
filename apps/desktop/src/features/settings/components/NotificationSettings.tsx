@@ -119,6 +119,14 @@ export function NotificationSettings() {
     ui.openPage(pageId);
   }
 
+  function handleOpenNotificationSettings() {
+    getPlatform()
+      .openNotificationSettings()
+      .catch((e: unknown) => {
+        log.warn("openNotificationSettings failed", e instanceof Error ? e.name : "unknown");
+      });
+  }
+
   async function handleRequestPermission() {
     try {
       const granted = await getPlatform().requestNotificationPermission();
@@ -343,10 +351,14 @@ export function NotificationSettings() {
           </button>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          What Pikos sent you over the last 30 days, including anything quiet hours silenced.
+          What Pikos sent you over the last 30 days, including anything that wasn't shown.
         </p>
         <div className="rounded-lg border border-border bg-card px-4">
-          <NotificationHistory entries={history} onOpenPage={handleOpenPage} />
+          <NotificationHistory
+            entries={history}
+            onOpenNotificationSettings={handleOpenNotificationSettings}
+            onOpenPage={handleOpenPage}
+          />
         </div>
       </section>
     </div>

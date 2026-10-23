@@ -33,7 +33,6 @@ fn base_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: String::new(),
-        content_text: Some(String::new()),
         status: "not_started".into(),
         priority: 0,
         tags: Vec::new(),
@@ -321,7 +320,7 @@ async fn search_finds_body_text() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let mut p = base_page("Groceries");
-    p.content_text = Some("remember the avocado".into());
+    p.content = pikos_db::build_tiptap_doc("remember the avocado");
     seed(dbs, vec![p]).await;
     let out = cli(dbs, &["search", "avocado", "--json"]);
     assert!(out.status.success());
@@ -336,7 +335,7 @@ async fn search_pages_through_every_match_with_its_cursor() {
     let pages = (0..5)
         .map(|i| {
             let mut p = base_page(&format!("Note {i}"));
-            p.content_text = Some("remember the avocado".into());
+            p.content = pikos_db::build_tiptap_doc("remember the avocado");
             p
         })
         .collect();
@@ -1726,7 +1725,7 @@ async fn list_filters_by_priority_query_and_schedule() {
     let mut urgent = base_page("Urgent thing");
     urgent.priority = 1;
     let mut noted = base_page("Notes");
-    noted.content_text = Some("mentions an avocado".into());
+    noted.content = pikos_db::build_tiptap_doc("mentions an avocado");
     let ids = seed(dbs, vec![urgent, noted, base_page("Plain")]).await;
 
     let by_priority = json(&cli(dbs, &["list", "--priority", "1", "--json"]));
@@ -2308,11 +2307,14 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
     assert!(v["created"][0]["tags"].as_array().unwrap().is_empty());
     let id = v["created"][0]["id"].as_str().unwrap().to_string();
 
+    let text: String = scalar(
+        dbs,
+        &format!("SELECT content_text FROM pages WHERE id = '{id}'"),
+    )
+    .await;
+    assert_eq!(text, "she likes the #blue one\nask her sister");
+
     let page = json(&cli(dbs, &["read", &id, "--json"]));
-    assert_eq!(
-        page["contentText"],
-        "she likes the #blue one\nask her sister"
-    );
     let doc: Value = serde_json::from_str(page["content"].as_str().unwrap()).unwrap();
     let line = &doc["content"][0]["content"];
     assert_eq!(line[0]["text"], "she likes the #blue one");
@@ -2399,6 +2401,38 @@ async fn reading_a_page_and_writing_it_back_keeps_its_structure() {
 
     let human = String::from_utf8_lossy(&cli(dbs, &["read", &ids[0]]).stdout).to_string();
     assert!(human.contains("- Day one\n  - Museum"), "{human}");
+}
+
+#[tokio::test]
+async fn writing_a_page_its_own_body_back_leaves_it_unedited() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let page = agent_edit_page();
+    let before = page.content.clone();
+    let ids = seed(dbs, vec![page]).await;
+    mark_synced(dbs, &ids[0], "active").await;
+    let pool = open_pool(dbs).await.unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 1 WHERE id = ?")
+        .bind(&ids[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
+    let markdown = read["markdown"].as_str().unwrap().to_string();
+    let out = cli(dbs, &["update", &ids[0], "--content", &markdown, "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let content: String = scalar(dbs, "SELECT content FROM pages").await;
+    let version: i64 = scalar(dbs, "SELECT content_schema_version FROM pages").await;
+    let user_modified: i64 = scalar(dbs, "SELECT user_modified FROM page_sync").await;
+    assert_eq!(content, before);
+    assert_eq!(version, 1);
+    assert_eq!(user_modified, 0);
 }
 
 // qa: CLI-14:2

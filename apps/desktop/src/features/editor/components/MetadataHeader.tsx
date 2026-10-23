@@ -9,6 +9,7 @@ import {
   snapAnchorToRule,
   viewerStart,
 } from "@pikos/core";
+import type { JSONContent } from "@tiptap/core";
 import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -19,7 +20,9 @@ import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
+import { tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 import { useCaretAtEndOnFocus } from "../hooks/useCaretAtEndOnFocus";
 import { Byline } from "./Byline";
@@ -29,9 +32,9 @@ import { FocusTimer } from "./FocusTimer";
 interface MetadataHeaderProps {
   page: Page;
   onFocusEditor: () => void;
-  /** Appends text to the end of the body through the editor's own insert path,
-   *  so the write marks the page owned exactly as typing would. */
-  onAppendToBody: (text: string) => void;
+  /** Appends a document to the end of the body through the editor's own insert path,
+   *  so the write marks the page owned exactly as typing would. False when nothing went in. */
+  onAppendToBody: (doc: JSONContent) => boolean;
 }
 
 export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: MetadataHeaderProps) {
@@ -51,10 +54,22 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
   const { lineWidth } = useEditorSettings();
   const { flashPageBlock, requestCalendarScroll, setRightPanel } = useUI();
   const { setReferenceDate } = useCalendarDate();
+  const { storage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
 
   function handleStatusChange(status: PageStatus) {
     togglePageStatus(page, status);
+  }
+
+  // Read before the clear, which drops the text the document is built from; kept parked when it
+  // couldn't go in, such as a page switched away from while it was read.
+  async function handleAppendDescription() {
+    if (!storage) return;
+
+    const raw = await storage.pendingDescriptionDocument(page.id);
+    const doc = tryParseTiptapJson(raw, "appending a calendar description");
+    const isResolved = raw === null || (doc !== null && onAppendToBody(doc));
+    if (isResolved) await clearPendingDescription(page.id);
   }
 
   function handleFolderChange(folderId: string | null) {
@@ -240,10 +255,7 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
         )}
         {showDescriptionNotice && (
           <CalendarDescriptionNotice
-            onAppend={() => {
-              onAppendToBody(page.pendingDescription!);
-              void clearPendingDescription(page.id);
-            }}
+            onAppend={() => void handleAppendDescription()}
             onDismiss={() => void clearPendingDescription(page.id)}
             text={page.pendingDescription!}
           />

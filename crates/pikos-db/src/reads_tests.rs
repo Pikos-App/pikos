@@ -576,7 +576,6 @@ async fn linking(pool: &SqlitePool, title: &str, targets: &[&str]) -> String {
             title: title.to_string(),
             subtitle: None,
             content: content.to_string(),
-            content_text: None,
             status: "not_started".to_string(),
             priority: 0,
             tags: vec![],

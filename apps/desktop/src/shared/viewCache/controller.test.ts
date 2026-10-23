@@ -337,7 +337,7 @@ describe("ViewCacheController after its own writes", () => {
     const before = controller.store.get(id)?.rowSeq;
     const fetches = controller.listFetches;
 
-    await adapter.updatePage(id, { content: '{"type":"doc"}', contentText: "typed" });
+    await adapter.updatePage(id, { content: '{"type":"doc"}' });
     await settle();
     expect(controller.listFetches).toBe(fetches);
     expect(controller.store.get(id)?.rowSeq).not.toBe(before);
@@ -462,10 +462,10 @@ describe("ViewCacheController bodies", () => {
   it("keeps a held body current with what the app saved to it", async () => {
     const { adapter, controller, ids, reads } = await withPages(1);
     await controller.body(ids[0]!);
-    await adapter.updatePage(ids[0]!, { content: '{"type":"doc","content":[]}', contentText: "x" });
+    await adapter.updatePage(ids[0]!, { content: '{"type":"doc","content":[]}' });
     await settle();
     const page = await controller.body(ids[0]!);
-    expect(page?.contentText).toBe("x");
+    expect(page?.content).toBe('{"type":"doc","content":[]}');
     expect(reads).toEqual({ full: 1, newer: 0 });
   });
 });

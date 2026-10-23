@@ -473,7 +473,6 @@ fn new_page(title: &str) -> crate::pages::NewPage {
         title: title.into(),
         subtitle: None,
         content: "{}".into(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],

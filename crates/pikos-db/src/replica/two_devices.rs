@@ -68,7 +68,6 @@ pub fn new_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: "{}".into(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],

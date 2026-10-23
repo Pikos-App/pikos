@@ -278,6 +278,22 @@ pub async fn clear_sync_cursors_impl(pool: &sqlx::SqlitePool, account_id: &str) 
     .await
 }
 
+/// A withheld upstream description as the document a seed would have written, addresses linked,
+/// for Append to add to the body. `None` once nothing is parked.
+pub async fn pending_description_document_impl(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> AppResult<Option<String>> {
+    let pending: Option<String> =
+        sqlx::query_scalar("SELECT pending_description FROM page_sync WHERE page_id = ?")
+            .bind(page_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
+
+    Ok(pending.map(|text| crate::pool::build_description_doc(&text)))
+}
+
 /// Drop a withheld upstream description once the user has dealt with it — they
 /// folded it into the body, or decided against it. Both resolutions clear the
 /// same column; nothing distinguishes them afterwards, and nothing needs to.
