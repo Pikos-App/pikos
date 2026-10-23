@@ -35,7 +35,7 @@ const releases = await Promise.all(
 
     <div class="mt-12 space-y-16">
       {releases.map(({ Content, badge, isoDate, version }) => (
-        <article>
+        <article id={version}>
           <div class="flex items-center gap-3">
             <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{version}</h2>
             {badge && (

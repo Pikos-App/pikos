@@ -50,7 +50,7 @@ NEW="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${NEW}"
 
 # One notes file per version, which the site, the GitHub release and the update dialog all show
-# (PKOS-0194). The release workflow reads it from the tag.
+# (PKOS-0198). The release workflow reads it from the tag.
 NOTES_FILE="$ROOT/apps/marketing/src/content/release-notes/${NEW}.md"
 notes_body() { awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$NOTES_FILE"; }
 if [ ! -f "$NOTES_FILE" ] || [ -z "$(notes_body | tr -d '[:space:]')" ]; then
@@ -125,7 +125,8 @@ fi
 # explicit human review of the notes before proceeding.
 echo "Bumping $CURRENT → $NEW"
 echo ""
-echo "Release notes (site, GitHub and the update dialog):"
+echo "Release notes. The site shows all of it; the update dialog and GitHub show what's above"
+echo "<!-- more -->, with a link to the rest (PKOS-0198):"
 echo "───────────────────────────────────"
 notes_body
 echo "───────────────────────────────────"

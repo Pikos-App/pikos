@@ -68,7 +68,10 @@ describe("every published release note", () => {
   });
 
   it.each(Object.entries(PUBLISHED))("%s draws with no Markdown left over", (_path, file) => {
-    const { container } = render(<ReleaseNotes body={file.replace(FRONT_MATTER, "")} />);
+    const forDialog = file.replace(FRONT_MATTER, "").split(/^<!-- more -->$/m)[0]!;
+    const { container } = render(
+      <ReleaseNotes body={`${forDialog}\n[See everything](https://pikos.app/release-notes)`} />
+    );
 
     for (const block of container.querySelectorAll("p, li")) {
       expect(block.textContent).not.toMatch(UNDRAWN_MARKDOWN);

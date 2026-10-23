@@ -403,6 +403,13 @@ jobs:
             echo "::error::${FILE} is missing or empty at ${GITHUB_REF_NAME}"
             exit 1
           fi
+          # The update dialog and the GitHub release show the highlights above `<!-- more -->` and
+          # link to the full entry on the site, which renders the whole file.
+          if printf '%s\n' "$NOTES" | grep -qx '<!-- more -->'; then
+            NOTES="$(printf '%s\n' "$NOTES" | awk '/^<!-- more -->$/ {exit} {print}')
+
+          [See everything in ${VERSION%%-*}](https://pikos.app/release-notes#${VERSION%%-*})"
+          fi
           # Store as multiline output
           {
             echo "body<<NOTES_EOF"
