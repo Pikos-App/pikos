@@ -22,8 +22,9 @@ import { WriteMirror } from "./writeMirror";
 
 const log = createLogger("viewCache");
 
-/** Fields no list orders, groups, filters or counts by: a write of only these refetches its row. */
-const ROW_ONLY_FIELDS = new Set(["content", "lastOpenedAt"]);
+/** Fields no list orders, groups, filters or counts by, and the body a save was typed over, which
+ *  is a condition on the write rather than a field: a write of only these refetches its row. */
+const ROW_ONLY_FIELDS = new Set(["baseContent", "content", "lastOpenedAt"]);
 
 /** The page an `updatePage` of only row-only fields wrote, else null. */
 function rowOnlyWrite(method: string, args: unknown[]): string | null {

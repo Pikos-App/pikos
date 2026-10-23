@@ -337,7 +337,7 @@ describe("ViewCacheController after its own writes", () => {
     const before = controller.store.get(id)?.rowSeq;
     const fetches = controller.listFetches;
 
-    await adapter.updatePage(id, { content: '{"type":"doc"}' });
+    await adapter.updatePage(id, { baseContent: "", content: '{"type":"doc"}' });
     await settle();
     expect(controller.listFetches).toBe(fetches);
     expect(controller.store.get(id)?.rowSeq).not.toBe(before);
