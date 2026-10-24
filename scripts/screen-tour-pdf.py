@@ -5,8 +5,9 @@
         [--layout phone|window] [--not-captured TEXT ...] [--work-dir DIR]
 
 The directory is either what `xcresulttool export attachments` writes (the iOS ScreenTour, read
-through its manifest) or plain PNGs named `section|order|title.png` beside `missed*.txt` notes (the
-desktop tour). Screenshots are scaled down with `sips` and an HTML page is printed to PDF with
+through its manifest) or plain PNGs named `section|order|title.png` beside `missed*.txt` notes and
+`evidence*.json` lists of the functionality-matrix rows each shot shows (the desktop tour), which
+end the PDF as an index of those rows. Screenshots are scaled down with `sips` and an HTML page is printed to PDF with
 headless Chrome. Nothing here needs Python packages beyond the standard library.
 """
 
@@ -18,6 +19,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+import matrix_rows
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 NAME = re.compile(r"^(?P<section>[^|]+)\|(?P<order>\d+)\|(?P<title>.+?)(?:_\d+_[0-9A-Fa-f-]{36})?(?:\.\w+)?$")
@@ -63,7 +66,7 @@ def shot(name: str, path: Path):
 
 
 def load_shots(source: Path):
-    shots, missed = [], []
+    shots, missed, evidence = [], [], {}
     manifest = source / "manifest.json"
     if manifest.exists():
         for test in json.loads(manifest.read_text()):
@@ -77,10 +80,14 @@ def load_shots(source: Path):
     else:
         for note in sorted(source.glob("missed*.txt")):
             missed.extend(line for line in note.read_text().splitlines() if line.strip())
+        for note in source.glob("evidence*.json"):
+            listed = json.loads(note.read_text())
+            for item in listed["shots"]:
+                evidence[(listed["section"], item["order"])] = item["rows"]
         shots = [found for path in source.glob("*.png") if (found := shot(path.name, path))]
     # By the section's leading number, not its name: past nine, a string sort reads "10" before "2".
     shots.sort(key=lambda s: (section_number(s["section"]), s["section"], s["order"]))
-    return shots, missed
+    return shots, missed, evidence
 
 
 def scaled(shot, images: Path, longest_side: int) -> str:
@@ -103,7 +110,44 @@ def section_label(section: str) -> str:
     return f"{number}. {name}"
 
 
-def build_html(shots, missed, subtitle, images: Path, title: str, doc_title: str, layout, not_captured) -> str:
+def shot_number(section: str, order: int) -> str:
+    return f"{section.split()[0]}.{order:02d}"
+
+
+def evidence_index(shots, evidence) -> str:
+    """The matrix rows the shots show, and the rows none does, so a gap is on the page."""
+    if not evidence:
+        return ""
+
+    shown = {}
+    for shot in shots:
+        for row_id in evidence.get((shot["section"], shot["order"]), []):
+            shown.setdefault(row_id, []).append(shot_number(shot["section"], shot["order"]))
+
+    listed, unshown = [], {}
+    for row in matrix_rows.rows():
+        if row["id"] in shown:
+            listed.append(
+                f"<li><b>{row['id']}</b> {html.escape(row['name'])} "
+                f"<span>{html.escape(row['section'])} · {', '.join(shown[row['id']])}</span></li>"
+            )
+        else:
+            unshown.setdefault(row["section"], []).append(row["id"])
+    gaps = "".join(
+        f"<li><b>{html.escape(section)}</b> <span>{', '.join(ids)}</span></li>" for section, ids in unshown.items()
+    )
+    return f"""<section class="page">
+  <h2>Functionality matrix rows these pages show</h2>
+  <p class="sub">A page shows that a control is there, missing, or worded a certain way. It never shows
+  that the control works: a picture of a menu is not evidence that its action does what it says.</p>
+  <ul class="contents">{''.join(listed)}</ul>
+  <h3>Rows no page shows</h3>
+  <p class="sub">Most are behaviour no still can show; the rest are affordances the tour has not reached.</p>
+  <ul class="contents">{gaps}</ul>
+</section>"""
+
+
+def build_html(shots, missed, evidence, subtitle, images: Path, title: str, doc_title: str, layout, not_captured) -> str:
     sections = []
     for shot in shots:
         if not sections or sections[-1][0] != shot["section"]:
@@ -132,7 +176,7 @@ def build_html(shots, missed, subtitle, images: Path, title: str, doc_title: str
             chunk = items[start:start + per_page]
             figures = "".join(
                 f"<figure><img src='images/{scaled(s, images, layout['longest_side'])}'>"
-                f"<figcaption><span class='num'>{name.split()[0]}.{s['order']:02d}</span>"
+                f"<figcaption><span class='num'>{shot_number(name, s['order'])}</span>"
                 f"{html.escape(s['title'])}</figcaption></figure>"
                 for s in chunk
             )
@@ -171,6 +215,7 @@ figcaption {{ margin-top: 8px; font-size: 11px; line-height: 1.35; text-align: c
   {missed_block}
 </section>
 {''.join(pages)}
+{evidence_index(shots, evidence)}
 </body></html>"""
 
 
@@ -186,7 +231,7 @@ def main() -> int:
     parser.add_argument("--work-dir", type=Path, help="where the scaled images and HTML go (default: beside the PDF)")
     args = parser.parse_args()
 
-    shots, missed = load_shots(args.screenshots)
+    shots, missed, evidence = load_shots(args.screenshots)
     if not shots:
         print("no tour screenshots in the export", file=sys.stderr)
         return 1
@@ -195,7 +240,7 @@ def main() -> int:
     images = work / "images"
     images.mkdir(parents=True, exist_ok=True)
     page = work / "index.html"
-    page.write_text(build_html(shots, missed, args.subtitle, images, args.title, args.output.stem,
+    page.write_text(build_html(shots, missed, evidence, args.subtitle, images, args.title, args.output.stem,
                                LAYOUTS[args.layout], args.not_captured or NOT_CAPTURED))
 
     subprocess.run(

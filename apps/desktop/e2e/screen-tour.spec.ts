@@ -31,8 +31,21 @@ const SMALL = { height: 900, width: 720 };
 
 type Prefs = Record<string, unknown>;
 
+/** A row id of docs/functionality-matrix.md; scripts/matrix_rows.py fails on one the matrix lacks. */
+type MatrixRow = `F${number}`;
+
+interface ShotOptions {
+  pointer?: "keep" | "park";
+  /**
+   * The matrix rows whose affordance this shot shows: a control present, absent or worded a
+   * certain way. A still never shows that the control works, so a row is cited for what it draws.
+   */
+  rows?: readonly MatrixRow[];
+}
+
 class Tour {
   private readonly missed: string[] = [];
+  private readonly evidence: { order: number; rows: readonly MatrixRow[] }[] = [];
 
   private constructor(
     readonly page: Page,
@@ -87,11 +100,12 @@ class Tour {
     order: number,
     title: string,
     reach: () => Promise<unknown>,
-    pointer: "keep" | "park" = "park"
+    { pointer = "park", rows = [] }: ShotOptions = {}
   ): Promise<void> {
     try {
       await reach();
       await this.shot(order, title, pointer);
+      if (rows.length > 0) this.evidence.push({ order, rows });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // eslint-disable-next-line no-control-regex -- Playwright colours its messages with ANSI escapes
@@ -102,6 +116,10 @@ class Tour {
 
   finish(): void {
     writeFileSync(join(this.dir, `missed-${this.section}.txt`), this.missed.join("\n"));
+    writeFileSync(
+      join(this.dir, `evidence-${this.section}.json`),
+      JSON.stringify({ section: this.section, shots: this.evidence })
+    );
   }
 }
 
@@ -217,7 +235,7 @@ test("1 Lists @tour", async ({ page }) => {
       9,
       "Page menu: Move to Folder",
       () => page.getByRole("menuitem", { name: "Move to folder" }).hover(),
-      "keep"
+      { pointer: "keep" }
     );
     await t.capture(10, "Rename, in place", async () => {
       await t.launch(TODAY);
@@ -231,7 +249,9 @@ test("1 Lists @tour", async ({ page }) => {
       await row(page, "Order FlexiSpot E7 frame").click({ modifiers: [MODIFIER] });
       await row(page, "Call mom").click({ modifiers: [MODIFIER] });
     });
-    await t.capture(12, "Page menu on a selection", () => rightClick(row(page, "Call mom")));
+    await t.capture(12, "Page menu on a selection", () => rightClick(row(page, "Call mom")), {
+      rows: ["F96"],
+    });
 
     await t.capture(13, "Relative dates", async () => {
       await t.launch(TODAY);
@@ -250,7 +270,7 @@ test("1 Lists @tour", async ({ page }) => {
         );
         await dragTo(page, row(page, "Book the car in for a service"), target);
       },
-      "keep"
+      { pointer: "keep" }
     );
     await page.mouse.up();
 
@@ -378,7 +398,7 @@ test("3 Calendar @tour", async ({ page }) => {
         await page.getByRole("button", { name: "Month view" }).hover();
         await expect(page.getByRole("tooltip").first()).toBeVisible();
       },
-      "keep"
+      { pointer: "keep" }
     );
 
     await t.capture(10, "Block popover", async () => {
@@ -437,7 +457,7 @@ test("3 Calendar @tour", async ({ page }) => {
           y: three.y + 8,
         });
       },
-      "keep"
+      { pointer: "keep" }
     );
     await page.mouse.up();
 
@@ -485,10 +505,15 @@ test("4 Search @tour", async ({ page }) => {
       await search.fill("snorkel");
       await expect(page.getByText("No pages found")).toBeVisible();
     });
-    await t.capture(6, "Command mode", async () => {
-      await search.fill("> ");
-      await page.waitForTimeout(300);
-    });
+    await t.capture(
+      6,
+      "Command mode",
+      async () => {
+        await search.fill("> ");
+        await page.waitForTimeout(300);
+      },
+      { rows: ["F93"] }
+    );
     await t.capture(7, "Commands, filtered", async () => {
       await search.fill("> cal");
       await page.waitForTimeout(300);
@@ -621,8 +646,11 @@ test("6 Settings @tour", async ({ page }) => {
         .click();
       await expect(settings.getByRole("button", { name: /^Account actions for/ })).toBeVisible();
     });
-    await t.capture(10, "Account actions", () =>
-      settings.getByRole("button", { name: /^Account actions for/ }).click()
+    await t.capture(
+      10,
+      "Account actions",
+      () => settings.getByRole("button", { name: /^Account actions for/ }).click(),
+      { rows: ["F115", "F116", "F117", "F118"] }
     );
     await t.capture(11, "Data", () => openSection("Data"));
     await further(12, "Data, further down");
@@ -659,7 +687,7 @@ test("7 Folders and trash @tour", async ({ page }) => {
         await t.launch(TODAY);
         await sidebar(page).getByText("Folders", { exact: true }).hover();
       },
-      "keep"
+      { pointer: "keep" }
     );
     await t.capture(2, "Folder sort menu", () =>
       sidebar(page).getByRole("button", { name: "Sort folders" }).click()
@@ -672,7 +700,7 @@ test("7 Folders and trash @tour", async ({ page }) => {
       4,
       "Folder menu: Color",
       () => page.getByRole("menuitem", { name: "Color" }).hover(),
-      "keep"
+      { pointer: "keep", rows: ["F72"] }
     );
     await t.capture(5, "Rename folder, in place", async () => {
       await t.launch(TODAY);
@@ -788,44 +816,82 @@ test("10 A calendar's pages @tour", async ({ page }) => {
       await openView(page, name);
     }
 
-    await t.capture(1, "A calendar's folder in the list", () => openCalendarFolder("Personal"));
-    await t.capture(2, "A mirror's menu, without the actions the calendar owns", () =>
-      rightClick(row(page, mirror))
+    const menu: ShotOptions = { rows: ["F3", "F10", "F13", "F18"] };
+    const editor: ShotOptions = { rows: ["F2", "F3", "F15", "F16"] };
+
+    await t.capture(1, "A calendar's folder in the list", () => openCalendarFolder("Personal"), {
+      rows: ["F76"],
+    });
+    await t.capture(
+      2,
+      "A mirror's menu, without the actions the calendar owns",
+      () => rightClick(row(page, mirror)),
+      menu
     );
-    await t.capture(3, "A detached page's menu, with every action back", async () => {
-      await openCalendarFolder("Work");
-      await rightClick(row(page, detached));
-    });
-    await t.capture(4, "A calendar's folder menu", async () => {
-      await page.keyboard.press("Escape");
-      await rightClick(sidebar(page).getByRole("button", { exact: true, name: "Personal" }));
-    });
-    await t.capture(5, "A mirror in the editor", async () => {
-      await openCalendarFolder("Personal");
-      await row(page, mirror).click();
-      await expect(page.getByRole("textbox", { name: "Page content" })).toBeVisible();
-      await page.waitForTimeout(400);
-    });
-    await t.capture(6, "A mirror's block on the calendar", async () => {
-      await t.launch(CALENDAR, origin);
-      await calendar
-        .getByRole("button", { name: new RegExp(`^${mirror},`) })
-        .first()
-        .click();
-      await expect(page.getByRole("button", { name: "Open page" })).toBeVisible();
-    });
-    await t.capture(7, "A detached page in the editor", async () => {
-      await openCalendarFolder("Work");
-      await row(page, detached).click();
-      await expect(page.getByRole("textbox", { name: "Page content" })).toBeVisible();
-      await page.waitForTimeout(400);
-    });
-    await t.capture(8, "Settings, with the calendar connected", async () => {
-      await t.launch(TODAY, origin);
-      await page.keyboard.press(`${MODIFIER}+,`);
-      await page.getByRole("button", { exact: true, name: "Calendar sync" }).click();
-      await page.waitForTimeout(500);
-    });
+    await t.capture(
+      3,
+      "A detached page's menu, with every action back",
+      async () => {
+        await openCalendarFolder("Work");
+        await rightClick(row(page, detached));
+      },
+      menu
+    );
+    await t.capture(
+      4,
+      "A calendar's folder menu",
+      async () => {
+        await page.keyboard.press("Escape");
+        await rightClick(sidebar(page).getByRole("button", { exact: true, name: "Personal" }));
+      },
+      { rows: ["F71", "F72", "F74"] }
+    );
+    await t.capture(
+      5,
+      "A mirror in the editor",
+      async () => {
+        await openCalendarFolder("Personal");
+        await row(page, mirror).click();
+        await expect(page.getByRole("textbox", { name: "Page content" })).toBeVisible();
+        await page.waitForTimeout(400);
+      },
+      editor
+    );
+    await t.capture(
+      6,
+      "A mirror's block on the calendar",
+      async () => {
+        await t.launch(CALENDAR, origin);
+        await calendar
+          .getByRole("button", { name: new RegExp(`^${mirror},`) })
+          .first()
+          .click();
+        await expect(page.getByRole("button", { name: "Open page" })).toBeVisible();
+      },
+      { rows: ["F15", "F16"] }
+    );
+    await t.capture(
+      7,
+      "A detached page in the editor",
+      async () => {
+        await openCalendarFolder("Work");
+        await row(page, detached).click();
+        await expect(page.getByRole("textbox", { name: "Page content" })).toBeVisible();
+        await page.waitForTimeout(400);
+      },
+      editor
+    );
+    await t.capture(
+      8,
+      "Settings, with the calendar connected",
+      async () => {
+        await t.launch(TODAY, origin);
+        await page.keyboard.press(`${MODIFIER}+,`);
+        await page.getByRole("button", { exact: true, name: "Calendar sync" }).click();
+        await page.waitForTimeout(500);
+      },
+      { rows: ["F75"] }
+    );
   });
 });
 
