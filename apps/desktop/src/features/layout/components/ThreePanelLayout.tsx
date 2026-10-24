@@ -19,13 +19,12 @@ import { useWindowWidth } from "@/shared/hooks/useWindowWidth";
 
 import { useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
+import { PANEL_SPRING, usePanelWidthMotion } from "../hooks/usePanelWidthMotion";
 import { useThreePanelDnD } from "../hooks/useThreePanelDnD";
 import { EditorPanel } from "./EditorPanel";
 import { MiddlePanel } from "./MiddlePanel";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
-
-const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 const LEFT_PANEL = { defaultWidth: 180, max: 320, min: 180 };
 const MID_PANEL = { defaultWidth: 280, max: 480, min: 240 };
@@ -87,6 +86,8 @@ export function ThreePanelLayout() {
     ceiling: windowWidth - CALENDAR_MIN_WIDTH - leftOccupies,
     storageKey: STORAGE_KEYS.midPanelWidth,
   });
+  const leftWidth = usePanelWidthMotion(left.width, leftHidden || hideSidebar);
+  const midWidth = usePanelWidthMotion(mid.width, leftHidden);
   const {
     activeFolderData,
     activePageData,
@@ -127,10 +128,7 @@ export function ThreePanelLayout() {
         <div className="relative flex min-h-0 flex-1">
           {/* Left folder sidebar — hidden at md/sm or when manually collapsed. */}
           <motion.div
-            animate={{
-              opacity: leftHidden || hideSidebar ? 0 : 1,
-              width: leftHidden || hideSidebar ? 0 : left.width,
-            }}
+            animate={{ opacity: leftHidden || hideSidebar ? 0 : 1 }}
             className={cn(
               "h-full shrink-0 overflow-hidden",
               leftHidden || hideSidebar ? "pointer-events-none" : "pointer-events-auto"
@@ -140,6 +138,7 @@ export function ThreePanelLayout() {
             // taking Tab focus and stays in the accessibility tree while nothing
             // is on screen. `pointer-events-none` only stops the mouse.
             inert={leftHidden || hideSidebar}
+            style={{ width: leftWidth }}
             transition={PANEL_SPRING}
           >
             <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
@@ -148,15 +147,13 @@ export function ThreePanelLayout() {
           {/* Middle page list — inline at xl/lg/md, hidden at sm (rendered as overlay below). */}
           {!pageListOverlay && (
             <motion.div
-              animate={{
-                opacity: leftHidden ? 0 : 1,
-                width: leftHidden ? 0 : mid.width,
-              }}
+              animate={{ opacity: leftHidden ? 0 : 1 }}
               className={cn(
                 "h-full shrink-0 overflow-hidden",
                 leftHidden ? "pointer-events-none" : "pointer-events-auto"
               )}
               inert={leftHidden}
+              style={{ width: midWidth }}
               transition={PANEL_SPRING}
             >
               <MiddlePanel onResizeStart={mid.onResizeStart} width={mid.width} />
