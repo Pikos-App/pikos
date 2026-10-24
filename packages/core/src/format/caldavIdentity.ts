@@ -24,6 +24,27 @@ export function caldavBaseUrl(typed: string): string {
   }
 }
 
+const LOOPBACK_HOST = /^(localhost|127(\.\d{1,3}){3}|\[::1\])$/;
+
+/**
+ * Whether connecting to `typed` sends the app password unencrypted over a network: the client
+ * sends it as Basic auth on the first request, so plain `http://` to any host but this machine
+ * puts it on the wire in the clear.
+ */
+export function caldavSendsPasswordInClear(typed: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(caldavBaseUrl(typed));
+  } catch {
+    return false;
+  }
+
+  const isPlainHttp = url.protocol === "http:";
+  const isThisMachine = LOOPBACK_HOST.test(url.hostname);
+
+  return isPlainHttp && !isThisMachine;
+}
+
 /**
  * The identity a CalDAV account is matched by on reconnect: `username · base URL`.
  *

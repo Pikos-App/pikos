@@ -160,6 +160,23 @@ describe("AddAccountDialog", () => {
     expect(screen.getByText("Needs an app password.")).toBeInTheDocument();
   });
 
+  // qa: SYNC-33
+  it("warns that plain http to another machine sends the password unencrypted", () => {
+    render();
+    fireEvent.click(screen.getByText("CalDAV"));
+    const url = screen.getByLabelText("Server URL");
+    const warning = /password crosses the network unencrypted/;
+
+    fireEvent.change(url, { target: { value: "http://nas.local:5232" } });
+    expect(screen.getByText(warning)).toBeInTheDocument();
+
+    fireEvent.change(url, { target: { value: "https://nas.local:5232" } });
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
+
+    fireEvent.change(url, { target: { value: "http://localhost:5232" } });
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
+  });
+
   it("submits trimmed credentials", async () => {
     const onConnect = vi.fn().mockResolvedValue(undefined);
     render({ onConnect });

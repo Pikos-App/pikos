@@ -126,7 +126,11 @@ export {
   PRIORITY_LABELS,
 } from "./constants/priorities";
 export * from "./errors";
-export { caldavAccountIdentity, caldavBaseUrl } from "./format/caldavIdentity";
+export {
+  caldavAccountIdentity,
+  caldavBaseUrl,
+  caldavSendsPasswordInClear,
+} from "./format/caldavIdentity";
 // ── Date/time formatting for chips, labels and pickers ──
 export {
   computeEndTimeLabel,

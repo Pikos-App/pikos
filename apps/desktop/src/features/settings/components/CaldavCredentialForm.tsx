@@ -3,6 +3,8 @@
 // same busy-aware action row. Each dialog keeps its own title, description, and
 // submit callback.
 
+import { caldavSendsPasswordInClear } from "@pikos/core";
+
 import { Button } from "@/components/ui/button";
 
 import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
@@ -72,6 +74,11 @@ export function CaldavCredentialForm({
               value={server.url}
             />
           </label>
+          {caldavSendsPasswordInClear(server.url) && (
+            <p className="-mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+              Without https://, your password crosses the network unencrypted.
+            </p>
+          )}
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Username</span>
             <input
