@@ -756,9 +756,8 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("UPDATE pages SET content = '{\"edited\":true}' WHERE id = ?")
-        .bind(&page_id)
-        .execute(&pool)
+    let edited = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Mine"}]}]}"#;
+    pikos_db::page_chunks::write_body(&pool, &page_id, edited)
         .await
         .unwrap();
 
@@ -805,15 +804,8 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
             .unwrap();
     assert_eq!(state2, "active", "re-link reactivates the same row");
     assert!(user_modified, "ownership preserved across reconnect");
-    let content: String = sqlx::query_scalar("SELECT content FROM pages WHERE id = ?")
-        .bind(&page_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        content, "{\"edited\":true}",
-        "user body preserved across reconnect"
-    );
+    let page = pikos_db::get_page(&pool, &page_id).await.unwrap().unwrap();
+    assert_eq!(page.content, edited, "user body preserved across reconnect");
 }
 
 // Reconnecting an account that's still active (never disconnected) must refresh

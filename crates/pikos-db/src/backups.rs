@@ -231,7 +231,7 @@ async fn renew_epoch(workspace_path: &str) -> AppResult<()> {
 
 /// Device sync's state on the workspace a restore is about to replace, read before the file goes.
 async fn sync_before_restore(workspace_path: &str) -> AppResult<Option<crate::replica::Displaced>> {
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let pool = crate::pool::with_functions(sqlx::sqlite::SqlitePoolOptions::new())
         .max_connections(1)
         .connect_with(
             sqlx::sqlite::SqliteConnectOptions::new()

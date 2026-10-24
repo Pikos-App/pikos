@@ -173,7 +173,9 @@ async fn page_content_text(pool: &sqlx::SqlitePool, page_id: &str) -> String {
 }
 
 async fn page_content(pool: &sqlx::SqlitePool, page_id: &str) -> String {
-    sqlx::query_scalar("SELECT content FROM pages WHERE id = ?")
+    let body = crate::page_chunks::body_sql("pages.id");
+    // sql-ok: body_sql is built from a compile-time constant
+    sqlx::query_scalar(&format!("SELECT {body} FROM pages WHERE id = ?"))
         .bind(page_id)
         .fetch_one(pool)
         .await
@@ -4785,10 +4787,12 @@ async fn upgrading_links_the_addresses_in_a_seed_left_as_written() {
         serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
     }).collect::<Vec<_>>() })
     .to_string();
-    sqlx::query("UPDATE pages SET content = ?, updated_at = '2026-01-01T00:00:00Z' WHERE id = ?")
-        .bind(&unlinked)
+    sqlx::query("UPDATE pages SET updated_at = '2026-01-01T00:00:00Z' WHERE id = ?")
         .bind(&untouched)
         .execute(&pool)
+        .await
+        .unwrap();
+    crate::page_chunks::write_body(&pool, &untouched, &unlinked)
         .await
         .unwrap();
 
@@ -4812,10 +4816,7 @@ async fn upgrading_a_seed_is_not_sent_to_other_devices_as_an_edit() {
         serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
     }).collect::<Vec<_>>() })
     .to_string();
-    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
-        .bind(&unlinked)
-        .bind(&untouched)
-        .execute(&pool)
+    crate::page_chunks::write_body(&pool, &untouched, &unlinked)
         .await
         .unwrap();
     sqlx::query("DELETE FROM replica_ops")
@@ -4838,10 +4839,7 @@ async fn upgrading_leaves_a_body_the_person_edited_as_it_is() {
     let pool = setup().await;
     let page_id = seed_invite(&pool).await;
     let edited = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Mine: https://example.com/plan"}]}]}"#;
-    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
-        .bind(edited)
-        .bind(&page_id)
-        .execute(&pool)
+    crate::page_chunks::write_body(&pool, &page_id, edited)
         .await
         .unwrap();
     simulate_user_body_edit(&pool, &page_id, "Mine: https://example.com/plan").await;
@@ -4930,15 +4928,16 @@ async fn seed_agenda_as_dashed_paragraphs(pool: &sqlx::SqlitePool) -> String {
         .unwrap();
     let (page_id, _, _) = only_page_sync(pool).await;
     sqlx::query(
-        "UPDATE pages SET content = ?, content_text = ?, updated_at = '2026-01-01T00:00:00Z'
-         WHERE id = ?",
+        "UPDATE pages SET content_text = ?, updated_at = '2026-01-01T00:00:00Z' WHERE id = ?",
     )
-    .bind(crate::build_tiptap_doc(AGENDA))
     .bind(AGENDA)
     .bind(&page_id)
     .execute(pool)
     .await
     .unwrap();
+    crate::page_chunks::write_body(pool, &page_id, &crate::build_tiptap_doc(AGENDA))
+        .await
+        .unwrap();
     sqlx::query(
         "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = 1
          WHERE page_id = ?",

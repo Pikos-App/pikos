@@ -4,9 +4,9 @@ use serde_json::json;
 
 async fn page(pool: &SqlitePool, id: &str, title: &str) {
     sqlx::query(
-        "INSERT INTO pages (id, title, content, content_text, status, priority, tags, sort_order,
+        "INSERT INTO pages (id, title, content_text, status, priority, tags, sort_order,
            created_at, updated_at)
-         VALUES (?, ?, '{}', '', 'not_started', 0, '[]', 0, '2026-06-01T09:00:00',
+         VALUES (?, ?, '', 'not_started', 0, '[]', 0, '2026-06-01T09:00:00',
            '2026-06-01T09:00:00')",
     )
     .bind(id)

@@ -71,8 +71,21 @@ const WORDS: &[&str] = &[
 /// Body sizes the bench reads and writes against, in words. Roughly: a note, a long document, and
 /// something past anything a person would type by hand — the last exists to find where the editor
 /// and the FTS index stop being free rather than to represent a real page.
-const SIZE_BUCKETS: &[(&str, usize)] = &[("small", 40), ("large", 20_000), ("huge", 200_000)];
+const SIZE_BUCKETS: &[(&str, usize)] = &[
+    ("small", 40),
+    ("large", 20_000),
+    ("huge", 200_000),
+    ("longest", 500_000),
+];
 const SIZE_MARKER: &str = "sizebench";
+
+/// Words in each paragraph of a generated long page. A save is timed as one paragraph typed into,
+/// so a page has to be paragraphs the way a written one is, not one line of every word.
+const PARAGRAPH_WORDS: usize = 60;
+
+/// Stands in for the paragraph a timed save rewrites, so each save's body is built by joining two
+/// halves around new text rather than by encoding the whole page inside the timing.
+const EDIT_MARKER: &str = "zzbencheditzz";
 
 /// A word outside [`WORDS`], put into the same number of pages whatever the corpus size. Every
 /// word in [`WORDS`] lands in most pages, so searching one ranks most of the workspace and grows
@@ -116,6 +129,29 @@ fn sentence(rng: &mut Rng, words: usize) -> String {
         s.push_str(WORDS[rng.below(WORDS.len())]);
     }
     s
+}
+
+/// About `words` words in paragraphs of [`PARAGRAPH_WORDS`], one per line.
+fn prose(rng: &mut Rng, words: usize) -> String {
+    let paragraphs: Vec<String> = (0..words.div_ceil(PARAGRAPH_WORDS))
+        .map(|_| sentence(rng, PARAGRAPH_WORDS.min(words)))
+        .collect();
+    paragraphs.join("\n")
+}
+
+/// `body` split around its middle paragraph, so a save of that one paragraph is the two halves
+/// joined around the new text.
+fn around_middle_paragraph(body: &str) -> Option<(String, String)> {
+    let mut doc: serde_json::Value = serde_json::from_str(body).ok()?;
+    let blocks = doc["content"].as_array_mut()?;
+    let middle = blocks.len() / 2;
+    *blocks.get_mut(middle)? = json!({
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": EDIT_MARKER }],
+    });
+    let marked = doc.to_string();
+    let (before, after) = marked.split_once(EDIT_MARKER)?;
+    Some((before.to_string(), after.to_string()))
 }
 
 /// The real workspace is off limits, whatever the flags say.
@@ -299,19 +335,19 @@ pub async fn seed(
         }
     }
 
-    // Three marked pages the bench can find by title, so read and write can be timed against a
+    // Marked pages the bench can find by title, so read and write can be timed against a
     // known body size. Listing never touches these bodies — SUMMARY_COLUMNS carries no content —
     // so page size only shows up on open, save, and the FTS index a write has to maintain.
     for (label, words) in SIZE_BUCKETS {
         let mut page = base_page(None, format!("{SIZE_MARKER} {label}"));
-        let body = sentence(&mut rng, *words);
+        let body = prose(&mut rng, *words);
         set_body(&mut page, body);
         create_page_impl(&pool, page).await.map_err(classify)?;
     }
 
     for i in 0..large_pages {
         let title = format!("large document {i}");
-        let body = sentence(&mut rng, large_words);
+        let body = prose(&mut rng, large_words);
         let mut page = base_page(None, title);
         set_body(&mut page, body);
         create_page_impl(&pool, page).await.map_err(classify)?;
@@ -567,7 +603,8 @@ pub async fn bench(
         let name: &'static str = match *label {
             "small" => "read small page",
             "large" => "read large page",
-            _ => "read huge page",
+            "huge" => "read huge page",
+            _ => "read longest page",
         };
         timings.push(
             time_it(runs, name, || async {
@@ -577,23 +614,41 @@ pub async fn bench(
         );
 
         let name: &'static str = match *label {
-            "small" => "save small page",
-            "large" => "save large page",
-            _ => "save huge page",
+            "small" => "save small page, one paragraph typed",
+            "large" => "save large page, one paragraph typed",
+            "huge" => "save huge page, one paragraph typed",
+            _ => "save longest page, one paragraph typed",
         };
+        let stored = get_page(&pool, &id).await.map_err(classify)?;
+        let Some((before, after)) = stored.and_then(|p| around_middle_paragraph(&p.content)) else {
+            continue;
+        };
+        let typed = |save: usize| format!("{before}typed {save}{after}");
+        let saves = std::cell::Cell::new(0);
         timings.push(
-            time_it(runs, name, || async {
-                let text = sentence(&mut Rng(7), 80);
-                update_page_impl(
-                    &pool,
-                    id.clone(),
-                    PageUpdate {
-                        content: Some(build_tiptap_doc(&text)),
-                        ..Default::default()
-                    },
-                )
-                .await
-                .map_err(classify)
+            time_it(runs, name, || {
+                let save = saves.get();
+                saves.set(save + 1);
+                let base = match save {
+                    0 => None,
+                    _ => Some(typed(save - 1)),
+                };
+                let content = typed(save);
+                let id = id.clone();
+                // Sent the way the editor sends it: the body, and the body it was typed over.
+                async move {
+                    update_page_impl(
+                        pool_ref,
+                        id,
+                        PageUpdate {
+                            content: Some(content),
+                            base_content: base,
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .map_err(classify)
+                }
             })
             .await?,
         );

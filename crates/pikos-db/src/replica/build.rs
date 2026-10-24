@@ -152,12 +152,7 @@ pub(crate) async fn read(
     key: &str,
     deleted: bool,
 ) -> AppResult<Read> {
-    let columns: String = entity
-        .fields
-        .iter()
-        .flat_map(|f| f.columns.iter())
-        .map(|c| format!(", quote(t.{c})"))
-        .collect();
+    let columns = super::manifest::quoted_values(entity);
     let covers = entity.covers.unwrap_or("1");
     let sql = format!(
         "SELECT {} AS in_scope{columns} FROM {} AS t WHERE ({covers}) AND {} = ?",

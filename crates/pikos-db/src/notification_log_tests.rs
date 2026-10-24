@@ -23,8 +23,8 @@ fn window_ending(end_utc: chrono::DateTime<chrono::Utc>) -> ReminderWindow {
 async fn insert_page(pool: &sqlx::SqlitePool, id: &str, status: &str, created_at: &str) {
     sqlx::query(
         "INSERT INTO pages
-         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
-         VALUES (?, ?, '{}', '', ?, 0, '[]', 0, ?, ?)",
+         (id, title, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES (?, ?, '', ?, 0, '[]', 0, ?, ?)",
     )
     .bind(id)
     .bind(id)

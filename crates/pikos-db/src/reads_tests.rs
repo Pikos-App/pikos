@@ -9,9 +9,9 @@ async fn page(
     end: Option<&str>,
 ) {
     sqlx::query(
-        "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+        "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
            sort_order, scheduled_start, scheduled_end, created_at, updated_at)
-         VALUES (?, ?, ?, '{}', '', 'not_started', 0, '[]', 0, ?, ?, '2026-06-01T09:00:00',
+         VALUES (?, ?, ?, '', 'not_started', 0, '[]', 0, ?, ?, '2026-06-01T09:00:00',
            '2026-06-01T09:00:00')",
     )
     .bind(id)

@@ -23,8 +23,8 @@ async fn horizon(pool: &SqlitePool, zone: chrono_tz::Tz, days: i64) -> Vec<Upcom
 async fn insert_page(pool: &SqlitePool, id: &str, status: &str) {
     sqlx::query(
         "INSERT INTO pages
-         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
-         VALUES (?, ?, '{}', '', ?, 0, '[]', 0, '2026-05-01T00:00:00', '2026-05-01T00:00:00')",
+         (id, title, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES (?, ?, '', ?, 0, '[]', 0, '2026-05-01T00:00:00', '2026-05-01T00:00:00')",
     )
     .bind(id)
     .bind(id)

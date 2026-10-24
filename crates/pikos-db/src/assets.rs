@@ -36,20 +36,36 @@ pub fn pikos_file_name(stored: &str) -> Option<&str> {
 /// The stored path of every image a page refers to, trashed pages included, since restoring one
 /// brings its images back.
 ///
-/// Reads `pages.content`, not the chunks: it also scans backups, opened read-only and unmigrated
-/// on a connection without Pikos's SQL functions, and one older than chunks has none. An image
-/// missed there is deleted, and the restore shows it broken.
+/// Reads the chunks' bodies one by one rather than whole pages: it also scans backups, opened
+/// read-only and unmigrated on a connection without Pikos's SQL functions. A backup from before
+/// bodies were stored only as chunks still has its `content` column, and one older than chunks has
+/// nothing else, so that column is read wherever it is there. An image missed is deleted, and the
+/// restore shows it broken.
 pub async fn asset_paths_in(pool: &SqlitePool) -> AppResult<HashSet<String>> {
-    // body-read-ok: a backup of any age has this column, see the doc above
-    let bodies: Vec<String> =
-        sqlx::query_scalar("SELECT content FROM pages WHERE instr(content, '\"image\"') > 0")
-            .fetch_all(pool)
-            .await?;
+    // body-read-ok: a backup's own schema, see the doc above
+    let has_body_column: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM pragma_table_info('pages') WHERE name = 'content')",
+    )
+    .fetch_one(pool)
+    .await?;
+    let sql = if has_body_column {
+        // body-read-ok: a backup from before bodies were stored only as chunks
+        "SELECT content FROM pages WHERE instr(content, '\"image\"') > 0"
+    } else {
+        "SELECT body FROM page_chunks WHERE instr(body, '\"image\"') > 0"
+    };
+    let bodies: Vec<String> = sqlx::query_scalar(sql).fetch_all(pool).await?;
 
     let mut paths = Vec::new();
     for body in &bodies {
-        if let Ok(doc) = serde_json::from_str::<serde_json::Value>(body) {
-            collect_asset_paths(&doc, &mut paths);
+        match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(serde_json::Value::Array(blocks)) => {
+                for block in &blocks {
+                    collect_asset_paths(block, &mut paths);
+                }
+            }
+            Ok(doc) => collect_asset_paths(&doc, &mut paths),
+            Err(_) => {}
         }
     }
 

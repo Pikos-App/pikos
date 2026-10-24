@@ -20,7 +20,7 @@ async fn open_read_only(path: &str) -> Result<SqlitePool, CliError> {
     }
 
     let options = SqliteConnectOptions::new().filename(path).read_only(true);
-    SqlitePoolOptions::new()
+    pikos_db::with_functions(SqlitePoolOptions::new())
         .max_connections(1)
         .connect_with(options)
         .await

@@ -27,12 +27,7 @@ impl SyncedRow {
 }
 
 fn select_sql(entity: &EntityMap) -> String {
-    let columns: String = entity
-        .fields
-        .iter()
-        .flat_map(|f| f.columns.iter())
-        .map(|c| format!(", quote(t.{c})"))
-        .collect();
+    let columns = super::manifest::quoted_values(entity);
     let covers = entity.covers.unwrap_or("1");
     format!(
         "SELECT {} AS key{columns} FROM {} AS t WHERE ({covers}) AND {}",

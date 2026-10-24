@@ -27,12 +27,11 @@ async fn insert_rich_page(
     let now = crate::now_iso();
     sqlx::query(
         "INSERT INTO pages
-         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'not_started', ?, ?, 0, ?, ?)",
+         (id, title, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, 'not_started', ?, ?, 0, ?, ?)",
     )
     .bind(id)
     .bind(title)
-    .bind(content)
     .bind(content_text)
     .bind(priority)
     .bind(tags_json)
@@ -41,6 +40,9 @@ async fn insert_rich_page(
     .execute(pool)
     .await
     .unwrap();
+    crate::page_chunks::write_body(pool, id, content)
+        .await
+        .unwrap();
 }
 
 async fn soft_delete(pool: &SqlitePool, id: &str) {

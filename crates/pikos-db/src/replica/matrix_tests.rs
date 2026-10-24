@@ -1296,13 +1296,17 @@ async fn a_calendars_edits_to_a_live_mirror_are_never_sent() {
     for upstream in [
         "UPDATE pages SET title = 'Team sync, moved', subtitle = 'Room 4' WHERE id = 'mirror'",
         "UPDATE pages SET scheduled_start = '2030-01-10T15:00:00' WHERE id = 'mirror'",
-        "UPDATE pages SET content = '{\"type\":\"doc\"}' WHERE id = 'mirror'",
     ] {
         sqlx::query(upstream).execute(&mac).await.unwrap();
         let queued = pending(&mac, 10).await.unwrap();
         let built = build(&mac, &queued).await.unwrap();
         assert!(built.is_empty(), "{upstream}");
     }
+    crate::page_chunks::write_body(&mac, "mirror", crate::page_chunks::EMPTY_BODY)
+        .await
+        .unwrap();
+    let queued = pending(&mac, 10).await.unwrap();
+    assert!(build(&mac, &queued).await.unwrap().is_empty(), "the body");
     converge(&mac, &phone).await;
 
     assert!(get_page(&phone, "mirror").await.unwrap().is_none());

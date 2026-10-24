@@ -655,17 +655,16 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         let mut tx = pool.begin().await?;
 
         sqlx::query(
-            "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
+            "INSERT INTO pages (id, folder_id, title, subtitle, content_text, status,
              priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
              links, parent_id, last_opened_at, created_at, updated_at,
              content_schema_version)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&data.folder_id)
         .bind(&data.title)
         .bind(&data.subtitle)
-        .bind(&data.content)
         .bind(crate::pool::extract_text_from_tiptap(&data.content))
         .bind(&data.status)
         .bind(data.priority)
@@ -684,6 +683,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         .bind(crate::CONTENT_SCHEMA_VERSION)
         .execute(&mut *tx)
         .await?;
+        crate::page_chunks::write_body(&mut *tx, &id, &data.content).await?;
 
         upsert_page_tags_tx(&mut tx, &id, &data.tags).await?;
 
@@ -932,8 +932,6 @@ async fn apply_page_update(
         fields.push_bind_unseparated(v.clone());
     }
     if let Some(v) = &updates.content {
-        fields.push("content = ");
-        fields.push_bind_unseparated(v.clone());
         // Re-stamp on every content write: whatever produced this document did
         // so with this build's editor schema, so the stored version must follow
         // the content rather than stay at whatever wrote the row originally.
@@ -1010,6 +1008,10 @@ async fn apply_page_update(
     let is_written = builder.build().execute(&mut *tx).await?.rows_affected() > 0;
     if !is_written {
         return Ok(false);
+    }
+
+    if let Some(content) = &updates.content {
+        crate::page_chunks::write_body(&mut *tx, id, content).await?;
     }
 
     if marks_ownership {
@@ -1866,17 +1868,16 @@ async fn insert_head_clone_tx(
     let tags_json = serde_json::to_string(&head.tags).unwrap_or_else(|_| "[]".to_string());
 
     sqlx::query(
-        "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
+        "INSERT INTO pages (id, folder_id, title, subtitle, content_text, status,
          priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
          links, parent_id, last_opened_at, created_at, updated_at,
          content_schema_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?, ?)",
     )
     .bind(spec.clone_id)
     .bind(&head.folder_id)
     .bind(&head.title)
     .bind(&head.subtitle)
-    .bind(&head.content)
     .bind(head.content_text.as_deref().unwrap_or(""))
     .bind(spec.status)
     .bind(head.priority)
@@ -1895,6 +1896,7 @@ async fn insert_head_clone_tx(
     )
     .execute(&mut **tx)
     .await?;
+    crate::page_chunks::write_body(&mut **tx, spec.clone_id, &head.content).await?;
 
     // Sync tags for the clone — same transaction as the pages insert above
     // so the JSON denorm and the page_tags join can't fall out of sync.

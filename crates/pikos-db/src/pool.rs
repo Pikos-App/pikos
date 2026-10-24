@@ -353,14 +353,12 @@ async fn integrity_failure(path: &str) -> Option<String> {
 }
 
 /// Registers [`crate::sql_functions`] on each connection the pool opens. Any pool that runs the
-/// migrations or writes pages needs it.
-#[cfg(test)]
+/// migrations, writes pages or reads a page body needs it.
 pub fn with_functions(options: sqlx::sqlite::SqlitePoolOptions) -> sqlx::sqlite::SqlitePoolOptions {
     with_functions_on(options, crate::sql_functions::Clock::System)
 }
 
 /// [`with_functions`] reading the time from `clock`.
-#[cfg(any(test, feature = "test-support"))]
 pub fn with_functions_on(
     options: sqlx::sqlite::SqlitePoolOptions,
     clock: crate::sql_functions::Clock,
@@ -597,13 +595,14 @@ pub async fn gather_statistics(pool: &SqlitePool) -> AppResult<()> {
 const ANALYSIS_LIMIT: u32 = 400;
 
 async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        // The terms of `idx_pages_untexted`, exactly, so the planner reads that index.
-        // body-read-ok: an upgrade pass over rows saved before content_text existed
-        "SELECT id, content FROM pages WHERE content_text = '' AND content != '' AND content != '{}'",
-    )
-    .fetch_all(pool)
-    .await?;
+    let body = crate::page_chunks::body_sql("pages.id");
+    // The terms of `idx_pages_untexted`, so the planner reads that index.
+    // sql-ok: body_sql is built from a compile-time constant
+    let sql = format!(
+        "SELECT id, {body} FROM pages WHERE content_text = '' \
+         AND EXISTS (SELECT 1 FROM page_chunks WHERE page_chunks.page_id = pages.id)"
+    );
+    let rows: Vec<(String, String)> = sqlx::query_as(&sql).fetch_all(pool).await?;
 
     for (id, content) in &rows {
         let text = extract_text_from_tiptap(content);
@@ -623,11 +622,13 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
 /// finds them, without stamping `updated_at`: nobody edited it, and it mustn't float to the top of
 /// recently edited.
 async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
-    // body-read-ok: an upgrade pass, run once on a workspace older than derived-text version 2
-    let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT id, content FROM pages WHERE content LIKE '%\"hardBreak\"%'")
-            .fetch_all(pool)
-            .await?;
+    let body = crate::page_chunks::body_sql("pages.id");
+    // sql-ok: body_sql is built from a compile-time constant
+    let sql = format!(
+        "SELECT id, {body} FROM pages WHERE id IN \
+         (SELECT page_id FROM page_chunks WHERE body LIKE '%\"hardBreak\"%')"
+    );
+    let rows: Vec<(String, String)> = sqlx::query_as(&sql).fetch_all(pool).await?;
     let mut tx = pool.begin().await?;
     for (id, content) in &rows {
         sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
@@ -980,8 +981,8 @@ pub async fn wal_test_pool() -> TempWalDb {
     TempWalDb { pool, path }
 }
 
-/// Test fixture for inserting a minimal `pages` row. `content` is empty JSON;
-/// `content_text` drives FTS body matches.
+/// Test fixture for inserting a minimal `pages` row, with no body; `content_text` drives FTS body
+/// matches.
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone)]
 pub struct TestPage<'a> {
@@ -1018,9 +1019,9 @@ pub async fn insert_test_page(pool: &SqlitePool, p: TestPage<'_>) -> AppResult<(
     let now = now_iso();
     sqlx::query(
         "INSERT INTO pages
-         (id, folder_id, title, subtitle, content, content_text, status, priority, tags,
+         (id, folder_id, title, subtitle, content_text, status, priority, tags,
           sort_order, scheduled_start, scheduled_end, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '{}', ?, ?, 0, ?, 0, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?)",
     )
     .bind(p.id)
     .bind(p.folder_id)

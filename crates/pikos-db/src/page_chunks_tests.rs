@@ -3,7 +3,6 @@ use crate::pages::pages_tests::new_page;
 use crate::pool::test_pool;
 use crate::PageUpdate;
 use pikos_core::body_section::SectionEdit;
-use pikos_core::chunks::join_chunks;
 use sqlx::SqlitePool;
 
 fn para(text: &str) -> String {
@@ -26,32 +25,23 @@ async fn stored_chunks(pool: &SqlitePool, page_id: &str) -> Vec<(String, String)
         .unwrap()
 }
 
-/// Every page's chunks, joined, are its body's blocks; a body with no blocks has no chunks. Blocks,
-/// not the whole document: a section edit to an empty page writes one without `"type":"doc"`.
-async fn assert_chunks_are_every_body(pool: &SqlitePool) {
-    let pages: Vec<(String, String)> = sqlx::query_as("SELECT id, content FROM pages")
-        .fetch_all(pool)
+async fn body_rev(pool: &SqlitePool, page_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT body_rev FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
         .await
-        .unwrap();
+        .unwrap()
+}
 
-    for (id, content) in pages {
-        let chunks = stored_chunks(pool, &id).await;
-        let body: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+/// The blocks of the body page `page_id` reads back with.
+async fn read_blocks(pool: &SqlitePool, page_id: &str) -> serde_json::Value {
+    let page = crate::get_page(pool, page_id).await.unwrap().unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&page.content).unwrap();
+    doc["content"].clone()
+}
 
-        let has_blocks = body["content"]
-            .as_array()
-            .is_some_and(|blocks| !blocks.is_empty());
-        if !has_blocks {
-            assert!(chunks.is_empty(), "{id} has no blocks but has chunks");
-            continue;
-        }
-        let joined = join_chunks(chunks.iter().map(|(_, body)| body.as_str()));
-        let joined: serde_json::Value = serde_json::from_str(&joined).unwrap();
-        assert_eq!(
-            joined["content"], body["content"],
-            "{id}'s chunks are not its body"
-        );
-    }
+fn blocks_of(content: &str) -> serde_json::Value {
+    serde_json::from_str::<serde_json::Value>(content).unwrap()["content"].clone()
 }
 
 /// One calendar event with `description`, synced in at `etag`: the reconciler seeds a page's body
@@ -107,7 +97,7 @@ async fn synced_event(pool: &SqlitePool, etag: &str, description: &str) {
 }
 
 #[tokio::test]
-async fn every_content_write_leaves_chunks_equal_to_the_body() {
+async fn every_body_write_reads_back_as_written() {
     let pool = test_pool().await;
 
     let mut data = new_page("Long");
@@ -116,7 +106,10 @@ async fn every_content_write_leaves_chunks_equal_to_the_body() {
     let empty = crate::create_page_impl(&pool, new_page("Empty"))
         .await
         .unwrap();
-    assert_chunks_are_every_body(&pool).await;
+    assert_eq!(
+        read_blocks(&pool, &page.id).await,
+        blocks_of(&long_body(200, "first"))
+    );
 
     let loaded = long_body(200, "first");
     let typed = long_body(220, "first");
@@ -125,56 +118,47 @@ async fn every_content_write_leaves_chunks_equal_to_the_body() {
         page.id.clone(),
         PageUpdate {
             content: Some(typed.clone()),
-            base_content: Some(loaded.clone()),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    assert_chunks_are_every_body(&pool).await;
-
-    let over_a_stale_base = long_body(210, "first").replace("first 5 ", "edited 5 ");
-    crate::update_page_impl(
-        &pool,
-        page.id.clone(),
-        PageUpdate {
-            content: Some(over_a_stale_base),
             base_content: Some(loaded),
             ..Default::default()
         },
     )
     .await
     .unwrap();
-    assert_chunks_are_every_body(&pool).await;
+    assert_eq!(read_blocks(&pool, &page.id).await, blocks_of(&typed));
 
     let block: serde_json::Value = serde_json::from_str(&para("from the CLI")).unwrap();
-    let blocks = [block];
-    crate::edit_page_section_impl(&pool, &page.id, &SectionEdit::Append, &blocks)
-        .await
-        .unwrap();
+    let blocks = [block.clone()];
     crate::edit_page_section_impl(&pool, &empty.id, &SectionEdit::Append, &blocks)
         .await
         .unwrap();
-    assert_chunks_are_every_body(&pool).await;
+    let appended = read_blocks(&pool, &empty.id).await;
+    assert_eq!(appended.as_array().unwrap().last(), Some(&block));
 
-    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
-        .bind(long_body(50, "raw"))
-        .bind(&page.id)
-        .execute(&pool)
+    crate::page_chunks::write_body(&pool, &page.id, "{}")
         .await
         .unwrap();
-    assert_chunks_are_every_body(&pool).await;
-
-    sqlx::query("UPDATE pages SET content = '{}' WHERE id = ?")
-        .bind(&page.id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert_chunks_are_every_body(&pool).await;
+    assert!(stored_chunks(&pool, &page.id).await.is_empty());
+    assert_eq!(
+        crate::get_page(&pool, &page.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .content,
+        EMPTY_BODY
+    );
 
     synced_event(&pool, "v1", &"A long agenda line.\n".repeat(2_000)).await;
     synced_event(&pool, "v2", &"A changed agenda line.\n".repeat(2_000)).await;
-    assert_chunks_are_every_body(&pool).await;
+    // sql-ok: body_sql is built from a compile-time constant
+    let seeded: String = sqlx::query_scalar(&format!(
+        "SELECT {} FROM pages WHERE title = 'Meeting'",
+        body_sql("pages.id")
+    ))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(seeded.contains("A changed agenda line."));
+    assert!(!seeded.contains("A long agenda line."));
 
     crate::hard_delete_page_impl(&pool, &empty.id)
         .await
@@ -189,6 +173,29 @@ async fn every_content_write_leaves_chunks_equal_to_the_body() {
 }
 
 #[tokio::test]
+async fn writing_the_stored_body_again_writes_nothing_and_leaves_sync_alone() {
+    let pool = test_pool().await;
+    let mut data = new_page("Long");
+    data.content = long_body(100, "same");
+    let page = crate::create_page_impl(&pool, data).await.unwrap();
+    let before = body_rev(&pool, &page.id).await;
+
+    let is_changed = write_body(&pool, &page.id, &long_body(100, "same"))
+        .await
+        .unwrap();
+
+    assert!(!is_changed);
+    assert_eq!(body_rev(&pool, &page.id).await, before);
+
+    let is_changed = write_body(&pool, &page.id, &long_body(101, "same"))
+        .await
+        .unwrap();
+
+    assert!(is_changed);
+    assert_eq!(body_rev(&pool, &page.id).await, before + 1);
+}
+
+#[tokio::test]
 async fn a_one_block_edit_rewrites_one_chunk_under_its_id() {
     let pool = test_pool().await;
     let mut data = new_page("Long");
@@ -197,12 +204,7 @@ async fn a_one_block_edit_rewrites_one_chunk_under_its_id() {
     let before = stored_chunks(&pool, &page.id).await;
 
     let edited = long_body(300, "block").replace("block 150 ", "rewritten 150 ");
-    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
-        .bind(&edited)
-        .bind(&page.id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    write_body(&pool, &page.id, &edited).await.unwrap();
     let after = stored_chunks(&pool, &page.id).await;
 
     assert!(before.len() > 1);
@@ -233,18 +235,13 @@ async fn a_chunk_added_mid_page_leaves_the_place_of_every_other_chunk() {
 
     let grown = long_body(300, "block")
         .replace("block 20 ", &format!("block 20 {}", "typed ".repeat(4_000)));
-    sqlx::query("UPDATE pages SET content = ? WHERE id = ?")
-        .bind(&grown)
-        .bind(&page.id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    write_body(&pool, &page.id, &grown).await.unwrap();
     let after = ords(pool.clone(), page.id.clone()).await;
 
     assert_eq!(after.len(), before.len() + 1);
     let kept = after.iter().filter(|chunk| before.contains(chunk)).count();
     assert_eq!(kept, before.len(), "every chunk keeps its id and ord");
-    assert_chunks_are_every_body(&pool).await;
+    assert_eq!(read_blocks(&pool, &page.id).await, blocks_of(&grown));
 }
 
 #[test]

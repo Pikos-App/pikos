@@ -23,10 +23,10 @@
 //! database's triggers differ from what the manifest generates. A migration that has shipped is
 //! never rewritten: a change to the triggers takes a new one, named here.
 
-use super::manifest::{EntityMap, Lifecycle, Scope, ENTITIES, PURGE_NULLED};
+use super::manifest::{watched_column, EntityMap, Lifecycle, Scope, ENTITIES, PURGE_NULLED};
 
 /// Where the generated triggers are checked in, relative to the crate.
-pub const MIGRATION: &str = "migrations/030_replica_capture_in_scope.sql";
+pub const MIGRATION: &str = "migrations/036_replica_capture_body_chunks.sql";
 
 /// Triggers an earlier capture migration made that the manifest no longer generates.
 const RETIRED: &[&str] = &["replica_page_delete", "replica_folder_delete"];
@@ -323,7 +323,8 @@ fn field_changed(entity: &EntityMap, i: usize) -> String {
         .columns
         .iter()
         .map(|column| {
-            let changed = format!("OLD.{column} IS NOT NEW.{column}");
+            let watched = watched_column(entity.table, column);
+            let changed = format!("OLD.{watched} IS NOT NEW.{watched}");
             let nulled_by = PURGE_NULLED
                 .iter()
                 .find(|(table, c, _)| *table == entity.table && c == column);

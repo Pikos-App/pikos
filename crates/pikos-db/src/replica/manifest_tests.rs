@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashSet};
 use pikos_replica::{Entity, ALL_ENTITIES};
 use sqlx::SqlitePool;
 
-use super::{Lifecycle, ENTITIES, PURGE_NULLED, TABLES};
+use super::{is_body, Lifecycle, ENTITIES, PURGE_NULLED, TABLES};
 use crate::test_pool;
 
 async fn columns(pool: &SqlitePool, table: &str) -> BTreeSet<String> {
@@ -67,9 +67,11 @@ async fn every_column_of_a_synced_table_is_classified_once() {
 
         let classified: BTreeSet<String> =
             synced.union(&unsynced_set).map(|c| c.to_string()).collect();
+        let mut real = columns(&pool, table.table).await;
+        let body = synced.iter().filter(|c| is_body(table.table, c));
+        real.extend(body.map(|c| c.to_string()));
         assert_eq!(
-            columns(&pool, table.table).await,
-            classified,
+            real, classified,
             "{}: every column is synced by an entity's field or listed as identity, derived or \
              local, and every name listed is a real column",
             table.table

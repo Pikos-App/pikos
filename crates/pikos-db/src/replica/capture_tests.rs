@@ -234,11 +234,9 @@ async fn a_body_edit_is_its_own_record() {
         .unwrap();
     clear_ops(&pool).await;
 
-    exec(
-        &pool,
-        r#"UPDATE pages SET content = '{"type":"doc"}' WHERE id = 'p1'"#,
-    )
-    .await;
+    crate::page_chunks::write_body(&pool, "p1", crate::page_chunks::EMPTY_BODY)
+        .await
+        .unwrap();
 
     assert_eq!(op(&pool, Entity::Page, "p1").await, None);
     assert_eq!(

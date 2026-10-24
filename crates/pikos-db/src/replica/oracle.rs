@@ -43,7 +43,6 @@ async fn synced_state(pool: &SqlitePool) -> State {
     let mut state = State::new();
     for entity in ENTITIES {
         let columns = column_list(entity);
-        let selected: Vec<String> = columns.iter().map(|c| format!("quote(t.{c})")).collect();
         let parent = entity
             .parent
             .as_ref()
@@ -55,10 +54,7 @@ async fn synced_state(pool: &SqlitePool) -> State {
             "SELECT {} AS key, {parent} AS parent, {} AS in_scope{} FROM {} AS t WHERE {covers}",
             entity.key.replace("{row}", "t"),
             entity.scope.sql().replace("{row}", "t"),
-            selected
-                .iter()
-                .map(|s| format!(", {s}"))
-                .collect::<String>(),
+            crate::replica::manifest::quoted_values(entity).replace("{row}", "t"),
             entity.table,
         );
 

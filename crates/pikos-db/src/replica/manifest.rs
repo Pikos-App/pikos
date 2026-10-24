@@ -14,6 +14,45 @@ pub struct Field {
     pub columns: &'static [&'static str],
 }
 
+/// A page's body, the one synced value that isn't a column of its row: it is stored as chunks.
+/// Records read it whole through [`column_sql`], and capture watches [`BODY_MARKER`].
+const BODY: (&str, &str) = ("pages", "content");
+
+/// The column of a page's row that every body write bumps.
+pub const BODY_MARKER: &str = "body_rev";
+
+pub fn is_body(table: &str, column: &str) -> bool {
+    (table, column) == BODY
+}
+
+/// SQL for `column`'s value in a row of `table`, written `{row}`.
+pub fn column_sql(table: &str, column: &str) -> String {
+    if is_body(table, column) {
+        return crate::page_chunks::body_sql("{row}.id");
+    }
+
+    format!("{{row}}.{column}")
+}
+
+/// SQL for each of the entity's synced values in a row written `{row}`, quoted, each after a comma.
+pub fn quoted_values(entity: &EntityMap) -> String {
+    entity
+        .fields
+        .iter()
+        .flat_map(|f| f.columns.iter())
+        .map(|c| format!(", quote({})", column_sql(entity.table, c)))
+        .collect()
+}
+
+/// The column of `table`'s row that changes when `column`'s value does.
+pub fn watched_column<'a>(table: &str, column: &'a str) -> &'a str {
+    if is_body(table, column) {
+        return BODY_MARKER;
+    }
+
+    column
+}
+
 /// Which changes to an entity's rows are captured.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Lifecycle {
@@ -360,7 +399,7 @@ pub const TABLES: &[TableMap] = &[
             "mirror_search_text",
             "updated_at",
         ],
-        local: &["last_opened_at"],
+        local: &["last_opened_at", BODY_MARKER],
     },
     TableMap {
         table: "folders",

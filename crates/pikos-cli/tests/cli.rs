@@ -307,9 +307,9 @@ async fn stress_seed_writes_bodies_the_editor_can_open() {
     );
     let not_documents: i64 = scalar(
         dbs,
-        "SELECT COUNT(*) FROM pages \
-         WHERE NOT json_valid(content) OR json_extract(content, '$.type') <> 'doc' \
-         OR content_text LIKE '{%'",
+        "SELECT (SELECT COUNT(*) FROM page_chunks \
+                 WHERE NOT json_valid(body) OR json_type(body) <> 'array') \
+              + (SELECT COUNT(*) FROM pages WHERE content_text LIKE '{%')",
     )
     .await;
     assert_eq!(not_documents, 0);
@@ -2427,10 +2427,11 @@ async fn writing_a_page_its_own_body_back_leaves_it_unedited() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let content: String = scalar(dbs, "SELECT content FROM pages").await;
+    let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
+    let content: Value = serde_json::from_str(read["content"].as_str().unwrap()).unwrap();
     let version: i64 = scalar(dbs, "SELECT content_schema_version FROM pages").await;
     let user_modified: i64 = scalar(dbs, "SELECT user_modified FROM page_sync").await;
-    assert_eq!(content, before);
+    assert_eq!(content, serde_json::from_str::<Value>(&before).unwrap());
     assert_eq!(version, 1);
     assert_eq!(user_modified, 0);
 }

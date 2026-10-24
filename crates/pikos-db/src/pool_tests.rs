@@ -98,6 +98,15 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../migrations/033_notification_refused.sql"),
     ),
     ("034", include_str!("../migrations/034_page_chunks.sql")),
+    ("035", include_str!("../migrations/035_page_body_rev.sql")),
+    (
+        "036",
+        include_str!("../migrations/036_replica_capture_body_chunks.sql"),
+    ),
+    (
+        "037",
+        include_str!("../migrations/037_page_body_only_in_chunks.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -742,10 +751,12 @@ async fn a_page_saved_before_line_breaks_counted_is_found_by_the_word_after_one(
         insert_test_page_sync_connected_at(&pool, "p1", "active", stamped)
             .await
             .unwrap();
-        sqlx::query("UPDATE pages SET content = ?, updated_at = ? WHERE id = 'p1'")
-            .bind(body)
+        sqlx::query("UPDATE pages SET updated_at = ? WHERE id = 'p1'")
             .bind(stamped)
             .execute(&pool)
+            .await
+            .unwrap();
+        crate::page_chunks::write_body(&pool, "p1", body)
             .await
             .unwrap();
         sqlx::query("PRAGMA user_version = 1")
@@ -1743,5 +1754,7 @@ async fn upgrading_chunks_every_page_body_once() {
         long
     );
     assert_eq!(empty, 0);
+    let columns = column_names(&pool, "pages").await;
+    assert!(!columns.iter().any(|c| c == "content"));
     let _ = std::fs::remove_dir_all(&staged);
 }

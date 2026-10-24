@@ -141,10 +141,10 @@ async fn load(pool: &SqlitePool, pages: &[SeedPage]) {
     .unwrap();
     for p in pages {
         sqlx::query(
-            "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+            "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
                sort_order, scheduled_start, scheduled_end, completed_at, last_opened_at,
                created_at, updated_at)
-             VALUES (?, ?, ?, '{}', '', ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, '', ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&p.id)
         .bind(&p.folder_id)

@@ -73,17 +73,16 @@ async fn insert_synced_page(
     // The body's own plain text, projected the way every real writer projects it
     // (`create_page_impl`, and the reconciler when it applies a description). Seeding
     // an empty projection beside a non-empty body leaves the user's notes on a mirror
-    // unfindable — search reads `content_text`, not `content`.
+    // unfindable — search reads `content_text`, not the body.
     let body = mirror.body.unwrap_or(EMPTY_DOC);
     sqlx::query(
-        "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+        "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
             sort_order, scheduled_start, scheduled_end, links, mirror_search_text, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?, ?)",
+         VALUES (?, ?, ?, ?, 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?, ?)",
     )
     .bind(&page_id)
     .bind(folder_id)
     .bind(title)
-    .bind(body)
     .bind(pikos_db::extract_text_from_tiptap(body))
     .bind(sort_order)
     .bind(scheduled_start)
@@ -96,6 +95,7 @@ async fn insert_synced_page(
     .bind(now)
     .execute(&mut **tx)
     .await?;
+    pikos_db::page_chunks::write_body(&mut **tx, &page_id, body).await?;
 
     sqlx::query(
         "INSERT INTO page_schedules (id, page_id, scheduled_start, scheduled_end, timezone, status, created_at)
@@ -194,14 +194,13 @@ async fn insert_synced_recurring(
     // clears, and the mock, which derives its head, never had one.
     let head_end = base_start.contains('T').then_some(base_end);
     sqlx::query(
-        "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+        "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
             sort_order, scheduled_start, scheduled_end, links, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?)",
+         VALUES (?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?)",
     )
     .bind(&page_id)
     .bind(folder_id)
     .bind(title)
-    .bind(EMPTY_DOC)
     .bind(sort_order)
     .bind(base_start)
     .bind(head_end)
@@ -209,6 +208,7 @@ async fn insert_synced_recurring(
     .bind(now)
     .execute(&mut **tx)
     .await?;
+    pikos_db::page_chunks::write_body(&mut **tx, &page_id, EMPTY_DOC).await?;
 
     let rule_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(

@@ -940,9 +940,9 @@ async fn the_database_refuses_an_unknown_status_from_a_writer_that_skips_the_che
     let page = create_page_impl(&pool, new_page("Open")).await.unwrap();
 
     let raw_insert = sqlx::query(
-        "INSERT INTO pages (id, title, content, content_text, status, priority, tags, sort_order,
+        "INSERT INTO pages (id, title, content_text, status, priority, tags, sort_order,
          created_at, updated_at)
-         VALUES ('raw', 'Raw', '{}', '', 'Done', 0, '[]', 0, '2026-01-01', '2026-01-01')",
+         VALUES ('raw', 'Raw', '', 'Done', 0, '[]', 0, '2026-01-01', '2026-01-01')",
     )
     .execute(&pool)
     .await;
@@ -1553,9 +1553,9 @@ async fn list_pages_today_excludes_a_series_whose_next_occurrence_is_ahead() {
 async fn insert_completed_page(pool: &sqlx::SqlitePool, id: &str, completed_at: &str) {
     sqlx::query(
         "INSERT INTO pages
-         (id, folder_id, title, subtitle, content, content_text, status, priority, tags,
+         (id, folder_id, title, subtitle, content_text, status, priority, tags,
           sort_order, completed_at, created_at, updated_at)
-         VALUES (?, NULL, ?, NULL, '{}', '', 'done', 0, '[]', 0, ?, ?, ?)",
+         VALUES (?, NULL, ?, NULL, '', 'done', 0, '[]', 0, ?, ?, ?)",
     )
     .bind(id)
     .bind(id)
@@ -1651,8 +1651,8 @@ async fn list_completed_pages_filters_by_folder() {
     insert_completed_page(&pool, "inbox-done", "2026-05-21T09:00:00").await;
     // Folder completion — needs explicit folder_id INSERT
     sqlx::query(
-        "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status, priority, tags, sort_order, completed_at, created_at, updated_at)
-         VALUES ('work-done', 'work', 'Work done', NULL, '{}', '', 'done', 0, '[]', 0, '2026-05-21T09:00:00', '2026-05-21T09:00:00', '2026-05-21T09:00:00')",
+        "INSERT INTO pages (id, folder_id, title, subtitle, content_text, status, priority, tags, sort_order, completed_at, created_at, updated_at)
+         VALUES ('work-done', 'work', 'Work done', NULL, '', 'done', 0, '[]', 0, '2026-05-21T09:00:00', '2026-05-21T09:00:00', '2026-05-21T09:00:00')",
     )
     .execute(&pool)
     .await
@@ -2673,13 +2673,13 @@ async fn writing_a_page_its_own_body_with_keys_reordered_changes_nothing() {
     insert_test_page(&pool, TestPage::new("p", "Event"))
         .await
         .unwrap();
-    sqlx::query(
-        r#"UPDATE pages SET content = '{"type":"doc","content":[{"type":"paragraph"}]}',
-           content_schema_version = 1 WHERE id = 'p'"#,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 1 WHERE id = 'p'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    crate::page_chunks::write_body(&pool, "p", crate::page_chunks::EMPTY_BODY)
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
     crate::replica::start(&pool).await.unwrap();
     let body_clock = || {
@@ -2719,11 +2719,8 @@ async fn sectioned_page(pool: &sqlx::SqlitePool) {
     insert_test_page(pool, TestPage::new("p", "Plans"))
         .await
         .unwrap();
-    sqlx::query("UPDATE pages SET content = ? WHERE id = 'p'")
-        .bind(format!(
-            r#"{{"type":"doc","content":[{SECTIONED_BEFORE},{SECTIONED_AFTER}]}}"#
-        ))
-        .execute(pool)
+    let body = format!(r#"{{"type":"doc","content":[{SECTIONED_BEFORE},{SECTIONED_AFTER}]}}"#);
+    crate::page_chunks::write_body(pool, "p", &body)
         .await
         .unwrap();
 }
@@ -2797,10 +2794,12 @@ async fn typing_over_a_body_the_cli_changed_since_it_loaded_merges_and_keeps_its
         serde_json::json!({ "type": "pageLink", "attrs": { "pageId": "trip", "title": "Trip" } }),
     );
     let from_cli = doc(vec![text("one"), text("two"), link.clone()]);
+    sqlx::query("UPDATE pages SET content_schema_version = 1 WHERE id = 'p'")
+        .execute(&pool)
+        .await
+        .unwrap();
     for body in [&loaded, &from_cli] {
-        sqlx::query("UPDATE pages SET content = ?, content_schema_version = 1 WHERE id = 'p'")
-            .bind(body)
-            .execute(&pool)
+        crate::page_chunks::write_body(&pool, "p", body)
             .await
             .unwrap();
     }

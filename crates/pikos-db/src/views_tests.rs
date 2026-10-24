@@ -152,14 +152,18 @@ async fn workspace() -> SqlitePool {
     .unwrap();
     for p in seeds() {
         sqlx::query(
-            "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+            "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
                sort_order, scheduled_start, completed_at, created_at, updated_at)
-             VALUES (?, ?, ?, '{}', '', ?, ?, '[]', ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, '', ?, ?, '[]', ?, ?, ?, ?, ?)",
         )
         .bind(p.id)
         .bind(p.folder)
         .bind(p.title)
-        .bind(if p.done_at.is_some() { "done" } else { "not_started" })
+        .bind(if p.done_at.is_some() {
+            "done"
+        } else {
+            "not_started"
+        })
         .bind(p.priority)
         .bind(p.sort_order)
         .bind(p.start)

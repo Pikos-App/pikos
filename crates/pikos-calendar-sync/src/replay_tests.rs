@@ -793,14 +793,18 @@ async fn changes_made_in_google_calendar_reach_pikos() {
     // dropped it, so this is the text Google itself shows, blank lines included.
     let body: String = scalar(
         &pool,
-        "SELECT content FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+        &format!(
+            "SELECT {} FROM pages WHERE title = 'Trip notes: Tom & Jerry''s <draft>'",
+            pikos_db::page_chunks::body_sql("pages.id")
+        ),
     )
     .await;
+    let expected = pikos_db::build_tiptap_doc(
+        &(TRIP_NOTES.replace("<passport>", "").repeat(12) + "\n\nUpdated upstream"),
+    );
     assert_eq!(
-        body,
-        pikos_db::build_tiptap_doc(
-            &(TRIP_NOTES.replace("<passport>", "").repeat(12) + "\n\nUpdated upstream")
-        )
+        serde_json::from_str::<serde_json::Value>(&body).unwrap(),
+        serde_json::from_str::<serde_json::Value>(&expected).unwrap()
     );
 }
 

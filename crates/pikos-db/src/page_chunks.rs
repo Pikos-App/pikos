@@ -1,12 +1,10 @@
-//! A page body's chunks in `page_chunks`, written by triggers on `pages` from every write that sets
-//! `content`, in the same transaction. Every reader gets a body from its chunks, through
-//! [`body_sql`]; only the writer and the upgrade read `content`, which `scripts/check-body-reads.sh`
-//! holds.
+//! A page body is stored only as its chunks in `page_chunks`. Every writer saves one
+//! through [`write_body`] and every reader gets one through [`body_sql`].
 //!
-//! A trigger can't keep a value between its statements, so one call works out every row write and
-//! the trigger applies them as one upsert: a chunk whose bytes and place are unchanged gets no
-//! write, and a chunk that has gone is marked with [`GONE`] for the trigger's second statement to
-//! delete.
+//! One SQL call, [`chunk_writes`], works out every row write and [`write_body`] applies them as one
+//! upsert: a chunk whose bytes and place are unchanged gets no write, and a chunk that has gone is
+//! marked with [`GONE`] for the second statement to delete. The upgrade that first chunked every
+//! body ran the same call from SQL.
 //!
 //! `ord` places chunks with gaps of [`ORD_SPACING`], so a chunk added mid-page takes a number
 //! between its neighbours and every chunk after it keeps its row. Only when a gap runs out is the
@@ -14,6 +12,8 @@
 
 use pikos_core::chunks::{chunk_body, join_chunks, Chunk};
 use serde_json::{json, Value};
+
+use crate::error::AppResult;
 
 /// The `ord` that marks a chunk for deletion. Every live chunk's `ord` is positive.
 pub const GONE: i64 = -1;
@@ -46,6 +46,52 @@ pub fn joined_body(bodies: &str) -> String {
     }
 
     join_chunks(bodies.split(ROW))
+}
+
+/// Saves `content` as page `page_id`'s body, writing only the chunks that changed, and true when
+/// one did. A change bumps the page's `body_rev`, which is what sync's capture watches: a body
+/// isn't a column of the row, so a trigger on `pages` can't see it change.
+///
+/// An empty body in a row write means the stored bytes stand: no chunk's body is ever empty.
+pub async fn write_body<'a>(
+    db: impl sqlx::Acquire<'a, Database = sqlx::Sqlite>,
+    page_id: &str,
+    content: &str,
+) -> AppResult<bool> {
+    let mut tx = db.begin().await?;
+
+    let written = sqlx::query(
+        "INSERT INTO page_chunks (page_id, chunk_id, ord, body)
+           SELECT ?2, w.value ->> 'id', w.value ->> 'ord', COALESCE(w.value ->> 'body', '')
+           FROM json_each(pikos_chunk_writes(?1, (
+             SELECT group_concat(chunk_id || char(31) || ord || char(31) || body, char(30))
+             FROM page_chunks WHERE page_id = ?2
+           ))) AS w
+           WHERE true
+         ON CONFLICT (page_id, chunk_id) DO UPDATE
+           SET ord = excluded.ord, body = iif(excluded.body = '', body, excluded.body)",
+    )
+    .bind(content)
+    .bind(page_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    sqlx::query("DELETE FROM page_chunks WHERE page_id = ? AND ord = ?")
+        .bind(page_id)
+        .bind(GONE)
+        .execute(&mut *tx)
+        .await?;
+
+    let is_changed = written > 0;
+    if is_changed {
+        sqlx::query("UPDATE pages SET body_rev = body_rev + 1 WHERE id = ?")
+            .bind(page_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(is_changed)
 }
 
 struct Stored<'a> {

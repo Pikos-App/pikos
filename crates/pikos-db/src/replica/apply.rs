@@ -1133,12 +1133,7 @@ async fn read_row(
     entity: &EntityMap,
     key: &str,
 ) -> AppResult<Option<Vec<Vec<Value>>>> {
-    let columns: String = entity
-        .fields
-        .iter()
-        .flat_map(|f| f.columns.iter())
-        .map(|c| format!(", quote(t.{c})"))
-        .collect();
+    let columns = super::manifest::quoted_values(entity);
     let covers = entity.covers.unwrap_or("1");
     let sql = format!(
         "SELECT 1{columns} FROM {} AS t WHERE ({covers}) AND {} = ?",
@@ -1360,12 +1355,19 @@ async fn write_row(
             return Ok(());
         }
         Entity::Body => {
-            let sql = "UPDATE pages SET content = ?, content_schema_version = ? WHERE id = ?";
-            let mut query = sqlx::query(sql);
-            for value in &values {
-                query = bind_value(query, value);
-            }
-            query.bind(key).execute(&mut *conn).await?;
+            let [content, version] = values[..] else {
+                return Err(AppError::Internal(format!("body {key} has no version")));
+            };
+            let query = sqlx::query("UPDATE pages SET content_schema_version = ? WHERE id = ?");
+            bind_value(query, version)
+                .bind(key)
+                .execute(&mut *conn)
+                .await?;
+            let content = match content {
+                Value::Text(content) => content.as_str(),
+                _ => "",
+            };
+            crate::page_chunks::write_body(&mut *conn, key, content).await?;
             return Ok(());
         }
         Entity::Asset => return Ok(()),

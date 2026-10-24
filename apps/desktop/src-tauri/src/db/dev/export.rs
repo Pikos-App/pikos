@@ -63,9 +63,7 @@ pub(crate) async fn build_export_json_impl(
                 let mut obj = serde_json::Map::new();
                 for col in row.columns() {
                     let name = col.name();
-                    // A page's stored body column gives way to the body every reader gets.
                     let key = match name {
-                        "content" => continue,
                         "body" => "content",
                         _ => name,
                     };

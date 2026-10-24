@@ -1207,8 +1207,8 @@ async fn insert_synced_page(
     .await?;
     sqlx::query(
         "INSERT INTO pages
-         (id, folder_id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, '{}', '', 'not_started', 0, '[]', ?, ?, ?)",
+         (id, folder_id, title, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?)",
     )
     .bind(&id)
     .bind(&ctx.folder_id)
@@ -1505,12 +1505,12 @@ pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<
         };
 
         if linked || listed {
-            sqlx::query("UPDATE pages SET content = ?, content_text = ? WHERE id = ?")
-                .bind(&content)
+            sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
                 .bind(&text)
                 .bind(&id)
                 .execute(tx.conn())
                 .await?;
+            crate::page_chunks::write_body(tx.conn(), &id, &content).await?;
         }
         sqlx::query(
             "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = ?
@@ -1553,13 +1553,13 @@ async fn write_seeded_body(
     hash: &str,
     now: &str,
 ) -> AppResult<()> {
-    sqlx::query("UPDATE pages SET content = ?, content_text = ?, updated_at = ? WHERE id = ?")
-        .bind(content_json)
+    sqlx::query("UPDATE pages SET content_text = ?, updated_at = ? WHERE id = ?")
         .bind(content_text)
         .bind(now)
         .bind(page_id)
         .execute(&mut **tx)
         .await?;
+    crate::page_chunks::write_body(&mut **tx, page_id, content_json).await?;
     sqlx::query(
         "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = ?,
          pending_description = NULL WHERE page_id = ?",
