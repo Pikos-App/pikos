@@ -107,6 +107,43 @@ pub fn join_chunks<'a>(bodies: impl IntoIterator<Item = &'a str>) -> String {
     format!(r#"{{"type":"doc","content":[{}]}}"#, inners.join(","))
 }
 
+/// Whether `content`'s blocks are `chunks`' blocks in order. A block counts as the same when it is
+/// the same JSON in other bytes, since a body round-tripped through Markdown by the CLI or MCP comes
+/// back with its keys reordered.
+pub fn has_blocks_of(content: &str, chunks: &[Chunk]) -> bool {
+    let blocks = top_level_blocks(content);
+    let stored: Vec<&str> = chunks
+        .iter()
+        .flat_map(|chunk| array_items(&chunk.body))
+        .collect();
+
+    let is_same_count = blocks.len() == stored.len();
+    is_same_count
+        && blocks
+            .iter()
+            .zip(&stored)
+            .all(|(block, was)| block == was || is_same_json(block, was))
+}
+
+/// The document `content` reads back as once its chunks are stored: its blocks and nothing else.
+/// None when it has no blocks.
+pub fn rejoined(content: &str) -> Option<String> {
+    let blocks = top_level_blocks(content);
+    if blocks.is_empty() {
+        return None;
+    }
+
+    Some(join_chunks([body_of(&blocks).as_str()]))
+}
+
+fn is_same_json(a: &str, b: &str) -> bool {
+    let parsed = (
+        serde_json::from_str::<serde_json::Value>(a),
+        serde_json::from_str::<serde_json::Value>(b),
+    );
+    matches!(parsed, (Ok(a), Ok(b)) if a == b)
+}
+
 fn top_level_blocks(content: &str) -> Vec<&str> {
     let Ok(fields) = serde_json::from_str::<BTreeMap<&str, &RawValue>>(content) else {
         return Vec::new();

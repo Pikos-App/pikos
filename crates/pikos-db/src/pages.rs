@@ -574,6 +574,19 @@ async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
         .map(Page::from)
 }
 
+/// [`fetch_page`] with its body already known, so a long page isn't rejoined from its chunks.
+async fn fetch_page_with_body(pool: &sqlx::SqlitePool, id: &str, body: String) -> AppResult<Page> {
+    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
+    let sql = format!("SELECT *{SYNC_DERIVED_SELECT}, ? AS body FROM pages WHERE id = ?");
+    sqlx::query_as::<_, PageRow>(&sql)
+        .bind(body)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
+        .map(Page::from)
+}
+
 async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> AppResult<i64> {
     Ok(sqlx::query_scalar(
         "SELECT COALESCE(MAX(sort_order) + ?, 0) FROM pages WHERE folder_id IS ?",
@@ -699,6 +712,9 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
 /// another write landed between the merge and the save, so even a second is rare.
 const BODY_MERGE_ATTEMPTS: usize = 5;
 
+/// Writes `updates` to page `id`. A body the page already has is dropped from the write, because
+/// writing it back would re-stamp the schema version, which stamps the body's sync clock and lets
+/// the no-op beat a real edit from another device, and would claim a calendar page for the person.
 pub async fn update_page_impl(
     pool: &sqlx::SqlitePool,
     id: String,
@@ -709,20 +725,39 @@ pub async fn update_page_impl(
     }
 
     for _ in 0..BODY_MERGE_ATTEMPTS {
+        let mut stored = None;
+        let mut typed_over_rev = None;
+        let mut is_typed_over_older = false;
         if let Some(content) = &updates.content {
-            let is_unchanged = is_stored_body(pool, &id, content).await?;
+            stored = crate::page_chunks::stored_body(pool, &id).await?;
+            let is_unchanged = stored.as_ref().is_some_and(|stored| stored.holds(content));
             if is_unchanged {
                 updates.content = None;
             } else {
                 ensure_body_from_this_build(pool, &id).await?;
             }
+
+            if let (Some(base), Some(stored), Some(_)) =
+                (&updates.base_content, &stored, &updates.content)
+            {
+                is_typed_over_older = !stored.holds(base);
+                typed_over_rev = Some(stored.rev);
+            }
         }
 
-        let is_written = write_page_update(pool, &id, &updates).await?;
+        let is_written =
+            !is_typed_over_older && write_page_update(pool, &id, &updates, typed_over_rev).await?;
         let has_merged = !is_written && merge_over_stored_body(pool, &id, &mut updates).await?;
-        if !has_merged {
-            return fetch_page(pool, &id).await;
+        if has_merged {
+            continue;
         }
+
+        let body = match (is_written, &updates.content, &stored) {
+            (true, Some(content), _) => crate::page_chunks::stored_form(content),
+            (true, None, Some(stored)) => stored.joined(),
+            _ => return fetch_page(pool, &id).await,
+        };
+        return fetch_page_with_body(pool, &id, body).await;
     }
 
     Err(AppError::Conflict(format!(
@@ -785,12 +820,13 @@ async fn merge_over_stored_body(
     Ok(true)
 }
 
-/// Writes `updates`, true unless a body typed over an older one found a newer one stored, or the
-/// page is gone or in the trash.
+/// Writes `updates`, true unless the page is gone or in the trash, or `typed_over_rev` is given and
+/// the body has changed since it was read at that revision.
 async fn write_page_update(
     pool: &sqlx::SqlitePool,
     id: &str,
     updates: &PageUpdate,
+    typed_over_rev: Option<i64>,
 ) -> AppResult<bool> {
     // Editing any authored field claims ownership (the reconciler never calls this
     // path, so sync can't trip it). `last_opened_at`/`sort_order` are excluded —
@@ -849,7 +885,10 @@ async fn write_page_update(
         return Ok(true);
     }
 
-    crate::tx::retry_on_busy(|| apply_page_update(pool, id, updates, marks_ownership)).await
+    crate::tx::retry_on_busy(|| {
+        apply_page_update(pool, id, updates, typed_over_rev, marks_ownership)
+    })
+    .await
 }
 
 /// Refuses to write over a body a newer Pikos wrote. This build's editor may not know its nodes,
@@ -886,27 +925,6 @@ async fn live_body(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<String
         .await?)
 }
 
-/// Whether `incoming` is the body the page already has. Writing it back must change
-/// nothing: a content write re-stamps the schema version, which stamps the body's sync
-/// clock and lets the no-op beat a real edit from another device, and it claims a
-/// calendar page for the person. Compared as parsed JSON because a body round-tripped
-/// through markdown by the CLI or MCP comes back with its keys reordered.
-async fn is_stored_body(pool: &sqlx::SqlitePool, id: &str, incoming: &str) -> AppResult<bool> {
-    let Some(stored) = live_body(pool, id).await? else {
-        return Ok(false);
-    };
-
-    if stored == incoming {
-        return Ok(true);
-    }
-
-    let parsed = (
-        serde_json::from_str::<serde_json::Value>(&stored),
-        serde_json::from_str::<serde_json::Value>(incoming),
-    );
-    Ok(matches!(parsed, (Ok(a), Ok(b)) if a == b))
-}
-
 /// The write half of [`write_page_update`], retried as a unit because it can lose
 /// the WAL write race to any concurrent writer (a sync poll, a calendar teardown).
 ///
@@ -922,6 +940,7 @@ async fn apply_page_update(
     pool: &sqlx::SqlitePool,
     id: &str,
     updates: &PageUpdate,
+    typed_over_rev: Option<i64>,
     marks_ownership: bool,
 ) -> AppResult<bool> {
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
@@ -995,11 +1014,9 @@ async fn apply_page_update(
         builder.push(" AND content_schema_version <= ");
         builder.push_bind(crate::CONTENT_SCHEMA_VERSION);
     }
-    if let (Some(_), Some(base)) = (&updates.content, &updates.base_content) {
-        builder.push(" AND ");
-        builder.push(crate::page_chunks::body_sql("pages.id"));
-        builder.push(" = ");
-        builder.push_bind(base.clone());
+    if let (Some(_), Some(rev)) = (&updates.content, typed_over_rev) {
+        builder.push(" AND body_rev = ");
+        builder.push_bind(rev);
     }
 
     // Transaction wraps the pages row + (optional) page_tags rewrite so the

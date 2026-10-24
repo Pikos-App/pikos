@@ -10,7 +10,7 @@
 //! between its neighbours and every chunk after it keeps its row. Only when a gap runs out is the
 //! page renumbered.
 
-use pikos_core::chunks::{chunk_body, join_chunks, Chunk};
+use pikos_core::chunks::{chunk_body, has_blocks_of, join_chunks, rejoined, Chunk};
 use serde_json::{json, Value};
 
 use crate::error::AppResult;
@@ -60,17 +60,16 @@ pub async fn write_body<'a>(
 ) -> AppResult<bool> {
     let mut tx = db.begin().await?;
 
-    let written = sqlx::query(
+    let rows = stored_rows_sql("?2");
+    // sql-ok: stored_rows_sql is built from a compile-time constant
+    let written = sqlx::query(&format!(
         "INSERT INTO page_chunks (page_id, chunk_id, ord, body)
            SELECT ?2, w.value ->> 'id', w.value ->> 'ord', COALESCE(w.value ->> 'body', '')
-           FROM json_each(pikos_chunk_writes(?1, (
-             SELECT group_concat(chunk_id || char(31) || ord || char(31) || body, char(30))
-             FROM page_chunks WHERE page_id = ?2
-           ))) AS w
+           FROM json_each(pikos_chunk_writes(?1, {rows})) AS w
            WHERE true
          ON CONFLICT (page_id, chunk_id) DO UPDATE
-           SET ord = excluded.ord, body = iif(excluded.body = '', body, excluded.body)",
-    )
+           SET ord = excluded.ord, body = iif(excluded.body = '', body, excluded.body)"
+    ))
     .bind(content)
     .bind(page_id)
     .execute(&mut *tx)
@@ -94,17 +93,77 @@ pub async fn write_body<'a>(
     Ok(is_changed)
 }
 
+/// The SQL for the stored chunks of the page whose id is `id_column`, as `id FIELD ord FIELD body`
+/// joined by `ROW`, the form [`chunk_writes`] reads.
+fn stored_rows_sql(id_column: &str) -> String {
+    format!(
+        "(SELECT group_concat(chunk_id || char(31) || ord || char(31) || body, char(30)) \
+         FROM page_chunks WHERE page_id = {id_column})"
+    )
+}
+
+/// A page's chunks as one read found them, and the `body_rev` they were read at. A write guarded
+/// on that `body_rev` lands only if no chunk has changed since, which is how a save typed over this
+/// body is told from one typed over an older one without rejoining the page.
+pub struct StoredBody {
+    pub rev: i64,
+    chunks: Vec<Chunk>,
+}
+
+impl StoredBody {
+    /// Whether `content` is this body, block for block.
+    pub fn holds(&self, content: &str) -> bool {
+        match self.chunks.as_slice() {
+            [] => has_blocks_of(content, &chunk_body(EMPTY_BODY, &[])),
+            chunks => has_blocks_of(content, chunks),
+        }
+    }
+
+    /// The body every reader gets.
+    pub fn joined(&self) -> String {
+        match self.chunks.as_slice() {
+            [] => EMPTY_BODY.to_string(),
+            chunks => join_chunks(chunks.iter().map(|chunk| chunk.body.as_str())),
+        }
+    }
+}
+
+/// Page `page_id`'s chunks and `body_rev`, read together. None when there is no such page.
+pub async fn stored_body(pool: &sqlx::SqlitePool, page_id: &str) -> AppResult<Option<StoredBody>> {
+    let rows = stored_rows_sql("pages.id");
+    // sql-ok: stored_rows_sql is built from a compile-time constant
+    let sql = format!("SELECT body_rev, {rows} FROM pages WHERE id = ?");
+    let row: Option<(i64, Option<String>)> = sqlx::query_as(&sql)
+        .bind(page_id)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(row.map(|(rev, rows)| StoredBody {
+        rev,
+        chunks: stored_rows(rows.as_deref().unwrap_or_default())
+            .into_iter()
+            .map(|chunk| Chunk {
+                id: chunk.id.to_string(),
+                body: chunk.body.to_string(),
+            })
+            .collect(),
+    }))
+}
+
+/// What a page saved as `content` reads back as, without reading it back.
+pub fn stored_form(content: &str) -> String {
+    rejoined(content).unwrap_or_else(|| EMPTY_BODY.to_string())
+}
+
 struct Stored<'a> {
     id: &'a str,
     ord: i64,
     body: &'a str,
 }
 
-/// The row writes that bring a page's chunks in line with `content`, as a JSON array of
-/// `{id, ord, body}`, `body` left out where the stored bytes stand. `previous` is the page's stored
-/// chunks as `id FIELD ord FIELD body`, joined by `ROW`, in any order.
-pub fn chunk_writes(content: &str, previous: &str) -> String {
-    let mut stored: Vec<Stored> = previous
+/// `rows`, in the form [`stored_rows_sql`] reads, as chunks in page order.
+fn stored_rows(rows: &str) -> Vec<Stored<'_>> {
+    let mut stored: Vec<Stored> = rows
         .split(ROW)
         .filter_map(|row| {
             let mut fields = row.splitn(3, FIELD);
@@ -115,6 +174,15 @@ pub fn chunk_writes(content: &str, previous: &str) -> String {
         })
         .collect();
     stored.sort_by_key(|chunk| chunk.ord);
+
+    stored
+}
+
+/// The row writes that bring a page's chunks in line with `content`, as a JSON array of
+/// `{id, ord, body}`, `body` left out where the stored bytes stand. `previous` is the page's stored
+/// chunks as `id FIELD ord FIELD body`, joined by `ROW`, in any order.
+pub fn chunk_writes(content: &str, previous: &str) -> String {
+    let stored = stored_rows(previous);
 
     let previous: Vec<Chunk> = stored
         .iter()

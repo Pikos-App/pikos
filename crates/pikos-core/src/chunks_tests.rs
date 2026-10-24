@@ -259,3 +259,42 @@ fn an_emptied_page_drops_every_chunk() {
 
     assert!(chunk_body(r#"{"type":"doc","content":[]}"#, &before).is_empty());
 }
+
+#[test]
+fn a_body_holds_its_chunks_blocks_whatever_the_order_of_its_keys() {
+    let blocks = long_page(100);
+    let chunks = chunk_body(&body(&blocks), &[]);
+    let reordered: Vec<String> = blocks
+        .iter()
+        .map(|block| parsed(block).to_string())
+        .collect();
+    assert_ne!(reordered, blocks);
+
+    assert!(has_blocks_of(&body(&reordered), &chunks));
+}
+
+#[test]
+fn a_body_with_one_block_changed_added_or_gone_does_not_hold_the_chunks() {
+    let blocks = long_page(100);
+    let chunks = chunk_body(&body(&blocks), &[]);
+    let mut changed = blocks.clone();
+    changed[50] = para("typed");
+    let mut added = blocks.clone();
+    added.push(para("typed"));
+
+    for content in [body(&changed), body(&added), body(&blocks[1..])] {
+        assert!(!has_blocks_of(&content, &chunks));
+    }
+}
+
+#[test]
+fn a_body_rejoins_as_its_blocks_alone_the_way_its_chunks_join() {
+    let blocks = long_page(100);
+    let wrapped = format!(
+        r#"{{"content":[{}],"type":"doc","attrs":{{}}}}"#,
+        blocks.join(",")
+    );
+
+    assert_eq!(rejoined(&wrapped), Some(joined(&chunk_body(&wrapped, &[]))));
+    assert_eq!(rejoined(r#"{"type":"doc","content":[]}"#), None);
+}

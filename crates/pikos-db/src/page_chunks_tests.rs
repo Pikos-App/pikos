@@ -374,3 +374,32 @@ async fn a_body_typed_over_the_one_read_lands_as_typed() {
         "merged rather than written over its own base"
     );
 }
+
+#[tokio::test]
+async fn a_save_hands_back_the_body_a_read_gets() {
+    let pool = test_pool().await;
+    let mut data = new_page("Long");
+    data.content = long_body(100, "first");
+    let page = crate::create_page_impl(&pool, data).await.unwrap();
+
+    let typed = format!(
+        r#"{{"content":{},"type":"doc"}}"#,
+        blocks_of(&long_body(101, "first"))
+    );
+    let empty = r#"{"type":"doc","content":[]}"#.to_string();
+    for content in [typed.clone(), typed, empty] {
+        let saved = crate::update_page_impl(
+            &pool,
+            page.id.clone(),
+            PageUpdate {
+                content: Some(content.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let read = crate::get_page(&pool, &page.id).await.unwrap().unwrap();
+        assert_eq!(saved.content, read.content, "saving {content:.40}");
+    }
+}
