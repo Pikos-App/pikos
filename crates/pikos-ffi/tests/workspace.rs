@@ -132,19 +132,20 @@ async fn editing_content_restamps_the_schema_version() {
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
     let page = ws.create_page(new_page("Doc")).await.unwrap();
+    let body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Edited"}]}]}"#;
 
     let updated = ws
         .update_page(
             page.id.clone(),
             PageEdit {
-                content: Some(r#"{"type":"doc","content":[]}"#.to_string()),
+                content: Some(body.to_string()),
                 ..Default::default()
             },
         )
         .await
         .unwrap();
 
-    assert_eq!(updated.content, r#"{"type":"doc","content":[]}"#);
+    assert_eq!(updated.content, body);
     assert_eq!(updated.content_schema_version, ws.content_schema_version());
 }
 

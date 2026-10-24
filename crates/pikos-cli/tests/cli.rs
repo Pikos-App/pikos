@@ -2458,7 +2458,9 @@ async fn update_content_refuses_markdown_the_editor_cannot_hold_and_writes_nothi
     );
     assert_eq!(code(&out), 2);
     let read = json(&cli(dbs, &["read", &ids[0], "--json"]));
-    assert_eq!(read["content"], before.as_str());
+    let read_doc: Value = serde_json::from_str(read["content"].as_str().unwrap()).unwrap();
+    let before_doc: Value = serde_json::from_str(&before).unwrap();
+    assert_eq!(read_doc, before_doc);
     assert_eq!(read["title"], "Trip");
 }
 

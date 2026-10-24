@@ -227,12 +227,14 @@ struct Touched {
 
 impl Touched {
     async fn rederive(&self, tx: &mut Uncaptured<'_>) -> AppResult<()> {
+        let body = crate::page_chunks::body_sql("pages.id");
+        // sql-ok: body_sql is built from a compile-time constant
+        let read_body = format!("SELECT {body} FROM pages WHERE id = ?");
         for page in &self.bodies {
-            let content: Option<String> =
-                sqlx::query_scalar("SELECT content FROM pages WHERE id = ?")
-                    .bind(page)
-                    .fetch_optional(tx.conn())
-                    .await?;
+            let content: Option<String> = sqlx::query_scalar(&read_body)
+                .bind(page)
+                .fetch_optional(tx.conn())
+                .await?;
             if let Some(content) = content {
                 sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
                     .bind(crate::pool::extract_text_from_tiptap(&content))

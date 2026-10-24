@@ -599,6 +599,7 @@ const ANALYSIS_LIMIT: u32 = 400;
 async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         // The terms of `idx_pages_untexted`, exactly, so the planner reads that index.
+        // body-read-ok: an upgrade pass over rows saved before content_text existed
         "SELECT id, content FROM pages WHERE content_text = '' AND content != '' AND content != '{}'",
     )
     .fetch_all(pool)
@@ -622,6 +623,7 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
 /// finds them, without stamping `updated_at`: nobody edited it, and it mustn't float to the top of
 /// recently edited.
 async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
+    // body-read-ok: an upgrade pass, run once on a workspace older than derived-text version 2
     let rows: Vec<(String, String)> =
         sqlx::query_as("SELECT id, content FROM pages WHERE content LIKE '%\"hardBreak\"%'")
             .fetch_all(pool)

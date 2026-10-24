@@ -100,6 +100,8 @@ run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
 run_check "ui-tokens"         bash scripts/check-ui-tokens.sh &
 # A shipped migration edited in place locks installs out on upgrade; the script says how.
 run_check "migrations"        bash scripts/check-migrations-frozen.sh &
+# A reader left on the stored body column returns the right page until saves write chunks alone.
+run_check "body-reads"        bash scripts/check-body-reads.sh &
 # The keyboard registry logs a warning for a duplicate combo and registers both
 # anyway, so the winner is whichever component mounted last. Same cheap-guard
 # reasoning again: a text scan over call sites, catching what a runtime check
@@ -133,7 +135,7 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations shortcut-conflicts qa-rows tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body-reads shortcut-conflicts qa-rows tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then

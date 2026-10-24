@@ -913,7 +913,8 @@ async fn update_page_with_the_body_read_page_gave_leaves_it_unedited() {
     );
     server.shutdown();
 
-    assert_eq!(updated["content"], doc.as_str());
+    let updated_doc: Value = serde_json::from_str(updated["content"].as_str().unwrap()).unwrap();
+    assert_eq!(updated_doc, serde_json::from_str::<Value>(&doc).unwrap());
     let version: i64 = sqlx::query_scalar("SELECT content_schema_version FROM pages")
         .fetch_one(&pool)
         .await

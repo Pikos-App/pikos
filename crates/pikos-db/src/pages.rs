@@ -26,6 +26,7 @@ struct PageRow {
     folder_id: Option<String>,
     title: String,
     subtitle: Option<String>,
+    #[sqlx(rename = "body")]
     content: String,
     content_text: Option<String>,
     status: String,
@@ -557,16 +558,20 @@ async fn upsert_page_tags_tx(
     Ok(())
 }
 
+/// Every column of a page, the sync-derived ones, and its body as `body`, for a [`PageRow`].
+fn page_row_select() -> String {
+    let body = crate::page_chunks::body_sql("pages.id");
+    format!("SELECT *{SYNC_DERIVED_SELECT}, {body} AS body FROM pages")
+}
+
 async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
-    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
-    sqlx::query_as::<_, PageRow>(&format!(
-        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
-    .map(Page::from)
+    // sql-ok: page_row_select is built from compile-time constants
+    sqlx::query_as::<_, PageRow>(&format!("{} WHERE id = ?", page_row_select()))
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
+        .map(Page::from)
 }
 
 async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> AppResult<i64> {
@@ -870,14 +875,15 @@ async fn ensure_body_from_this_build(pool: &sqlx::SqlitePool, id: &str) -> AppRe
     Ok(())
 }
 
-/// The body of a page not in the trash.
+/// The body of a page not in the trash, as every reader gets it.
 async fn live_body(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<String>> {
-    Ok(
-        sqlx::query_scalar("SELECT content FROM pages WHERE id = ? AND deleted_at IS NULL")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?,
-    )
+    let body = crate::page_chunks::body_sql("pages.id");
+    // sql-ok: body_sql is built from a compile-time constant
+    let sql = format!("SELECT {body} FROM pages WHERE id = ? AND deleted_at IS NULL");
+    Ok(sqlx::query_scalar(&sql)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?)
 }
 
 /// Whether `incoming` is the body the page already has. Writing it back must change
@@ -992,7 +998,9 @@ async fn apply_page_update(
         builder.push_bind(crate::CONTENT_SCHEMA_VERSION);
     }
     if let (Some(_), Some(base)) = (&updates.content, &updates.base_content) {
-        builder.push(" AND content = ");
+        builder.push(" AND ");
+        builder.push(crate::page_chunks::body_sql("pages.id"));
+        builder.push(" = ");
         builder.push_bind(base.clone());
     }
 
@@ -1928,9 +1936,10 @@ async fn complete_recurring_page_once(
     // Fetch the head inside the tx, rejecting soft-deleted pages — completing a
     // trashed series must not resurrect it as a visible "done" clone. The
     // sort_order read also lives in the tx so concurrent completions can't collide.
-    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
+    // sql-ok: page_row_select is built from compile-time constants
     let head = sqlx::query_as::<_, PageRow>(&format!(
-        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+        "{} WHERE id = ? AND deleted_at IS NULL",
+        page_row_select()
     ))
     .bind(&data.page_id)
     .fetch_optional(&mut *tx)
@@ -2426,9 +2435,10 @@ async fn reschedule_virtual_occurrence_once(
 
     // Reject soft-deleted heads: rescheduling an occurrence of a trashed series
     // must not resurrect its content as a visible page.
-    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
+    // sql-ok: page_row_select is built from compile-time constants
     let head = sqlx::query_as::<_, PageRow>(&format!(
-        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+        "{} WHERE id = ? AND deleted_at IS NULL",
+        page_row_select()
     ))
     .bind(&page_id)
     .fetch_optional(&mut *tx)
@@ -2548,13 +2558,11 @@ pub(crate) async fn get_page_in(
     conn: &mut sqlx::SqliteConnection,
     id: &str,
 ) -> AppResult<Option<Page>> {
-    // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
-    let row = sqlx::query_as::<_, PageRow>(&format!(
-        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
-    .bind(id)
-    .fetch_optional(conn)
-    .await?;
+    // sql-ok: page_row_select is built from compile-time constants
+    let row = sqlx::query_as::<_, PageRow>(&format!("{} WHERE id = ?", page_row_select()))
+        .bind(id)
+        .fetch_optional(conn)
+        .await?;
     Ok(row.map(Page::from))
 }
 

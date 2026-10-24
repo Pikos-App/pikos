@@ -123,7 +123,7 @@ pub async fn plan_markdown_export(
             .into_iter()
             .collect();
 
-    let rows = fetch_export_pages(pool, MARKDOWN_COLUMNS, include_synced).await?;
+    let rows = fetch_export_pages(pool, &markdown_columns(), include_synced).await?;
 
     let titles: HashMap<String, String> = rows
         .iter()
@@ -160,13 +160,13 @@ pub async fn plan_markdown_page(
     pool: &sqlx::SqlitePool,
     page_id: &str,
 ) -> AppResult<Option<MarkdownPage>> {
-    let sql =
-        format!("SELECT {MARKDOWN_COLUMNS} FROM pages p WHERE p.id = ? AND p.deleted_at IS NULL");
+    let columns = markdown_columns();
+    let sql = format!("SELECT {columns} FROM pages p WHERE p.id = ? AND p.deleted_at IS NULL");
     let Some(row) = sqlx::query(&sql).bind(page_id).fetch_optional(pool).await? else {
         return Ok(None);
     };
 
-    let content: String = row.try_get("content").unwrap_or_default();
+    let content: String = row.try_get("body").unwrap_or_default();
     let titles = match serde_json::from_str::<serde_json::Value>(&content) {
         Ok(doc) => crate::page_links::target_titles(pool, &doc).await?,
         Err(_) => HashMap::new(),
@@ -175,8 +175,13 @@ pub async fn plan_markdown_page(
     Ok(Some(markdown_page(&row, None, &titles)))
 }
 
-const MARKDOWN_COLUMNS: &str = "id, folder_id, title, content, status, priority, tags, \
-     scheduled_start, scheduled_end, created_at, updated_at";
+fn markdown_columns() -> String {
+    let body = crate::page_chunks::body_sql("p.id");
+    format!(
+        "id, folder_id, title, {body} AS body, status, priority, tags, \
+         scheduled_start, scheduled_end, created_at, updated_at"
+    )
+}
 
 fn markdown_page(
     row: &sqlx::sqlite::SqliteRow,
@@ -184,7 +189,7 @@ fn markdown_page(
     titles: &HashMap<String, String>,
 ) -> MarkdownPage {
     let title: String = row.try_get("title").unwrap_or_default();
-    let content: String = row.try_get("content").unwrap_or_default();
+    let content: String = row.try_get("body").unwrap_or_default();
     let status: String = row.try_get("status").unwrap_or_default();
     let priority: i64 = row.try_get("priority").unwrap_or(0);
     let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());

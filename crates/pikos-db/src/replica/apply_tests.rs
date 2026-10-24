@@ -195,9 +195,10 @@ async fn typing_over_a_body_another_device_changed_since_it_loaded_keeps_both_ed
 
     assert_converged(&mac, &phone).await;
     let on_phone = get_page(&phone, &page.id).await.unwrap().unwrap();
+    let doc = |body: &str| serde_json::from_str::<serde_json::Value>(body).unwrap();
     assert_eq!(
-        on_phone.content,
-        body_of(&["oat milk", "eggs", "rye bread"])
+        doc(&on_phone.content),
+        doc(&body_of(&["oat milk", "eggs", "rye bread"]))
     );
     assert_eq!(
         on_phone.content_text.as_deref(),

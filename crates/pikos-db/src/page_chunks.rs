@@ -1,6 +1,7 @@
 //! A page body's chunks in `page_chunks`, written by triggers on `pages` from every write that sets
-//! `content`, in the same transaction. `content` stays the source of truth: the chunks are derived
-//! from it, never the other way round.
+//! `content`, in the same transaction. Every reader gets a body from its chunks, through
+//! [`body_sql`]; only the writer and the upgrade read `content`, which `scripts/check-body-reads.sh`
+//! holds.
 //!
 //! A trigger can't keep a value between its statements, so one call works out every row write and
 //! the trigger applies them as one upsert: a chunk whose bytes and place are unchanged gets no
@@ -11,7 +12,7 @@
 //! between its neighbours and every chunk after it keeps its row. Only when a gap runs out is the
 //! page renumbered.
 
-use pikos_core::chunks::{chunk_body, Chunk};
+use pikos_core::chunks::{chunk_body, join_chunks, Chunk};
 use serde_json::{json, Value};
 
 /// The `ord` that marks a chunk for deletion. Every live chunk's `ord` is positive.
@@ -23,6 +24,29 @@ const ORD_SPACING: i64 = 1 << 20;
 /// holds either unescaped, so neither can occur inside a chunk's body.
 const ROW: char = '\u{1e}';
 const FIELD: char = '\u{1f}';
+
+/// The body of a page with no chunks. A document with no blocks isn't one the editor's schema
+/// allows, and the editor loads what it is given unchecked, so an empty page reads as the one empty
+/// paragraph every editor opens a new page with.
+pub const EMPTY_BODY: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
+
+/// The SQL for the body of the page whose id is `id_column`, rebuilt from its chunks by
+/// [`joined_body`].
+pub fn body_sql(id_column: &str) -> String {
+    format!(
+        "pikos_join_chunks((SELECT group_concat(page_chunks.body, char(30) ORDER BY page_chunks.ord) \
+         FROM page_chunks WHERE page_chunks.page_id = {id_column}))"
+    )
+}
+
+/// The document whose blocks are `bodies`', a page's chunk bodies in order joined by `ROW`.
+pub fn joined_body(bodies: &str) -> String {
+    if bodies.is_empty() {
+        return EMPTY_BODY.to_string();
+    }
+
+    join_chunks(bodies.split(ROW))
+}
 
 struct Stored<'a> {
     id: &'a str,

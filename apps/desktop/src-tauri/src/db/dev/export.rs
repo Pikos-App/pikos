@@ -37,9 +37,13 @@ pub(crate) async fn build_export_json_impl(
         .fetch_all(pool)
         .await?;
 
-    let pages = sqlx::query("SELECT * FROM pages WHERE deleted_at IS NULL ORDER BY sort_order")
-        .fetch_all(pool)
-        .await?;
+    let body = pikos_db::page_chunks::body_sql("pages.id");
+    // sql-ok: body_sql is built from a compile-time constant
+    let pages = sqlx::query(&format!(
+        "SELECT *, {body} AS body FROM pages WHERE deleted_at IS NULL ORDER BY sort_order"
+    ))
+    .fetch_all(pool)
+    .await?;
 
     let schedules = sqlx::query("SELECT * FROM page_schedules ORDER BY scheduled_start")
         .fetch_all(pool)
@@ -59,8 +63,14 @@ pub(crate) async fn build_export_json_impl(
                 let mut obj = serde_json::Map::new();
                 for col in row.columns() {
                     let name = col.name();
+                    // A page's stored body column gives way to the body every reader gets.
+                    let key = match name {
+                        "content" => continue,
+                        "body" => "content",
+                        _ => name,
+                    };
                     let val: serde_json::Value = if let Ok(v) = row.try_get::<String, _>(name) {
-                        if matches!(name, "content" | "tags" | "links" | "rrule_exdates") {
+                        if matches!(key, "content" | "tags" | "links" | "rrule_exdates") {
                             serde_json::from_str(&v).unwrap_or(serde_json::Value::String(v))
                         } else {
                             serde_json::Value::String(v)
@@ -70,7 +80,7 @@ pub(crate) async fn build_export_json_impl(
                     } else {
                         serde_json::Value::Null
                     };
-                    obj.insert(name.to_string(), val);
+                    obj.insert(key.to_string(), val);
                 }
                 serde_json::Value::Object(obj)
             })
@@ -79,7 +89,7 @@ pub(crate) async fn build_export_json_impl(
 
     let mut asset_paths: Vec<String> = Vec::new();
     for row in &pages {
-        if let Ok(content) = row.try_get::<String, _>("content") {
+        if let Ok(content) = row.try_get::<String, _>("body") {
             if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
                 collect_asset_paths(&doc, &mut asset_paths);
             }

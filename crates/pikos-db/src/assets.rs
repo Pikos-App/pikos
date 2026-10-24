@@ -35,7 +35,12 @@ pub fn pikos_file_name(stored: &str) -> Option<&str> {
 
 /// The stored path of every image a page refers to, trashed pages included, since restoring one
 /// brings its images back.
+///
+/// Reads `pages.content`, not the chunks: it also scans backups, opened read-only and unmigrated
+/// on a connection without Pikos's SQL functions, and one older than chunks has none. An image
+/// missed there is deleted, and the restore shows it broken.
 pub async fn asset_paths_in(pool: &SqlitePool) -> AppResult<HashSet<String>> {
+    // body-read-ok: a backup of any age has this column, see the doc above
     let bodies: Vec<String> =
         sqlx::query_scalar("SELECT content FROM pages WHERE instr(content, '\"image\"') > 0")
             .fetch_all(pool)

@@ -269,3 +269,111 @@ fn chunks_take_numbers_between_neighbours_until_a_gap_runs_out() {
     assert_eq!(roomy, [10, 15, 20]);
     assert_eq!(full, [ORD_SPACING, 2 * ORD_SPACING, 3 * ORD_SPACING]);
 }
+
+fn doc_of(blocks: &[String]) -> String {
+    format!(r#"{{"type":"doc","content":[{}]}}"#, blocks.join(","))
+}
+
+/// One list or table block of `rows` rows, far past a chunk.
+fn huge_list(rows: usize) -> String {
+    let items: Vec<String> = (0..rows)
+        .map(|i| {
+            format!(
+                r#"{{"type":"listItem","content":[{}]}}"#,
+                para(&format!("item {i}"))
+            )
+        })
+        .collect();
+    format!(r#"{{"type":"bulletList","content":[{}]}}"#, items.join(","))
+}
+
+fn huge_table(rows: usize) -> String {
+    let cell = |text: String| format!(r#"{{"type":"tableCell","content":[{}]}}"#, para(&text));
+    let rows: Vec<String> = (0..rows)
+        .map(|i| {
+            let cells = [cell(format!("r{i} a")), cell(format!("r{i} b"))];
+            format!(r#"{{"type":"tableRow","content":[{}]}}"#, cells.join(","))
+        })
+        .collect();
+    format!(r#"{{"type":"table","content":[{}]}}"#, rows.join(","))
+}
+
+#[tokio::test]
+async fn every_reader_returns_the_blocks_the_page_was_saved_with() {
+    let pool = test_pool().await;
+    let log: Vec<String> = (0..5_000).map(|i| para(&format!("12:{i:04} ok"))).collect();
+    let bodies = [
+        ("Prose", long_body(300, "prose")),
+        ("Log", doc_of(&log)),
+        (
+            "List",
+            doc_of(&[para("before"), huge_list(3_000), para("after")]),
+        ),
+        ("Table", doc_of(&[huge_table(2_000)])),
+        (
+            "Keys reordered",
+            format!(r#"{{"content":[{}],"type":"doc"}}"#, para("one")),
+        ),
+        (
+            "No type",
+            format!(r#"{{"content":[{}]}}"#, para("appended")),
+        ),
+    ];
+
+    for (title, stored) in bodies {
+        let mut data = new_page(title);
+        data.content = stored.clone();
+        let page = crate::create_page_impl(&pool, data).await.unwrap();
+        let read = crate::get_page(&pool, &page.id).await.unwrap().unwrap();
+        let exported = crate::plan_markdown_page(&pool, &page.id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let stored_doc: serde_json::Value = serde_json::from_str(&stored).unwrap();
+        let read_doc: serde_json::Value = serde_json::from_str(&read.content).unwrap();
+        assert_eq!(read_doc["type"], "doc", "{title}");
+        assert_eq!(read_doc["content"], stored_doc["content"], "{title}");
+        let markdown = crate::markdown_body(&stored, &Default::default());
+        assert!(exported.contents.ends_with(&markdown), "{title}'s export");
+    }
+}
+
+#[tokio::test]
+async fn a_page_with_no_blocks_reads_as_one_empty_paragraph() {
+    let pool = test_pool().await;
+
+    for stored in ["", "{}", r#"{"type":"doc","content":[]}"#] {
+        let mut data = new_page("Empty");
+        data.content = stored.to_string();
+        let page = crate::create_page_impl(&pool, data).await.unwrap();
+
+        assert_eq!(page.content, EMPTY_BODY, "stored as {stored:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_body_typed_over_the_one_read_lands_as_typed() {
+    let pool = test_pool().await;
+    let mut data = new_page("Quick add");
+    data.content = format!(r#"{{"content":[{}],"type":"doc"}}"#, para("one"));
+    let page = crate::create_page_impl(&pool, data).await.unwrap();
+
+    let typed = doc_of(&[para("one"), para("two")]);
+    let saved = crate::update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(typed.clone()),
+            base_content: Some(page.content),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        saved.content, typed,
+        "merged rather than written over its own base"
+    );
+}

@@ -1474,11 +1474,13 @@ async fn apply_seeded_description(
 /// is restamped at the current projection version, so the next description change still sees the
 /// body as untouched, and `updated_at` stays put.
 pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
-    let rows: Vec<(String, String, String, String)> = sqlx::query_as(
-        "SELECT p.id, p.content, p.content_text, ps.seeded_description_hash
+    let body = crate::page_chunks::body_sql("p.id");
+    // sql-ok: body_sql is built from a compile-time constant
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(&format!(
+        "SELECT p.id, {body}, p.content_text, ps.seeded_description_hash
          FROM pages p JOIN page_sync ps ON ps.page_id = p.id
-         WHERE ps.seeded_description_hash IS NOT NULL",
-    )
+         WHERE ps.seeded_description_hash IS NOT NULL"
+    ))
     .fetch_all(pool)
     .await?;
     let mut tx = crate::replica::Uncaptured::begin(pool).await?;
