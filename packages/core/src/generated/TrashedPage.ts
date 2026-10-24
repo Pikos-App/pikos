@@ -19,11 +19,9 @@ export type TrashedPage = {
    */
   deletedAt: string;
   /**
-   * True while a `page_sync` row still exists — deliberately the same predicate
-   * [`delete_page_impl`] diverts on. A row flagged here is one the trash cannot
-   * destroy: it carries the tombstone suppressing the upstream event, so
-   * deleting it outright would hand the next sync pass a page to resurrect.
-   * Restoring one gives it back to its calendar.
+   * [`crate::sync::hard_delete_would_resurrect`], the predicate
+   * [`delete_page_impl`] diverts on: a row flagged here is one the trash cannot
+   * destroy. Restoring one gives it back to its calendar.
    */
   isSynced: boolean;
 };

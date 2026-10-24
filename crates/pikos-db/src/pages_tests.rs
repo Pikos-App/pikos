@@ -4429,6 +4429,43 @@ async fn the_sweep_leaves_a_mirror_in_the_trash_rather_than_resurrecting_it() {
 }
 
 #[tokio::test]
+async fn the_sweep_destroys_a_detached_page_like_a_native_one_and_keeps_only_the_mirror() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("native", "My note"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("mirror", "Standup"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "mirror", "active").await;
+    insert_test_page(&pool, TestPage::new("detached", "Severed standup"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "detached", "detached").await;
+    for id in ["native", "mirror", "detached"] {
+        trash_at(&pool, id, &days_ago(90)).await;
+    }
+
+    let flagged: Vec<(String, bool)> = list_trashed_pages_impl(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|t| (t.id, t.is_synced))
+        .collect();
+    assert!(flagged.contains(&("detached".to_string(), false)));
+    assert!(flagged.contains(&("mirror".to_string(), true)));
+
+    let purged = purge_trashed_pages_older_than(&pool, TRASH_RETENTION_DAYS)
+        .await
+        .unwrap();
+
+    assert_eq!(purged, 2);
+    assert!(!page_exists(&pool, "native").await);
+    assert!(!page_exists(&pool, "detached").await);
+    assert!(page_exists(&pool, "mirror").await);
+}
+
+#[tokio::test]
 async fn emptying_the_trash_is_the_same_sweep_at_zero_days() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("a", "Just deleted"))

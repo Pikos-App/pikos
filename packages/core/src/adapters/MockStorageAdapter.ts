@@ -288,6 +288,11 @@ function excerptAround(text: string, terms: string[]): string {
   return text.slice(Math.max(0, hit - 40), hit + 40);
 }
 
+/** `hard_delete_would_resurrect`: the trash keeps any linked page that isn't detached. */
+function deleteWouldResurrect(page: Page): boolean {
+  return page.syncState != null && page.syncState !== "detached";
+}
+
 function toSummary(page: Page): PageSummary {
   const { content: _, ...summary } = page;
   return summary;
@@ -738,9 +743,7 @@ export class MockStorageAdapter implements StorageAdapter {
         // Rust subquery filters on `folders.deleted_at IS NULL` for the same reason.
         folderName: folder && !this.softDeletedFolders.has(folder.id) ? folder.name : null,
         id,
-        // `EXISTS(page_sync)`: any link at all, which is the predicate the delete
-        // path diverts on — not just an active one.
-        isSynced: page.syncState != null,
+        isSynced: deleteWouldResurrect(page),
         title: page.title,
       });
     }
@@ -753,10 +756,7 @@ export class MockStorageAdapter implements StorageAdapter {
     for (const [id, deletedAt] of [...this.softDeleted]) {
       if (deletedAt > cutoff) continue;
       const page = this.pages.get(id);
-      // A mirror keeps its place in the trash: destroying the row would take the
-      // tombstone with it and the next sync pass would re-create the event
-      // (`purge_trashed_pages_older_than`, which reuses the same divert).
-      if (page && page.syncState != null) continue;
+      if (page && deleteWouldResurrect(page)) continue;
       this.softDeleted.delete(id);
       void this.deletePage(id);
       purged++;

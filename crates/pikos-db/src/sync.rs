@@ -237,7 +237,9 @@ pub(crate) async fn ensure_page_schedule_unlocked(
 /// `page_sync` row that isn't `detached`. Deliberately broader than
 /// [`page_schedule_locked`] — a tombstoned mirror is unlocked, but the FK cascade
 /// takes its tombstone along with the page, so the suppression dies with it and
-/// the event comes back.
+/// the event comes back. A detached link suppresses nothing (the reconciler drops a
+/// trashed one and mirrors the event fresh), so a detached page deletes like a
+/// native one.
 pub async fn hard_delete_would_resurrect(
     pool: &sqlx::SqlitePool,
     page_id: &str,

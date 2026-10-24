@@ -1057,15 +1057,9 @@ async fn apply_page_update(
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    // A synced page can't be hard-deleted — it still exists upstream and the next
-    // poll would resurrect it. Soft-delete + tombstone instead: recoverable from
-    // trash, sync suppressed. (Sync's own hard-deletes use raw SQL, not this path.)
-    let synced: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ?)")
-            .bind(id)
-            .fetch_one(pool)
-            .await?;
-    if synced {
+    // Soft-delete + tombstone instead: recoverable from trash, sync suppressed.
+    // (Sync's own hard-deletes use raw SQL, not this path.)
+    if crate::sync::hard_delete_would_resurrect(pool, id).await? {
         return soft_delete_page_impl(pool, id).await;
     }
 
@@ -1206,11 +1200,9 @@ pub struct TrashedPage {
     /// When it was trashed (UTC ISO, as [`soft_delete_page_impl`] writes it).
     /// Drives both the "deleted N days ago" label and the auto-purge clock.
     pub deleted_at: String,
-    /// True while a `page_sync` row still exists — deliberately the same predicate
-    /// [`delete_page_impl`] diverts on. A row flagged here is one the trash cannot
-    /// destroy: it carries the tombstone suppressing the upstream event, so
-    /// deleting it outright would hand the next sync pass a page to resurrect.
-    /// Restoring one gives it back to its calendar.
+    /// [`crate::sync::hard_delete_would_resurrect`], the predicate
+    /// [`delete_page_impl`] diverts on: a row flagged here is one the trash cannot
+    /// destroy. Restoring one gives it back to its calendar.
     pub is_synced: bool,
 }
 
@@ -1224,7 +1216,8 @@ pub async fn list_trashed_pages_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<T
         "SELECT p.id, p.title, p.deleted_at,
                 (SELECT f.name FROM folders f
                   WHERE f.id = p.folder_id AND f.deleted_at IS NULL) AS folder_name,
-                EXISTS(SELECT 1 FROM page_sync ps WHERE ps.page_id = p.id) AS is_synced
+                EXISTS(SELECT 1 FROM page_sync ps
+                        WHERE ps.page_id = p.id AND ps.sync_state <> 'detached') AS is_synced
            FROM pages p
           WHERE p.deleted_at IS NOT NULL
           ORDER BY p.deleted_at DESC, p.id ASC",

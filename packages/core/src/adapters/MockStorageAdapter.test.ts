@@ -679,6 +679,16 @@ describe("trash", () => {
     expect(trash.map((t) => t.title)).toEqual(["Standup"]);
     expect(trash[0]!.isSynced).toBe(true);
   });
+
+  it("destroys a detached page like a native one", async () => {
+    const detached = await createTestPage({ title: "Severed standup" });
+    adapter.markPageSynced(detached.id, { state: "detached" });
+    await adapter.softDeletePage(detached.id);
+
+    expect((await adapter.listTrashedPages())[0]!.isSynced).toBe(false);
+    expect(await adapter.purgeTrashedPages(0)).toBe(1);
+    expect(await adapter.listTrashedPages()).toHaveLength(0);
+  });
 });
 
 describe("clearPendingDescription", () => {
