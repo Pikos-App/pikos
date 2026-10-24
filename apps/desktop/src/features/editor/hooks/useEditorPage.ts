@@ -21,10 +21,17 @@ function sameFields(a: PageSummary, b: PageSummary): boolean {
   return keys.length === Object.keys(a).length && keys.every((k) => Object.is(a[k], b[k]));
 }
 
+/** Only the body comes from the loaded page. A row may leave out a field it has no value for, so a
+ *  field the row lacks is unset, not the loaded page's: a cleared date must not come back. */
 function withSummary(loaded: Page, summary: PageSummary): Page {
   const last = merges.get(loaded);
   if (last && sameFields(last.summary, summary)) return last.page;
-  const page = { ...loaded, ...summary };
+
+  const page = {
+    content: loaded.content,
+    contentSchemaVersion: loaded.contentSchemaVersion,
+    ...summary,
+  };
   merges.set(loaded, { page, summary });
   return page;
 }

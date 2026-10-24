@@ -79,4 +79,19 @@ describe("useEditorPage", () => {
     });
     expect(hook.result.current.editor.page?.title).toBe("A2");
   });
+
+  it("drops a date cleared while the page is open", async () => {
+    const { hook, ids } = await setup(["A"]);
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(ids[0]!, "2026-10-20");
+    });
+    act(() => hook.result.current.ui.openPage(ids[0]!));
+    await waitFor(() => expect(hook.result.current.editor.page?.scheduledStart).toBe("2026-10-20"));
+
+    await act(async () => {
+      await hook.result.current.pages.clearSchedule(ids[0]!);
+    });
+
+    await waitFor(() => expect(hook.result.current.editor.page?.scheduledStart ?? null).toBeNull());
+  });
 });
