@@ -20,6 +20,7 @@ pub mod focus;
 pub mod folders;
 pub mod moves;
 pub mod notification_log;
+pub mod page_chunks;
 pub mod page_links;
 pub mod pages;
 mod pool;

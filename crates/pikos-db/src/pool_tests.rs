@@ -97,6 +97,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "033",
         include_str!("../migrations/033_notification_refused.sql"),
     ),
+    ("034", include_str!("../migrations/034_page_chunks.sql")),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -1683,4 +1684,64 @@ async fn gathering_statistics_never_changes_the_schema_of_an_open_workspace() {
         let _ = std::fs::remove_file(format!("{path_str}{suffix}"));
     }
     assert_eq!(before, after);
+}
+
+#[tokio::test]
+async fn upgrading_chunks_every_page_body_once() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let staged = std::env::temp_dir().join(format!("pkos_mig_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&staged).unwrap();
+    for entry in std::fs::read_dir(&source).unwrap() {
+        let name = entry.unwrap().file_name();
+        if name.to_string_lossy().as_ref() < "034" {
+            std::fs::copy(source.join(&name), staged.join(&name)).unwrap();
+        }
+    }
+    let pool = single_conn_memory_pool().await;
+    Migrator::new(staged.as_path())
+        .await
+        .unwrap()
+        .run(&pool)
+        .await
+        .unwrap();
+
+    let blocks: Vec<String> = (0..100)
+        .map(|i| {
+            format!(
+                r#"{{"type":"paragraph","content":[{{"type":"text","text":"{i} {}"}}]}}"#,
+                "word ".repeat(200)
+            )
+        })
+        .collect();
+    let long = format!(r#"{{"type":"doc","content":[{}]}}"#, blocks.join(","));
+    insert_test_page(&pool, TestPage::new("long", "Long"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("empty", "Empty"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content = ? WHERE id = 'long'")
+        .bind(&long)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    MIGRATOR.run(&pool).await.unwrap();
+
+    let bodies: Vec<String> =
+        sqlx::query_scalar("SELECT body FROM page_chunks WHERE page_id = 'long' ORDER BY ord")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let empty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_chunks WHERE page_id = 'empty'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(bodies.len() > 1);
+    assert_eq!(
+        pikos_core::chunks::join_chunks(bodies.iter().map(String::as_str)),
+        long
+    );
+    assert_eq!(empty, 0);
+    let _ = std::fs::remove_dir_all(&staged);
 }

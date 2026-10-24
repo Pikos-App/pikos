@@ -12,6 +12,7 @@
 
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
+pub(crate) use pikos_core::hash::fnv_hex;
 use pikos_recurrence::{rewrite_until_with, zoned, WallClock};
 
 use self::allday_end::InclusiveEnd;
@@ -1577,17 +1578,6 @@ fn project_description(text: &str) -> (String, String) {
     let doc = crate::pool::build_description_doc(text);
     let projected = crate::pool::extract_text_from_tiptap(&doc);
     (doc, projected)
-}
-
-/// FNV-1a 64-bit hex — deterministic across builds (std `DefaultHasher` isn't)
-/// and dep-free. Change detection, not security.
-pub(crate) fn fnv_hex(s: &str) -> String {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in s.as_bytes() {
-        hash ^= *b as u64;
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("{hash:016x}")
 }
 
 /// Rewrite a UTC `UNTIL=…Z` token inside a raw RRULE to source-zone wall-clock,

@@ -49,7 +49,7 @@ pub(crate) async fn register(conn: &mut SqliteConnection, clock: Clock) -> Resul
         Clock::System => std::ptr::null_mut(),
         Clock::Manual(now) => std::ptr::from_ref(now).cast_mut().cast(),
     };
-    let functions: [(&CStr, c_int, c_int, ScalarFn); 5] = [
+    let functions: [(&CStr, c_int, c_int, ScalarFn); 6] = [
         (
             c"pikos_utc",
             2,
@@ -75,6 +75,12 @@ pub(crate) async fn register(conn: &mut SqliteConnection, clock: Clock) -> Resul
             pikos_hlc_next,
         ),
         (c"pikos_now_ms", 0, ffi::SQLITE_UTF8, pikos_now_ms),
+        (
+            c"pikos_chunk_writes",
+            2,
+            ffi::SQLITE_UTF8 | ffi::SQLITE_DETERMINISTIC | ffi::SQLITE_INNOCUOUS,
+            pikos_chunk_writes,
+        ),
     ];
     for (name, args, flags, function) in functions {
         let user_data = if name == c"pikos_now_ms" {
@@ -176,6 +182,25 @@ extern "C" fn pikos_hlc_next(ctx: Context, _argc: c_int, argv: Values) {
         Some(clock) => result_text(ctx, &clock),
         None => {
             let message = c"replica clock is unreadable";
+            // SAFETY: `ctx` is the live context of the call; -1 reads the static message to its NUL.
+            let () = unsafe { ffi::sqlite3_result_error(ctx, message.as_ptr(), -1) };
+        }
+    }
+}
+
+/// `pikos_chunk_writes(content, previous)`: [`crate::page_chunks::chunk_writes`], `previous` NULL
+/// for a page with no chunks yet. A panic fails the write, so chunks never fall out of step with the
+/// body unnoticed. Called only by SQLite, with a live context and two values.
+extern "C" fn pikos_chunk_writes(ctx: Context, _argc: c_int, argv: Values) {
+    let content = arg_text(argv, 0).unwrap_or_default();
+    let previous = arg_text(argv, 1).unwrap_or_default();
+    let writes = catch_unwind(AssertUnwindSafe(|| {
+        crate::page_chunks::chunk_writes(&content, &previous)
+    }));
+    match writes {
+        Ok(writes) => result_text(ctx, &writes),
+        Err(_) => {
+            let message = c"chunking a page body failed";
             // SAFETY: `ctx` is the live context of the call; -1 reads the static message to its NUL.
             let () = unsafe { ffi::sqlite3_result_error(ctx, message.as_ptr(), -1) };
         }

@@ -6,6 +6,8 @@ const UNCOUNTED: &[&str] = &[
     "focus_sessions",
     "folder_counts",
     "notification_log",
+    // Derived from pages.content, whose own triggers count every change.
+    "page_chunks",
     "page_reminders",
     // Sync's own bookkeeping, which no view shows.
     "replica_applying",
