@@ -4,6 +4,8 @@
 import type { PagePriority, PageStatus } from "@pikos/core";
 
 export interface ImportBatchItem {
+  /** Chosen before any page is written, so a body can link to a page written after it. */
+  id: string;
   title: string;
   content: string;
   folderKey: string | null;

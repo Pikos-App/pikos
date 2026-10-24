@@ -186,6 +186,7 @@ async fn page_showing(pool: &SqlitePool, title: &str, src: &str) -> String {
     let page = pikos_db::create_page_impl(
         pool,
         pikos_db::NewPage {
+            id: None,
             folder_id: None,
             title: title.into(),
             subtitle: None,

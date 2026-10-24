@@ -305,6 +305,7 @@ async fn missing_images(pool: &SqlitePool) -> Vec<String> {
 
 fn page(title: String) -> NewPage {
     NewPage {
+        id: None,
         folder_id: None,
         title,
         subtitle: None,

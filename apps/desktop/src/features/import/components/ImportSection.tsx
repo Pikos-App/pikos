@@ -139,28 +139,46 @@ function ImportStatusBar({ onReset, state }: { state: ImportState; onReset: () =
     );
   }
 
-  if (state.step === "done" && state.missingImages.length > 0) {
-    const count = state.missingImages.length;
-    return (
-      <div
-        aria-live="polite"
-        className="mt-2 rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2"
-        role="status"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <p className="flex items-center gap-1.5 text-sm text-yellow-700 dark:text-yellow-400">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            {count === 1
-              ? "1 image wasn't in the folder, so it was left out"
-              : `${count} images weren't in the folder, so they were left out`}
-          </p>
-          <button
-            className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={onReset}
-          >
-            Dismiss
-          </button>
+  if (state.step !== "done") return null;
+
+  const count = state.missingImages.length;
+  const links = state.unlinkedLinks;
+  const hasShortfall = count > 0 || links > 0;
+  if (!hasShortfall) return null;
+
+  return (
+    <div
+      aria-live="polite"
+      className="mt-2 rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2"
+      role="status"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-0.5 text-sm text-yellow-700 dark:text-yellow-400">
+          {links > 0 && (
+            <p className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {links === 1
+                ? "1 [[link]] matched no page, or more than one, so it stayed as text"
+                : `${links} [[links]] matched no page, or more than one, so they stayed as text`}
+            </p>
+          )}
+          {count > 0 && (
+            <p className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {count === 1
+                ? "1 image wasn't in the folder, so it was left out"
+                : `${count} images weren't in the folder, so they were left out`}
+            </p>
+          )}
         </div>
+        <button
+          className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={onReset}
+        >
+          Dismiss
+        </button>
+      </div>
+      {count > 0 && (
         <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
           {state.missingImages.map((m, i) => (
             <li className="text-xs text-muted-foreground" key={i}>
@@ -168,9 +186,7 @@ function ImportStatusBar({ onReset, state }: { state: ImportState; onReset: () =
             </li>
           ))}
         </ul>
-      </div>
-    );
-  }
-
-  return null;
+      )}
+    </div>
+  );
 }

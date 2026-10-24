@@ -1317,6 +1317,7 @@ impl Workspace {
         let created = pikos_db::create_page_impl(
             &self.pool,
             DbNewPage {
+                id: None,
                 folder_id: page.folder_id,
                 title: page.title,
                 subtitle: page.subtitle.filter(|s| !s.trim().is_empty()),

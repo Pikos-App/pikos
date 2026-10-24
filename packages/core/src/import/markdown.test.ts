@@ -370,7 +370,7 @@ Task body`,
       { content: "No links", path: "plain.md" },
     ];
     const plan = parseMarkdownVault(files);
-    expect(plan.meta.transformations.some((t) => t.includes("Wikilinks in 1 pages"))).toBe(true);
+    expect(plan.meta.transformations.some((t) => t.includes("[[Links]] in 1 pages"))).toBe(true);
   });
 
   it("sets updatedAt from modified frontmatter", () => {
@@ -572,7 +572,7 @@ And an embedded image: ![[screenshot.png]]`,
   });
 
   it("includes wikilink count in meta transformations", () => {
-    expect(plan.meta.transformations.some((t) => t.includes("Wikilinks"))).toBe(true);
+    expect(plan.meta.transformations.some((t) => t.includes("[[Links]]"))).toBe(true);
   });
 
   it("preserves markdown body content (stripped of frontmatter)", () => {

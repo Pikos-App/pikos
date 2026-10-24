@@ -164,6 +164,8 @@ export {
   suggestValueMappings,
 } from "./import/csv";
 export type { PreparedCSV, SuggestedMappings } from "./import/csv";
+export { importLinkResolver } from "./import/links";
+export type { TitledPage } from "./import/links";
 export {
   extractImageRefs,
   imageRefCandidates,
@@ -284,7 +286,7 @@ export {
   isOpen,
   toPageSummary,
 } from "./utils/page";
-export { linkTargets } from "./utils/pageLinks";
+export { linkTargets, resolveWikilinks, wikilinkTitles } from "./utils/pageLinks";
 export {
   alignWeeklyRuleToAnchor,
   buildRrule,

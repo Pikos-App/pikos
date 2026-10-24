@@ -572,6 +572,7 @@ async fn linking(pool: &SqlitePool, title: &str, targets: &[&str]) -> String {
     let page = crate::pages::create_page_impl(
         pool,
         crate::pages::NewPage {
+            id: None,
             folder_id: None,
             title: title.to_string(),
             subtitle: None,

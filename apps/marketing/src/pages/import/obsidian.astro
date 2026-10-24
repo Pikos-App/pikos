@@ -4,7 +4,7 @@ import Footer from "../../components/Footer.astro";
 import Prose from "../../components/Prose.astro";
 
 const title = "Import from Obsidian to Pikos";
-const description = "Move an Obsidian vault into Pikos. Frontmatter, callouts, and image attachments come across; wikilinks arrive as plain text.";
+const description = "Move an Obsidian vault into Pikos. Frontmatter, callouts, image attachments, and wikilinks come across.";
 ---
 
 <Base title={title} description={description}>
@@ -18,7 +18,7 @@ const description = "Move an Obsidian vault into Pikos. Frontmatter, callouts, a
 
     <article>
       <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from Obsidian</h1>
-      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Pikos imports an Obsidian vault in three steps. Notes, folders, tags, checkboxes, images, and dates from frontmatter come across. Wikilinks stay as text, and plugins, canvas, and the graph don't come across.</p>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Pikos imports an Obsidian vault in three steps. Notes, folders, tags, checkboxes, images, links between notes, and dates from frontmatter come across. Plugins, canvas, and the graph don't come across.</p>
 
       <Prose class="mt-10">
 
@@ -67,7 +67,7 @@ const description = "Move an Obsidian vault into Pikos. Frontmatter, callouts, a
             Dates are parsed in ISO format and in the Obsidian Linter formats (e.g. "Monday, March 17th 2025, 11:03:04 am"). Unrecognized frontmatter keys are ignored, not flagged as errors.
           </li>
           <li><strong>Folder structure</strong>: preserved. Nested paths flatten with a <code>/</code> separator (so <code>Projects/Work/Q3</code> becomes a folder named "Projects / Work / Q3"). Files in the vault root land in the Pikos Inbox.</li>
-          <li><strong>Wikilinks</strong>: <code>[[Page Name]]</code> stays as text. Pikos links pages with <code>[[</code> too, but an imported link isn't turned into one, so you'd relink the ones you want. Nothing is lost.</li>
+          <li><strong>Wikilinks</strong>: <code>[[Page Name]]</code> and <code>[[Page Name|shown text]]</code> become links to the page of that name, an imported one first, then one already in Pikos. A link to a heading or a block, or to a name no page has, or that two pages share, stays as text, and the import says how many did. Nothing is lost.</li>
           <li><strong>Image embeds</strong>: both <code>![[image.png]]</code> and <code>![alt](path.png)</code> are copied into Pikos's asset store and rewritten to local paths. Supported extensions: <code>png</code>, <code>jpg</code>, <code>jpeg</code>, <code>gif</code>, <code>webp</code>, <code>svg</code>, <code>bmp</code>, <code>avif</code>. Extensionless wiki-embeds (<code>![[Screenshot]]</code>) are tried speculatively against those extensions; if no image is found, they're left as plain text.</li>
           <li><strong>Callouts</strong>: <code>&gt; [!note] Title</code> becomes a styled blockquote with the type as a bold label (<code>&gt; <strong>Note:</strong> Title</code>).</li>
           <li><strong>Tasks</strong>: checkbox items (<code>- [ ]</code> and <code>- [x]</code>) keep their checked state.</li>

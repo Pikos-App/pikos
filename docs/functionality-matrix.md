@@ -677,8 +677,9 @@ current title, or `[[Title|text]]` when it shows text of its own, and either goi
 that title, matched without regard to case among pages outside the trash. A title no page has
 stays text, and so does one several pages share, unless one of them is the page the body
 already linked to, which is what keeps a link through a read and a write back. The CLI has no
-backlinks command. The Markdown export writes links the same way; Markdown import still keeps
-`[[wikilinks]]` as plain text. The phone's editor shares the document schema, so it shows a
+backlinks command. The Markdown export writes links the same way, and Markdown import reads them
+back: a `[[title]]` links the one imported page of that title, else the one page already in the
+workspace, and is otherwise kept as text and counted in the import's summary. The phone's editor shares the document schema, so it shows a
 link under the title stored in it and keeps it through an edit, but a tap doesn't open it, and
 it offers no `[[` and no backlink count.
 ⁵⁶ The UI's three exports are Markdown, **CSV** and a SQLite backup. There is no JSON

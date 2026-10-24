@@ -62,6 +62,9 @@ export type NewPage = Omit<
   | "contentSchemaVersion"
   | "detachIsReversible"
 > & {
+  /** The id to create the page under, else a new one (used during import, so a page can link to
+   *  one written after it). */
+  id?: string;
   /** Optional override for created_at (used during import to preserve original dates). */
   createdAt?: string;
   /** Optional override for updated_at (used during import to preserve original dates). */

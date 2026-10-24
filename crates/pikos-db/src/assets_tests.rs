@@ -10,6 +10,7 @@ fn page_with_images(title: &str, srcs: &[&str]) -> NewPage {
         .map(|src| serde_json::json!({ "type": "image", "attrs": { "src": src } }))
         .collect();
     NewPage {
+        id: None,
         folder_id: None,
         title: title.into(),
         subtitle: None,

@@ -7,6 +7,7 @@ use crate::*;
 
 fn page(title: &str) -> NewPage {
     NewPage {
+        id: None,
         folder_id: None,
         title: title.into(),
         subtitle: None,

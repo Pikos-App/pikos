@@ -64,6 +64,7 @@ pub async fn text(pool: &SqlitePool, sql: &str) -> Option<String> {
 
 pub fn new_page(title: &str) -> NewPage {
     NewPage {
+        id: None,
         folder_id: None,
         title: title.into(),
         subtitle: None,

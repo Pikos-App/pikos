@@ -757,6 +757,7 @@ async fn tag_variants_collapse_to_one_lowercase_tag() {
 
 pub(crate) fn new_page(title: &str) -> NewPage {
     NewPage {
+        id: None,
         folder_id: None,
         title: title.into(),
         subtitle: None,
@@ -807,6 +808,29 @@ async fn create_page_persists_fields_and_assigns_sort_order() {
         "each new page lands a full gap after the last, leaving room to move pages between"
     );
     assert_eq!(count_pages(&pool).await, 2);
+}
+
+#[tokio::test]
+async fn create_page_takes_the_id_it_is_given() {
+    let pool = test_pool().await;
+
+    let page = create_page_impl(
+        &pool,
+        NewPage {
+            id: Some("named-before-writing".into()),
+            ..new_page("Named")
+        },
+    )
+    .await
+    .unwrap();
+
+    let stored = get_page(&pool, "named-before-writing")
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(page.id, "named-before-writing");
+    assert_eq!(stored.title, "Named");
 }
 
 #[tokio::test]
@@ -3266,6 +3290,7 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
     let err = create_page_impl(
         &pool,
         crate::NewPage {
+            id: None,
             folder_id: Some("ext".into()),
             title: "Sneaky".into(),
             subtitle: None,

@@ -438,7 +438,9 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
 
   const wikilinkPages = pages.filter((p) => p.wikilinks.length > 0).length;
   if (wikilinkPages > 0) {
-    meta.transformations.push(`Wikilinks in ${wikilinkPages} pages preserved as text`);
+    meta.transformations.push(
+      `[[Links]] in ${wikilinkPages} pages link to the page of that title, where there is one`
+    );
   }
 
   return {

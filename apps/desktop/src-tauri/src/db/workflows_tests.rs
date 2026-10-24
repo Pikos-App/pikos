@@ -42,6 +42,7 @@ use sqlx::SqlitePool;
 
 fn new_page(title: &str) -> NewPage {
     NewPage {
+        id: None,
         folder_id: None,
         title: title.to_string(),
         subtitle: None,

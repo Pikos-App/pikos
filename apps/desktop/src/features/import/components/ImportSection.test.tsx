@@ -31,12 +31,15 @@ describe("ImportSection after a Markdown import", () => {
     plan.vaultRoot = "/vault";
     const { result } = renderHook(() => useImport());
 
-    let missing: Awaited<ReturnType<typeof result.current.executeImport>> = null;
+    let shortfall: Awaited<ReturnType<typeof result.current.executeImport>> = null;
     await act(async () => {
-      missing = await result.current.executeImport(plan);
+      shortfall = await result.current.executeImport(plan);
     });
 
-    expect(missing).toEqual([{ image: "gone.png", page: "Trip" }]);
+    expect(shortfall).toEqual({
+      missingImages: [{ image: "gone.png", page: "Trip" }],
+      unlinkedLinks: 0,
+    });
     render(
       <ImportSection
         parseCSVFile={vi.fn()}

@@ -16,6 +16,7 @@ pub fn local_tz() -> String {
 
 pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
     NewPage {
+        id: None,
         folder_id,
         title,
         subtitle: None,

@@ -120,9 +120,12 @@ export function SettingsPage() {
                   pages: importState.plan.pages.filter(isOpen),
                 }
               : importState.plan;
-            void executeImport(plan).then((missingImages) => {
-              const staysToListMissing = missingImages === null || missingImages.length > 0;
-              if (staysToListMissing) return;
+            void executeImport(plan).then((shortfall) => {
+              const staysToListShortfall =
+                shortfall === null ||
+                shortfall.missingImages.length > 0 ||
+                shortfall.unlinkedLinks > 0;
+              if (staysToListShortfall) return;
 
               reset();
               setActiveViewId("inbox");

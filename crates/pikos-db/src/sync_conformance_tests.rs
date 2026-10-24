@@ -469,6 +469,7 @@ where
 
 fn new_page(title: &str) -> crate::pages::NewPage {
     crate::pages::NewPage {
+        id: None,
         folder_id: None,
         title: title.into(),
         subtitle: None,

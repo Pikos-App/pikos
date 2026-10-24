@@ -400,6 +400,10 @@ pub(crate) const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
 pub struct NewPage {
+    /// The id to create the page under, else a new one. An import names its pages' ids before
+    /// writing any, so a page can link to one written after it in a single write.
+    #[serde(default)]
+    pub id: Option<String>,
     pub folder_id: Option<String>,
     pub title: String,
     pub subtitle: Option<String>,
@@ -653,7 +657,10 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         }
     }
 
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = data
+        .id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let now = now_iso();
     let created_at = data.created_at.as_deref().unwrap_or(&now);
     let updated_at = data.updated_at.as_deref().unwrap_or(&now);

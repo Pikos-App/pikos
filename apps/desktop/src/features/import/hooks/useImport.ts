@@ -1,16 +1,27 @@
-import type { CSVMappingConfig, ImageRef, ImportPlan, VaultFile } from "@pikos/core";
+import type {
+  CSVMappingConfig,
+  ImageRef,
+  ImportPage,
+  ImportPlan,
+  StorageAdapter,
+  TitledPage,
+  VaultFile,
+} from "@pikos/core";
 import {
   applyMappings,
   ASSET_DIR,
   cleanTitle,
   detectUniqueValues,
   imageRefCandidates,
+  importLinkResolver,
   parseMarkdownVault,
   prepareCSVRows,
+  resolveWikilinks,
   storageErrorUserMessage,
   suggestColumnMappings,
   suggestValueMappings,
   toStorageError,
+  wikilinkTitles,
 } from "@pikos/core";
 import { createDocumentExtensions, Markdown } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
@@ -226,6 +237,27 @@ function addAssetPathsToJson(json: JSONContent): JSONContent {
   return json;
 }
 
+/** The workspace's pages titled as one of `titles`, leaving out any title an imported page has,
+ *  since an imported page wins it. */
+async function workspacePagesTitled(
+  storage: Pick<StorageAdapter, "searchPages">,
+  titles: string[],
+  imported: TitledPage[]
+): Promise<TitledPage[]> {
+  const importedTitles = new Set(imported.map(({ title }) => title.toLowerCase()));
+  const wanted = [...new Set(titles.map((t) => t.toLowerCase()))].filter(
+    (t) => !importedTitles.has(t)
+  );
+
+  const responses = await Promise.all(wanted.map((t) => storage.searchPages(t, true)));
+
+  return responses.flatMap(({ results }, i) =>
+    results
+      .filter(({ title }) => title.toLowerCase() === wanted[i])
+      .map(({ id, title }) => ({ id, title }))
+  );
+}
+
 // ─── File reading ─────────────────────────────────────────────────────────────
 
 interface VaultReadResult {
@@ -291,6 +323,13 @@ export interface MissingImage {
   image: string;
 }
 
+/** What an import couldn't carry over: images it didn't find, and `[[links]]` left as text
+ *  because no page, or more than one, has that title. */
+export interface ImportShortfall {
+  missingImages: MissingImage[];
+  unlinkedLinks: number;
+}
+
 export type ImportState =
   | { step: "idle" }
   | { step: "parsing" }
@@ -302,14 +341,13 @@ export type ImportState =
     }
   | { step: "preview"; plan: ImportPlan }
   | { step: "importing" }
-  | {
+  | ({
       step: "done";
       pageCount: number;
       folderCount: number;
       pageIds: string[];
       folderIds: string[];
-      missingImages: MissingImage[];
-    }
+    } & ImportShortfall)
   | { step: "error"; message: string };
 
 export function useImport() {
@@ -396,8 +434,8 @@ export function useImport() {
     }
   }
 
-  /** Resolves to the images the import couldn't find, or null when it failed. */
-  async function executeImport(plan: ImportPlan): Promise<MissingImage[] | null> {
+  /** Resolves to what the import couldn't carry over, or null when it failed. */
+  async function executeImport(plan: ImportPlan): Promise<ImportShortfall | null> {
     setState({ step: "importing" });
 
     try {
@@ -413,7 +451,7 @@ export function useImport() {
       // (handles plain CSV bodies as single paragraphs).
       const convert = getMarkdownConverter();
 
-      const batchPages: ImportBatchItem[] = [];
+      const converted: { doc: JSONContent; page: ImportPage; title: string }[] = [];
       const missingImages: MissingImage[] = [];
       for (const p of plan.pages) {
         let bodyToConvert = p.body;
@@ -430,14 +468,29 @@ export function useImport() {
         // failure here means the converter regressed — log + fall back so
         // the rest of the import still completes.
         const parsedRaw = tryParseTiptapJson(rawContent, "useImport.executeImport");
-        const parsed = addAssetPathsToJson(parsedRaw ?? EMPTY_TIPTAP_DOC);
-        const content = JSON.stringify(parsed);
+        const doc = addAssetPathsToJson(parsedRaw ?? EMPTY_TIPTAP_DOC);
+        converted.push({ doc, page: p, title });
+      }
 
-        batchPages.push({
+      const imported = converted.map(({ title }) => ({ id: crypto.randomUUID(), title }));
+      const linkedTitles = converted.flatMap(({ doc }) => wikilinkTitles(doc));
+      const workspace = storage ? await workspacePagesTitled(storage, linkedTitles, imported) : [];
+      const resolve = importLinkResolver(imported, workspace);
+      let unlinkedLinks = 0;
+      const resolveCounting = (title: string) => {
+        const id = resolve(title);
+        if (id === null) unlinkedLinks++;
+
+        return id;
+      };
+
+      const batchPages = converted.map(
+        ({ doc, page: p, title }, i): ImportBatchItem => ({
           completedAt: p.completedAt,
-          content,
+          content: JSON.stringify(resolveWikilinks(doc, resolveCounting)),
           createdAt: p.createdAt,
           folderKey: p.folderKey,
+          id: imported[i]!.id,
           priority: p.priority,
           reminderMinutes: p.reminderMinutes,
           rrule: p.rrule,
@@ -449,8 +502,8 @@ export function useImport() {
           tags: p.tags,
           title,
           updatedAt: p.updatedAt,
-        });
-      }
+        })
+      );
 
       const result = await importBatch({
         folders: plan.folders,
@@ -465,8 +518,9 @@ export function useImport() {
         pageCount: plan.pages.length,
         pageIds: result.pageIds,
         step: "done",
+        unlinkedLinks,
       });
-      return missingImages;
+      return { missingImages, unlinkedLinks };
     } catch (e) {
       // Surface the raw cause — the import catch used to swallow it entirely
       // (only a generic user-facing message reached the UI), which is why

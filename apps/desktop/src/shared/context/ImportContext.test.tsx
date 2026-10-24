@@ -41,6 +41,7 @@ function item(overrides: Partial<ImportBatchItem> = {}): ImportBatchItem {
     content: "<p>body</p>",
     createdAt: null,
     folderKey: null,
+    id: crypto.randomUUID(),
     priority: 0,
     reminderMinutes: [],
     rrule: null,

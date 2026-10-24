@@ -50,6 +50,7 @@ async fn insert_rich_page(
 /// `create_page_impl` writer (not the raw-SQL `insert_rich_page` above).
 fn bare_page(title: &str) -> NewPage {
     NewPage {
+        id: None,
         folder_id: None,
         title: title.to_string(),
         subtitle: None,
@@ -578,6 +579,7 @@ fn page_from_export(v: &serde_json::Value, folder_map: &HashMap<String, String>)
             .unwrap_or_default()
     };
     NewPage {
+        id: None,
         folder_id: v
             .get("folder_id")
             .and_then(|x| x.as_str())

@@ -554,7 +554,7 @@ export class MockStorageAdapter implements StorageAdapter {
       // Supplied by an import, and kept, as the Rust writer keeps them.
       createdAt: data.createdAt ?? now(),
       detachIsReversible: false,
-      id: uuid(),
+      id: data.id ?? uuid(),
       isRecurring: false,
       links: deriveLinks(data.content),
       scheduleLocked: false,

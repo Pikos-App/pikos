@@ -149,6 +149,7 @@ async fn apply(pool: &sqlx::SqlitePool, ids: &mut HashMap<String, String>, step:
             let page = create_page_impl(
                 pool,
                 NewPage {
+                    id: None,
                     folder_id: folder.as_ref().map(|f| ids[f].clone()),
                     title: title.clone(),
                     subtitle: subtitle.clone(),
