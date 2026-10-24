@@ -781,6 +781,32 @@ async fn the_same_reminder_added_on_both_devices_counts_once() {
     assert_converged(&mac, &phone).await;
 }
 
+#[tokio::test]
+async fn a_schedule_deleted_on_one_device_clears_its_page_date_on_the_other() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Dentist")).await.unwrap();
+    let block = create_page_schedule_impl(
+        &mac,
+        NewPageSchedule {
+            page_id: page.id.clone(),
+            scheduled_start: "2030-01-05T09:00:00".into(),
+            scheduled_end: None,
+            timezone: Some("UTC".into()),
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    converge(&mac, &phone).await;
+
+    delete_page_schedule_impl(&mac, block.id).await.unwrap();
+    send(&mac, &phone).await;
+
+    let on_phone = get_page(&phone, &page.id).await.unwrap().unwrap();
+    assert_eq!(on_phone.scheduled_start, None);
+}
+
 // qa: CLOUD-70:2, CLOUD-104
 #[tokio::test]
 async fn a_calendar_folder_left_with_pages_when_its_calendar_is_turned_off_arrives_with_them() {
