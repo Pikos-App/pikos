@@ -277,12 +277,19 @@ export function EditorPane() {
     currentPageIdRef.current = page.id;
 
     const doc = tryParseTiptapJson(page.content, `EditorPane page=${page.id}`);
+    const openingId = page.id;
 
-    if (!editor.isDestroyed) {
+    // A page link is a React node view, which Tiptap draws with flushSync, and React drops a
+    // flushSync called while it is still committing this effect.
+    queueMicrotask(() => {
+      const isStillOpening = currentPageIdRef.current === openingId && !editor.isDestroyed;
+      if (!isStillOpening) return;
+
+      cancelOpening();
       restOfPageRef.current = openPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
       // Which page the editor holds, for tests and the in-app benchmark to wait on.
-      editor.view.dom.setAttribute("data-page-id", page.id);
-    }
+      editor.view.dom.setAttribute("data-page-id", openingId);
+    });
     shownContentRef.current = page.content;
 
     const focusBody = takeBodyFocus(page.id);
