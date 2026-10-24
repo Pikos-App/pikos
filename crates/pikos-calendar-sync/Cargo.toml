@@ -51,6 +51,10 @@ psl = "2.1.232"
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 keyring = { version = "3.6.3", features = ["apple-native"] }
 
+# keyring can't list or delete by service alone, which the wipe needs.
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7.0"
+
 # Secret Service over D-Bus: GNOME Keyring, KWallet 5.97+, KeePassXC. `sync-` because
 # `CredentialStore` is a sync trait, and keyring's async backend still blocks, which
 # deadlocks under a tokio runtime. `crypto-rust` encrypts the D-Bus session without

@@ -347,11 +347,18 @@ async fn go_dormant(pool: &SqlitePool, account_id: &str) -> AppResult<()> {
 /// delete the workspace wholesale. No DB writes — the rows are going away anyway.
 ///
 /// The keychain lives outside `app_data_dir`, so a wipe on its own would strand a
-/// usable refresh token keyed to an account id nothing references any more.
+/// usable refresh token keyed to an account id nothing references any more. The rows
+/// are walked for the Google revokes, then the whole service is swept, because a
+/// database replaced outside a disconnect leaves credentials no row names.
 pub async fn release_all_credentials(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
     for (id, provider, _) in all_account_identities_impl(pool).await? {
         release_credential(&keychain, &id, &provider).await;
     }
+
+    if let Err(e) = keychain.delete_all() {
+        log::warn!("sync: could not sweep the keychain: {e}");
+    }
+
     Ok(())
 }
 

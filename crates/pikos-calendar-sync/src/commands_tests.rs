@@ -578,6 +578,24 @@ async fn releasing_credentials_clears_every_account_including_dormant_ones() {
     }
 }
 
+#[tokio::test]
+async fn releasing_credentials_clears_one_whose_account_row_is_gone() {
+    let pool = test_pool().await;
+    let backing = MemoryStore::default();
+    backing
+        .set("account-from-a-replaced-workspace", "secret-blob")
+        .unwrap();
+
+    release_all_credentials(&pool, Keychain::with_store(Box::new(backing.clone())))
+        .await
+        .unwrap();
+
+    assert!(
+        backing.is_empty(),
+        "an orphaned credential survived the wipe"
+    );
+}
+
 // A reset deletes every account row, so it has the same one-last-chance property as
 // the wipe: a dormant account never reaches the panel's disconnect path, and once its
 // row is gone nothing holds the id its blob is keyed to.

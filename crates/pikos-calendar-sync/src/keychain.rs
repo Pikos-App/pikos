@@ -45,6 +45,8 @@ pub(crate) trait CredentialStore: Send + Sync {
     fn set(&self, key: &str, secret: &str) -> Result<(), KeychainError>;
     fn get(&self, key: &str) -> Result<String, KeychainError>;
     fn delete(&self, key: &str) -> Result<(), KeychainError>;
+    /// Every credential under the service, including ones no account row names any more.
+    fn delete_all(&self) -> Result<(), KeychainError>;
 }
 
 struct KeyringStore;
@@ -64,6 +66,32 @@ impl CredentialStore for KeyringStore {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(map_err(e)),
         }
+    }
+
+    /// Repeated until nothing matches, since a legacy macOS keychain's `SecItemDelete` may remove
+    /// only the first match.
+    #[cfg(target_os = "macos")]
+    fn delete_all(&self) -> Result<(), KeychainError> {
+        use security_framework::item::{ItemClass, ItemSearchOptions};
+
+        const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
+        let mut query = ItemSearchOptions::new();
+        query.class(ItemClass::generic_password()).service(SERVICE);
+
+        loop {
+            match query.delete() {
+                Ok(()) => continue,
+                Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => return Ok(()),
+                Err(e) => return Err(KeychainError::Backend(e.to_string())),
+            }
+        }
+    }
+
+    /// Elsewhere keyring offers no search by service, so the per-account deletes are all there is.
+    #[cfg(not(target_os = "macos"))]
+    fn delete_all(&self) -> Result<(), KeychainError> {
+        Ok(())
     }
 }
 
@@ -106,6 +134,10 @@ impl Keychain {
 
     pub fn delete(&self, account_id: &str) -> Result<(), KeychainError> {
         self.store.delete(account_id)
+    }
+
+    pub fn delete_all(&self) -> Result<(), KeychainError> {
+        self.store.delete_all()
     }
 }
 

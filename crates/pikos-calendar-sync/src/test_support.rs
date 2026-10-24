@@ -43,6 +43,11 @@ impl CredentialStore for MemoryStore {
         self.0.lock().unwrap().remove(key);
         Ok(())
     }
+
+    fn delete_all(&self) -> Result<(), KeychainError> {
+        self.0.lock().unwrap().clear();
+        Ok(())
+    }
 }
 
 impl MemoryStore {
@@ -66,6 +71,9 @@ pub(crate) fn refusing_keychain() -> Keychain {
             Err(KeychainError::NotFound)
         }
         fn delete(&self, _: &str) -> Result<(), KeychainError> {
+            Ok(())
+        }
+        fn delete_all(&self) -> Result<(), KeychainError> {
             Ok(())
         }
     }
