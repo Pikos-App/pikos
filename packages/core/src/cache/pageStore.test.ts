@@ -49,6 +49,18 @@ describe("PageStore", () => {
     expect(s.get("a")?.title).toBe("Renamed by sync");
   });
 
+  it("adopts the app's own copy of a row at the change number it already holds", () => {
+    const s = store({ id: "a", rowSeq: 5, title: "Plan" });
+    s.adopt([makePage({ id: "a", rowSeq: 5, title: "Renamed" })]);
+    expect(s.get("a")?.title).toBe("Renamed");
+  });
+
+  it("refuses to adopt a copy older than the row it holds", () => {
+    const s = store({ id: "a", rowSeq: 5, title: "Plan" });
+    s.adopt([makePage({ id: "a", rowSeq: 4, title: "Stale" })]);
+    expect(s.get("a")?.title).toBe("Plan");
+  });
+
   it("holds a failed content write on screen until a later write to the page is confirmed", () => {
     const s = store({ id: "a", rowSeq: 1, title: "Plan" });
     const failed = s.write("a", { title: "Typed but unsaved" });

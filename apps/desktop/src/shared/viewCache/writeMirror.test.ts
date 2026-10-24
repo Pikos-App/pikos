@@ -71,4 +71,10 @@ describe("WriteMirror", () => {
     expect(store.get("a")).toBeUndefined();
     expect(store.get("b")?.title).toBe("New");
   });
+
+  it("lands the app's own rebuilt row in the store though its change number is unchanged", () => {
+    const { mirror, store } = setup(plan);
+    mirror.apply([plan], [{ ...plan, title: "Renamed" }]);
+    expect(store.get("a")?.title).toBe("Renamed");
+  });
 });
