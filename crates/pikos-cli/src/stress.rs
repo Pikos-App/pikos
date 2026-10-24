@@ -928,10 +928,24 @@ pub async fn bench(
     );
 
     timings.retain(|t| !t.samples.is_empty());
+
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let version = env!("CARGO_PKG_VERSION");
+
     if json {
         crate::render::print_json(&json!({
             "pages": total,
             "runs": runs,
+            "profile": profile,
+            "version": version,
+            "platform": platform,
+            "date": date,
             "timings": timings.iter().map(|t| json!({
                 "op": t.name,
                 "ms": t.percentile(0.5),
@@ -943,7 +957,8 @@ pub async fn bench(
             })).collect::<Vec<_>>(),
         }));
     } else {
-        println!("{total} pages in {path}, median of {runs} run(s)\n");
+        println!("{total} pages in {path}, median of {runs} run(s)");
+        println!("pikos {version}, {profile} build, {platform}, {date}\n");
         if runs > 1 {
             println!("  {:<24} {:>8} {:>8}", "", "median", "p95");
         }
