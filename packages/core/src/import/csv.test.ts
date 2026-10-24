@@ -986,6 +986,48 @@ describe("applyMappings — duration computation", () => {
     const plan = applyMappings(rows, config);
     expect(plan.pages[0]!.scheduledEnd).toBe("2025-06-15T16:00:00");
   });
+
+  const todoistDurationConfig: CSVMappingConfig = {
+    columnMappings: [
+      { csvHeader: "Title", pikosField: "title", sampleValues: [] },
+      { csvHeader: "DATE", pikosField: "scheduledStart", sampleValues: [] },
+      { csvHeader: "DURATION", pikosField: "skip", sampleValues: [] },
+      { csvHeader: "DURATION_UNIT", pikosField: "skip", sampleValues: [] },
+    ],
+    detectedSource: "Todoist",
+    valueMappings: [],
+  };
+
+  it("a duration in days on a dated task becomes an all-day span ending on its last day", () => {
+    const rows = [{ DATE: "2025-06-15", DURATION: "3", DURATION_UNIT: "day", Title: "Trip" }];
+    const plan = applyMappings(rows, todoistDurationConfig);
+    expect(plan.pages[0]!.scheduledStart).toBe("2025-06-15");
+    expect(plan.pages[0]!.scheduledEnd).toBe("2025-06-17");
+  });
+
+  it("a one-day duration on a dated task stays a single all-day day", () => {
+    const rows = [{ DATE: "2025-06-15", DURATION: "1", DURATION_UNIT: "day", Title: "Offsite" }];
+    const plan = applyMappings(rows, todoistDurationConfig);
+    expect(plan.pages[0]!.scheduledStart).toBe("2025-06-15");
+    expect(plan.pages[0]!.scheduledEnd).toBeNull();
+  });
+
+  it("a duration in days on a timed task ends that many days later at the same time", () => {
+    const rows = [
+      { DATE: "2025-06-15 at 09:00", DURATION: "2", DURATION_UNIT: "day", Title: "Retreat" },
+    ];
+    const plan = applyMappings(rows, todoistDurationConfig);
+    expect(plan.pages[0]!.scheduledStart).toBe("2025-06-15T09:00:00");
+    expect(plan.pages[0]!.scheduledEnd).toBe("2025-06-17T09:00:00");
+  });
+
+  it("a duration in minutes on a timed Todoist task ends that many minutes later", () => {
+    const rows = [
+      { DATE: "2025-06-15 at 09:00", DURATION: "45", DURATION_UNIT: "minute", Title: "Standup" },
+    ];
+    const plan = applyMappings(rows, todoistDurationConfig);
+    expect(plan.pages[0]!.scheduledEnd).toBe("2025-06-15T09:45:00");
+  });
 });
 
 describe("prepareCSVRows — Todoist edge cases", () => {

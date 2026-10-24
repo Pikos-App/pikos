@@ -59,7 +59,7 @@ const description = "Move your Todoist projects into Pikos. Tasks, due dates, pr
           <li><strong>Notes</strong>: Todoist exports task comments as separate rows with <code>TYPE=note</code>. Pikos merges them into the previous task's body so you don't lose context.</li>
           <li><strong>Priorities</strong>: Todoist's CSV uses 1–4 (where 1 is urgent and 4 is no priority in the UI). The importer maps <code>1 → Urgent</code>, <code>2 → High</code>, <code>3 → Medium</code>, <code>4 → None</code>.</li>
           <li><strong>Fixed dates</strong>: date-only values like <code>2026-06-15</code> come across as all-day. Structured date-with-time values are preserved as timed events.</li>
-          <li><strong>Durations</strong>: a timed task's <code>DURATION</code> becomes its end time, read as minutes. Pikos doesn't read <code>DURATION_UNIT</code> yet, so a duration Todoist gives in days comes across as that many minutes.</li>
+          <li><strong>Durations</strong>: a timed task's <code>DURATION</code> becomes its end time, in minutes or days as <code>DURATION_UNIT</code> says. A task with a date and no time, given a duration in days, becomes an all-day span across those days.</li>
           <li><strong>Labels</strong>: become Pikos tags.</li>
           <li><strong>Deadlines</strong>: Todoist's optional <code>DEADLINE</code> field maps to the scheduled end date.</li>
         </ul>

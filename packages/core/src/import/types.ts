@@ -35,7 +35,7 @@ export interface ImportPage {
   tags: string[];
   /** 'YYYY-MM-DD' for all-day or 'YYYY-MM-DDTHH:MM:SS' for timed events. */
   scheduledStart: string | null;
-  /** 'YYYY-MM-DDTHH:MM:SS' end time for timed events. Null for all-day. */
+  /** Same shape as the start; for an all-day span, its last day. Null for a single day. */
   scheduledEnd: string | null;
   /** ISO datetime string for createdAt override, if any. */
   createdAt: string | null;

@@ -1,5 +1,13 @@
+import { addDays, addMinutes, isValid } from "date-fns";
+
 import type { PagePriority, PageStatus } from "../types";
-import { isAllDayIso, isTimedIso } from "../utils/dates";
+import {
+  formatDateOnly,
+  formatLocalISO,
+  isAllDayIso,
+  isTimedIso,
+  parseLocalISO,
+} from "../utils/dates";
 import { isDone } from "../utils/page";
 import { parseRrule } from "../utils/recurrence";
 import type {
@@ -473,8 +481,8 @@ const KNOWN_SKIP_REASONS: Record<string, Record<string, string>> = {
     author: "task author — not tracked in Pikos",
     date_lang: "date language hint — handled automatically",
     deadline_lang: "deadline language hint — handled automatically",
-    duration: "duration computed from scheduled start + end instead",
-    duration_unit: "duration computed from scheduled start + end instead",
+    duration: "read automatically — sets the end from the start and its unit",
+    duration_unit: "read automatically — minutes set an end time, days a multi-day span",
     indent: "subtask nesting level — map manually via Parent ID if needed",
     is_collapsed: "section collapse state — not applicable",
     responsible: "task assignee — not tracked in Pikos",
@@ -594,13 +602,16 @@ export function applyMappings(
       scheduledEnd = null; // clear so duration can compute a proper end
     }
 
-    // Duration → scheduledEnd: compute end time from start + duration
-    // (e.g. Todoist DURATION=30, DURATION_UNIT=minute). Skip for all-day events.
+    // Todoist's DURATION counts DURATION_UNIT, "minute" or "day". A span in days on a
+    // dated task is all-day, and its stored end is the last day, so 3 days ends 2 later.
     if (!isAllDayFlag && scheduledStart && !scheduledEnd) {
       const durationStr = findColumnValue(row, headers, ["duration"]);
       if (durationStr) {
-        const durationMinutes = Number(durationStr);
-        if (!isNaN(durationMinutes) && durationMinutes > 0) {
+        const duration = Number(durationStr);
+        const isInDays =
+          (findColumnValue(row, headers, ["duration_unit"]) ?? "").toLowerCase() === "day";
+
+        if (!isNaN(duration) && duration > 0) {
           let timedStart = scheduledStart;
 
           // If start is date-only, try to extract time from the raw field value
@@ -613,18 +624,20 @@ export function applyMappings(
               const m = timeMatch[2]!;
               timedStart = `${scheduledStart}T${h}:${m}:00`;
             } else {
-              // No time info — create an all-day block, skip duration
               timedStart = "";
             }
           }
 
           if (timedStart && isTimedIso(timedStart)) {
-            const startDate = new Date(timedStart);
-            if (!isNaN(startDate.getTime())) {
+            const startDate = parseLocalISO(timedStart);
+            if (isValid(startDate)) {
               scheduledStart = timedStart;
-              startDate.setMinutes(startDate.getMinutes() + durationMinutes);
-              scheduledEnd = toLocalISO(startDate);
+              scheduledEnd = formatLocalISO(
+                isInDays ? addDays(startDate, duration) : addMinutes(startDate, duration)
+              );
             }
+          } else if (isInDays && duration > 1) {
+            scheduledEnd = formatDateOnly(addDays(parseLocalISO(scheduledStart), duration - 1));
           }
         }
       }
