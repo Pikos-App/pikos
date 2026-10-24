@@ -1,8 +1,8 @@
-import { getLocalTimezone } from "@pikos/core";
+import { getLocalTimezone, NLP_PRIORITY_MAP, parseInput } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { seedTutorial } from "./tutorial";
+import { HOW_IT_WORKS_QUICK_ADD, seedTutorial } from "./tutorial";
 
 describe("seedTutorial", () => {
   it("creates the Start here folder with 3 pages", async () => {
@@ -51,6 +51,28 @@ describe("seedTutorial", () => {
     const [schedule] = await adapter.listPageSchedules(welcomePage.id);
 
     expect(schedule!.timezone).toBe(localTz);
+  });
+
+  it("makes How it works the page its own Quick Add line creates", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 9, 24, 14, 0), toFake: ["Date"] });
+    const adapter = new MockStorageAdapter();
+    await seedTutorial(adapter);
+
+    const parsed = parseInput(HOW_IT_WORKS_QUICK_ADD);
+    vi.useRealTimers();
+    const pages = await adapter.listPages();
+    const howPage = pages.find((p) => p.title === "How it works")!;
+    const [schedule] = await adapter.listPageSchedules(howPage.id);
+
+    expect(parsed.type).toBe("single");
+    const { input } = parsed as Extract<typeof parsed, { type: "single" }>;
+    expect(input.title).toBe(howPage.title);
+    expect(input.tags).toEqual(howPage.tags);
+    expect(NLP_PRIORITY_MAP[input.priority!]).toBe(howPage.priority);
+    expect(howPage.priority).not.toBe(0);
+    expect(input.scheduledStart).toBe(schedule!.scheduledStart);
+    expect(input.scheduledEnd).toBe(schedule!.scheduledEnd);
+    expect((await adapter.getPage(howPage.id))!.content).toContain(HOW_IT_WORKS_QUICK_ADD);
   });
 
   it("is idempotent — returns null on second call", async () => {

@@ -10,6 +10,9 @@ import { IS_MACOS } from "@/shared/constants/platform";
 
 const MARKER = "Welcome to Pikos";
 
+/** Shown in the "How it works" page's body, so the page's own fields must be what this line parses to. */
+export const HOW_IT_WORKS_QUICK_ADD = "How it works tomorrow 9am for 1h #tutorial !high";
+
 async function alreadySeeded(adapter: StorageAdapter): Promise<boolean> {
   const { results } = await adapter.searchPages(MARKER);
   return results.some((r) => r.title.startsWith(MARKER));
@@ -109,7 +112,11 @@ export async function seedTutorial(
         "call dentist monday 9am",
         "book club thursday 7pm"
       ),
-      p("You can also pick a folder, add tags, or set priority from the menus that appear."),
+      p(
+        "Type a # word to tag it and !high to raise its priority, or pick a folder from the menu that appears. " +
+          "This page was added with one line:"
+      ),
+      bullets(HOW_IT_WORKS_QUICK_ADD),
       h3("2. Schedule"),
       p(
         "Put something on the calendar by dragging it from the list, or by clicking an empty slot and typing. For all-day things, use the strip at the top of the calendar instead of a time slot."
@@ -128,7 +135,7 @@ export async function seedTutorial(
       )
     ),
     folderId: tutorial.id,
-    priority: 0,
+    priority: 2,
     status: "not_started",
     subtitle: "Type what you want, drop it on the calendar, tick it off.",
     tags: ["tutorial"],

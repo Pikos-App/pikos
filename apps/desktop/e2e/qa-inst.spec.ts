@@ -1,4 +1,4 @@
-import { test as appTest, expect } from "./fixtures";
+import { test as appTest, expect, openEditorForPage } from "./fixtures";
 
 appTest.use({ firstRun: true });
 
@@ -18,6 +18,13 @@ appTest(
 
     await appTest.step("INST-05 the welcome page is open in the editor", async () => {
       await expect(app.getByRole("button", { name: "Page title" })).toHaveText("Welcome to Pikos 👋");
+    });
+
+    await appTest.step("INST-05 How it works shows a tag, a priority and its Quick Add line", async () => {
+      const editor = await openEditorForPage(app, "How it works");
+
+      await expect(app.getByRole("button", { name: "Priority: High" })).toBeVisible();
+      await expect(editor).toContainText("How it works tomorrow 9am for 1h #tutorial !high");
     });
   }
 );
