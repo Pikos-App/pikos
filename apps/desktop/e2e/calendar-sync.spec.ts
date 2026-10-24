@@ -848,7 +848,7 @@ appTest("a synced page's context menu offers no move, rename or date edit", asyn
   // Delete stays — trashing a synced page is supported (it tombstones the link).
   await expect(app.getByRole("menuitem", { name: "Delete" })).toBeVisible();
   await expect(app.getByRole("menuitem", { name: "Move to folder" })).toHaveCount(0);
-  await expect(app.getByRole("menuitem", { name: "No date" })).toHaveCount(0);
+  await expect(app.getByRole("menuitem", { name: "When" })).toHaveCount(0);
   await expect(app.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
 
   await app.keyboard.press("Escape");
@@ -859,7 +859,7 @@ appTest("a synced page's context menu offers no move, rename or date edit", asyn
     button: "right",
   });
   await expect(app.getByRole("menuitem", { name: "Move to folder" })).toBeVisible();
-  await expect(app.getByRole("menuitem", { name: "No date" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "When" })).toBeVisible();
   await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
 });
 

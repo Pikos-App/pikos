@@ -29,6 +29,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
 interface ItemHandlers {
   menuActsOn?: number;
   onDelete?: () => void;
+  onSendToDay?: (day: string) => void;
 }
 
 function renderItem(page: PageSummary, onRenameStart: () => void, handlers: ItemHandlers = {}) {
@@ -49,6 +50,8 @@ function renderItem(page: PageSummary, onRenameStart: () => void, handlers: Item
           onRenameCommit={() => {}}
           onRenameStart={onRenameStart}
           onSelect={() => {}}
+          onSendToDay={handlers.onSendToDay ?? (() => {})}
+          onStopRepeating={() => {}}
           onToggleStatus={() => {}}
           page={page}
         />
@@ -116,11 +119,12 @@ describe("PageListItem mirror-lock gating", () => {
     renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "When" }));
 
     expect(screen.getByText("No date")).toBeInTheDocument();
   });
 
-  it("context menu omits No date for a schedule-locked (synced) page", () => {
+  it("context menu omits When for a schedule-locked (synced) page", () => {
     renderItem(
       makePage({ scheduledStart: "2026-08-10", scheduleLocked: true, syncState: "active" }),
       vi.fn()
@@ -128,7 +132,7 @@ describe("PageListItem mirror-lock gating", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.queryByText("No date")).not.toBeInTheDocument();
+    expect(screen.queryByText("When")).not.toBeInTheDocument();
   });
 
   it("context menu keeps Move to Folder on a detached page", () => {
@@ -149,26 +153,82 @@ describe("PageListItem menu", () => {
       .map((item) => item.textContent ?? "");
   }
 
-  it("lists Rename, Move to folder, No date, Export as Markdown and Delete, in that order", () => {
+  it("lists the commonest edits first and Rename and Delete last, as the phone does", () => {
     renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
     expect(menuItems()).toEqual([
-      "Rename",
+      "Complete",
+      "Today",
+      "Tomorrow",
+      "Priority",
+      "When",
       "Move to folder",
-      "No date",
+      "Rename",
       "Export as Markdown",
       "Delete",
     ]);
   });
 
-  it("drops Rename and counts the pages when it acts on a selection", () => {
+  it("offers Reopen on a done page", () => {
+    renderItem(makePage({ status: "done" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(screen.getByRole("menuitem", { name: "Reopen" })).toBeInTheDocument();
+  });
+
+  it("keeps a repeating page on its rule's dates and offers to stop it", () => {
+    renderItem(makePage({ isRecurring: true, scheduledStart: "2026-08-10" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(menuItems()).toEqual([
+      "Complete",
+      "Priority",
+      "Move to folder",
+      "Stop repeating",
+      "Rename",
+      "Export as Markdown",
+      "Delete",
+    ]);
+  });
+
+  it("leaves a calendar's page only what is the user's", () => {
+    renderItem(
+      makePage({ scheduledStart: "2026-08-10", scheduleLocked: true, syncState: "active" }),
+      vi.fn()
+    );
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(menuItems()).toEqual(["Complete", "Priority", "Export as Markdown", "Delete"]);
+  });
+
+  it("sends the page to tomorrow", () => {
+    const onSendToDay = vi.fn();
+    renderItem(makePage(), vi.fn(), { onSendToDay });
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tomorrow" }));
+
+    expect(onSendToDay).toHaveBeenCalledWith("send-tomorrow");
+  });
+
+  it("drops what names one page and counts the pages when it acts on a selection", () => {
     renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn(), { menuActsOn: 3 });
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(menuItems()).toEqual(["Move to folder", "No date", "Delete 3 pages"]);
+    expect(menuItems()).toEqual([
+      "Today",
+      "Tomorrow",
+      "Priority",
+      "When",
+      "Move to folder",
+      "Delete 3 pages",
+    ]);
   });
 
   it("hands Delete to the list, which decides whether to ask", () => {

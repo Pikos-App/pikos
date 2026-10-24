@@ -18,6 +18,7 @@ import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useScrollAnchor } from "@/features/layout/hooks/useScrollAnchor";
 import { PageListItem, useMoveOverdueToToday, usePageListContext } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
+import { usePageRowActions } from "@/features/pages/hooks/usePageRowActions";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -98,6 +99,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   } = useSelection();
   const { isDraggingOverCalendar } = useCalendarDnD();
   const { moveOverdueToToday } = useMoveOverdueToToday();
+  const { sendToDay, stopRepeating } = usePageRowActions();
   const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
   const { density } = useInterfaceSettings();
@@ -505,12 +507,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
         onDelete={() => onMenuTargets(page, (ps) => requestDeleteMany(ps, menuActsOn(page.id)))}
         onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}
-        onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
+        onPriorityChange={(priority) =>
+          batchAction(page, (p) => handlePriorityChange(p.id, priority))
+        }
         onRenameCancel={handleRenameCancel}
         onRenameChange={(title) => handleRenameChange(page.id, title)}
         onRenameCommit={(title) => handleRenameCommit(page.id, title)}
         onRenameStart={() => setRenamingId(page.id)}
         onSelect={(e) => handlePageClick(page, e)}
+        onSendToDay={(day) => onMenuTargets(page, (pages) => sendToDay(pages, day))}
+        onStopRepeating={() => void stopRepeating(page)}
         onToggleDateFormat={toggleDateFormat}
         onToggleStatus={() => {
           // A multi-select status toggle (clicking one selected row's checkbox)

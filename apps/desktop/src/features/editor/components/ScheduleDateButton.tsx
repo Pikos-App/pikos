@@ -1,14 +1,6 @@
 import type { Page } from "@pikos/core";
-import {
-  computeScheduleTransition,
-  formatTriggerLabel,
-  isDone,
-  isTimedIso,
-  parseLocalISO,
-  toISODateOnly,
-  toISODateTime,
-} from "@pikos/core";
-import { addDays, getHours, getMinutes, isSameDay, nextMonday, startOfDay } from "date-fns";
+import { formatTriggerLabel, isDone, isTimedIso, parseLocalISO, scheduleOnDay } from "@pikos/core";
+import { addDays, isSameDay, nextMonday, startOfDay } from "date-fns";
 import { Calendar } from "lucide-react";
 import { useState } from "react";
 
@@ -48,11 +40,7 @@ export function ScheduleDateButton({ page }: { page: Page }) {
 
   function pick(date: Date) {
     monthNav.reset(date);
-    const iso =
-      isTimed && parsedStart
-        ? toISODateTime(date, getHours(parsedStart), getMinutes(parsedStart))
-        : toISODateOnly(date);
-    const next = computeScheduleTransition({ end: page.scheduledEnd, start }, iso);
+    const next = scheduleOnDay({ end: page.scheduledEnd, start }, date);
     void scheduleOnce(page.id, next.start, next.end);
   }
 

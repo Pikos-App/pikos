@@ -27,6 +27,7 @@ import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useNow } from "@/shared/hooks/useNow";
 import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
 
+import type { SendDay } from "../hooks/usePageRowActions";
 import { PageRowMenu } from "./PageRowMenu";
 
 interface PageListItemProps {
@@ -49,6 +50,8 @@ interface PageListItemProps {
   onMoveToFolder: (folderId: string | null) => void;
   onToggleStatus: () => void;
   onPriorityChange: (priority: PagePriority) => void;
+  onSendToDay: (day: SendDay) => void;
+  onStopRepeating: () => void;
   showRelative?: boolean;
   onToggleDateFormat?: () => void;
 }
@@ -62,12 +65,14 @@ export function PageListItem({
   onClearDate,
   onDelete,
   onMoveToFolder,
-  onPriorityChange: _onPriorityChange,
+  onPriorityChange,
   onRenameCancel,
   onRenameChange: _onRenameChange,
   onRenameCommit,
   onRenameStart,
   onSelect,
+  onSendToDay,
+  onStopRepeating,
   onToggleDateFormat,
   onToggleStatus,
   page,
@@ -288,7 +293,11 @@ export function PageListItem({
         onCloseAutoFocus={(e) => contextMenuContentProps.onCloseAutoFocus(e)}
         onDelete={onDelete}
         onMoveToFolder={onMoveToFolder}
+        onPriorityChange={onPriorityChange}
         onRename={() => prepareRenameFromMenu(onRenameStart)}
+        onSendToDay={onSendToDay}
+        onStopRepeating={onStopRepeating}
+        onToggleStatus={onToggleStatus}
         page={page}
       />
     </ContextMenu>

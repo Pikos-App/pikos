@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { computeScheduleTransition, normalizeEndInput, scheduleAtTypedTime } from "./schedule";
+import {
+  computeScheduleTransition,
+  normalizeEndInput,
+  scheduleAtTypedTime,
+  scheduleOnDay,
+} from "./schedule";
 
 const ALL_DAY = "2026-05-23";
 const TIMED = "2026-05-23T10:00:00";
@@ -224,5 +229,30 @@ describe("scheduleAtTypedTime", () => {
     expect(
       scheduleAtTypedTime({ end: undefined, start: undefined }, { hour24: 9, minute: 0 }, today)
     ).toEqual({ end: undefined, start: "2026-10-23T09:00:00" });
+  });
+});
+
+describe("scheduleOnDay", () => {
+  const day = new Date(2026, 9, 24);
+
+  it("keeps a timed page's time and length", () => {
+    expect(scheduleOnDay({ end: "2026-05-23T11:30:00", start: TIMED }, day)).toEqual({
+      end: "2026-10-24T11:30:00",
+      start: "2026-10-24T10:00:00",
+    });
+  });
+
+  it("keeps an all-day page all-day", () => {
+    expect(scheduleOnDay({ end: undefined, start: ALL_DAY }, day)).toEqual({
+      end: undefined,
+      start: "2026-10-24",
+    });
+  });
+
+  it("an undated page lands all-day on the day", () => {
+    expect(scheduleOnDay({ end: undefined, start: null }, day)).toEqual({
+      end: undefined,
+      start: "2026-10-24",
+    });
   });
 });

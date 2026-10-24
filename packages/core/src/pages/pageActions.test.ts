@@ -10,11 +10,42 @@ const series = { ...dated, isRecurring: true };
 describe("pageActions", () => {
   it("lists every action in menu order, offered or not", () => {
     expect(pageActions(plain).map((a) => a.id)).toEqual([
-      "rename",
-      "move-to-folder",
+      "complete",
+      "send-today",
+      "send-tomorrow",
+      "priority",
+      "next-week",
       "clear-date",
+      "move-to-folder",
+      "stop-repeating",
+      "rename",
       "delete",
     ]);
+  });
+
+  it("keeps a series and a calendar's page on their own dates", () => {
+    for (const page of [series, { ...dated, scheduleLocked: true }]) {
+      const sends = pageActions(page).filter((a) =>
+        ["send-today", "send-tomorrow", "next-week"].includes(a.id)
+      );
+      expect(sends.every((a) => !a.offered)).toBe(true);
+    }
+  });
+
+  it("offers Stop repeating only on a series of your own, one at a time", () => {
+    const stop = (page: typeof dated, actsOn = 1) =>
+      pageActions(page, actsOn).find((a) => a.id === "stop-repeating");
+    expect(stop(series)).toEqual({ id: "stop-repeating", offered: true });
+    expect(stop(dated)).toMatchObject({ reason: "not-repeating" });
+    expect(stop({ ...series, scheduleLocked: true })).toMatchObject({ reason: "calendar-owned" });
+    expect(stop(series, 2)).toMatchObject({ reason: "several-pages" });
+  });
+
+  it("completes and sets priority on a calendar's page, which are the user's", () => {
+    const offered = pageActions({ ...dated, scheduleLocked: true })
+      .filter((a) => a.offered)
+      .map((a) => a.id);
+    expect(offered).toEqual(["complete", "priority", "delete"]);
   });
 
   describe("answers as the phone's menu does", () => {
@@ -26,7 +57,9 @@ describe("pageActions", () => {
           scheduleLocked: c.page.scheduleLocked,
         };
         const answers = Object.fromEntries(
-          pageActions(page, c.actsOn).map((a) => [a.id, a.offered ? "offered" : a.reason])
+          pageActions(page, c.actsOn)
+            .filter((a) => a.id in c.expect)
+            .map((a) => [a.id, a.offered ? "offered" : a.reason])
         );
         expect(answers).toEqual(c.expect);
       });

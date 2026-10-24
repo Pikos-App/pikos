@@ -246,6 +246,7 @@ export {
   computeScheduleTransition,
   normalizeEndInput,
   scheduleAtTypedTime,
+  scheduleOnDay,
 } from "./pages/schedule";
 export { withTodayOccurrences } from "./pages/todayOccurrences";
 export { partitionToggleSelection } from "./pages/toggleSelection";

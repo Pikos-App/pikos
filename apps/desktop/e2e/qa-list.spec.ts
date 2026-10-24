@@ -442,31 +442,47 @@ appTest(
 );
 
 appTest(
-  "a page's menu offers Rename, Move to folder, No date and Delete, and counts a selection",
+  "a page's menu puts Complete, Today and Tomorrow first, clears a date, and counts a selection",
   { tag: ["@LIST-12"] },
   async ({ app }) => {
     await quickAdd(app, "dated page @tomorrow");
     await quickAdd(app, "other page");
     const items = app.locator("[data-page-list-item]");
     const dated = items.filter({ hasText: "dated page" });
+    const other = items.filter({ hasText: "other page" });
+    const when = app.getByRole("menuitem", { exact: true, name: "When" });
+    const noDate = app.getByRole("menuitem", { exact: true, name: "No date" });
 
-    await appTest.step("LIST-12 one scheduled page offers all four", async () => {
+    await appTest.step("LIST-12 one scheduled page offers the phone's menu", async () => {
       await dated.click({ button: "right" });
-      for (const name of ["Rename", "Move to folder", "No date", "Delete"]) {
+      const names = ["Complete", "Today", "Tomorrow", "Priority", "When", "Move to folder"];
+      for (const name of [...names, "Rename", "Delete"]) {
         await expect(app.getByRole("menuitem", { exact: true, name })).toBeVisible();
       }
     });
 
     await appTest.step("LIST-12 No date clears the date", async () => {
-      await app.getByRole("menuitem", { exact: true, name: "No date" }).click();
+      await when.click();
+      await noDate.click();
       await dated.click({ button: "right" });
-      await expect(app.getByRole("menuitem", { exact: true, name: "No date" })).toHaveCount(0);
+      await when.click();
+      await expect(noDate).toHaveCount(0);
       await app.keyboard.press("Escape");
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step("LIST-12 Tomorrow moves an undated page to tomorrow", async () => {
+      await other.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Tomorrow" }).click();
+      const { monthDay } = await dayFrom(app, 1);
+      await expect(
+        other.getByRole("button", { name: `Toggle date format: ${monthDay}` })
+      ).toBeVisible();
     });
 
     await appTest.step("LIST-12 with two selected it reads and does Delete 2 pages", async () => {
       await dated.click();
-      await items.filter({ hasText: "other page" }).click({ modifiers: ["ControlOrMeta"] });
+      await other.click({ modifiers: ["ControlOrMeta"] });
       await expect(app.locator("[data-page-list-item][data-selected=true]")).toHaveCount(2);
       await dated.click({ button: "right" });
       const deleteBoth = app.getByRole("menuitem", { exact: true, name: "Delete 2 pages" });

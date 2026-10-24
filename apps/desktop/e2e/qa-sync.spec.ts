@@ -144,11 +144,11 @@ appTest(
     });
 
     await appTest.step(
-      "SYNC-12 the context menu has no Move to folder, No date or Rename",
+      "SYNC-12 the context menu has no Move to folder, When or Rename",
       async () => {
         await standup.click({ button: "right" });
         await expect(app.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-        for (const name of ["Move to folder", "No date", "Rename"]) {
+        for (const name of ["Move to folder", "When", "Rename"]) {
           await expect(app.getByRole("menuitem", { name })).toHaveCount(0);
         }
         await app.keyboard.press("Escape");

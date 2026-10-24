@@ -2,9 +2,9 @@
 // date-picker chip. Pure date-string transforms — no calendar layout deps —
 // so they belong in shared/ rather than features/calendar/utils.
 
-import { addMinutes } from "date-fns";
+import { addMinutes, getHours, getMinutes } from "date-fns";
 
-import { toISODateTime } from "../format/dateTimePicker";
+import { toISODateOnly, toISODateTime } from "../format/dateTimePicker";
 import type { TypedTime } from "../nlp/typedTime";
 import { formatLocalISO, isAllDayIso, isTimedIso, parseLocalISO } from "../utils/dates";
 
@@ -57,6 +57,20 @@ export function computeScheduleTransition(
 
   // all-day → all-day: preserve end, drop if now before new start.
   return { end: currEnd && currEnd >= iso ? currEnd : undefined, start: iso };
+}
+
+/** Moves a page onto `day`, keeping its time and length; an undated page lands all-day. */
+export function scheduleOnDay(
+  current: { start: string | null | undefined; end: string | null | undefined },
+  day: Date
+): { start: string; end: string | undefined } {
+  const start = current.start ?? null;
+  const iso =
+    start !== null && isTimedIso(start)
+      ? toISODateTime(day, getHours(parseLocalISO(start)), getMinutes(parseLocalISO(start)))
+      : toISODateOnly(day);
+
+  return computeScheduleTransition(current, iso);
 }
 
 /**

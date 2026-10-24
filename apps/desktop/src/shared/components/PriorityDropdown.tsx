@@ -15,7 +15,7 @@ interface PriorityConfig {
   icon: string;
 }
 
-const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
+export const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
   0: { icon: "", label: "No priority" },
   1: { icon: "!!", label: "Urgent" },
   2: { icon: "!", label: "High" },
@@ -23,7 +23,7 @@ const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
   4: { icon: "•", label: "Low" },
 };
 
-const ALL_PRIORITIES: PagePriority[] = [0, 1, 2, 3, 4];
+export const ALL_PRIORITIES: PagePriority[] = [0, 1, 2, 3, 4];
 
 export interface PriorityDropdownProps {
   priority: PagePriority;
