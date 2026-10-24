@@ -1,5 +1,5 @@
 // The credential body shared by the add-account and reconnect dialogs: the
-// same fields, the same app-password help link, the same error line, and the
+// same fields, the app-password help link, the same error line, and the
 // same busy-aware action row. Each dialog keeps its own title, description, and
 // submit callback.
 
@@ -7,7 +7,7 @@ import { caldavSendsPasswordInClear } from "@pikos/core";
 
 import { Button } from "@/components/ui/button";
 
-import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
+import { APP_PASSWORD_HELP, type CaldavPreset, FORM_INPUT } from "./accountForm";
 
 interface CaldavCredentialFormProps {
   password: string;
@@ -19,6 +19,7 @@ interface CaldavCredentialFormProps {
     onUrlChange: (value: string) => void;
     username: string;
     onUsernameChange: (value: string) => void;
+    preset: CaldavPreset | null;
   };
   error: string | null;
   busy: boolean;
@@ -54,6 +55,7 @@ export function CaldavCredentialForm({
     !password && "an app password",
   ].filter((m): m is string => typeof m === "string");
   const canSubmit = missing.length === 0 && !busy;
+  const preset = server?.preset ?? null;
 
   // Only once something has been typed. On an untouched form the list is every
   // field and says nothing the empty inputs don't; the case worth naming is the
@@ -67,7 +69,7 @@ export function CaldavCredentialForm({
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Server URL</span>
             <input
-              autoFocus
+              autoFocus={!preset}
               className={FORM_INPUT}
               onChange={(e) => server.onUrlChange(e.target.value)}
               placeholder="https://caldav.example.com"
@@ -82,9 +84,10 @@ export function CaldavCredentialForm({
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Username</span>
             <input
+              autoFocus={!!preset}
               className={FORM_INPUT}
               onChange={(e) => server.onUsernameChange(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={server.preset?.usernameHint ?? "you@example.com"}
               value={server.username}
             />
           </label>
@@ -101,9 +104,10 @@ export function CaldavCredentialForm({
           value={password}
         />
       </label>
+      {preset && <p className="-mt-1.5 text-xs text-subtle">{preset.passwordHint}</p>}
       <a
         className="-mt-1.5 text-xs text-action hover:underline"
-        href={APP_PASSWORD_HELP}
+        href={preset?.helpUrl ?? APP_PASSWORD_HELP}
         rel="noreferrer"
         target="_blank"
       >

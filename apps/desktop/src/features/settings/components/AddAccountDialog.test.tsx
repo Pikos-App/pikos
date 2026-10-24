@@ -1,5 +1,3 @@
-// AddAccountDialog — provider picker + the CalDAV form. Validates the submit
-// gate, the failure path (stay open, show the error), and Back navigation.
 // Rendered standalone with a spy onConnect; the happy path through the real
 // adapter is covered by CalendarSyncSettings.test.tsx.
 
@@ -36,10 +34,45 @@ function fillForm() {
 }
 
 describe("AddAccountDialog", () => {
-  it("offers both providers", () => {
+  it("offers the named providers beside any CalDAV server", () => {
     render();
-    expect(screen.getByText("CalDAV")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^iCloud/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Fastmail/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Google Calendar/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Any server that speaks CalDAV/ })).toBeEnabled();
+  });
+
+  it("fills in iCloud's server and says which password it takes", async () => {
+    const onConnect = vi.fn().mockResolvedValue(undefined);
+    render({ onConnect });
+    fireEvent.click(screen.getByRole("button", { name: /^iCloud/ }));
+
+    expect(screen.getByLabelText("Server URL")).toHaveValue("https://caldav.icloud.com");
+    expect(screen.getByText(/won't take your Apple password/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "How to generate an app password" })).toHaveAttribute(
+      "href",
+      "https://pikos.app/calendar-sync/icloud"
+    );
+
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "me@icloud.com" } });
+    fireEvent.change(screen.getByLabelText("App password"), { target: { value: "app-pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() =>
+      expect(onConnect).toHaveBeenCalledWith(
+        expect.objectContaining({ baseUrl: "https://caldav.icloud.com/" })
+      )
+    );
+  });
+
+  it("starts any other CalDAV server empty, even after a named provider", () => {
+    render();
+    fireEvent.click(screen.getByRole("button", { name: /^Fastmail/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByText("CalDAV"));
+
+    expect(screen.getByLabelText("Server URL")).toHaveValue("");
+    expect(screen.queryByText(/won't take your/)).not.toBeInTheDocument();
   });
 
   // See `googleAvailable` in useCalendarSync.ts for why: shown-but-disabled, not
