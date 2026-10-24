@@ -1,8 +1,8 @@
 import type { Node } from "@tiptap/pm/model";
 
-const WORDS_PER_MINUTE = 238;
+import { readTextblock } from "./textblocks";
 
-const WORD = /\S+/g;
+const WORDS_PER_MINUTE = 238;
 
 export interface PageStats {
   chars: number;
@@ -10,27 +10,38 @@ export interface PageStats {
   words: number;
 }
 
-/** Counts block by block, as if the non-empty blocks were joined with a space, without building
- *  that string: on a long page the joined copy was most of the cost. */
-export function pageStats(doc: Node): PageStats {
-  let chars = 0;
-  let filledBlocks = 0;
-  let paragraphs = 0;
-  let words = 0;
+interface Totals extends PageStats {
+  filledBlocks: number;
+}
 
-  doc.descendants((node) => {
-    if (!node.isTextblock) return true;
+const totals = new WeakMap<Node, Totals>();
 
-    paragraphs++;
-    const text = node.textContent.trim();
-    if (text) {
-      filledBlocks++;
-      chars += text.length;
-      words += text.match(WORD)?.length ?? 0;
-    }
+function totalsOf(node: Node): Totals {
+  if (node.isTextblock) {
+    const { chars, words } = readTextblock(node);
+    return { chars, filledBlocks: chars > 0 ? 1 : 0, paragraphs: 1, words };
+  }
 
-    return false;
+  const cached = totals.get(node);
+  if (cached) return cached;
+
+  const sum = { chars: 0, filledBlocks: 0, paragraphs: 0, words: 0 };
+  node.forEach((child) => {
+    const part = totalsOf(child);
+    sum.chars += part.chars;
+    sum.filledBlocks += part.filledBlocks;
+    sum.paragraphs += part.paragraphs;
+    sum.words += part.words;
   });
+  totals.set(node, sum);
+
+  return sum;
+}
+
+/** Counts as if the non-empty blocks were joined with a space, without building that string: on a
+ *  long page the joined copy was most of the cost. */
+export function pageStats(doc: Node): PageStats {
+  const { chars, filledBlocks, paragraphs, words } = totalsOf(doc);
 
   return { chars: chars + Math.max(filledBlocks - 1, 0), paragraphs, words };
 }

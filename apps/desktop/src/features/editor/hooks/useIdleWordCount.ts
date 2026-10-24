@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 import { REST_OF_PAGE_META } from "../utils/pageLoad";
 import { pageStats } from "../utils/pageStats";
 
-/** How long typing pauses before the count catches up. Counting walks the whole page, which at
- *  500,000 words was over half of a keystroke's cost. */
+/** How long typing pauses before the count catches up. Counting once walked the whole page, at
+ *  500,000 words over half of a keystroke's cost; it now rereads only edited blocks, but still
+ *  sums every top-level one. */
 const WORD_COUNT_IDLE_MS = 300;
 
 export function useIdleWordCount(editor: Editor): number {
