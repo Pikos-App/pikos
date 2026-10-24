@@ -81,6 +81,47 @@ describe("light / dark completeness", () => {
   });
 });
 
+function linearChannel(hexColor: string, offset: number): number {
+  const c = Number.parseInt(hexColor.slice(offset, offset + 2), 16) / 255;
+
+  return c <= 0.039_28 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(hexColor: string): number {
+  return (
+    0.2126 * linearChannel(hexColor, 1) +
+    0.7152 * linearChannel(hexColor, 3) +
+    0.0722 * linearChannel(hexColor, 5)
+  );
+}
+
+function contrast(a: string, b: string): number {
+  const lighter = Math.max(luminance(a), luminance(b));
+  const darker = Math.min(luminance(a), luminance(b));
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+describe("priority colours", () => {
+  it.each(["light", "dark"] as const)(
+    "draws Urgent readable as text on every row surface, in %s",
+    (scheme) => {
+      const urgent = tokenHex("priority-urgent", scheme);
+      const surfaces = [
+        "surface-primary",
+        "surface-secondary",
+        "surface-tertiary",
+        "surface-hover",
+      ];
+
+      for (const surface of surfaces) {
+        expect(contrast(urgent, tokenHex(surface, scheme))).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(urgent).not.toBe(tokenHex("status-overdue", scheme));
+    }
+  );
+});
+
 describe("tier discipline", () => {
   it("reaches primitives only through modelled refs, never through raw CSS", () => {
     for (const value of semanticValues.flatMap(walk)) {

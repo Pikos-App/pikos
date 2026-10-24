@@ -131,7 +131,7 @@ button,
   --color-warning-500: #c78f3a;
   --color-warning-600: #8f6526;
 
-  /* ─── Danger — red, for urgent / destructive / overdue. ─── */
+  /* ─── Danger — red, for destructive / overdue. ─── */
   --color-danger-400: #f87171;
   --color-danger-500: #ef4444;
   --color-danger-600: #dc2626;
@@ -227,6 +227,9 @@ button,
   --status-due-soon: #d4850f;
   --status-open: #3b82f6;
   --status-done: #10b981;
+
+  /* ─── Priority ─── */
+  --priority-urgent: #7c3aed;
 
   /* ─── Code (each at least 4.5:1 on surface-inset, a code block's fill) ─── */
   --code-keyword: #6d28d9;
@@ -350,6 +353,9 @@ button,
   --status-open: #60a5fa;
   --status-done: #34d399;
 
+  /* ─── Priority ─── */
+  --priority-urgent: #a78bfa;
+
   /* ─── Code ─── */
   --code-keyword: #c4b5fd;
   --code-string: #86efac;
@@ -422,6 +428,9 @@ button,
   --color-status-due-soon: var(--status-due-soon);
   --color-status-open: var(--status-open);
   --color-status-done: var(--status-done);
+
+  /* ── Semantic priority tokens ── */
+  --color-priority-urgent: var(--priority-urgent);
 
   /* ── Short aliases (avoid double text- prefix) ── */
   --color-subtle: var(--text-tertiary);

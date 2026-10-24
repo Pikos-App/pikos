@@ -111,7 +111,7 @@ export const PRIMITIVE_GROUPS: readonly TokenGroup[] = [
     ]),
   },
   {
-    comment: ["Danger — red, for urgent / destructive / overdue."],
+    comment: ["Danger — red, for destructive / overdue."],
     tokens: scale("danger", [
       [400, "#f87171"],
       [500, "#ef4444"],
@@ -277,6 +277,14 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
       { dark: hex("#f59e42"), name: "status-due-soon", value: hex("#d4850f") },
       { dark: hex("#60a5fa"), name: "status-open", value: hex("#3b82f6") },
       { dark: hex("#34d399"), name: "status-done", value: hex("#10b981") },
+    ],
+  },
+  {
+    comment: ["Priority"],
+    tokens: [
+      // Urgent's own hue, so red means only late. At least 4.5:1 as text on every surface a row
+      // sits on, the selected row included, so one value serves the mark and the checkbox.
+      { dark: hex("#a78bfa"), name: "priority-urgent", value: hex("#7c3aed") },
     ],
   },
   {
@@ -480,6 +488,10 @@ export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
   {
     aliases: bridge("status-overdue", "status-due-soon", "status-open", "status-done"),
     comment: ["Semantic status tokens"],
+  },
+  {
+    aliases: bridge("priority-urgent"),
+    comment: ["Semantic priority tokens"],
   },
   {
     aliases: [

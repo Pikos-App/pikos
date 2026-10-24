@@ -20,7 +20,7 @@ export const NLP_PRIORITY_MAP: Record<string, PagePriority> = {
 // third and fourth hue either fail contrast as text or land beside due-soon amber.
 export const PRIORITY_COLORS: Record<PagePriority, string> = {
   0: "text-subtle",
-  1: "text-status-overdue",
+  1: "text-priority-urgent",
   2: "text-due-soon",
   3: "text-muted-foreground",
   4: "text-subtle",
@@ -31,7 +31,7 @@ export const PRIORITY_COLORS: Record<PagePriority, string> = {
 // which Tailwind folds into its classes without defining them on the page.
 export const PRIORITY_CHECKBOX_COLORS: Record<PagePriority, string | undefined> = {
   0: undefined,
-  1: "var(--status-overdue)",
+  1: "var(--priority-urgent)",
   2: "var(--status-due-soon)",
   3: undefined,
   4: undefined,
