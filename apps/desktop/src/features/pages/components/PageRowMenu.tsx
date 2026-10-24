@@ -1,5 +1,11 @@
 import type { Folder, PageActionId, PagePriority, PageSummary } from "@pikos/core";
-import { isDone, pageActions, PRIORITY_COLORS, writableFolders } from "@pikos/core";
+import {
+  isDone,
+  pageActions,
+  PRIORITY_COLORS,
+  rruleEditWouldDegrade,
+  writableFolders,
+} from "@pikos/core";
 import { Check } from "lucide-react";
 
 import {
@@ -12,9 +18,11 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "@/shared/components/PriorityDropdown";
+import { usePages } from "@/shared/context/PagesContext";
 
 import { useExportPage } from "../hooks/useExportPage";
 import type { SendDay } from "../hooks/usePageRowActions";
+import type { RowPickerKind } from "../hooks/useRowPicker";
 
 interface PageRowMenuProps {
   page: PageSummary;
@@ -27,6 +35,7 @@ interface PageRowMenuProps {
   onPriorityChange: (priority: PagePriority) => void;
   onMoveToFolder: (folderId: string | null) => void;
   onStopRepeating: () => void;
+  onOpenPicker: (kind: RowPickerKind) => void;
   onRename: () => void;
   /** Absent where the list can't clear a date, which withholds No date. */
   onClearDate?: (() => void) | undefined;
@@ -44,6 +53,7 @@ export function PageRowMenu({
   onCloseAutoFocus,
   onDelete,
   onMoveToFolder,
+  onOpenPicker,
   onPriorityChange,
   onRename,
   onSendToDay,
@@ -52,6 +62,7 @@ export function PageRowMenu({
   page,
 }: PageRowMenuProps) {
   const { exportPage } = useExportPage();
+  const { recurrenceRules } = usePages();
   const isOnePage = actsOn === 1;
   const offered = new Set(
     pageActions(page, actsOn)
@@ -61,6 +72,10 @@ export function PageRowMenu({
   const offers = (id: PageActionId) => offered.has(id);
   const canClearDate = offers("clear-date") && onClearDate !== undefined;
   const hasTopRow = offers("complete") || offers("send-today") || offers("send-tomorrow");
+  const hasWhen = offers("next-week") || offers("pick-date") || canClearDate;
+  // The repeat picker refuses to open on a rule it would degrade, so the menu doesn't offer it.
+  const rule = recurrenceRules.find((r) => r.pageId === page.id);
+  const canEditRepeat = offers("repeat") && !(rule && rruleEditWouldDegrade(rule.rrule));
 
   return (
     <ContextMenuContent onCloseAutoFocus={onCloseAutoFocus}>
@@ -103,12 +118,17 @@ export function PageRowMenu({
         </ContextMenuSubContent>
       </ContextMenuSub>
 
-      {(offers("next-week") || canClearDate) && (
+      {hasWhen && (
         <ContextMenuSub>
           <ContextMenuSubTrigger>When</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             {offers("next-week") && (
               <ContextMenuItem onSelect={() => onSendToDay("next-week")}>Next week</ContextMenuItem>
+            )}
+            {offers("pick-date") && (
+              <ContextMenuItem onSelect={() => onOpenPicker("pick-date")}>
+                Pick a date…
+              </ContextMenuItem>
             )}
             {canClearDate && <ContextMenuItem onSelect={onClearDate}>No date</ContextMenuItem>}
           </ContextMenuSubContent>
@@ -142,6 +162,13 @@ export function PageRowMenu({
             ))}
           </ContextMenuSubContent>
         </ContextMenuSub>
+      )}
+
+      {offers("tags") && (
+        <ContextMenuItem onSelect={() => onOpenPicker("tags")}>Tags…</ContextMenuItem>
+      )}
+      {canEditRepeat && (
+        <ContextMenuItem onSelect={() => onOpenPicker("repeat")}>Repeat…</ContextMenuItem>
       )}
 
       {offers("stop-repeating") && (

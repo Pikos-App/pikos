@@ -443,7 +443,7 @@ appTest(
 
 appTest(
   "a page's menu puts Complete, Today and Tomorrow first, clears a date, and counts a selection",
-  { tag: ["@LIST-12"] },
+  { tag: ["@LIST-12:2"] },
   async ({ app }) => {
     await quickAdd(app, "dated page @tomorrow");
     await quickAdd(app, "other page");
@@ -490,6 +490,52 @@ appTest(
       await expect(app.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
       await deleteBoth.click();
       await expect(items).toHaveCount(0);
+    });
+  }
+);
+
+appTest(
+  "a page's menu opens its day, tag and repeat pickers beside the row, and each writes",
+  { tag: ["@LIST-12:2"] },
+  async ({ app }) => {
+    await quickAdd(app, "picked page");
+    const row = app.locator("[data-page-list-item]").filter({ hasText: "picked page" });
+
+    await appTest.step("LIST-12 When › Pick a date… sets the day from the picker", async () => {
+      await row.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "When" }).click();
+      await app.getByRole("menuitem", { exact: true, name: "Pick a date…" }).click();
+      const picker = app.getByRole("dialog", { name: "Schedule picker" });
+      await picker.getByRole("button", { exact: true, name: "Tomorrow" }).click();
+      await app.keyboard.press("Escape");
+      await expect(picker).not.toBeVisible();
+      const { monthDay } = await dayFrom(app, 1);
+      await expect(row.getByRole("button", { name: `Toggle date format: ${monthDay}` })).toBeVisible();
+    });
+
+    await appTest.step("LIST-12 Tags… creates and adds a tag", async () => {
+      await row.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Tags…" }).click();
+      await app.getByPlaceholder("Search or create…").fill("errand");
+      await app.keyboard.press("Enter");
+      await app.keyboard.press("Escape");
+      await expect(app.getByPlaceholder("Search or create…")).not.toBeVisible();
+    });
+
+    await appTest.step("LIST-12 Repeat… makes the page repeat", async () => {
+      await row.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Repeat…" }).click();
+      await app.getByRole("button", { exact: true, name: "Daily" }).click();
+      await app.keyboard.press("Escape");
+      await row.click({ button: "right" });
+      await expect(app.getByRole("menuitem", { exact: true, name: "Stop repeating" })).toBeVisible();
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step("LIST-12 the page's byline shows the tag and the repeat", async () => {
+      await row.click();
+      await expect(app.getByRole("button", { name: "Tags: errand" })).toBeVisible();
+      await expect(app.getByRole("button", { name: "Recurrence: every day" })).toBeVisible();
     });
   }
 );

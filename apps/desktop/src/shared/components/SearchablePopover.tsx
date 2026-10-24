@@ -1,6 +1,8 @@
 import { type ReactNode, useState } from "react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent } from "@/components/ui/popover";
+
+import { type AnchoredOpen, PickerTrigger } from "./PickerTrigger";
 
 interface SearchablePopoverProps {
   trigger: ReactNode;
@@ -12,6 +14,7 @@ interface SearchablePopoverProps {
   onEnter?: (query: string) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  anchored?: AnchoredOpen;
   /**
    * Intercepts Radix's focus-restore on close. When set, the default
    * trigger-refocus is cancelled and this callback fires instead — used by
@@ -23,6 +26,7 @@ interface SearchablePopoverProps {
 
 export function SearchablePopover({
   align = "start",
+  anchored,
   children,
   className = "w-52",
   onCloseAutoFocus,
@@ -36,12 +40,13 @@ export function SearchablePopover({
   const [internalOpen, setInternalOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const open = controlledOpen ?? internalOpen;
+  const open = anchored !== undefined || (controlledOpen ?? internalOpen);
 
   function handleOpenChange(next: boolean) {
     if (!next) setQuery("");
     setInternalOpen(next);
     onOpenChange?.(next);
+    if (!next) anchored?.onClose();
   }
 
   function close() {
@@ -55,7 +60,7 @@ export function SearchablePopover({
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PickerTrigger anchored={anchored}>{trigger}</PickerTrigger>
 
       <PopoverContent
         align={align}

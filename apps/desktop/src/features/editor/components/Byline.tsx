@@ -5,11 +5,11 @@ import { CalendarDays, CalendarSync } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { type MetadataChip, PageMetadataChips } from "@/shared/components/PageMetadataChips";
+import { ScheduleDateButton } from "@/shared/components/ScheduleDateButton";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { useBacklinks } from "../hooks/useBacklinks";
 import { BacklinksButton } from "./BacklinksButton";
-import { ScheduleDateButton } from "./ScheduleDateButton";
 import { ScheduleTimeControls } from "./ScheduleTimeControls";
 
 interface BylineProps {

@@ -16,6 +16,7 @@ import {
   viewerStart,
 } from "@pikos/core";
 import type React from "react";
+import { useRef } from "react";
 
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,9 @@ import { useNow } from "@/shared/hooks/useNow";
 import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
 
 import type { SendDay } from "../hooks/usePageRowActions";
+import { useRowPicker } from "../hooks/useRowPicker";
 import { PageRowMenu } from "./PageRowMenu";
+import { PageRowPicker } from "./PageRowPicker";
 
 interface PageListItemProps {
   page: PageSummary;
@@ -86,6 +89,8 @@ export function PageListItem({
     transition: null,
   });
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const rowPicker = useRowPicker();
   const { openPage } = useUI();
   const { density } = useInterfaceSettings();
   const showSubtitle = density !== "compact" && Boolean(page.subtitle);
@@ -102,7 +107,10 @@ export function PageListItem({
           data-active={isActive ? "true" : undefined}
           data-page-id={page.id}
           data-page-list-item
-          ref={setNodeRef}
+          ref={(el) => {
+            setNodeRef(el);
+            rowRef.current = el;
+          }}
           style={{
             opacity: isDragging ? 0 : 1,
             transform: CSS.Transform.toString(transform),
@@ -290,9 +298,13 @@ export function PageListItem({
         actsOn={menuActsOn}
         folders={folders}
         onClearDate={onClearDate}
-        onCloseAutoFocus={(e) => contextMenuContentProps.onCloseAutoFocus(e)}
+        onCloseAutoFocus={(e) => {
+          contextMenuContentProps.onCloseAutoFocus(e);
+          rowPicker.openRequested(rowRef.current);
+        }}
         onDelete={onDelete}
         onMoveToFolder={onMoveToFolder}
+        onOpenPicker={rowPicker.request}
         onPriorityChange={onPriorityChange}
         onRename={() => prepareRenameFromMenu(onRenameStart)}
         onSendToDay={onSendToDay}
@@ -300,6 +312,9 @@ export function PageListItem({
         onToggleStatus={onToggleStatus}
         page={page}
       />
+      {rowPicker.open && (
+        <PageRowPicker onClose={rowPicker.close} page={page} picker={rowPicker.open} />
+      )}
     </ContextMenu>
   );
 }

@@ -1,14 +1,7 @@
 // key={page.id} in parent resets all state on page switch.
 
 import type { Page, PagePriority, PageStatus } from "@pikos/core";
-import {
-  getLocalTimezone,
-  isTimedIso,
-  localToday,
-  parseLocalISO,
-  snapAnchorToRule,
-  viewerStart,
-} from "@pikos/core";
+import { isTimedIso, parseLocalISO, viewerStart } from "@pikos/core";
 import type { JSONContent } from "@tiptap/core";
 import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -21,6 +14,7 @@ import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { usePageMetadataWrites } from "@/shared/hooks/usePageMetadataWrites";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
@@ -38,18 +32,8 @@ interface MetadataHeaderProps {
 }
 
 export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: MetadataHeaderProps) {
-  const {
-    clearPendingDescription,
-    createRecurrence,
-    deleteRecurrence,
-    flushPage,
-    folders,
-    recurrenceRules,
-    scheduleOnce,
-    tags,
-    updatePage,
-    updateRecurrence,
-  } = usePages();
+  const { clearPendingDescription, flushPage, folders, tags, updatePage } = usePages();
+  const { changeRecurrence, toggleTag } = usePageMetadataWrites();
   const togglePageStatus = useRecurringStatusToggle();
   const { lineWidth } = useEditorSettings();
   const { flashPageBlock, requestCalendarScroll, setRightPanel } = useUI();
@@ -94,50 +78,6 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
     }
     setRightPanel("calendar");
     flashPageBlock(page.id);
-  }
-
-  function handleTagToggle(name: string) {
-    const next = page.tags.includes(name)
-      ? page.tags.filter((t) => t !== name)
-      : [...page.tags, name];
-    updatePage(page.id, { tags: next });
-  }
-
-  async function handleRecurrenceChange(rrule: string | null) {
-    const existing = recurrenceRules.find((r) => r.pageId === page.id);
-    if (!rrule) {
-      if (existing) await deleteRecurrence(existing.id);
-      return;
-    }
-    if (existing) {
-      await updateRecurrence(existing.id, { rrule });
-      // Changing BYDAY can leave the head on a weekday the rule now excludes;
-      // snap it (and the rule anchor, via scheduleOnce) onto the first allowed
-      // occurrence so no stray "first run" lingers on the old day.
-      const snapped = snapAnchorToRule(rrule, existing.scheduledStart);
-      if (snapped !== existing.scheduledStart) {
-        await scheduleOnce(page.id, snapped, page.scheduledEnd ?? undefined);
-      }
-      return;
-    }
-    // No existing rule. If the page has no date yet, anchor to today so the
-    // first occurrence is concrete. Snap the anchor onto the first date the
-    // rule permits (e.g. a Sunday date under an M/W/F rule moves to Monday).
-    // Await scheduleOnce so the rule's anchor and the head's scheduledStart
-    // commit together — otherwise a failed scheduleOnce leaves a rule
-    // referencing a date the head doesn't carry.
-    const anchorStart = snapAnchorToRule(rrule, page.scheduledStart ?? localToday());
-    if (anchorStart !== page.scheduledStart) {
-      await scheduleOnce(page.id, anchorStart, page.scheduledEnd ?? undefined);
-    }
-    const tz = getLocalTimezone();
-    await createRecurrence({
-      pageId: page.id,
-      rrule,
-      scheduledStart: anchorStart,
-      ...(page.scheduledEnd ? { scheduledEnd: page.scheduledEnd } : {}),
-      timezone: tz,
-    });
   }
 
   const [titleValue, setTitleValue] = useState(page.title ?? "");
@@ -394,9 +334,9 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
               onFolderChange={handleFolderChange}
               {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
               onPriorityChange={handlePriorityChange}
-              onRecurrenceChange={(rrule) => void handleRecurrenceChange(rrule)}
+              onRecurrenceChange={(rrule) => void changeRecurrence(page, rrule)}
               onStatusChange={handleStatusChange}
-              onTagToggle={handleTagToggle}
+              onTagToggle={(name) => toggleTag(page, name)}
               page={page}
             />
           </div>

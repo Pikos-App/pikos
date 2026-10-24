@@ -165,6 +165,8 @@ describe("PageListItem menu", () => {
       "Priority",
       "When",
       "Move to folder",
+      "Tags…",
+      "Repeat…",
       "Rename",
       "Export as Markdown",
       "Delete",
@@ -187,7 +189,10 @@ describe("PageListItem menu", () => {
     expect(menuItems()).toEqual([
       "Complete",
       "Priority",
+      "When",
       "Move to folder",
+      "Tags…",
+      "Repeat…",
       "Stop repeating",
       "Rename",
       "Export as Markdown",
@@ -203,7 +208,7 @@ describe("PageListItem menu", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(menuItems()).toEqual(["Complete", "Priority", "Export as Markdown", "Delete"]);
+    expect(menuItems()).toEqual(["Complete", "Priority", "Tags…", "Export as Markdown", "Delete"]);
   });
 
   it("sends the page to tomorrow", () => {
@@ -229,6 +234,45 @@ describe("PageListItem menu", () => {
       "Move to folder",
       "Delete 3 pages",
     ]);
+  });
+
+  it("opens the day picker beside the row from When › Pick a date…", async () => {
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "When" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Pick a date…" }));
+
+    expect(await screen.findByRole("dialog", { name: "Schedule picker" })).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("opens the tag picker beside the row from Tags…", async () => {
+    renderItem(makePage(), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tags…" }));
+
+    expect(await screen.findByPlaceholderText("Search or create…")).toBeInTheDocument();
+  });
+
+  it("opens the repeat picker beside the row from Repeat…", async () => {
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Repeat…" }));
+
+    expect(await screen.findByRole("button", { name: /Weekly/ })).toBeInTheDocument();
+  });
+
+  it("closes the picker on Escape", async () => {
+    renderItem(makePage(), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tags…" }));
+    fireEvent.keyDown(await screen.findByPlaceholderText("Search or create…"), { key: "Escape" });
+
+    expect(screen.queryByPlaceholderText("Search or create…")).not.toBeInTheDocument();
   });
 
   it("hands Delete to the list, which decides whether to ask", () => {

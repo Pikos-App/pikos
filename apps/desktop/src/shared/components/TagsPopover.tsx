@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import type { AnchoredOpen } from "@/shared/components/PickerTrigger";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 
 export interface TagsPopoverProps {
@@ -14,9 +15,10 @@ export interface TagsPopoverProps {
   onToggle: (name: string) => void;
   /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
+  anchored?: AnchoredOpen;
 }
 
-export function TagsPopover({ allTags, onClose, onToggle, selected }: TagsPopoverProps) {
+export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: TagsPopoverProps) {
   const [open, setOpen] = useState(false);
 
   const hasSelected = selected.length > 0;
@@ -29,86 +31,88 @@ export function TagsPopover({ allTags, onClose, onToggle, selected }: TagsPopove
           ? `#${selected[0]} #${selected[1]}`
           : `#${selected[0]} #${selected[1]} +${selected.length - 2}`;
 
+  const popover = (
+    <SearchablePopover
+      {...(anchored && { anchored })}
+      onEnter={(q) => {
+        if (q && !allTags.some((t) => t.toLowerCase() === q.toLowerCase())) {
+          onToggle(q.toLowerCase());
+        }
+      }}
+      onOpenChange={setOpen}
+      {...(onClose && { onCloseAutoFocus: onClose })}
+      open={open}
+      placeholder="Search or create…"
+      trigger={
+        <button
+          aria-label={`Tags: ${hasSelected ? selected.join(", ") : "none"}`}
+          className={cn(
+            "inline-flex min-w-0 items-center gap-1 rounded text-sm transition-colors hover:text-muted-foreground focus:outline-none",
+            hasSelected ? "text-muted-foreground" : "text-subtle"
+          )}
+        >
+          {!hasSelected && <Hash aria-hidden="true" className="shrink-0" size={13} />}
+          <span className="max-w-chip-label truncate">{label}</span>
+        </button>
+      }
+    >
+      {({ clearQuery, query }) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        const filteredTags = normalizedQuery
+          ? allTags.filter((t) => t.toLowerCase().includes(normalizedQuery))
+          : allTags;
+        const canCreate =
+          normalizedQuery.length > 0 && !allTags.some((t) => t.toLowerCase() === normalizedQuery);
+
+        return (
+          <>
+            {filteredTags.map((name) => {
+              const isSelected = selected.includes(name);
+              return (
+                <SearchablePopoverItem
+                  className={cn(
+                    "justify-between",
+                    isSelected ? "font-medium text-foreground" : "text-muted-foreground"
+                  )}
+                  key={name}
+                  onClick={() => onToggle(name)}
+                >
+                  <span className="truncate">#{name}</span>
+                  {isSelected && (
+                    <Check className="shrink-0 text-foreground" size={12} strokeWidth={2.5} />
+                  )}
+                </SearchablePopoverItem>
+              );
+            })}
+
+            {canCreate && (
+              <SearchablePopoverItem
+                className="text-muted-foreground"
+                onClick={() => {
+                  onToggle(normalizedQuery);
+                  clearQuery();
+                }}
+              >
+                <span className="shrink-0">Create</span>
+                <span className="truncate font-medium text-foreground">#{normalizedQuery}</span>
+              </SearchablePopoverItem>
+            )}
+
+            {filteredTags.length === 0 && !canCreate && (
+              <p className="px-3 py-2 text-xs text-subtle">No tags found</p>
+            )}
+          </>
+        );
+      }}
+    </SearchablePopover>
+  );
+
+  if (anchored) return popover;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div>
-          <SearchablePopover
-            onEnter={(q) => {
-              if (q && !allTags.some((t) => t.toLowerCase() === q.toLowerCase())) {
-                onToggle(q.toLowerCase());
-              }
-            }}
-            onOpenChange={setOpen}
-            {...(onClose && { onCloseAutoFocus: onClose })}
-            open={open}
-            placeholder="Search or create…"
-            trigger={
-              <button
-                aria-label={`Tags: ${hasSelected ? selected.join(", ") : "none"}`}
-                className={cn(
-                  "inline-flex min-w-0 items-center gap-1 rounded text-sm transition-colors hover:text-muted-foreground focus:outline-none",
-                  hasSelected ? "text-muted-foreground" : "text-subtle"
-                )}
-              >
-                {!hasSelected && <Hash aria-hidden="true" className="shrink-0" size={13} />}
-                <span className="max-w-chip-label truncate">{label}</span>
-              </button>
-            }
-          >
-            {({ clearQuery, query }) => {
-              const normalizedQuery = query.trim().toLowerCase();
-              const filteredTags = normalizedQuery
-                ? allTags.filter((t) => t.toLowerCase().includes(normalizedQuery))
-                : allTags;
-              const canCreate =
-                normalizedQuery.length > 0 &&
-                !allTags.some((t) => t.toLowerCase() === normalizedQuery);
-
-              return (
-                <>
-                  {filteredTags.map((name) => {
-                    const isSelected = selected.includes(name);
-                    return (
-                      <SearchablePopoverItem
-                        className={cn(
-                          "justify-between",
-                          isSelected ? "font-medium text-foreground" : "text-muted-foreground"
-                        )}
-                        key={name}
-                        onClick={() => onToggle(name)}
-                      >
-                        <span className="truncate">#{name}</span>
-                        {isSelected && (
-                          <Check className="shrink-0 text-foreground" size={12} strokeWidth={2.5} />
-                        )}
-                      </SearchablePopoverItem>
-                    );
-                  })}
-
-                  {canCreate && (
-                    <SearchablePopoverItem
-                      className="text-muted-foreground"
-                      onClick={() => {
-                        onToggle(normalizedQuery);
-                        clearQuery();
-                      }}
-                    >
-                      <span className="shrink-0">Create</span>
-                      <span className="truncate font-medium text-foreground">
-                        #{normalizedQuery}
-                      </span>
-                    </SearchablePopoverItem>
-                  )}
-
-                  {filteredTags.length === 0 && !canCreate && (
-                    <p className="px-3 py-2 text-xs text-subtle">No tags found</p>
-                  )}
-                </>
-              );
-            }}
-          </SearchablePopover>
-        </div>
+        <div>{popover}</div>
       </TooltipTrigger>
 
       {/* Not while the menu is open. The tooltip is anchored to the trigger, which the

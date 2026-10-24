@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useNow } from "@/shared/hooks/useNow";
 
+import { type AnchoredOpen, PickerTrigger } from "./PickerTrigger";
 import { computePresets, type Preset, shapesMatch } from "./recurrence/recurrenceConstants";
 import { RecurrenceCustomEditor } from "./recurrence/RecurrenceCustomEditor";
 import { RecurrenceEndsEditor, type RecurrenceEndType } from "./recurrence/RecurrenceEndsEditor";
@@ -60,6 +61,13 @@ export interface RecurrencePopoverProps {
   overrideLabel?: string;
   /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
+  anchored?: AnchoredOpen;
+}
+
+/** The month the Ends calendar first shows: the rule's end date, else this month. */
+function initialUntilView(rrule: string | null): Date {
+  const until = rrule ? parseRrule(rrule)?.until : undefined;
+  return until ? parseLocalISO(until) : new Date();
 }
 
 function formatTriggerLabel(rrule: string | null, short: boolean): string {
@@ -69,6 +77,7 @@ function formatTriggerLabel(rrule: string | null, short: boolean): string {
 
 export function RecurrencePopover({
   anchorDate,
+  anchored,
   disabled = false,
   disabledHint,
   onChange,
@@ -79,10 +88,11 @@ export function RecurrencePopover({
   variant = "label",
 }: RecurrencePopoverProps) {
   const { weekStart } = useAppSettings();
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = anchored !== undefined || ownOpen;
   const [customManuallyExpanded, setCustomManuallyExpanded] = useState(false);
-  const [untilViewYear, setUntilViewYear] = useState(() => new Date().getFullYear());
-  const [untilViewMonth, setUntilViewMonth] = useState(() => new Date().getMonth());
+  const [untilViewYear, setUntilViewYear] = useState(() => initialUntilView(rrule).getFullYear());
+  const [untilViewMonth, setUntilViewMonth] = useState(() => initialUntilView(rrule).getMonth());
   const now = useNow();
 
   // Local draft state for numeric inputs — only emits on commit (blur/Enter)
@@ -230,12 +240,13 @@ export function RecurrencePopover({
       setIntervalFocused(false);
       setCountFocused(false);
       setCustomManuallyExpanded(false);
+      anchored?.onClose();
     } else if (options?.until) {
       const d = parseLocalISO(options.until);
       setUntilViewYear(d.getFullYear());
       setUntilViewMonth(d.getMonth());
     }
-    setOpen(next);
+    setOwnOpen(next);
   }
 
   const endType: RecurrenceEndType =
@@ -303,7 +314,9 @@ export function RecurrencePopover({
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      {isIconOnly ? (
+      {anchored ? (
+        <PickerTrigger anchored={anchored}>{triggerButton}</PickerTrigger>
+      ) : isIconOnly ? (
         <Tooltip>
           <PopoverTrigger asChild>
             <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
@@ -378,7 +391,7 @@ export function RecurrencePopover({
               className="text-xs text-subtle transition-colors hover:text-destructive"
               onClick={() => {
                 onChange(null);
-                setOpen(false);
+                handleOpenChange(false);
               }}
               type="button"
             >

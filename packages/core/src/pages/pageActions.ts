@@ -7,8 +7,11 @@ export type PageActionId =
   | "send-tomorrow"
   | "priority"
   | "next-week"
+  | "pick-date"
   | "clear-date"
   | "move-to-folder"
+  | "tags"
+  | "repeat"
   | "stop-repeating"
   | "rename"
   | "delete";
@@ -49,7 +52,9 @@ function answer(id: PageActionId, reason: PageActionRefusal | null): PageAction 
  * Delete, completion and priority are offered on every origin: a mirror can be
  * removed locally, and its status and priority are the user's, not the calendar's.
  * Completion names one page because a selection's checkbox and Space flip each page
- * its own way, which one menu label can't say.
+ * its own way, which one menu label can't say. Pick a date, Tags and Repeat open a
+ * picker that shows one page's value, so they name one page too. Pick a date and
+ * Repeat stay on a series of your own: they are how its date and its rule change.
  */
 export function pageActions(page: PageActionFacts, actsOn = 1): PageAction[] {
   const owned = page.scheduleLocked ? "calendar-owned" : null;
@@ -61,11 +66,14 @@ export function pageActions(page: PageActionFacts, actsOn = 1): PageAction[] {
     answer("send-tomorrow", sendToDay),
     answer("priority", null),
     answer("next-week", sendToDay),
+    answer("pick-date", owned ?? several),
     answer(
       "clear-date",
       owned ?? (page.isRecurring ? "repeats" : page.scheduledStart ? null : "no-date")
     ),
     answer("move-to-folder", owned),
+    answer("tags", several),
+    answer("repeat", owned ?? several),
     answer("stop-repeating", owned ?? (page.isRecurring ? several : "not-repeating")),
     answer("rename", owned ?? several),
     answer("delete", null),

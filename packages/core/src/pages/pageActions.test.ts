@@ -15,8 +15,11 @@ describe("pageActions", () => {
       "send-tomorrow",
       "priority",
       "next-week",
+      "pick-date",
       "clear-date",
       "move-to-folder",
+      "tags",
+      "repeat",
       "stop-repeating",
       "rename",
       "delete",
@@ -41,11 +44,18 @@ describe("pageActions", () => {
     expect(stop(series, 2)).toMatchObject({ reason: "several-pages" });
   });
 
-  it("completes and sets priority on a calendar's page, which are the user's", () => {
+  it("completes, tags and sets priority on a calendar's page, which are the user's", () => {
     const offered = pageActions({ ...dated, scheduleLocked: true })
       .filter((a) => a.offered)
       .map((a) => a.id);
-    expect(offered).toEqual(["complete", "priority", "delete"]);
+    expect(offered).toEqual(["complete", "priority", "tags", "delete"]);
+  });
+
+  it("opens a picker on one page only, and on a series of your own", () => {
+    const pickers = (page: typeof dated, actsOn = 1) =>
+      pageActions(page, actsOn).filter((a) => ["pick-date", "tags", "repeat"].includes(a.id));
+    expect(pickers(series).every((a) => a.offered)).toBe(true);
+    expect(pickers(dated, 2).every((a) => !a.offered)).toBe(true);
   });
 
   describe("answers as the phone's menu does", () => {

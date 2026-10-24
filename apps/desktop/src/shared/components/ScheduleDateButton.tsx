@@ -1,15 +1,17 @@
-import type { Page } from "@pikos/core";
+import type { PageSummary } from "@pikos/core";
 import { formatTriggerLabel, isDone, isTimedIso, parseLocalISO, scheduleOnDay } from "@pikos/core";
 import { addDays, isSameDay, nextMonday, startOfDay } from "date-fns";
 import { Calendar } from "lucide-react";
 import { useState } from "react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { MiniCalendar } from "@/shared/components/MiniCalendar";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useMonthNav } from "@/shared/hooks/useMonthNav";
+
+import { type AnchoredOpen, PickerTrigger } from "./PickerTrigger";
 
 const DATE_PRESETS: readonly (readonly [string, (today: Date, day: Date | null) => Date])[] = [
   ["Today", (today) => today],
@@ -19,23 +21,34 @@ const DATE_PRESETS: readonly (readonly [string, (today: Date, day: Date | null) 
 ];
 
 /**
- * The byline's date. Its name reads the whole schedule, time included, so a screen reader
+ * The byline's date, also opened from a list row's menu. Its name reads the whole schedule, time included, so a screen reader
  * hears the schedule from one control; picking a day keeps the time and the length.
  */
-export function ScheduleDateButton({ page }: { page: Page }) {
+export function ScheduleDateButton({
+  anchored,
+  page,
+}: {
+  anchored?: AnchoredOpen;
+  page: PageSummary;
+}) {
   const { clearSchedule, scheduleOnce } = usePages();
   const { weekStart } = useAppSettings();
-  const monthNav = useMonthNav();
-  const [open, setOpen] = useState(false);
-
   const start = page.scheduledStart ?? null;
   const parsedStart = start ? parseLocalISO(start) : null;
   const selectedDate = parsedStart ? startOfDay(parsedStart) : null;
   const isTimed = start !== null && isTimedIso(start);
+  const monthNav = useMonthNav(parsedStart ?? undefined);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = anchored !== undefined || ownOpen;
 
   function handleOpenChange(next: boolean) {
+    if (anchored) {
+      if (!next) anchored.onClose();
+      return;
+    }
+
     if (next) monthNav.reset(parsedStart ?? new Date());
-    setOpen(next);
+    setOwnOpen(next);
   }
 
   function pick(date: Date) {
@@ -46,7 +59,7 @@ export function ScheduleDateButton({ page }: { page: Page }) {
 
   function clear() {
     void clearSchedule(page.id);
-    setOpen(false);
+    handleOpenChange(false);
   }
 
   const schedule = start ? formatTriggerLabel(start, page.scheduledEnd, isDone(page)) : null;
@@ -57,7 +70,7 @@ export function ScheduleDateButton({ page }: { page: Page }) {
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      <PopoverTrigger asChild>
+      <PickerTrigger anchored={anchored}>
         <button
           aria-label={schedule ? `Scheduled: ${schedule.label}` : "Set schedule"}
           className={cn(
@@ -74,7 +87,7 @@ export function ScheduleDateButton({ page }: { page: Page }) {
           <Calendar aria-hidden="true" size={13} />
           <span>{dateLabel}</span>
         </button>
-      </PopoverTrigger>
+      </PickerTrigger>
 
       <PopoverContent align="start" aria-label="Schedule picker" className="w-[260px] p-3">
         <div className="mb-3 flex items-start justify-between gap-2 text-xs">
