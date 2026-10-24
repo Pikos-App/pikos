@@ -1260,7 +1260,11 @@ async fn projection_version_bump_reseeds_a_pristine_body() {
         "version bump re-seeds the pristine body instead of mis-classifying it"
     );
     let (_, version, pending) = seed_meta(&pool, &page_id).await;
-    assert_eq!(version, Some(CONTENT_TEXT_PROJECTION_VERSION), "hash re-stamped at the current version");
+    assert_eq!(
+        version,
+        Some(CONTENT_TEXT_PROJECTION_VERSION),
+        "hash re-stamped at the current version"
+    );
     assert_eq!(pending, None);
 }
 
@@ -4873,7 +4877,9 @@ fn agenda(etag: &str, desc: &str) -> SyncDelta {
 #[tokio::test]
 async fn a_seeded_agenda_arrives_as_a_bullet_list() {
     let pool = setup().await;
-    reconcile(&pool, &ctx(), &agenda("v1", AGENDA)).await.unwrap();
+    reconcile(&pool, &ctx(), &agenda("v1", AGENDA))
+        .await
+        .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
 
     let content = page_content(&pool, &page_id).await;
@@ -4897,11 +4903,15 @@ async fn a_seeded_agenda_arrives_as_a_bullet_list() {
 #[tokio::test]
 async fn a_withheld_agenda_is_parked_as_written_and_appends_as_a_list() {
     let pool = setup().await;
-    reconcile(&pool, &ctx(), &agenda("v1", "Seed")).await.unwrap();
+    reconcile(&pool, &ctx(), &agenda("v1", "Seed"))
+        .await
+        .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
     simulate_user_body_edit(&pool, &page_id, "my notes").await;
 
-    reconcile(&pool, &ctx(), &agenda("v2", AGENDA)).await.unwrap();
+    reconcile(&pool, &ctx(), &agenda("v2", AGENDA))
+        .await
+        .unwrap();
 
     assert_eq!(seed_meta(&pool, &page_id).await.2.as_deref(), Some(AGENDA));
     let appended = crate::sync_commands::pending_description_document_impl(&pool, &page_id)
@@ -4915,7 +4925,9 @@ async fn a_withheld_agenda_is_parked_as_written_and_appends_as_a_list() {
 }
 
 async fn seed_agenda_as_dashed_paragraphs(pool: &sqlx::SqlitePool) -> String {
-    reconcile(pool, &ctx(), &agenda("v1", AGENDA)).await.unwrap();
+    reconcile(pool, &ctx(), &agenda("v1", AGENDA))
+        .await
+        .unwrap();
     let (page_id, _, _) = only_page_sync(pool).await;
     sqlx::query(
         "UPDATE pages SET content = ?, content_text = ?, updated_at = '2026-01-01T00:00:00Z'

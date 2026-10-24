@@ -12,7 +12,13 @@ fn doc<S: AsRef<str>>(lines: &[S]) -> Value {
 }
 
 /// A name, then the base, theirs, mine, and the merge wanted.
-type Case<'a> = (&'a str, &'a [&'a str], &'a [&'a str], &'a [&'a str], &'a [&'a str]);
+type Case<'a> = (
+    &'a str,
+    &'a [&'a str],
+    &'a [&'a str],
+    &'a [&'a str],
+    &'a [&'a str],
+);
 
 #[test]
 fn each_side_keeps_what_only_it_changed() {

@@ -1881,7 +1881,10 @@ async fn insert_head_clone_tx(
     .bind(now) // updated_at
     // The clone copies head.content verbatim: an older head's body reads fine in this build, so it
     // comes forward, and a newer one's keeps its version so no editor here writes over it.
-    .bind(head.content_schema_version.max(crate::CONTENT_SCHEMA_VERSION))
+    .bind(
+        head.content_schema_version
+            .max(crate::CONTENT_SCHEMA_VERSION),
+    )
     .execute(&mut **tx)
     .await?;
 
