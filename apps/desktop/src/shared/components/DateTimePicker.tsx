@@ -34,6 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useMonthNav } from "@/shared/hooks/useMonthNav";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { CAL_HEIGHT, MiniCalendar } from "./MiniCalendar";
 
@@ -69,6 +70,7 @@ export function DateTimePicker({
 }: DateTimePickerProps) {
   const { weekStart } = useAppSettings();
   const [open, setOpen] = useState(false);
+  const now = useNow();
 
   const monthNav = useMonthNav();
 
@@ -382,7 +384,7 @@ export function DateTimePicker({
           <div className="flex w-full items-start justify-between">
             <div className="mb-3 flex items-center gap-0.5 text-xs">
               {QUICK_PICKS.map(([label, resolve], idx) => {
-                const pickDate = resolve(startOfDay(new Date()));
+                const pickDate = resolve(startOfDay(now));
                 const isActive = selectedDate !== null && isSameDay(selectedDate, pickDate);
                 return (
                   <span className="flex items-center" key={label}>

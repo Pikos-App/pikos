@@ -7,6 +7,7 @@ import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
+import { useNow } from "@/shared/hooks/useNow";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { buildCachedList } from "@/shared/viewCache/cachedList";
@@ -51,8 +52,9 @@ export function usePageList() {
   // rules outside Today keeps other views off the round-trip.
   const source = useSeriesHeads(isTodayView) ?? NO_PAGES;
   const lookup = usePageLookup();
+  const now = useNow();
   const expanded = useRecurrenceExpansion({
-    days: [new Date()],
+    days: [now],
     expandRecurrenceRange,
     listOverridesForRules,
     overridesVersion,

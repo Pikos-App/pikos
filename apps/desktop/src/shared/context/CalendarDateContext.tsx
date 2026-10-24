@@ -18,6 +18,7 @@ const CalendarDateContext = createContext<CalendarDateValue | null>(null);
 export function CalendarDateProvider({ children }: { children: ReactNode }) {
   const [referenceDateIso, setReferenceDateIso] = useLocalStorage<string>(
     STORAGE_KEYS.calendarReferenceDate,
+    // eslint-disable-next-line pikos/no-render-clock -- read once, as the first launch's default
     new Date().toISOString()
   );
   const value: CalendarDateValue = {

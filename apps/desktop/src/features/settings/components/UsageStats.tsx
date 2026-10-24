@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { weekLabel } from "../utils/weekLabel";
 import { FocusSummary } from "./FocusSummary";
@@ -38,9 +39,8 @@ function formatMinutes(mins: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function daysSince(dateStr: string): number {
+function daysSince(dateStr: string, now: Date): number {
   const d = new Date(dateStr);
-  const now = new Date();
   return Math.floor((now.getTime() - d.getTime()) / 86_400_000);
 }
 
@@ -168,9 +168,11 @@ export function UsageStats({
   notificationsEnabled: boolean;
   stats: UsageStatsData | null;
 }) {
+  const now = useNow();
+
   if (!stats) return null;
 
-  const memberDays = stats.first_page_date ? daysSince(stats.first_page_date) : 0;
+  const memberDays = stats.first_page_date ? daysSince(stats.first_page_date, now) : 0;
 
   return (
     <div className="space-y-4">

@@ -6,6 +6,7 @@ import { CalendarRange, ChevronLeft, ChevronRight, Grid3x3 } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+import { useNow } from "@/shared/hooks/useNow";
 
 interface CalendarHeaderProps {
   dayCount: CalendarDayCount;
@@ -33,7 +34,7 @@ export function CalendarHeader({
   const visibleDays = buildCalendarDays(referenceDate, dayCount);
   const first = visibleDays[0]!;
   const last = visibleDays[visibleDays.length - 1]!;
-  const today = startOfDay(new Date());
+  const today = startOfDay(useNow());
   // Month view's Today button disables on the visible MONTH, not the visible
   // week — otherwise it stays live all month long while today is already on screen.
   const isCurrentPeriod = isMonth

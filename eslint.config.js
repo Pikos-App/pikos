@@ -6,6 +6,8 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+import pikos from "./scripts/eslint/no-render-clock.js";
+
 export default tseslint.config(
   {
     ignores: [
@@ -109,6 +111,14 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "no-console": "error",
+    },
+  },
+  {
+    files: ["apps/desktop/src/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}"],
+    plugins: { pikos },
+    rules: {
+      "pikos/no-render-clock": "error",
     },
   },
   // Tests legitimately spy on console.* (e.g. suppressing React's expected

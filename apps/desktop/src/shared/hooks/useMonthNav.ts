@@ -9,9 +9,9 @@ export interface MonthNav {
   reset: (date: Date) => void;
 }
 
-export function useMonthNav(initial: Date = new Date()): MonthNav {
-  const [year, setYear] = useState(() => getYear(initial));
-  const [month, setMonth] = useState(() => getMonth(initial));
+export function useMonthNav(initial?: Date): MonthNav {
+  const [year, setYear] = useState(() => getYear(initial ?? new Date()));
+  const [month, setMonth] = useState(() => getMonth(initial ?? new Date()));
 
   function next() {
     const stepped = addMonths(new Date(year, month, 1), 1);

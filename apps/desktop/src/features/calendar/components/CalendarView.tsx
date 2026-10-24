@@ -12,6 +12,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useCalendarExpansionHold, useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useNow } from "@/shared/hooks/useNow";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import { useCachedRange } from "@/shared/viewCache/useCachedRange";
 
@@ -67,7 +68,7 @@ export function CalendarView() {
   }, []);
 
   const { days, isMonth, monthWeeks, neighbours, shown, stepDays } = useCalendarRange();
-  const today = new Date();
+  const today = useNow();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
 
   const cachedRange = useCachedRange(shown?.[0] ?? null, shown?.[1] ?? null, neighbours);

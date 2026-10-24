@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { computePresets, type Preset, shapesMatch } from "./recurrence/recurrenceConstants";
 import { RecurrenceCustomEditor } from "./recurrence/RecurrenceCustomEditor";
@@ -80,8 +81,9 @@ export function RecurrencePopover({
   const { weekStart } = useAppSettings();
   const [open, setOpen] = useState(false);
   const [customManuallyExpanded, setCustomManuallyExpanded] = useState(false);
-  const [untilViewYear, setUntilViewYear] = useState(new Date().getFullYear());
-  const [untilViewMonth, setUntilViewMonth] = useState(new Date().getMonth());
+  const [untilViewYear, setUntilViewYear] = useState(() => new Date().getFullYear());
+  const [untilViewMonth, setUntilViewMonth] = useState(() => new Date().getMonth());
+  const now = useNow();
 
   // Local draft state for numeric inputs — only emits on commit (blur/Enter)
   // so intermediate keystrokes never emit invalid rrules.
@@ -104,7 +106,7 @@ export function RecurrencePopover({
     ? formatTriggerLabel(rrule, /* short */ false)
     : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ false));
 
-  const anchor = anchorDate ? parseLocalISO(anchorDate) : new Date();
+  const anchor = anchorDate ? parseLocalISO(anchorDate) : now;
   const presets = computePresets(anchor);
 
   const activePreset = options

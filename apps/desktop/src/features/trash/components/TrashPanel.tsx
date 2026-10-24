@@ -22,6 +22,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/shared/components/EmptyState";
+import { useNow } from "@/shared/hooks/useNow";
 
 import { TRASH_RETENTION_DAYS } from "../constants";
 import { useTrash } from "../hooks/useTrash";
@@ -34,10 +35,12 @@ const SYNCED_CANNOT_DESTROY =
 
 function TrashRow({
   entry,
+  now,
   onDeleteForever,
   onRestore,
 }: {
   entry: TrashedPage;
+  now: Date;
   onRestore: () => void;
   onDeleteForever: () => void;
 }) {
@@ -48,7 +51,7 @@ function TrashRow({
       <p className="type-ui-sm flex flex-wrap items-center gap-x-1.5 text-subtle">
         <span>{entry.folderName ?? "Inbox"}</span>
         <span aria-hidden>·</span>
-        <span>{deletedAgoLabel(entry.deletedAt)}</span>
+        <span>{deletedAgoLabel(entry.deletedAt, now)}</span>
         {entry.isSynced && (
           <span className="rounded-sm bg-surface-hover px-1 text-text-tertiary">Synced</span>
         )}
@@ -84,6 +87,7 @@ export function TrashPanel({
   width: number;
 }) {
   const { deleteForever, emptyTrash, entries, error, loading, restore } = useTrash(true);
+  const now = useNow();
 
   // Each pending confirmation holds the row it was raised for, so the panel
   // can name it — and so dismissing one can't act on a different row.
@@ -140,6 +144,7 @@ export function TrashPanel({
             <TrashRow
               entry={entry}
               key={entry.id}
+              now={now}
               onDeleteForever={() => setPendingDelete(entry)}
               onRestore={() => onRestore(entry)}
             />

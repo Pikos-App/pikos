@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useNow } from "@/shared/hooks/useNow";
 
 const MONTH_NAMES = [
   "January",
@@ -42,7 +43,7 @@ export function MiniCalendar({
   weekStartsOn = 1,
   year,
 }: MiniCalendarProps) {
-  const today = new Date();
+  const today = useNow();
   const rawDay = new Date(year, month, 1).getDay();
   // Shift so the grid starts on the correct day (0=Sun or 1=Mon)
   const firstDayOfWeek = (rawDay - weekStartsOn + 7) % 7;
