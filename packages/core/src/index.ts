@@ -213,6 +213,8 @@ export { quickAddHighlightTokens } from "./nlp/quickAddHighlight";
 export type { QuickAddHighlightKind, QuickAddHighlightToken } from "./nlp/quickAddHighlight";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
+export { readTypedTime } from "./nlp/typedTime";
+export type { TypedTime } from "./nlp/typedTime";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
 export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
 export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
@@ -234,7 +236,11 @@ export {
   upcomingWindowEnd,
 } from "./pages/pageFilters";
 export type { SmartViewId, SortMode } from "./pages/pageFilters";
-export { computeScheduleTransition, normalizeEndInput } from "./pages/schedule";
+export {
+  computeScheduleTransition,
+  normalizeEndInput,
+  scheduleAtTypedTime,
+} from "./pages/schedule";
 export { withTodayOccurrences } from "./pages/todayOccurrences";
 export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";

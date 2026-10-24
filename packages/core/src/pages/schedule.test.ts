@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeScheduleTransition, normalizeEndInput } from "./schedule";
+import { computeScheduleTransition, normalizeEndInput, scheduleAtTypedTime } from "./schedule";
 
 const ALL_DAY = "2026-05-23";
 const TIMED = "2026-05-23T10:00:00";
@@ -188,5 +188,41 @@ describe("normalizeEndInput", () => {
     expect(normalizeEndInput("2026-03-15T09:00:00", "2026-03-15T10:30:00")).toBe(
       "2026-03-15T10:30:00"
     );
+  });
+});
+
+describe("scheduleAtTypedTime", () => {
+  const today = new Date(2026, 9, 23);
+
+  it("puts the time on the page's own day and keeps its length", () => {
+    expect(
+      scheduleAtTypedTime(
+        { end: "2026-05-23T11:00:00", start: TIMED },
+        { hour24: 9, minute: 5 },
+        today
+      )
+    ).toEqual({ end: "2026-05-23T10:05:00", start: "2026-05-23T09:05:00" });
+  });
+
+  it("a typed length sets the end", () => {
+    expect(
+      scheduleAtTypedTime(
+        { end: undefined, start: TIMED },
+        { durationMinutes: 45, hour24: 15, minute: 0 },
+        today
+      )
+    ).toEqual({ end: "2026-05-23T15:45:00", start: "2026-05-23T15:00:00" });
+  });
+
+  it("a time on an all-day span collapses it to that one day", () => {
+    expect(
+      scheduleAtTypedTime({ end: "2026-05-25", start: ALL_DAY }, { hour24: 9, minute: 0 }, today)
+    ).toEqual({ end: undefined, start: "2026-05-23T09:00:00" });
+  });
+
+  it("a page with no date gets the time today", () => {
+    expect(
+      scheduleAtTypedTime({ end: undefined, start: undefined }, { hour24: 9, minute: 0 }, today)
+    ).toEqual({ end: undefined, start: "2026-10-23T09:00:00" });
   });
 });

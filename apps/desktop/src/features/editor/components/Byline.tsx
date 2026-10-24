@@ -9,7 +9,8 @@ import { usePages } from "@/shared/context/PagesContext";
 
 import { useBacklinks } from "../hooks/useBacklinks";
 import { BacklinksButton } from "./BacklinksButton";
-import { DateSchedulePopover } from "./DateSchedulePopover";
+import { ScheduleDateButton } from "./ScheduleDateButton";
+import { ScheduleTimeControls } from "./ScheduleTimeControls";
 
 interface BylineProps {
   page: Page;
@@ -63,19 +64,34 @@ export function Byline({
       }
     : { kind: "folder", props: { folders, onChange: onFolderChange, value: page.folderId } };
 
-  const scheduleChip: MetadataChip | null = locked
+  const scheduleChips: MetadataChip[] = locked
     ? lockedSchedule
-      ? {
-          id: "schedule",
+      ? [
+          {
+            id: "schedule",
+            kind: "node",
+            node: (
+              <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
+                {lockedSchedule}
+              </span>
+            ),
+          },
+        ]
+      : []
+    : [
+        { id: "schedule", kind: "node", node: <ScheduleDateButton page={page} /> },
+        {
+          id: "time",
           kind: "node",
           node: (
-            <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
-              {lockedSchedule}
-            </span>
+            <ScheduleTimeControls
+              key={page.id}
+              page={page}
+              {...(onOpenInCalendar && { onShowOnCalendar: onOpenInCalendar })}
+            />
           ),
-        }
-      : null
-    : { id: "schedule", kind: "node", node: <DateSchedulePopover page={page} /> };
+        },
+      ];
 
   const recurrenceChip: MetadataChip | null = locked
     ? lockedRecurrenceLabel
@@ -122,7 +138,7 @@ export function Byline({
           {
             boxed: true,
             chips: [
-              scheduleChip,
+              ...scheduleChips,
               // A timed page reminds on a lead time; an all-day page has no start
               // time to count back from, so its dropdown offers the day-before
               // anchor instead (see notifications/scheduler's day-before arm).

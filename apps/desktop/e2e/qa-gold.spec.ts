@@ -39,9 +39,9 @@ appTest(
       await app.getByRole("button", { name: "Set schedule" }).click();
       const picker = app.getByRole("dialog", { name: "Schedule picker" });
       await picker.getByRole("button", { exact: true, name: "Today" }).click();
-      await picker.getByPlaceholder("or type a time…").fill("2pm");
-      await app.keyboard.press("Enter");
       await app.keyboard.press("Escape");
+      await app.getByRole("textbox", { name: "Type a time" }).fill("2pm");
+      await app.keyboard.press("Enter");
       await expect(schedule).toBeVisible();
     });
 

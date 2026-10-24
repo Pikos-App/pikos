@@ -2,6 +2,10 @@
 // date-picker chip. Pure date-string transforms — no calendar layout deps —
 // so they belong in shared/ rather than features/calendar/utils.
 
+import { addMinutes } from "date-fns";
+
+import { toISODateTime } from "../format/dateTimePicker";
+import type { TypedTime } from "../nlp/typedTime";
 import { formatLocalISO, isAllDayIso, isTimedIso, parseLocalISO } from "../utils/dates";
 
 /**
@@ -53,6 +57,23 @@ export function computeScheduleTransition(
 
   // all-day → all-day: preserve end, drop if now before new start.
   return { end: currEnd && currEnd >= iso ? currEnd : undefined, start: iso };
+}
+
+/**
+ * Places a typed time on the page's own day, or on `today` when it has none. A typed length
+ * sets the end; without one the page keeps its length, as any other move of a timed page does.
+ */
+export function scheduleAtTypedTime(
+  current: { start: string | null | undefined; end: string | null | undefined },
+  time: TypedTime,
+  today: Date
+): { start: string; end: string | undefined } {
+  const day = current.start ? parseLocalISO(current.start) : today;
+  const start = toISODateTime(day, time.hour24, time.minute);
+  const length = time.durationMinutes ?? 0;
+  if (length <= 0) return computeScheduleTransition(current, start);
+
+  return { end: formatLocalISO(addMinutes(parseLocalISO(start), length)), start };
 }
 
 /**
