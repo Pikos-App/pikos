@@ -178,7 +178,7 @@ export function PageListItem({
               <div className="min-w-0 flex-1">
                 <span
                   className={cn(
-                    "type-body block leading-none font-medium outline-none",
+                    "type-body block leading-none font-medium outline-none [transition:color_var(--transition-fast)]",
                     isRenaming
                       ? "cursor-text overflow-hidden whitespace-nowrap caret-foreground"
                       : "truncate",

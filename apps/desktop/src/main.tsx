@@ -7,8 +7,10 @@ import App from "./App";
 import { loadMockStorage } from "./shared/adapters/mockStorageChunk";
 import { STORAGE_BACKEND } from "./shared/constants/testMode";
 import { installGlobalErrorHandlers } from "./shared/logger";
+import { followReducedMotion } from "./shared/reducedMotion";
 
 installGlobalErrorHandlers();
+followReducedMotion();
 
 // Suppress the WebView's native right-click menu globally.
 // Radix ContextMenu calls preventDefault() on events it handles, so custom

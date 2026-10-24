@@ -62,7 +62,7 @@ export function TaskCheckbox({
       aria-checked={isSpan ? undefined : checked}
       aria-label={isSpan ? undefined : checked ? "Mark not done" : "Mark done"}
       className={cn(
-        "task-checkbox flex shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
+        "task-checkbox flex shrink-0 items-center justify-center rounded-sm border-[1.5px] [transition:background-color_var(--transition-fast),border-color_var(--transition-fast)]",
         SIZE_CLASS[size],
         checked && "border-muted-foreground/40 bg-muted-foreground/40",
         !checked && !borderColor && "border-border-control",
@@ -80,7 +80,16 @@ export function TaskCheckbox({
       }}
       tabIndex={isSpan ? undefined : -1}
     >
-      {checked && <Check className="text-white" size={9} strokeWidth={2} />}
+      {/* Always mounted, so the tick draws in when it is checked and not on every
+          row that scrolls into view already done. */}
+      <Check
+        className={cn(
+          "text-white [transition:opacity_var(--transition-fast),scale_var(--transition-fast)]",
+          checked ? "scale-100 opacity-100" : "scale-50 opacity-0"
+        )}
+        size={9}
+        strokeWidth={2}
+      />
     </Tag>
   );
 }
