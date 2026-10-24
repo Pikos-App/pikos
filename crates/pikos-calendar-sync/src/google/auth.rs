@@ -84,7 +84,7 @@ impl PendingAuth {
     /// Wait for the redirect, then exchange the code for tokens.
     pub async fn complete(self) -> Result<GoogleCredentials, GoogleError> {
         let client = config::oauth_client()?;
-        self.complete_with(client, &crate::http::client()).await
+        self.complete_with(client, &crate::http::oauth_http()).await
     }
 
     async fn complete_with<C>(
@@ -139,7 +139,7 @@ pub fn store(
 /// one is spent.
 pub async fn access_token(keychain: &Keychain, account_id: &str) -> Result<String, GoogleError> {
     let client = config::oauth_client()?;
-    access_token_with(keychain, account_id, &client, &crate::http::client()).await
+    access_token_with(keychain, account_id, &client, &crate::http::oauth_http()).await
 }
 
 async fn access_token_with<C>(
@@ -192,7 +192,7 @@ where
 /// desired end state, so a repeat disconnect succeeds.
 pub async fn revoke(keychain: &Keychain, account_id: &str) -> Result<(), GoogleError> {
     let client = config::oauth_client()?;
-    revoke_with(keychain, account_id, &client, &crate::http::client()).await
+    revoke_with(keychain, account_id, &client, &crate::http::oauth_http()).await
 }
 
 async fn revoke_with<C>(

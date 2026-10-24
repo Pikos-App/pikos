@@ -21,6 +21,9 @@
 //!    content.
 //! 4. Silent branches. When code chooses based on env, OS, or stored
 //!    preference in a way the user can't see. DEBUG with the choice.
+//! 5. Every request the app sends. One INFO line each, at any volume,
+//!    because Pikos's privacy claim should be checkable from this file.
+//!    `pikos_calendar_sync::http` owns what the line may carry.
 //!
 //! ─── DO NOT log ────────────────────────────────────────────────────────
 //!
@@ -98,6 +101,7 @@ pub fn build_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         // Our crate and the JS-side bridge (target="webview").
         .level_for("pikos_lib", app_default)
         .level_for("webview", app_default)
+        .level_for("pikos_calendar_sync::http", LevelFilter::Info)
         // Panic hook target — always surface panics.
         .level_for("panic", LevelFilter::Error)
         .max_file_size(2 * 1024 * 1024)

@@ -1,6 +1,13 @@
 //! Shared `reqwest::Client` for sync providers to clone — one connection pool,
 //! uniform TLS/timeouts/user-agent. No provider logic here.
+//!
+//! Every request a provider sends goes through [`fetch`] or [`OauthHttp`], which log one INFO
+//! line for it, so the log alone answers "what has this app sent, and where". The line carries
+//! the method, host, path, status and response size, and never a header, a body or a query
+//! string, since tokens travel in all three.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -72,12 +79,89 @@ pub fn client_no_redirect() -> reqwest::Client {
         .expect("reqwest rustls client should always build")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// A response with its body read.
+pub(crate) struct Fetched {
+    pub status: u16,
+    pub headers: reqwest::header::HeaderMap,
+    pub body: String,
+}
 
-    #[test]
-    fn client_builds() {
-        let _ = client();
+/// Send `request`, read its body, and log it.
+pub(crate) async fn fetch(request: reqwest::RequestBuilder) -> Result<Fetched, reqwest::Error> {
+    let (client, request) = request.build_split();
+    let request = request?;
+    let method = request.method().clone();
+    let url = request.url().clone();
+
+    let fetched = async {
+        let response = client.execute(request).await?;
+        let status = response.status().as_u16();
+        let headers = response.headers().clone();
+        let body = response.text().await?;
+        Ok(Fetched {
+            status,
+            headers,
+            body,
+        })
+    }
+    .await;
+
+    let answer = fetched.as_ref().ok().map(|f| (f.status, f.body.len()));
+    log_request(
+        method.as_str(),
+        url.host_str().unwrap_or_default(),
+        url.path(),
+        answer,
+    );
+    fetched
+}
+
+/// The HTTP client the OAuth grant sends through: oauth2's own reqwest adapter, logged as
+/// [`fetch`] logs.
+pub(crate) struct OauthHttp(reqwest::Client);
+
+pub(crate) fn oauth_http() -> OauthHttp {
+    OauthHttp(client())
+}
+
+impl<'c> oauth2::AsyncHttpClient<'c> for OauthHttp {
+    type Error = oauth2::HttpClientError<reqwest::Error>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<oauth2::HttpResponse, Self::Error>> + Send + Sync + 'c>>;
+
+    fn call(&'c self, request: oauth2::HttpRequest) -> Self::Future {
+        let method = request.method().clone();
+        let uri = request.uri().clone();
+
+        Box::pin(async move {
+            let response = self.0.call(request).await;
+            let answer = response
+                .as_ref()
+                .ok()
+                .map(|r| (r.status().as_u16(), r.body().len()));
+            log_request(
+                method.as_str(),
+                uri.host().unwrap_or_default(),
+                uri.path(),
+                answer,
+            );
+            response
+        })
     }
 }
+
+/// `answer` is the status and body size, or `None` when no response came back.
+fn log_request(method: &str, host: &str, path: &str, answer: Option<(u16, usize)>) {
+    match answer {
+        Some((status, bytes)) => {
+            log::info!(
+                "request method={method} host={host} path={path} status={status} bytes={bytes}"
+            )
+        }
+        None => log::info!("request method={method} host={host} path={path} failed"),
+    }
+}
+
+#[cfg(test)]
+#[path = "http_tests.rs"]
+mod http_tests;

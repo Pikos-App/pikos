@@ -64,21 +64,18 @@ impl GoogleTransport for ReqwestGoogle {
         path: &str,
         query: &[(&str, String)],
     ) -> Result<GoogleResponse, GoogleError> {
-        let resp = self
+        let request = self
             .client
             .get(format!("{}{path}", self.root))
             .bearer_auth(&self.access_token)
-            .query(query)
-            .send()
+            .query(query);
+        let fetched = http::fetch(request)
             .await
             .map_err(|e| GoogleError::Network(e.to_string()))?;
 
-        let status = resp.status().as_u16();
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| GoogleError::Network(e.to_string()))?;
-
-        Ok(GoogleResponse { status, body })
+        Ok(GoogleResponse {
+            status: fetched.status,
+            body: fetched.body,
+        })
     }
 }

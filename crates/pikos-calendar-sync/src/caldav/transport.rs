@@ -56,7 +56,7 @@ impl ReqwestDav {
         body: &str,
     ) -> Result<DavResponse, CaldavError> {
         let method = reqwest::Method::from_bytes(method).expect("valid WebDAV method");
-        let resp = self
+        let request = self
             .client
             .request(method, url)
             // Sent preemptively — iCloud/Fastmail expect Basic without a challenge round-trip.
@@ -66,26 +66,21 @@ impl ReqwestDav {
                 reqwest::header::CONTENT_TYPE,
                 "application/xml; charset=utf-8",
             )
-            .body(body.to_owned())
-            .send()
+            .body(body.to_owned());
+        let fetched = http::fetch(request)
             .await
             .map_err(|e| CaldavError::Network(e.to_string()))?;
 
-        let status = resp.status().as_u16();
-        let location = resp
-            .headers()
+        let location = fetched
+            .headers
             .get(reqwest::header::LOCATION)
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned);
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| CaldavError::Network(e.to_string()))?;
 
         Ok(DavResponse {
-            status,
+            status: fetched.status,
             location,
-            body,
+            body: fetched.body,
         })
     }
 }
