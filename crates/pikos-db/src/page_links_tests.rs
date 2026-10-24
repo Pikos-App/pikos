@@ -65,3 +65,20 @@ async fn markdown_names_a_renamed_page_by_its_new_title() {
         "[[Plans for spring]]\n"
     );
 }
+
+#[tokio::test]
+async fn a_labelled_link_keeps_its_label_through_a_rename_export_and_write_back() {
+    let pool = test_pool().await;
+    page(&pool, "plans", "Plans for spring").await;
+    let mut doc = json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [
+        { "type": "pageLink", "attrs": { "pageId": "plans", "title": "Plans", "label": "the plan" } }
+    ]}]});
+
+    refresh_titles(&pool, &mut doc).await.unwrap();
+    let markdown = pikos_core::prosemirror_to_markdown(&doc);
+    let mut back = pikos_core::markdown_to_prosemirror(&markdown).unwrap();
+    link_titles(&pool, &mut back, &[]).await.unwrap();
+
+    assert_eq!(markdown, "[[Plans for spring|the plan]]\n");
+    assert_eq!(back["content"][0]["content"], doc["content"][0]["content"]);
+}

@@ -488,6 +488,60 @@ appTest(
   }
 );
 
+appTest(
+  "a page link shows text of its own through a rename, until it is set back to the title",
+  { tag: ["@EDIT-29"] },
+  async ({ app }) => {
+    await quickAdd(app, "Plans");
+    await quickAdd(app, "Garden journal");
+    const body = await openEditorForPage(app, "Garden journal");
+    await app.keyboard.type("See [[Plans");
+    await expect(app.getByRole("option", { name: "Plans" })).toBeVisible();
+    await app.keyboard.press("Enter");
+    const link = (text: string) => body.getByRole("button", { exact: true, name: text });
+    const editText = async (from: string, typed: string, key: "Enter" | "Escape") => {
+      await link(from).click({ button: "right" });
+      await app.getByRole("menuitem", { name: "Edit link text" }).click();
+      await app.getByRole("textbox", { name: "Link text" }).fill(typed);
+      await app.keyboard.press(key);
+    };
+    const items = app.locator("[data-page-list-item]");
+
+    await appTest.step("EDIT-29 the link shows the text typed", async () => {
+      await editText("Plans", "the plan", "Enter");
+      await expect(link("the plan")).toBeVisible();
+    });
+
+    await appTest.step("EDIT-29 Escape leaves the link as it was", async () => {
+      await editText("the plan", "something else", "Escape");
+      await expect(link("the plan")).toBeVisible();
+    });
+
+    await appTest.step("EDIT-29 the text stays through a rename of the page", async () => {
+      await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+      await items.filter({ hasText: "Plans" }).click();
+      await app.getByLabel("Page title").click();
+      await app.keyboard.press(mod("Mod+a"));
+      await app.keyboard.type("Plans for spring");
+      await app.keyboard.press("Enter");
+      await items.filter({ hasText: "Garden journal" }).click();
+      await expect(link("the plan")).toBeVisible();
+    });
+
+    await appTest.step("EDIT-29 Show page title puts the current title back", async () => {
+      await link("the plan").click({ button: "right" });
+      await app.getByRole("menuitem", { name: "Show page title" }).click();
+      await expect(link("Plans for spring")).toBeVisible();
+    });
+
+    await appTest.step("EDIT-29 clearing the text puts the title back", async () => {
+      await editText("Plans for spring", "for now", "Enter");
+      await editText("for now", "", "Enter");
+      await expect(link("Plans for spring")).toBeVisible();
+    });
+  }
+);
+
 /** The distinct text colours inside a code block: one when nothing is coloured. */
 function codeColours(code: Locator) {
   return code.evaluate((el) => {

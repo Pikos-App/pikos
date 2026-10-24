@@ -6,6 +6,10 @@ fn link(id: &str, title: &str) -> Value {
     json!({ "type": "pageLink", "attrs": { "pageId": id, "title": title } })
 }
 
+fn labelled(id: &str, title: &str, label: &str) -> Value {
+    json!({ "type": "pageLink", "attrs": { "pageId": id, "title": title, "label": label } })
+}
+
 fn paragraph(content: Vec<Value>) -> Value {
     json!({ "type": "doc", "content": [{ "type": "paragraph", "content": content }] })
 }
@@ -152,4 +156,53 @@ fn wikilink_titles_lists_each_bracketed_title_once_outside_code() {
     });
 
     assert_eq!(wikilink_titles(&doc), ["Plans", "Trip notes"]);
+}
+
+#[test]
+fn markdown_writes_a_labelled_link_as_its_title_then_its_label() {
+    let doc = paragraph(vec![labelled("plans-id", "Plans", "the plan")]);
+
+    assert_eq!(prosemirror_to_markdown(&doc), "[[Plans|the plan]]\n");
+}
+
+#[test]
+fn resolve_wikilinks_keeps_the_label_after_a_bar() {
+    let mut doc = paragraph(vec![json!({
+        "type": "text",
+        "text": "[[ Plans | the plan ]], [[Nobody|x]] and [[Plans|a|b]]"
+    })]);
+
+    resolve_wikilinks(&mut doc, &mut resolve_known);
+
+    assert_eq!(
+        doc["content"][0]["content"],
+        json!([
+            labelled("plans-id", "Plans", "the plan"),
+            { "type": "text", "text": ", [[Nobody|x]] and [[Plans|a|b]]" },
+        ])
+    );
+}
+
+#[test]
+fn a_label_survives_a_rename_and_a_markdown_round_trip() {
+    let mut doc = paragraph(vec![labelled("plans-id", "Old name", "the plan")]);
+    refresh_link_titles(&mut doc, &|_| Some("Plans".to_string()));
+
+    let markdown = prosemirror_to_markdown(&doc);
+    let mut back = markdown_to_prosemirror(&markdown).unwrap();
+    resolve_wikilinks(&mut back, &mut resolve_known);
+
+    assert_eq!(markdown, "[[Plans|the plan]]\n");
+    assert_eq!(back["content"][0]["content"], json!([labelled("plans-id", "Plans", "the plan")]));
+}
+
+#[test]
+fn search_text_reads_a_link_as_its_label_else_its_title() {
+    let doc = paragraph(vec![
+        labelled("plans-id", "Plans", "the plan"),
+        json!({ "type": "text", "text": " / " }),
+        link("trip-id", "Trip notes"),
+    ]);
+
+    assert_eq!(crate::text::extract_text_value(&doc), "the plan / Trip notes");
 }

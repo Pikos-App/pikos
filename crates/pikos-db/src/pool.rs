@@ -871,6 +871,10 @@ fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
         parts.push("\n".to_string());
         return;
     }
+    if node.get("type").and_then(|t| t.as_str()) == Some("pageLink") {
+        parts.push(pikos_core::page_links::link_text(node).to_string());
+        return;
+    }
 
     let children = match node.get("content").and_then(|c| c.as_array()) {
         Some(arr) => arr,

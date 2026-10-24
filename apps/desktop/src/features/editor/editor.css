@@ -388,6 +388,12 @@
   cursor: pointer;
 }
 
+.editor-content .page-link-input {
+  border: none;
+  outline: none;
+  cursor: text;
+}
+
 .editor-content .page-link:hover {
   background: color-mix(in srgb, var(--primary) 18%, transparent);
 }

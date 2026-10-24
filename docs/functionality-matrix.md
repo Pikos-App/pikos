@@ -669,9 +669,11 @@ and never inside a code block. It links only a page that exists; there is no cre
 The writer derives `pages.links`, the ids a body links to, from the body on every write, so the
 app, the CLI and the phone can't disagree about it, and backlinks read that column. The page's
 byline, after its tags, shows how many pages outside the trash link here, hidden at none, and
-opens a list of them.
+opens a list of them. A link can show text of its own, set and cleared from its right-click menu;
+a rename of the target leaves that text alone. Search and the word count read a link as the text
+it shows.
 The CLI and MCP speak Markdown, so a link comes out of `read` as `[[Title]]` under the target's
-current title, and a `[[Title]]` going in through `add` or `update --content` links the page of
+current title, or `[[Title|text]]` when it shows text of its own, and either going in through `add` or `update --content` links the page of
 that title, matched without regard to case among pages outside the trash. A title no page has
 stays text, and so does one several pages share, unless one of them is the page the body
 already linked to, which is what keeps a link through a read and a write back. The CLI has no

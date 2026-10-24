@@ -1,9 +1,10 @@
 //! Links between pages inside a Tiptap document.
 //!
 //! A `pageLink` node holds the target's id, which is what makes a link survive a
-//! rename, and the target's title when the link was made. Markdown has no id, so
-//! there a link is `[[title]]`: the export writes the target's current title, and
-//! a write from the CLI or MCP turns `[[title]]` back into a link by looking the
+//! rename, the target's title when the link was made, and optionally a `label`, the
+//! text the link shows in place of the title. Markdown has no id, so there a link is
+//! `[[title]]`, or `[[title|label]]`: the export writes the target's current title,
+//! and a write from the CLI or MCP turns either form back into a link by looking the
 //! title up.
 
 use serde_json::{json, Map, Value};
@@ -14,6 +15,19 @@ pub fn link_title(node: &Value) -> &str {
         .and_then(|a| a.get("title"))
         .and_then(Value::as_str)
         .unwrap_or("")
+}
+
+/// The text a link shows in place of its target's title, when it has one.
+pub fn link_label(node: &Value) -> Option<&str> {
+    node.get("attrs")
+        .and_then(|a| a.get("label"))
+        .and_then(Value::as_str)
+        .filter(|label| !label.is_empty())
+}
+
+/// What a link reads as on the page: its label, else the title it carries.
+pub fn link_text(node: &Value) -> &str {
+    link_label(node).unwrap_or_else(|| link_title(node))
 }
 
 fn link_target(node: &Value) -> Option<&str> {
@@ -77,8 +91,8 @@ pub fn refresh_link_titles(doc: &mut Value, title_of: &impl Fn(&str) -> Option<S
     }
 }
 
-/// Turn each `[[title]]` in the document's text into a link to the page `resolve` names.
-/// A title it can't place stays as text, and so does anything inside code.
+/// Turn each `[[title]]` or `[[title|label]]` in the document's text into a link to the page
+/// `resolve` names. A title it can't place stays as text, and so does anything inside code.
 pub fn resolve_wikilinks(doc: &mut Value, resolve: &mut impl FnMut(&str) -> Option<String>) {
     let is_code_block = doc.get("type").and_then(Value::as_str) == Some("codeBlock");
     if is_code_block {
@@ -126,19 +140,25 @@ fn split_text(node: &Value, resolve: &mut impl FnMut(&str) -> Option<String>) ->
             break;
         };
 
-        let title = after[..close].trim();
-        let is_plain_title = !title.is_empty() && !title.contains(['[', ']', '|']);
-        let target = if is_plain_title { resolve(title) } else { None };
+        let inner = &after[..close];
+        let (title, label) = match inner.split_once('|') {
+            Some((title, label)) => (title.trim(), Some(label.trim())),
+            None => (inner.trim(), None),
+        };
+        let is_plain = |part: &str| !part.is_empty() && !part.contains(['[', ']', '|']);
+        let is_linkable = is_plain(title) && label.is_none_or(is_plain);
+        let target = if is_linkable { resolve(title) } else { None };
         match target {
             Some(id) => {
                 pending.push_str(&rest[..open]);
                 if !pending.is_empty() {
                     pieces.push(text_like(node, std::mem::take(&mut pending)));
                 }
-                pieces.push(json!({
-                    "type": "pageLink",
-                    "attrs": { "pageId": id, "title": title },
-                }));
+                let mut attrs = json!({ "pageId": id, "title": title });
+                if let Some(label) = label {
+                    attrs["label"] = Value::String(label.to_string());
+                }
+                pieces.push(json!({ "type": "pageLink", "attrs": attrs }));
                 rest = &after[close + 2..];
             }
             None => {

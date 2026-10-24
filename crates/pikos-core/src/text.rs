@@ -58,6 +58,11 @@ fn walk(node: &Value, parts: &mut Vec<String>) {
         // content check rather than emitting. Preserved deliberately.
     }
 
+    if node.get("type").and_then(Value::as_str) == Some("pageLink") {
+        parts.push(crate::page_links::link_text(node).to_string());
+        return;
+    }
+
     let Some(content) = node.get("content").and_then(Value::as_array) else {
         return;
     };

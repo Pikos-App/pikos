@@ -221,7 +221,10 @@ describe("document schema", () => {
       type: "doc",
     });
 
-    expect(e.getJSON().content?.[0]?.content?.[1]).toEqual(link);
+    expect(e.getJSON().content?.[0]?.content?.[1]).toEqual({
+      ...link,
+      attrs: { ...link.attrs, label: null },
+    });
   });
 
   it("writes a page link to Markdown as [[title]]", () => {
@@ -238,6 +241,26 @@ describe("document schema", () => {
 
     const storage = e.storage as unknown as { markdown: { getMarkdown: () => string } };
     expect(storage.markdown.getMarkdown()).toBe("[[Plans]]");
+  });
+
+  it("writes a labelled page link to Markdown as [[title|label]], and counts its label", () => {
+    const e = editor();
+    e.commands.setContent({
+      content: [
+        {
+          content: [
+            { attrs: { label: "the plan", pageId: "target-1", title: "Plans" }, type: "pageLink" },
+          ],
+          type: "paragraph",
+        },
+      ],
+      type: "doc",
+    });
+
+    const storage = e.storage as unknown as { markdown: { getMarkdown: () => string } };
+    expect(storage.markdown.getMarkdown()).toBe("[[Plans|the plan]]");
+    expect(e.state.doc.textContent).toBe("the plan");
+    expect(e.getText()).toBe("the plan");
   });
 
   it("keeps the stored src free of platform-specific URLs", () => {

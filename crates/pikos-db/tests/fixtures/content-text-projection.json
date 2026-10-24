@@ -178,6 +178,24 @@
         ]
       },
       "text": "one\nask"
+    },
+    {
+      "name": "a page link reads as its label, else the title it carries",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              { "type": "text", "text": "see " },
+              { "type": "pageLink", "attrs": { "pageId": "a", "title": "Plans", "label": "the plan" } },
+              { "type": "text", "text": " and " },
+              { "type": "pageLink", "attrs": { "pageId": "b", "title": "Trip notes", "label": null } }
+            ]
+          }
+        ]
+      },
+      "text": "see the plan and Trip notes"
     }
   ]
 }

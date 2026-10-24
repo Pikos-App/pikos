@@ -3,6 +3,7 @@ interface TiptapNode {
   text?: string;
   content?: TiptapNode[];
   marks?: { type: string }[];
+  attrs?: { label?: unknown; title?: unknown };
 }
 
 /**
@@ -29,6 +30,14 @@ export function extractText(doc: unknown): string {
   return parts.join("\n").trim();
 }
 
+/** Port of `pikos_core::page_links::link_text`: the label a link shows, else its title. */
+function pageLinkText(attrs: { label?: unknown; title?: unknown } | undefined): string {
+  const label = typeof attrs?.label === "string" ? attrs.label : "";
+  if (label) return label;
+
+  return typeof attrs?.title === "string" ? attrs.title : "";
+}
+
 function walkNode(node: TiptapNode, parts: string[]): void {
   if (node.text) {
     parts.push(node.text);
@@ -37,6 +46,11 @@ function walkNode(node: TiptapNode, parts: string[]): void {
   // A block's children join with no separator, so a line break has to bring its own.
   if (node.type === "hardBreak") {
     parts.push("\n");
+    return;
+  }
+
+  if (node.type === "pageLink") {
+    parts.push(pageLinkText(node.attrs));
     return;
   }
 

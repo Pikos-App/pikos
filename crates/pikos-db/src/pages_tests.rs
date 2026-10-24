@@ -2821,7 +2821,7 @@ async fn typing_over_a_body_the_cli_changed_since_it_loaded_merges_and_keeps_its
         serde_json::from_str::<serde_json::Value>(&saved.content).unwrap(),
         serde_json::from_str::<serde_json::Value>(&merged).unwrap()
     );
-    assert_eq!(saved.content_text.as_deref(), Some("ONE\ntwo"));
+    assert_eq!(saved.content_text.as_deref(), Some("ONE\ntwo\nTrip"));
     assert_eq!(saved.links, vec!["trip"]);
     assert_eq!(saved.content_schema_version, crate::CONTENT_SCHEMA_VERSION);
 }

@@ -385,6 +385,10 @@ fn render_inline(out: &mut String, node: &Value) {
         "pageLink" => {
             out.push_str("[[");
             out.push_str(crate::page_links::link_title(node));
+            if let Some(label) = crate::page_links::link_label(node) {
+                out.push('|');
+                out.push_str(label);
+            }
             out.push_str("]]");
         }
         _ => {
