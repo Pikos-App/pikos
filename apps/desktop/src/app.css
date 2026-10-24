@@ -65,6 +65,17 @@ html.dragging-resize * {
   animation: highlight-flash 1.6s ease-out;
 }
 
+/* Starts from the drag ghost's opacity; no `to`, so it ends on the block's own. */
+@keyframes block-settle {
+  from {
+    opacity: 0.8;
+    box-shadow: var(--shadow-app-md);
+  }
+}
+.animate-block-settle {
+  animation: block-settle var(--transition-fast);
+}
+
 /* All buttons should use pointer cursor by default */
 button,
 [role="button"] {

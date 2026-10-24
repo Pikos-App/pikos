@@ -12,6 +12,7 @@ import { useNow } from "@/shared/hooks/useNow";
 
 import { useAllDayCreate } from "../hooks/useAllDayCreate";
 import { useAllDayDrag } from "../hooks/useAllDayDrag";
+import { useBlockSettle } from "../hooks/useBlockSettle";
 import { useDragGhost } from "../hooks/useDragGhost";
 import { useExternalDropPreview } from "../hooks/useExternalDropPreview";
 import { useHeightResize } from "../hooks/useHeightResize";
@@ -134,6 +135,8 @@ export function WeekGrid({
     scrollRef,
   });
 
+  const { clearSettling, rescheduleAndSettle, settlingPageId } = useBlockSettle(onReschedule);
+
   const { handleBlockDragStart, timedDragAllDayTarget, timedDragDayIndex, timedDraggingPageId } =
     useTimedDrag({
       dayColumnsRef,
@@ -144,7 +147,7 @@ export function WeekGrid({
       geometry,
       hideGhost,
       metrics,
-      onReschedule,
+      onReschedule: rescheduleAndSettle,
       pages,
       positionGhost,
       queueInitialGhostPosition,
@@ -300,10 +303,12 @@ export function WeekGrid({
                     onAutoOpenConsumed={onAutoOpenConsumed}
                     onBlockDragStart={handleBlockDragStart}
                     onBlockResizeStart={handleBlockResizeStart}
+                    onBlockSettled={clearSettling}
                     onCreatePage={onCreatePage}
                     onPageDoubleClick={onPageDoubleClick}
                     pages={pagesByDay[i]!}
                     resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
+                    settlingPageId={settlingPageId}
                   />
                 );
               })}

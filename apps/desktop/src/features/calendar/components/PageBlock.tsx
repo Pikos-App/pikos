@@ -46,6 +46,10 @@ interface PageBlockProps {
   onDoubleClick: (pageId: string) => void;
   /** When true, dims the block — used while it is being dragged to a new position. */
   isDragging?: boolean;
+  /** When true, the block was just dropped here and eases out of the drag ghost's look. */
+  isSettling?: boolean;
+  /** Called when the settle animation ends. */
+  onSettled?: () => void;
   /**
    * When true, the block's rendered width has dropped below the
    * "legible-time" threshold (COMPACT_MODE_WIDTH_PX). Renders single-line
@@ -70,10 +74,12 @@ export function PageBlock({
   folderColor,
   isCompactWidth,
   isDragging,
+  isSettling,
   onAutoOpenConsumed,
   onDoubleClick,
   onDragStart,
   onResizeStart,
+  onSettled,
   resizeHeight,
 }: PageBlockProps) {
   const {
@@ -297,6 +303,7 @@ export function PageBlock({
               "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
               done && "opacity-50",
               isHighlighted && "animate-highlight-flash",
+              isSettling && "animate-block-settle",
               (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
               (isContinuationAfter || straddlesBottomBand) && "rounded-br-none rounded-bl-none",
               isResizing
@@ -306,6 +313,7 @@ export function PageBlock({
                   : "cursor-default!"
             )}
             data-cal-page-id={page.id}
+            onAnimationEnd={isSettling ? onSettled : undefined}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
             onMouseEnter={() => applyHoverLink(true)}
@@ -331,6 +339,7 @@ export function PageBlock({
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
               isHighlighted && "animate-highlight-flash",
+              isSettling && "animate-block-settle",
               isResizing
                 ? "cursor-row-resize!"
                 : isDragging
@@ -340,6 +349,7 @@ export function PageBlock({
               (isContinuationAfter || straddlesBottomBand) && "rounded-br-none rounded-bl-none"
             )}
             data-cal-page-id={page.id}
+            onAnimationEnd={isSettling ? onSettled : undefined}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
             onMouseEnter={() => applyHoverLink(true)}

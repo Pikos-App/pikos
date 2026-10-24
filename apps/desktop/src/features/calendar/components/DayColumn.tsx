@@ -96,11 +96,13 @@ interface DayColumnProps {
   now: Date;
   onBlockDragStart: (info: BlockDragStartInfo) => void;
   onBlockResizeStart: (info: BlockResizeStartInfo) => void;
+  onBlockSettled: () => void;
   onAutoOpenConsumed: () => void;
   onCreatePage: (day: Date, start: Date, end?: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
   pages: PageSummary[];
   resizeGhost: ResizeGhost | null;
+  settlingPageId: string | null;
 }
 
 export function DayColumn({
@@ -115,10 +117,12 @@ export function DayColumn({
   onAutoOpenConsumed,
   onBlockDragStart,
   onBlockResizeStart,
+  onBlockSettled,
   onCreatePage,
   onPageDoubleClick,
   pages,
   resizeGhost,
+  settlingPageId,
 }: DayColumnProps) {
   const { folders } = usePages();
   const {
@@ -483,6 +487,7 @@ export function DayColumn({
               folderColor={folderColor}
               isCompactWidth={isCompactWidth}
               isDragging={isBeingDragged}
+              isSettling={settlingPageId === block.page.id}
               key={blockKey}
               onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
@@ -506,6 +511,7 @@ export function DayColumn({
                   ...(virtual.originalDate && { originalDate: virtual.originalDate }),
                 });
               }}
+              onSettled={onBlockSettled}
               {...(resizeHeight !== undefined ? { resizeHeight } : {})}
             />
           );
