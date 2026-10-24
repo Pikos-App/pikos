@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { SidebarCount } from "@/shared/components/SidebarCount";
 import { SIDEBAR_ENTRY_BOX } from "@/shared/components/SidebarListItem";
 import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 
@@ -46,11 +47,7 @@ export function SmartViewEntry({
     >
       <span className="shrink-0">{icon}</span>
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-      {badge !== undefined && badge > 0 && (
-        <span className="type-ui-sm shrink-0 text-subtle tabular-nums">
-          {badge > 99 ? "99+" : badge}
-        </span>
-      )}
+      {badge !== undefined && badge > 0 && <SidebarCount value={badge} />}
     </button>
   );
 }

@@ -76,6 +76,15 @@ html.dragging-resize * {
   animation: block-settle var(--transition-fast);
 }
 
+@keyframes count-change {
+  from {
+    opacity: 0.3;
+  }
+}
+.animate-count-change {
+  animation: count-change var(--transition-fast);
+}
+
 /* All buttons should use pointer cursor by default */
 button,
 [role="button"] {

@@ -14,6 +14,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { SidebarCount } from "@/shared/components/SidebarCount";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 
@@ -95,11 +96,7 @@ export function FolderItem({
           tabIndex={-1}
         >
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-          {pageCount !== undefined && pageCount > 0 && (
-            <span className="type-ui-sm shrink-0 text-subtle">
-              {pageCount > 99 ? "99+" : pageCount}
-            </span>
-          )}
+          {pageCount !== undefined && pageCount > 0 && <SidebarCount value={pageCount} />}
         </SidebarListItem>
       </ContextMenuTrigger>
 
