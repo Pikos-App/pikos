@@ -8,7 +8,8 @@
 //   // qa: NOTIF-02
 //   #[tokio::test]
 // or the same annotation above a unit test's `it(` or `test(`, which every commit and CI run,
-// or above an iPhone test's `func test…`, which the iOS workflow runs.
+// or above an iPhone test's `func test…`, which the iOS workflow runs, or anywhere in a
+// `scripts/*.mjs` check that `release.sh` runs before every tag.
 // A row that takes N tests together says so on each of them, `@GOLD-01:2` or `qa: GOLD-01:2`,
 // counted across both kinds. The release copy's automated marks are built from this output,
 // never typed.
@@ -181,6 +182,27 @@ function swiftClaims() {
   return claims;
 }
 
+/** Release gates that claim a row, from a `// qa:` line in a script under `scripts/`. A gate runs
+ *  on the real app before every tag, so the claim holds only while `release.sh` runs the script. */
+function gateClaims() {
+  const release = readFileSync(join(ROOT, "scripts/release.sh"), "utf8");
+  const claims = [];
+  for (const name of readdirSync(join(ROOT, "scripts")).filter((f) => f.endsWith(".mjs"))) {
+    const file = `scripts/${name}`;
+    const lines = readFileSync(join(ROOT, file), "utf8").split("\n");
+    lines.forEach((line, i) => {
+      const claim = /^\/\/ qa: (.+)$/.exec(line);
+      if (!claim) return;
+      const where = `${file}:${i + 1} release gate`;
+      const tags = claim[1].split(/,\s*/);
+      const isGate = release.includes(file);
+      if (isGate) claims.push({ id: where, tags });
+      else claims.push({ bad: "is in a script release.sh doesn't run", id: where, tags });
+    });
+  }
+  return claims;
+}
+
 const rows = readMaster(MASTER);
 const realWriterTests = listTests("playwright.bridge.config.ts");
 const onRealWriter = new Set(realWriterTests.map((t) => t.id));
@@ -216,7 +238,7 @@ for (const test of everyTest) {
     }
   }
 }
-for (const test of [...rustClaims(), ...unitClaims(), ...swiftClaims()]) {
+for (const test of [...rustClaims(), ...unitClaims(), ...swiftClaims(), ...gateClaims()]) {
   for (const match of test.tags.map((tag) => ROW_TAG.exec(tag))) {
     if (!match) {
       failures.push(`a qa: line names something that isn't a row: ${test.id}`);

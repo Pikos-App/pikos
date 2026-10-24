@@ -120,6 +120,15 @@ else
   RECORD+=("$SPEED_LINE")
 fi
 
+# The app reaches no host through a full session with no account connected.
+# SKIP_EGRESS="<why>" lets a release through and records why.
+if [ -n "${SKIP_EGRESS:-}" ]; then
+  RECORD+=("Bypass: SKIP_EGRESS, the no-account egress check didn't run: ${SKIP_EGRESS}")
+else
+  node "$ROOT/scripts/check-egress.mjs" || exit 1
+  RECORD+=("Egress: the app reached no host through a full session with no account connected.")
+fi
+
 # ── Release-notes sign-off ───────────────────────────────────────────────────
 # Tagging triggers the publish pipeline and is irreversible, so require an
 # explicit human review of the notes before proceeding.

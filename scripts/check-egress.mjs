@@ -11,6 +11,8 @@
 // policy, so the proxy watches the native side, where every network client lives.
 //
 // It proves the proxy first, with one request of its own that must show up in the log.
+//
+// qa: PRIV-05
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
