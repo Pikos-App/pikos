@@ -11400,7 +11400,7 @@ public func parseQuickAdd(input: String, reference: String) -> QuickAddResult?  
  * For a caller building a page by hand from a parsed line — the phone's
  * quick-add sheet, when a date picked in the picker overrides the parse — so
  * the body typed after `//` is not lost on that path. The same builder the
- * data layer uses for a synced event's description, so the two cannot drift.
+ * data layer uses for a page created from text, so the two cannot drift.
  */
 public func plainTextToDocument(text: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -11529,7 +11529,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_func_parse_quick_add() != 46428) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 58750) {
+    if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 16292) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_drop_schedule() != 19000) {
