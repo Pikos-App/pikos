@@ -200,7 +200,9 @@ pub async fn connect_db(
 
     // Watch the workspace file so external writes (e.g. the CLI) live-refresh
     // the open app. Self-caused writes are filtered out on the frontend.
-    watch::start(app, path);
+    if let Some(pool) = guard.pool.clone() {
+        watch::start(app, path, pool);
+    }
     Ok(())
 }
 
