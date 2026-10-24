@@ -24,6 +24,22 @@ export interface Post {
 
 export const posts: Post[] = [
   {
+    slug: "your-calendar-app-has-no-memory",
+    title: "Your calendar app has no memory",
+    description:
+      "A calendar keeps the time and the title of a meeting and forgets what was said. In Pikos a meeting is a page, so the notes live on the meeting.",
+    date: "2026-10-24",
+    tag: "Principles",
+  },
+  {
+    slug: "where-your-calendar-password-goes",
+    title: "Where your calendar password actually goes",
+    description:
+      "Into your computer's keychain, and from there only to your calendar provider. There's no Pikos server to send it to.",
+    date: "2026-10-24",
+    tag: "Principles",
+  },
+  {
     slug: "fast-at-any-size",
     title: "Fast at any size",
     description:
