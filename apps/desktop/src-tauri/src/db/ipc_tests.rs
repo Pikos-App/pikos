@@ -145,6 +145,7 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
 fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
     vec![
         ("get_page", json!({ "id": PROBE_PAGE })),
+        ("pending_description_document", json!({ "id": PROBE_PAGE })),
         ("list_pages", json!({ "filter": null })),
         ("list_pages_today", json!({})),
         ("list_trashed_pages", json!({})),
