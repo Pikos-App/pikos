@@ -1034,6 +1034,39 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     });
   });
 
+  // qa: SYNC-34
+  it("shows a synced series from another zone on the days it falls for the viewer", async () => {
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 1, 2)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
+        pages: [
+          makePage({
+            ...SYNCED,
+            scheduledStart: "2026-01-04T21:00:00",
+            timezone: "America/New_York",
+          }),
+        ],
+        recurrenceRules: [
+          makeRule({
+            rrule: "FREQ=WEEKLY;BYDAY=SU",
+            scheduledEnd: "2026-01-04T22:00:00",
+            scheduledStart: "2026-01-04T21:00:00",
+          }),
+        ],
+      })
+    );
+
+    await waitFor(() =>
+      expect(
+        result.current
+          .filter((p): p is VirtualOccurrence => "isVirtual" in p)
+          .map((p) => p.originalDate)
+      ).toEqual(["2026-02-01"])
+    );
+  });
+
   it("with a margin, a step to the next week shows its occurrences without a fetch", async () => {
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
     const expand = vi.fn(EXPAND);
@@ -1054,12 +1087,12 @@ describe("useRecurrenceExpansion — async in-flight", () => {
         .filter((p): p is VirtualOccurrence => "isVirtual" in p)
         .map((p) => p.scheduledStart);
     await waitFor(() => expect(starts()).toEqual(["2026-03-09T09:00:00"]));
-    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-02", "2026-03-23");
+    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-02-28", "2026-03-25");
 
     rerender({ days: weekDays(new Date(2026, 2, 16)) });
     expect(starts()).toEqual(["2026-03-16T09:00:00"]);
     await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
-    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-09", "2026-03-30");
+    expect(expand).toHaveBeenLastCalledWith(expect.anything(), "2026-03-07", "2026-04-01");
   });
 
   it("a remount sharing a hold draws its occurrences and moved rows in the first frame", async () => {

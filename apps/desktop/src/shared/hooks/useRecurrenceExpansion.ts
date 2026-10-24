@@ -6,7 +6,13 @@ import type {
   RawRuleExpansion,
   VirtualOccurrence,
 } from "@pikos/core";
-import { dateKey, formatDateOnly, warmBlockInstants } from "@pikos/core";
+import {
+  dateKey,
+  formatDateOnly,
+  getLocalTimezone,
+  viewerStart,
+  warmBlockInstants,
+} from "@pikos/core";
 import { addDays } from "date-fns";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
@@ -202,10 +208,30 @@ export class ExpansionHold {
   }
 }
 
+/**
+ * Days the fetched range reaches past the visible one on each side. The engine reads the range on
+ * a series' own clock, and a synced series in another zone puts an occurrence on a visible day from
+ * up to 26 hours outside it, so the fetch is wide and each occurrence is kept by when it falls for
+ * the viewer.
+ */
+const ZONE_REACH_DAYS = 2;
+
+/** The visible range on the viewer's clock, half-open. */
+interface ShownRange {
+  start: string;
+  end: string;
+}
+
+interface BuiltOccurrence {
+  virtual: VirtualOccurrence;
+  /** The occurrence's start on the viewer's clock, which converting is too slow to redo per render. */
+  shownStart: string;
+}
+
 /** Each series' occurrences as built, by head object: an occurrence keeps its object while its head
  *  and its times do, so a re-render, or a step to a week prepared while idle, reuses the times
  *  layout already parsed for it. A changed head is a new object and starts afresh. */
-const builtOccurrences = new WeakMap<PageSummary, Map<string, VirtualOccurrence>>();
+const builtOccurrences = new WeakMap<PageSummary, Map<string, BuiltOccurrence>>();
 /** Occurrences kept per head before its map starts over, bounding a long scroll through years. */
 const KEPT_PER_HEAD = 400;
 /** How long after a week is shown its neighbours are prepared, where idle callbacks don't exist:
@@ -259,12 +285,15 @@ function overridesByRule(overrideSchedules: PageSchedule[]): Map<string, PageSch
  *
  * The floor is the only bound on how far back expansion reaches — the range
  * alone would paint a synced series into any past week the user navigates to.
- * See `PageSummary.syncedSince`. */
+ * See `PageSummary.syncedSince`. With `shown`, keeps only the occurrences that
+ * start inside it on the viewer's clock (see `ZONE_REACH_DAYS`). */
 function toVirtuals(
   raw: RawOccurrence[],
   page: PageSummary,
   rule: PageRecurrenceRule,
-  ruleOverrides: PageSchedule[]
+  ruleOverrides: PageSchedule[],
+  viewerZone: string,
+  shown: ShownRange | null
 ): VirtualOccurrence[] {
   const excluded = completedOrSkippedKeys(page);
   for (const s of ruleOverrides) {
@@ -285,10 +314,10 @@ function toVirtuals(
     if (excluded.has(occ.originalDate)) continue;
     if (headDate && occ.originalDate === headDate) continue;
     if (page.syncedSince && occ.originalDate < page.syncedSince) continue;
-    const key = `${rule.id}|${occ.originalDate}|${occ.scheduledStart}|${occ.scheduledEnd ?? ""}`;
-    let virtual = built.get(key);
-    if (!virtual) {
-      virtual = {
+    const key = `${rule.id}|${occ.originalDate}|${occ.scheduledStart}|${occ.scheduledEnd ?? ""}|${viewerZone}`;
+    let entry = built.get(key);
+    if (!entry) {
+      const virtual: VirtualOccurrence = {
         ...page,
         isVirtual: true,
         originalDate: occ.originalDate,
@@ -296,10 +325,14 @@ function toVirtuals(
         scheduledEnd: occ.scheduledEnd,
         scheduledStart: occ.scheduledStart,
       };
-      built.set(key, virtual);
+      entry = { shownStart: viewerStart(virtual) ?? occ.scheduledStart, virtual };
+      built.set(key, entry);
     }
-    out.push(virtual);
+
+    const isShown = !shown || (entry.shownStart >= shown.start && entry.shownStart < shown.end);
+    if (isShown) out.push(entry.virtual);
   }
+
   return out;
 }
 
@@ -371,8 +404,16 @@ function useExpansionLoads(
   const rangeEndDate = lastDay ? addDays(lastDay, 1) : null;
   const startStr = rangeStartDate ? formatDateOnly(rangeStartDate) : null;
   const endStr = rangeEndDate ? formatDateOnly(rangeEndDate) : null;
-  const fetchStart = rangeStartDate ? formatDateOnly(addDays(rangeStartDate, -margin)) : null;
-  const fetchEnd = rangeEndDate ? formatDateOnly(addDays(rangeEndDate, margin)) : null;
+  const readStart = rangeStartDate
+    ? formatDateOnly(addDays(rangeStartDate, -ZONE_REACH_DAYS))
+    : null;
+  const readEnd = rangeEndDate ? formatDateOnly(addDays(rangeEndDate, ZONE_REACH_DAYS)) : null;
+  const fetchStart = rangeStartDate
+    ? formatDateOnly(addDays(rangeStartDate, -(margin + ZONE_REACH_DAYS)))
+    : null;
+  const fetchEnd = rangeEndDate
+    ? formatDateOnly(addDays(rangeEndDate, margin + ZONE_REACH_DAYS))
+    : null;
   const ruleCount = recurrenceRules.length;
   // Stable key over the fields that change a rule's raw expansion, so the IPC
   // effect refires on a rule edit/add/remove but not on unrelated page changes.
@@ -403,7 +444,7 @@ function useExpansionLoads(
     expansion.expand(expandRecurrenceRange, recurrenceRules, rulesKey, fetchStart, fetchEnd);
   }, [startStr, endStr, rulesKey]);
 
-  return { endStr, rulesKey, startStr };
+  return { endStr, readEnd, readStart, rulesKey, startStr };
 }
 
 /** Fills `hold` for a surface that is mounted but hidden, where its own effects don't run, so it
@@ -432,10 +473,10 @@ export function useRecurrenceExpansion(
   // renders without them for a frame (accepted).
   const [ownHold] = useState(() => new ExpansionHold());
   const expansion = hold ?? ownHold;
-  const { endStr, rulesKey, startStr } = useExpansionLoads(params, expansion);
+  const { endStr, readEnd, readStart, rulesKey, startStr } = useExpansionLoads(params, expansion);
 
   const rawExpansion = useSyncExternalStore(expansion.subscribe, () =>
-    startStr && endStr ? expansion.read(rulesKey, startStr, endStr) : null
+    readStart && readEnd ? expansion.read(rulesKey, readStart, readEnd) : null
   );
   const heldWindow = useSyncExternalStore(expansion.subscribe, expansion.window);
   const overrideSchedules = useSyncExternalStore(expansion.subscribe, expansion.overrides);
@@ -447,11 +488,12 @@ export function useRecurrenceExpansion(
     return whenIdle(() => {
       const byId = indexById(pages);
       const overrides = overridesByRule(overrideSchedules);
+      const zone = getLocalTimezone();
       for (const rule of recurrenceRules) {
         const page = byId.get(rule.pageId);
         const raw = heldWindow.get(rule.id);
         if (page && raw)
-          warmBlockInstants(toVirtuals(raw, page, rule, overrides.get(rule.id) ?? []));
+          warmBlockInstants(toVirtuals(raw, page, rule, overrides.get(rule.id) ?? [], zone, null));
       }
     });
   }, [heldWindow, pages]);
@@ -474,8 +516,10 @@ export function useRecurrenceExpansion(
   // Before the first batch resolves: render pages only for this frame; virtuals
   // appear once the batch lands (a one-frame cold-mount cost vs the old
   // synchronous expansion).
-  if (rawExpansion === null) return visiblePages;
+  if (rawExpansion === null || !startStr || !endStr) return visiblePages;
 
+  const zone = getLocalTimezone();
+  const shown: ShownRange = { end: endStr, start: startStr };
   const pageById = indexById(pages);
   const ruleOverrides = overridesByRule(overrideSchedules);
   const allVirtual: VirtualOccurrence[] = [];
@@ -486,7 +530,7 @@ export function useRecurrenceExpansion(
     // series renders no virtuals; there is no second engine to fall back to.
     const raw = rawExpansion.get(rule.id);
     if (!raw) continue;
-    allVirtual.push(...toVirtuals(raw, page, rule, ruleOverrides.get(rule.id) ?? []));
+    allVirtual.push(...toVirtuals(raw, page, rule, ruleOverrides.get(rule.id) ?? [], zone, shown));
   }
 
   // A synced override's original slot is already excluded from the virtuals
