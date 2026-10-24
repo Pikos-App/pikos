@@ -22,8 +22,9 @@ import { WriteMirror } from "./writeMirror";
 
 const log = createLogger("viewCache");
 
-/** Fields no list orders, groups, filters or counts by: a write of only these refetches its row. */
-const ROW_ONLY_FIELDS = new Set(["content", "contentText", "lastOpenedAt"]);
+/** Fields no list orders, groups, filters or counts by, and the body a save was typed over, which
+ *  is a condition on the write rather than a field: a write of only these refetches its row. */
+const ROW_ONLY_FIELDS = new Set(["baseContent", "content", "lastOpenedAt"]);
 
 /** The page an `updatePage` of only row-only fields wrote, else null. */
 function rowOnlyWrite(method: string, args: unknown[]): string | null {
@@ -321,6 +322,15 @@ export class ViewCacheController {
     if (this.heads === null) void this.loadHeads();
   }
 
+  /** The calendar will show `start` to `end` when it opens: load it now unless it is held, so the
+   *  first open draws its pages with the grid. A calendar on screen loads its own range. */
+  preloadRange(start: string, end: string): void {
+    const isCalendarShown = this.shownRange !== null;
+    if (isCalendarShown || this.ranges.has(`${start}|${end}`)) return;
+
+    void this.loadRange(start, end);
+  }
+
   /** Whether `start` to `end` has loaded at least once, with the series heads its repeats come
    *  from. */
   rangeLoaded(start: string, end: string): boolean {
@@ -351,10 +361,18 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** The calendar unmounted or was hidden: its ranges go; the series heads stay. */
+  /** The calendar unmounted or was hidden: every range but the one on screen goes, and the series
+   *  heads stay. Dropping that one too made going back to the calendar draw its grid empty and its
+   *  blocks a fetch later; kept, it shows at once and reloads behind it if a write marked it stale. */
   hideRanges(): void {
-    this.ranges.clear();
-    this.rangeRead.clear();
+    const shown = this.shownRange && `${this.shownRange.start}|${this.shownRange.end}`;
+    for (const name of [...this.ranges.keys()]) {
+      if (name === shown) continue;
+
+      this.ranges.delete(name);
+      this.rangeRead.delete(name);
+    }
+
     this.shownRange = null;
     this.bump();
   }

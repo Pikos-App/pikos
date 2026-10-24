@@ -138,7 +138,6 @@ async fn editing_content_restamps_the_schema_version() {
             page.id.clone(),
             PageEdit {
                 content: Some(r#"{"type":"doc","content":[]}"#.to_string()),
-                content_text: Some(String::new()),
                 ..Default::default()
             },
         )
@@ -356,8 +355,7 @@ async fn search_finds_a_page_by_its_body() {
     ws.update_page(
         page.id.clone(),
         PageEdit {
-            content: Some(r#"{"type":"doc"}"#.to_string()),
-            content_text: Some("the quick brown fox".to_string()),
+            content: Some(pikos_db::build_tiptap_doc("the quick brown fox")),
             ..Default::default()
         },
     )
@@ -385,8 +383,7 @@ async fn search_respects_its_limit() {
         ws.update_page(
             page.id,
             PageEdit {
-                content: Some(r#"{"type":"doc"}"#.to_string()),
-                content_text: Some("shared keyword".to_string()),
+                content: Some(pikos_db::build_tiptap_doc("shared keyword")),
                 ..Default::default()
             },
         )
@@ -4622,8 +4619,7 @@ async fn an_unknown_operator_is_searched_for_rather_than_obeyed() {
     ws.update_page(
         page.id.clone(),
         PageEdit {
-            content: Some(r#"{"type":"doc"}"#.to_string()),
-            content_text: Some("the ratio is 1.5 across".to_string()),
+            content: Some(pikos_db::build_tiptap_doc("the ratio is 1.5 across")),
             ..Default::default()
         },
     )

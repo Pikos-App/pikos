@@ -1,4 +1,5 @@
 import type { PagePriority } from "@pikos/core";
+import { PRIORITY_COLORS } from "@pikos/core";
 import { Check } from "lucide-react";
 
 import {
@@ -12,41 +13,14 @@ import { cn } from "@/lib/utils";
 interface PriorityConfig {
   label: string;
   icon: string;
-  className: string;
-  badgeClassName: string;
 }
 
 const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
-  0: {
-    badgeClassName: "text-subtle",
-    className: "text-subtle",
-    icon: "—",
-    label: "Priority",
-  },
-  1: {
-    badgeClassName: "text-status-overdue",
-    className: "text-status-overdue",
-    icon: "!!",
-    label: "Urgent",
-  },
-  2: {
-    badgeClassName: "text-status-overdue",
-    className: "text-status-overdue",
-    icon: "!",
-    label: "High",
-  },
-  3: {
-    badgeClassName: "text-due-soon",
-    className: "text-due-soon",
-    icon: "··",
-    label: "Medium",
-  },
-  4: {
-    badgeClassName: "text-subtle",
-    className: "text-subtle",
-    icon: "·",
-    label: "Low",
-  },
+  0: { icon: "", label: "No priority" },
+  1: { icon: "!!", label: "Urgent" },
+  2: { icon: "!", label: "High" },
+  3: { icon: "••", label: "Medium" },
+  4: { icon: "•", label: "Low" },
 };
 
 const ALL_PRIORITIES: PagePriority[] = [0, 1, 2, 3, 4];
@@ -67,6 +41,8 @@ export function PriorityDropdown({
   variant = "byline",
 }: PriorityDropdownProps) {
   const cfg = PRIORITY_CONFIG[priority];
+  const colour = PRIORITY_COLORS[priority];
+  const hasPriority = priority !== 0;
 
   return (
     <DropdownMenu>
@@ -76,22 +52,22 @@ export function PriorityDropdown({
             aria-label={`Priority: ${cfg.label}`}
             className={cn(
               "flex shrink-0 items-center justify-center rounded px-[3px] text-sm leading-none font-semibold transition-opacity hover:opacity-80 focus:outline-none",
-              cfg.badgeClassName
+              colour
             )}
             onClick={(e) => e.stopPropagation()}
           >
-            {cfg.icon}
+            {hasPriority ? cfg.icon : "—"}
           </button>
         ) : (
           <button
             aria-label={`Priority: ${cfg.label}`}
             className={cn(
               "inline-flex shrink-0 items-center gap-1 rounded whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
-              cfg.className
+              colour
             )}
           >
-            <span className="text-sm font-medium">{cfg.icon}</span>
-            <span className="text-sm">{cfg.label}</span>
+            <span className="text-sm font-medium">{hasPriority ? cfg.icon : "—"}</span>
+            <span className="text-sm">{hasPriority ? cfg.label : "Priority"}</span>
           </button>
         )}
       </DropdownMenuTrigger>
@@ -119,7 +95,12 @@ export function PriorityDropdown({
               onSelect={() => onSelect(p)}
             >
               <span className="flex items-center gap-2">
-                <span className={cn("w-5 shrink-0 text-center text-sm font-semibold", c.className)}>
+                <span
+                  className={cn(
+                    "w-5 shrink-0 text-center text-sm font-semibold",
+                    PRIORITY_COLORS[p]
+                  )}
+                >
                   {c.icon}
                 </span>
                 <span>{c.label}</span>

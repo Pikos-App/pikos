@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { READ_COMMANDS, WRITE_COMMANDS } from "./TauriSQLiteAdapter";
 
@@ -50,5 +50,66 @@ describe("TauriSQLiteAdapter command classification", () => {
     const invoked = new Set(invokedCommands());
     const stale = [...WRITE_COMMANDS, ...READ_COMMANDS].filter((cmd) => !invoked.has(cmd));
     expect(stale).toEqual([]);
+  });
+});
+
+const CORRUPT = { kind: "Corrupt", message: "corrupt: database disk image is malformed" };
+
+/** A fresh copy of the module, since what it learns about damage lasts the session. */
+async function freshAdapter(fail: (command: string) => boolean) {
+  vi.resetModules();
+  const mod = await import("./TauriSQLiteAdapter");
+  const sent: string[] = [];
+  mod.setCommandTransport(<T>(command: string) => {
+    sent.push(command);
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Tauri rejects with the plain { kind, message } object
+    return (fail(command) ? Promise.reject(CORRUPT) : Promise.resolve(null)) as Promise<T>;
+  });
+  return { adapter: new mod.TauriSQLiteAdapter(), mod, sent };
+}
+
+describe("a workspace found damaged mid-session", () => {
+  it("is reported once, from whichever command found it", async () => {
+    const { adapter, mod } = await freshAdapter((cmd) => cmd === "get_page");
+    const heard = vi.fn();
+    mod.onWorkspaceDamaged(heard);
+
+    await expect(adapter.getPage("p1")).rejects.toMatchObject({ kind: "Corrupt" });
+    await expect(adapter.getPage("p2")).rejects.toMatchObject({ kind: "Corrupt" });
+
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(heard.mock.calls[0]![0]).toMatchObject({ kind: "Corrupt" });
+  });
+
+  it("closes the workspace and lets no further write reach it", async () => {
+    const { adapter, sent } = await freshAdapter((cmd) => cmd === "get_page");
+
+    await adapter.getPage("p1").catch(() => {});
+    await expect(adapter.updatePage("p1", { title: "x" })).rejects.toMatchObject({
+      kind: "Corrupt",
+    });
+
+    expect(sent).toContain("close_damaged_workspace");
+    expect(sent).not.toContain("update_page");
+  });
+
+  it("still lets a backup be put back", async () => {
+    const { adapter, sent } = await freshAdapter((cmd) => cmd === "get_page");
+
+    await adapter.getPage("p1").catch(() => {});
+    await adapter.restoreBackup("pre-migration-x.sqlite");
+
+    expect(sent).toContain("restore_backup");
+  });
+
+  it("is not raised by a damaged backup, which is a different file", async () => {
+    const { adapter, mod, sent } = await freshAdapter((cmd) => cmd === "restore_backup");
+    const heard = vi.fn();
+    mod.onWorkspaceDamaged(heard);
+
+    await adapter.restoreBackup("pre-migration-x.sqlite").catch(() => {});
+
+    expect(heard).not.toHaveBeenCalled();
+    expect(sent).not.toContain("close_damaged_workspace");
   });
 });

@@ -33,7 +33,7 @@ export function usePageList() {
   const togglePageStatus = useRecurringStatusToggle();
   const { activeViewId, openPage, setActivePage } = useUI();
   const sortMode = useActiveSortMode();
-  const { hiddenIds, requestDeletePage } = useUndoDelete();
+  const { hiddenIds, requestDeletePage, requestDeletePages } = useUndoDelete();
   const activePage = useActivePage();
   const { selectedPageIds } = useSelection();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -85,6 +85,13 @@ export function usePageList() {
     else requestDeletePage(page);
   }
 
+  /** Delete what a gesture acts on: a lone page as requestDelete, several under one undo. */
+  function requestDeleteMany(pages: PageSummary[], actsOn: number) {
+    const [only] = pages;
+    if (only && pages.length === 1) requestDelete(only, actsOn);
+    else requestDeletePages(pages);
+  }
+
   function handleRenameChange(id: string, title: string) {
     updatePage(id, { title });
   }
@@ -134,8 +141,8 @@ export function usePageList() {
     handleRenameCancel,
     handleRenameChange,
     handleRenameCommit,
-    handleSelectPage: (page: PageSummary | string | null) => {
-      if (page !== null) openPage(page);
+    handleSelectPage: (page: PageSummary | string | null, options?: { browsed?: boolean }) => {
+      if (page !== null) openPage(page, options);
       else setActivePage(null);
     },
     handleToggleStatus,
@@ -143,6 +150,7 @@ export function usePageList() {
     onExpandCompleted: completed.onExpand,
     renamingId,
     requestDelete,
+    requestDeleteMany,
     setRenamingId,
     visiblePages,
   };

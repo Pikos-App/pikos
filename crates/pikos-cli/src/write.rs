@@ -2,8 +2,8 @@
 //! indistinguishable from one the desktop app wrote.
 
 use pikos_db::{
-    extract_text_from_tiptap, fuzzy_match_folder, list_folders_impl, list_page_schedules_impl,
-    update_page_impl, update_page_schedule_impl, AppError, NewPage, NewPageSchedule, PageUpdate,
+    fuzzy_match_folder, list_folders_impl, list_page_schedules_impl, update_page_impl,
+    update_page_schedule_impl, AppError, NewPage, NewPageSchedule, PageUpdate,
 };
 use serde_json::Value;
 
@@ -20,14 +20,12 @@ pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
         title,
         subtitle: None,
         content: String::new(),
-        content_text: Some(String::new()),
         status: "not_started".to_string(),
         priority: 0,
         tags: Vec::new(),
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: Vec::new(),
         parent_id: None,
         last_opened_at: None,
         created_at: None,
@@ -37,16 +35,15 @@ pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
 
 /// [`base_page`] with a parsed `//` body already in it, so the page is written
 /// once rather than created empty and immediately patched.
-pub fn page_with_body(
+pub async fn page_with_body(
+    pool: &SqlitePool,
     folder_id: Option<String>,
     title: String,
     body: Option<&String>,
 ) -> Result<NewPage, CliError> {
     let mut page = base_page(folder_id, title);
     if let Some(text) = body.filter(|t| !t.is_empty()) {
-        let (doc, plain) = markdown_to_tiptap(text)?;
-        page.content = doc;
-        page.content_text = Some(plain);
+        page.content = markdown_to_tiptap(pool, text, &[]).await?;
     }
     Ok(page)
 }
@@ -153,14 +150,35 @@ pub async fn schedule_once(
     Ok(())
 }
 
-/// A markdown body → the (Tiptap doc, `content_text`) pair a page write takes, read
-/// as the app's markdown import reads it (see [`pikos_core::markdown_import`]).
-pub fn markdown_to_tiptap(markdown: &str) -> Result<(String, String), CliError> {
-    let doc = pikos_core::markdown_to_prosemirror(markdown)
-        .map_err(|pikos_core::Refused(why)| CliError::usage(why))?
-        .to_string();
-    let plain = extract_text_from_tiptap(&doc);
-    Ok((doc, plain))
+/// A markdown body as the app's markdown import reads it (see [`pikos_core::markdown_import`]),
+/// or the reason the editor couldn't hold it.
+pub fn markdown_to_doc(markdown: &str) -> Result<Value, CliError> {
+    pikos_core::markdown_to_prosemirror(markdown)
+        .map_err(|pikos_core::Refused(why)| CliError::usage(why))
+}
+
+/// A markdown body → the Tiptap doc a page write takes, with each `[[title]]` linked to its
+/// page. `linked` is what the page linked to before this write.
+pub async fn markdown_to_tiptap(
+    pool: &SqlitePool,
+    markdown: &str,
+    linked: &[String],
+) -> Result<String, CliError> {
+    Ok(markdown_to_linked_doc(pool, markdown, linked)
+        .await?
+        .to_string())
+}
+
+pub async fn markdown_to_linked_doc(
+    pool: &SqlitePool,
+    markdown: &str,
+    linked: &[String],
+) -> Result<Value, CliError> {
+    let mut doc = markdown_to_doc(markdown)?;
+    pikos_db::page_links::link_titles(pool, &mut doc, linked)
+        .await
+        .map_err(crate::error::classify)?;
+    Ok(doc)
 }
 
 #[cfg(test)]
@@ -178,17 +196,15 @@ mod tests {
     }
 
     #[test]
-    fn markdown_to_tiptap_keeps_structure_and_derives_the_plain_text() {
-        let (content, text) = markdown_to_tiptap("# Plan\n\n- [ ] **call** Sam").unwrap();
-        assert!(text.starts_with("Plan\ncall"), "{text}");
-        let doc: serde_json::Value = serde_json::from_str(&content).unwrap();
+    fn markdown_to_doc_keeps_structure() {
+        let doc = markdown_to_doc("# Plan\n\n- [ ] **call** Sam").unwrap();
         assert_eq!(doc["content"][0]["type"], "heading");
         assert_eq!(doc["content"][2]["type"], "taskList");
     }
 
     #[test]
-    fn markdown_to_tiptap_refuses_what_the_editor_cannot_hold() {
-        let err = markdown_to_tiptap("a <b>bold</b> word").unwrap_err();
+    fn markdown_to_doc_refuses_what_the_editor_cannot_hold() {
+        let err = markdown_to_doc("a <b>bold</b> word").unwrap_err();
         assert_eq!(err.kind, "Usage");
     }
 }

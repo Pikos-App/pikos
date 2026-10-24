@@ -179,7 +179,7 @@ describe("ViewCacheController calendar ranges", () => {
     expect(ids).toHaveLength(2);
   });
 
-  it("refetches the range on screen after a write, and drops every range when hidden", async () => {
+  it("refetches the range on screen after a write", async () => {
     const { adapter, controller } = await setup(0);
     controller.showRange(start, end);
     await settle();
@@ -189,8 +189,88 @@ describe("ViewCacheController calendar ranges", () => {
     });
     await settle();
     expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+  });
+
+  it("keeps the range on screen when hidden, so showing it again needs no fetch", async () => {
+    const { adapter, controller, raw } = await setup(0);
+    const later: [string, string] = ["2026-06-08T00:00:00Z", "2026-06-15T00:00:00Z"];
+    const dentist = await adapter.createPage({
+      ...newPage("Dentist"),
+      scheduledStart: "2026-06-03T09:00:00",
+    });
+    controller.showRange(...later);
+    await settle();
+    controller.showRange(start, end);
+    await settle();
     controller.hideRanges();
-    expect(controller.rangePages(start, end)).toEqual([]);
+    const fetched: (string | null)[] = [];
+    const listRange = raw.listRange.bind(raw);
+    raw.listRange = (...args) => {
+      fetched.push(args[0]);
+      return listRange(...args);
+    };
+
+    expect(controller.rangeLoaded(...later)).toBe(false);
+
+    controller.showRange(start, end);
+    expect(controller.rangeLoaded(start, end)).toBe(true);
+    expect(controller.rangePages(start, end).map((p) => p.id)).toEqual([dentist.id]);
+    await settle();
+    expect(fetched).toEqual([]);
+  });
+
+  it("reloads a kept range a write marked stale while the calendar was hidden", async () => {
+    const { adapter, controller } = await setup(0);
+    controller.showRange(start, end);
+    await settle();
+    controller.hideRanges();
+    const added = await adapter.createPage({
+      ...newPage("Added while away"),
+      scheduledStart: "2026-06-05T10:00:00",
+    });
+    await settle();
+
+    controller.showRange(start, end);
+    await settle();
+    expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+  });
+
+  it("loads a range ahead of the calendar's first showing, so it shows with no fetch", async () => {
+    const { adapter, controller, raw } = await setup(0);
+    const dentist = await adapter.createPage({
+      ...newPage("Dentist"),
+      scheduledStart: "2026-06-03T09:00:00",
+    });
+    await controller.loadSeriesHeads();
+    controller.preloadRange(start, end);
+    await settle();
+    const fetched: (string | null)[] = [];
+    const listRange = raw.listRange.bind(raw);
+    raw.listRange = (...args) => {
+      fetched.push(args[0]);
+      return listRange(...args);
+    };
+
+    controller.showRange(start, end);
+    expect(controller.rangeLoaded(start, end)).toBe(true);
+    expect(controller.rangePages(start, end).map((p) => p.id)).toEqual([dentist.id]);
+    await settle();
+    expect(fetched).toEqual([]);
+  });
+
+  it("leaves the preload to the calendar while it shows a range", async () => {
+    const { controller, raw } = await setup(0);
+    const fetched: (string | null)[] = [];
+    const listRange = raw.listRange.bind(raw);
+    raw.listRange = (...args) => {
+      fetched.push(args[0]);
+      return listRange(...args);
+    };
+
+    controller.showRange(start, end);
+    controller.preloadRange(start, end);
+    await settle();
+    expect(fetched).toEqual([start]);
   });
 });
 
@@ -257,7 +337,7 @@ describe("ViewCacheController after its own writes", () => {
     const before = controller.store.get(id)?.rowSeq;
     const fetches = controller.listFetches;
 
-    await adapter.updatePage(id, { content: '{"type":"doc"}', contentText: "typed" });
+    await adapter.updatePage(id, { baseContent: "", content: '{"type":"doc"}' });
     await settle();
     expect(controller.listFetches).toBe(fetches);
     expect(controller.store.get(id)?.rowSeq).not.toBe(before);
@@ -382,10 +462,10 @@ describe("ViewCacheController bodies", () => {
   it("keeps a held body current with what the app saved to it", async () => {
     const { adapter, controller, ids, reads } = await withPages(1);
     await controller.body(ids[0]!);
-    await adapter.updatePage(ids[0]!, { content: '{"type":"doc","content":[]}', contentText: "x" });
+    await adapter.updatePage(ids[0]!, { content: '{"type":"doc","content":[]}' });
     await settle();
     const page = await controller.body(ids[0]!);
-    expect(page?.contentText).toBe("x");
+    expect(page?.content).toBe('{"type":"doc","content":[]}');
     expect(reads).toEqual({ full: 1, newer: 0 });
   });
 });

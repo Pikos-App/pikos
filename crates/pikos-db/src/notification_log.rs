@@ -786,28 +786,45 @@ pub async fn mark_notification_opened(
         .map(Option::flatten)
 }
 
-/// Record that a reminder came due inside quiet hours and was therefore never
-/// delivered.
+/// Why a due reminder was never shown, stored as its log row's `type`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotShown {
+    QuietHours,
+    /// The system has notifications turned off for Pikos.
+    NotificationsOff,
+}
+
+impl NotShown {
+    pub fn log_type(self) -> &'static str {
+        match self {
+            NotShown::QuietHours => "suppressed",
+            NotShown::NotificationsOff => "refused",
+        }
+    }
+}
+
+/// Record that a reminder came due and was never delivered, and why.
 ///
-/// `type='suppressed'`, not `'reminder'`: every dedup predicate reads
-/// `type = 'reminder'`, so this row is invisible to them and suppression stays
-/// what it always was — the notification is dropped, and the day's summary
-/// counts it as overdue exactly as before. What changes is only that the history
-/// panel can now say the reminder existed and was silenced, instead of the user
-/// finding no trace of it anywhere.
-pub async fn log_reminder_suppressed(
+/// Never `type='reminder'`: every dedup predicate reads `type = 'reminder'`, so
+/// this row is invisible to them and the reminder is dropped as it always was,
+/// with the day's summary counting the page as overdue. The row exists so the
+/// history panel can say the reminder happened and why nobody saw it, instead of
+/// leaving no trace, or claiming it was delivered.
+pub async fn log_reminder_not_shown(
     pool: &SqlitePool,
     page_id: &str,
     schedule_id: &str,
     fired_at: &str,
+    reason: NotShown,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
-         VALUES (?, ?, ?, 'suppressed', ?)",
+         VALUES (?, ?, ?, ?, ?)",
     )
     .bind(uuid::Uuid::new_v4().to_string())
     .bind(page_id)
     .bind(schedule_id)
+    .bind(reason.log_type())
     .bind(fired_at)
     .execute(pool)
     .await?;
@@ -828,8 +845,8 @@ pub struct NotificationHistoryEntry {
     pub page_id: Option<String>,
     pub page_title: Option<String>,
     pub schedule_id: Option<String>,
-    /// `reminder` (delivered), `suppressed` (quiet hours ate it) or `overdue`
-    /// (the daily summary marker). Named `kind` because `type` is a Rust keyword;
+    /// `reminder` (delivered), `suppressed` (quiet hours ate it), `refused`
+    /// (notifications are off for Pikos) or `overdue` (the daily summary marker). Named `kind` because `type` is a Rust keyword;
     /// the column is `type`.
     pub kind: String,
     pub fired_at: String,

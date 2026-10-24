@@ -20,6 +20,8 @@ import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 export interface UndoDeleteContextValue {
   /** Soft-delete + hide the page immediately; the toast's Undo restores it. */
   requestDeletePage: (page: Pick<PageSummary, "id" | "title">) => void;
+  /** As requestDeletePage, for a selection: one toast whose Undo restores every page. */
+  requestDeletePages: (pages: Pick<PageSummary, "id" | "title">[]) => void;
   /** Soft-delete + hide the folder and its pages immediately; Undo restores all. */
   requestDeleteFolder: (folder: Folder, pageCount: number) => void;
   /** Set of page IDs currently pending deletion — filter these from all views. */
@@ -43,6 +45,7 @@ export interface UndoDeleteContextValue {
 
 const NOTICE_PREFIX = "notice:";
 const FOLDER_UNDO_PREFIX = "folder:";
+const PAGES_UNDO_PREFIX = "pages:";
 
 const UndoDeleteContext = createContext<UndoDeleteContextValue | null>(null);
 
@@ -57,20 +60,28 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
   const [toastItems, setToastItems] = useState<ToastItem[]>([]);
   const undoCallbacks = useRef<Map<string, () => void>>(new Map());
   const pendingFolderIds = useRef<Set<string>>(new Set());
+  const toastPageIds = useRef<Map<string, string[]>>(new Map());
 
   function removeToast(id: string) {
     setToastItems((prev) => prev.filter((item) => item.id !== id));
   }
 
-  function undoPage(id: string) {
-    pendingDeleteIds.current.delete(id);
+  function releasePages(toastId: string): string[] {
+    const ids = toastPageIds.current.get(toastId) ?? [toastId];
+    toastPageIds.current.delete(toastId);
+    for (const id of ids) pendingDeleteIds.current.delete(id);
     setHiddenPageIds((prev) => {
       const next = new Set(prev);
-      next.delete(id);
+      for (const id of ids) next.delete(id);
       return next;
     });
-    void restorePage(id);
-    removeToast(id);
+
+    return ids;
+  }
+
+  function undoPages(toastId: string) {
+    for (const id of releasePages(toastId)) void restorePage(id);
+    removeToast(toastId);
   }
 
   function undoFolder(undoId: string) {
@@ -86,23 +97,32 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     removeToast(undoId);
   }
 
-  function requestDeletePage(page: Pick<PageSummary, "id" | "title">) {
-    if (pendingDeleteIds.current.has(page.id)) return;
-    pendingDeleteIds.current.add(page.id);
+  function requestDeletePages(pages: Pick<PageSummary, "id" | "title">[]) {
+    const fresh = pages.filter((p) => !pendingDeleteIds.current.has(p.id));
+    const [first] = fresh;
+    if (!first) return;
+
+    const ids = fresh.map((p) => p.id);
+    const isSingle = ids.length === 1;
+    const toastId = isSingle ? first.id : `${PAGES_UNDO_PREFIX}${crypto.randomUUID()}`;
+    for (const id of ids) pendingDeleteIds.current.add(id);
+    toastPageIds.current.set(toastId, ids);
     // Close the editor if we're about to hide the active page — otherwise the
     // editor keeps rendering a stale page that no longer exists in any list.
-    if (activePageId === page.id) setActivePage(null);
-    setHiddenPageIds((prev) => new Set([...prev, page.id]));
-    const title = page.title || "Untitled";
+    if (activePageId && ids.includes(activePageId)) setActivePage(null);
+    setHiddenPageIds((prev) => new Set([...prev, ...ids]));
+    const label = isSingle
+      ? `Deleted “${first.title || "Untitled"}”`
+      : `${ids.length} pages moved to Trash`;
     setToastItems((prev) => [
       ...prev,
-      {
-        action: { label: "Undo", onClick: () => undoPage(page.id) },
-        id: page.id,
-        label: `Deleted “${title}”`,
-      },
+      { action: { label: "Undo", onClick: () => undoPages(toastId) }, id: toastId, label },
     ]);
-    void softDeletePage(page.id);
+    for (const id of ids) void softDeletePage(id);
+  }
+
+  function requestDeletePage(page: Pick<PageSummary, "id" | "title">) {
+    requestDeletePages([page]);
   }
 
   function requestDeleteFolder(folder: Folder, pageCount: number) {
@@ -146,11 +166,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
         return next;
       });
     } else {
-      setHiddenPageIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      releasePages(id);
     }
 
     removeToast(id);
@@ -191,7 +207,8 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
 
   // Cmd+Z — fire the most recent undoable toast's action. Skipped while the
   // user is in a text input or contentEditable so the editor's native undo
-  // (Tiptap history) keeps working unchanged.
+  // (Tiptap history) keeps working unchanged. Gated on there being one, so the
+  // palette doesn't offer an undo that has nothing to act on.
   useKeyboardShortcut(
     "Mod+z",
     () => {
@@ -203,7 +220,11 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    { group: "Navigation", label: "Undo delete" }
+    {
+      group: "Navigation",
+      label: "Undo delete",
+      when: () => toastItems.some((toast) => toast.action),
+    }
   );
 
   const value: UndoDeleteContextValue = {
@@ -213,6 +234,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     hiddenPageIds,
     requestDeleteFolder,
     requestDeletePage,
+    requestDeletePages,
     requestUndoableAction,
     showNotice,
     toastItems,

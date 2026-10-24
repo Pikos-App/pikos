@@ -231,7 +231,10 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
     tokens: [
       { dark: hex("#f0efed"), name: "text-primary", value: hex("#161613") },
       { dark: hex("#b0afaa"), name: "text-secondary", value: hex("#5a5955") },
+      // The faintest text a reader has to read: 5:1 on white and on the dark popover. An opacity
+      // step on any text token drops below 4.5:1 by /75, so faded text is for separators and icons.
       { dark: hex("#999893"), name: "text-tertiary", value: hex("#6f6e6a") },
+      // 3.3:1 on white: disabled controls and display-size type only, never body-size text.
       { dark: hex("#8e8d88"), name: "text-disabled", value: hex("#8e8d88") },
       { dark: hex("#161613"), name: "text-inverse", value: hex("#ffffff") },
       { dark: hex("#2dd4a8"), name: "text-brand", value: hex("#14896c") },
@@ -250,6 +253,9 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
       { dark: hex("#272724"), name: "border-secondary", value: hex("#e6e5e2") },
       { dark: hex("#1e1e1b"), name: "border-subtle", value: hex("#f0efed") },
       { dark: hex("#2dd4a8"), name: "border-focus", value: hex("#2dd4a8") },
+      // An unchecked checkbox's stroke. border-primary is 1.6:1 on the dark ground and 1.3:1 on a
+      // selected row; this is 3.3:1 on that row.
+      { dark: hex("#7a7975"), name: "border-control", value: hex("#d5d4d0") },
     ],
   },
   {
@@ -271,6 +277,19 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
       { dark: hex("#f59e42"), name: "status-due-soon", value: hex("#d4850f") },
       { dark: hex("#60a5fa"), name: "status-open", value: hex("#3b82f6") },
       { dark: hex("#34d399"), name: "status-done", value: hex("#10b981") },
+    ],
+  },
+  {
+    comment: ["Code (each at least 4.5:1 on surface-inset, a code block's fill)"],
+    darkComment: ["Code"],
+    tokens: [
+      { dark: hex("#c4b5fd"), name: "code-keyword", value: hex("#6d28d9") },
+      { dark: hex("#86efac"), name: "code-string", value: hex("#166534") },
+      { dark: hex("#fdba74"), name: "code-number", value: hex("#9a3412") },
+      { dark: hex("#93c5fd"), name: "code-title", value: hex("#1d4ed8") },
+      { dark: hex("#5eead4"), name: "code-type", value: hex("#115e59") },
+      { dark: ref("text-tertiary"), name: "code-comment", value: ref("text-secondary") },
+      { dark: hex("#fca5a5"), name: "code-deletion", value: hex("#b91c1c") },
     ],
   },
   {
@@ -439,13 +458,20 @@ export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
     comment: ["Semantic text tokens"],
   },
   {
-    aliases: bridge("border-primary", "border-secondary", "border-subtle", "border-focus"),
+    aliases: bridge(
+      "border-primary",
+      "border-secondary",
+      "border-subtle",
+      "border-focus",
+      "border-control"
+    ),
     comment: ["Semantic border tokens"],
   },
   {
     aliases: bridge(
       "interactive-primary",
       "interactive-primary-hover",
+      "interactive-fill",
       "interactive-secondary",
       "interactive-secondary-hover"
     ),
@@ -460,6 +486,7 @@ export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
       { from: "text-tertiary", name: "subtle" },
       { from: "text-disabled", name: "faint" },
       { from: "text-due-soon", name: "due-soon" },
+      { from: "text-action", name: "action" },
     ],
     comment: ["Short aliases (avoid double text- prefix)"],
   },

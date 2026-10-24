@@ -9,7 +9,7 @@
 //! Handles the node types produced by our Tiptap editor configuration:
 //! doc, paragraph, heading(1-3), bulletList, orderedList, listItem,
 //! taskList, taskItem, codeBlock, blockquote, horizontalRule, hardBreak,
-//! text with marks: bold, italic, strike, code, link, underline.
+//! pageLink, text with marks: bold, italic, strike, code, link, underline.
 
 use serde_json::Value;
 
@@ -381,6 +381,11 @@ fn render_inline(out: &mut String, node: &Value) {
         }
         "hardBreak" => {
             out.push_str("  \n");
+        }
+        "pageLink" => {
+            out.push_str("[[");
+            out.push_str(crate::page_links::link_title(node));
+            out.push_str("]]");
         }
         _ => {
             // Unknown inline — try text

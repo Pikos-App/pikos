@@ -70,13 +70,10 @@ appTest("sort by Date orders the page list by schedule", async ({ app }) => {
 
   // Confirm each page actually got a schedule chip — if any didn't,
   // the date sort assertion below would race the no-schedule fallback.
-  // The chip shows absolute "MMM d" dates by default (relative "Today" is
-  // opt-in via the chip toggle), so derive the expected labels from the run
-  // date to stay correct on any day.
-  const { monthDay: today } = await dayFrom(app, 0);
+  // An all-day page due today reads "Today"; the others read "MMM d".
   const { monthDay: tomorrow } = await dayFrom(app, 1);
   const list = app.locator("[data-page-list-item]");
-  await expect(list.filter({ hasText: "alpha" })).toContainText(today);
+  await expect(list.filter({ hasText: "alpha" })).toContainText("Today");
   await expect(list.filter({ hasText: "bravo" })).toContainText(tomorrow);
   await expect(list.filter({ hasText: "charlie" })).toContainText(/Dec 28/);
 

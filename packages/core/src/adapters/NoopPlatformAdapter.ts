@@ -65,6 +65,11 @@ export class NoopPlatformAdapter implements PlatformAdapter {
     return Promise.resolve(false);
   }
 
+  openNotificationSettings(): Promise<void> {
+    this.record("openNotificationSettings");
+    return Promise.resolve();
+  }
+
   applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void> {
     this.record("applyNotificationSettings", settings);
     return Promise.resolve();

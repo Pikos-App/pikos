@@ -24,7 +24,7 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("db error: {0}")]
-    Db(#[from] sqlx::Error),
+    Db(#[source] sqlx::Error),
 
     #[error("not found: {0}")]
     NotFound(String),
@@ -48,9 +48,15 @@ pub enum AppError {
     /// check found it inconsistent. Separate from `Db` because the answer is
     /// different — no retry helps, and the app has a backups directory to point
     /// the user at. Nothing else can offer that if this arrives as a generic
-    /// storage failure.
+    /// storage failure. Any query can produce it, not only the open, which is why
+    /// the sorting happens in `From<sqlx::Error>`.
     #[error("corrupt: {0}")]
     Corrupt(String),
+
+    /// A newer Pikos migrated the workspace past what this build carries. The
+    /// file is fine and only updating this copy opens it.
+    #[error("too new: the workspace is at schema v{applied}, this build reads up to v{supported}")]
+    TooNew { applied: i64, supported: i64 },
 
     #[error("internal: {0}")]
     Internal(String),
@@ -70,9 +76,55 @@ impl AppError {
             AppError::Invalid(_) => "Invalid",
             AppError::Network(_) => "Network",
             AppError::Corrupt(_) => "Corrupt",
+            AppError::TooNew { .. } => "TooNew",
             AppError::Internal(_) => "Internal",
         }
     }
+}
+
+impl From<sqlx::Error> for AppError {
+    fn from(err: sqlx::Error) -> Self {
+        if says_the_file_is_damaged(&err) {
+            return AppError::Corrupt(err.to_string());
+        }
+
+        match migrated_past(&err) {
+            Some((applied, supported)) => AppError::TooNew { applied, supported },
+            None => AppError::Db(err),
+        }
+    }
+}
+
+/// The versions in a write refused because a newer Pikos migrated the workspace.
+fn migrated_past(err: &sqlx::Error) -> Option<(i64, i64)> {
+    let sqlx::Error::Database(db) = err else {
+        return None;
+    };
+
+    let versions = db.message().strip_prefix(crate::pool::MIGRATED_PAST_MARK)?;
+    let mut versions = versions.split_whitespace().map(str::parse::<i64>);
+    match (versions.next(), versions.next()) {
+        (Some(Ok(applied)), Some(Ok(supported))) => Some((applied, supported)),
+        _ => None,
+    }
+}
+
+/// SQLITE_IOERR_SHORT_READ: the file is shorter than SQLite's own record of it, so it changed
+/// underneath SQLite. It arrived a second before the first CORRUPT on the one damaged workspace
+/// seen in use. The rest of IOERR, and FULL (13), stay `Db`: a full disk or a failed write is
+/// the machine rather than the file, and a restore offered over it would throw away good work.
+const SQLITE_IOERR_SHORT_READ: i32 = 522;
+
+/// CORRUPT (11) or NOTADB (26), in any extended form, or a short read. sqlx carries the
+/// extended result code as a decimal string; the primary code is its low byte.
+fn says_the_file_is_damaged(err: &sqlx::Error) -> bool {
+    let sqlx::Error::Database(db) = err else {
+        return false;
+    };
+
+    db.code()
+        .and_then(|c| c.parse::<i32>().ok())
+        .is_some_and(|code| matches!(code & 0xFF, 11 | 26) || code == SQLITE_IOERR_SHORT_READ)
 }
 
 impl Serialize for AppError {

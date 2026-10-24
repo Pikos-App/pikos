@@ -241,6 +241,16 @@ pub async fn list_backups(
     pikos_db::list_backups(&path.to_string_lossy())
 }
 
+/// Stop reading and writing a workspace the app has found damaged, since every
+/// further write to it can lose more. The sync loops, the checkpoint timer and the
+/// asset sweep all hold the same pool, so they stop too.
+#[tauri::command]
+pub async fn close_damaged_workspace(state: tauri::State<'_, DbState>) -> AppResult<()> {
+    state.close_keeping_path().await;
+    log::warn!("workspace closed: the file is damaged");
+    Ok(())
+}
+
 /// Put a snapshot back and restart into it.
 ///
 /// The restart is the whole design. Swapping the file under a live pool means

@@ -83,7 +83,7 @@ fn a_session_exactly_at_the_floor_is_recorded() {
 fn every_outcome_carries_a_sentence() {
     match finish_session(5) {
         FocusOutcome::TooShort { label } => {
-            assert_eq!(label, "Under 30 seconds — not recorded")
+            assert_eq!(label, "Under 30 seconds, not recorded")
         }
         other => panic!("expected TooShort, got {other:?}"),
     }

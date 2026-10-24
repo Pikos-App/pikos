@@ -313,11 +313,6 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_adopt_workspace_id(uint64_t ptr, R
 uint64_t uniffi_pikos_ffi_fn_method_workspace_apply_records(uint64_t ptr, RustBuffer records
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BODY_CLOCK
-#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BODY_CLOCK
-uint64_t uniffi_pikos_ffi_fn_method_workspace_body_clock(uint64_t ptr, RustBuffer page_id
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BUILD_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BUILD_RECORDS
 uint64_t uniffi_pikos_ffi_fn_method_workspace_build_records(uint64_t ptr, RustBuffer names
@@ -371,11 +366,6 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_records_sent(uint64_t ptr, RustBuf
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RETRY_HELD_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RETRY_HELD_RECORDS
 uint64_t uniffi_pikos_ffi_fn_method_workspace_retry_held_records(uint64_t ptr
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
-#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
-uint64_t uniffi_pikos_ffi_fn_method_workspace_save_body_if_unchanged(uint64_t ptr, RustBuffer page_id, RustBuffer content, RustBuffer loaded_clock
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SAVE_SYSTEM_FIELDS
@@ -1285,12 +1275,6 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_apply_records(void
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BODY_CLOCK
-#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BODY_CLOCK
-uint16_t uniffi_pikos_ffi_checksum_method_workspace_body_clock(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BUILD_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BUILD_RECORDS
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_build_records(void
@@ -1354,12 +1338,6 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_records_sent(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RETRY_HELD_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RETRY_HELD_RECORDS
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_retry_held_records(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
-#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SAVE_BODY_IF_UNCHANGED
-uint16_t uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged(void
     
 );
 #endif

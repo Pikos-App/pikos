@@ -63,7 +63,6 @@ function page(seed: SeedPage): Page {
     completedOccurrences: null,
     content: "{}",
     contentSchemaVersion: CONTENT_SCHEMA_VERSION,
-    contentText: "",
     createdAt: seed.createdAt,
     detachIsReversible: false,
     folderId: seed.folderId,

@@ -68,7 +68,6 @@ export function ImportProvider({ children }: { children: ReactNode }) {
 
       const page = await adapter.createPage({
         content: p.content,
-        contentText: p.contentText,
         folderId,
         priority: p.priority,
         status: p.status,

@@ -19,6 +19,8 @@ interface MonthEventChipProps {
    * week grid's all-day section uses. */
   folderColor: string | undefined;
   onDoubleClick: (pageId: string) => void;
+  /** Set when the chip is a bar reaching past its own cell. */
+  width?: string | undefined;
 }
 
 /**
@@ -29,7 +31,7 @@ interface MonthEventChipProps {
  * downstream of the click — the popover pair, the recurring/synced action
  * routing — is the same code path the week grid takes.
  */
-export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEventChipProps) {
+export function MonthEventChip({ event, folderColor, onDoubleClick, width }: MonthEventChipProps) {
   const { continuesAfter, continuesBefore, isAllDay, page, startDate } = event;
   const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
 
@@ -59,19 +61,16 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
         <button
           aria-label={label}
           className={cn(
-            "flex w-full cursor-default! items-center gap-1",
+            "relative flex w-full cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
-            page.syncState === "detached" && !done && "opacity-70",
             done && "opacity-50",
-            // A multi-day event is drawn as one chip per covered cell (see
-            // core/monthGrid's header note); squaring the shared corners keeps
-            // the run reading as a single band across the week row.
+            // Square ends say the event carries on into the previous or next week row.
             continuesBefore && "rounded-tl-none rounded-bl-none border-l-0",
             continuesAfter && "rounded-tr-none rounded-br-none"
           )}
           onClick={handleClick}
           onMouseDown={(e) => e.stopPropagation()}
-          style={chipFolderStyle(folderColor)}
+          style={{ ...chipFolderStyle(folderColor), width }}
         >
           {showsCheckbox ? (
             <TaskCheckbox

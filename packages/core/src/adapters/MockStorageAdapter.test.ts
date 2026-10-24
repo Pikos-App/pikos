@@ -30,11 +30,19 @@ async function expectRejection(
   if (messageRe) expect(se.message).toMatch(messageRe);
 }
 
-/** Creates a page with sensible defaults and returns it. */
-async function createTestPage(overrides: Partial<Page> = {}): Promise<Page> {
+/** One paragraph of `text`, as the editor saves it. */
+function paragraphDoc(text: string): string {
+  return JSON.stringify({
+    content: [{ content: [{ text, type: "text" }], type: "paragraph" }],
+    type: "doc",
+  });
+}
+
+/** Creates a page with sensible defaults and returns it; `body` is its text as one paragraph. */
+async function createTestPage(overrides: Partial<Page> & { body?: string } = {}): Promise<Page> {
   return adapter.createPage({
-    content: overrides.content ?? "",
-    ...(overrides.contentText !== undefined && { contentText: overrides.contentText }),
+    content:
+      overrides.body !== undefined ? paragraphDoc(overrides.body) : (overrides.content ?? ""),
     folderId: overrides.folderId ?? null,
     priority: overrides.priority ?? 0,
     status: overrides.status ?? "not_started",
@@ -276,7 +284,7 @@ describe("searchPages", () => {
   });
 
   it("matches by content", async () => {
-    await createTestPage({ contentText: "discuss the budget proposal", title: "notes" });
+    await createTestPage({ body: "discuss the budget proposal", title: "notes" });
 
     const { results } = await adapter.searchPages("budget");
     expect(results).toHaveLength(1);
@@ -284,7 +292,7 @@ describe("searchPages", () => {
   });
 
   it("title matches rank above content matches", async () => {
-    await createTestPage({ contentText: "review the design", title: "other" });
+    await createTestPage({ body: "review the design", title: "other" });
     await createTestPage({ title: "design doc" });
 
     const { results } = await adapter.searchPages("design");
@@ -294,7 +302,7 @@ describe("searchPages", () => {
 
   it("generates excerpt around content match", async () => {
     const longContent = "prefix ".repeat(20) + "findme" + " suffix".repeat(20);
-    await createTestPage({ contentText: longContent, title: "other" });
+    await createTestPage({ body: longContent, title: "other" });
 
     const { results } = await adapter.searchPages("findme");
     expect(results[0]!.excerpt).toContain("findme");
@@ -342,7 +350,7 @@ describe("searchPages", () => {
   });
 
   it("prefers the body over a mirror's metadata for the excerpt", async () => {
-    const page = await createTestPage({ contentText: "moved to the annex", title: "Standup" });
+    const page = await createTestPage({ body: "moved to the annex", title: "Standup" });
     adapter.markPageSynced(page.id, { location: "Annex Room", state: "active" });
 
     const { results } = await adapter.searchPages("annex");
@@ -400,9 +408,7 @@ describe("matchesFilter (via listPages)", () => {
   });
 
   it("filters by query (title + content search)", async () => {
-    // `contentText`, not `content`: the writer's LIKE reads the extracted text
-    // column, so a body the editor has not projected yet is not searchable.
-    await createTestPage({ contentText: "lorem ipsum", title: "notes" });
+    await createTestPage({ body: "lorem ipsum", title: "notes" });
     await createTestPage({ title: "unrelated" });
 
     const results = await adapter.listPages({ query: "ipsum" });
@@ -852,7 +858,7 @@ describe("recurrence exdates (skip occurrence)", () => {
     // Expand 3 weeks: should get 3 occurrences
     const rangeStart = new Date(2026, 2, 2);
     const rangeEnd = new Date(2026, 2, 23);
-    const { content: _c, contentText: _ct, ...pageSummary } = head;
+    const { content: _c, ...pageSummary } = head;
     const page: PageSummary = pageSummary;
 
     let occs = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
@@ -880,7 +886,7 @@ describe("recurrence exdates (skip occurrence)", () => {
       timezone: "America/New_York",
     });
 
-    const { content: _c, contentText: _ct, ...pageSummary } = head;
+    const { content: _c, ...pageSummary } = head;
     const page: PageSummary = pageSummary;
     const rangeStart = new Date(2026, 2, 2);
     const rangeEnd = new Date(2026, 2, 23);
@@ -1148,7 +1154,7 @@ describe("notification history", () => {
 // constraints, FTS surface, soft-delete cascade. Drift here causes mock-only
 // passes that break in prod.
 
-describe("parity: searchPages indexes contentText, not raw Tiptap JSON", () => {
+describe("parity: searchPages indexes the body's text, not raw Tiptap JSON", () => {
   it("does not match structural tokens inside the content JSON", async () => {
     await createTestPage({
       content: JSON.stringify({
@@ -1158,7 +1164,7 @@ describe("parity: searchPages indexes contentText, not raw Tiptap JSON", () => {
       title: "Untitled",
     });
     // Rust FTS would never match "paragraph" — that token lives in the structural
-    // schema, not the indexed contentText.
+    // schema, not the indexed text.
     const { results } = await adapter.searchPages("paragraph");
     expect(results).toHaveLength(0);
   });
@@ -1176,17 +1182,12 @@ describe("parity: searchPages indexes contentText, not raw Tiptap JSON", () => {
     expect(results[0]?.matchSource).toBe("content");
   });
 
-  it("respects caller-provided contentText (no auto-overwrite)", async () => {
-    const page = await adapter.createPage({
-      content: '{"type":"doc","content":[]}',
-      contentText: "explicit override",
-      folderId: null,
-      priority: 0,
-      status: "not_started",
-      tags: [],
-      title: "Untitled",
-    });
-    expect(page.contentText).toBe("explicit override");
+  it("finds a rewritten body's new words and not its old ones", async () => {
+    const page = await createTestPage({ body: "buy oat milk", title: "Groceries" });
+    await adapter.updatePage(page.id, { content: paragraphDoc("buy almond milk") });
+
+    expect((await adapter.searchPages("almond")).results).toHaveLength(1);
+    expect((await adapter.searchPages("oat")).results).toHaveLength(0);
   });
 });
 
@@ -1305,16 +1306,6 @@ describe("page CRUD", () => {
     await expect(adapter.updatePage("missing", { title: "x" })).rejects.toThrow(
       "Page not found: missing"
     );
-  });
-
-  it("updatePage re-derives contentText from content unless the caller sets it", async () => {
-    const page = await createTestPage();
-    const content = JSON.stringify({
-      content: [{ content: [{ text: "hello world", type: "text" }], type: "paragraph" }],
-      type: "doc",
-    });
-    const updated = await adapter.updatePage(page.id, { content });
-    expect(updated.contentText).toBe("hello world");
   });
 
   it("reorderPages assigns sortOrder by position", async () => {

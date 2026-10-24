@@ -17,8 +17,12 @@ import { cn } from "@/lib/utils";
 
 import { describeEntry, formatFiredAt } from "./notificationHistoryFormat";
 
+function wasNotShown(kind: string): boolean {
+  return kind === "suppressed" || kind === "refused";
+}
+
 function entryIcon(kind: string) {
-  if (kind === "suppressed") return BellOff;
+  if (wasNotShown(kind)) return BellOff;
   if (kind === "overdue") return CalendarClock;
   return Bell;
 }
@@ -36,14 +40,19 @@ export interface NotificationHistoryProps {
   /** Open a page from a row. Rows with no page (the daily summary, a deleted
    *  page) render as plain text instead of a button. */
   onOpenPage: (pageId: string) => void;
+  /** Open the system setting that turned off a refused reminder. */
+  onOpenNotificationSettings: () => void;
 }
 
-export function NotificationHistory({ entries, onOpenPage }: NotificationHistoryProps) {
+export function NotificationHistory({
+  entries,
+  onOpenNotificationSettings,
+  onOpenPage,
+}: NotificationHistoryProps) {
   if (entries.length === 0) {
     return (
       <p className="py-3 text-xs text-muted-foreground">
-        Nothing yet. Reminders you receive — and any quiet hours silences — show up here for 30
-        days.
+        Nothing yet. Reminders you receive, and any quiet hours silences, show up here for 30 days.
       </p>
     );
   }
@@ -59,7 +68,7 @@ export function NotificationHistory({ entries, onOpenPage }: NotificationHistory
             <Icon
               className={cn(
                 "h-3.5 w-3.5 shrink-0",
-                entry.kind === "suppressed" ? "text-muted-foreground/60" : "text-muted-foreground"
+                wasNotShown(entry.kind) ? "text-subtle" : "text-muted-foreground"
               )}
             />
             <div className="min-w-0 flex-1">
@@ -76,6 +85,14 @@ export function NotificationHistory({ entries, onOpenPage }: NotificationHistory
                 </span>
               )}
               <span className="text-xs text-muted-foreground">{describeEntry(entry)}</span>
+              {entry.kind === "refused" && (
+                <button
+                  className="ml-2 text-xs font-medium text-foreground hover:underline"
+                  onClick={onOpenNotificationSettings}
+                >
+                  Open System Settings
+                </button>
+              )}
             </div>
             <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
               {formatFiredAt(entry.firedAt)}

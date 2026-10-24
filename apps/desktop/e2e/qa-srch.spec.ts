@@ -4,6 +4,7 @@ import {
   test as appTest,
   createFolder,
   expect,
+  hourLineY,
   mod,
   openEditorForPage,
   quickAdd,
@@ -161,6 +162,8 @@ appTest(
   "every command the palette lists does what its label says",
   { tag: ["@SRCH-05"] },
   async ({ app }) => {
+    // Every command runs through the palette, some several times: well past the default budget.
+    appTest.setTimeout(120_000);
     await quickAdd(app, "alpha page today");
     await quickAdd(app, "beta page");
     const editor = await openEditorForPage(app, "alpha page");
@@ -172,17 +175,62 @@ appTest(
       await app.locator("body").click({ position: { x: 0, y: 0 } });
       const palette = await search(app, `>${label}`);
       await palette
-        .getByRole("button", { name: new RegExp(`^${label}`) })
+        .getByRole("button", {
+          name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+        })
         .first()
         .click();
       await expect(palette).not.toBeVisible();
     }
 
+    /** A command that moves between pages puts the list in keyboard mode, where rows take no
+     *  pointer until the mouse moves over the list, as a person's hand would first. */
+    async function openAlpha() {
+      const alpha = rows.filter({ hasText: "alpha page" });
+      const box = await alpha.boundingBox();
+      if (box) await app.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await alpha.click();
+    }
+
+    const hourPitch = async () => (await hourLineY(app, 10)) - (await hourLineY(app, 9));
+
+    /** The calendar's hour height, read on the calendar and back to the page. */
+    async function calendarPitch() {
+      await app.keyboard.press(mod("Mod+Shift+C"));
+      await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+      const pitch = await hourPitch();
+      await app.keyboard.press(mod("Mod+Shift+C"));
+      await expect(editor).toBeVisible();
+      return pitch;
+    }
+
+    async function calendarHoursAfter(label: string) {
+      const before = await calendarPitch();
+      await run(label);
+      const after = await calendarPitch();
+      await run("Reset calendar hours");
+      expect(await calendarPitch()).toBe(before);
+      return { after, before };
+    }
+
     const expectations: Record<string, () => Promise<void>> = {
+      "Back to the previous page": async () => {
+        const before = await title.textContent();
+        await run("Select next page");
+        await expect(title).not.toHaveText(before ?? "");
+        await run("Back to the previous page");
+        await expect(title).toHaveText(before ?? "");
+      },
+      "Clear the selection, leave the editor, or go to the calendar": async () => {
+        await run("Clear the selection, leave the editor, or go to the calendar");
+        await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+        await run("Toggle calendar / editor");
+        await expect(editor).toBeVisible();
+      },
       "Close page": async () => {
         await run("Close page");
         await expect(title).toHaveCount(0);
-        await rows.filter({ hasText: "alpha page" }).click();
+        await openAlpha();
       },
       "Decrease text size": async () => {
         await run("Increase text size");
@@ -193,10 +241,30 @@ appTest(
         await run("Delete page");
         await expect(rows.filter({ hasText: "alpha page" })).toHaveCount(0);
       },
+      "Delete page (works in text inputs)": async () => {
+        await run("Delete page (works in text inputs)");
+        await expect(rows.filter({ hasText: "alpha page" })).toHaveCount(0);
+        await run("Undo delete");
+        await openAlpha();
+        await expect(title).toHaveText("alpha page");
+      },
+      "Export page as Markdown": async () => {
+        await run("Export page as Markdown");
+        await expect(app.getByText("Exported to Downloads", { exact: true })).toBeVisible();
+      },
       "Find in page": async () => {
         await run("Find in page");
         await expect(app.getByPlaceholder("Find…")).toBeVisible();
         await app.keyboard.press("Escape");
+      },
+      "Forward to the next page": async () => {
+        const before = await title.textContent();
+        await run("Select next page");
+        await run("Back to the previous page");
+        await expect(title).toHaveText(before ?? "");
+        await run("Forward to the next page");
+        await expect(title).not.toHaveText(before ?? "");
+        await run("Back to the previous page");
       },
       "Increase text size": async () => {
         await run("Increase text size");
@@ -212,6 +280,11 @@ appTest(
         await run("New page");
         await expect(app.getByRole("dialog", { name: "Quick add" })).toBeVisible();
         await app.keyboard.press("Escape");
+      },
+      // Each calendar-hours check ends on "Reset calendar hours" and checks it restored the height.
+      "Reset calendar hours": async () => {
+        const { after, before } = await calendarHoursAfter("Taller calendar hours");
+        expect(after).not.toBe(before);
       },
       "Reset text size": async () => {
         await run("Increase text size");
@@ -243,6 +316,14 @@ appTest(
         await expect(app.getByRole("region", { name: "Settings" })).toBeVisible();
         await app.keyboard.press("Escape");
       },
+      "Shorter calendar hours": async () => {
+        const { after, before } = await calendarHoursAfter("Shorter calendar hours");
+        expect(after).toBeLessThan(before);
+      },
+      "Taller calendar hours": async () => {
+        const { after, before } = await calendarHoursAfter("Taller calendar hours");
+        expect(after).toBeGreaterThan(before);
+      },
       "Toggle calendar / editor": async () => {
         await run("Toggle calendar / editor");
         await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
@@ -261,7 +342,7 @@ appTest(
         await run("Toggle sidebar");
         await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
       },
-      // Runs after "Delete page", which leaves it something to undo.
+      // Runs after "Delete page", which leaves it something to undo; listed only then (SRCH-07).
       "Undo delete": async () => {
         await run("Undo delete");
         await expect(rows.filter({ hasText: "alpha page" })).toHaveCount(1);
@@ -288,7 +369,8 @@ appTest(
         (text) => text.split("\n")[0]!
       );
       await app.keyboard.press("Escape");
-      expect([...listed].sort()).toEqual(Object.keys(expectations).sort());
+      const listable = Object.keys(expectations).filter((label) => label !== "Undo delete");
+      expect([...listed].sort()).toEqual(listable.sort());
     });
 
     // Last: "Delete page" takes the open page with it, and "Undo delete" brings it back.
@@ -305,6 +387,51 @@ appTest(
       await app.keyboard.press(mod("Mod+Shift+k"));
       await expect(paletteOf(app).getByRole("button", { name: /^New page/ })).toBeVisible();
       await app.keyboard.press("Escape");
+    });
+  }
+);
+
+appTest(
+  "a command starting with what's typed ranks first with its letters marked, and Undo delete shows only while it can undo",
+  { tag: ["@SRCH-07"] },
+  async ({ app }) => {
+    await quickAdd(app, "scratch page");
+    const commandLabels = async (palette: ReturnType<typeof paletteOf>) =>
+      (await palette.getByRole("button").allInnerTexts()).map((text) => text.split("\n")[0]!);
+
+    await appTest.step("SRCH-07 a label or word starting with the letters ranks first", async () => {
+      const palette = await search(app, ">si");
+      const labels = await commandLabels(palette);
+      const startsWord = (label: string) =>
+        label.toLowerCase().split(" ").some((word) => word.startsWith("si"));
+      const firstOther = labels.findIndex((label) => !startsWord(label));
+      expect(labels.filter(startsWord).length).toBeGreaterThan(0);
+      expect(firstOther).toBeGreaterThan(0);
+      expect(labels.slice(firstOther).some(startsWord)).toBe(false);
+    });
+
+    await appTest.step("SRCH-07 the matched letters are marked", async () => {
+      const first = paletteOf(app).getByRole("button").first();
+      const label = (await first.innerText()).split("\n")[0]!;
+      const at = label.toLowerCase().split(" ").findIndex((word) => word.startsWith("si"));
+      const word = label.split(" ")[at]!;
+      await expect(first.locator("mark")).toHaveText([word[0]!, word[1]!]);
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step("SRCH-07 Undo delete is missing with no delete banner up", async () => {
+      const palette = await search(app, ">undo");
+      await expect(palette.getByRole("button", { name: /^Undo delete/ })).toHaveCount(0);
+      await app.keyboard.press("Escape");
+    });
+
+    await appTest.step("SRCH-07 Undo delete is listed while a delete's banner is up", async () => {
+      const row = app.locator("[data-page-list-item]").filter({ hasText: "scratch page" });
+      await row.click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Delete" }).click();
+      await expect(app.getByRole("alert", { name: /scratch page/ })).toBeVisible();
+      const palette = await search(app, ">undo");
+      await expect(palette.getByRole("button", { name: /^Undo delete/ })).toHaveCount(1);
     });
   }
 );

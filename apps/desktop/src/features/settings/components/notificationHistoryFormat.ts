@@ -25,6 +25,7 @@ export function formatFiredAt(firedAt: string): string {
 /** What this row says happened, in the user's terms. */
 export function describeEntry(entry: NotificationHistoryEntry): string {
   if (entry.kind === "suppressed") return "Silenced by quiet hours";
+  if (entry.kind === "refused") return "Not shown: notifications are off for Pikos";
   if (entry.kind === "overdue") return "Daily summary";
   return entry.action === "opened" ? "Reminder · opened" : "Reminder";
 }

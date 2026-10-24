@@ -28,7 +28,7 @@ use std::sync::OnceLock;
 use chrono::{NaiveDateTime, Timelike};
 
 use crate::dates::{format_date_only, format_local_iso, is_all_day_iso, parse_local_iso};
-use crate::nlp::{parse_first, Granularity};
+use crate::nlp::{parse, Granularity};
 
 pub use recurrence::Weekday;
 pub use tokens::Priority;
@@ -96,6 +96,19 @@ pub enum ParseResult {
 const MAX_FINITE_OCCURRENCES: usize = 10_000;
 
 /// Parse one line of quick-add input.
+/// What a date match has to pin to be read as the page's date. The engine also matches a bare
+/// "morning" or "evening", pinning only a meridiem, and that word belongs to the title
+/// ("Evening review today 8pm"), so the date is the first match that pins one of these. Mirrors
+/// `DATE_OR_TIME_COMPONENTS` in the TypeScript parser.
+const DATE_OR_TIME: [Granularity; 6] = [
+    Granularity::Year,
+    Granularity::Month,
+    Granularity::Day,
+    Granularity::Weekday,
+    Granularity::Hour,
+    Granularity::Minute,
+];
+
 pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
     if raw.trim().is_empty() {
         return ParseResult::Single {
@@ -120,7 +133,9 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
         group(captures, 1).unwrap_or_default().to_string()
     });
 
-    let matched = parse_first(&text, reference);
+    let matched = parse(&text, reference)
+        .into_iter()
+        .find(|found| DATE_OR_TIME.iter().any(|g| found.start.is_certain(*g)));
 
     let mut scheduled_start: Option<String> = None;
     let mut has_time = false;

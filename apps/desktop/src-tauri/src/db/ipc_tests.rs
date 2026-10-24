@@ -104,6 +104,7 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
         ("export_csv", json!({ "includeSynced": false })),
         ("export_ics", json!({ "includeSynced": false })),
         ("export_markdown", json!({ "includeSynced": false })),
+        ("export_page_markdown", json!({ "pageId": "missing" })),
         (
             "create_focus_session",
             json!({
@@ -144,6 +145,7 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
 fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
     vec![
         ("get_page", json!({ "id": PROBE_PAGE })),
+        ("pending_description_document", json!({ "id": PROBE_PAGE })),
         ("list_pages", json!({ "filter": null })),
         ("list_pages_today", json!({})),
         ("list_trashed_pages", json!({})),
@@ -181,6 +183,7 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ),
         ("list_recent_pages", json!({ "exclude": null, "limit": 10 })),
         ("list_tags", json!({})),
+        ("list_backlinks", json!({ "id": PROBE_PAGE })),
         ("change_state", json!({})),
     ]
 }
@@ -282,6 +285,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::windows::get_page_if_newer,
             super::windows::list_recent_pages,
             super::windows::list_tags,
+            super::windows::list_backlinks,
             super::windows::change_state,
             super::schedules::list_page_schedules,
             super::schedules::list_page_schedules_for_rules,
@@ -295,6 +299,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::dev::export_csv,
             super::dev::export_ics,
             super::dev::export_markdown,
+            super::dev::export_page_markdown,
             super::pages::get_page,
             super::pages::list_pages,
             super::pages::list_pages_today,

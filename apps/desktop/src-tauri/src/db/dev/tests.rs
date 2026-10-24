@@ -52,14 +52,12 @@ fn bare_page(title: &str) -> NewPage {
         title: title.to_string(),
         subtitle: None,
         content: "{}".to_string(),
-        content_text: None,
         status: "not_started".to_string(),
         priority: 0,
         tags: vec![],
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: vec![],
         parent_id: None,
         last_opened_at: None,
         created_at: None,
@@ -589,14 +587,12 @@ fn page_from_export(v: &serde_json::Value, folder_map: &HashMap<String, String>)
             .get("content")
             .map(|c| c.to_string())
             .unwrap_or_else(|| "{}".to_string()),
-        content_text: s("content_text"),
         status: s("status").unwrap_or_else(|| "not_started".to_string()),
         priority: v.get("priority").and_then(|p| p.as_i64()).unwrap_or(0),
         tags: str_array("tags"),
         scheduled_start: s("scheduled_start"),
         scheduled_end: s("scheduled_end"),
         completed_at: s("completed_at"),
-        links: str_array("links"),
         parent_id: None,
         last_opened_at: s("last_opened_at"),
         created_at: s("created_at"),
@@ -659,7 +655,6 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     let mut page = NewPage {
         folder_id: Some(folder.id.clone()),
         content,
-        content_text: Some("hello world".to_string()),
         tags: vec!["Work".to_string(), "urgent".to_string()],
         ..bare_page("Has image")
     };
@@ -830,6 +825,109 @@ async fn a_markdown_export_writes_the_tree_and_carries_every_image_from_a_moved_
         std::fs::read_to_string(vault.join("Packing.md")).unwrap()
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn a_page_without_images_exports_as_one_md_file_that_never_replaces_an_earlier_one() {
+    let pool = test_pool().await;
+    let root = std::env::temp_dir().join(format!("pkos_page_export_{}", uuid::Uuid::new_v4()));
+    let downloads = root.join("Downloads");
+    std::fs::create_dir_all(&downloads).unwrap();
+    let doc = serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Ship it" }] }]
+    })
+    .to_string();
+    insert_test_folder(&pool, "f1", "Work").await.unwrap();
+    insert_rich_page(&pool, "p1", "Plan: Q4", &doc, "Ship it", 0, "[]").await;
+    sqlx::query(
+        "UPDATE pages SET folder_id = 'f1', created_at = '2026-10-01T09:00:00', \
+         updated_at = '2026-10-02T09:00:00'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let assets_dir = root.join("assets");
+
+    let first = write_page_markdown(&pool, "p1", &downloads, &assets_dir)
+        .await
+        .unwrap();
+    let second = write_page_markdown(&pool, "p1", &downloads, &assets_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(first, downloads.join("Plan_ Q4.md"));
+    assert_eq!(second, downloads.join("Plan_ Q4 2.md"));
+    assert_eq!(
+        std::fs::read_to_string(&first).unwrap(),
+        "---\ntitle: \"Plan: Q4\"\ncreated: \"2026-10-01T09:00:00\"\n\
+         updated: \"2026-10-02T09:00:00\"\n---\n\nShip it\n"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// qa: EXP-12:2
+#[tokio::test]
+async fn a_page_with_images_exports_as_a_directory_holding_them_beside_its_md() {
+    let pool = test_pool().await;
+    let root = std::env::temp_dir().join(format!("pkos_page_export_{}", uuid::Uuid::new_v4()));
+    let downloads = root.join("Downloads");
+    let assets_dir = root.join("workspace").join("assets");
+    std::fs::create_dir_all(&downloads).unwrap();
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        std::fs::write(assets_dir.join(name), name.as_bytes()).unwrap();
+    }
+    insert_rich_page(
+        &pool,
+        "p1",
+        "Paris",
+        &page_with_images(),
+        "Day one",
+        0,
+        "[]",
+    )
+    .await;
+
+    let file = write_page_markdown(&pool, "p1", &downloads, &assets_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(file, downloads.join("Paris").join("Paris.md"));
+    let contents = std::fs::read_to_string(&file).unwrap();
+    for name in [NEW_IMAGE, OLD_IMAGE, IMPORTED_IMAGE] {
+        assert_eq!(
+            std::fs::read(downloads.join("Paris").join("assets").join(name)).unwrap(),
+            name.as_bytes()
+        );
+        assert!(
+            contents.contains(&format!("](assets/{name})")),
+            "{contents}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn a_trashed_page_does_not_export() {
+    let pool = test_pool().await;
+    let dir = std::env::temp_dir().join(format!("pkos_page_export_{}", uuid::Uuid::new_v4()));
+    insert_rich_page(&pool, "p1", "Gone", "{}", "", 0, "[]").await;
+    sqlx::query("UPDATE pages SET deleted_at = '2026-10-01T09:00:00'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let result = write_page_markdown(&pool, "p1", &dir, &dir).await;
+
+    assert!(
+        matches!(result, Err(crate::error::AppError::NotFound(_))),
+        "{result:?}"
+    );
+    assert!(
+        !dir.exists(),
+        "nothing is written for a page that isn't there"
+    );
 }
 
 /// The UTC stamp inside `<stem>-<stamp>.<ext>`, or a panic naming the file.

@@ -11,14 +11,16 @@ Pikos is a desktop app for macOS and Linux in which a note, a task, and a calend
 - Pricing: Free desktop download (no limits, no trial). A Mac App Store version (with iCloud sync) and an iPhone app are planned, each a one-time purchase. No subscriptions. A $29 Backer pre-order is available at pikos.app/backer for early supporters; backers receive the paid App Store apps free when they ship.
 - Data: Stored on the user's computer. Export any time to Markdown, CSV, or calendar files.
 - Privacy: No telemetry, no tracking cookies, no personal data collection.
-- Performance: measured, not claimed. With 500,000 pages, opening a page takes about 61 ms and a search about 28 ms on a MacBook Air, nearly the same as with fifty pages. Method and the commands to reproduce it: https://pikos.app/speed
+- Performance: measured, not claimed. With 500,000 pages, opening a page takes about 61 ms and a search about 28 ms on a MacBook Air, nearly the same as with fifty pages. In a single page of 100,000 words, a typed letter shows in about 24 ms. Method and the commands to reproduce it: https://pikos.app/speed
 - Source: Source-available. Full code public on GitHub (not open-source licensed).
 - Website: https://pikos.app
 - Contact: hello@pikos.app
 
 ## What Pikos Does
 
-- Rich text editor with slash commands, formatting toolbar, Markdown paste, and autosave
+- Rich text editor with slash commands, formatting toolbar, Markdown paste, and code blocks with a language
+- Links between pages: type [[ to link a page by its title. A link follows the page through a rename, and each page shows which pages link to it. There is no graph view
+- Saving: autosave as you type, a save of the last words on quit, and both edits kept when the CLI, an assistant, or another window changes a page while it's being typed in. A failed save shows "Not saved" with a retry
 - Task management with priorities (Urgent/High/Medium/Low), statuses, tags, and folders
 - Calendar showing one to seven days or a month, with drag-to-schedule and both timed and all-day events
 - External calendar sync: read-only, opt-in, from Google Calendar, iCloud, or any CalDAV server. Synced events become pages you can take notes on. An event the user has written on, tagged, or marked done becomes theirs: if the calendar is disconnected or the event is deleted upstream, it stays in Pikos as a normal page. Untouched events are removed on disconnect. Nothing written in Pikos is sent back to the provider. Credentials are held in the operating system keychain
@@ -29,9 +31,9 @@ Pikos is a desktop app for macOS and Linux in which a note, a task, and a calend
 - Three-panel layout: sidebar, page list, and editor or calendar
 - Complete keyboard navigation
 - Light, dark, and system themes
-- Data export (SQLite backup, CSV, Markdown, ICS)
+- Data export (SQLite backup, CSV, Markdown, ICS), and a single page as Markdown
 - A command-line interface, `pikos`, that reads and writes the same workspace file
-- An MCP (Model Context Protocol) server, `pikos mcp`, over stdio, so an AI assistant can search, read, create, and update pages. It opens no network socket, and a test in the suite fails if it ever does. Pikos itself sends nothing anywhere, with no account, no API key, and no Pikos server involved. Where the content goes after that depends on the assistant: a cloud assistant sends what it reads to its provider, and a model running locally keeps everything on the user's computer
+- An MCP (Model Context Protocol) server, `pikos mcp`, over stdio, so an AI assistant can search, read, create, and update pages, including adding to or replacing one section of a page by its heading. It opens no network socket, and a test in the suite fails if it ever does. Pikos itself sends nothing anywhere, with no account, no API key, and no Pikos server involved. Where the content goes after that depends on the assistant: a cloud assistant sends what it reads to its provider, and a model running locally keeps everything on the user's computer
 - Pikos ships no AI features of its own: no chat panel, no summarise button, no bundled model. It is the local data layer another assistant reads, not an AI product
 
 ## Network Behaviour

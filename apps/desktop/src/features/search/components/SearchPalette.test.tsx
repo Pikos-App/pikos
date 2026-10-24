@@ -56,8 +56,12 @@ async function seed(pages: SeedPage[]) {
   if (!storage) throw new Error("storage should be available after selectWorkspace");
   for (const p of pages) {
     await storage.createPage({
-      content: "",
-      contentText: p.body ?? "",
+      content: p.body
+        ? JSON.stringify({
+            content: [{ content: [{ text: p.body, type: "text" }], type: "paragraph" }],
+            type: "doc",
+          })
+        : "",
       folderId: p.folderId ?? null,
       priority: p.priority ?? 0,
       status: p.done ? "done" : "not_started",
@@ -289,7 +293,7 @@ describe("SearchPalette — is:done", () => {
 
     type("is:done");
 
-    expect(await screen.findByText("Showing completed — is:done")).toBeInTheDocument();
+    expect(await screen.findByText("Showing completed: is:done")).toBeInTheDocument();
     expect(screen.queryByText(/Show completed \(/)).toBeNull();
   });
 
@@ -312,6 +316,8 @@ describe("SearchPalette — command mode", () => {
     Keyboard.unregister("test-command");
     Keyboard.unregister("test-unlabelled");
     Keyboard.unregister("test-gated");
+    Keyboard.unregister("test-scattered");
+    Keyboard.unregister("test-word");
   });
 
   function registerCommand(handler: () => void) {
@@ -405,6 +411,40 @@ describe("SearchPalette — command mode", () => {
 
     expect(await screen.findByRole("button", { name: /Do the thing/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Gated away/ })).toBeNull();
+  });
+
+  it("ranks a word that starts with the filter above scattered letters, and marks what matched", async () => {
+    await setup();
+    Keyboard.register({
+      combo: "Mod+7",
+      handler: () => undefined,
+      id: "test-scattered",
+      label: "Create a label",
+    });
+    Keyboard.register({
+      combo: "Mod+6",
+      handler: () => undefined,
+      id: "test-word",
+      label: "Toggle calendar",
+    });
+
+    type(">cal");
+
+    const rows = await screen.findAllByRole("button", { name: /Create a label|Toggle calendar/ });
+    expect(rows.map((r) => r.getAttribute("aria-label") ?? r.textContent)).toEqual([
+      expect.stringContaining("Toggle calendar"),
+      expect.stringContaining("Create a label"),
+    ]);
+    const marked = rows[0]?.querySelectorAll("mark");
+    expect([...(marked ?? [])].map((m) => m.textContent).join("")).toBe("cal");
+  });
+
+  it("offers no undo when nothing has been deleted", async () => {
+    await setup();
+
+    type(">undo");
+
+    expect(await screen.findByText("No matching commands")).toBeInTheDocument();
   });
 });
 

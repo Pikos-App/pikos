@@ -129,6 +129,26 @@ pub async fn check_notification_permission(app: tauri::AppHandle) -> crate::erro
     }
 }
 
+/// Tauri command: open Pikos's page in System Settings → Notifications. Opened from
+/// Rust because the webview's opener scope admits only web, mail and phone links.
+#[tauri::command]
+pub async fn open_notification_settings(app: tauri::AppHandle) -> crate::error::AppResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_opener::OpenerExt;
+        let url = format!(
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id={}",
+            app.config().identifier
+        );
+        app.opener()
+            .open_url(url, None::<&str>)
+            .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+    Ok(())
+}
+
 // ─── Scheduler loop ──────────────────────────────────────────────────────────
 
 /// Main scheduler loop — spawned from `lib.rs` setup.
@@ -386,6 +406,12 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
         }
     };
 
+    // Linux and Windows have no authorization read, so they always deliver.
+    #[cfg(target_os = "macos")]
+    let notifications_off = crate::notifications::macos::notifications_off().await;
+    #[cfg(not(target_os = "macos"))]
+    let notifications_off = false;
+
     let runtime_state = app.state::<SchedulerRuntimeState>();
     let mut runtime = runtime_state.lock().await.clone();
     let result = tick(
@@ -393,6 +419,7 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
         &settings,
         &mut runtime,
         chrono::Local::now(),
+        notifications_off,
         &mut |title, body, log_id| deliver(app, title, body, log_id),
     )
     .await;
@@ -404,12 +431,14 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
 
 /// Resolve everything due at `now`, show it through `show` (title, body, log row id), and log
 /// it. `runtime` records the day's summary as it goes and the window's end once every
-/// reminder is through.
+/// reminder is through. With `notifications_off`, a due reminder is logged as not shown
+/// rather than handed to a system that would drop it.
 async fn tick(
     pool: &SqlitePool,
     settings: &NotificationSettings,
     runtime: &mut SchedulerRuntime,
     now: chrono::DateTime<chrono::Local>,
+    notifications_off: bool,
     show: &mut impl FnMut(&str, &str, &str),
 ) -> Result<(), sqlx::Error> {
     let batch = collect_due(pool, settings, runtime, &now).await?;
@@ -435,11 +464,18 @@ async fn tick(
         }
     }
 
+    let not_shown = if batch.quiet {
+        Some(pikos_db::NotShown::QuietHours)
+    } else if notifications_off {
+        Some(pikos_db::NotShown::NotificationsOff)
+    } else {
+        None
+    };
+
     for row in &batch.reminders {
-        if batch.quiet {
-            record_suppressed(pool, row, &now).await?;
-        } else {
-            fire_reminder(pool, row, &now, show).await?;
+        match not_shown {
+            Some(reason) => record_not_shown(pool, row, &now, reason).await?,
+            None => fire_reminder(pool, row, &now, show).await?,
         }
     }
 
@@ -486,21 +522,20 @@ fn deliver(app: &AppHandle, title: &str, body: &str, log_id: &str) {
     {}
 }
 
-/// Note a reminder that came due inside quiet hours and was therefore not shown.
-///
-/// Deliberately not a delivery path: no OS notification, and no `type='reminder'`
-/// dedup row — the reminder is dropped exactly as it always was, and the day's
-/// summary still counts the page as overdue. The row exists so "Recent
-/// notifications" can say the reminder happened and was silenced.
-async fn record_suppressed(
+/// Note a reminder that came due and was not shown. Deliberately not a delivery
+/// path: no OS notification, and no dedup row (see `pikos_db::log_reminder_not_shown`).
+async fn record_not_shown(
     pool: &SqlitePool,
     row: &DueReminder,
     now: &chrono::DateTime<chrono::Local>,
+    reason: pikos_db::NotShown,
 ) -> Result<(), sqlx::Error> {
     let fired_at = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    pikos_db::log_reminder_suppressed(pool, &row.page_id, &row.schedule_id, &fired_at).await?;
+    pikos_db::log_reminder_not_shown(pool, &row.page_id, &row.schedule_id, &fired_at, reason)
+        .await?;
     log::info!(
-        "notification_suppressed reason=quiet_hours page_id={} schedule_id={}",
+        "notification_suppressed reason={} page_id={} schedule_id={}",
+        reason.log_type(),
         row.page_id,
         row.schedule_id
     );

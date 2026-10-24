@@ -89,6 +89,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "031",
         include_str!("../migrations/031_pages_row_seq_index.sql"),
     ),
+    (
+        "032",
+        include_str!("../migrations/032_pages_links_index.sql"),
+    ),
+    (
+        "033",
+        include_str!("../migrations/033_notification_refused.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -946,6 +954,68 @@ async fn no_snapshot_for_empty_workspace() {
         "empty workspace must not be snapshotted even with a pending migration"
     );
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_workspace_a_newer_build_migrated_names_both_versions() {
+    let dir = unique_tmp_dir();
+    let path_str = dir.join("workspace.sqlite").to_str().unwrap().to_string();
+
+    let pool = open_pool(&path_str).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let opened = open_pool(&path_str).await;
+
+    let supported = embedded_migration_max();
+    assert!(
+        matches!(opened, Err(AppError::TooNew { applied: 9999, supported: s }) if s == supported),
+        "{opened:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_pool_open_before_a_newer_build_migrates_refuses_to_write_naming_both_versions() {
+    let dir = unique_tmp_dir();
+    let path_str = dir.join("workspace.sqlite").to_str().unwrap().to_string();
+    let running = open_pool(&path_str).await.unwrap();
+    insert_test_page(&running, TestPage::new("before", "Written before"))
+        .await
+        .unwrap();
+
+    let newer = open_pool(&path_str).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&newer)
+    .await
+    .unwrap();
+    newer.close().await;
+
+    let written = insert_test_page(&running, TestPage::new("after", "Written after")).await;
+
+    let supported = embedded_migration_max();
+    assert!(
+        matches!(written, Err(AppError::TooNew { applied: 9999, supported: s }) if s == supported),
+        "{written:?}"
+    );
+    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
+        .fetch_one(&running)
+        .await
+        .unwrap();
+    assert_eq!(pages, 1);
+
+    running.close().await;
     let _ = std::fs::remove_dir_all(&dir);
 }
 

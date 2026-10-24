@@ -586,6 +586,53 @@ describe("listCommands", () => {
     expect(ids).not.toContain("c-shut");
   });
 
+  describe("a command that stands down under a dialog", () => {
+    function openDialog(attrs: Record<string, string>) {
+      const el = document.createElement("div");
+      el.setAttribute("data-slot", "dialog-content");
+      el.setAttribute("data-state", "open");
+      for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, value);
+      document.body.appendChild(el);
+    }
+
+    function registerExport() {
+      Keyboard.register({
+        combo: "Mod+Shift+e",
+        handler: vi.fn(),
+        id: "c-export",
+        label: "Export page",
+        when: () => !Keyboard.isModalOpen(),
+      });
+    }
+
+    afterEach(() => {
+      document.body.innerHTML = "";
+    });
+
+    it("is listed while the palette itself is the open dialog", () => {
+      registerExport();
+      openDialog({ "data-command-palette": "" });
+
+      expect(Keyboard.listCommands().map((b) => b.id)).toContain("c-export");
+    });
+
+    it("is left out while another dialog is open under the palette", () => {
+      registerExport();
+      openDialog({ "data-command-palette": "" });
+      openDialog({});
+
+      expect(Keyboard.listCommands().map((b) => b.id)).not.toContain("c-export");
+    });
+
+    it("still stands down to a key press while the palette is open", () => {
+      registerExport();
+      openDialog({ "data-command-palette": "" });
+      Keyboard.listCommands();
+
+      expect(Keyboard.isModalOpen()).toBe(true);
+    });
+  });
+
   it("skips bindings outside the active scopes", () => {
     Keyboard.register({
       combo: "Mod+b",

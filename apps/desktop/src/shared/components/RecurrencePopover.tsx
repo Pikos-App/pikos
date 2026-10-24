@@ -276,7 +276,7 @@ export function RecurrencePopover({
               "cursor-default text-muted-foreground"
             : hasLabelContent
               ? "text-muted-foreground hover:text-foreground"
-              : "text-muted-foreground/60 hover:text-muted-foreground"
+              : "text-subtle hover:text-muted-foreground"
       )}
       type="button"
     >
@@ -366,16 +366,14 @@ export function RecurrencePopover({
 
         {hasRule && rrule && !activePreset && (
           <div className="border-t border-border/40 bg-muted/20 px-3 py-2">
-            <p className="text-xs text-foreground/55 first-letter:uppercase">
-              {rruleToLabel(rrule)}
-            </p>
+            <p className="text-xs text-subtle first-letter:uppercase">{rruleToLabel(rrule)}</p>
           </div>
         )}
 
         {hasRule && (
           <div className="border-t border-border/40 px-3 py-2">
             <button
-              className="text-xs text-foreground/55 transition-colors hover:text-destructive"
+              className="text-xs text-subtle transition-colors hover:text-destructive"
               onClick={() => {
                 onChange(null);
                 setOpen(false);

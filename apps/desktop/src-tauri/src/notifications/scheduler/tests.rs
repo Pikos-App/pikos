@@ -413,7 +413,9 @@ async fn a_quiet_hours_suppression_is_logged_without_arming_the_dedup() {
         .await
         .unwrap();
     for row in &batch.reminders {
-        record_suppressed(&pool, row, &now).await.unwrap();
+        record_not_shown(&pool, row, &now, pikos_db::NotShown::QuietHours)
+            .await
+            .unwrap();
     }
 
     let suppressed: i64 =
@@ -455,7 +457,9 @@ async fn a_reminder_on_a_tick_boundary_is_collected_once() {
         .unwrap();
     assert_eq!(batch.reminders.len(), 5);
     for row in &batch.reminders {
-        record_suppressed(&pool, row, &first).await.unwrap();
+        record_not_shown(&pool, row, &first, pikos_db::NotShown::QuietHours)
+            .await
+            .unwrap();
     }
 
     let runtime = SchedulerRuntime {
@@ -511,10 +515,25 @@ async fn run_tick(
     runtime: &mut SchedulerRuntime,
     now: chrono::DateTime<chrono::Local>,
 ) -> Shown {
+    run_tick_with(pool, settings, runtime, now, false).await
+}
+
+async fn run_tick_with(
+    pool: &SqlitePool,
+    settings: &NotificationSettings,
+    runtime: &mut SchedulerRuntime,
+    now: chrono::DateTime<chrono::Local>,
+    notifications_off: bool,
+) -> Shown {
     let mut shown = Shown::new();
-    tick(pool, settings, runtime, now, &mut |title, body, id| {
-        shown.push((title.into(), body.into(), id.into()))
-    })
+    tick(
+        pool,
+        settings,
+        runtime,
+        now,
+        notifications_off,
+        &mut |title, body, id| shown.push((title.into(), body.into(), id.into())),
+    )
     .await
     .unwrap();
     shown
@@ -598,6 +617,60 @@ async fn a_quiet_tick_shows_nothing_and_records_each_silenced_reminder() {
         "the summary waits for quiet hours to end"
     );
     assert_eq!(runtime.last_window_end, Some(now));
+}
+
+#[tokio::test]
+async fn with_notifications_off_a_tick_shows_no_reminder_and_records_each_as_refused() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut runtime = SchedulerRuntime::default();
+
+    let shown = run_tick_with(&pool, &reminders_only(), &mut runtime, now, true).await;
+
+    assert!(shown.is_empty(), "shown with notifications off: {shown:?}");
+    assert_eq!(logged(&pool, "refused").await.len(), 5);
+    assert!(logged(&pool, "reminder").await.is_empty());
+    assert_eq!(runtime.last_window_end, Some(now));
+}
+
+#[tokio::test]
+async fn a_refused_reminder_is_not_shown_once_notifications_are_allowed() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut runtime = SchedulerRuntime::default();
+    run_tick_with(&pool, &reminders_only(), &mut runtime, now, true).await;
+
+    let after = run_tick_with(
+        &pool,
+        &reminders_only(),
+        &mut runtime,
+        now + chrono::Duration::seconds(30),
+        false,
+    )
+    .await;
+
+    assert!(after.is_empty(), "replayed: {after:?}");
+}
+
+#[tokio::test]
+async fn quiet_hours_name_a_reminder_they_silence_even_with_notifications_off() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+
+    run_tick_with(
+        &pool,
+        &settings_with_quiet("08:00", "10:00"),
+        &mut SchedulerRuntime::default(),
+        now,
+        true,
+    )
+    .await;
+
+    assert_eq!(logged(&pool, "suppressed").await.len(), 5);
+    assert!(logged(&pool, "refused").await.is_empty());
 }
 
 #[test]

@@ -20,6 +20,7 @@ export type StorageErrorKind =
   | "Invalid"
   | "Network"
   | "Corrupt"
+  | "TooNew"
   | "Internal"
   | "Unknown";
 
@@ -73,6 +74,7 @@ const KIND_SET: ReadonlySet<StorageErrorKind> = new Set<StorageErrorKind>([
   "Invalid",
   "Network",
   "Corrupt",
+  "TooNew",
   "Internal",
   "Unknown",
 ]);
@@ -106,6 +108,8 @@ export function storageErrorUserMessage(err: StorageError, verb = "the operation
       return `Couldn't reach the network while ${verb}. Check your connection.`;
     case "Corrupt":
       return `The workspace file is damaged. Restore a backup from Settings → Data.`;
+    case "TooNew":
+      return `A newer Pikos updated this workspace. Update Pikos to open it.`;
     case "Internal":
     case "Unknown":
     default:

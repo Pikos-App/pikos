@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { postNotice } from "@/shared/events/noticeBus";
 import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
-import { onDrainPending } from "@/shared/pendingWrites";
+import { flushPendingWrites, onDrainPending } from "@/shared/pendingWrites";
 import type { WriteMirror } from "@/shared/viewCache/writeMirror";
 
 const log = createLogger("PageWriteQueue");
@@ -199,6 +199,10 @@ export function usePageWriteQueue({
           mirror.confirmRow(summary);
         }
         emit("page:updated", updated);
+
+        const typed = patch.content;
+        const isMerged = patch.baseContent != null && typed != null && updated.content !== typed;
+        if (isMerged) emit("page:merged", { page: updated, typed });
       },
     }).then(() => undefined);
   }
@@ -210,7 +214,13 @@ export function usePageWriteQueue({
     debouncedWrites.current.set(id, [...(debouncedWrites.current.get(id) ?? []), ...edits]);
 
     const existing = pendingPatches.current.get(id) ?? {};
-    pendingPatches.current.set(id, { ...existing, ...patch });
+    // Typing that coalesces with a body still waiting was typed over that body's base, the one
+    // stored; its own base is the waiting body, which never was.
+    const isBodyWaiting = existing.content !== undefined;
+    const coalesced = isBodyWaiting
+      ? { ...existing, ...patch, baseContent: existing.baseContent ?? null }
+      : { ...existing, ...patch };
+    pendingPatches.current.set(id, coalesced);
 
     const prevTimer = debounceTimers.current.get(id);
     if (prevTimer !== undefined) clearTimeout(prevTimer);
@@ -259,9 +269,15 @@ export function usePageWriteQueue({
     if (accumulated) void commitPatch(id, accumulated, false, false);
   }
 
+  /** With nothing waiting, still settles once the writes already in flight have: a write queued
+   *  ahead of the flush (a recurrence enqueued on Enter) takes the debounced patch with it, and a
+   *  read that followed a bare return saw the page as it was before that patch. */
   async function flushPage(id: string): Promise<void> {
     const accumulated = takePendingPatch(id);
-    if (!accumulated) return;
+    if (!accumulated) {
+      await mutationQueues.current.get(id)?.catch(() => undefined);
+      return;
+    }
     return commitPatch(id, accumulated, true);
   }
 
@@ -289,10 +305,7 @@ export function usePageWriteQueue({
     await Promise.allSettled(Array.from(mutationQueues.current.values()));
   }
 
-  // ─── Flush on window close ────────────────────────────────────────────────
-  // Tauri's Rust side calls prevent_close() so we get a chance here to flush
-  // any debounced writes, wait for all in-flight mutations, then destroy.
-
+  // Quit from the menu ends here too, by closing the window.
   useEffect(() => {
     if (import.meta.env["VITE_TEST_MODE"] === "true") return;
 
@@ -303,7 +316,7 @@ export function usePageWriteQueue({
       const win = getCurrentWindow();
       unlisten = await win.onCloseRequested(async (event) => {
         event.preventDefault();
-        await drainAll();
+        await flushPendingWrites();
         await win.destroy();
       });
     }
@@ -314,9 +327,8 @@ export function usePageWriteQueue({
     };
   }, [adapter]);
 
-  // An update relaunch restarts the process without closing the window, so the
-  // handler above never sees it. Registering here means the updater does not
-  // have to know what a write queue is.
+  // The close above and an update relaunch both reach the queue through this, after
+  // the editor has fed it, so neither has to know what a write queue is.
   useEffect(() => onDrainPending(drainAll), [adapter]);
 
   return {

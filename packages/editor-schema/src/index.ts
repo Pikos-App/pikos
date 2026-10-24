@@ -37,10 +37,11 @@ import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 
 import { createPikosImageNode, type ResolveAssetUrl } from "./image";
+import { PageLink } from "./pageLink";
 import { TabIndent } from "./tabIndent";
 import { PikosTable } from "./table";
 
-export { createPikosImageNode, PikosTable, TabIndent };
+export { createPikosImageNode, PageLink, PikosTable, TabIndent };
 export {
   getIndentLevel,
   isCursorAtLineStart,
@@ -68,6 +69,11 @@ export interface DocumentSchemaOptions {
    */
   image?: Extensions[number];
   /**
+   * Replaces StarterKit's code block, as `image` does: pass an extension of
+   * `CodeBlock`, so the `language` attribute and its Markdown fence tag stay.
+   */
+  codeBlock?: Extensions[number];
+  /**
    * Replaces the default Markdown extension.
    *
    * Parsing options legitimately differ by context — the Obsidian importer
@@ -77,6 +83,8 @@ export interface DocumentSchemaOptions {
    * `Markdown` so the attribute survives and only the parsing changes.
    */
   markdown?: Extensions[number];
+  /** Replaces the default page link node, as `image` does: pass `PageLink.extend({ ... })`. */
+  pageLink?: Extensions[number];
   /** See `TabIndentOptions.onKeyHandled`. */
   onKeyHandled?: (event: KeyboardEvent) => void;
 }
@@ -94,12 +102,13 @@ export interface DocumentSchemaOptions {
 export function createDocumentExtensions(options: DocumentSchemaOptions): Extensions {
   return [
     StarterKit.configure({
-      codeBlock: { HTMLAttributes: { class: "editor-code-block" } },
+      codeBlock: options.codeBlock ? false : { HTMLAttributes: { class: "editor-code-block" } },
       heading: { levels: [1, 2, 3] },
       // StarterKit ships its own link mark; disabled so the configured one
       // below is the only definition in the schema rather than one of two.
       link: false,
     }),
+    ...(options.codeBlock ? [options.codeBlock] : []),
     TaskList,
     TaskItem.configure({ nested: true }),
     Link.configure({
@@ -111,6 +120,7 @@ export function createDocumentExtensions(options: DocumentSchemaOptions): Extens
     }),
     options.image ?? createPikosImageNode(options.resolveAssetUrl),
     PikosTable,
+    options.pageLink ?? PageLink,
     // Schema-bearing despite appearances — see the note at the top of the file.
     // Markdown contributes `tight` to lists; TabIndent contributes `indent` to
     // paragraph and heading. Omitting either on one platform loses those

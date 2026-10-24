@@ -79,7 +79,7 @@ export function MiniCalendar({
       <div className="grid grid-cols-7">
         {dayAbbrs.map((day) => (
           <div
-            className="pb-1 text-center text-3xs font-medium tracking-wide text-muted-foreground/60"
+            className="pb-1 text-center text-3xs font-medium tracking-wide text-subtle"
             key={day}
           >
             {day}
@@ -113,7 +113,7 @@ export function MiniCalendar({
                 className={cn(
                   "relative flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors",
                   isSelected
-                    ? "font-medium text-primary"
+                    ? "font-medium text-action"
                     : isTodayDate
                       ? "text-foreground hover:text-foreground"
                       : "text-foreground/75 hover:text-foreground"

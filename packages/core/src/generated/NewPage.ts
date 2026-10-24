@@ -5,14 +5,12 @@ export type NewPage = {
   title: string;
   subtitle?: string | null;
   content: string;
-  contentText?: string | null;
   status: string;
   priority: number;
   tags: Array<string>;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;
-  links?: Array<string>;
   parentId?: string | null;
   lastOpenedAt?: string | null;
   createdAt?: string | null;

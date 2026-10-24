@@ -3,6 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import {
   test as appTest,
   bridgeCall,
+  clickBlockCheckbox,
   expect,
   gutterLabel,
   hourLineY,
@@ -105,9 +106,7 @@ appTest(
       await thisWeek(app);
       const head = realBlocksOf(app, "review");
       await expect(head).toHaveCount(1);
-      const title = await head.getByText("review").boundingBox();
-      if (!title) throw new Error("no head title");
-      await app.mouse.click(title.x - 10, title.y + title.height / 2);
+      await clickBlockCheckbox(head, "review");
       await app.getByRole("button", { exact: true, name: "Completed" }).click();
       await expect(
         listRows(app, "review").getByRole("checkbox", { name: "Mark not done" })
@@ -254,9 +253,7 @@ appTest(
     });
 
     await appTest.step("RECUR-06 completing it leaves the head", async () => {
-      const title = await moved.getByText("standup").boundingBox();
-      if (!title) throw new Error("no moved block title");
-      await app.mouse.click(title.x - 10, title.y + title.height / 2);
+      await clickBlockCheckbox(moved, "standup");
       await expectHeadUntouched();
     });
 
@@ -719,7 +716,9 @@ appTest(
       const box = await block.boundingBox();
       if (!box) throw new Error("no standup block");
       expect(Math.abs(box.y - (await hourLineY(app, 9)))).toBeLessThan(4);
-      await app.getByRole("button", { name: "Jump to current week" }).click();
+      // In the week before a clock change, that week is this one and the button is off.
+      const thisWeek = app.getByRole("button", { name: "Jump to current week" });
+      if (await thisWeek.isEnabled()) await thisWeek.click();
     }
 
     await appTest.step("RECUR-16 the week before the change it is at 9 AM", async () => {

@@ -55,7 +55,7 @@ import type {
   WorkspaceExportOptions,
   WorkspaceUsageStats,
 } from "@pikos/core";
-import { toStorageError } from "@pikos/core";
+import { type StorageError, toStorageError } from "@pikos/core";
 import { invoke as rawInvoke } from "@tauri-apps/api/core";
 
 import { markLocalWrite } from "@/shared/lib/externalChange";
@@ -116,6 +116,8 @@ export const WRITE_COMMANDS = new Set([
   // never sees the echo because the process is gone, but it belongs here rather
   // than among the reads: nothing in this app rewrites more.
   "restore_backup",
+  // Closing the pool folds the write-ahead log back into the file.
+  "close_damaged_workspace",
   "move_pages",
   "create_page",
   "update_page",
@@ -174,6 +176,7 @@ export const READ_COMMANDS = new Set([
   "count_views",
   "get_page_if_newer",
   "get_pages",
+  "list_backlinks",
   "list_completed_window",
   "list_range",
   "list_recent_pages",
@@ -183,6 +186,7 @@ export const READ_COMMANDS = new Set([
   "list_view_ids",
   "connect_db",
   "get_page",
+  "pending_description_document",
   "list_pages",
   "list_pages_today",
   "list_trashed_pages",
@@ -208,6 +212,7 @@ export const READ_COMMANDS = new Set([
   "export_csv",
   "export_ics",
   "export_markdown",
+  "export_page_markdown",
   "get_usage_stats",
   "list_backups",
 ]);
@@ -223,15 +228,48 @@ export function setCommandTransport(next: CommandTransport): void {
   transport = next;
 }
 
+/** The first error that said the workspace file is damaged, or null while it is sound.
+ *  Latched for the rest of the session: no write may follow it except a restore, because a
+ *  damaged file that keeps taking writes loses more, and only a restart reopens a file. */
+let damage: StorageError | null = null;
+const damageListeners = new Set<(error: StorageError) => void>();
+
+/** Called once, with the first damaged-file error any command returns. */
+export function onWorkspaceDamaged(listener: (error: StorageError) => void): () => void {
+  damageListeners.add(listener);
+  return () => damageListeners.delete(listener);
+}
+
+/** A restore reads a backup, so its Corrupt is about that file, not the workspace. */
+const READS_ANOTHER_FILE = new Set(["restore_backup", "list_backups"]);
+
+const WRITES_ALLOWED_AFTER_DAMAGE = new Set(["restore_backup", "close_damaged_workspace"]);
+
+function reportDamage(error: StorageError): void {
+  if (damage) return;
+  damage = error;
+  invoke<void>("close_damaged_workspace").catch((err: unknown) =>
+    log.error("could not close the damaged workspace", err)
+  );
+  damageListeners.forEach((listener) => listener(error));
+}
+
 // Rust commands serialize errors as { kind, message } (see
 // apps/desktop/src-tauri/src/error.rs::AppError). Convert at the boundary
 // into a typed StorageError so UI code can branch on `kind` and never
 // stringifies a raw IPC payload (which would render "[object Object]").
 function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const isBlockedOnceDamaged =
+    WRITE_COMMANDS.has(command) && !WRITES_ALLOWED_AFTER_DAMAGE.has(command);
+  if (damage && isBlockedOnceDamaged) return Promise.reject(damage);
+
   if (import.meta.env.DEV) watchdog(command);
   if (WRITE_COMMANDS.has(command)) markLocalWrite();
   return transport<T>(command, args).catch((err: unknown) => {
-    throw toStorageError(err);
+    const error = toStorageError(err);
+    const isWorkspaceDamage = error.kind === "Corrupt" && !READS_ANOTHER_FILE.has(command);
+    if (isWorkspaceDamage) reportDamage(error);
+    throw error;
   });
 }
 
@@ -264,6 +302,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   clearPendingDescription(id: string): Promise<void> {
     return invoke<void>("clear_pending_description", { id });
+  }
+
+  pendingDescriptionDocument(id: string): Promise<string | null> {
+    return invoke<string | null>("pending_description_document", { id });
   }
 
   softDeletePage(id: string): Promise<void> {
@@ -358,6 +400,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   listTags(): Promise<TagCount[]> {
     return invoke<TagCount[]>("list_tags");
+  }
+
+  listBacklinks(id: string): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_backlinks", { id });
   }
 
   movePages(ids: string[], place: Placement): Promise<MoveOutcome> {
@@ -623,6 +669,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
       case "markdown":
         return invoke<string>("export_markdown", { includeSynced });
     }
+  }
+
+  exportPageMarkdown(id: string): Promise<string> {
+    return invoke<string>("export_page_markdown", { pageId: id });
   }
 
   getUsageStats(weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats> {

@@ -152,7 +152,6 @@ export function AllDayBar({
           className={cn(
             "pointer-events-auto absolute flex cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
-            page.syncState === "detached" && !done && "opacity-70",
             done && "opacity-50",
             isBeingDragged && "opacity-40",
             continuesLeft && "rounded-tl-none rounded-bl-none",

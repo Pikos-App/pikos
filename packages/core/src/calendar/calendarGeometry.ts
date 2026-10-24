@@ -29,13 +29,20 @@ import {
   MIN_VISIBLE_HOURS,
   VISIBLE_HOURS,
 } from "./calendarConstants";
-import type { CalendarDayCount, CalendarDensity } from "./dayCount";
+import { type CalendarDayCount, type CalendarDensity, DEFAULT_CALENDAR_DENSITY } from "./dayCount";
 
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {
   hourHeight: number;
-  /** The shortest a timed block renders: a 15-minute slot, or `MIN_BLOCK_HEIGHT`
-   *  where the slot is shorter than that. */
+  /**
+   * The shortest a timed block renders: a 15-minute slot, however few pixels that is.
+   *
+   * It was floored at 16px so a quarter hour at compact density stayed easy to hit.
+   * The floor drew a block taller than its time, so short items cascaded beside
+   * neighbours they don't overlap, and it is what kept density from going denser
+   * than 40px an hour. A short block drops its time line and then cuts its title
+   * instead, as TickTick does.
+   */
   compactBlockHeight: number;
   gridHeight: number;
   minResizeHeight: number;
@@ -63,28 +70,9 @@ export interface CalendarMetrics {
   zoom: number;
 }
 
-const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
-  compact: 40,
-  normal: 64,
-  spacious: 88,
-};
-
 /** The tier heights the block layout was tuned to at the default zoom. */
 const TIME_ROW_MIN_HEIGHT = 40;
 const TWO_LINE_TITLE_MIN_HEIGHT = 52;
-
-/**
- * The floor on a timed block's height at the default zoom: a quarter hour at
- * normal density, the shortest chip that holds the body type and a checkbox.
- *
- * A block was as tall as its duration, so at compact density an item with no end
- * time was a 10px sliver with 10px type, and 7px zoomed out — too small to hit.
- * It scales up with zoom but never below this, because zooming out is for seeing
- * more of the day, not for making a target smaller than a pointer can land on.
- * The layout reserves the extra height, so a floored block cascades beside its
- * neighbour rather than covering it.
- */
-const MIN_BLOCK_HEIGHT = 16;
 
 /** Far below a visible pixel or a millisecond, far above the rounding a zoomed
  *  position carries. */
@@ -122,12 +110,12 @@ export function fallsShortOf(value: number, threshold: number): boolean {
  * `zoom` is 1 at the default text size, so the calendar a user opens is unchanged.
  */
 export function computeCalendarMetrics(density: CalendarDensity, zoom = 1): CalendarMetrics {
-  const hourHeight = DENSITY_HOUR_HEIGHT[density] * zoom;
+  const hourHeight = density * zoom;
   return {
     allDayBarHeight: ALL_DAY_BAR_HEIGHT * zoom,
     allDayRowHeight: ALL_DAY_ROW_HEIGHT * zoom,
     allDayTopPadding: ALL_DAY_TOP_PADDING * zoom,
-    compactBlockHeight: Math.max(hourHeight / 4, MIN_BLOCK_HEIGHT * Math.max(zoom, 1)),
+    compactBlockHeight: hourHeight / 4,
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,
@@ -146,7 +134,7 @@ export function shortestBlockMinutes(metrics: CalendarMetrics): number {
 }
 
 /** Baseline metrics for tests + callers that don't have settings context. */
-export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
+export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics(DEFAULT_CALENDAR_DENSITY);
 
 // ─── Clock time ───────────────────────────────────────────────────────────────
 // The grid is drawn in clock hours: the 4 PM row is 16 hour-heights down on every

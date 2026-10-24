@@ -377,7 +377,7 @@ pub struct QuickAddInput {
 /// For a caller building a page by hand from a parsed line — the phone's
 /// quick-add sheet, when a date picked in the picker overrides the parse — so
 /// the body typed after `//` is not lost on that path. The same builder the
-/// data layer uses for a synced event's description, so the two cannot drift.
+/// data layer uses for a page created from text, so the two cannot drift.
 #[uniffi::export]
 pub fn plain_text_to_document(text: String) -> String {
     pikos_db::build_tiptap_doc(&text)
@@ -566,7 +566,7 @@ pub fn content_schema_version() -> i64 {
 /// Kept in step with `pikos_db::CONTENT_SCHEMA_VERSION` by a test below —
 /// this crate does not depend on pikos-db, so the value is mirrored rather
 /// than re-exported.
-const CONTENT_SCHEMA_VERSION: i64 = 1;
+const CONTENT_SCHEMA_VERSION: i64 = 2;
 
 #[cfg(test)]
 mod tests {

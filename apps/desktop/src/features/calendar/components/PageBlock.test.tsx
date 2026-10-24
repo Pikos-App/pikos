@@ -69,6 +69,17 @@ describe("PageBlock — detached synced rendering", () => {
     expect(block.className).not.toContain("opacity-50");
   });
 
+  it("is drawn at full strength, the same as a native page", () => {
+    renderBlock(makePage({ syncState: null }));
+    const nativeClasses = screen.getByRole("button", { name: /Standup/ }).className;
+    cleanup();
+
+    renderBlock(makePage({ syncState: "detached" }));
+    const block = screen.getByRole("button", { name: /Standup/ });
+
+    expect(block.className).toBe(nativeClasses);
+  });
+
   it("applies the done treatment when the page is done", () => {
     renderBlock(makePage({ status: "done", syncState: "detached" }));
     const block = screen.getByRole("button", { name: /Standup/ });

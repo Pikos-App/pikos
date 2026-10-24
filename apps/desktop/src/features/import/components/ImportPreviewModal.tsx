@@ -96,7 +96,7 @@ export function ImportPreviewModal({ onCancel, onConfirm, plan }: ImportPreviewM
         <div className="min-w-0">
           <h2 className="text-lg font-semibold">Import Preview</h2>
           <p className="text-sm text-muted-foreground">
-            {sourceLabel} — {plan.pages.length} pages in {plan.folders.length} folder
+            {sourceLabel}: {plan.pages.length} pages in {plan.folders.length} folder
             {plan.folders.length !== 1 ? "s" : ""}
             {grouped.has(null) ? " + Inbox" : ""}
           </p>
@@ -207,7 +207,7 @@ export function ImportPreviewModal({ onCancel, onConfirm, plan }: ImportPreviewM
           Cancel
         </button>
         <button
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          className="rounded-md bg-interactive-fill px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-fill/90 disabled:pointer-events-none disabled:opacity-50"
           disabled={importCount === 0}
           onClick={() => onConfirm(skipCompleted)}
         >

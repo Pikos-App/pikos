@@ -67,7 +67,7 @@ export type PagePriority = 0 | 1 | 2 | 3 | 4;
  * TypeScript from the same declaration the database uses rather than from a
  * hand-written copy of it.
  */
-export const CONTENT_SCHEMA_VERSION = 1;
+export const CONTENT_SCHEMA_VERSION = 2;
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
 // One explicit calendar block (from page_schedules table).
@@ -131,7 +131,7 @@ export interface SearchResponse {
 // above) is the shape now, and the running one lives in the timer's own state.
 
 // ─── PageSummary ─────────────────────────────────────────────────────────
-// Lightweight projection for list views — excludes content and contentText.
+// Lightweight projection for list views — excludes the body.
 // Used by listPages / listPagesToday to avoid pulling large Tiptap JSON
 // blobs over IPC for every page in a folder.
 

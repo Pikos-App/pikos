@@ -28,10 +28,10 @@ import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import { assignStableAllDayRows, buildAllDayBars } from "@pikos/core";
 import { computeCalendarMetrics, shortestBlockMinutes } from "@pikos/core";
 import { buildDayBlocks } from "@pikos/core";
-import type { CalendarDensity } from "@pikos/core";
+import { LEGACY_CALENDAR_DENSITIES } from "@pikos/core";
 
 const EXPECTED_TZ = "UTC";
-const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
+const DENSITIES = Object.entries(LEGACY_CALENDAR_DENSITIES);
 
 /** The day every timed scenario is laid out on. */
 const DAY = "2026-03-18";
@@ -219,8 +219,8 @@ function main(): void {
       Array.from({ length: count }, (_, n) => timedEvent(random, `p${String(n).padStart(2, "0")}`))
     );
 
-    for (const density of DENSITIES) {
-      const metrics = computeCalendarMetrics(density);
+    for (const [density, hourHeight] of DENSITIES) {
+      const metrics = computeCalendarMetrics(hourHeight);
       const blocks = buildDayBlocks(pages, day, metrics);
       timed.push({
         // Sorted by page id rather than emit order: emit order is a DOM painting

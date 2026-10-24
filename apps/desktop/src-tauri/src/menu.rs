@@ -4,6 +4,8 @@
 //! plugins, state and windows, and 100-odd lines of menu construction in the
 //! middle of it buried that.
 
+use std::time::Duration;
+
 use tauri::menu::{
     AboutMetadataBuilder, Menu, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder,
 };
@@ -17,6 +19,10 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build(handle)?;
     let check_updates = MenuItemBuilder::new("Check for Updates…")
         .id("check_updates")
+        .build(handle)?;
+    let quit = MenuItemBuilder::new("Quit Pikos")
+        .id(QUIT)
+        .accelerator("CmdOrCtrl+Q")
         .build(handle)?;
     let app_menu = SubmenuBuilder::new(handle, "Pikos")
         .about(Some(
@@ -43,7 +49,7 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .hide_others()
         .show_all()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
 
     // ── File ──────────────────────────────────────────────────────
@@ -81,10 +87,38 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .accelerator("CmdOrCtrl+Shift+C")
         .build(handle)?;
 
+    let go_back = MenuItemBuilder::new("Back")
+        .id("go_back")
+        .accelerator("CmdOrCtrl+[")
+        .build(handle)?;
+    let go_forward = MenuItemBuilder::new("Forward")
+        .id("go_forward")
+        .accelerator("CmdOrCtrl+]")
+        .build(handle)?;
+
+    let taller_hours = MenuItemBuilder::new("Taller Calendar Hours")
+        .id("calendar_density_up")
+        .accelerator("Alt+CmdOrCtrl+=")
+        .build(handle)?;
+    let shorter_hours = MenuItemBuilder::new("Shorter Calendar Hours")
+        .id("calendar_density_down")
+        .accelerator("Alt+CmdOrCtrl+-")
+        .build(handle)?;
+    let reset_hours = MenuItemBuilder::new("Reset Calendar Hours")
+        .id("calendar_density_reset")
+        .accelerator("Alt+CmdOrCtrl+0")
+        .build(handle)?;
+
     let view_menu = SubmenuBuilder::new(handle, "View")
         .item(&toggle_sidebar)
         .separator()
         .item(&toggle_calendar)
+        .item(&taller_hours)
+        .item(&shorter_hours)
+        .item(&reset_hours)
+        .separator()
+        .item(&go_back)
+        .item(&go_forward)
         .build()?;
 
     // ── Window ───────────────────────────────────────────────────
@@ -126,6 +160,32 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()
 }
 
+const QUIT: &str = "quit";
+
+/// How long Quit waits for the window to save before the app exits anyway, so a stuck
+/// write can't keep Pikos open.
+const QUIT_DEADLINE: Duration = Duration::from_secs(3);
+
+/// Quit by closing the window, whose close handler saves every pending edit first and
+/// whose closing ends the app. The predefined Quit ended the process at once and lost
+/// up to two debounces of typing.
+fn quit<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        app.exit(0);
+        return;
+    };
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(QUIT_DEADLINE);
+        handle.exit(0);
+    });
+
+    if window.close().is_err() {
+        app.exit(0);
+    }
+}
+
 const HELP_DOCS: &str = "help_docs";
 const HELP_RELEASE_NOTES: &str = "help_release_notes";
 const HELP_BUG: &str = "help_bug";
@@ -159,9 +219,23 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
         return;
     }
+    if id == QUIT {
+        quit(app);
+        return;
+    }
     match id.as_str() {
-        "new_page" | "close_page" | "settings" | "toggle_sidebar" | "toggle_calendar"
-        | "check_updates" | "keyboard_shortcuts" => {
+        "new_page"
+        | "close_page"
+        | "settings"
+        | "toggle_sidebar"
+        | "toggle_calendar"
+        | "check_updates"
+        | "keyboard_shortcuts"
+        | "go_back"
+        | "go_forward"
+        | "calendar_density_up"
+        | "calendar_density_down"
+        | "calendar_density_reset" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.eval(format!(
                     "window.__onMenuEvent && window.__onMenuEvent('{}')",

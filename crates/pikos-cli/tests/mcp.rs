@@ -31,14 +31,12 @@ fn base_page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: String::new(),
-        content_text: Some(String::new()),
         status: "not_started".into(),
         priority: 0,
         tags: Vec::new(),
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: Vec::new(),
         parent_id: None,
         last_opened_at: None,
         created_at: None,
@@ -352,6 +350,37 @@ async fn a_workspace_needing_migration_fails_the_tool_not_the_handshake() {
         .contains("--migrate"));
 
     server.shutdown();
+}
+
+#[tokio::test]
+async fn a_running_server_refuses_to_write_once_a_newer_build_migrates_the_file() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed(dbs, vec![base_page("Standup")]).await.remove(0);
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    server.call(2, "update_page", json!({ "id": id, "priority": 1 }));
+
+    let newer = open_pool(dbs).await.unwrap();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (9999, 'from a newer build', 1, x'00', 0)",
+    )
+    .execute(&newer)
+    .await
+    .unwrap();
+    newer.close().await;
+
+    let refused = server.call_expecting_error(3, "update_page", json!({ "id": id, "priority": 2 }));
+    assert_eq!(refused["error"]["kind"], "SchemaTooNew");
+    let message = refused["error"]["message"].as_str().unwrap();
+    assert!(message.contains("9999"), "{message}");
+
+    server.shutdown();
+
+    let pool = open_pool(dbs).await;
+    assert!(pool.is_err(), "the newer file must still refuse an open");
 }
 
 /// Listening TCP sockets held by one pid, lsof's own tabular output. `None` when
@@ -843,6 +872,108 @@ async fn read_page_hands_back_markdown_that_update_page_takes_unchanged() {
     assert_eq!(after, doc);
 
     server.shutdown();
+}
+
+#[tokio::test]
+async fn update_page_with_the_body_read_page_gave_leaves_it_unedited() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let corpus: Value = serde_json::from_str(include_str!(
+        "../../pikos-core/tests/corpus/markdown-import.json"
+    ))
+    .unwrap();
+    let doc = corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "a page an agent edits")
+        .unwrap()["doc"]
+        .to_string();
+    let ids = seed(
+        dbs,
+        vec![NewPage {
+            content: doc.clone(),
+            ..base_page("Trip")
+        }],
+    )
+    .await;
+    let pool = open_pool(dbs).await.unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 1")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    let read = server.call(2, "read_page", json!({ "id": ids[0] }));
+    let updated = server.call(
+        3,
+        "update_page",
+        json!({ "id": ids[0], "content": read["markdown"] }),
+    );
+    server.shutdown();
+
+    assert_eq!(updated["content"], doc.as_str());
+    let version: i64 = sqlx::query_scalar("SELECT content_schema_version FROM pages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(version, 1);
+}
+
+#[tokio::test]
+async fn update_page_edits_one_section_by_its_heading() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Trip")]).await;
+    let id = &ids[0];
+
+    let mut server = Server::start(dbs);
+    handshake(&mut server);
+    server.call(
+        2,
+        "update_page",
+        json!({ "id": id, "content": "## Packing\n\n- passport\n\n## Route\n\nNorth first" }),
+    );
+    server.call(
+        3,
+        "update_page",
+        json!({ "id": id, "section": "Packing", "append": "- charger" }),
+    );
+    server.call(
+        4,
+        "update_page",
+        json!({ "id": id, "section": "Route", "insert": "Leave at six" }),
+    );
+    server.call(
+        5,
+        "update_page",
+        json!({ "id": id, "section": "route", "replaceSection": "South instead" }),
+    );
+    server.call(
+        6,
+        "update_page",
+        json!({ "id": id, "append": "Back on Sunday" }),
+    );
+    let read = server.call(7, "read_page", json!({ "id": id }));
+    let missing = server.call_expecting_error(
+        8,
+        "update_page",
+        json!({ "id": id, "section": "Budget", "append": "x", "priority": 1 }),
+    );
+    let after_refusal = server.call(9, "read_page", json!({ "id": id }));
+    server.shutdown();
+
+    assert_eq!(
+        read["markdown"],
+        "## Packing\n\n- passport\n\n* charger\n\n\n## Route\n\nSouth instead\n\nBack on Sunday\n"
+    );
+    let message = missing["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("\"## Packing\", \"## Route\""),
+        "{message}"
+    );
+    assert_eq!(after_refusal["priority"], 0);
 }
 
 #[tokio::test]

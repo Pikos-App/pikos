@@ -34,9 +34,10 @@ appTest(
     const settings = app.getByRole("region", { name: "Settings" });
     await expect(settings.getByRole("heading", { name: "Preferences" })).toBeVisible();
 
-    // "Calendar days shown" row has buttons "1", "3", "5", "M–F", "7".
-    // The "3" label is unique to this row inside the settings region.
-    await settings.getByRole("button", { exact: true, name: "3" }).click();
+    await settings
+      .getByLabel("Calendar days shown")
+      .getByRole("button", { exact: true, name: "3" })
+      .click();
 
     // Close settings and verify the calendar live-updated to 3 columns.
     await app.keyboard.press("Escape");

@@ -93,20 +93,24 @@ export {
 } from "./calendar/calendarLayout";
 export type { CalendarBlock, OverflowPill, RemappedBlocks } from "./calendar/calendarLayout";
 export { formatMultiDayTimeRange, formatTimeRange } from "./calendar/calendarTimeFormat";
-export { clampDayCount, dayCountColumns, dayCountNavStep } from "./calendar/dayCount";
+export {
+  CALENDAR_DENSITY_STEPS,
+  clampDayCount,
+  dayCountColumns,
+  dayCountNavStep,
+  DEFAULT_CALENDAR_DENSITY,
+  LEGACY_CALENDAR_DENSITIES,
+  stepCalendarDensity,
+  toCalendarDensity,
+} from "./calendar/dayCount";
 export type { CalendarDayCount, CalendarDensity } from "./calendar/dayCount";
 export {
   buildMonthGrid,
   MONTH_CELL_MAX_EVENTS,
   monthGridDays,
-  placeMonthCellEvents,
+  placeMonthWeek,
 } from "./calendar/monthGrid";
-export type {
-  CalendarViewMode,
-  MonthCell,
-  MonthCellEvent,
-  MonthCellPlacement,
-} from "./calendar/monthGrid";
+export type { CalendarViewMode, MonthCell, MonthCellEvent } from "./calendar/monthGrid";
 // ── Shared palettes and priority labels ──
 export {
   currentPaletteColor,
@@ -115,7 +119,12 @@ export {
   withCurrentColor,
 } from "./constants/colors";
 export type { PaletteColor } from "./constants/colors";
-export { NLP_PRIORITY_MAP, PRIORITY_COLORS, PRIORITY_LABELS } from "./constants/priorities";
+export {
+  NLP_PRIORITY_MAP,
+  PRIORITY_CHECKBOX_COLORS,
+  PRIORITY_COLORS,
+  PRIORITY_LABELS,
+} from "./constants/priorities";
 export * from "./errors";
 export { caldavAccountIdentity, caldavBaseUrl } from "./format/caldavIdentity";
 // ── Date/time formatting for chips, labels and pickers ──
@@ -200,6 +209,8 @@ export type {
 } from "./layout/buildPageListRows";
 export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
 export type { ParseResult, ParsedInput } from "./nlp/parser";
+export { quickAddHighlightTokens } from "./nlp/quickAddHighlight";
+export type { QuickAddHighlightKind, QuickAddHighlightToken } from "./nlp/quickAddHighlight";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
@@ -262,10 +273,12 @@ export { fuzzyMatchFolder } from "./utils/fuzzyMatchFolder";
 export {
   deriveTags,
   findRecurringOccurrenceClone,
+  isBodyFromNewerBuild,
   isDone,
   isOpen,
   toPageSummary,
 } from "./utils/page";
+export { linkTargets } from "./utils/pageLinks";
 export {
   alignWeeklyRuleToAnchor,
   buildRrule,

@@ -1,13 +1,14 @@
 // Reuses a single ProseMirror instance across page switches
 // (setContent instead of destroy/recreate) for instant switching.
 
-import { extractText } from "@pikos/core";
+import { isBodyFromNewerBuild } from "@pikos/core";
 import { createDocumentExtensions } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { TriangleAlert } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/shared/components/EmptyState";
@@ -17,22 +18,30 @@ import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { onFlushPending } from "@/shared/pendingWrites";
 import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
+import { DesktopPageLink } from "../extensions/DesktopPageLink";
+import { PikosCodeBlock } from "../extensions/PikosCodeBlock";
 import { PikosImage } from "../extensions/PikosImage";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
+import { usePageLinkTargets } from "../hooks/usePageLinkTargets";
 import { registerActiveEditor } from "../utils/imageDropBridge";
 import { looksLikeMarkdown } from "../utils/markdownPaste";
+import { loadPageContent, openPageContent, type RestOfPage } from "../utils/pageLoad";
+import { saveDelayFor } from "../utils/saveDelay";
 import { FindContentPopover } from "./FindContentPopover";
 import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
 import { PageInfoPopover } from "./PageInfoPopover";
+import { PageLinkPicker } from "./PageLinkPicker";
+import { SaveStatus } from "./SaveStatus";
 import { SlashMenuExtension } from "./SlashMenu";
 import { TableToolbar } from "./TableToolbar";
 
@@ -50,8 +59,10 @@ import { TableToolbar } from "./TableToolbar";
 // stored document.
 export const editorExtensions = [
   ...createDocumentExtensions({
+    codeBlock: PikosCodeBlock,
     image: PikosImage.configure({ allowBase64: false, inline: false }),
     onKeyHandled: (event) => Keyboard.markUsed(event),
+    pageLink: DesktopPageLink,
     resolveAssetUrl: assetUrl,
   }),
   Placeholder.configure({
@@ -60,6 +71,7 @@ export const editorExtensions = [
   }),
   Typography,
   SlashMenuExtension,
+  PageLinkPicker,
 ];
 
 // tiptap-markdown only converts pasted markdown when the clipboard has no
@@ -73,47 +85,43 @@ function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): bool
   const text = event.clipboardData?.getData("text/plain");
   if (!text || !looksLikeMarkdown(text)) return false;
   // insertContent is overridden by tiptap-markdown to parse strings as markdown.
-  return editor.commands.insertContent(text);
+  return editor.chain().setMeta("paste", true).insertContent(text).run();
 }
 
-/**
- * Put a page's content into the editor.
- *
- * Exported so the behaviour below can be tested directly rather than through a
- * React effect — and so there is exactly one load path to get right.
- *
- * Two flags, both load-bearing:
- *
- * - `emitUpdate: false` stops the load being reported as a change, which would
- *   trigger autosave for content the user has not touched.
- * - `addToHistory: false` keeps the load out of the undo stack. Without it the
- *   load is an undoable step, so undo on a freshly-opened page reverts to the
- *   empty document the editor was constructed with — and because onUpdate then
- *   fires, autosave persists that empty document. Typing within ProseMirror's
- *   ~500ms grouping window has the same effect, as the keystroke is grouped
- *   with the load and one undo reverts both.
- */
-export function loadPageContent(editor: Editor, doc: JSONContent): void {
-  editor.chain().setMeta("addToHistory", false).setContent(doc, { emitUpdate: false }).run();
+/** Load a newer body into the page already open, keeping the caret and the scroll where they were. */
+function reloadInPlace(editor: Editor, doc: JSONContent, scroller: HTMLElement | null): void {
+  const { from, to } = editor.state.selection;
+  const scrollTop = scroller?.scrollTop ?? 0;
+  loadPageContent(editor, doc);
+  editor.commands.setTextSelection({ from, to });
+
+  requestAnimationFrame(() => {
+    if (scroller) scroller.scrollTop = scrollTop;
+  });
+}
+
+/** Typing not yet handed to the write queue, and the page it was typed into. Only this is ever
+ *  saved: writing back a body nobody edited would put it over a newer one from outside.
+ *  Holds the immutable document rather than its JSON, so a keystroke copies nothing on a long
+ *  page; it is serialised once, when the save fires. */
+interface PendingEdit {
+  doc: Editor["state"]["doc"];
+  pageId: string;
 }
 
 // Append at the very end of the doc, never at the cursor: the caller is a banner
 // above the editor, so wherever the caret happens to sit is not where the user
-// asked for this. Inserted as plain paragraphs — the text is an invite
-// description, and running it through the markdown parser would let stray
-// asterisks or a "#" line restyle it.
-function appendParagraphs(editor: Editor | null, text: string): void {
-  if (!editor || editor.isDestroyed) return;
-  const content = text.split(/\n{2,}/).map((block) => ({
-    content: [{ text: block.replace(/\n/g, " "), type: "text" }],
-    type: "paragraph",
-  }));
-  editor.chain().focus("end").insertContent(content).run();
+// asked for this.
+function appendDocument(editor: Editor | null, doc: JSONContent): boolean {
+  if (!editor || editor.isDestroyed || !editor.isEditable || !doc.content) return false;
+  return editor.chain().focus("end").insertContent(doc.content).run();
 }
 
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
-  const { updatePage } = usePages();
+  const { getPageAfterWrites, updatePage } = usePages();
+  const viewCache = useViewCacheController();
+  const { on } = useWorkspace();
   const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
   const { takeBodyFocus } = useUI();
@@ -125,14 +133,76 @@ export function EditorPane() {
   // are created before useEditor returns). Assigned in an effect below.
   const editorRef = useRef<Editor | null>(null);
 
-  // Content stored in a ref (not state) to avoid triggering React re-renders
-  // on every keystroke. A version counter drives the autosave schedule.
-  const contentJsonRef = useRef<string>("");
-  const [contentVersion, setContentVersion] = useState(0);
+  const pendingEditRef = useRef<PendingEdit | null>(null);
+
+  /** The open page's body as last loaded or saved: what typing is saved over, and how a change
+   *  from outside is told from our own. */
+  const shownContentRef = useRef<string>("");
+
+  const restOfPageRef = useRef<RestOfPage | null>(null);
+
+  /** Draw what a long page has left before anything that edits it or moves to its end. */
+  function finishOpening(): void {
+    restOfPageRef.current?.finish();
+    restOfPageRef.current = null;
+  }
+
+  function cancelOpening(): void {
+    restOfPageRef.current?.cancel();
+    restOfPageRef.current = null;
+  }
+
+  /** An input handler that lets ProseMirror handle the event, on the whole page. */
+  function finishOpeningFirst(): boolean {
+    finishOpening();
+    return false;
+  }
+
+  /** The last body handed to the write queue, with the body it was typed over, so retrying a
+   *  failed save sends it again: by then nothing is pending, and a flush alone would send nothing. */
+  const lastSentRef = useRef<{ baseContent: string; content: string; pageId: string } | null>(null);
+
+  function savePendingEdit(): void {
+    const edit = pendingEditRef.current;
+    if (!edit) return;
+
+    pendingEditRef.current = null;
+    const content = JSON.stringify(edit.doc.toJSON());
+    const baseContent = shownContentRef.current;
+    shownContentRef.current = content;
+    lastSentRef.current = { baseContent, content, pageId: edit.pageId };
+    updatePage(edit.pageId, {
+      baseContent,
+      content,
+    });
+  }
+
+  function retrySave(): void {
+    const sent = lastSentRef.current;
+    if (!sent) {
+      void flush();
+      return;
+    }
+
+    updatePage(sent.pageId, { baseContent: sent.baseContent, content: sent.content });
+  }
+
+  const { flush, isSaving, saveError, schedule } = useAutosave(() => {
+    savePendingEdit();
+    return Promise.resolve();
+  });
 
   const editor = useEditor({
     editorProps: {
       attributes: EDITOR_ATTRIBUTES,
+      handleDOMEvents: {
+        beforeinput: finishOpeningFirst,
+        compositionstart: finishOpeningFirst,
+        cut: finishOpeningFirst,
+        drop: finishOpeningFirst,
+        keydown: finishOpeningFirst,
+        paste: finishOpeningFirst,
+      },
       handlePaste: (_view, event) => handleMarkdownPaste(editorRef.current, event),
     },
     extensions: editorExtensions,
@@ -142,14 +212,30 @@ export function EditorPane() {
       if (selectedPageIds.size > 0) clearSelection();
     },
     onUpdate: ({ editor: e }) => {
-      contentJsonRef.current = JSON.stringify(e.getJSON());
-      setContentVersion((v) => v + 1);
+      const pageId = currentPageIdRef.current;
+      if (pageId === null) return;
+
+      // An edit from a command rather than input, such as the toolbar, still saves the whole page.
+      finishOpening();
+      pendingEditRef.current = { doc: e.state.doc, pageId };
+      schedule(saveDelayFor(e.state.doc.content.size));
     },
   });
 
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  /** Show a body newer than the one on screen, if this page is still open with nothing typed. */
+  function showNewerBody(pageId: string, content: string): void {
+    const isClean = currentPageIdRef.current === pageId && pendingEditRef.current === null;
+    if (!editor || editor.isDestroyed || !isClean) return;
+
+    cancelOpening();
+    const doc = tryParseTiptapJson(content, `EditorPane reload page=${pageId}`);
+    reloadInPlace(editor, doc ?? EMPTY_TIPTAP_DOC, scrollContainerRef.current);
+    shownContentRef.current = content;
+  }
 
   // Links are rendered as <a> by Tiptap but clicking should only place the cursor
   // (the LinkPopover handles opening links explicitly via its Open button).
@@ -176,56 +262,73 @@ export function EditorPane() {
     if (!editor || editor.isDestroyed || isLoading) return;
 
     if (page === null) {
-      // Flush pending content for the outgoing page before clearing
-      if (currentPageIdRef.current && contentJsonRef.current !== "") {
-        const content = contentJsonRef.current;
-        updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
-      }
+      savePendingEdit();
+      cancelOpening();
       currentPageIdRef.current = null;
       if (!editor.isDestroyed) editor.commands.clearContent();
-      contentJsonRef.current = "";
+      shownContentRef.current = "";
       return;
     }
 
     if (page.id === currentPageIdRef.current) return;
 
-    // Flush pending content for the outgoing page before switching
-    if (currentPageIdRef.current && contentJsonRef.current !== "") {
-      const content = contentJsonRef.current;
-      updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
-    }
-
+    savePendingEdit();
+    cancelOpening();
     currentPageIdRef.current = page.id;
 
     const doc = tryParseTiptapJson(page.content, `EditorPane page=${page.id}`);
 
     if (!editor.isDestroyed) {
-      loadPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
+      restOfPageRef.current = openPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
       // Which page the editor holds, for tests and the in-app benchmark to wait on.
       editor.view.dom.setAttribute("data-page-id", page.id);
     }
-    contentJsonRef.current = doc ? page.content : "";
+    shownContentRef.current = page.content;
 
     const focusBody = takeBodyFocus(page.id);
     // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
     requestAnimationFrame(() => {
       scrollContainerRef.current?.scrollTo({ top: 0 });
-      if (focusBody && !editor.isDestroyed) editor.commands.focus("end");
+      if (focusBody && !editor.isDestroyed) {
+        finishOpening();
+        editor.commands.focus("end");
+      }
     });
   }, [editor, page, isLoading]);
 
-  const pageId = page?.id ?? null;
+  // A newer body from another process or a sync replaces the open one only while nothing typed
+  // waits to be saved, checked again once the read lands.
+  useEffect(() => {
+    if (!viewCache || !editor) return;
 
-  const { flush, isSaving, saveError } = useAutosave(
-    contentVersion,
-    (_version: number) => {
-      if (!pageId || contentJsonRef.current === "") return Promise.resolve();
-      const contentText = extractText(contentJsonRef.current);
-      updatePage(pageId, { content: contentJsonRef.current, contentText });
-      return Promise.resolve();
-    },
-    { delay: 800 }
-  );
+    return viewCache.onOutsideChange(() => {
+      const pageId = currentPageIdRef.current;
+      if (pageId === null || pendingEditRef.current !== null) return;
+
+      void getPageAfterWrites(pageId).then((newer) => {
+        const isNewer = newer !== null && newer.content !== shownContentRef.current;
+        if (isNewer) showNewerBody(pageId, newer.content);
+      });
+    });
+  }, [viewCache, editor]);
+
+  // A save that found a newer body stored saved a merge of the two; it replaces what was typed,
+  // unless more has been typed since, whose save merges again.
+  useEffect(() => {
+    return on("page:merged", ({ page: merged, typed }) => {
+      const isShowingTyped = shownContentRef.current === typed;
+      if (isShowingTyped) showNewerBody(merged.id, merged.content);
+    });
+  }, [editor]);
+
+  const pageId = page?.id ?? null;
+  usePageLinkTargets(editor, pageId);
+
+  const isReadOnly = page !== null && isBodyFromNewerBuild(page);
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.setEditable(!isReadOnly, false);
+  }, [editor, isReadOnly]);
 
   useEffect(() => {
     function handleBlur() {
@@ -292,15 +395,19 @@ export function EditorPane() {
     <div className="group/editor relative flex flex-1 flex-col overflow-hidden bg-surface-primary">
       {page && (
         <MetadataHeader
-          contentSaveError={saveError}
           key={page.id}
-          onAppendToBody={(text) => appendParagraphs(editorRef.current, text)}
+          onAppendToBody={(doc) => {
+            const isStillOpen = currentPageIdRef.current === page.id;
+            if (!isStillOpen) return false;
+
+            finishOpening();
+            return appendDocument(editorRef.current, doc);
+          }}
           onFocusEditor={() => !editor?.isDestroyed && editor?.commands.focus()}
-          onRetryContent={() => void flush()}
           page={page}
         />
       )}
-      {editor && <FindContentPopover editor={editor} />}
+      {editor && <FindContentPopover editor={editor} scroller={scrollContainerRef} />}
       {editor && !isAddingLink && (
         <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
       )}
@@ -312,9 +419,6 @@ export function EditorPane() {
           onAddingLinkChange={setIsAddingLink}
         />
       )}
-      <div aria-atomic="true" aria-live="assertive" className="sr-only">
-        {saveError ? "Failed to save. Please try again." : isSaving ? "Saving…" : ""}
-      </div>
       <div className="relative flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- padding around the editor; clicks delegate focus to the ProseMirror surface which is the real keyboard target */}
@@ -325,14 +429,39 @@ export function EditorPane() {
             // not after drag-selections that end outside text bounds.
             if (e.target === e.currentTarget && !editor?.isFocused) {
               // Defer so the mousedown doesn't interfere with ProseMirror's own handling
-              requestAnimationFrame(() => !editor?.isDestroyed && editor?.commands.focus("end"));
+              requestAnimationFrame(() => {
+                if (!editor || editor.isDestroyed) return;
+
+                finishOpening();
+                editor.commands.focus("end");
+              });
             }
           }}
           style={{ "--editor-font-size": `${fontSize}px` } as CSSProperties}
         >
+          {isReadOnly && (
+            <p
+              className="mb-3 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90"
+              role="status"
+            >
+              <TriangleAlert aria-hidden="true" className="shrink-0" size={14} />
+              <span className="type-ui-sm">
+                This page was edited in a newer version of Pikos. Update to edit it.
+              </span>
+            </p>
+          )}
           <EditorContent editor={editor} />
         </div>
-        {editor && <PageInfoPopover editor={editor} page={page} />}
+        {/* Pinned to the right edge, so a status appearing grows leftward into the margin. */}
+        <div className="sticky right-3 bottom-3 z-10 ml-auto flex w-fit items-center gap-1">
+          <SaveStatus
+            contentSaveError={saveError}
+            isSaving={isSaving}
+            onRetryContent={retrySave}
+            pageId={page.id}
+          />
+          {editor && <PageInfoPopover editor={editor} page={page} />}
+        </div>
       </div>
     </div>
   );

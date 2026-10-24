@@ -11,6 +11,7 @@ export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof St
   "changeState",
   "countViews",
   "expandRecurrenceRange",
+  "exportPageMarkdown",
   "exportWorkspace",
   "getFolder",
   "getPage",
@@ -20,6 +21,7 @@ export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof St
   "getSyncStatus",
   "getUsageStats",
   "googleSyncAvailable",
+  "listBacklinks",
   "listBackups",
   "listCompletedPages",
   "listCompletedWindow",
@@ -39,6 +41,7 @@ export const STORAGE_READS: ReadonlySet<keyof StorageAdapter> = new Set<keyof St
   "listTrashedPages",
   "listView",
   "listViewIds",
+  "pendingDescriptionDocument",
   "searchPages",
   "searchTags",
 ]);

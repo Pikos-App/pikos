@@ -11,6 +11,13 @@ import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { usePages } from "@/shared/context/PagesContext";
 import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+import {
+  EMPTY_PAGE_HISTORY,
+  type PageHistory,
+  pageHistoryIds,
+  stepPageHistory,
+  visitPage,
+} from "@/shared/lib/pageHistory";
 
 import { CalendarDateProvider } from "./CalendarDateContext";
 
@@ -96,9 +103,15 @@ export interface UIContextValue {
   /**
    * Open a page in the editor. Switches to editor panel and sets activePageId
    * atomically — bypasses setRightPanel's restore logic so order never matters.
-   * `focusBody` puts the cursor at the end of the body once the page loads.
+   * `focusBody` puts the cursor at the end of the body once the page loads. `browsed` marks an
+   * arrow step through the list, which page history keeps as one entry per run.
    */
-  openPage: (page: PageSummary | string, options?: { focusBody?: boolean }) => void;
+  openPage: (
+    page: PageSummary | string,
+    options?: { browsed?: boolean; focusBody?: boolean }
+  ) => void;
+  /** Back (-1) or forward (1) to the nearest page in history that is still open. */
+  stepHistory: (direction: -1 | 1) => Promise<void>;
   /** Whether `pageId` was opened asking for the cursor in its body; true once, for the editor. */
   takeBodyFocus: (pageId: string) => boolean;
 }
@@ -225,10 +238,36 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setPageListDrawerOpen(false);
   }
 
-  function openPage(page: PageSummary | string, options?: { focusBody?: boolean }) {
+  // A ref, not state: nothing renders it, and a step reads it after awaiting the database.
+  const historyRef = useRef<PageHistory>(EMPTY_PAGE_HISTORY);
+
+  function openPage(
+    page: PageSummary | string,
+    options?: { browsed?: boolean; focusBody?: boolean }
+  ) {
     const id = typeof page === "string" ? page : page.id;
     bodyFocusRef.current = options?.focusBody ? id : null;
+    historyRef.current = visitPage(historyRef.current, id, {
+      browsed: options?.browsed ?? false,
+      showing: activePageId,
+    });
     showPage(id);
+  }
+
+  async function stepHistory(direction: -1 | 1) {
+    const ids = pageHistoryIds(historyRef.current);
+    const open = viewCache
+      ? new Set((await viewCache.rows(ids)).filter(isOpen).map((p) => p.id))
+      : new Set(ids);
+    const stepped = stepPageHistory(historyRef.current, activePageId, direction, (id) =>
+      open.has(id)
+    );
+
+    if (!stepped) return;
+
+    historyRef.current = stepped.history;
+    bodyFocusRef.current = null;
+    showPage(stepped.id);
   }
 
   function takeBodyFocus(pageId: string): boolean {
@@ -297,6 +336,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     settingsOpen,
     settingsSection,
     sidebarCollapsed,
+    stepHistory,
     takeBodyFocus,
   };
 

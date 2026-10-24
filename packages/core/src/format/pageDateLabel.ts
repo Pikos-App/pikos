@@ -5,6 +5,8 @@
 // Locale is left to the system (no explicit locale argument) so these read the
 // way the rest of the app does — see UsageStats and the settings surfaces.
 
+import { addDays, endOfDay, startOfDay } from "date-fns";
+
 import { isAllDayIso, parseLocalISO } from "../utils/dates";
 import { formatClockTime } from "./formatTime";
 
@@ -43,10 +45,13 @@ function tooltipFor(iso: string): string {
       });
 }
 
+/** An all-day date is due for the whole of its day, so it counts from that day's start, not from now. */
 export function isDueSoon(iso: string, now: Date = new Date()): boolean {
   const date = parseLocalISO(iso);
-  const threeDaysOut = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59);
-  return date > now && date <= threeDaysOut;
+  const windowStart = isAllDayIso(iso) ? startOfDay(now) : now;
+  const windowEnd = endOfDay(addDays(now, 3));
+
+  return date >= windowStart && date <= windowEnd;
 }
 
 export function formatPageDate(iso: string, now: Date = new Date()): PageDateLabel {
@@ -63,6 +68,10 @@ export function formatPageDate(iso: string, now: Date = new Date()): PageDateLab
   // This keeps them visually distinct from any all-day event on the same date.
   if (!isAllDay && isToday) {
     return { isPast, label: formatCompactTime(date), tooltip };
+  }
+
+  if (isToday) {
+    return { isPast, label: "Today", tooltip };
   }
 
   const dateLabel = date.toLocaleDateString(undefined, {

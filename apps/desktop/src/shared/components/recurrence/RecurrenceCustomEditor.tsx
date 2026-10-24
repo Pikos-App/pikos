@@ -87,7 +87,7 @@ export function RecurrenceCustomEditor({
                   className={cn(
                     "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
                     isActive
-                      ? "text-primary"
+                      ? "text-action"
                       : "text-foreground/75 hover:bg-accent hover:text-foreground"
                   )}
                   key={freq}
@@ -121,8 +121,8 @@ export function RecurrenceCustomEditor({
                 className={cn(
                   "h-6 w-6 rounded-full text-xs transition-colors",
                   isActive
-                    ? "bg-primary/20 font-medium text-primary"
-                    : "text-foreground/50 hover:bg-accent hover:text-foreground"
+                    ? "bg-primary/20 font-medium text-action"
+                    : "text-subtle hover:bg-accent hover:text-foreground"
                 )}
                 key={value}
                 onClick={() => onToggleWeekday(value)}

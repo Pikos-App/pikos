@@ -1,4 +1,4 @@
-import { toStorageError } from "@pikos/core";
+import { DEFAULT_CALENDAR_DENSITY, toStorageError } from "@pikos/core";
 import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,7 +6,7 @@ import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapD
 import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
-import { SettingsPage } from "@/features/settings";
+import { RestoreSection, SettingsPage } from "@/features/settings";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { Toast } from "@/shared/components/Toast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
@@ -36,7 +36,7 @@ import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { UpdateProvider, useUpdate } from "@/shared/context/UpdateContext";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useWorkspace, useWorkspaceInternal } from "@/shared/context/WorkspaceContext";
 import { useDeepLinkRouter } from "@/shared/deep-link/useDeepLinkRouter";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useExternalChangeReload } from "@/shared/hooks/useExternalChangeReload";
@@ -69,7 +69,12 @@ type MenuEventId =
   | "toggle_sidebar"
   | "toggle_calendar"
   | "check_updates"
-  | "keyboard_shortcuts";
+  | "keyboard_shortcuts"
+  | "go_back"
+  | "go_forward"
+  | "calendar_density_up"
+  | "calendar_density_down"
+  | "calendar_density_reset";
 
 declare global {
   interface Window {
@@ -84,10 +89,13 @@ function useMenuEvents() {
   const { setRightPanel, setSidebarCollapsed } = ui;
   const stateRef = useRef({ rightPanel: ui.rightPanel });
   const updaterRef = useRef(updater);
+  const calendar = useCalendarSettings();
+  const calendarRef = useRef(calendar);
 
   useEffect(() => {
     stateRef.current = { rightPanel: ui.rightPanel };
     updaterRef.current = updater;
+    calendarRef.current = calendar;
   });
 
   useEffect(() => {
@@ -117,12 +125,52 @@ function useMenuEvents() {
           ui.setSettingsSection("shortcuts");
           ui.setSettingsOpen(true);
           break;
+        case "go_back":
+          void ui.stepHistory(-1);
+          break;
+        case "go_forward":
+          void ui.stepHistory(1);
+          break;
+        case "calendar_density_up":
+          calendarRef.current.stepDensity(1);
+          break;
+        case "calendar_density_down":
+          calendarRef.current.stepDensity(-1);
+          break;
+        case "calendar_density_reset":
+          calendarRef.current.setDensity(DEFAULT_CALENDAR_DENSITY);
+          break;
       }
     };
     return () => {
       delete window.__onMenuEvent;
     };
   }, [setSidebarCollapsed, setRightPanel]);
+}
+
+/** The mouse's back and forward buttons, by the number the browser gives them. */
+const HISTORY_BUTTONS: Partial<Record<number, -1 | 1>> = { 3: -1, 4: 1 };
+
+function useMouseHistoryButtons() {
+  const { stepHistory } = useUI();
+  const stepRef = useRef(stepHistory);
+
+  useEffect(() => {
+    stepRef.current = stepHistory;
+  });
+
+  useEffect(() => {
+    function onMouseUp(event: MouseEvent) {
+      const direction = HISTORY_BUTTONS[event.button];
+      if (direction === undefined) return;
+
+      event.preventDefault();
+      void stepRef.current(direction);
+    }
+
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  }, []);
 }
 
 function useGlobalShortcuts() {
@@ -133,12 +181,18 @@ function useGlobalShortcuts() {
     setSettingsOpen,
     setSettingsSection,
     settingsOpen,
+    stepHistory,
   } = useUI();
   const { folders } = usePages();
   const { setFontSize, stepFontSize } = useEditorSettings();
   const { setTextScale: setInterfaceScale, stepTextScale: stepInterfaceScale } =
     useInterfaceSettings();
-  const { setTextSize: setCalendarSize, stepTextSize: stepCalendarSize } = useCalendarSettings();
+  const {
+    setDensity: setCalendarDensity,
+    setTextSize: setCalendarSize,
+    stepDensity: stepCalendarDensity,
+    stepTextSize: stepCalendarSize,
+  } = useCalendarSettings();
 
   // The size keys act on the panel in front of you, not on whatever holds focus.
   // Settings is a full-window overlay, so while it is open it is that panel and
@@ -165,6 +219,16 @@ function useGlobalShortcuts() {
     allowInInputs: true,
     group: "Navigation",
     label: "Close page",
+  });
+  useKeyboardShortcut("Mod+[", () => void stepHistory(-1), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Back to the previous page",
+  });
+  useKeyboardShortcut("Mod+]", () => void stepHistory(1), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Forward to the next page",
   });
   // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
   // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
@@ -196,6 +260,21 @@ function useGlobalShortcuts() {
     allowInInputs: true,
     group: "View",
     label: "Reset text size",
+  });
+  useKeyboardShortcut("Mod+Alt+=", () => stepCalendarDensity(1), {
+    allowInInputs: true,
+    group: "View",
+    label: "Taller calendar hours",
+  });
+  useKeyboardShortcut("Mod+Alt+-", () => stepCalendarDensity(-1), {
+    allowInInputs: true,
+    group: "View",
+    label: "Shorter calendar hours",
+  });
+  useKeyboardShortcut("Mod+Alt+0", () => setCalendarDensity(DEFAULT_CALENDAR_DENSITY), {
+    allowInInputs: true,
+    group: "View",
+    label: "Reset calendar hours",
   });
 
   // ⌘1-9 — switch to folder by index (1-based).
@@ -247,6 +326,7 @@ function AppShell() {
   useTrackPageOpened();
   useGlobalShortcuts();
   useMenuEvents();
+  useMouseHistoryButtons();
   useDeepLinkRouter();
   useExternalChangeReload();
   useSyncAppliedReload();
@@ -300,20 +380,30 @@ function AppShell() {
 }
 
 function WorkspaceLoadError({ error }: { error: unknown }) {
+  const { adapter } = useWorkspaceInternal();
   const storageError = toStorageError(error);
   // A damaged file and a failed open read the same from here, and the answers
   // are opposite: relaunching fixes a locked or missing path and does nothing at
-  // all for corruption, which needs a backup put back. The backend tells them
-  // apart by running an integrity check on the failure path.
+  // all for corruption, which needs a backup put back.
   const damaged = storageError.kind === "Corrupt";
+  const tooNew = storageError.kind === "TooNew";
 
   return (
     <div className="flex h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="w-full max-w-md">
         <p className="text-lg font-medium">
-          {damaged ? "Your workspace file is damaged" : "Couldn't open your workspace"}
+          {damaged
+            ? "Your workspace file is damaged"
+            : tooNew
+              ? "This workspace needs a newer Pikos"
+              : "Couldn't open your workspace"}
         </p>
-        {damaged ? (
+        {tooNew ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            A newer version of Pikos or the Pikos CLI has updated it. Your pages are fine. Update
+            this copy of Pikos to open them.
+          </p>
+        ) : damaged ? (
           <>
             <p className="mt-1 text-sm text-muted-foreground">
               Pikos keeps a snapshot before anything that rewrites your workspace. Putting one back
@@ -325,10 +415,13 @@ function WorkspaceLoadError({ error }: { error: unknown }) {
             >
               Show me the backups
             </button>
+            <div className="mt-6">
+              <RestoreSection storage={adapter} />
+            </div>
           </>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">
-            Quit and relaunch the app. If this keeps happening, file a bug — it is usually a path or
+            Quit and relaunch the app. If this keeps happening, file a bug. It is usually a path or
             permission problem on disk.
           </p>
         )}

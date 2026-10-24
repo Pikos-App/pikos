@@ -3,7 +3,7 @@
 // once-only guard a scenario is wrapped in.
 
 import type { Folder, Page, PagePriority, StorageAdapter } from "@pikos/core";
-import { extractText, formatDateOnly, formatLocalISO, getLocalTimezone } from "@pikos/core";
+import { formatDateOnly, formatLocalISO, getLocalTimezone } from "@pikos/core";
 import { addDays, addMinutes, startOfDay } from "date-fns";
 
 import { STORAGE_BACKEND } from "@/shared/constants/testMode";
@@ -71,7 +71,6 @@ export async function plantPage(adapter: StorageAdapter, spec: PageSpec): Promis
   const page = await adapter.createPage({
     completedAt,
     content,
-    contentText: extractText(content),
     folderId: spec.folderId ?? null,
     parentId: spec.parentId ?? null,
     priority: spec.priority ?? 0,

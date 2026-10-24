@@ -131,13 +131,24 @@ describe("MonthGrid — event chips", () => {
     expect(chip.getAttribute("style")).toContain("#ff0000");
   });
 
-  it("draws a multi-day event as a chip in every covered cell", () => {
+  it("draws a multi-day event as one bar from its first day across the days it covers", () => {
     renderGrid([
       makePage({ id: "Offsite", scheduledEnd: "2026-03-12", scheduledStart: "2026-03-10" }),
     ]);
-    const chips = screen.getAllByRole("button", { name: "Offsite" });
-    expect(chips).toHaveLength(3);
-    expect(cell("Wednesday March 11, 2026")).toContainElement(chips[1]!);
+    const bar = screen.getByRole("button", { name: "Offsite" });
+
+    expect(cell("Tuesday March 10, 2026")).toContainElement(bar);
+    expect(bar.style.width).toContain("3 * 100%");
+  });
+
+  it("draws one bar per week row for an event that crosses a week", () => {
+    renderGrid([
+      makePage({ id: "Trip", scheduledEnd: "2026-03-17", scheduledStart: "2026-03-14" }),
+    ]);
+    const bars = screen.getAllByRole("button", { name: "Trip" });
+
+    expect(bars).toHaveLength(2);
+    expect(cell("Monday March 16, 2026")).toContainElement(bars[1]!);
   });
 
   it("shows events on padding cells too — they are real days of the grid", () => {

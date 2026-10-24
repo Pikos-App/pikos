@@ -11,7 +11,10 @@ import {
   clampBottomHour,
   clampTopHour,
   computeCalendarMetrics,
+  DEFAULT_CALENDAR_DENSITY,
   DEFAULT_COLLAPSE_CONFIG,
+  stepCalendarDensity,
+  toCalendarDensity,
 } from "@pikos/core";
 import { useState } from "react";
 
@@ -67,6 +70,7 @@ export interface CalendarSettingsValue {
   setViewMode: (v: CalendarViewMode) => void;
   density: CalendarDensity;
   setDensity: (v: CalendarDensity) => void;
+  stepDensity: (direction: 1 | -1) => void;
   /** Event-title size in px, independent of the interface text size. Raising it
    *  raises `metrics.hourHeight` when the text would otherwise be taller than
    *  the block holding it. */
@@ -99,10 +103,11 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     STORAGE_KEYS.calendarViewMode,
     "time"
   );
-  const [density, setDensity] = useLocalStorage<CalendarDensity>(
+  const [storedDensity, setStoredDensity] = useLocalStorage<unknown>(
     STORAGE_KEYS.calendarDensity,
-    "normal"
+    DEFAULT_CALENDAR_DENSITY
   );
+  const density = toCalendarDensity(storedDensity);
   const [textSize, setTextSize] = useLocalStorage<CalendarTextSize>(
     STORAGE_KEYS.calendarTextSize,
     DEFAULT_CALENDAR_TEXT_SIZE
@@ -149,12 +154,14 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     setBottomCollapsed: setBottomCollapsedRaw,
     setBottomHour,
     setDayCount,
-    setDensity,
+    setDensity: setStoredDensity,
     setHoveredBand,
     setTextSize,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
     setViewMode,
+    stepDensity: (direction) =>
+      setStoredDensity((prev: unknown) => stepCalendarDensity(toCalendarDensity(prev), direction)),
     stepTextSize: (direction) => setTextSize((prev) => stepCalendarTextSize(prev, direction)),
     textSize,
     viewMode,

@@ -132,12 +132,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
 // as Settings, which otherwise let Cmd+Backspace delete the page behind it.
 function isBlockingDialogOpen(): boolean {
   if (typeof document === "undefined") return false;
-  return (
-    document.querySelector(
-      '[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"], [data-modal-surface]'
-    ) !== null
+  const open = document.querySelectorAll(
+    '[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"], [data-modal-surface]'
   );
+  return [...open].some((el) => !(listingForPalette && el.hasAttribute("data-command-palette")));
 }
+
+let listingForPalette = false;
 
 /** One labelled shortcut, as the settings page needs it. */
 export type ShortcutDoc = {
@@ -232,12 +233,19 @@ export const Keyboard = {
    * What the command palette can offer right now: bindings in an active scope
    * that carry a label and whose `when()` gate currently passes. The gate is
    * evaluated here rather than left to the caller so a command the key press
-   * wouldn't fire is never listed as available.
+   * wouldn't fire is never listed as available. The palette closes before it
+   * runs a command, so while gates are read here the palette's own dialog
+   * doesn't count as one open over the page; any other dialog still does.
    */
   listCommands(): Binding[] {
-    return Keyboard.listActiveBindings().filter(
-      (b) => b.label !== undefined && b.inPalette !== false && (b.when?.() ?? true)
-    );
+    listingForPalette = true;
+    try {
+      return Keyboard.listActiveBindings().filter(
+        (b) => b.label !== undefined && b.inPalette !== false && (b.when?.() ?? true)
+      );
+    } finally {
+      listingForPalette = false;
+    }
   },
 
   /** Every labelled shortcut registered this session — see `catalog`. */
