@@ -28,6 +28,7 @@ import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useNow } from "@/shared/hooks/useNow";
 import { usePrefetchOnHover } from "@/shared/viewCache/usePrefetchOnHover";
 
+import { useDropSettle } from "../hooks/useDropSettle";
 import type { SendDay } from "../hooks/usePageRowActions";
 import { useRowPicker } from "../hooks/useRowPicker";
 import { PageRowMenu } from "./PageRowMenu";
@@ -88,6 +89,7 @@ export function PageListItem({
     id: page.id,
     transition: null,
   });
+  const dropSettle = useDropSettle(isDragging);
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
   const rowRef = useRef<HTMLDivElement | null>(null);
   const rowPicker = useRowPicker();
@@ -129,10 +131,12 @@ export function PageListItem({
               ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
               : isSelected
                 ? "border-l-transparent bg-surface-selected/50 text-accent-foreground"
-                : "border-l-transparent hover:bg-surface-hover"
+                : "border-l-transparent hover:bg-surface-hover",
+            dropSettle.isSettling && "animate-row-settle"
           )}
           data-page-item
           data-selected={isSelected ? "true" : undefined}
+          onAnimationEnd={dropSettle.onAnimationEnd}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
             e.stopPropagation();

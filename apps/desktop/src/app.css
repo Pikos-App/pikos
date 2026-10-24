@@ -85,6 +85,16 @@ html.dragging-resize * {
   animation: count-change var(--transition-fast);
 }
 
+/* From the 0 a dragged row is hidden at; no `to`, so it ends on the row's own. */
+@keyframes row-settle {
+  from {
+    opacity: 0;
+  }
+}
+.animate-row-settle {
+  animation: row-settle var(--transition-fast);
+}
+
 /* All buttons should use pointer cursor by default */
 button,
 [role="button"] {
