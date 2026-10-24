@@ -15,6 +15,7 @@ export interface ComparedApp {
   notes: Cell;
   tasks: Cell;
   calendar: Cell;
+  pageLinks: Cell;
   onDevice: Cell;
   noAccount: Cell;
   phone: Cell;
@@ -32,16 +33,17 @@ export const COMPARISON_CHECKED = "2026-09-26";
 export const apps: ComparedApp[] = [
   {
     name: "Pikos",
-    notes: true, tasks: true, calendar: true, onDevice: true, noAccount: true,
+    notes: true, tasks: true, calendar: true, pageLinks: true, onDevice: true, noAccount: true,
     phone: false, sync: false, noSubscription: true, price: "Free", sourceAvailable: true,
     sources: [],
   },
   {
     name: "NotePlan",
-    notes: true, tasks: true, calendar: true, onDevice: true, noAccount: true,
+    notes: true, tasks: true, calendar: true, pageLinks: true, onDevice: true, noAccount: true,
     phone: true, sync: true, noSubscription: false, price: "$99/yr", sourceAvailable: false,
     sources: [
       "https://noteplan.co/features",
+      "https://help.noteplan.co/article/115-linking-notes",
       "https://noteplan.co/pricing",
       "https://help.noteplan.co/article/31-where-are-my-notes-saved",
       "https://help.noteplan.co/article/16-what-is-the-difference-between-cloudkit-vs-icloud-drive",
@@ -49,31 +51,42 @@ export const apps: ComparedApp[] = [
   },
   {
     name: "Notion",
-    notes: true, tasks: true, calendar: true, onDevice: false, noAccount: false,
+    notes: true, tasks: true, calendar: true, pageLinks: true, onDevice: false, noAccount: false,
     phone: true, sync: true, noSubscription: true, price: "Free", sourceAvailable: false,
-    sources: ["https://www.notion.com/pricing", "https://www.notion.com/help/use-pages-offline"],
+    sources: [
+      "https://www.notion.com/pricing",
+      "https://www.notion.com/help/use-pages-offline",
+      "https://www.notion.com/help/create-links-and-backlinks",
+    ],
   },
   {
     name: "Obsidian",
-    notes: true, tasks: "Plugin", calendar: "Plugin", onDevice: true, noAccount: true,
+    notes: true, tasks: "Plugin", calendar: "Plugin", pageLinks: true, onDevice: true, noAccount: true,
     phone: true, sync: "Paid", noSubscription: false, price: "Free", sourceAvailable: false,
-    sources: ["https://obsidian.md/pricing", "https://obsidian.md/help/bases"],
+    sources: ["https://obsidian.md/pricing", "https://obsidian.md/help/bases", "https://obsidian.md/help/links"],
   },
   {
     name: "Logseq",
-    notes: true, tasks: true, calendar: "Plugin", onDevice: true, noAccount: true,
+    notes: true, tasks: true, calendar: "Plugin", pageLinks: true, onDevice: true, noAccount: true,
     phone: true, sync: "Paid", noSubscription: false, price: "Free", sourceAvailable: true,
-    sources: ["https://github.com/logseq/docs/blob/master/db-version.md"],
+    sources: [
+      "https://github.com/logseq/docs/blob/master/db-version.md",
+      "https://discuss.logseq.com/t/why-linking-matters-in-logseq/8434",
+    ],
   },
   {
     name: "TickTick",
-    notes: true, tasks: true, calendar: "Paid", onDevice: false, noAccount: false,
+    notes: true, tasks: true, calendar: "Paid", pageLinks: true, onDevice: false, noAccount: false,
     phone: true, sync: true, noSubscription: false, price: "Free", sourceAvailable: false,
-    sources: ["https://ticktick.com/upgrade", "https://help.ticktick.com/articles/7055780476358754304"],
+    sources: [
+      "https://ticktick.com/upgrade",
+      "https://help.ticktick.com/articles/7055780476358754304",
+      "https://help.ticktick.com/articles/7351523697951244288",
+    ],
   },
   {
     name: "Things",
-    notes: false, tasks: true, calendar: false, onDevice: true, noAccount: true,
+    notes: false, tasks: true, calendar: false, pageLinks: false, onDevice: true, noAccount: true,
     phone: "Paid", sync: true, noSubscription: true, price: "$49.99", sourceAvailable: false,
     sources: [
       "https://apps.apple.com/us/app/things-3/id904280696?mt=12",
@@ -84,7 +97,7 @@ export const apps: ComparedApp[] = [
   },
   {
     name: "Todoist",
-    notes: false, tasks: true, calendar: "Paid", onDevice: false, noAccount: false,
+    notes: false, tasks: true, calendar: "Paid", pageLinks: false, onDevice: false, noAccount: false,
     phone: true, sync: true, noSubscription: false, price: "Free", sourceAvailable: false,
     sources: [
       "https://www.todoist.com/pricing",
@@ -112,6 +125,10 @@ export const features: Feature[] = [
   { key: "notes", label: "Notes", longLabel: "Notes", onSite: true },
   { key: "tasks", label: "Tasks", longLabel: "Tasks", onSite: true },
   { key: "calendar", label: "Calendar", longLabel: "Calendar view", onSite: true },
+  {
+    key: "pageLinks", label: "Links", longLabel: "Links between notes", onSite: true,
+    note: "Links means linking one note or task to another by its name, not pasting a copied address.",
+  },
   { key: "onDevice", label: "On your computer", longLabel: "Stored on your computer", onSite: true },
   { key: "noAccount", label: "No account", longLabel: "No account required", onSite: true },
   { key: "phone", label: "Phone app", longLabel: "Phone app", onSite: true },

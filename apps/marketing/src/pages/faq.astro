@@ -42,7 +42,7 @@ const faqs = [
   },
   {
     q: "Does Pikos slow down with lots of notes?",
-    a: "No. With half a million pages, opening a page takes about 61 milliseconds and a search about 28, nearly the same as with fifty. The laptop it was measured on and the commands to check it on your own machine are on the speed page.",
+    a: "No. With half a million pages, opening a page takes about 61 milliseconds and a search about 28, nearly the same as with fifty. A long page stays quick too: in a page of 100,000 words, a letter you type shows in about 24 milliseconds. The laptop it was measured on and the commands to check it on your own machine are on the speed page.",
     href: "/speed",
     linkLabel: "How it was measured",
   },
@@ -51,8 +51,12 @@ const faqs = [
     a: "As a single file on your drive. You can back it up, copy it, or export it anytime. Pikos doesn't send your data anywhere on its own, and the network features it has are opt-in and off until you turn them on. Calendar sync is the one that exists today, and it only reads.",
   },
   {
+    q: "Can I lose what I've typed?",
+    a: "Pikos saves as you type, and quitting saves the last few words first. If the command line, an assistant, or another window changes a page while you're typing in it, Pikos keeps both edits. And if a save ever fails, \"Not saved\" shows beside the word count, and clicking it tries again.",
+  },
+  {
     q: "Can it replace Obsidian?",
-    a: "Depends on your workflow. If you mostly write and link notes, Obsidian is purpose-built for that. If you also need task management and a calendar without plugins, Pikos does all three natively.",
+    a: "Depends on your workflow. If you mostly write and link notes, with a graph and plugins, Obsidian is purpose-built for that. Pikos links pages too, with [[, and shows what links to each one. If you also want tasks and a calendar without plugins, Pikos has them built in.",
   },
   {
     q: "Can it replace TickTick or Todoist?",
