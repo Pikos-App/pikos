@@ -43,7 +43,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEVELOPMENT_TEAM: "" # set locally; deliberately not committed
-    MARKETING_VERSION: "1.0"
+    MARKETING_VERSION: "1.0.0"
     # The TestFlight workflow raises this to its run number, since every upload needs a higher one.
     CURRENT_PROJECT_VERSION: "1"
 
