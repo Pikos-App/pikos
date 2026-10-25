@@ -35,6 +35,8 @@ jobs:
     timeout-minutes: 60
     env:
       CONFIGURATION: ${{ inputs.app == 'staging' && 'Staging' || 'Release' }}
+      # The same pin as _ios.yml. App Store Connect also refuses an upload built on an SDK before 26.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v5
 
