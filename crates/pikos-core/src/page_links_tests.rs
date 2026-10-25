@@ -193,7 +193,10 @@ fn a_label_survives_a_rename_and_a_markdown_round_trip() {
     resolve_wikilinks(&mut back, &mut resolve_known);
 
     assert_eq!(markdown, "[[Plans|the plan]]\n");
-    assert_eq!(back["content"][0]["content"], json!([labelled("plans-id", "Plans", "the plan")]));
+    assert_eq!(
+        back["content"][0]["content"],
+        json!([labelled("plans-id", "Plans", "the plan")])
+    );
 }
 
 #[test]
@@ -204,5 +207,8 @@ fn search_text_reads_a_link_as_its_label_else_its_title() {
         link("trip-id", "Trip notes"),
     ]);
 
-    assert_eq!(crate::text::extract_text_value(&doc), "the plan / Trip notes");
+    assert_eq!(
+        crate::text::extract_text_value(&doc),
+        "the plan / Trip notes"
+    );
 }
