@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Pikos Beta",
+  "identifier": "app.pikos.desktop.beta",
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
+}

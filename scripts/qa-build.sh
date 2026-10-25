@@ -15,6 +15,10 @@
 #
 #   scripts/qa-build.sh --icloud   also turn on iCloud sync, which needs the staging Developer ID
 #                                  provisioning profile at $PIKOS_STAGING_PROFILE
+#   scripts/qa-build.sh --beta     Pikos Beta instead, Alex's own app before sync ships: the
+#                                  production iCloud container, its profile at $PIKOS_BETA_PROFILE,
+#                                  and its own identifier and no updater, so no public release can
+#                                  replace it with a build that has no sync
 
 set -euo pipefail
 
@@ -50,21 +54,34 @@ if [ -n "$missing" ]; then
   log "building without Google sync, as asked"
 fi
 
-OVERLAY=apps/desktop/src-tauri/tauri.conf.staging.json
-NAME=$(node -p "require('./$OVERLAY').productName")
+CHANNEL=staging
+OVERLAY=tauri.conf.staging.json
+ENTITLEMENTS=PikosStaging.entitlements
+PROFILE="${PIKOS_STAGING_PROFILE:-$HOME/.config/pikos/signing/Pikos_Staging_Developer_ID.provisionprofile}"
+CONTAINER=iCloud.app.pikos.staging
+with_icloud=false
+case "${1:-}" in
+  --icloud) with_icloud=true ;;
+  --beta)
+    CHANNEL=beta
+    OVERLAY=tauri.conf.beta.json
+    ENTITLEMENTS=PikosBeta.entitlements
+    PROFILE="${PIKOS_BETA_PROFILE:-$HOME/.config/pikos/signing/Pikos_Beta_Developer_ID.provisionprofile}"
+    CONTAINER=iCloud.app.pikos
+    with_icloud=true
+    ;;
+esac
+NAME=$(node -p "require('./apps/desktop/src-tauri/$OVERLAY').productName")
 
 # CloudKit refuses an app whose entitlements its embedded profile doesn't grant, so both go in.
 icloud=()
-icloud_ui=false
-if [ "${1:-}" = "--icloud" ]; then
-  PROFILE="${PIKOS_STAGING_PROFILE:-$HOME/.config/pikos/signing/Pikos_Staging_Developer_ID.provisionprofile}"
+if [ "$with_icloud" = true ]; then
   if [ ! -f "$PROFILE" ]; then
     echo "[qa-build] No provisioning profile at $PROFILE" >&2
     exit 1
   fi
-  log "with iCloud sync, profile: $PROFILE"
-  icloud_ui=true
-  icloud=(--features icloud-sync --config "{\"bundle\":{\"macOS\":{\"entitlements\":\"PikosStaging.entitlements\",\"files\":{\"embedded.provisionprofile\":\"$PROFILE\"}}}}")
+  log "with iCloud sync through $CONTAINER, profile: $PROFILE"
+  icloud=(--features icloud-sync --config "{\"bundle\":{\"macOS\":{\"entitlements\":\"$ENTITLEMENTS\",\"files\":{\"embedded.provisionprofile\":\"$PROFILE\"}}}}")
 fi
 
 # Remove previously built bundles so macOS Spotlight can't launch a stale copy
@@ -74,8 +91,9 @@ find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
   -exec rm -rf {} + 2>/dev/null || true
 
 # The app bundle only: QA never opens the disk image, and building it is most of the wait.
-VITE_NO_UPDATER=true VITE_ICLOUD_SYNC="$icloud_ui" APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
-  tauri build --config "src-tauri/tauri.conf.staging.json" --bundles app ${icloud[@]+"${icloud[@]}"}
+VITE_NO_UPDATER=true VITE_ICLOUD_SYNC="$with_icloud" PIKOS_ICLOUD_CONTAINER="$CONTAINER" \
+  APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
+  tauri build --config "src-tauri/$OVERLAY" --bundles app ${icloud[@]+"${icloud[@]}"}
 
 BUNDLE="$ROOT/apps/desktop/src-tauri/target/release/bundle"
 
@@ -91,7 +109,7 @@ mkdir -p "$HOME/Applications"
 rm -rf "$APP"
 mv "$BUNDLE/macos/$NAME.app" "$APP"
 
-if [ ${#icloud[@]} -gt 0 ]; then
+if [ ${#icloud[@]} -gt 0 ] && [ "$CHANNEL" = staging ]; then
   bash "$ROOT/scripts/check-sync-pairing.sh" "" "$APP" || true
 fi
 
