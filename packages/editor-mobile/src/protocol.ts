@@ -61,6 +61,10 @@ export const HOST_TO_WEBVIEW = {
     doc: "Replace the editor's contents with a page's document.",
     fields: { doc: "json", pageId: "string" },
   },
+  reload: {
+    doc: "Show a newer body of the open page in place, keeping the caret in the text it was in. `changesSeen` is how many docChanged the host has had since the page loaded. The editor refuses the body while it holds typing the host hasn't had, which the body would wipe from the screen, and answers with reloadResult either way.",
+    fields: { changesSeen: "integer", doc: "json", pageId: "string" },
+  },
   setEditable: {
     doc: "Make the document read-only or editable. The host sends false for a page written by a newer schema than it can save, so the surface refuses input instead of accepting keystrokes it will never persist.",
     fields: { editable: "boolean" },
@@ -105,6 +109,10 @@ export const WEBVIEW_TO_HOST = {
   ready: {
     doc: "The editor has mounted and can accept messages. Carries the protocol version the webview was built against so the host can refuse a mismatch loudly rather than misbehave quietly.",
     fields: { protocolVersion: "integer" },
+  },
+  reloadResult: {
+    doc: "Whether the editor showed the body a reload sent. One for every reload, in order, so the host knows which body later typing was typed over.",
+    fields: { applied: "boolean", pageId: "string" },
   },
   requestImagePicker: {
     doc: "The user asked to insert an image. The host presents a picker and replies with insertImage.",

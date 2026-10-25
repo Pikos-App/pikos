@@ -11,7 +11,7 @@
 
 import { extractText } from "@pikos/core";
 import { createDocumentExtensions, createPikosImageNode } from "@pikos/editor-schema";
-import { Editor } from "@tiptap/core";
+import { createDocument, Editor } from "@tiptap/core";
 
 import { resolveAssetUrl } from "./assetUrl";
 import { debounce, hasHost, send } from "./bridge";
@@ -34,14 +34,24 @@ let currentPageId: string | null = null;
 /** Guards against echoing the host's own `load` back as a change. */
 let applyingHostDocument = false;
 
+/** docChanged messages sent since the open page loaded, matched against a reload's `changesSeen`. */
+let changesSent = 0;
+
 const inputTimings = createInputTimings();
 
-function mount(): Editor {
+interface Mounted {
+  editor: Editor;
+  /** Typing still inside the debounce, which no docChanged has carried yet. */
+  hasUnsentChange: () => boolean;
+}
+
+function mount(): Mounted {
   const element = document.querySelector<HTMLElement>("#editor");
   if (!element) throw new Error("#editor element is missing from the document");
 
   const sendDocChanged = debounce((editor: Editor) => {
     if (currentPageId === null) return;
+    changesSent += 1;
     const doc = editor.getJSON();
     send("docChanged", {
       doc: JSON.stringify(doc),
@@ -109,7 +119,7 @@ function mount(): Editor {
   });
   window.addEventListener("pagehide", () => sendDocChanged.flush());
 
-  return editor;
+  return { editor, hasUnsentChange: sendDocChanged.isPending };
 }
 
 /** Tell the host what the caret is currently inside, for its formatting UI. */
@@ -140,7 +150,50 @@ function applyTheme(scheme: string, accent: string): void {
   root.style.setProperty("--pikos-accent", accent);
 }
 
-function handleHostMessage(editor: Editor, raw: unknown): void {
+/**
+ * Replace the document with `doc` by changing only the stretch that differs, so the caret and the
+ * scroll stay with the text around them. Resetting the whole document and putting the caret back
+ * at the same offset would move it into other text whenever the change sat above it.
+ */
+function showInPlace(editor: Editor, doc: string): boolean {
+  const next = parseDocument(editor, doc);
+  if (!next) return false;
+
+  const current = editor.state.doc;
+  const start = current.content.findDiffStart(next.content);
+  if (start === null) return true;
+
+  const ends = current.content.findDiffEnd(next.content);
+  if (!ends) return true;
+
+  // Counted back from the end, a change that repeats the text beside it can end before it starts.
+  const overlap = Math.max(0, start - Math.min(ends.a, ends.b));
+  const tr = editor.state.tr
+    .replace(start, ends.a + overlap, next.slice(start, ends.b + overlap))
+    .setMeta("addToHistory", false);
+
+  applyingHostDocument = true;
+  try {
+    editor.view.dispatch(tr);
+  } finally {
+    applyingHostDocument = false;
+  }
+  return true;
+}
+
+function parseDocument(editor: Editor, doc: string): ReturnType<typeof createDocument> | null {
+  try {
+    return createDocument(JSON.parse(doc) as object, editor.schema, undefined, {
+      errorOnInvalidContent: true,
+    });
+  } catch {
+    // eslint-disable-next-line no-console
+    console.error("[pikos-bridge] could not parse a newer body for", currentPageId);
+    return null;
+  }
+}
+
+function handleHostMessage({ editor, hasUnsentChange }: Mounted, raw: unknown): void {
   const parsed = parseHostMessage(raw);
   if (!parsed.ok) {
     // Reported rather than thrown: a throw here is swallowed by the JS
@@ -154,6 +207,7 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
     case "load": {
       const { doc, pageId } = parsed.payload as { doc: string; pageId: string };
       currentPageId = pageId;
+      changesSent = 0;
       applyingHostDocument = true;
       try {
         // Three things at once, each load-bearing:
@@ -180,6 +234,18 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
       } finally {
         applyingHostDocument = false;
       }
+      return;
+    }
+    case "reload": {
+      const { changesSeen, doc, pageId } = parsed.payload as {
+        changesSeen: number;
+        doc: string;
+        pageId: string;
+      };
+      const isOpenPage = pageId === currentPageId;
+      const hasHostEveryChange = changesSeen === changesSent && !hasUnsentChange();
+      const applied = isOpenPage && hasHostEveryChange && showInPlace(editor, doc);
+      send("reloadResult", { applied, pageId });
       return;
     }
     case "setTheme": {
@@ -291,13 +357,14 @@ declare global {
 }
 
 function start(): void {
-  const editor = mount();
+  const mounted = mount();
+  const { editor } = mounted;
 
   // The host calls this through evaluateJavaScript. Exposed as a single
   // function rather than several so there is one place to version and one
   // place to validate.
   window.pikosEditor = {
-    receive: (raw: unknown) => handleHostMessage(editor, raw),
+    receive: (raw: unknown) => handleHostMessage(mounted, raw),
   };
 
   send("ready", { protocolVersion: PROTOCOL_VERSION });

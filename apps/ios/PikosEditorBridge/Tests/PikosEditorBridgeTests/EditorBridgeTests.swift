@@ -98,6 +98,17 @@ final class EditorBridgeProtocolTests: XCTestCase {
         XCTAssertEqual(payload.plainText, "hi")
     }
 
+    func testAnEditorsAnswerToANewerBodyDecodes() throws {
+        let data = Data(#"{"v":1,"type":"reloadResult","payload":{"applied":true,"pageId":"p"}}"#.utf8)
+        guard case .reloadResult(let payload) = try JSONDecoder().decode(
+            EditorBridge.Incoming.self, from: data)
+        else {
+            return XCTFail("expected reloadResult")
+        }
+        XCTAssertTrue(payload.applied)
+        XCTAssertEqual(payload.pageId, "p")
+    }
+
     /// An app update can replace the native shell while a webview is still
     /// live. Acting on a message from a version this build does not understand
     /// is worse than dropping it.
@@ -187,6 +198,20 @@ final class EditorControllerTests: XCTestCase {
 
         XCTAssertEqual(
             sink.types, ["toggleMark", "toggleBlock", "focus", "blur", "insertImage"])
+    }
+
+    /// Every reload delivered gets one answer, and the host pairs answers with bodies in order, so
+    /// it has to know which bodies went nowhere.
+    func testANewerBodySaysWhetherAnEditorTookIt() {
+        let sink = RecordingSink()
+        let controller = EditorController()
+        controller.attach(sink)
+
+        XCTAssertFalse(controller.reload(pageId: "p", doc: "{}", changesSeen: 0))
+
+        sink.isReady = true
+        XCTAssertTrue(controller.reload(pageId: "p", doc: "{}", changesSeen: 2))
+        XCTAssertEqual(sink.types, ["reload"])
     }
 
     /// `dismantleUIView` detaches when the screen goes away. A controller that

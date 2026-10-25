@@ -84,9 +84,19 @@ public final class EditorController {
         send(.insertImage(.init(assetPath: assetPath)))
     }
 
-    private func send(_ message: EditorBridge.Outgoing) {
-        guard let sink, sink.isReady else { return }
+    /// Offer the editor a newer body of the open page, which it shows in place or refuses, and
+    /// answers through `EditorWebView.onReloadAnswered`. False when no editor took it, so no
+    /// answer will come.
+    @discardableResult
+    public func reload(pageId: String, doc: String, changesSeen: Int) -> Bool {
+        send(.reload(.init(changesSeen: changesSeen, doc: doc, pageId: pageId)))
+    }
+
+    @discardableResult
+    private func send(_ message: EditorBridge.Outgoing) -> Bool {
+        guard let sink, sink.isReady else { return false }
         sink.deliver(message)
+        return true
     }
 
     // MARK: - Vocabulary

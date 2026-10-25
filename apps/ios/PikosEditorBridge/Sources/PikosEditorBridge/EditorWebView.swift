@@ -20,7 +20,8 @@ import WebKit
 public struct EditorWebView: UIViewRepresentable {
     /// Document to show. Changing the page id loads it; changing the JSON alone
     /// does not, since the editor is the authority on its own content once
-    /// loaded and re-pushing it would fight the user's cursor.
+    /// loaded and re-pushing it would fight the user's cursor. A newer body goes
+    /// in through `EditorController.reload`, which the editor can refuse.
     public let pageId: String
     public let documentJSON: String
 
@@ -59,6 +60,10 @@ public struct EditorWebView: UIViewRepresentable {
     /// How long the keystrokes since the last report took to reach the screen, in milliseconds.
     public var onInputTiming: (_ count: Int, _ medianMs: Double, _ worstMs: Double) -> Void
 
+    /// Fired once for every `EditorController.reload` delivered, in order: whether the editor
+    /// showed that body.
+    public var onReloadAnswered: (_ pageId: String, _ applied: Bool) -> Void
+
     public init(
         pageId: String,
         documentJSON: String,
@@ -72,7 +77,8 @@ public struct EditorWebView: UIViewRepresentable {
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onImageRequested: @escaping () -> Void = {},
         onReady: @escaping (TimeInterval) -> Void = { _ in },
-        onInputTiming: @escaping (Int, Double, Double) -> Void = { _, _, _ in }
+        onInputTiming: @escaping (Int, Double, Double) -> Void = { _, _, _ in },
+        onReloadAnswered: @escaping (String, Bool) -> Void = { _, _ in }
     ) {
         self.pageId = pageId
         self.documentJSON = documentJSON
@@ -87,6 +93,7 @@ public struct EditorWebView: UIViewRepresentable {
         self.onImageRequested = onImageRequested
         self.onReady = onReady
         self.onInputTiming = onInputTiming
+        self.onReloadAnswered = onReloadAnswered
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -306,6 +313,9 @@ public struct EditorWebView: UIViewRepresentable {
 
             case .inputTiming(let payload):
                 parent.onInputTiming(payload.count, payload.medianMs, payload.worstMs)
+
+            case .reloadResult(let payload):
+                parent.onReloadAnswered(payload.pageId, payload.applied)
 
             case .heightChanged:
                 // Only meaningful for a host that sizes the webview inline. This

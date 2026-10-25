@@ -53,6 +53,23 @@ public enum EditorBridge {
         }
     }
 
+    /// Show a newer body of the open page in place, keeping the caret in the text
+    /// it was in. `changesSeen` is how many docChanged the host has had since the
+    /// page loaded. The editor refuses the body while it holds typing the host
+    /// hasn't had, which the body would wipe from the screen, and answers with
+    /// reloadResult either way.
+    public struct OutgoingReloadPayload: Codable, Equatable {
+        public let changesSeen: Int
+        public let doc: String
+        public let pageId: String
+
+        public init(changesSeen: Int, doc: String, pageId: String) {
+            self.changesSeen = changesSeen
+            self.doc = doc
+            self.pageId = pageId
+        }
+    }
+
     /// Make the document read-only or editable. The host sends false for a page
     /// written by a newer schema than it can save, so the surface refuses input
     /// instead of accepting keystrokes it will never persist.
@@ -107,6 +124,7 @@ public enum EditorBridge {
         case focus(OutgoingFocusPayload)
         case insertImage(OutgoingInsertImagePayload)
         case load(OutgoingLoadPayload)
+        case reload(OutgoingReloadPayload)
         case setEditable(OutgoingSetEditablePayload)
         case setTheme(OutgoingSetThemePayload)
         case toggleBlock(OutgoingToggleBlockPayload)
@@ -118,6 +136,7 @@ public enum EditorBridge {
             case .focus: return "focus"
             case .insertImage: return "insertImage"
             case .load: return "load"
+            case .reload: return "reload"
             case .setEditable: return "setEditable"
             case .setTheme: return "setTheme"
             case .toggleBlock: return "toggleBlock"
@@ -138,6 +157,7 @@ public enum EditorBridge {
             case .focus(let p): payloadData = try encoder.encode(p)
             case .insertImage(let p): payloadData = try encoder.encode(p)
             case .load(let p): payloadData = try encoder.encode(p)
+            case .reload(let p): payloadData = try encoder.encode(p)
             case .setEditable(let p): payloadData = try encoder.encode(p)
             case .setTheme(let p): payloadData = try encoder.encode(p)
             case .toggleBlock(let p): payloadData = try encoder.encode(p)
@@ -213,6 +233,18 @@ public enum EditorBridge {
         }
     }
 
+    /// Whether the editor showed the body a reload sent. One for every reload, in
+    /// order, so the host knows which body later typing was typed over.
+    public struct IncomingReloadResultPayload: Codable, Equatable {
+        public let applied: Bool
+        public let pageId: String
+
+        public init(applied: Bool, pageId: String) {
+            self.applied = applied
+            self.pageId = pageId
+        }
+    }
+
     /// The user asked to insert an image. The host presents a picker and replies
     /// with insertImage.
     public struct IncomingRequestImagePickerPayload: Codable, Equatable {
@@ -240,6 +272,7 @@ public enum EditorBridge {
         case inputTiming(IncomingInputTimingPayload)
         case linkTapped(IncomingLinkTappedPayload)
         case ready(IncomingReadyPayload)
+        case reloadResult(IncomingReloadResultPayload)
         case requestImagePicker(IncomingRequestImagePickerPayload)
         case selectionChanged(IncomingSelectionChangedPayload)
 
@@ -274,6 +307,8 @@ public enum EditorBridge {
                 self = .linkTapped(try container.decode(IncomingLinkTappedPayload.self, forKey: .payload))
             case "ready":
                 self = .ready(try container.decode(IncomingReadyPayload.self, forKey: .payload))
+            case "reloadResult":
+                self = .reloadResult(try container.decode(IncomingReloadResultPayload.self, forKey: .payload))
             case "requestImagePicker":
                 self = .requestImagePicker(try container.decode(IncomingRequestImagePickerPayload.self, forKey: .payload))
             case "selectionChanged":

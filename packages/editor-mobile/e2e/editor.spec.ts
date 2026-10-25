@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import {
   clearMessages,
@@ -58,6 +58,112 @@ test.describe("loading a document", () => {
     // the user would be editing one page believing it is another.
     await sendToEditor(page, "load", { doc: "{ not json", pageId: "p2" });
     await expect(page.locator(".ProseMirror")).not.toContainText("Previous page");
+  });
+});
+
+test.describe("showing a newer body in place", () => {
+  const twoLines = (first: string, second: string) =>
+    JSON.stringify({
+      content: [
+        { content: [{ text: first, type: "text" }], type: "paragraph" },
+        { content: [{ text: second, type: "text" }], type: "paragraph" },
+      ],
+      type: "doc",
+    });
+
+  async function caretAtEnd(page: Page): Promise<void> {
+    await page.locator(".ProseMirror p").last().click();
+    await page.keyboard.press("End");
+  }
+
+  test("keeps the caret in the line it was in when a line above changed", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: twoLines("First line", "Second line"), pageId: "p1" });
+    await caretAtEnd(page);
+    await clearMessages(page);
+
+    await sendToEditor(page, "reload", {
+      changesSeen: 0,
+      doc: twoLines("First line, changed on the Mac", "Second line"),
+      pageId: "p1",
+    });
+    await page.keyboard.type("X");
+
+    await expect(page.locator(".ProseMirror p").first()).toHaveText("First line, changed on the Mac");
+    await expect(page.locator(".ProseMirror p").last()).toHaveText("Second lineX");
+    const [answer] = await messagesOfType(page, "reloadResult");
+    expect(answer?.payload).toEqual({ applied: true, pageId: "p1" });
+  });
+
+  test("keeps the caret in its line when a line was added above it", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: twoLines("One", "Two"), pageId: "p1" });
+    await caretAtEnd(page);
+
+    await sendToEditor(page, "reload", {
+      changesSeen: 0,
+      doc: JSON.stringify({
+        content: ["Added on the Mac", "One", "Two"].map((text) => ({
+          content: [{ text, type: "text" }],
+          type: "paragraph",
+        })),
+        type: "doc",
+      }),
+      pageId: "p1",
+    });
+    await page.keyboard.type("X");
+
+    await expect(page.locator(".ProseMirror p")).toHaveText(["Added on the Mac", "One", "TwoX"]);
+  });
+
+  test("does not report the newer body back as a change", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: twoLines("One", "Two"), pageId: "p1" });
+    await clearMessages(page);
+
+    await sendToEditor(page, "reload", { changesSeen: 0, doc: twoLines("One", "Two, again"), pageId: "p1" });
+    await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
+
+    await expect(page.locator(".ProseMirror")).toContainText("Two, again");
+    expect(await messagesOfType(page, "docChanged")).toEqual([]);
+  });
+
+  test("refuses it while typing hasn't been sent to the host", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: twoLines("One", "Two"), pageId: "p1" });
+    await caretAtEnd(page);
+    await clearMessages(page);
+
+    await page.keyboard.type(" typed");
+    await sendToEditor(page, "reload", { changesSeen: 0, doc: twoLines("Changed", "Two"), pageId: "p1" });
+
+    await expect(page.locator(".ProseMirror p")).toHaveText(["One", "Two typed"]);
+    const [answer] = await messagesOfType(page, "reloadResult");
+    expect(answer?.payload).toEqual({ applied: false, pageId: "p1" });
+    await expect
+      .poll(async () => (await messagesOfType(page, "docChanged")).at(-1)?.payload["plainText"])
+      .toContain("Two typed");
+  });
+
+  test("refuses one sent before the host saw the latest change", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: twoLines("One", "Two"), pageId: "p1" });
+    await caretAtEnd(page);
+    await page.keyboard.type(" typed");
+    await expect.poll(async () => (await messagesOfType(page, "docChanged")).length).toBe(1);
+
+    await sendToEditor(page, "reload", { changesSeen: 0, doc: twoLines("Stale", "Two"), pageId: "p1" });
+    await expect(page.locator(".ProseMirror p")).toHaveText(["One", "Two typed"]);
+
+    await sendToEditor(page, "reload", { changesSeen: 1, doc: twoLines("Merged", "Two typed"), pageId: "p1" });
+    await expect(page.locator(".ProseMirror p")).toHaveText(["Merged", "Two typed"]);
+    const answers = await messagesOfType(page, "reloadResult");
+    expect(answers.map((a) => a.payload["applied"])).toEqual([false, true]);
+  });
+
+  test("refuses a body for a page that isn't open", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: twoLines("One", "Two"), pageId: "p1" });
+
+    await sendToEditor(page, "reload", { changesSeen: 0, doc: twoLines("Other", "Page"), pageId: "p2" });
+
+    await expect(page.locator(".ProseMirror p")).toHaveText(["One", "Two"]);
+    const [answer] = await messagesOfType(page, "reloadResult");
+    expect(answer?.payload).toEqual({ applied: false, pageId: "p2" });
   });
 });
 

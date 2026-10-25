@@ -64,7 +64,7 @@ export function hasHost(): boolean {
 export function debounce<A extends unknown[]>(
   fn: (...args: A) => void,
   ms: number
-): ((...args: A) => void) & { flush: () => void; cancel: () => void } {
+): ((...args: A) => void) & { flush: () => void; cancel: () => void; isPending: () => boolean } {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: A | null = null;
 
@@ -97,6 +97,7 @@ export function debounce<A extends unknown[]>(
     timer = null;
     pending = null;
   };
+  wrapped.isPending = () => timer !== null;
 
   return wrapped;
 }
