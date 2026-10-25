@@ -13,31 +13,41 @@ export function ICloudSyncSettings() {
   const action = state && state.action !== "none" ? ACTION_LABELS[state.action] : null;
 
   return (
-    <SettingsSection
-      description="Keeps your pages the same on every device signed in to your iCloud account."
-      title="iCloud"
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-border py-3">
-        <label className="text-sm font-medium" htmlFor="icloud-sync">
-          Sync with iCloud
-        </label>
-        <Switch
-          checked={state?.on ?? false}
-          disabled={state === null}
-          id="icloud-sync"
-          onCheckedChange={(on) => void setOn(on)}
-        />
-      </div>
-      {state && <p className="mt-3 text-xs text-muted-foreground">{state.text}</p>}
-      {action && (
-        <button
-          className="mt-3 inline-flex items-center rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent"
-          onClick={() => void act()}
-        >
-          {action}
-        </button>
-      )}
-      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
-    </SettingsSection>
+    <div className="max-w-settings">
+      <SettingsSection
+        description="Keeps your pages the same on every device signed in to your iCloud account."
+        title="iCloud"
+      >
+        <div className="rounded-lg border border-border bg-card px-4">
+          <div className="flex items-center justify-between gap-3 py-3">
+            <div>
+              <label className="text-sm font-medium" htmlFor="icloud-sync">
+                Sync with iCloud
+              </label>
+              {state && <p className="text-xs text-muted-foreground">{state.text}</p>}
+            </div>
+            <Switch
+              checked={state?.on ?? false}
+              disabled={state === null}
+              id="icloud-sync"
+              onCheckedChange={(on) => void setOn(on)}
+            />
+          </div>
+          {(action || error) && (
+            <div className="flex flex-col items-start gap-2 border-t border-border py-3">
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              {action && (
+                <button
+                  className="inline-flex items-center rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent"
+                  onClick={() => void act()}
+                >
+                  {action}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </SettingsSection>
+    </div>
   );
 }
