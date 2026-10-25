@@ -184,6 +184,8 @@ targets:
         NSSupportsLiveActivities: true
         UIBackgroundModes:
           - fetch
+          # CloudKit's silent push wakes a suspended app to fetch what another device changed.
+          - remote-notification
         # The app's Documents folder appears in the Files app as "Pikos",
         # and files in it can be opened where they are. This is what makes
         # "your data is a file" true on a phone: Settings › Your data writes

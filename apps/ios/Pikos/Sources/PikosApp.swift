@@ -46,8 +46,15 @@ struct PikosApp: App {
         let scheduler = ReminderScheduler(workspace: { pages.handle })
         _reminders = State(initialValue: scheduler)
         _spotlight = State(initialValue: SpotlightIndexer(workspace: { pages.handle }))
-        _deviceSync = State(
-            initialValue: DeviceSync(workspace: { pages.handle }, onApplied: { await pages.refresh() }))
+        let device = DeviceSync(workspace: { pages.handle }, onApplied: { await pages.refresh() })
+        _deviceSync = State(initialValue: device)
+
+        // Here rather than in the first screen's task: a push can launch the app in the background,
+        // where no screen appears, and Apple's sync engine takes the push only once it exists.
+        Task { @MainActor in
+            await pages.ensureStarted()
+            await device.resume()
+        }
 
         // The in-place hints. Configured before any view exists so the first
         // list can already ask whether its tip is due.
@@ -140,12 +147,11 @@ struct PikosApp: App {
             ) { _ in
                 Task { await deviceSync.fetchNow() }
             }
-            // Opening the workspace runs migrations, so it happens once,
-            // here, in the app process. A widget must never be the process
-            // that migrates.
+            // Opening the workspace runs migrations, so it happens once, in
+            // the app process. A widget must never be the process that
+            // migrates.
             .task {
-                await store.start()
-                await deviceSync.resume()
+                await store.ensureStarted()
                 // An intent or deep link may have arrived while the
                 // workspace was still opening.
                 route.applyPending(to: store)
