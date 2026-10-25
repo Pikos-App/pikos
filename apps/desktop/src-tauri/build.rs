@@ -19,12 +19,20 @@ fn main() {
 
 /// With the `icloud-sync` feature on a Mac, builds the Swift transport as a static library and
 /// links it, with CloudKit and the Swift runtime it needs.
+///
+/// The container comes from `PIKOS_ICLOUD_CONTAINER`, which must name the one the build's
+/// entitlements grant: CloudKit refuses any other. Unset, it is staging's.
 fn link_icloud_sync() {
     let wanted = std::env::var_os("CARGO_FEATURE_ICLOUD_SYNC").is_some()
         && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos");
     if !wanted {
         return;
     }
+
+    println!("cargo:rerun-if-env-changed=PIKOS_ICLOUD_CONTAINER");
+    let container = std::env::var("PIKOS_ICLOUD_CONTAINER")
+        .unwrap_or_else(|_| "iCloud.app.pikos.staging".to_owned());
+    println!("cargo:rustc-env=PIKOS_ICLOUD_CONTAINER={container}");
 
     let manifest = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let package = manifest.join("../../apple/PikosSync");

@@ -20,7 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use super::icloud_settings::ICloudSyncState;
 use crate::error::{AppError, AppResult};
 
-const CONTAINER: &str = "iCloud.app.pikos.staging";
+const CONTAINER: &str = env!("PIKOS_ICLOUD_CONTAINER");
 
 /// Emitted when the line under the Settings switch changes.
 const STATUS_EVENT: &str = "icloud-sync:status";
