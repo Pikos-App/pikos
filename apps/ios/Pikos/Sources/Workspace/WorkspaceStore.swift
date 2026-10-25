@@ -827,22 +827,26 @@ public final class WorkspaceStore {
 
     // MARK: - Writes
 
-    /// Save an edited document.
+    /// Save an edited document typed over `base`, the stored body the editor showed, and return
+    /// the body stored after: the one typed, or its merge with a newer one saved elsewhere.
     ///
     /// Deliberately does not refresh the list: this is called on every debounced
     /// keystroke while the editor is open, and reloading the page list under the
     /// user on each one would be both wasteful and visibly janky. The list
     /// refreshes when the editor closes.
-    public func saveDocument(pageId: String, json: String) async {
-        guard let workspace else { return }
+    public func saveDocument(pageId: String, json: String, base: String) async -> String? {
+        guard let workspace else { return nil }
+        var stored: String?
         await untilWritten {
             do {
-                _ = try await workspace.updatePage(
-                    id: pageId, edit: PageEdit(content: json))
+                stored = try await workspace.updatePage(
+                    id: pageId, edit: PageEdit(content: json, baseContent: base)
+                ).content
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
+        return stored
     }
 
     /// Asks iOS for time to finish the write if the app is put away while it runs. The editor and

@@ -33,6 +33,7 @@ struct EditorScreen: View {
     /// Owned here rather than by the editor view, which is a value type
     /// recreated on every update and so cannot hold a live reference.
     @State private var controller = EditorController()
+    @State private var openBody: OpenPageBody?
 
     var body: some View {
         Group {
@@ -49,13 +50,13 @@ struct EditorScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        // A rename, a new date or a moved folder from the menu is a write
-        // through the store, and the store bumps its version after each. The
-        // facts are re-read so the title and the strip follow; the document is
-        // not re-sent — the editor only loads when the page *id* changes, and
-        // re-pushing content it already holds would fight the caret.
+        // The store bumps its version after every write it makes and every sync
+        // that lands. The facts are re-read so the title and the strip follow, and
+        // a body changed elsewhere is offered to the editor once nothing typed is
+        // waiting to be saved.
         .onChange(of: store.dataVersion) { _, _ in
             Task { await reloadFacts() }
+            openBody?.storedMayHaveChanged()
         }
         // The list is not refreshed on every keystroke — see WorkspaceStore —
         // so it is refreshed once, here, when the editor goes away.
@@ -101,11 +102,9 @@ struct EditorScreen: View {
                 // invoked from WebKit delegate callbacks, and whether those are
                 // main-actor-isolated depends on the SDK's audit state — hopping
                 // is correct either way and costs nothing.
-                onDocumentChanged: { pageId, json, _ in
+                onDocumentChanged: { _, json, _ in
                     guard editable else { return }
-                    Task { @MainActor in
-                        await store.saveDocument(pageId: pageId, json: json)
-                    }
+                    Task { @MainActor in openBody?.typed(json) }
                 },
                 onSelectionChanged: { marks, nodeType, isEmpty in
                     Task { @MainActor in
@@ -126,6 +125,9 @@ struct EditorScreen: View {
                 },
                 onInputTiming: { count, median, worst in
                     Task { @MainActor in typing.add(count: count, medianMs: median, worstMs: worst) }
+                },
+                onReloadAnswered: { _, applied in
+                    Task { @MainActor in openBody?.answered(applied: applied) }
                 }
             )
         }
@@ -210,7 +212,21 @@ struct EditorScreen: View {
         }
         page = await store.page(id: pageId)
         loadFailed = page == nil
-        if page != nil { await store.markOpened(pageId: pageId) }
+        guard let page else { return }
+
+        openBody = makeOpenBody(loaded: page.content)
+        await store.markOpened(pageId: pageId)
+    }
+
+    private func makeOpenBody(loaded: String) -> OpenPageBody {
+        let (store, controller, pageId) = (store, controller, pageId)
+        return OpenPageBody(
+            loaded: loaded,
+            save: { typed, base in await store.saveDocument(pageId: pageId, json: typed, base: base) },
+            read: { await store.page(id: pageId)?.content },
+            offer: { body, changesSeen in
+                controller.reload(pageId: pageId, doc: body, changesSeen: changesSeen)
+            })
     }
 
     /// Write a picked photo into the workspace and put it in the document.
