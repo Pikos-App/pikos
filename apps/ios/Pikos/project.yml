@@ -93,12 +93,16 @@ targets:
             ListWidget.swift NowWidget.swift WidgetSupport.swift CompletePageIntent.swift
             SendToTomorrowIntent.swift
           PIKOS_CLOUDKIT_CONTAINER: iCloud.app.pikos
+          # TestFlight's beta, banded so it can't be mistaken for staging or the store app.
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconBeta
         Staging:
           PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.staging
           CODE_SIGN_ENTITLEMENTS: PikosStaging.entitlements
           PIKOS_APP_GROUP: group.app.pikos.staging
           PIKOS_DISPLAY_NAME: Pikos Staging
           PIKOS_CLOUDKIT_CONTAINER: iCloud.app.pikos.staging
+          # Gold and striped, as the Mac's staging app is.
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconStaging
           # Production, as Release is, so staging tests what production will do. A cable install
           # may set Development to try a record shape before its schema is deployed; the Mac's
           # Developer ID builds reach only Production, so that phone then syncs alone.
