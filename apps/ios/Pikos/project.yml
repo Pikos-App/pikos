@@ -96,14 +96,15 @@ targets:
           PIKOS_APP_GROUP: group.app.pikos.staging
           PIKOS_DISPLAY_NAME: Pikos Staging
           PIKOS_CLOUDKIT_CONTAINER: iCloud.app.pikos.staging
+          # Production, as Release is, so staging tests what production will do. A cable install
+          # may set Development to try a record shape before its schema is deployed; the Mac's
+          # Developer ID builds reach only Production, so that phone then syncs alone.
+          PIKOS_CLOUDKIT_ENVIRONMENT: Production
       base:
         PIKOS_APP_GROUP: group.app.pikos
         PIKOS_DISPLAY_NAME: Pikos
         # A build without a container has no sync and shows no sync settings.
         PIKOS_CLOUDKIT_CONTAINER: ""
-        # Which iCloud environment a staging build syncs through. A Developer ID Mac build reaches
-        # only Production, so the phone is set to it for anything the Mac takes part in.
-        PIKOS_CLOUDKIT_ENVIRONMENT: Development
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
         # Sources/Assets.xcassets. The accent is the brand's terracotta, the
         # same value PikosSupport's `Brand.accentHex` hands to the editor and

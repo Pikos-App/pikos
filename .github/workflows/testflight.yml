@@ -3,9 +3,12 @@ name: TestFlight
 # The iPhone app, archived, signed and uploaded to TestFlight, so a phone with automatic updates
 # on picks it up without the laptop building anything.
 #
-# Started by hand, from the Actions tab or `gh workflow run testflight.yml --ref <branch>`. On
-# every push it would be a build nobody installs for most commits, at about half an hour of
-# runner time each.
+# Started by hand, from the Actions tab or `gh workflow run testflight.yml --ref <branch>`, with
+# `-f app=staging` for the staging app. On every push it would be a build nobody installs for most
+# commits, at about half an hour of runner time each.
+#
+# Both apps take their build number from this workflow's run number, which only rises, so each
+# app's numbers rise too, with gaps where the other app took one.
 #
 # Signing is Apple's cloud signing: with an App Store Connect API key, `-allowProvisioningUpdates`
 # creates and renews the distribution certificate and profiles itself, so no certificate is kept
@@ -14,6 +17,12 @@ name: TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      app:
+        description: Which app to upload
+        type: choice
+        options: [production, staging]
+        default: production
 
 env:
   NODE_VERSION: 24
@@ -21,9 +30,11 @@ env:
 
 jobs:
   upload:
-    name: Archive and upload
+    name: Archive and upload ${{ inputs.app }}
     runs-on: macos-15
     timeout-minutes: 60
+    env:
+      CONFIGURATION: ${{ inputs.app == 'staging' && 'Staging' || 'Release' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -92,7 +103,7 @@ jobs:
           xcodebuild archive \
             -project apps/ios/Pikos/Pikos.xcodeproj \
             -scheme Pikos \
-            -configuration Release \
+            -configuration "$CONFIGURATION" \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Pikos.xcarchive" \
             -allowProvisioningUpdates \

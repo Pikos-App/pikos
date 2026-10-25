@@ -39,5 +39,5 @@ if [ "$phone" = "$mac" ]; then
 fi
 
 echo "[sync-pairing] the phone syncs through $phone and the Mac through $mac, so neither sees the other" >&2
-echo "[sync-pairing] a Developer ID Mac reaches Production only: build the phone with PIKOS_CLOUDKIT_ENVIRONMENT=Production" >&2
+echo "[sync-pairing] a Developer ID Mac reaches Production only: build the phone without PIKOS_CLOUDKIT_ENVIRONMENT=Development" >&2
 exit 1

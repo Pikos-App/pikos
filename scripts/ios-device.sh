@@ -5,9 +5,11 @@ set -euo pipefail
 #
 #   pnpm ios:device              the first paired iPhone, over USB or Wi-Fi
 #   pnpm ios:device <udid>       a specific one, from `xcrun devicectl list devices`
-#   pnpm ios:device --staging    the staging app instead, which syncs through the staging iCloud
-#                                container's Production environment, the only one a Developer ID Mac
-#                                reaches; PIKOS_CLOUDKIT_ENVIRONMENT=Development keeps it to the phone
+#   pnpm ios:device --staging    the staging app instead, replacing a TestFlight staging build and
+#                                syncing as it does, except that a development-signed app registers
+#                                with Apple's sandbox push service, which CloudKit's Production
+#                                environment doesn't send to: it catches up each time it's opened.
+#                                PIKOS_CLOUDKIT_ENVIRONMENT=Development keeps it to the phone
 #
 # Xcode the app never opens. Its indexing and simulators are what eat a laptop, and
 # `xcodebuild` with `devicectl` needs neither.
@@ -101,7 +103,7 @@ xcodebuild build \
   -derivedDataPath "$DERIVED" \
   -allowProvisioningUpdates \
   DEVELOPMENT_TEAM="$TEAM" \
-  PIKOS_CLOUDKIT_ENVIRONMENT="${PIKOS_CLOUDKIT_ENVIRONMENT:-Production}" \
+  ${PIKOS_CLOUDKIT_ENVIRONMENT:+PIKOS_CLOUDKIT_ENVIRONMENT="$PIKOS_CLOUDKIT_ENVIRONMENT"} \
   CODE_SIGN_STYLE=Automatic |
   if command -v xcbeautify >/dev/null; then xcbeautify --quiet; else grep -E 'error:|warning: .*Pikos|BUILD'; fi
 

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The staging app's own App Group and iCloud container, so a dogfood build never touches the real
-  workspace. The iCloud environment comes from PIKOS_CLOUDKIT_ENVIRONMENT in project.yml.
+  Pikos.entitlements with the staging app's own App Group and iCloud container, so a dogfood build
+  never touches the real workspace. Pikos.entitlements says why aps-environment reads development.
+  The iCloud environment comes from PIKOS_CLOUDKIT_ENVIRONMENT in project.yml.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
