@@ -22,6 +22,19 @@ final class SyncStatusLineTests: XCTestCase {
         XCTAssertEqual(line.action, .none)
     }
 
+    func testAFetchUnderAMinuteOldOrStampedAfterNowSaysJustNow() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let ahead = SyncStatusLine.Queue(
+            toSend: 0, needsUpdate: false, lastFetch: now.addingTimeInterval(0.2))
+        let recent = SyncStatusLine.Queue(
+            toSend: 0, needsUpdate: false, lastFetch: now.addingTimeInterval(-30))
+
+        XCTAssertEqual(
+            SyncStatusLine(status: .upToDate, queue: ahead, now: now).text, "Up to date · checked just now")
+        XCTAssertEqual(
+            SyncStatusLine(status: .upToDate, queue: recent, now: now).text, "Up to date · checked just now")
+    }
+
     func testChangesWaitingToSendAreCountedInsteadOfUpToDate() {
         let one = SyncStatusLine(
             status: .upToDate, queue: .init(toSend: 1, needsUpdate: false, lastFetch: nil))

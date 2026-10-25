@@ -73,9 +73,20 @@ public struct SyncStatusLine: Equatable, Sendable {
             parts.append("some changes need a newer Pikos")
         }
         if let lastFetch = queue.lastFetch {
-            let ago = RelativeDateTimeFormatter().localizedString(for: lastFetch, relativeTo: now)
-            parts.append("checked \(ago)")
+            parts.append("checked \(Self.ago(lastFetch, now: now))")
         }
+
         return parts.joined(separator: " · ")
+    }
+
+    /// A fetch stamped a moment after `now` read as "in 0 seconds", and seconds are noise in a line
+    /// that's only redrawn when the status changes.
+    private static let justNow: TimeInterval = 60
+
+    private static func ago(_ date: Date, now: Date) -> String {
+        let isRecent = now.timeIntervalSince(date) < justNow
+        if isRecent { return "just now" }
+
+        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
     }
 }
