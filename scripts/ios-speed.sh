@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$ROOT/apps/ios/Pikos/Pikos.xcodeproj"
 DERIVED="$ROOT/target/ios-speed"
 TEMPLATE="$ROOT/target/pikos-speed-200k.sqlite"
-BUNDLE_ID="app.pikos.ios"
+BUNDLE_ID="app.pikos.ios.dev"
 # Must match SpeedTests' workspace directory at scale.
 DESTINATION_IN_CONTAINER="Library/Caches/pikos.sqlite"
 

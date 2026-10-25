@@ -28,8 +28,9 @@ cd apps/ios/Pikos && xcodegen generate
 ```
 
 Then set `DEVELOPMENT_TEAM` in Xcode (deliberately blank in `project.yml`, since
-it is a local setting) and enable the **App Groups** capability with
-`group.app.pikos` on every target. `WorkspaceLocation` throws rather than
+it is a local setting) and enable the **App Groups** capability on every target,
+with the group `project.yml` names for the configuration being built; each
+configuration is its own app with its own group. `WorkspaceLocation` throws rather than
 falling back to the app's private container if that group is unreachable — a
 silent fallback would work perfectly in the app and leave widgets reading an
 empty database, which looks like a widget bug for weeks before anyone suspects

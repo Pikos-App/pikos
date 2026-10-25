@@ -21,11 +21,11 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
-# Staging is Debug with its own identity: its own bundle ids, App Group and iCloud container, so a
-# dogfood build never opens the real workspace. Release, which TestFlight takes, syncs through the
-# production container; Debug doesn't sync. Staging leaves out DEBUG because
-# Xcode builds local packages as release for any configuration not named Debug, so their
-# debug-only code is missing.
+# Each configuration is its own app, with its own bundle ids and App Group, so only Release ever
+# opens the real workspace: Debug is the dev app the simulators and a plain cable install run,
+# Staging and Release are what TestFlight takes. Staging syncs exactly as Release does, through its
+# own iCloud container; Debug doesn't sync. Staging leaves out DEBUG because Xcode builds local
+# packages as release for any configuration not named Debug, so their debug-only code is missing.
 configs:
   Debug: debug
   Release: release
@@ -84,7 +84,10 @@ targets:
     settings:
       configs:
         Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.dev
           CODE_SIGN_ENTITLEMENTS: PikosDebug.entitlements
+          PIKOS_APP_GROUP: group.app.pikos.dev
+          PIKOS_DISPLAY_NAME: Pikos Dev
         Release:
           EXCLUDED_SOURCE_FILE_NAMES: >-
             ListWidget.swift NowWidget.swift WidgetSupport.swift CompletePageIntent.swift
@@ -215,6 +218,10 @@ targets:
         product: PikosSupport
     settings:
       configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.dev.widgets
+          CODE_SIGN_ENTITLEMENTS: ../PikosWidgets/PikosWidgetsDebug.entitlements
+          PIKOS_APP_GROUP: group.app.pikos.dev
         Staging:
           PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.staging.widgets
           CODE_SIGN_ENTITLEMENTS: ../PikosWidgets/PikosWidgetsStaging.entitlements

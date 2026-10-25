@@ -20,8 +20,8 @@ DESKTOP="$ROOT/apps/desktop"
 TAURI="$DESKTOP/src-tauri"
 BUNDLE="$DESKTOP/node_modules/.cache/seed-workspace.mjs"
 RUNNER="${CARGO_TARGET_DIR:-$TAURI/target}/debug/examples/seed_workspace"
-APP_ID="app.pikos.ios"
-APP_GROUP="group.app.pikos"
+APP_ID="app.pikos.ios.dev"
+APP_GROUP="group.app.pikos.dev"
 
 device="booted"
 scenarios=()

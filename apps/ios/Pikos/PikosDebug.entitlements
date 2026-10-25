@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Pikos.entitlements without iCloud: a Debug build shares the production app's identity, so it is
-  kept from the production container.
+  The dev app's own App Group, so a cable install sits beside the TestFlight apps and never opens
+  their workspaces. No iCloud: the dev app has no container.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.app.pikos</string>
+		<string>group.app.pikos.dev</string>
 	</array>
 </dict>
 </plist>

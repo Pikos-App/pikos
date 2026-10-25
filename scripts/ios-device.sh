@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Build the iPhone app, install it on a paired phone, open it, then free what the build left running.
 #
-#   pnpm ios:device              the first paired iPhone, over USB or Wi-Fi
+#   pnpm ios:device              the dev app, Pikos Dev, on the first paired iPhone, over USB or Wi-Fi
 #   pnpm ios:device <udid>       a specific one, from `xcrun devicectl list devices`
 #   pnpm ios:device --staging    the staging app instead, replacing a TestFlight staging build and
 #                                syncing as it does, except that a development-signed app registers
@@ -24,7 +24,7 @@ XCFRAMEWORK="$ROOT/apps/ios/PikosCore/Frameworks/PikosFFI.xcframework"
 EDITOR_HTML="$ROOT/apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources/editor.html"
 DERIVED="$ROOT/target/ios-device"
 CONFIGURATION=Debug
-BUNDLE_ID="app.pikos.ios"
+BUNDLE_ID="app.pikos.ios.dev"
 if [ "${1:-}" = "--staging" ]; then
   shift
   CONFIGURATION=Staging
