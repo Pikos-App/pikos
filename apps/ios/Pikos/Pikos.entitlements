@@ -11,6 +11,9 @@
   entitlement — and must NOT be shared with the widget: the widget renders
   today's pages and has no business holding a password. If sync ever needs to
   run from an extension, that is the moment to add a group here, not before.
+
+  aps-environment stays development: the archive is signed with a development profile, which
+  refuses production, and exporting for TestFlight rewrites it from the distribution profile.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -19,5 +22,17 @@
 	<array>
 		<string>group.app.pikos</string>
 	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.app.pikos</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>Production</string>
+	<key>aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>

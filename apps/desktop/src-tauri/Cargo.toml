@@ -27,7 +27,7 @@ required-features = ["e2e-bridge"]
 
 [features]
 # iCloud sync on the Mac: links the Swift transport (apps/apple/PikosSync) in through build.rs.
-# Staging builds only, until sync ships.
+# Staging and Pikos Beta only; the public release builds without it.
 icloud-sync = ["dep:pikos-replica"]
 # The in-app benchmark: opens a scratch workspace from the environment, times real interactions
 # and quits. No release carries it.
