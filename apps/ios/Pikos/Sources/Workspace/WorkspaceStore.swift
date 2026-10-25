@@ -222,6 +222,11 @@ public final class WorkspaceStore {
     /// still showing it undone is the symptom.
     public private(set) var dataVersion = 0
 
+    /// Bumped by each save of the open document, which leaves `dataVersion` alone so the list
+    /// isn't re-read on every keystroke. iCloud sync follows both, or typing would wait in the
+    /// workspace until the editor closed.
+    public private(set) var documentSaves = 0
+
     #if DEBUG
         /// How long the list last took to catch up with a change, for the speed tests.
         public private(set) var lastRefresh: Duration?
@@ -842,6 +847,7 @@ public final class WorkspaceStore {
                 stored = try await workspace.updatePage(
                     id: pageId, edit: PageEdit(content: json, baseContent: base)
                 ).content
+                documentSaves += 1
             } catch {
                 errorMessage = error.localizedDescription
             }

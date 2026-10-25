@@ -142,6 +142,9 @@ struct PikosApp: App {
             .onChange(of: store.dataVersion) {
                 Task { await deviceSync.localChangesHappened() }
             }
+            .onChange(of: store.documentSaves) {
+                Task { await deviceSync.localChangesHappened() }
+            }
             .onReceive(
                 NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             ) { _ in
