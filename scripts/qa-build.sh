@@ -74,7 +74,7 @@ find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
   -exec rm -rf {} + 2>/dev/null || true
 
 # The app bundle only: QA never opens the disk image, and building it is most of the wait.
-VITE_STAGING=true VITE_ICLOUD_SYNC="$icloud_ui" APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
+VITE_NO_UPDATER=true VITE_ICLOUD_SYNC="$icloud_ui" APPLE_SIGNING_IDENTITY="$IDENTITY" pnpm --filter @pikos/desktop \
   tauri build --config "src-tauri/tauri.conf.staging.json" --bundles app ${icloud[@]+"${icloud[@]}"}
 
 BUNDLE="$ROOT/apps/desktop/src-tauri/target/release/bundle"
