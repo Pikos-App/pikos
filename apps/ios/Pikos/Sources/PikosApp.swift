@@ -142,7 +142,7 @@ struct PikosApp: App {
             .onChange(of: store.dataVersion) {
                 Task { await deviceSync.localChangesHappened() }
             }
-            .onChange(of: store.documentSaves) {
+            .onChange(of: store.typedSaves) {
                 Task { await deviceSync.localChangesHappened() }
             }
             .onReceive(

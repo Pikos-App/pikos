@@ -222,10 +222,10 @@ public final class WorkspaceStore {
     /// still showing it undone is the symptom.
     public private(set) var dataVersion = 0
 
-    /// Bumped by each save of the open document, which leaves `dataVersion` alone so the list
-    /// isn't re-read on every keystroke. iCloud sync follows both, or typing would wait in the
-    /// workspace until the editor closed.
-    public private(set) var documentSaves = 0
+    /// Bumped by each save of the open page while it's typed in, its body or its header, which
+    /// leaves `dataVersion` alone so the list isn't re-read on every keystroke. iCloud sync follows
+    /// both, or typing would wait in the workspace until the editor closed.
+    public private(set) var typedSaves = 0
 
     #if DEBUG
         /// How long the list last took to catch up with a change, for the speed tests.
@@ -847,12 +847,24 @@ public final class WorkspaceStore {
                 stored = try await workspace.updatePage(
                     id: pageId, edit: PageEdit(content: json, baseContent: base)
                 ).content
-                documentSaves += 1
+                typedSaves += 1
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
         return stored
+    }
+
+    /// Save the title or subtitle as it's typed. Like `saveDocument` it leaves the list alone; the
+    /// field's commit when it lets go refreshes it.
+    public func saveTypedHeader(pageId: String, edit: PageEdit) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.updatePage(id: pageId, edit: edit)
+            typedSaves += 1
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     /// Asks iOS for time to finish the write if the app is put away while it runs. The editor and

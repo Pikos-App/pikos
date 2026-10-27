@@ -4,9 +4,10 @@ import SwiftUI
 
 /// The desktop's page header on a phone: title, subtitle, and the byline under them.
 ///
-/// Title and subtitle are edited in place and saved when the field lets go. A page a calendar
-/// owns keeps its title read-only, as the desktop does; its subtitle, status, priority and tags
-/// stay the reader's.
+/// Title and subtitle are edited in place, saved as they're typed so iCloud carries them while the
+/// field still has the keyboard, and committed when it lets go, which refreshes the list. A page a
+/// calendar owns keeps its title read-only, as the desktop does; its subtitle, status, priority and
+/// tags stay the reader's.
 struct EditorHeader: View {
     let page: Page
     @Binding var actions: PageActionState
@@ -24,7 +25,14 @@ struct EditorHeader: View {
 
     @State private var title = ""
     @State private var subtitle = ""
+    /// What the workspace holds: `page` until a save as typed, which `page` only catches up with
+    /// at the next refresh.
+    @State private var storedTitle = ""
+    @State private var storedSubtitle = ""
     @State private var isBylineOpen = false
+
+    /// The desktop editor's shortest save delay.
+    private static let typedSaveDelay: Duration = .milliseconds(800)
 
     private var facts: PageFacts { PageFacts(page) }
 
@@ -70,12 +78,27 @@ struct EditorHeader: View {
         .onAppear {
             title = page.title
             subtitle = page.subtitle ?? ""
+            storedTitle = title
+            storedSubtitle = subtitle
         }
         .onChange(of: page.title) { _, new in
+            storedTitle = new
             if focus.wrappedValue != .title { title = new }
         }
         .onChange(of: page.subtitle) { _, new in
+            storedSubtitle = new ?? ""
             if focus.wrappedValue != .subtitle { subtitle = new ?? "" }
+        }
+        // Debounced by cancellation: each keystroke cancels the previous run.
+        .task(id: title) {
+            try? await Task.sleep(for: Self.typedSaveDelay)
+            guard !Task.isCancelled, focus.wrappedValue == .title else { return }
+            await saveTypedTitle()
+        }
+        .task(id: subtitle) {
+            try? await Task.sleep(for: Self.typedSaveDelay)
+            guard !Task.isCancelled, focus.wrappedValue == .subtitle else { return }
+            await saveTypedSubtitle()
         }
         .onChange(of: focus.wrappedValue) { old, _ in
             switch old {
@@ -201,19 +224,49 @@ struct EditorHeader: View {
 
     // MARK: - Writes
 
+    /// An empty title isn't saved as typed, so clearing the field to retype it doesn't name the
+    /// page nothing on the other devices meanwhile.
+    private func saveTypedTitle() async {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !page.scheduleLocked, !trimmed.isEmpty, trimmed != storedTitle else { return }
+
+        storedTitle = trimmed
+        await store.saveTypedHeader(pageId: page.id, edit: PageEdit(title: trimmed))
+    }
+
+    private func saveTypedSubtitle() async {
+        let trimmed = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != storedSubtitle else { return }
+
+        storedSubtitle = trimmed
+        await store.saveTypedHeader(pageId: page.id, edit: PageEdit(subtitle: trimmed))
+    }
+
+    /// A title already saved as typed is only refreshed, not written again: a rewrite of the same
+    /// title still stamps its sync clock, and could beat a newer one from another device.
     private func commitTitle() {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !page.scheduleLocked, !trimmed.isEmpty, trimmed != page.title else {
-            if trimmed.isEmpty { title = page.title }
+        guard !page.scheduleLocked, !trimmed.isEmpty else {
+            if trimmed.isEmpty { title = storedTitle }
             return
         }
-        Task { await store.renamePage(id: page.id, to: trimmed) }
+
+        let isSavedAsTyped = trimmed == storedTitle
+        if !isSavedAsTyped {
+            Task { await store.renamePage(id: page.id, to: trimmed) }
+        } else if trimmed != page.title {
+            Task { await store.refresh() }
+        }
     }
 
     private func commitSubtitle() {
         let trimmed = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != (page.subtitle ?? "") else { return }
-        Task { await store.setSubtitle(pageId: page.id, to: trimmed) }
+        let isSavedAsTyped = trimmed == storedSubtitle
+        if !isSavedAsTyped {
+            Task { await store.setSubtitle(pageId: page.id, to: trimmed) }
+        } else if trimmed != (page.subtitle ?? "") {
+            Task { await store.refresh() }
+        }
     }
 
     private func move(to folderId: String?) {
