@@ -319,6 +319,20 @@ struct CalendarGrid: View {
             pages.isEmpty
             ? [] : layoutTimedDay(pages: pages, day: day, shortestBlockMinutes: metrics.shortestBlockMinutes)
 
+        let placements = blocks.map { block in
+            timed.first { $0.key == block.pageId }.flatMap {
+                CalendarGeometry.placement(
+                    start: $0.scheduledStart, end: $0.scheduledEnd, on: day, metrics: metrics)
+            }
+        }
+        let slots = CalendarGeometry.slots(
+            for: zip(blocks, placements).map { block, placed in
+                CalendarGeometry.SlotInput(
+                    depth: Int(block.cascadeDepth), top: placed?.top ?? 0, height: placed?.height ?? 0)
+            },
+            columnWidth: columnWidth,
+            titleClearance: CalendarGeometry.titleClearance * typeScale / 100)
+
         return ZStack(alignment: .topLeading) {
             // The empty grid under the blocks; the blocks take their own presses first.
             Color.clear
@@ -336,14 +350,11 @@ struct CalendarGrid: View {
                         onCancel: { stretch = nil }))
                 .accessibilityHidden(true)
 
-            ForEach(blocks, id: \.pageId) { block in
+            ForEach(Array(blocks.enumerated()), id: \.element.pageId) { index, block in
                 if let entry = timed.first(where: { $0.key == block.pageId }),
-                    let placed = CalendarGeometry.placement(
-                        start: entry.scheduledStart, end: entry.scheduledEnd,
-                        on: day, metrics: metrics)
+                    let placed = placements[index]
                 {
-                    let inset = CalendarGeometry.cascadeInset(
-                        depth: Int(block.cascadeDepth), columnWidth: columnWidth)
+                    let slot = slots[index]
                     CalendarBlockView(
                         title: entry.title,
                         // A range does not fit a phone's third of a width; the block's height already shows the end.
@@ -352,7 +363,7 @@ struct CalendarGrid: View {
                         tint: color(for: entry),
                         isDone: entry.status == "done",
                         height: placed.height,
-                        showsText: columnWidth >= Self.minimumTextWidth,
+                        showsText: slot.width >= Self.minimumTextWidth,
                         showsCheckbox: !entry.isRecurring || canComplete(entry),
                         isRecurring: entry.isRecurring,
                         squaredTop: block.isContinuationBefore,
@@ -361,7 +372,7 @@ struct CalendarGrid: View {
                             if entry.isRecurring { onComplete(entry) } else { onToggleDone(entry) }
                         }
                     )
-                    .frame(width: max(columnWidth - inset - 3, 1), height: placed.height)
+                    .frame(width: max(slot.width - 3, 1), height: placed.height)
                     // Without it VoiceOver and the UI tests got the block as the whole column under it.
                     .contentShape(.accessibility, Rectangle())
                     .onTapGesture { onOpen(entry.pageId) }
@@ -371,22 +382,19 @@ struct CalendarGrid: View {
                     .accessibilityLabel(accessibleLabel(entry, block: block))
                     .accessibilityAddTraits(.isButton)
                     .accessibilityActions { occurrenceActions(entry) }
-                    .offset(x: inset + 1.5, y: placed.top)
+                    .offset(x: slot.x + 1.5, y: placed.top)
                     .opacity(resizing?.key == entry.key ? 0.35 : 1)
                 }
             }
 
             // After every block, so a block cascading over another never hides its grips.
-            ForEach(blocks, id: \.pageId) { block in
+            ForEach(Array(blocks.enumerated()), id: \.element.pageId) { index, block in
                 if let entry = timed.first(where: { $0.key == block.pageId }),
-                    let placed = CalendarGeometry.placement(
-                        start: entry.scheduledStart, end: entry.scheduledEnd,
-                        on: day, metrics: metrics),
-                    canResize(entry, height: placed.height, width: columnWidth)
+                    let placed = placements[index],
+                    canResize(entry, height: placed.height, width: slots[index].width)
                 {
-                    let inset = CalendarGeometry.cascadeInset(
-                        depth: Int(block.cascadeDepth), columnWidth: columnWidth)
-                    let width = max(columnWidth - inset - 3, 1)
+                    let slot = slots[index]
+                    let width = max(slot.width - 3, 1)
                     let cascadeStep = CalendarGeometry.cascadeInset(depth: 1, columnWidth: columnWidth)
                     // Beside the block rather than inside it, where its menu and lift took the touch.
                     ForEach([CalendarGeometry.BlockEdge.top, .bottom], id: \.self) { edge in
@@ -399,10 +407,10 @@ struct CalendarGrid: View {
                                 : placed.top + placed.height - Self.gripInside)
                         let gripWidth =
                             edge == .top
-                            ? width * 0.6 : min(width, max(cascadeStep, Self.minimumBottomGripWidth))
+                            ? width * 0.4 : min(width, max(cascadeStep, Self.minimumBottomGripWidth))
                         grip(entry, edge: edge, day: day, top: top)
                             .frame(width: gripWidth, height: Self.gripHeight)
-                            .offset(x: inset + 1.5 + (edge == .top ? width * 0.2 : 0), y: top)
+                            .offset(x: slot.x + 1.5 + (edge == .top ? width - gripWidth : 0), y: top)
                     }
                 }
             }
@@ -487,10 +495,14 @@ struct CalendarGrid: View {
     {
         Capsule()
             .fill(color(for: entry))
-            .frame(width: 20, height: 4)
-            .offset(y: edge == .top ? Self.gripHeight - Self.gripInside - 2 : Self.gripInside - 2)
-            .padding(.leading, edge == .top ? 0 : 4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .top ? .top : .topLeading)
+            .frame(width: Self.gripMarkWidth, height: Self.gripMarkHeight)
+            .offset(
+                y: edge == .top
+                    ? Self.gripHeight - Self.gripInside + Self.gripMarkInset
+                    : Self.gripInside - Self.gripMarkInset - Self.gripMarkHeight)
+            .padding(edge == .top ? .trailing : .leading, 6)
+            .frame(
+                maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .top ? .topTrailing : .topLeading)
             .contentShape(Rectangle())
             // SwiftUI's own hold here, not `HoldAndDrag`: UIKit's lost the touch to the grid's hold
             // behind it, and a scroll that starts on an 18-point strip can afford the wait.
@@ -712,20 +724,25 @@ struct CalendarGrid: View {
 
     private static let gutterWidth: CGFloat = 52
     private static let gripHeight: CGFloat = 28
+    /// How far above the bar the fade starts.
+    private static let barFadeLead: CGFloat = 16
     /// The bottom grip sits in the strip at the block's left edge that an event cascading over it
     /// leaves showing: a cascade is inset one step to the right and starts later, so it lies over
-    /// the host's lower part. It is that step wide, but no narrower than this. The top grip stays
-    /// centred, clear of the checkbox.
+    /// the host's lower part. It is that step wide, but no narrower than this. The top grip sits at
+    /// the right, clear of the checkbox, where a later cascade never reaches (`PKOS-0201`).
     private static let minimumBottomGripWidth: CGFloat = 24
-    /// How much of a grip's height lies inside its block; the rest is outside the edge.
+    /// How much of a grip's touch area lies inside its block; the rest is outside the edge.
     private static let gripInside: CGFloat = 10
+    /// The grip's drawn mark sits this far inside the block's edge, so it never lies over the block
+    /// above or below, though the touch area does.
+    private static let gripMarkInset: CGFloat = 2
+    private static let gripMarkWidth: CGFloat = 20
+    private static let gripMarkHeight: CGFloat = 4
     /// Far shorter than the grid's hold: a grip is a target the finger chose, so there is no scroll
     /// to tell it from, only a stray brush.
     private static let gripHold: Double = 0.1
     private static let hourLabelClearance: CGFloat = 12
     private static let timedTopInset: CGFloat = 8
-    /// How far above the bar the fade starts.
-    private static let barFadeLead: CGFloat = 16
     /// Narrower than this a title wraps a letter to a line, so a block shows its colour alone.
     private static let minimumTextWidth: CGFloat = 44
     /// Where the grid opens when today is not on screen, rather than at an empty midnight.
