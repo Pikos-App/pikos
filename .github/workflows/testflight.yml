@@ -14,6 +14,10 @@ name: TestFlight
 # creates and renews the distribution certificate and profiles itself, so no certificate is kept
 # in the repo's secrets. The key needs the Admin role for that. The Developer role that
 # notarizing the Mac app needs is not enough.
+#
+# The archive still has Xcode make an Apple Development certificate on each runner, so the run
+# revokes it at the end (scripts/ci-development-certificates.py) and runs go one at a time, so one
+# run never revokes a certificate another is still signing with.
 
 on:
   workflow_dispatch:
@@ -23,6 +27,10 @@ on:
         type: choice
         options: [production, staging]
         default: production
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: 24
@@ -95,6 +103,16 @@ jobs:
           KEY: ${{ secrets.APPLE_API_KEY }}
         run: printf '%s' "$KEY" > "$RUNNER_TEMP/api-key.p8"
 
+      - name: Note the development certificates
+        env:
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/asc"
+          "$RUNNER_TEMP/asc/bin/pip" install --quiet "pyjwt[crypto]"
+          "$RUNNER_TEMP/asc/bin/python" scripts/ci-development-certificates.py snapshot "$RUNNER_TEMP/certificates-before"
+
       - name: Archive
         env:
           TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
@@ -145,6 +163,17 @@ jobs:
             -authenticationKeyID "$KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER_ID" \
             | xcbeautify
+
+      - name: Revoke the development certificate this run made
+        if: always()
+        continue-on-error: true
+        env:
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          [ -f "$RUNNER_TEMP/certificates-before" ] || exit 0
+          "$RUNNER_TEMP/asc/bin/python" scripts/ci-development-certificates.py revoke-new "$RUNNER_TEMP/certificates-before"
 
       - name: Remove the API key
         if: always()
