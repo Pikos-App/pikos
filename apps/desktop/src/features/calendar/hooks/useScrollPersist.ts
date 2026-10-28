@@ -12,6 +12,15 @@ const SCROLL_PERSIST_DEBOUNCE_MS = 200;
  * calendar to midnight on every subsequent open. */
 const MIN_USABLE_SAVED_HOUR = 0.5;
 
+/** An hour's label sits just above its line, so a scroll that puts the line at the very top
+ * cuts the label in half under the all-day row. The saved hour is the one this far below the
+ * top, which keeps a restore and the next save on the same hour instead of drifting. */
+export const HOUR_LABEL_CLEARANCE_PX = 12;
+
+function scrollTopForHour(hour: number, geometry: CollapseGeometry): number {
+  return Math.max(0, mapHourToY(hour, geometry) - HOUR_LABEL_CLEARANCE_PX);
+}
+
 export interface UseScrollPersistOptions {
   /** One-shot view-in-calendar target. When non-null and `token` hasn't been
    * consumed yet, restore scrolls to `hour` and records the token. */
@@ -112,7 +121,7 @@ export function useScrollPersist({
       calendarScrollRequest !== null &&
       calendarScrollRequest.token !== lastConsumedScrollTokenRef.current
     ) {
-      el.scrollTop = mapHourToY(calendarScrollRequest.hour, geometry);
+      el.scrollTop = scrollTopForHour(calendarScrollRequest.hour, geometry);
       lastConsumedScrollTokenRef.current = calendarScrollRequest.token;
       restoredForSessionRef.current = true;
       return;
@@ -127,7 +136,7 @@ export function useScrollPersist({
     const scrollHour = hasUsableSaved
       ? Math.min(saved, VISIBLE_HOURS)
       : Math.max(7, new Date().getHours() - 1);
-    el.scrollTop = mapHourToY(scrollHour, geometry);
+    el.scrollTop = scrollTopForHour(scrollHour, geometry);
   }, [calendarScrollRequest, containerHeight, geometry, rightPanel, storageKey]);
 
   // Persist scrollHour on scroll (debounced).
@@ -139,7 +148,7 @@ export function useScrollPersist({
       if (!el) return;
       if (tid !== null) clearTimeout(tid);
       tid = setTimeout(() => {
-        const scrollHour = mapYToHour(el.scrollTop, geometry);
+        const scrollHour = mapYToHour(el.scrollTop + HOUR_LABEL_CLEARANCE_PX, geometry);
         getKeyValueStore().setItem(storageKey, String(scrollHour));
       }, SCROLL_PERSIST_DEBOUNCE_MS);
     }

@@ -12,7 +12,7 @@ import { act, render } from "@testing-library/react";
 import { type ReactNode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useScrollPersist } from "./useScrollPersist";
+import { HOUR_LABEL_CLEARANCE_PX, useScrollPersist } from "./useScrollPersist";
 
 const STORAGE_KEY = "pikos:test:scrollHour";
 
@@ -137,7 +137,7 @@ describe("useScrollPersist — initial restore", () => {
     const ro = installResizeObserver(800);
     const { probe, update } = makeProbe();
     render(<Harness geometry={makeGeometry()} onProbe={update} />);
-    expect(probe.scrollEl?.scrollTop).toBe(9 * 64);
+    expect(probe.scrollEl?.scrollTop).toBe(9 * 64 - HOUR_LABEL_CLEARANCE_PX);
     ro.restore();
   });
 
@@ -147,7 +147,7 @@ describe("useScrollPersist — initial restore", () => {
     const { probe, update } = makeProbe();
     render(<Harness geometry={makeGeometry()} onProbe={update} />);
     // 10am → currentHour−1 = 9 > 7 → expect 9.
-    expect(probe.scrollEl?.scrollTop).toBe(9 * 64);
+    expect(probe.scrollEl?.scrollTop).toBe(9 * 64 - HOUR_LABEL_CLEARANCE_PX);
     ro.restore();
   });
 
@@ -158,7 +158,7 @@ describe("useScrollPersist — initial restore", () => {
     const { probe, update } = makeProbe();
     render(<Harness geometry={makeGeometry()} onProbe={update} />);
     // 8am → currentHour−1 = 7, floor 7 → expect 7.
-    expect(probe.scrollEl?.scrollTop).toBe(7 * 64);
+    expect(probe.scrollEl?.scrollTop).toBe(7 * 64 - HOUR_LABEL_CLEARANCE_PX);
     ro.restore();
   });
 
@@ -179,7 +179,7 @@ describe("useScrollPersist — re-render semantics", () => {
     const { probe, update } = makeProbe();
     const initialGeom = makeGeometry();
     const { rerender } = render(<Harness geometry={initialGeom} onProbe={update} />);
-    expect(probe.scrollEl?.scrollTop).toBe(576);
+    expect(probe.scrollEl?.scrollTop).toBe(576 - HOUR_LABEL_CLEARANCE_PX);
 
     // User scrolls; then geometry recomputes (density flip, band toggle…).
     if (probe.scrollEl) probe.scrollEl.scrollTop = 1200;
@@ -198,7 +198,7 @@ describe("useScrollPersist — persistence on scroll", () => {
     render(<Harness geometry={makeGeometry()} onProbe={update} />);
 
     const el = probe.scrollEl!;
-    el.scrollTop = 11 * 64; // 11am
+    el.scrollTop = 11 * 64 - HOUR_LABEL_CLEARANCE_PX; // 11am
     el.dispatchEvent(new Event("scroll"));
 
     act(() => {
@@ -206,6 +206,22 @@ describe("useScrollPersist — persistence on scroll", () => {
     });
 
     expect(Number(localStorage.getItem(STORAGE_KEY))).toBeCloseTo(11);
+    ro.restore();
+  });
+
+  it("saves the same hour a restore scrolled to, so reopening never drifts upward", () => {
+    vi.useFakeTimers();
+    localStorage.setItem(STORAGE_KEY, "9");
+    const ro = installResizeObserver(800);
+    const { probe, update } = makeProbe();
+    render(<Harness geometry={makeGeometry()} onProbe={update} />);
+
+    probe.scrollEl!.dispatchEvent(new Event("scroll"));
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(Number(localStorage.getItem(STORAGE_KEY))).toBeCloseTo(9);
     ro.restore();
   });
 
