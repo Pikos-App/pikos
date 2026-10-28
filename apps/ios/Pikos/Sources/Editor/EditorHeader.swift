@@ -34,22 +34,41 @@ struct EditorHeader: View {
     /// The desktop editor's shortest save delay.
     private static let typedSaveDelay: Duration = .milliseconds(800)
 
+    /// The tick as the box was last set here, ahead of the page being read again. The list holds
+    /// a ticked row for a beat before it re-reads, and the page waited on that re-read, so the box
+    /// took about a second to fill. Cleared when the stored status changes, so a change from sync
+    /// still shows.
+    @State private var tickedTo: Bool?
+
+    /// Where the 26-point box sits to be centred on the title's first line, at the reader's text size.
+    private static var checkboxTop: CGFloat {
+        max(0, (UIFont.preferredFont(forTextStyle: .title1).lineHeight - 26) / 2)
+    }
+
     private var facts: PageFacts { PageFacts(page) }
+    private var isDone: Bool { tickedTo ?? facts.isDone }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // The list's checkbox, beside the title as it is beside a row's.
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                CompletionToggle(isDone: facts.isDone, priority: PagePriority(stored: page.priority)) { done in
-                    Task { await store.setStatus(pageId: page.id, done: done) }
+            // Top-aligned with the box centred on the first line, not on a shared baseline: an empty
+            // field has no baseline of its own, so "Untitled" fell below the box.
+            HStack(alignment: .top, spacing: 10) {
+                CompletionToggle(isDone: isDone, priority: PagePriority(stored: page.priority)) { done in
+                    // A repeating page advances instead of finishing, so it waits for the write.
+                    if !facts.isRecurring { tickedTo = done }
+                    Task {
+                        await store.setStatus(pageId: page.id, done: done)
+                        tickedTo = await store.page(id: page.id).map { $0.status == "done" }
+                    }
                 }
                 .frame(width: 26, height: 26)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
+                .padding(.top, Self.checkboxTop)
                 .padding(.leading, -4)
                 TextField("Untitled", text: $title, axis: .vertical)
                     .font(.pkDisplay)
                     .tracking(-0.4)
-                    .foregroundStyle(facts.isDone ? Color.textTertiary : Color.textPrimary)
+                    .foregroundStyle(isDone ? Color.textTertiary : Color.textPrimary)
                     .lineLimit(1...4)
                     .focused(focus, equals: .title)
                     .submitLabel(.next)
@@ -81,6 +100,7 @@ struct EditorHeader: View {
             storedTitle = title
             storedSubtitle = subtitle
         }
+        .onChange(of: page.status) { _, _ in tickedTo = nil }
         .onChange(of: page.title) { _, new in
             storedTitle = new
             if focus.wrappedValue != .title { title = new }
@@ -186,7 +206,7 @@ struct EditorHeader: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: page.isRecurring ? "repeat" : "calendar")
-                ScheduleLabel(iso: start, end: page.scheduledEnd, isDone: facts.isDone)
+                ScheduleLabel(iso: start, end: page.scheduledEnd, isDone: isDone)
             }
             .touchTarget()
         }
