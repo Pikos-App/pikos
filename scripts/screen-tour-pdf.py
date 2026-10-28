@@ -23,6 +23,8 @@ from pathlib import Path
 import matrix_rows
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# A tour can attach text beside its shots, such as measurements, named like a shot.
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
 NAME = re.compile(r"^(?P<section>[^|]+)\|(?P<order>\d+)\|(?P<title>.+?)(?:_\d+_[0-9A-Fa-f-]{36})?(?:\.\w+)?$")
 
 # A landscape window shot three to a page would print its body text at about three points, so
@@ -75,7 +77,7 @@ def load_shots(source: Path):
                 path = source / item["exportedFileName"]
                 if name.startswith("missed"):
                     missed.extend(line for line in path.read_text().splitlines() if line.strip())
-                elif found := shot(name, path):
+                elif path.suffix.lower() in IMAGE_SUFFIXES and (found := shot(name, path)):
                     shots.append(found)
     else:
         for note in sorted(source.glob("missed*.txt")):
