@@ -56,14 +56,18 @@ struct WhenMenuItems: View {
     }
 }
 
-/// A colour a menu row keeps.
+/// A colour a menu row or an inline picker row keeps.
 ///
 /// Menus retint SF Symbols with the accent, which drew every folder dot and every colour choice
-/// in the same teal; an original-rendering image is the one a menu leaves alone.
+/// in the same teal. A tinted symbol kept its colour in a menu but not in a list, where SwiftUI
+/// draws the symbol again in the row's foreground and every folder dot came out black. Drawn
+/// into a bitmap, it is no longer a symbol for either to restyle.
 enum MenuSwatch {
     static func image(_ color: Color, systemName: String = "circle.fill") -> Image {
-        let base = UIImage(systemName: systemName) ?? UIImage()
-        return Image(uiImage: base.withTintColor(UIColor(color), renderingMode: .alwaysOriginal))
+        let base = (UIImage(systemName: systemName) ?? UIImage())
+            .withTintColor(UIColor(color), renderingMode: .alwaysOriginal)
+        let drawn = UIGraphicsImageRenderer(size: base.size).image { _ in base.draw(at: .zero) }
+        return Image(uiImage: drawn.withRenderingMode(.alwaysOriginal))
     }
 }
 

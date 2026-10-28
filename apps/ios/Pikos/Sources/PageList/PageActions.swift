@@ -370,6 +370,8 @@ private struct FolderPickerSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.surfaceElevated)
     }
 
     private var choice: Binding<String?> {
