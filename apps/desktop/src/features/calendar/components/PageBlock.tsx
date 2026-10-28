@@ -11,7 +11,7 @@ import {
 } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -22,6 +22,7 @@ import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
 import { BLOCK_TIME_TEXT_CLASS, CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -394,7 +395,7 @@ export function PageBlock({
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent
+      <BlockPopoverContent
         align="start"
         className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         side="right"
@@ -422,7 +423,7 @@ export function PageBlock({
             page={page}
           />
         )}
-      </PopoverContent>
+      </BlockPopoverContent>
     </Popover>
   );
 }

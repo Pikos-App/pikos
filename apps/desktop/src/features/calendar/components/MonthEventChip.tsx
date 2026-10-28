@@ -2,7 +2,7 @@ import type { MonthCellEvent, VirtualOccurrence } from "@pikos/core";
 import { DEFAULT_EVENT_COLOR, formatTime12h, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -10,6 +10,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -88,7 +89,7 @@ export function MonthEventChip({ event, folderColor, onDoubleClick, width }: Mon
           <SyncSourceIcon className="ml-auto h-3 w-3 shrink-0" syncState={page.syncState} />
         </button>
       </PopoverTrigger>
-      <PopoverContent
+      <BlockPopoverContent
         align="start"
         className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         onClick={(e) => e.stopPropagation()}
@@ -116,7 +117,7 @@ export function MonthEventChip({ event, folderColor, onDoubleClick, width }: Mon
             page={page}
           />
         )}
-      </PopoverContent>
+      </BlockPopoverContent>
     </Popover>
   );
 }
