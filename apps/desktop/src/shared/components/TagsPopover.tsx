@@ -21,6 +21,11 @@ export interface TagsPopoverProps {
 export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: TagsPopoverProps) {
   const [open, setOpen] = useState(false);
 
+  // A tag typed into quick add is chosen before any page carries it, so it is in `selected`
+  // but not yet in `allTags`. Listed only from `allTags`, the menu left out the one tag the
+  // page already had, and offered to create it.
+  const listedTags = [...selected.filter((t) => !allTags.includes(t)), ...allTags];
+
   const hasSelected = selected.length > 0;
   const label =
     selected.length === 0
@@ -35,7 +40,7 @@ export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: 
     <SearchablePopover
       {...(anchored && { anchored })}
       onEnter={(q) => {
-        if (q && !allTags.some((t) => t.toLowerCase() === q.toLowerCase())) {
+        if (q && !listedTags.some((t) => t.toLowerCase() === q.toLowerCase())) {
           onToggle(q.toLowerCase());
         }
       }}
@@ -59,10 +64,11 @@ export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: 
       {({ clearQuery, query }) => {
         const normalizedQuery = query.trim().toLowerCase();
         const filteredTags = normalizedQuery
-          ? allTags.filter((t) => t.toLowerCase().includes(normalizedQuery))
-          : allTags;
+          ? listedTags.filter((t) => t.toLowerCase().includes(normalizedQuery))
+          : listedTags;
         const canCreate =
-          normalizedQuery.length > 0 && !allTags.some((t) => t.toLowerCase() === normalizedQuery);
+          normalizedQuery.length > 0 &&
+          !listedTags.some((t) => t.toLowerCase() === normalizedQuery);
 
         return (
           <>
