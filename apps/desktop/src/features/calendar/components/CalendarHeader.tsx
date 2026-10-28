@@ -1,6 +1,6 @@
 import type { CalendarDayCount, CalendarViewMode } from "@pikos/core";
 import { buildCalendarDays } from "@pikos/core";
-import { format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
+import { format, isSameDay, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
 import { CalendarRange, ChevronLeft, ChevronRight, Grid3x3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -42,13 +42,17 @@ export function CalendarHeader({
     : isWithinInterval(today, { end: last, start: first });
   const unit = isMonth ? "month" : "week";
 
+  const isOneDay = isSameDay(first, last);
+
   // Time grid shows its visible range ("Mar 16 – 22, 2026" / "Mar 30 – Apr 5,
-  // 2026"); month view names the month it is padded around.
+  // 2026"), or the day alone when it shows one; month view names the month it is padded around.
   const rangeLabel = isMonth
     ? format(referenceDate, "MMMM yyyy")
-    : isSameMonth(first, last)
-      ? `${format(first, "MMM d")} – ${format(last, "d, yyyy")}`
-      : `${format(first, "MMM d")} – ${format(last, "MMM d, yyyy")}`;
+    : isOneDay
+      ? format(first, "EEE, MMM d, yyyy")
+      : isSameMonth(first, last)
+        ? `${format(first, "MMM d")} – ${format(last, "d, yyyy")}`
+        : `${format(first, "MMM d")} – ${format(last, "MMM d, yyyy")}`;
 
   return (
     <>
