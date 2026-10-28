@@ -86,6 +86,7 @@ export function SettingsPage() {
   const showingMapping = importState.step === "mapping";
   const showingPreview = importState.step === "preview";
   const showingProgress = importState.step === "importing";
+  const isImportOnScreen = showingMapping || showingPreview || showingProgress;
 
   return (
     <div
@@ -97,6 +98,7 @@ export function SettingsPage() {
     >
       <SettingsNav
         active={section}
+        isLocked={isImportOnScreen}
         onClose={() => setSettingsOpen(false)}
         onNavigate={setSettingsSection}
       />

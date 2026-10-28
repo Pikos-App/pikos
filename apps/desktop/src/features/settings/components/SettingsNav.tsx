@@ -17,11 +17,13 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }
 
 interface SettingsNavProps {
   active: SettingsSection;
+  /** While a flow holds the content pane, as an import does, another section couldn't show. */
+  isLocked: boolean;
   onNavigate: (section: SettingsSection) => void;
   onClose: () => void;
 }
 
-export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
+export function SettingsNav({ active, isLocked, onClose, onNavigate }: SettingsNavProps) {
   return (
     <div className="flex h-full w-settings-nav shrink-0 flex-col border-r border-border bg-background">
       {/* Header */}
@@ -53,8 +55,10 @@ export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
               "type-ui flex w-full items-center gap-ui-md rounded-md px-ui-md py-ui-sm transition-colors",
               active === id
                 ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              "disabled:pointer-events-none disabled:opacity-50"
             )}
+            disabled={isLocked && active !== id}
             key={id}
             onClick={() => onNavigate(id)}
           >
