@@ -44,6 +44,7 @@ struct CalendarGrid: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(PageDragSession.self) private var drag
     @Environment(Route.self) private var route
+    @Environment(\.shellLayout) private var shellLayout
 
     /// A percentage rather than the height itself, because `@ScaledMetric` takes its base from a
     /// literal and the base is a setting.
@@ -73,6 +74,9 @@ struct CalendarGrid: View {
                         .padding(.top, Self.timedTopInset)
                 }
                 .minimizesShellBar()
+                .overlay(alignment: .bottom) {
+                    if shellLayout == .single { barFade }
+                }
                 .modifier(RemembersTopHour(hourHeight: hourHeight, topInset: Self.timedTopInset))
                 .onAppear {
                     proxy.scrollTo(Self.hourAnchor(route.calendarTopHour ?? openingHour), anchor: .top)
@@ -84,6 +88,22 @@ struct CalendarGrid: View {
         }
         .background(.surfacePrimary)
         .modifier(GridFeedback(stretch: stretch, resizing: resizing, hover: hover, drops: drops))
+    }
+
+    /// The hours fade out under the floating bar rather than run into it: a label half under the
+    /// bar's edge read as clipped ("5 PN"). The bar only floats over the grid in the single layout.
+    private var barFade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color.surfacePrimary.opacity(0), location: 0),
+                .init(color: .surfacePrimary, location: 0.6),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .frame(height: ShellBar.clearance + Self.barFadeLead)
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     // MARK: - Header
@@ -704,6 +724,8 @@ struct CalendarGrid: View {
     private static let gripHold: Double = 0.1
     private static let hourLabelClearance: CGFloat = 12
     private static let timedTopInset: CGFloat = 8
+    /// How far above the bar the fade starts.
+    private static let barFadeLead: CGFloat = 16
     /// Narrower than this a title wraps a letter to a line, so a block shows its colour alone.
     private static let minimumTextWidth: CGFloat = 44
     /// Where the grid opens when today is not on screen, rather than at an empty midnight.
