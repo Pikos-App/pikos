@@ -61,14 +61,16 @@ def main() -> int:
         return 0
 
     before = set(path.read_text().split())
-    made_by_this_run = [
-        cert for cert in current
-        if cert["id"] not in before and cert["attributes"].get("name") == CREATED_BY_XCODE
-    ]
-    for cert in made_by_this_run:
+    new_since = [cert for cert in current if cert["id"] not in before]
+    for cert in new_since:
+        # The portal's Name column is `displayName`; `name` is the certificate's common name.
+        shown_as = cert["attributes"].get("displayName")
+        if shown_as != CREATED_BY_XCODE:
+            print(f"left {cert['id']}, shown as {shown_as!r}")
+            continue
         request("DELETE", f"{API}/{cert['id']}", auth)
         print(f"revoked {cert['id']}")
-    if not made_by_this_run:
+    if not new_since:
         print("this run made no development certificate")
     return 0
 
