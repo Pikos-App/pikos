@@ -315,7 +315,7 @@ struct SearchToken: Identifiable, Hashable {
     }
 
     static func tag(_ tag: String) -> SearchToken {
-        SearchToken(operatorName: "tag", value: tag, label: "#\(tag)", systemImage: "number")
+        SearchToken(operatorName: "tag", value: tag, label: tag, systemImage: "number")
     }
 }
 
