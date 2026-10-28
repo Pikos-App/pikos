@@ -369,7 +369,7 @@ export function EditorPane() {
     {
       allowInInputs: true,
       group: "Editor",
-      label: "Insert / edit link",
+      label: "Link selected text",
       scope: "editor",
       when: () => !!editor && !editor.state.selection.empty,
     }

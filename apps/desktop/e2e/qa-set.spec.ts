@@ -272,7 +272,7 @@ appTest(
       }
       // The one deliberate split: link with a selection, palette without. Why is in
       // scripts/check-shortcut-conflicts.mjs (ALLOWED_SHADOWING).
-      const split = ["Insert / edit link", "Run a command"];
+      const split = ["Link selected text", "Run a command"];
       const doubled = [...byCombo].filter(
         ([, labels]) => labels.length > 1 && [...labels].sort().join() !== split.join()
       );
