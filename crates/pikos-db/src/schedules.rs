@@ -71,8 +71,9 @@ pub struct NewPageSchedule {
 #[ts(export, optional_fields = nullable)]
 pub struct PageScheduleUpdate {
     pub scheduled_start: Option<String>,
+    #[serde(default, deserialize_with = "crate::pages::deserialize_nullable")]
     #[ts(type = "string | null", optional)]
-    pub scheduled_end: Option<serde_json::Value>, // Value::Null clears it
+    pub scheduled_end: Option<serde_json::Value>,
     #[ts(type = "'not_started' | 'done' | 'skipped'", optional)]
     pub status: Option<String>,
 }
@@ -148,8 +149,9 @@ pub struct RecurrenceRuleUpdate {
     pub rrule: Option<String>,
     pub rrule_exdates: Option<Vec<String>>,
     pub scheduled_start: Option<String>,
+    #[serde(default, deserialize_with = "crate::pages::deserialize_nullable")]
     #[ts(type = "string | null", optional)]
-    pub scheduled_end: Option<serde_json::Value>, // Value::Null clears it
+    pub scheduled_end: Option<serde_json::Value>,
     pub timezone: Option<String>,
 }
 

@@ -410,6 +410,39 @@ async fn update_start_refreshes_denorm() {
 }
 
 #[tokio::test]
+async fn an_update_sent_with_a_null_end_clears_the_end() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Task"))
+        .await
+        .unwrap();
+    let s = create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p1".into(),
+            scheduled_start: "2026-10-26".into(),
+            scheduled_end: Some("2026-10-26".into()),
+            timezone: None,
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let moved: PageScheduleUpdate = serde_json::from_value(serde_json::json!({
+        "scheduledStart": "2026-10-27",
+        "scheduledEnd": null,
+    }))
+    .unwrap();
+    update_page_schedule_impl(&pool, s.id, moved).await.unwrap();
+
+    assert_eq!(
+        page_denorm(&pool, "p1").await,
+        (Some("2026-10-27".to_string()), None)
+    );
+}
+
+#[tokio::test]
 async fn update_clears_reminder_log_when_start_changes() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "Task"))

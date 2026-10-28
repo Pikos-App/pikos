@@ -11,7 +11,9 @@ use crate::{now_iso, now_local_iso};
 /// ts-rs can't read `deserialize_with` and says so on every build; each field using
 /// this carries an explicit `#[ts(type = "…", optional)]` because of it, since the
 /// `serde_json::Value` it would otherwise export says nothing about the wire.
-fn deserialize_nullable<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+pub(crate) fn deserialize_nullable<'de, D>(
+    deserializer: D,
+) -> Result<Option<serde_json::Value>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -469,6 +471,7 @@ pub struct PageUpdate {
 #[ts(export, optional_fields = nullable)]
 pub struct PageFilter {
     /// None = no folder filter; Value::Null = inbox (folder_id IS NULL); Value::String = specific folder
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub folder_id: Option<serde_json::Value>,
     #[ts(type = "'not_started' | 'done'", optional)]
@@ -1688,6 +1691,7 @@ pub async fn set_pages_status_impl(
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
 pub struct CompletedPagesFilter {
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub folder_id: Option<serde_json::Value>, // null = inbox, missing = all
     pub completed_since: Option<String>, // ISO date for "today" filter

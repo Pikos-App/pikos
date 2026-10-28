@@ -72,10 +72,13 @@ pub struct NewFolder {
 #[ts(export, optional_fields = nullable)]
 pub struct FolderUpdate {
     pub name: Option<String>,
+    #[serde(default, deserialize_with = "crate::pages::deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub parent_id: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "crate::pages::deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub color: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "crate::pages::deserialize_nullable")]
     #[ts(type = "string | null", optional)]
     pub icon: Option<serde_json::Value>,
     #[ts(type = "number", optional)]

@@ -4658,3 +4658,30 @@ async fn completing_a_head_from_a_newer_build_keeps_the_clone_at_its_version() {
     let clone = fetch_page(&pool, &result.clone.id).await.unwrap();
     assert_eq!(clone.content_schema_version, 99);
 }
+
+#[test]
+fn a_null_from_the_app_reads_as_a_clear_and_a_missing_field_as_no_change() {
+    use serde_json::{json, Value};
+
+    let cleared: crate::folders::FolderUpdate =
+        serde_json::from_value(json!({ "parentId": null, "color": null, "icon": null })).unwrap();
+    assert_eq!(cleared.parent_id, Some(Value::Null));
+    assert_eq!(cleared.color, Some(Value::Null));
+    assert_eq!(cleared.icon, Some(Value::Null));
+    let untouched: crate::folders::FolderUpdate =
+        serde_json::from_value(json!({ "name": "Work" })).unwrap();
+    assert_eq!(untouched.color, None);
+
+    let rule: crate::schedules::RecurrenceRuleUpdate =
+        serde_json::from_value(json!({ "scheduledEnd": null })).unwrap();
+    assert_eq!(rule.scheduled_end, Some(Value::Null));
+
+    let inbox: PageFilter = serde_json::from_value(json!({ "folderId": null })).unwrap();
+    assert_eq!(inbox.folder_id, Some(Value::Null));
+    let everywhere: PageFilter = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(everywhere.folder_id, None);
+
+    let completed: CompletedPagesFilter =
+        serde_json::from_value(json!({ "folderId": null, "limit": 10, "offset": 0 })).unwrap();
+    assert_eq!(completed.folder_id, Some(Value::Null));
+}
