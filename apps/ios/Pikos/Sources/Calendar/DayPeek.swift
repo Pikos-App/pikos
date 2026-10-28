@@ -202,14 +202,24 @@ struct DayPeek: View {
         let origin = CGFloat(firstHour) * Self.hourHeight
         let layout = day.layout
         let colors = CalendarPalette.folderColors(store.folders)
+        let placements = day.timed.map {
+            CalendarGeometry.placement(
+                start: $0.scheduledStart, end: $0.scheduledEnd, on: day.today, metrics: metrics)
+        }
+        let slots = CalendarGeometry.slots(
+            for: zip(day.timed, placements).map { entry, placed in
+                CalendarGeometry.SlotInput(
+                    depth: Int(layout[entry.key]?.cascadeDepth ?? 0),
+                    top: placed?.top ?? 0, height: placed?.height ?? 0)
+            },
+            columnWidth: columnWidth,
+            titleClearance: CalendarGeometry.titleClearance)
 
-        return ForEach(day.timed, id: \.key) { entry in
-            if let placed = CalendarGeometry.placement(
-                start: entry.scheduledStart, end: entry.scheduledEnd, on: day.today, metrics: metrics),
+        return ForEach(Array(day.timed.enumerated()), id: \.element.key) { index, entry in
+            if let placed = placements[index],
                 placed.top - origin + placed.height > 0, placed.top - origin < height
             {
-                let depth = Int(layout[entry.key]?.cascadeDepth ?? 0)
-                let inset = CalendarGeometry.cascadeInset(depth: depth, columnWidth: columnWidth)
+                let slot = slots[index]
                 CalendarBlockView(
                     title: entry.title,
                     time: CalendarPalette.timeLabel(start: entry.scheduledStart, end: entry.scheduledEnd),
@@ -223,12 +233,12 @@ struct DayPeek: View {
                         Task { await store.setStatus(pageId: entry.pageId, done: entry.status != "done") }
                     }
                 )
-                .frame(width: max(columnWidth - inset, 1), height: placed.height)
+                .frame(width: max(slot.width, 1), height: placed.height)
                 .onTapGesture { route.open(page: entry.pageId) }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
                 .position(
-                    x: Self.gutter + inset + max(columnWidth - inset, 1) / 2,
+                    x: Self.gutter + slot.x + max(slot.width, 1) / 2,
                     y: placed.top - origin + placed.height / 2)
             }
         }

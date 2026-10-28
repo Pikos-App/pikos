@@ -158,6 +158,101 @@ public enum CalendarGeometry {
         return columnWidth * step * cappedDepth
     }
 
+    /// How far apart two overlapping blocks' tops must be, at the default text size, for a cascade
+    /// to leave the earlier title readable: about a title line and a time line.
+    public static let titleClearance: CGFloat = 40
+
+    /// One timed block as the horizontal layout reads it: its Rust cascade depth and where it is
+    /// drawn vertically, in points.
+    public struct SlotInput: Equatable, Sendable {
+        public var depth: Int
+        public var top: CGFloat
+        public var height: CGFloat
+
+        public init(depth: Int, top: CGFloat, height: CGFloat) {
+            self.depth = depth
+            self.top = top
+            self.height = height
+        }
+    }
+
+    /// Where a block sits across its day column, in points from the column's leading edge.
+    public struct Slot: Equatable, Sendable {
+        public var x: CGFloat
+        public var width: CGFloat
+    }
+
+    /// The horizontal slot for each block of one day, parallel to `blocks`.
+    ///
+    /// A cascade keeps the host's title readable only when the guest starts below it. Blocks
+    /// whose tops are closer than `titleClearance` would put both titles in the same band, and
+    /// at a three-day column's width the guest covered the host's title entirely. So where such
+    /// a group includes its cluster's host, it splits the column into equal side-by-side slots,
+    /// as the desktop splits a close pair; everything else cascades by depth. A close group
+    /// deeper in a cluster still cascades, because the host already holds the leading edge.
+    public static func slots(
+        for blocks: [SlotInput], columnWidth: CGFloat, titleClearance: CGFloat
+    ) -> [Slot] {
+        var slots = blocks.map { block in
+            let inset = cascadeInset(depth: block.depth, columnWidth: columnWidth)
+            return Slot(x: inset, width: columnWidth - inset)
+        }
+
+        for cluster in overlapClusters(blocks) {
+            for group in closeTopGroups(cluster, in: blocks, titleClearance: titleClearance) {
+                let holdsHost = group.contains { blocks[$0].depth == 0 }
+                guard group.count > 1, holdsHost else { continue }
+
+                let width = columnWidth / CGFloat(group.count)
+                for (column, index) in group.enumerated() {
+                    slots[index] = Slot(x: width * CGFloat(column), width: width)
+                }
+            }
+        }
+        return slots
+    }
+
+    /// Indices of blocks whose drawn spans connect, each cluster in input order.
+    private static func overlapClusters(_ blocks: [SlotInput]) -> [[Int]] {
+        let byTop = blocks.indices.sorted { (blocks[$0].top, $0) < (blocks[$1].top, $1) }
+        var clusters: [[Int]] = []
+        var clusterEnd = -CGFloat.infinity
+
+        for index in byTop {
+            let block = blocks[index]
+            if block.top >= clusterEnd || clusters.isEmpty { clusters.append([]) }
+            clusters[clusters.count - 1].append(index)
+            clusterEnd = max(clusterEnd, block.top + block.height)
+        }
+        return clusters.map { $0.sorted() }
+    }
+
+    /// The cluster's blocks joined wherever two tops are closer than `titleClearance`, each
+    /// group in input order, which is the Rust's top-then-start order.
+    private static func closeTopGroups(
+        _ cluster: [Int], in blocks: [SlotInput], titleClearance: CGFloat
+    ) -> [[Int]] {
+        var groupOf: [Int: Int] = [:]
+        var groups: [[Int]] = []
+
+        for index in cluster where groupOf[index] == nil {
+            var members: [Int] = []
+            var pending = [index]
+            groupOf[index] = groups.count
+            while let next = pending.popLast() {
+                members.append(next)
+                for other in cluster where groupOf[other] == nil
+                    && abs(blocks[other].top - blocks[next].top) < titleClearance
+                {
+                    groupOf[other] = groups.count
+                    pending.append(other)
+                }
+            }
+            groups.append(members.sorted())
+        }
+        return groups
+    }
+
     // MARK: - Touching an empty slot
 
     /// The minute a touch in a day column lands on, snapped to a slot.

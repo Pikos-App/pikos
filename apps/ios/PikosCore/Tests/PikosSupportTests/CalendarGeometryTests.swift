@@ -129,6 +129,54 @@ final class CalendarGeometryTests: XCTestCase {
         XCTAssertLessThan(CalendarGeometry.cascadeInset(depth: 9, columnWidth: width), width / 2)
     }
 
+    func testTwoBlocksStartingTogetherSitSideBySideRatherThanOneOverTheOther() {
+        let slots = CalendarGeometry.slots(
+            for: [
+                .init(depth: 0, top: 512, height: 32),
+                .init(depth: 1, top: 512, height: 22),
+            ],
+            columnWidth: 120, titleClearance: 40)
+
+        XCTAssertEqual(slots, [.init(x: 0, width: 60), .init(x: 60, width: 60)])
+    }
+
+    func testABlockStartingWellBelowItsHostStillCascades() {
+        let slots = CalendarGeometry.slots(
+            for: [
+                .init(depth: 0, top: 512, height: 128),
+                .init(depth: 1, top: 576, height: 64),
+            ],
+            columnWidth: 300, titleClearance: 40)
+
+        let inset = CalendarGeometry.cascadeInset(depth: 1, columnWidth: 300)
+        XCTAssertEqual(slots, [.init(x: 0, width: 300), .init(x: inset, width: 300 - inset)])
+    }
+
+    func testACloseGroupDeeperInAClusterCascadesBecauseTheHostHoldsTheLeadingEdge() {
+        let slots = CalendarGeometry.slots(
+            for: [
+                .init(depth: 0, top: 0, height: 256),
+                .init(depth: 1, top: 128, height: 64),
+                .init(depth: 2, top: 128, height: 64),
+            ],
+            columnWidth: 300, titleClearance: 40)
+
+        XCTAssertEqual(
+            slots.map(\.x),
+            [0, 1, 2].map { CalendarGeometry.cascadeInset(depth: $0, columnWidth: 300) })
+    }
+
+    func testBlocksThatDoNotOverlapNeverSplitHoweverCloseTheirTops() {
+        let slots = CalendarGeometry.slots(
+            for: [
+                .init(depth: 0, top: 0, height: 22),
+                .init(depth: 0, top: 30, height: 22),
+            ],
+            columnWidth: 300, titleClearance: 40)
+
+        XCTAssertEqual(slots, [.init(x: 0, width: 300), .init(x: 0, width: 300)])
+    }
+
     // MARK: - Now indicator
 
     func testTheNowIndicatorOnlyAppearsOnToday() {
