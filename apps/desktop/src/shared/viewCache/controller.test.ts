@@ -1,4 +1,4 @@
-import type { ViewKey } from "@pikos/core";
+import type { PageSummary, ViewKey } from "@pikos/core";
 import { watchWrites } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { afterEach, describe, expect, it } from "vitest";
@@ -325,6 +325,45 @@ describe("ViewCacheController range races", () => {
     older?.();
     await settle();
     expect(controller.rangePages(start, end).map((p) => p.id)).toContain(added.id);
+  });
+
+  it("keeps a page made by a click while its date is still on the way to the database", async () => {
+    const { adapter, controller } = await setup(0);
+    const start = "2026-06-01T00:00:00Z";
+    const end = "2026-06-08T00:00:00Z";
+    controller.showRange(start, end);
+    await settle();
+
+    const made = await adapter.createPage(newPage("Lunch"));
+    controller.adoptCreated(made);
+    controller.mirror.capture(() =>
+      controller.mirror.patch(made.id, { scheduledStart: "2026-06-03T12:00:00" })
+    );
+    await settle();
+
+    expect(controller.rangePages(start, end).map((p) => p.id)).toContain(made.id);
+  });
+
+  it("keeps a page in the range when a load that a write overlapped lands without it", async () => {
+    const { adapter, controller, raw } = await setup(0);
+    const start = "2026-06-01T00:00:00Z";
+    const end = "2026-06-08T00:00:00Z";
+    const lunch = await adapter.createPage({
+      ...newPage("Lunch"),
+      scheduledStart: "2026-06-03T12:00:00",
+    });
+    controller.showRange(start, end);
+    await settle();
+    const held: Array<(rows: PageSummary[]) => void> = [];
+    raw.listRange = () => new Promise((resolve) => held.push(resolve));
+
+    await adapter.createPage(newPage("Starts a load"));
+    await settle();
+    await adapter.createPage(newPage("Overlaps it"));
+    held[0]?.([]);
+    await settle();
+
+    expect(controller.rangePages(start, end).map((p) => p.id)).toContain(lunch.id);
   });
 });
 

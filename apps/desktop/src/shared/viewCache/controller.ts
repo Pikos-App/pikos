@@ -137,6 +137,7 @@ export class ViewCacheController {
   writeStarted(): void {
     this.writesInFlight += 1;
     this.writeEpoch += 1;
+    this.rangeEpoch += 1;
   }
 
   /**
@@ -146,6 +147,7 @@ export class ViewCacheController {
   writeSettled(method: string, args: unknown[]): void {
     this.writesInFlight -= 1;
     this.writeEpoch += 1;
+    this.rangeEpoch += 1;
     const [id, patch] = args;
     if (method === "updatePage" && typeof id === "string" && patch && typeof patch === "object") {
       this.patchBody(id, patch);
@@ -393,8 +395,13 @@ export class ViewCacheController {
     return pages;
   }
 
-  /** Only a range's latest load is kept: an earlier one landing after it would undo it. One a
-   *  write overlapped is kept but stale, and loads again if the range is on screen. */
+  /**
+   * Only a range's latest load is kept: an earlier one landing after it would undo it. One a write
+   * overlapped is kept but stale, and loads again if the range is on screen.
+   *
+   * Neither a stale load nor one that read before a pending edit reached the database takes a page
+   * out of the range: a block made by a click went on screen, off for that load, and on again.
+   */
   private async loadRange(start: string, end: string): Promise<void> {
     const name = `${start}|${end}`;
     const asked = (this.rangeAsked.get(name) ?? 0) + 1;
@@ -409,7 +416,10 @@ export class ViewCacheController {
     if (this.rangeAsked.get(name) !== asked) return;
     this.store.confirm(rows);
     const stale = epoch !== this.rangeEpoch;
-    this.ranges.set(name, { ids: rows.map((r) => r.id), stale });
+    const held = this.ranges.get(name)?.ids ?? [];
+    const kept = held.filter((id) => stale || this.store.isPending(id));
+    const ids = [...new Set([...rows.map((r) => r.id), ...kept])];
+    this.ranges.set(name, { ids, stale });
     this.bump();
     const shown = this.shownRange;
     if (stale && shown?.start === start && shown.end === end) void this.loadRange(start, end);
