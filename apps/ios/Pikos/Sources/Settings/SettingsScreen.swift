@@ -146,8 +146,19 @@ struct SettingsScreen: View {
                     #endif
 
                     Section {
+                        // On the button, not the screen: iOS shows the confirmation as a popover
+                        // pointing at what it's attached to, and attached to the screen it pointed
+                        // at a row near the top.
                         Button("Reset preferences", role: .destructive) {
                             isResetConfirmed = true
+                        }
+                        .confirmationDialog(
+                            "Reset preferences?", isPresented: $isResetConfirmed, titleVisibility: .visible
+                        ) {
+                            Button("Reset", role: .destructive) { settings.resetAll() }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("Theme, density, week start, default folder and reminders go back to their defaults.")
                         }
                     } footer: {
                         Text("Returns the settings above to their defaults. Your pages are not touched.")
@@ -162,6 +173,17 @@ struct SettingsScreen: View {
                         } else {
                             Button("Delete all data", role: .destructive) {
                                 isDeleteConfirmed = true
+                            }
+                            .confirmationDialog(
+                                "Delete everything on this device?", isPresented: $isDeleteConfirmed,
+                                titleVisibility: .visible
+                            ) {
+                                Button("Delete all data", role: .destructive) {
+                                    Task { await deleteEverything() }
+                                }
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("Every page, folder and calendar connection. This cannot be undone.")
                             }
                         }
                     } footer: {
@@ -184,25 +206,6 @@ struct SettingsScreen: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
-            }
-            .confirmationDialog(
-                "Reset preferences?", isPresented: $isResetConfirmed, titleVisibility: .visible
-            ) {
-                Button("Reset", role: .destructive) { settings.resetAll() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Theme, density, week start, default folder and reminders go back to their defaults.")
-            }
-            .confirmationDialog(
-                "Delete everything on this device?", isPresented: $isDeleteConfirmed,
-                titleVisibility: .visible
-            ) {
-                Button("Delete all data", role: .destructive) {
-                    Task { await deleteEverything() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Every page, folder and calendar connection. This cannot be undone.")
             }
             .sheet(item: exportReady) { ready in
                 ShareSheet(url: ready.url) { exports.ready = nil }
