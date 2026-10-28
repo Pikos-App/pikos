@@ -281,11 +281,26 @@ function ftsMatches(terms: string[], document: string): boolean {
   );
 }
 
+/** The shape of `excerpt_around` and `join_blocks` (search.rs), which own why: blocks joined
+ *  with a dot, the window grown out to whole words, and an ellipsis at each cut edge. */
 function excerptAround(text: string, terms: string[]): string {
-  const lower = text.toLowerCase();
+  const body = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join(" \u00B7 ");
+  const lower = body.toLowerCase();
   const hit = terms.map((t) => lower.indexOf(t)).find((i) => i >= 0) ?? -1;
   if (hit < 0) return "";
-  return text.slice(Math.max(0, hit - 40), hit + 40);
+
+  const half = 60;
+  const start = hit > half ? body.lastIndexOf(" ", hit - half) + 1 : 0;
+  const spaceAfter = body.indexOf(" ", hit + half);
+  const end = hit + half < body.length && spaceAfter >= 0 ? spaceAfter : body.length;
+
+  const prefix = start > 0 ? "\u2026" : "";
+  const suffix = end < body.length ? "\u2026" : "";
+  return `${prefix}${body.slice(start, end).trim()}${suffix}`;
 }
 
 /** `hard_delete_would_resurrect`: the trash keeps any linked page that isn't detached. */

@@ -308,6 +308,17 @@ describe("searchPages", () => {
     expect(results[0]!.excerpt).toContain("findme");
   });
 
+  it("cuts an excerpt at whole words and keeps a page's lines apart, as the database does", async () => {
+    const body = "Price is good after delivery\nMeasure the alcove\nOrder the desktop top";
+    await createTestPage({ body: "word ".repeat(30) + body, title: "other" });
+
+    const { results } = await adapter.searchPages("desk");
+
+    expect(results[0]!.excerpt).toMatch(/^\u2026\S/);
+    expect(results[0]!.excerpt).toContain("the alcove \u00B7 Order the desktop top");
+    expect(results[0]!.excerpt).not.toMatch(/\u2026r /);
+  });
+
   it("excludes completed pages by default, counts them", async () => {
     await createTestPage({ status: "done", title: "done task" });
     await createTestPage({ title: "active task" });
