@@ -72,7 +72,6 @@ targets:
       - path: ../PikosWidgets/Sources/NowWidget.swift
       - path: ../PikosWidgets/Sources/WidgetSupport.swift
       - path: ../PikosWidgets/Sources/CompletePageIntent.swift
-      - path: ../PikosWidgets/Sources/SendToTomorrowIntent.swift
     dependencies:
       - package: PikosCore
         product: PikosCore
@@ -91,7 +90,6 @@ targets:
         Release:
           EXCLUDED_SOURCE_FILE_NAMES: >-
             ListWidget.swift NowWidget.swift WidgetSupport.swift CompletePageIntent.swift
-            SendToTomorrowIntent.swift
           PIKOS_CLOUDKIT_CONTAINER: iCloud.app.pikos
           # TestFlight's beta, banded so it can't be mistaken for staging or the store app.
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIconBeta

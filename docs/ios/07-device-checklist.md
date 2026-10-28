@@ -80,7 +80,7 @@ Cheap, and each one has caught something on other apps:
 - Add List to the lock screen in the rectangular slot. It should show the
   next two open pages with their times; the circular one the open count.
   Switch it to a folder in its settings: the heading should change to the
-  folder's name. The arrow beside a row should move it to tomorrow.
+  folder's name.
 - Add Now at every size. With a timed page in progress it should count down
   to the end; in a gap it should say how long the gap is and offer a page with
   the reason it picked it. Its Focus button should open that page with the

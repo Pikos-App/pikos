@@ -137,41 +137,32 @@ func displayTitle(_ page: PageSummary) -> String {
 /// square are not something a thumb can pick between — but the ring is a
 /// target of its own even there.
 struct WidgetPageRow: View {
+    /// How big a row is drawn. A list of pages is the whole of the List widget, so its rows are
+    /// drawn at reading size, its detail at the right edge and its box a target a thumb can find
+    /// beside the title's link; the Now widget packs a headline and the day's hours around its rows.
+    enum Size {
+        case compact
+        case list
+    }
+
     let page: PageSummary
     /// Whether the title is its own link to the page.
     var linksToPage = true
     /// What to say beside the title, if anything: a time, a day.
     var detail: String? = nil
     var lineLimit = 1
+    var size = Size.compact
 
     var body: some View {
-        let isDone = page.status == "done"
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Button(intent: CompletePageIntent(pageId: page.id, done: !isDone)) {
-                Image(systemName: isDone ? "checkmark.square.fill" : "square")
-                    .font(.caption2)
-                    .foregroundStyle(isDone ? WidgetInk.secondary : ringColor(priority: page.priority))
-                    // Drawn dimmed while the tap is being written, so the
-                    // moment between the touch and the reload reads as
-                    // "working" rather than "ignored".
-                    .invalidatableContent()
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isDone ? "Reopen" : "Mark as done")
+        let isList = size == .list
+        HStack(alignment: .firstTextBaseline, spacing: isList ? 8 : 5) {
+            checkbox(isList: isList)
 
             let title = HStack(alignment: .firstTextBaseline, spacing: 4) {
-                if let detail {
-                    Text(detail)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(WidgetInk.secondary)
+                if let detail, !isList {
+                    detailText(detail, isList: false)
                 }
-                Text(displayTitle(page))
-                    .font(.caption)
-                    .strikethrough(isDone, color: WidgetInk.secondary)
-                    .foregroundStyle(isDone ? WidgetInk.secondary : WidgetInk.primary)
-                    .lineLimit(lineLimit)
-                    // A link centres a wrapped label; a row's second line starts under its first.
-                    .multilineTextAlignment(.leading)
+                titleText(isList: isList)
             }
             if linksToPage, let url = URL(string: "pikos://page/\(page.id)") {
                 Link(destination: url) { title }
@@ -179,7 +170,46 @@ struct WidgetPageRow: View {
                 title
             }
             Spacer(minLength: 0)
+            if let detail, isList {
+                detailText(detail, isList: true)
+            }
         }
+    }
+
+    private func checkbox(isList: Bool) -> some View {
+        let isDone = page.status == "done"
+        return Button(intent: CompletePageIntent(pageId: page.id, done: !isDone)) {
+            Image(systemName: isDone ? "checkmark.square.fill" : "square")
+                .font(isList ? .body : .caption2)
+                .foregroundStyle(isDone ? WidgetInk.secondary : ringColor(priority: page.priority))
+                // Drawn dimmed while the tap is being written, so the
+                // moment between the touch and the reload reads as
+                // "working" rather than "ignored".
+                .invalidatableContent()
+                .frame(minWidth: isList ? 24 : nil, minHeight: isList ? 24 : nil, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isDone ? "Reopen" : "Mark as done")
+    }
+
+    private func titleText(isList: Bool) -> some View {
+        let isDone = page.status == "done"
+        return Text(displayTitle(page))
+            .font(isList ? .subheadline : .caption)
+            .strikethrough(isDone, color: WidgetInk.secondary)
+            .foregroundStyle(isDone ? WidgetInk.secondary : WidgetInk.primary)
+            .lineLimit(lineLimit)
+            // A link centres a wrapped label; a row's second line starts under its first.
+            .multilineTextAlignment(.leading)
+    }
+
+    private func detailText(_ detail: String, isList: Bool) -> some View {
+        Text(detail)
+            .font((isList ? Font.footnote : .caption2).monospacedDigit())
+            .foregroundStyle(WidgetInk.secondary)
+            .lineLimit(1)
+            .fixedSize()
     }
 }
 

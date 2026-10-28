@@ -7,9 +7,8 @@ import WidgetKit
 /// One list of pages, chosen in the widget's settings: Today, Upcoming, the Inbox or a folder.
 ///
 /// One widget rather than one per list, because each of the earlier ones showed a little and none
-/// earned a home-screen slot on its own. Every row completes in place and moves to tomorrow in
-/// place, and the header adds a page to the list it shows, so a list can be worked from the home
-/// screen without opening the app.
+/// earned a home-screen slot on its own. Every row completes in place, and the header adds a page
+/// to the list it shows, so a list can be worked from the home screen without opening the app.
 ///
 /// It keeps the Today widget's kind, so a Today widget already on a home screen becomes this one,
 /// set to Today.
@@ -28,7 +27,7 @@ struct ListWidget: Widget {
                 .containerBackground(WidgetGround.style, for: .widget)
         }
         .configurationDisplayName("List")
-        .description("Today, Upcoming, your Inbox or a folder. Tick pages off or move them to tomorrow.")
+        .description("Today, Upcoming, your Inbox or a folder. Tick pages off without opening Pikos.")
         .supportedFamilies([
             .systemSmall, .systemMedium, .systemLarge,
             .accessoryInline, .accessoryCircular, .accessoryRectangular,
@@ -216,26 +215,33 @@ private struct HomeScreenView: View {
     let entry: ListEntry
     let family: WidgetFamily
 
-    /// Trimmed to what fits, since a widget can't scroll.
+    /// Trimmed to what fits, since a widget can't scroll. One line a row, so the small size fits
+    /// as many as the medium; the count in the header says how many more there are.
     private var visible: [PageSummary] {
         let limit: Int
         switch family {
-        case .systemSmall: limit = 2
-        case .systemMedium: limit = 4
-        default: limit = 9
+        case .systemSmall, .systemMedium: limit = 3
+        default: limit = 8
         }
         return Array(entry.open.prefix(limit))
     }
 
+    /// "Today" beside a page with no time says nothing in the Today list.
+    private func detail(_ page: PageSummary) -> String? {
+        let isTodayList = entry.list.id == ListChoice.today.id
+        if family == .systemSmall || (isTodayList && timeOfDay(page) == nil) { return nil }
+        return dueLabel(page, today: entry.today)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 Text(entry.list.name)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 if !entry.open.isEmpty {
                     Text("\(entry.open.count)")
-                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(WidgetInk.secondary)
                 }
                 Spacer(minLength: 4)
@@ -255,24 +261,13 @@ private struct HomeScreenView: View {
                 WidgetNote(text: "Nothing open")
             } else {
                 ForEach(visible, id: \.id) { page in
-                    HStack(spacing: 4) {
-                        WidgetPageRow(
-                            page: page,
-                            linksToPage: family != .systemSmall,
-                            detail: family == .systemSmall ? nil : dueLabel(page, today: entry.today),
-                            lineLimit: family == .systemMedium ? 1 : 2)
-                        if family != .systemSmall, SendToTomorrowIntent.canMove(page) {
-                            Button(intent: SendToTomorrowIntent(pageId: page.id)) {
-                                Image(systemName: "arrow.turn.down.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(WidgetInk.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Move \(displayTitle(page)) to tomorrow")
-                        }
-                    }
+                    WidgetPageRow(
+                        page: page,
+                        linksToPage: family != .systemSmall,
+                        detail: detail(page),
+                        size: .list)
                 }
-                if entry.open.count > visible.count {
+                if family == .systemLarge, entry.open.count > visible.count {
                     Text("+\(entry.open.count - visible.count) more")
                         .font(.caption2)
                         .foregroundStyle(WidgetInk.secondary)
