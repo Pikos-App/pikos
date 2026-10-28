@@ -59,7 +59,8 @@ export function CalendarHeader({
       <h2
         aria-label={isMonth ? "Visible month" : "Visible week"}
         aria-live="polite"
-        className="type-ui flex-1 pl-1 text-foreground"
+        className="type-ui min-w-0 flex-1 truncate pl-1 text-foreground"
+        title={rangeLabel}
       >
         {rangeLabel}
       </h2>

@@ -27,7 +27,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
         shortcut="mod+\"
       />
 
-      <div className="flex flex-1 items-center gap-1">{children}</div>
+      <div className="flex min-w-0 flex-1 items-center gap-1">{children}</div>
 
       <div className="flex items-center gap-0.5 rounded-md border border-border/50 bg-background">
         <Tooltip>
