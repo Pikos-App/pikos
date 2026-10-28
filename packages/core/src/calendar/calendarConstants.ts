@@ -98,6 +98,14 @@ export const ALL_DAY_TOP_PADDING = 4;
 export const COMPACT_MODE_WIDTH_PX = 100;
 
 /**
+ * Below this rendered width (px at calendar zoom 1, scaled by the zoom) a block shows its
+ * checkbox alone. Past the checkbox there is room for less than two letters and an ellipsis,
+ * so the browser cut the ellipsis as well and the title read as a broken "F." rather than a
+ * shortened one. The popover and the block's accessible name still carry the title.
+ */
+export const TITLE_MIN_WIDTH_PX = 54;
+
+/**
  * If any block would render below this rendered width (px), the layout
  * collapses the smallest blocks into a `+N more` pill at the cluster's
  * right edge instead of letting their titles truncate to a single letter.

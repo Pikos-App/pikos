@@ -53,6 +53,7 @@ export {
   MIN_TOP_HOUR,
   MIN_VISIBLE_HOURS,
   OVERFLOW_MIN_WIDTH_PX,
+  TITLE_MIN_WIDTH_PX,
   VISIBLE_HOURS,
 } from "./calendar/calendarConstants";
 export type { CalendarCollapseConfig } from "./calendar/calendarConstants";

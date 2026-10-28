@@ -58,6 +58,9 @@ interface PageBlockProps {
    * Independent of the height-driven `isCompact` chip mode.
    */
   isCompactWidth?: boolean;
+  /** False when the block is too narrow for any of its title (`TITLE_MIN_WIDTH_PX`), which
+   * leaves the checkbox alone. */
+  hasRoomForTitle?: boolean;
   /** Called (with initial clientX/Y) when drag threshold is crossed on the block body. */
   onDragStart?: (clientX: number, clientY: number) => void;
   /** Called when the user presses in the bottom resize zone. */
@@ -73,6 +76,7 @@ export function PageBlock({
   autoOpenPopover,
   block,
   folderColor,
+  hasRoomForTitle = true,
   isCompactWidth,
   isDragging,
   isSettling,
@@ -129,6 +133,7 @@ export function PageBlock({
   // still get a 2-line title for long page names.
   // `isCompactWidth` always forces a 1-line title regardless of height.
   const showTimeLabel =
+    hasRoomForTitle &&
     !isRenderingCompact &&
     !fallsShortOf(displayHeight, metrics.timeRowMinHeight) &&
     !isContinuationBefore;
@@ -142,6 +147,7 @@ export function PageBlock({
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.
   const showLabel = !isContinuationBefore;
+  const showTitle = showLabel && hasRoomForTitle;
 
   const {
     handleClick,
@@ -323,12 +329,12 @@ export function PageBlock({
             style={sharedStyle}
           >
             {showLabel && checkbox}
-            {showLabel && (
+            {showTitle && (
               <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
                 {page.title || "Untitled"}
               </span>
             )}
-            {showLabel && <SyncSourceIcon className="ml-auto h-3 w-3" syncState={page.syncState} />}
+            {showTitle && <SyncSourceIcon className="ml-auto h-3 w-3" syncState={page.syncState} />}
             {resizeHandle}
           </button>
         ) : (
@@ -361,30 +367,35 @@ export function PageBlock({
             {showLabel && (
               <div className="flex w-full min-w-0 items-start gap-1">
                 {checkbox}
-                <p
-                  className={cn(
-                    "type-body-sm min-w-0 text-left leading-tight font-medium text-foreground",
-                    // `break-words` because the clamp only ellipsizes where it
-                    // clamps: a single word wider than the column was sliced at the
-                    // edge with nothing to show it had been, which a large calendar
-                    // text size reaches easily.
-                    useTwoLineTitle ? "line-clamp-2 break-words" : "truncate"
-                  )}
-                >
-                  {page.title || "Untitled"}
-                </p>
+                {hasRoomForTitle && (
+                  <p
+                    className={cn(
+                      "type-body-sm min-w-0 text-left leading-tight font-medium text-foreground",
+                      // `break-words` because the clamp only ellipsizes where it
+                      // clamps: a single word wider than the column was sliced at the
+                      // edge with nothing to show it had been, which a large calendar
+                      // text size reaches easily. `hyphens-auto` so the break it makes
+                      // reads as one ("Imple-ment") rather than as a typo.
+                      useTwoLineTitle ? "line-clamp-2 break-words hyphens-auto" : "truncate"
+                    )}
+                  >
+                    {page.title || "Untitled"}
+                  </p>
+                )}
                 {/* mt-1 (4px) added to the row's 2px top inset (py-0.5) = 6px,
                     matching the 6px right inset (px-1.5) so the icon is evenly
                     spaced from the top and right corner. Stays in flow so a long
                     title reserves space and never runs under it. */}
-                <SyncSourceIcon className="mt-1 ml-auto h-3 w-3" syncState={page.syncState} />
+                {hasRoomForTitle && (
+                  <SyncSourceIcon className="mt-1 ml-auto h-3 w-3" syncState={page.syncState} />
+                )}
               </div>
             )}
             {showTimeLabel && (
               // Indent matches the title's own left edge: checkbox 3.5 + gap 1
               <p
                 className={cn(
-                  "type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] w-full truncate pl-[calc(1.125rem*var(--calendar-zoom,1))]",
+                  "type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] w-full truncate pl-[calc(1.125rem*var(--calendar-zoom,1))] text-left",
                   BLOCK_TIME_TEXT_CLASS
                 )}
               >

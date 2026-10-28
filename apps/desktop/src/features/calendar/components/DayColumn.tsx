@@ -11,6 +11,7 @@ import {
   mapHourToY,
   mapYToDate,
   remapBlocksForCollapse,
+  TITLE_MIN_WIDTH_PX,
 } from "@pikos/core";
 import { isSameDay } from "date-fns";
 import { Check } from "lucide-react";
@@ -466,8 +467,10 @@ export function DayColumn({
             : undefined;
           const autoOpen = autoOpenPageId === block.page.id;
           const isBeingDragged = draggingPageId === block.page.id;
-          const isCompactWidth =
-            columnWidth > 0 && (block.widthPct / 100) * columnWidth < COMPACT_MODE_WIDTH_PX;
+          const blockWidthPx = (block.widthPct / 100) * columnWidth;
+          const isMeasured = columnWidth > 0;
+          const isCompactWidth = isMeasured && blockWidthPx < COMPACT_MODE_WIDTH_PX;
+          const hasRoomForTitle = !isMeasured || blockWidthPx >= TITLE_MIN_WIDTH_PX * metrics.zoom;
 
           const resizeHeight =
             resizeGhost?.pageId === block.page.id && resizeGhost.dayIndex === dayIndex
@@ -485,6 +488,7 @@ export function DayColumn({
               autoOpenPopover={autoOpen}
               block={block}
               folderColor={folderColor}
+              hasRoomForTitle={hasRoomForTitle}
               isCompactWidth={isCompactWidth}
               isDragging={isBeingDragged}
               isSettling={settlingPageId === block.page.id}

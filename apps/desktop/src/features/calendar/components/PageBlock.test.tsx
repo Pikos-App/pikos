@@ -52,10 +52,15 @@ function makeBlock(page: PageSummary): CalendarBlock {
   };
 }
 
-function renderBlock(page: PageSummary) {
+function renderBlock(page: PageSummary, hasRoomForTitle = true) {
   return renderWithProviders(
     <CalendarSettingsProvider>
-      <PageBlock block={makeBlock(page)} folderColor={undefined} onDoubleClick={vi.fn()} />
+      <PageBlock
+        block={makeBlock(page)}
+        folderColor={undefined}
+        hasRoomForTitle={hasRoomForTitle}
+        onDoubleClick={vi.fn()}
+      />
     </CalendarSettingsProvider>
   );
 }
@@ -84,5 +89,15 @@ describe("PageBlock — detached synced rendering", () => {
     renderBlock(makePage({ status: "done", syncState: "detached" }));
     const block = screen.getByRole("button", { name: /Standup/ });
     expect(block.className).toContain("opacity-50");
+  });
+});
+
+describe("PageBlock — too narrow for its title", () => {
+  it("shows its checkbox alone and still names the page", () => {
+    renderBlock(makePage({ syncState: null }), false);
+
+    expect(screen.queryByText("Standup")).not.toBeInTheDocument();
+    expect(screen.queryByText(/AM/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Standup/ })).toBeInTheDocument();
   });
 });
