@@ -5,12 +5,11 @@ import { CalendarDays, CalendarSync } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { type MetadataChip, PageMetadataChips } from "@/shared/components/PageMetadataChips";
-import { ScheduleDateButton } from "@/shared/components/ScheduleDateButton";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { useBacklinks } from "../hooks/useBacklinks";
 import { BacklinksButton } from "./BacklinksButton";
-import { ScheduleTimeControls } from "./ScheduleTimeControls";
+import { DateSchedulePopover } from "./DateSchedulePopover";
 
 interface BylineProps {
   page: Page;
@@ -64,34 +63,19 @@ export function Byline({
       }
     : { kind: "folder", props: { folders, onChange: onFolderChange, value: page.folderId } };
 
-  const scheduleChips: MetadataChip[] = locked
+  const scheduleChip: MetadataChip | null = locked
     ? lockedSchedule
-      ? [
-          {
-            id: "schedule",
-            kind: "node",
-            node: (
-              <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
-                {lockedSchedule}
-              </span>
-            ),
-          },
-        ]
-      : []
-    : [
-        { id: "schedule", kind: "node", node: <ScheduleDateButton page={page} /> },
-        {
-          id: "time",
+      ? {
+          id: "schedule",
           kind: "node",
           node: (
-            <ScheduleTimeControls
-              key={page.id}
-              page={page}
-              {...(onOpenInCalendar && { onShowOnCalendar: onOpenInCalendar })}
-            />
+            <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
+              {lockedSchedule}
+            </span>
           ),
-        },
-      ];
+        }
+      : null
+    : { id: "schedule", kind: "node", node: <DateSchedulePopover page={page} /> };
 
   const recurrenceChip: MetadataChip | null = locked
     ? lockedRecurrenceLabel
@@ -138,7 +122,7 @@ export function Byline({
           {
             boxed: true,
             chips: [
-              ...scheduleChips,
+              scheduleChip,
               // A timed page reminds on a lead time; an all-day page has no start
               // time to count back from, so its dropdown offers the day-before
               // anchor instead (see notifications/scheduler's day-before arm).
