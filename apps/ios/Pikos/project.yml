@@ -88,6 +88,7 @@ targets:
           CODE_SIGN_ENTITLEMENTS: PikosDebug.entitlements
           PIKOS_APP_GROUP: group.app.pikos.dev
           PIKOS_DISPLAY_NAME: Pikos Dev
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
         Release:
           EXCLUDED_SOURCE_FILE_NAMES: >-
             ListWidget.swift CalendarWidget.swift CalendarDay.swift WidgetSupport.swift
