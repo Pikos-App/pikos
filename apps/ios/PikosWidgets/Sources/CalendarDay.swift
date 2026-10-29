@@ -18,7 +18,7 @@ struct CalendarDay: View {
     /// The small size: no hour labels and no summary, so a title has the width to be read.
     var isNarrow = false
 
-    private var allDay: [PageSummary] { entry.untimed }
+    private var allDay: [PageSummary] { entry.showsAllDay ? entry.untimed : [] }
 
     private var firstHour: Int {
         let hour = Calendar.current.component(.hour, from: entry.date)
@@ -63,7 +63,7 @@ struct CalendarDay: View {
         {
             return String(localized: "next at \(ClockTime.string(start))")
         }
-        return entry.timed.isEmpty && allDay.isEmpty ? String(localized: "nothing left") : nil
+        return entry.pages.isEmpty ? String(localized: "nothing left") : nil
     }
 
     private var allDaySection: some View {

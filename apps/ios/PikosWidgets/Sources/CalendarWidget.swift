@@ -1,3 +1,4 @@
+import AppIntents
 import PikosCore
 import PikosSupport
 import SwiftUI
@@ -16,7 +17,8 @@ struct CalendarWidget: Widget {
     static let kind = "app.pikos.widget.next"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: Self.kind, provider: NowProvider()) { entry in
+        AppIntentConfiguration(kind: Self.kind, intent: CalendarWidgetIntent.self, provider: NowProvider()) {
+            entry in
             NowWidgetView(entry: entry)
                 .containerBackground(WidgetGround.style, for: .widget)
         }
@@ -24,6 +26,21 @@ struct CalendarWidget: Widget {
         .description("Today's coming hours, as your calendar draws them. Tick a page off where it sits.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryInline])
     }
+}
+
+// MARK: - Settings
+
+/// The widget's one setting. The window of hours is not one: it follows the clock, and the size
+/// picks how many hours it holds. Done pages are not one either, since both widgets show what's left.
+struct CalendarWidgetIntent: WidgetConfigurationIntent {
+    static let title: LocalizedStringResource = "Calendar"
+    static let description = IntentDescription("Choose what the Calendar widget shows.")
+
+    /// Off gives the hours the room all-day rows take.
+    @Parameter(title: "All-day pages", default: true)
+    var showsAllDay: Bool
+
+    init() {}
 }
 
 // MARK: - Timeline
@@ -34,6 +51,7 @@ struct NowEntry: TimelineEntry {
     let pages: [PageSummary]
     /// Folder id to its stored palette value, for the blocks' colours.
     var folderColors: [String: String] = [:]
+    var showsAllDay = true
     let failure: String?
 
     static let placeholder = NowEntry(date: .now, plan: NowPlan(items: [], now: .now), pages: [], failure: nil)
@@ -69,7 +87,7 @@ enum NowSource {
     }
 }
 
-struct NowProvider: TimelineProvider {
+struct NowProvider: AppIntentTimelineProvider {
     /// More than a day holds, and few enough that WidgetKit accepts the timeline.
     private static let maxEntries = 24
 
@@ -77,19 +95,17 @@ struct NowProvider: TimelineProvider {
         .placeholder
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (NowEntry) -> Void) {
-        let done = Completion(call: completion)
-        Task { done.call(await timeline().entries.first ?? .placeholder) }
+    func snapshot(for configuration: CalendarWidgetIntent, in context: Context) async -> NowEntry {
+        await timeline(showsAllDay: configuration.showsAllDay).entries.first ?? .placeholder
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<NowEntry>) -> Void) {
-        let done = Completion(call: completion)
-        Task { done.call(await timeline()) }
+    func timeline(for configuration: CalendarWidgetIntent, in context: Context) async -> Timeline<NowEntry> {
+        await timeline(showsAllDay: configuration.showsAllDay)
     }
 
     /// One entry now and one at every start and end still ahead today, so the widget moves from
     /// "free" to "now" to "free" on time without waking. The hourly refresh catches a new day.
-    private func timeline() async -> Timeline<NowEntry> {
+    private func timeline(showsAllDay: Bool) async -> Timeline<NowEntry> {
         let now = Date.now
         do {
             let pages = try await NowSource.pages()
@@ -101,7 +117,8 @@ struct NowProvider: TimelineProvider {
             let instants = [now] + first.changes.prefix(Self.maxEntries - 1)
             let entries = instants.map { at in
                 NowEntry(
-                    date: at, plan: NowSource.plan(pages, at: at), pages: pages, folderColors: colors, failure: nil)
+                    date: at, plan: NowSource.plan(pages, at: at), pages: pages, folderColors: colors,
+                    showsAllDay: showsAllDay, failure: nil)
             }
             return Timeline(entries: entries, policy: .after(WidgetClock.nextHour()))
         } catch {

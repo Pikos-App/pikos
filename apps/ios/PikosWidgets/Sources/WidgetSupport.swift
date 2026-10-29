@@ -26,18 +26,6 @@ enum WidgetWorkspace {
     }
 }
 
-/// A completion handler WidgetKit gave us, carried into a `Task`.
-///
-/// `TimelineProvider` hands over plain closures, and under strict concurrency a
-/// plain closure cannot be captured by the `@Sendable` closure a `Task` runs.
-/// The handler is only ever called once, from the task that owns this box, so
-/// the sharing the checker objects to never happens — hence `@unchecked`. A
-/// box rather than an `async` provider because `StaticConfiguration` has no
-/// async variant of this protocol to adopt.
-struct Completion<Value>: @unchecked Sendable {
-    let call: (Value) -> Void
-}
-
 // MARK: - Time
 
 enum WidgetClock {
