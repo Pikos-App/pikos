@@ -212,8 +212,7 @@ struct DayPeek: View {
                     depth: Int(layout[entry.key]?.cascadeDepth ?? 0),
                     top: placed?.top ?? 0, height: placed?.height ?? 0)
             },
-            columnWidth: columnWidth,
-            titleClearance: CalendarGeometry.titleClearance)
+            columnWidth: columnWidth)
 
         return ForEach(Array(day.timed.enumerated()), id: \.element.key) { index, entry in
             if let placed = placements[index],

@@ -254,30 +254,6 @@ public enum CalendarGeometry {
         return (startMinute, endMinute)
     }
 
-    /// Horizontal inset for a cascade column, as a fraction of the day column.
-    ///
-    /// Overlapping events cascade — each one offset to the right of its host so
-    /// the host's title stays readable — rather than splitting the width, which
-    /// at four events on a phone would leave four unreadable slivers.
-    ///
-    /// The desktop folds anything past depth 1 into a "+N more" pill. That is
-    /// not reproduced here, deliberately: the pill needs the cluster's
-    /// membership and the Rust reports only a per-event depth, so building it
-    /// would mean sending cluster identity across the boundary for a case that
-    /// is rare on a phone. Instead the inset stops growing, which keeps deep
-    /// events on screen. The honest cost is that events past the cap sit at the
-    /// same inset and the deeper one covers the shallower; `04-calendar.md`
-    /// records it as the thing to revisit if dense days turn out to be common.
-    public static func cascadeInset(depth: Int, columnWidth: CGFloat) -> CGFloat {
-        let step: CGFloat = 0.14
-        let cappedDepth = CGFloat(min(max(depth, 0), 3))
-        return columnWidth * step * cappedDepth
-    }
-
-    /// How far apart two overlapping blocks' tops must be, at the default text size, for a cascade
-    /// to leave the earlier title readable: about a title line and a time line.
-    public static let titleClearance: CGFloat = 40
-
     /// One timed block as the horizontal layout reads it: its Rust cascade depth and where it is
     /// drawn vertically, in points.
     public struct SlotInput: Equatable, Sendable {
@@ -300,29 +276,23 @@ public enum CalendarGeometry {
 
     /// The horizontal slot for each block of one day, parallel to `blocks`.
     ///
-    /// A cascade keeps the host's title readable only when the guest starts below it. Blocks
-    /// whose tops are closer than `titleClearance` would put both titles in the same band, and
-    /// at a three-day column's width the guest covered the host's title entirely. So where such
-    /// a group includes its cluster's host, it splits the column into equal side-by-side slots,
-    /// as the desktop splits a close pair; everything else cascades by depth. A close group
-    /// deeper in a cluster still cascades, because the host already holds the leading edge.
-    public static func slots(
-        for blocks: [SlotInput], columnWidth: CGFloat, titleClearance: CGFloat
-    ) -> [Slot] {
-        var slots = blocks.map { block in
-            let inset = cascadeInset(depth: block.depth, columnWidth: columnWidth)
-            return Slot(x: inset, width: columnWidth - inset)
-        }
+    /// Overlapping blocks sit side by side in lanes, as Apple's Calendar draws them: each cluster
+    /// splits the column into one equal lane per depth it uses, and a block takes its depth's lane.
+    /// Nothing is drawn over anything, so every title and every duration grip stays on its own
+    /// block. A cascade was tried and dropped: three pages within half an hour stacked into a pile
+    /// whose grips lay over the neighbouring blocks, and splitting only the close pairs made one
+    /// day mix two layouts. Lanes are narrow on a crowded hour in a multi-day view, where a block
+    /// too narrow for its title shows its colour alone.
+    public static func slots(for blocks: [SlotInput], columnWidth: CGFloat) -> [Slot] {
+        var slots = blocks.map { _ in Slot(x: 0, width: columnWidth) }
 
         for cluster in overlapClusters(blocks) {
-            for group in closeTopGroups(cluster, in: blocks, titleClearance: titleClearance) {
-                let holdsHost = group.contains { blocks[$0].depth == 0 }
-                guard group.count > 1, holdsHost else { continue }
-
-                let width = columnWidth / CGFloat(group.count)
-                for (column, index) in group.enumerated() {
-                    slots[index] = Slot(x: width * CGFloat(column), width: width)
-                }
+            // Ranked rather than used directly: a cluster cut by drawn height can start below depth 0.
+            let depths = Set(cluster.map { blocks[$0].depth }).sorted()
+            let width = columnWidth / CGFloat(depths.count)
+            for index in cluster {
+                let lane = depths.firstIndex(of: blocks[index].depth) ?? 0
+                slots[index] = Slot(x: width * CGFloat(lane), width: width)
             }
         }
         return slots
@@ -341,32 +311,6 @@ public enum CalendarGeometry {
             clusterEnd = max(clusterEnd, block.top + block.height)
         }
         return clusters.map { $0.sorted() }
-    }
-
-    /// The cluster's blocks joined wherever two tops are closer than `titleClearance`, each
-    /// group in input order, which is the Rust's top-then-start order.
-    private static func closeTopGroups(
-        _ cluster: [Int], in blocks: [SlotInput], titleClearance: CGFloat
-    ) -> [[Int]] {
-        var groupOf: [Int: Int] = [:]
-        var groups: [[Int]] = []
-
-        for index in cluster where groupOf[index] == nil {
-            var members: [Int] = []
-            var pending = [index]
-            groupOf[index] = groups.count
-            while let next = pending.popLast() {
-                members.append(next)
-                for other in cluster where groupOf[other] == nil
-                    && abs(blocks[other].top - blocks[next].top) < titleClearance
-                {
-                    groupOf[other] = groups.count
-                    pending.append(other)
-                }
-            }
-            groups.append(members.sorted())
-        }
-        return groups
     }
 
     // MARK: - Touching an empty slot

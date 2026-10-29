@@ -12,8 +12,8 @@ was found while wiring the two together.
 | ------------------------------------------------ | -------------------------------------- |
 | overlap clustering, sweep-line column assignment | hour ↔ point mapping                   |
 | all-day row packing, bar coalescing              | density, block minimum heights         |
-| continuation flags, midnight crossing            | the cascade's visual inset and its cap |
-| which occurrences exist in a range at all        | the text-collision heuristic           |
+| continuation flags, midnight crossing            | how columns become lanes on screen     |
+| which occurrences exist in a range at all        | when a block is too narrow for text    |
 
 The line is not arbitrary. The desktop's `HOUR_HEIGHT` of 64px makes a
 15-minute slot 16px, which is fine for a mouse and less than half the 44pt a
@@ -28,12 +28,13 @@ Two deliberate differences from the desktop are worth naming:
 - **Short events keep their position and gain a minimum height.** The
   alternative — an hour tall enough that a 15-minute block is tappable — puts
   about six hours on a phone screen.
-- **There is no "+N more" overflow pill.** The desktop folds cascade depths
-  past 1 into one. Building it needs the cluster's membership and the shared
-  Rust reports only a per-event depth, so the inset stops growing instead. The
-  honest cost is that events past the cap sit at the same inset and the deeper
-  covers the shallower. Revisit if dense days turn out to be common; the fix is
-  to report cluster identity across the boundary, not to guess at it in Swift.
+- **Overlapping events sit side by side, never one over another.** The desktop
+  cascades them and folds depths past 1 into a "+N more" pill. On a phone a
+  cascade of three events within half an hour became a pile whose resize grips
+  lay over the neighbouring blocks, so each overlapping cluster splits the
+  column into equal lanes, one per column the Rust assigned, as Apple's
+  Calendar does. The cost is narrow lanes on a crowded hour in a multi-day
+  view, where a block too narrow for its title shows its colour alone.
 
 ## A calendar cannot draw the pages it queried
 

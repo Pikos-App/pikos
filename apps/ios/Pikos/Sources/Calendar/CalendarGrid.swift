@@ -438,8 +438,7 @@ struct CalendarGrid: View {
                 CalendarGeometry.SlotInput(
                     depth: Int(block.cascadeDepth), top: placed?.top ?? 0, height: placed?.height ?? 0)
             },
-            columnWidth: columnWidth,
-            titleClearance: CalendarGeometry.titleClearance * typeScale / 100)
+            columnWidth: columnWidth)
 
         return ZStack(alignment: .topLeading) {
             // The empty grid under the blocks; the blocks take their own presses first.
@@ -495,7 +494,7 @@ struct CalendarGrid: View {
                 }
             }
 
-            // After every block, so a block cascading over another never hides its grips.
+            // After every block, so a grip reaching past its block's edge isn't under the next block.
             ForEach(Array(blocks.enumerated()), id: \.element.pageId) { index, block in
                 if let entry = timed.first(where: { $0.key == block.pageId }),
                     let placed = placements[index],
@@ -503,7 +502,6 @@ struct CalendarGrid: View {
                 {
                     let slot = slots[index]
                     let width = max(slot.width - 3, 1)
-                    let cascadeStep = CalendarGeometry.cascadeInset(depth: 1, columnWidth: columnWidth)
                     // Beside the block rather than inside it, where its menu and lift took the touch.
                     ForEach([CalendarGeometry.BlockEdge.top, .bottom], id: \.self) { edge in
                         // Mostly outside the block, so the finger that meant the edge isn't
@@ -513,9 +511,7 @@ struct CalendarGrid: View {
                             edge == .top
                                 ? placed.top - (Self.gripHeight - Self.gripInside)
                                 : placed.top + placed.height - Self.gripInside)
-                        let gripWidth =
-                            edge == .top
-                            ? width * 0.4 : min(width, max(cascadeStep, Self.minimumBottomGripWidth))
+                        let gripWidth = width * Self.gripWidthShare
                         grip(entry, edge: edge, day: day, top: top)
                             .frame(width: gripWidth, height: Self.gripHeight)
                             .offset(x: slot.x + 1.5 + (edge == .top ? width - gripWidth : 0), y: top)
@@ -837,11 +833,9 @@ struct CalendarGrid: View {
     private static let gripHeight: CGFloat = 28
     /// How far above the bar the fade starts.
     private static let barFadeLead: CGFloat = 16
-    /// The bottom grip sits in the strip at the block's left edge that an event cascading over it
-    /// leaves showing: a cascade is inset one step to the right and starts later, so it lies over
-    /// the host's lower part. It is that step wide, but no narrower than this. The top grip sits at
-    /// the right, clear of the checkbox, where a later cascade never reaches (`PKOS-0201`).
-    private static let minimumBottomGripWidth: CGFloat = 24
+    /// How much of its block's width each grip's touch area takes: the top one from the right,
+    /// clear of the checkbox, the bottom one from the left, a pair at opposite corners (`PKOS-0201`).
+    private static let gripWidthShare: CGFloat = 0.4
     /// How much of a grip's touch area lies inside its block; the rest is outside the edge.
     private static let gripInside: CGFloat = 10
     /// The grip's drawn mark sits this far inside the block's edge, so it never lies over the block

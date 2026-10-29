@@ -6,8 +6,8 @@ import WidgetKit
 /// The Calendar widget's home-screen sizes: a header, today's all-day pages, then a window of hours
 /// from the current one with the timed pages in it.
 ///
-/// The hours are laid out by the app's own code: the Rust lays out the cascade and
-/// `CalendarGeometry` places and splits the blocks, so a day reads the same here as on the
+/// The hours are laid out by the app's own code: the Rust assigns each block its column and
+/// `CalendarGeometry` places the blocks in lanes, so a day reads the same here as on the
 /// calendar. Only the drawing is the widget's, at a size that fits a window of a few hours.
 struct CalendarDay: View {
     let entry: NowEntry
@@ -91,9 +91,6 @@ private struct CalendarHours: View {
     let showsLabels: Bool
 
     private var gutterWidth: CGFloat { showsLabels ? 40 : 0 }
-    /// Two blocks whose tops are closer than this sit side by side rather than cascade. Smaller than
-    /// the app's, because a widget block's title is one short line.
-    private static let titleClearance: CGFloat = 22
 
     var body: some View {
         GeometryReader { proxy in
@@ -173,7 +170,7 @@ private struct CalendarHours: View {
                 CalendarGeometry.SlotInput(
                     depth: Int(block.cascadeDepth), top: placed?.top ?? 0, height: placed?.height ?? 0)
             },
-            columnWidth: columnWidth, titleClearance: Self.titleClearance)
+            columnWidth: columnWidth)
 
         ForEach(Array(laidOut.enumerated()), id: \.element.pageId) { index, block in
             if let page = timed.first(where: { $0.id == block.pageId }), let placed = placements[index] {

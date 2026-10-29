@@ -114,65 +114,52 @@ final class CalendarGeometryTests: XCTestCase {
                 on: "2026-03-23", metrics: metrics))
     }
 
-    // MARK: - Cascade
+    // MARK: - Lanes
 
-    func testCascadeInsetGrowsWithDepthAndThenStops() {
-        let width: CGFloat = 300
-        XCTAssertEqual(CalendarGeometry.cascadeInset(depth: 0, columnWidth: width), 0)
-        XCTAssertLessThan(
-            CalendarGeometry.cascadeInset(depth: 1, columnWidth: width),
-            CalendarGeometry.cascadeInset(depth: 2, columnWidth: width))
-        // Capped, so a deep cascade cannot push a block off its own column.
-        XCTAssertEqual(
-            CalendarGeometry.cascadeInset(depth: 4, columnWidth: width),
-            CalendarGeometry.cascadeInset(depth: 3, columnWidth: width))
-        XCTAssertLessThan(CalendarGeometry.cascadeInset(depth: 9, columnWidth: width), width / 2)
-    }
-
-    func testTwoBlocksStartingTogetherSitSideBySideRatherThanOneOverTheOther() {
+    func testThreePagesWithinHalfAnHourSitInThreeLanesWithNoneOverAnother() {
         let slots = CalendarGeometry.slots(
             for: [
-                .init(depth: 0, top: 512, height: 32),
-                .init(depth: 1, top: 512, height: 22),
+                .init(depth: 0, top: 540, height: 60),
+                .init(depth: 1, top: 555, height: 45),
+                .init(depth: 2, top: 570, height: 24),
             ],
-            columnWidth: 120, titleClearance: 40)
+            columnWidth: 300)
 
-        XCTAssertEqual(slots, [.init(x: 0, width: 60), .init(x: 60, width: 60)])
+        XCTAssertEqual(
+            slots, [.init(x: 0, width: 100), .init(x: 100, width: 100), .init(x: 200, width: 100)])
     }
 
-    func testABlockStartingWellBelowItsHostStillCascades() {
+    func testABlockStartingWellBelowItsHostTakesALaneBesideItRatherThanCascading() {
         let slots = CalendarGeometry.slots(
             for: [
                 .init(depth: 0, top: 512, height: 128),
                 .init(depth: 1, top: 576, height: 64),
             ],
-            columnWidth: 300, titleClearance: 40)
+            columnWidth: 300)
 
-        let inset = CalendarGeometry.cascadeInset(depth: 1, columnWidth: 300)
-        XCTAssertEqual(slots, [.init(x: 0, width: 300), .init(x: inset, width: 300 - inset)])
+        XCTAssertEqual(slots, [.init(x: 0, width: 150), .init(x: 150, width: 150)])
     }
 
-    func testACloseGroupDeeperInAClusterCascadesBecauseTheHostHoldsTheLeadingEdge() {
+    func testAClusterSplitsOnlyItsOwnBlocksAndOnlyByTheDepthsItUses() {
         let slots = CalendarGeometry.slots(
             for: [
-                .init(depth: 0, top: 0, height: 256),
-                .init(depth: 1, top: 128, height: 64),
-                .init(depth: 2, top: 128, height: 64),
+                .init(depth: 0, top: 0, height: 60),
+                .init(depth: 1, top: 30, height: 60),
+                .init(depth: 2, top: 200, height: 60),
             ],
-            columnWidth: 300, titleClearance: 40)
+            columnWidth: 300)
 
         XCTAssertEqual(
-            slots.map(\.x),
-            [0, 1, 2].map { CalendarGeometry.cascadeInset(depth: $0, columnWidth: 300) })
+            slots, [.init(x: 0, width: 150), .init(x: 150, width: 150), .init(x: 0, width: 300)])
     }
 
-    func testBlocksThatDoNotOverlapNeverSplitHoweverCloseTheirTops() {
+    func testBlocksThatDoNotOverlapKeepTheWholeColumnHoweverCloseTheirTops() {
         let slots = CalendarGeometry.slots(
             for: [
                 .init(depth: 0, top: 0, height: 22),
                 .init(depth: 0, top: 30, height: 22),
             ],
-            columnWidth: 300, titleClearance: 40)
+            columnWidth: 300)
 
         XCTAssertEqual(slots, [.init(x: 0, width: 300), .init(x: 0, width: 300)])
     }

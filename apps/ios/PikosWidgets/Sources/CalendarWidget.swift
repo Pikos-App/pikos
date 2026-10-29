@@ -4,7 +4,7 @@ import SwiftUI
 import WidgetKit
 
 /// Today's coming hours, drawn as the app's calendar draws them: blocks in their folder colours,
-/// side by side or cascaded as the grid lays them out, each with a box that completes it in place.
+/// overlapping ones side by side as the grid lays them out, each with a box that completes it in place.
 /// An empty hour opens quick add at that hour.
 ///
 /// It replaced the Now widget, which told the time left and suggested a page; Alex found a picture
