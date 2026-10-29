@@ -88,8 +88,10 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
 
   const [prevTitle, setPrevTitle] = useState(page.title ?? "");
   if ((page.title ?? "") !== prevTitle) {
+    // An open field takes a title changed elsewhere unless it holds typing the store hasn't shown.
+    const isTypingAhead = titleFocused && titleValue !== prevTitle;
     setPrevTitle(page.title ?? "");
-    if (!titleFocused) setTitleValue(page.title ?? "");
+    if (!isTypingAhead) setTitleValue(page.title ?? "");
   }
 
   function handleTitleFocus() {
@@ -127,8 +129,9 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
 
   const [prevSubtitle, setPrevSubtitle] = useState(page.subtitle ?? "");
   if ((page.subtitle ?? "") !== prevSubtitle) {
+    const isTypingAhead = subtitleFocused && subtitleValue !== prevSubtitle;
     setPrevSubtitle(page.subtitle ?? "");
-    if (!subtitleFocused) setSubtitleValue(page.subtitle ?? "");
+    if (!isTypingAhead) setSubtitleValue(page.subtitle ?? "");
   }
 
   function handleSubtitleFocus() {

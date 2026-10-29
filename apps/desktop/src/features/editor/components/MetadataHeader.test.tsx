@@ -423,6 +423,44 @@ describe("MetadataHeader — the caret stays where you put it", () => {
   });
 });
 
+describe.each([
+  { field: "title", label: "Page title" },
+  { field: "subtitle", label: "Page description" },
+] as const)("MetadataHeader — a $field synced in while its field is open", ({ field, label }) => {
+  const page = makePage({ scheduleLocked: false, subtitle: "Weekly", syncState: null });
+
+  async function openField() {
+    const { rerender } = await renderHeader(page);
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    return (synced: string) =>
+      rerender(
+        <Harness onApi={vi.fn()} onAppendToBody={vi.fn()} page={{ ...page, [field]: synced }} />
+      );
+  }
+
+  it("shows the synced value in the open field", async () => {
+    const syncIn = await openField();
+
+    syncIn("changed on the phone");
+
+    expect(screen.getByRole("textbox", { name: label })).toHaveValue("changed on the phone");
+  });
+
+  it("keeps what is typed when the store has not caught up with it", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "updatePage").mockImplementation((id, patch) =>
+      Promise.resolve(makePage({ id, ...patch }))
+    );
+    const syncIn = await openField();
+    fireEvent.change(screen.getByRole("textbox", { name: label }), {
+      target: { value: "typed on the Mac" },
+    });
+
+    syncIn("changed on the phone");
+
+    expect(screen.getByRole("textbox", { name: label })).toHaveValue("typed on the Mac");
+  });
+});
+
 // The 800ms auto-save debounce is meant to flush on blur. It did not:
 // the only flush listened on `window`'s blur, which fires when the whole app
 // loses focus and never when focus moves between elements inside it. So moving
