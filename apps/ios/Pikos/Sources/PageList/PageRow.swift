@@ -41,8 +41,7 @@ struct CompletionToggle: View {
 
 /// One page in the list, without its checkbox — see `CompletionToggle`.
 ///
-/// The desktop's row: title and date on one line, the subtitle under it. Folder, repeat and tags
-/// follow only where the heading does not already say them.
+/// The desktop's row: title and date on one line, one quiet line of detail under it.
 struct PageRow: View {
     let page: PageSummary
     /// On in the date views, where rows from every folder sit together; off inside a folder.
@@ -53,8 +52,6 @@ struct PageRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var isDone: Bool { page.status == "done" }
-
-    private static let shownTags = 2
 
     var body: some View {
         // At accessibility sizes the date goes under the title: beside it, it left the title one letter wide.
@@ -77,73 +74,48 @@ struct PageRow: View {
                 }
             }
 
-            if settings.listDensity != .compact, let subtitle = page.subtitle, !subtitle.isEmpty {
-                Text(subtitle)
+            if let detailLine {
+                detailLine
                     .font(.pkBodySm)
                     .foregroundStyle(.textTertiary)
                     .lineLimit(1)
-            }
-
-            if hasMeta {
-                HStack(spacing: 10) {
-                    if page.isRecurring {
-                        Label("Repeats", systemImage: "repeat")
-                            .labelStyle(.iconOnly)
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    if showsFolder, let folder {
-                        FolderLabel(folder: folder)
-                    }
-                    if !page.tags.isEmpty {
-                        tagList
-                    }
-                }
-                .font(.pkUISm)
-                .foregroundStyle(.textTertiary)
             }
         }
         .padding(.top, 12 + settings.listDensity.rowPadding)
         .padding(.bottom, 11 + settings.listDensity.rowPadding)
     }
 
-    private var hasMeta: Bool {
-        page.isRecurring || (showsFolder && folder != nil) || !page.tags.isEmpty
+    /// Folder, first tag and subtitle as one line, subtitle last so a long one truncates rather
+    /// than pushing the short labels off the row. Repeating isn't marked: the page itself says so.
+    private var detailLine: Text? {
+        var parts: [Text] = []
+
+        if showsFolder, let folder {
+            let dot = Text(Image(systemName: "circle.fill"))
+                .font(.system(size: 7))
+                .foregroundStyle(Color(hex: folder.color) ?? Color.textDisabled)
+            parts.append((dot + Text(verbatim: " \(folder.name)")).accessibilityLabel("In \(folder.name)"))
+        }
+
+        if let tag = page.tags.first {
+            let more = page.tags.count > 1 ? " +\(page.tags.count - 1)" : ""
+            parts.append(
+                Text(verbatim: "#\(tag)\(more)")
+                    .accessibilityLabel("Tagged \(page.tags.joined(separator: ", "))"))
+        }
+
+        if settings.listDensity != .compact, let subtitle = page.subtitle, !subtitle.isEmpty {
+            parts.append(Text(subtitle))
+        }
+
+        guard let first = parts.first else { return nil }
+
+        return parts.dropFirst().reduce(first) { $0 + Text(verbatim: "  ·  ") + $1 }
     }
 
     private var folder: Folder? {
         guard let id = page.folderId else { return nil }
         return store.folders.first { $0.id == id }
-    }
-
-    /// Offsets as ids: "#work #work" is a typeable line, and duplicate ids confuse SwiftUI.
-    private var tagList: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(page.tags.prefix(Self.shownTags).enumerated()), id: \.offset) { _, tag in
-                Text("#\(tag)").lineLimit(1)
-            }
-            if page.tags.count > Self.shownTags {
-                Text("+\(page.tags.count - Self.shownTags)")
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Tagged \(page.tags.joined(separator: ", "))")
-    }
-}
-
-/// A folder's name beside its colour, as a row's metadata shows it.
-struct FolderLabel: View {
-    let folder: Folder
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(Color(hex: folder.color) ?? Color.textDisabled)
-                .frame(width: 7, height: 7)
-            Text(folder.name)
-                .lineLimit(1)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("In \(folder.name)")
     }
 }
 
