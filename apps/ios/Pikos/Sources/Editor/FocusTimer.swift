@@ -30,12 +30,13 @@ struct FocusTimer: View {
     let pageId: String
     /// The page's title, for the island. Read once at the start of a session.
     let title: String
+    /// Held by the page, which hides its header while a session runs.
+    @Binding var startedAt: Date?
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var startedAt: Date?
     @State private var elapsed = 0
     @State private var notice: String?
     /// The running session's Live Activity, held by id rather than by the

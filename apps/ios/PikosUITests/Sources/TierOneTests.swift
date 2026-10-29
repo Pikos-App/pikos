@@ -433,6 +433,26 @@ final class TierOneTests: PikosUITestCase {
             (title.value(forKey: "hasKeyboardFocus") as? Bool) ?? false, "with the title taking the typing")
     }
 
+    // qa: IOS-69
+    func testAFocusSessionHidesTheHeaderUntilItStops() {
+        quickAdd("Essay draft today")
+        assertRowExists("Essay draft")
+        app.staticTexts["Essay draft"].firstMatch.tap()
+        let title = textInput("Title")
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+
+        app.buttons["Start timing this page"].tap()
+        XCTAssertTrue(waitForDisappearance(of: title), "starting focus gives the header's height back")
+
+        app.buttons["Stop timing"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "stopping brings it back")
+
+        app.buttons["Start timing this page"].tap()
+        XCTAssertTrue(waitForDisappearance(of: title))
+        app.navigationBars.buttons["Essay draft"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "tapping the bar's title brings it back mid-session")
+    }
+
     // qa: IOS-12:2
     /// The desktop's signature move on a phone: lift a page, drop it on an hour of today.
     /// One press, two outcomes: still opens the menu, moving carries the page (the drag tests below).

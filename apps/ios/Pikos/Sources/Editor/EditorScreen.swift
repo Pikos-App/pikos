@@ -10,8 +10,8 @@ import UIKit
 /// The document is the shared Tiptap editor in a webview, so a page written here is byte-identical
 /// to one written on the desktop. Above it sits the desktop's page header, native: the title, the
 /// one-sentence subtitle, and the byline of status, folder, date, priority and tags, each of which
-/// changes itself. The header gives its height back while the document has the keyboard, and
-/// comes back when the page is scrolled to its top or the bar's title is tapped.
+/// changes itself. The header gives its height back while the document has the keyboard or a focus
+/// session runs, and comes back when the page is scrolled to its top or the bar's title is tapped.
 struct EditorScreen: View {
     let pageId: String
 
@@ -28,10 +28,11 @@ struct EditorScreen: View {
     @State private var typing = TypingTimes()
     @State private var actions = PageActionState()
     @State private var isKeyboardVisible = false
-    /// The header asked back while the document keeps the keyboard, by scrolling to the top or
-    /// tapping the bar's title. Cleared when the keyboard goes, so the next time the document takes
-    /// it the header gives its height back again.
+    /// The header asked back while it would be hidden, by scrolling to the top or tapping the bar's
+    /// title. Cleared when the keyboard goes or a focus session starts or stops, so the header gives
+    /// its height back again the next time either hides it.
     @State private var isHeaderRevealed = false
+    @State private var focusStartedAt: Date?
     @State private var isPickingPhoto = false
     @State private var pickedPhoto: PhotosPickerItem?
     @FocusState private var headerFocus: EditorHeader.Field?
@@ -181,6 +182,7 @@ struct EditorScreen: View {
             isKeyboardVisible = false
             isHeaderRevealed = false
         }
+        .onChange(of: focusStartedAt == nil) { _, _ in isHeaderRevealed = false }
         .toolbarBackground(.surfacePrimary, for: .navigationBar)
         .toolbar {
             if isHeaderHidden {
@@ -193,7 +195,7 @@ struct EditorScreen: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                FocusTimer(pageId: page.id, title: page.title)
+                FocusTimer(pageId: page.id, title: page.title, startedAt: $focusStartedAt)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -224,7 +226,10 @@ struct EditorScreen: View {
     }
 
     private var isHeaderHidden: Bool {
-        isDocumentFocused && !isHeaderRevealed
+        let isFocusing = focusStartedAt != nil
+        let isEditingHeader = isKeyboardVisible && headerFocus != nil
+
+        return (isDocumentFocused || (isFocusing && !isEditingHeader)) && !isHeaderRevealed
     }
 
     /// Bring the header back with the title taking the keyboard from the document.
