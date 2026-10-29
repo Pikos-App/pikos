@@ -46,6 +46,15 @@ if command -v cargo &>/dev/null; then
   cargo test --workspace --quiet || exit 1
   printf '\033[0;32m✓\033[0m Rust tests — crates\n'
 
+  # CI runs the same check, but only on a push to main or a PR into it, and a
+  # feature branch can go days without either while a local phone build from the
+  # stale Swift traps at launch.
+  echo "Checking Swift bindings..."
+  bash scripts/gen-swift-bindings.sh >/dev/null || exit 1
+  git diff --exit-code --quiet -- apps/ios/PikosCore/Sources apps/ios/PikosCore/generated \
+    || { echo "Swift bindings are stale; commit the regenerated files"; exit 1; }
+  printf '\033[0;32m✓\033[0m Swift bindings\n'
+
   if [ -f apps/desktop/src-tauri/Cargo.toml ]; then
     echo "Running cargo clippy (desktop)..."
     (cd apps/desktop/src-tauri && cargo clippy --all-targets --quiet -- -D warnings) || exit 1
