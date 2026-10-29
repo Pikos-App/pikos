@@ -14,7 +14,7 @@ const PIKOS_ASSET_NAME =
  * name Pikos generated is read as that file here, which heals those pages without
  * rewriting them. Any other path is not one Pikos saved and comes back unchanged.
  *
- * The desktop backend's `resolve_asset_path` runs the same rule against the same
+ * `resolve_asset_path` in `pikos-db` runs the same rule against the same
  * table, `asset-paths.json`.
  */
 export function resolveAssetPath(stored: string, assetsDir: string): string {

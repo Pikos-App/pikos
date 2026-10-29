@@ -12,6 +12,7 @@ mod bridge;
 mod cli;
 mod commands;
 mod error;
+mod export;
 mod mcp;
 mod occurrences;
 mod ops;

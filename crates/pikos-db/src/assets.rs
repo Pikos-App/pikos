@@ -1,6 +1,7 @@
 //! Which image files a workspace still needs.
 
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
@@ -31,6 +32,35 @@ pub fn pikos_file_name(stored: &str) -> Option<&str> {
     let name = parts.next()?;
     let in_asset_dir = parts.next() == Some(ASSET_DIR);
     (in_asset_dir && is_pikos_asset_name(name)).then_some(name)
+}
+
+/// The file a page's stored image path names, inside this machine's `assets_dir`.
+///
+/// Pages store `assets/<file>`, so a workspace copied to another Mac, another user or
+/// another build still finds its images. Images saved by earlier versions stored the
+/// full path on the machine that saved them; one that ends in an assets folder and a
+/// name Pikos generated is read as that file here, which heals those pages without
+/// rewriting them. Any other path is not one Pikos saved and comes back unchanged.
+///
+/// `resolveAssetPath` in `@pikos/core` runs the same rule against the same table,
+/// `asset-paths.json`.
+pub fn resolve_asset_path(assets_dir: &Path, stored: &str) -> PathBuf {
+    let parts: Vec<&str> = stored.split(['/', '\\']).collect();
+    let name = parts.last().copied().unwrap_or("");
+    if parts.len() == 2 && parts[0] == ASSET_DIR {
+        return assets_dir.join(name);
+    }
+    let bytes = stored.as_bytes();
+    let absolute = stored.starts_with('/')
+        || (bytes.len() > 2
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'/' || bytes[2] == b'\\'));
+    let in_asset_dir = parts.len() >= 2 && parts[parts.len() - 2] == ASSET_DIR;
+    if absolute && in_asset_dir && is_pikos_asset_name(name) {
+        return assets_dir.join(name);
+    }
+    PathBuf::from(stored)
 }
 
 /// The stored path of every image a page refers to, trashed pages included, since restoring one

@@ -44,7 +44,7 @@ Requires Node on PATH for `add` (including `--dry-run`) only.
 ## Commands
 
 `search`, `read`, `list`, `today`, `add`, `update`, `done`, `status`, `delete`,
-`restore`, `trash`, `tags`, `folders`, `occurrence`, `reminders`, `mcp`, `stress`.
+`restore`, `trash`, `tags`, `folders`, `occurrence`, `reminders`, `export`, `mcp`, `stress`.
 Run `pikos <command> --help` for each surface. Global flags: `--json`,
 `--db <path>`, `--yes`, `--migrate`.
 
@@ -152,6 +152,13 @@ under the title, and `--subtitle ""` clears it. `--unschedule` removes the date
 and time, and `--no-end` drops the end and keeps the start; both refuse on a
 recurring or synced page, like the three schedule flags.
 
+`export <markdown|csv|ics|sqlite> --out <path>` writes the workspace through the
+same builders as the app's Settings export, so a nightly copy needs nobody to open
+the app. Markdown is a folder of pages with their images copied beside them;
+`sqlite` is a full backup, trash included. Calendar events you never touched stay
+out unless `--include-synced`. An `--out` that already exists is refused rather
+than overwritten, so last night's copy survives tonight's.
+
 `stress seed` fills a scratch workspace with generated pages, and `stress bench`
 times the operations that decide whether Pikos feels instant against it. Neither
 touches your real workspace.
@@ -232,5 +239,5 @@ would be, and it keeps the CLI's dependencies to what it already had.
 
 ## Not exposed
 
-Left out on purpose: export lives in the desktop crate, sync needs credentials
-and the keyring, and editing a recurrence rule is a larger design than a flag.
+Left out on purpose: sync needs credentials and the keyring, and editing a
+recurrence rule is a larger design than a flag.

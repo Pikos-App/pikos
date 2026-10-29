@@ -2502,3 +2502,109 @@ async fn sync_diff_passes_for_one_copy_and_exits_10_listing_what_two_workspaces_
         .count();
     assert!(only_one_side >= 2, "{report}");
 }
+
+fn export_out(db: &str, name: &str) -> PathBuf {
+    PathBuf::from(db).with_file_name(name)
+}
+
+fn export(db: &str, format: &str, out: &std::path::Path) -> Output {
+    cli(db, &["export", format, "--out", out.to_str().unwrap(), "--json"])
+}
+
+#[tokio::test]
+async fn export_markdown_writes_each_page_with_its_images() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let image = "assets/0b0e6d0c-3f8e-4a59-9a43-1d6c2b7e8f10.png";
+    let assets_dir = db.with_file_name("assets");
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    std::fs::write(db.with_file_name(image), b"png bytes").unwrap();
+    let body = serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "image", "attrs": { "src": image } }],
+    });
+    seed(
+        dbs,
+        vec![NewPage {
+            content: body.to_string(),
+            ..base_page("Trip notes")
+        }],
+    )
+    .await;
+
+    let out = export_out(dbs, "markdown");
+    let run = export(dbs, "markdown", &out);
+
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert_eq!(json(&run)["path"], out.to_str().unwrap());
+    let page = std::fs::read_to_string(out.join("Trip notes.md")).unwrap();
+    assert!(page.contains("title: \"Trip notes\""), "{page}");
+    assert!(page.contains(&format!("]({image})")), "{page}");
+    assert_eq!(std::fs::read(out.join(image)).unwrap(), b"png bytes");
+}
+
+#[tokio::test]
+async fn export_csv_writes_a_row_per_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Buy milk"), base_page("Call Sam")]).await;
+
+    let out = export_out(dbs, "pages.csv");
+    let run = export(dbs, "csv", &out);
+
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let csv = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(csv.lines().count(), 3, "{csv}");
+    assert!(csv.contains("Buy milk") && csv.contains("Call Sam"), "{csv}");
+}
+
+#[tokio::test]
+async fn export_ics_writes_a_scheduled_page_as_an_event() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(
+        dbs,
+        vec![NewPage {
+            scheduled_start: Some("2026-11-02T09:00:00".into()),
+            scheduled_end: Some("2026-11-02T10:00:00".into()),
+            ..base_page("Dentist")
+        }],
+    )
+    .await;
+
+    let out = export_out(dbs, "pages.ics");
+    let run = export(dbs, "ics", &out);
+
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let ics = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(ics.matches("BEGIN:VEVENT").count(), 1, "{ics}");
+    assert!(ics.contains("SUMMARY:Dentist"), "{ics}");
+}
+
+#[tokio::test]
+async fn export_sqlite_writes_a_backup_that_opens_with_the_pages() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Kept safe")]).await;
+
+    let out = export_out(dbs, "backup.sqlite");
+    let run = export(dbs, "sqlite", &out);
+
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let title: String = scalar(out.to_str().unwrap(), "SELECT title FROM pages").await;
+    assert_eq!(title, "Kept safe");
+}
+
+#[tokio::test]
+async fn export_refuses_to_overwrite_an_existing_file() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("New")]).await;
+    let out = export_out(dbs, "pages.csv");
+    std::fs::write(&out, "last night's export").unwrap();
+
+    let run = export(dbs, "csv", &out);
+
+    assert!(!run.status.success());
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), "last night's export");
+}

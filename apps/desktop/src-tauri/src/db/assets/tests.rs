@@ -106,39 +106,6 @@ async fn a_pasted_image_is_stored_without_the_machines_path() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// The cross-language fixture directory; `assetPath.conformance.test.ts` reads the same file.
-const ASSET_PATHS: &str =
-    include_str!("../../../../../../crates/pikos-db/tests/fixtures/asset-paths.json");
-
-// qa: PRIV-04:4
-#[test]
-fn every_stored_path_resolves_as_the_shared_table_says() {
-    #[derive(serde::Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
-    struct Table {
-        assets_dir: String,
-        cases: Vec<Case>,
-    }
-    #[derive(serde::Deserialize)]
-    #[serde(deny_unknown_fields)]
-    struct Case {
-        name: String,
-        stored: String,
-        resolved: String,
-    }
-
-    let table: Table = serde_json::from_str(ASSET_PATHS).expect("parse asset-paths.json");
-    assert!(!table.cases.is_empty());
-    for case in &table.cases {
-        assert_eq!(
-            resolve_asset_path(Path::new(&table.assets_dir), &case.stored),
-            PathBuf::from(&case.resolved),
-            "{}",
-            case.name
-        );
-    }
-}
-
 #[tokio::test]
 async fn save_asset_rejects_missing_source() {
     let dir = unique_tmp_dir();

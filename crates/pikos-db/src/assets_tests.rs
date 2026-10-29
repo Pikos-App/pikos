@@ -1,6 +1,7 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
-use super::{asset_paths_in, pikos_file_name, referenced_asset_paths};
+use super::{asset_paths_in, pikos_file_name, referenced_asset_paths, resolve_asset_path};
 use crate::backups::{backups_dir, snapshot_workspace};
 use crate::*;
 
@@ -90,4 +91,37 @@ fn only_a_file_pikos_saved_is_named_as_one() {
     assert_eq!(pikos_file_name("assets/holiday.png"), None);
     assert_eq!(pikos_file_name(&format!("photos/{name}")), None);
     assert_eq!(pikos_file_name(&format!("assets/../{name}")), None);
+}
+
+// The cross-language fixture directory; `assetPath.conformance.test.ts` reads the same file.
+const ASSET_PATHS: &str =
+    include_str!("../tests/fixtures/asset-paths.json");
+
+// qa: PRIV-04:4
+#[test]
+fn every_stored_path_resolves_as_the_shared_table_says() {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct Table {
+        assets_dir: String,
+        cases: Vec<Case>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Case {
+        name: String,
+        stored: String,
+        resolved: String,
+    }
+
+    let table: Table = serde_json::from_str(ASSET_PATHS).expect("parse asset-paths.json");
+    assert!(!table.cases.is_empty());
+    for case in &table.cases {
+        assert_eq!(
+            resolve_asset_path(Path::new(&table.assets_dir), &case.stored),
+            PathBuf::from(&case.resolved),
+            "{}",
+            case.name
+        );
+    }
 }

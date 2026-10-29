@@ -3,15 +3,18 @@
 //! Moved here from the desktop crate. The exports are not a desktop feature —
 //! they are the answer to "what happens to my writing if I stop using this",
 //! and a phone that cannot produce them cannot answer it. What stayed behind is
-//! the half that touches a filesystem: where a file goes, and what a platform
-//! calls a downloads folder, are not shared questions.
+//! where a file goes: what a platform calls a downloads folder is not a shared
+//! question.
 //!
 //! So each export here returns *content*. CSV and `.ics` are one string each.
 //! Markdown is a tree, and is returned as a plan the caller writes — see
 //! [`plan_markdown_export`], which is split in two so that copying an asset can
 //! fail on one platform without the rewriting logic knowing what a file is.
+//! [`write_markdown_export`] is that writing for a caller with the workspace's
+//! images on disk beside it, the desktop and the CLI.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use sqlx::Row;
 
@@ -253,6 +256,68 @@ pub fn render_markdown_page(page: &MarkdownPage, copied: &HashMap<String, String
         body = body.replace(&format!("]({source})"), &format!("]({reference})"));
     }
     body
+}
+
+/// The Markdown export written into `base_dir`, with images copied from `assets_dir`.
+/// Returns how many pages and image files it wrote.
+pub async fn write_markdown_export(
+    pool: &sqlx::SqlitePool,
+    base_dir: &Path,
+    assets_dir: &Path,
+    include_synced: bool,
+) -> AppResult<(usize, usize)> {
+    let plan = plan_markdown_export(pool, include_synced).await?;
+    std::fs::create_dir_all(base_dir)?;
+
+    let mut copied = HashMap::new();
+    for page in &plan {
+        copy_page_assets(page, assets_dir, base_dir, &mut copied)?;
+
+        let destination = base_dir.join(&page.path);
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&destination, render_markdown_page(page, &copied))?;
+    }
+
+    Ok((plan.len(), copied.len()))
+}
+
+/// Copy a page's images into `base_dir/assets/`, recording each that arrived in
+/// `copied` as stored path → path relative to `base_dir`. A page whose asset did
+/// not copy keeps its stored reference rather than pointing at a file that is
+/// not there.
+pub fn copy_page_assets(
+    page: &MarkdownPage,
+    assets_dir: &Path,
+    base_dir: &Path,
+    copied: &mut HashMap<String, String>,
+) -> AppResult<()> {
+    for stored in &page.assets {
+        if copied.contains_key(stored) {
+            continue;
+        }
+
+        let source = crate::assets::resolve_asset_path(assets_dir, stored);
+        if !source.exists() {
+            continue;
+        }
+
+        std::fs::create_dir_all(base_dir.join("assets"))?;
+        let filename = source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("asset.bin")
+            .to_string();
+        if let Err(e) = std::fs::copy(&source, base_dir.join("assets").join(&filename)) {
+            // The source is a user asset path — log only the io::ErrorKind, not the path.
+            log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
+            continue;
+        }
+        copied.insert(stored.clone(), format!("assets/{filename}"));
+    }
+
+    Ok(())
 }
 
 pub fn sanitize_filename(name: &str) -> String {

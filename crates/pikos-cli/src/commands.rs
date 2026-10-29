@@ -19,7 +19,7 @@ use crate::render::{
     print_json, render_entry_list, render_folders, render_page, render_read, render_reminders,
     render_search, render_summary, render_summary_list, render_tags, render_trash,
 };
-use crate::workspace::open_workspace;
+use crate::workspace::{open_workspace, resolve_db_path};
 
 pub async fn run(cli: Cli) -> Result<(), CliError> {
     let json = cli.json;
@@ -447,6 +447,14 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 }
             }
         },
+        CliCommand::Export {
+            format,
+            out,
+            include_synced,
+        } => {
+            let db_path = resolve_db_path(&cli.db);
+            crate::export::export(&pool, &db_path, format, &out, include_synced, json).await?;
+        }
         CliCommand::Mcp | CliCommand::Stress { .. } | CliCommand::Sync { .. } => {
             unreachable!("handled above, before the workspace was opened")
         }

@@ -3,8 +3,8 @@
 //! Everything about *what* is exported — the ownership predicate, the CSV
 //! columns, the Markdown frontmatter, the whole `.ics` — moved to
 //! `pikos_db::export` when the phone needed it too. What stayed is the part
-//! that is genuinely a desktop question: a path under `~/Downloads`, a
-//! timestamped name, and copying a page's images out of the workspace.
+//! that is genuinely a desktop question: a path under `~/Downloads` and a
+//! timestamped name.
 //!
 //! The JSON snapshot below has no command and no caller. It stays because it is
 //! the shape the export → re-import round-trip tests assert against, and the
@@ -18,6 +18,7 @@ use tauri::Manager;
 
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
+pub(crate) use pikos_db::export::write_markdown_export;
 use pikos_db::export::collect_asset_paths;
 
 /// Build the full export object: every table as an array of dynamic-column
@@ -151,72 +152,6 @@ pub async fn export_markdown<R: tauri::Runtime>(
     Ok(base_dir)
 }
 
-/// The Markdown export into `base_dir`, reading images from `assets_dir`, split from
-/// [`export_markdown`] so it runs against a temp directory. Returns how many pages
-/// and image files it wrote.
-pub(crate) async fn write_markdown_export(
-    pool: &sqlx::SqlitePool,
-    base_dir: &Path,
-    assets_dir: &Path,
-    include_synced: bool,
-) -> AppResult<(usize, usize)> {
-    let plan = pikos_db::export::plan_markdown_export(pool, include_synced).await?;
-    std::fs::create_dir_all(base_dir)?;
-
-    let mut copied = HashMap::new();
-    for page in &plan {
-        copy_page_assets(page, assets_dir, base_dir, &mut copied)?;
-
-        let destination = base_dir.join(&page.path);
-        if let Some(parent) = destination.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(
-            &destination,
-            pikos_db::export::render_markdown_page(page, &copied),
-        )?;
-    }
-
-    Ok((plan.len(), copied.len()))
-}
-
-/// Copy a page's images into `base_dir/assets/`, recording each that arrived in
-/// `copied` as stored path → path relative to `base_dir`. A page whose asset did
-/// not copy keeps its stored reference rather than pointing at a file that is
-/// not there.
-fn copy_page_assets(
-    page: &pikos_db::export::MarkdownPage,
-    assets_dir: &Path,
-    base_dir: &Path,
-    copied: &mut HashMap<String, String>,
-) -> AppResult<()> {
-    for stored in &page.assets {
-        if copied.contains_key(stored) {
-            continue;
-        }
-
-        let source = crate::db::assets::resolve_asset_path(assets_dir, stored);
-        if !source.exists() {
-            continue;
-        }
-
-        std::fs::create_dir_all(base_dir.join("assets"))?;
-        let filename = source
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("asset.bin")
-            .to_string();
-        if let Err(e) = std::fs::copy(&source, base_dir.join("assets").join(&filename)) {
-            // The source is a user asset path — log only the io::ErrorKind, not the path.
-            log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
-            continue;
-        }
-        copied.insert(stored.clone(), format!("assets/{filename}"));
-    }
-
-    Ok(())
-}
-
 /// Export one page as Markdown to ~/Downloads, for sharing it on its own.
 /// Returns the `.md` file's path.
 #[tauri::command]
@@ -268,7 +203,7 @@ pub(crate) async fn write_page_markdown(
     let has_images = page
         .assets
         .iter()
-        .any(|stored| crate::db::assets::resolve_asset_path(assets_dir, stored).exists());
+        .any(|stored| pikos_db::assets::resolve_asset_path(assets_dir, stored).exists());
     let (base_dir, file) = if has_images {
         let base_dir = unused_path(dir, stem, "");
         (base_dir.clone(), base_dir.join(&page.path))
@@ -278,7 +213,7 @@ pub(crate) async fn write_page_markdown(
 
     std::fs::create_dir_all(&base_dir)?;
     let mut copied = HashMap::new();
-    copy_page_assets(&page, assets_dir, &base_dir, &mut copied)?;
+    pikos_db::export::copy_page_assets(&page, assets_dir, &base_dir, &mut copied)?;
     std::fs::write(
         &file,
         pikos_db::export::render_markdown_page(&page, &copied),

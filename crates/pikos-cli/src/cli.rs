@@ -217,6 +217,18 @@ pub enum CliCommand {
         #[command(subcommand)]
         command: ReminderCommand,
     },
+    /// Write the workspace out as Markdown, CSV, a calendar or a SQLite backup
+    Export {
+        #[arg(value_enum)]
+        format: crate::export::Format,
+        #[arg(long, help = "Where to write it; refused if it already exists")]
+        out: std::path::PathBuf,
+        #[arg(
+            long = "include-synced",
+            help = "Also export calendar events you never touched. A SQLite backup always holds everything"
+        )]
+        include_synced: bool,
+    },
     /// Speak the Model Context Protocol on stdio, for an agent to drive
     Mcp,
     /// Seed a throwaway workspace and time it. Never touches your real one.
