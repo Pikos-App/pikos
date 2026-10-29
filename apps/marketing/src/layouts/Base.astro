@@ -31,6 +31,11 @@ const {
 const currentPath = "/" + Astro.url.pathname.replace(/^\/|\/$/g, "").split("/")[0];
 
 const ogImage = new URL(ogImagePath, Astro.site);
+// Stated so a link preview can lay out the large card without downloading the image first; a
+// page with its own image doesn't get the default's size.
+const DEFAULT_OG_IMAGE = { height: 1260, path: "/og.png", width: 2400 };
+const isDefaultOgImage = ogImagePath === DEFAULT_OG_IMAGE.path;
+const ogImageAlt = "Pikos: notes, tasks, and calendar. One app.";
 
 // Default structured data — WebSite + SoftwareApplication
 const defaultJsonLd = {
@@ -90,6 +95,10 @@ const structuredData = jsonLd ?? defaultJsonLd;
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    {isDefaultOgImage && <meta property="og:image:type" content="image/png" />}
+    {isDefaultOgImage && <meta property="og:image:width" content={String(DEFAULT_OG_IMAGE.width)} />}
+    {isDefaultOgImage && <meta property="og:image:height" content={String(DEFAULT_OG_IMAGE.height)} />}
     <meta property="og:url" content={Astro.url} />
     {publishedTime && <meta property="article:published_time" content={publishedTime} />}
 
@@ -98,6 +107,7 @@ const structuredData = jsonLd ?? defaultJsonLd;
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
 
     <!-- Inter — marketing site only; the desktop app uses SF Pro -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
