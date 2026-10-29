@@ -52,7 +52,9 @@ final class TierOneTests: PikosUITestCase {
         assertRowExists("Write the report")
         let id = try XCTUnwrap(pageId(titled: "Write the report"))
 
-        app.open(try XCTUnwrap(URL(string: "pikos://page/\(id)?focus=1")))
+        // Through the system, as a widget's link arrives: `app.open` relaunches the app without the
+        // test's workspace, where the page doesn't exist.
+        XCUIDevice.shared.system.open(try XCTUnwrap(URL(string: "pikos://page/\(id)?focus=1")))
 
         XCTAssertTrue(
             app.buttons["Stop timing"].waitForExistence(timeout: Self.timeout),
@@ -445,6 +447,9 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(waitForDisappearance(of: title), "starting focus gives the header's height back")
 
         app.buttons["Stop timing"].tap()
+        let notice = app.alerts["Focus"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5), "stopping says what was kept")
+        notice.buttons["OK"].tap()
         XCTAssertTrue(title.waitForExistence(timeout: 5), "stopping brings it back")
 
         app.buttons["Start timing this page"].tap()

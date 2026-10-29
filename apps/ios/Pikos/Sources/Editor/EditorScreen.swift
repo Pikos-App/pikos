@@ -195,9 +195,6 @@ struct EditorScreen: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                FocusTimer(pageId: page.id, title: page.title, startedAt: $focusStartedAt)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     PageActionsMenu(page: facts, state: $actions, showsRename: false) {
                         // The page is in the trash: back to wherever it was opened from.
@@ -218,6 +215,7 @@ struct EditorScreen: View {
                 .tint(.textSecondary)
             }
         }
+        .modifier(FocusTimer(pageId: page.id, title: page.title, startedAt: $focusStartedAt))
     }
 
     /// The document has the keyboard, as opposed to the title or subtitle above it.

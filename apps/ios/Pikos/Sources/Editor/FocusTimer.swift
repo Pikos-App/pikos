@@ -26,7 +26,12 @@ import SwiftUI
 /// instant, so a person who has put the phone down to actually focus can see
 /// the session is still running without picking it up. The island's tap
 /// opens the page. It ends when the session does, by whichever route.
-struct FocusTimer: View {
+///
+/// A modifier on the page rather than a view in its toolbar, which only the
+/// button is: a toolbar item's `onAppear` never fired, so a focus link opened
+/// the page without timing it, and an alert attached there never showed, so
+/// stopping said nothing.
+struct FocusTimer: ViewModifier {
     let pageId: String
     /// The page's title, for the island. Read once at the start of a session.
     let title: String
@@ -47,71 +52,77 @@ struct FocusTimer: View {
     /// the side that ends it.
     @State private var activityID: String?
 
-    var body: some View {
-        Group {
-            if let startedAt {
-                HStack(spacing: 6) {
-                    Text(store.focusElapsedLabel(seconds: elapsed))
-                        .font(.pkUISm)
-                        .monospacedDigit()
-                        .foregroundStyle(.textAction)
-                    Button {
-                        Task { await stop(began: startedAt) }
-                    } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .foregroundStyle(.textAction)
-                    }
-                    .accessibilityLabel("Stop timing")
+    func body(content: Content) -> some View {
+        content
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { control }
+            }
+            // Ticks only while a session runs. Keyed on the start instant, so
+            // starting cancels nothing and stopping cancels the loop — a timer
+            // publisher that fired every second for the life of the toolbar, as
+            // this once was, was a wake-up a second on every open page for a clock
+            // that was showing nothing.
+            .task(id: startedAt) {
+                guard let startedAt else { return }
+                while !Task.isCancelled {
+                    elapsed = Int(Date().timeIntervalSince(startedAt))
+                    try? await Task.sleep(for: .seconds(1))
                 }
-            } else {
+            }
+            .onAppear {
+                guard route.focusPageId == pageId else { return }
+                route.focusPageId = nil
+                if startedAt == nil { start() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // Coming back from the background: the ticks stopped, the clock did
+                // not. Catch up before the next second would.
+                if phase == .active, let startedAt {
+                    elapsed = Int(Date().timeIntervalSince(startedAt))
+                }
+            }
+            // Leaving the page banks the session where it is rather than dropping
+            // it. `onDisappear` is the only hook that fires for a back-swipe, and
+            // the work is detached from the view's lifetime on purpose — a Task tied
+            // to a view that is going away is a Task that may not finish.
+            .onDisappear {
+                guard let began = startedAt else { return }
+                startedAt = nil
+                endActivity()
+                let id = pageId
+                Task { await store.recordFocusSession(pageId: id, from: began, to: Date()) }
+            }
+            .alert(
+                "Focus", isPresented: hasNotice,
+                actions: { Button("OK", role: .cancel) { notice = nil } },
+                message: { Text(notice ?? "") })
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        if let startedAt {
+            HStack(spacing: 6) {
+                Text(store.focusElapsedLabel(seconds: elapsed))
+                    .font(.pkUISm)
+                    .monospacedDigit()
+                    .foregroundStyle(.textAction)
                 Button {
-                    start()
+                    Task { await stop(began: startedAt) }
                 } label: {
-                    Image(systemName: "timer")
-                        .foregroundStyle(.textSecondary)
+                    Image(systemName: "stop.circle.fill")
+                        .foregroundStyle(.textAction)
                 }
-                .accessibilityLabel("Start timing this page")
+                .accessibilityLabel("Stop timing")
             }
-        }
-        // Ticks only while a session runs. Keyed on the start instant, so
-        // starting cancels nothing and stopping cancels the loop — a timer
-        // publisher that fired every second for the life of the toolbar, as
-        // this once was, was a wake-up a second on every open page for a clock
-        // that was showing nothing.
-        .task(id: startedAt) {
-            guard let startedAt else { return }
-            while !Task.isCancelled {
-                elapsed = Int(Date().timeIntervalSince(startedAt))
-                try? await Task.sleep(for: .seconds(1))
+        } else {
+            Button {
+                start()
+            } label: {
+                Image(systemName: "timer")
+                    .foregroundStyle(.textSecondary)
             }
+            .accessibilityLabel("Start timing this page")
         }
-        .onAppear {
-            guard route.focusPageId == pageId else { return }
-            route.focusPageId = nil
-            if startedAt == nil { start() }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            // Coming back from the background: the ticks stopped, the clock did
-            // not. Catch up before the next second would.
-            if phase == .active, let startedAt {
-                elapsed = Int(Date().timeIntervalSince(startedAt))
-            }
-        }
-        // Leaving the page banks the session where it is rather than dropping
-        // it. `onDisappear` is the only hook that fires for a back-swipe, and
-        // the work is detached from the view's lifetime on purpose — a Task tied
-        // to a view that is going away is a Task that may not finish.
-        .onDisappear {
-            guard let began = startedAt else { return }
-            startedAt = nil
-            endActivity()
-            let id = pageId
-            Task { await store.recordFocusSession(pageId: id, from: began, to: Date()) }
-        }
-        .alert(
-            "Focus", isPresented: hasNotice,
-            actions: { Button("OK", role: .cancel) { notice = nil } },
-            message: { Text(notice ?? "") })
     }
 
     private var hasNotice: Binding<Bool> {
