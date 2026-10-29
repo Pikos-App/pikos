@@ -46,6 +46,20 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["List"].isHittable, "one tap brings the bar back")
     }
 
+    // qa: IOS-46
+    /// The grid opens on the hour before now, so near either end of the day only one direction scrolls.
+    func testAQuickSwipeFromEmptyGridScrollsAndDrawsNoBlock() {
+        app.buttons["Calendar"].firstMatch.tap()
+        let grid = app.scrollViews.firstMatch
+        XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
+
+        grid.swipeDown(velocity: .fast)
+        grid.swipeUp(velocity: .fast)
+
+        XCTAssertTrue(app.buttons["Show the bar"].waitForExistence(timeout: 5), "the swipe scrolled the grid")
+        XCTAssertFalse(textInput("What needs doing?").exists, "and drew no block to open quick add on")
+    }
+
     // qa: IOS-20
     func testAFocusLinkOpensThePageWithTheTimerRunning() throws {
         quickAdd("Write the report today")
@@ -85,6 +99,34 @@ final class TierOneTests: PikosUITestCase {
             XCTAssertEqual(drawn, size, "nothing spills out of the \(family) widget")
             XCTAssertTrue(widget.frame.contains(title.frame), "the \(family) widget cuts the long title inside itself")
         }
+    }
+
+    // qa: IOS-40
+    func testAPageIsStillThereAfterTheAppIsQuitAndOpenedAgain() {
+        quickAdd("Buy milk today")
+        assertRowExists("Buy milk")
+
+        app.terminate()
+        app.launch()
+
+        assertRowExists("Buy milk", "the page outlives the process that wrote it")
+    }
+
+    // qa: IOS-42
+    /// The link New Page's control opens when its words are set to `#home`.
+    func testTheNewPageControlsLinkOpensQuickAddHoldingItsWordsAndALineTypedAfterLands() throws {
+        var link = URLComponents(string: "pikos://quick-add")!
+        link.queryItems = [URLQueryItem(name: "text", value: "#home ")]
+        app.open(try XCTUnwrap(link.url))
+
+        let input = textInput("What needs doing?")
+        XCTAssertTrue(input.waitForExistence(timeout: Self.timeout), "quick add opens")
+        XCTAssertEqual(input.value as? String, "#home ", "holding the control's words")
+        input.typeText("Fix the sink today")
+        app.buttons["Add"].firstMatch.tap()
+
+        assertRowExists("Fix the sink", "the line typed after the words lands, titled without the tag")
+        XCTAssertTrue(row(titled: "Fix the sink").staticTexts["#home"].exists, "and tagged with it")
     }
 
     // qa: IOS-19

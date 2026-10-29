@@ -2,17 +2,14 @@ import CoreSpotlight
 import Foundation
 import PikosCore
 import PikosSupport
-import UniformTypeIdentifiers
 
 /// Pages, findable from the home screen's search.
 ///
 /// A notes app whose notes cannot be found by pulling down on the home screen
 /// is one the phone treats as a stranger: Notes, Reminders, Things and Bear
 /// all index, and a reader who searches for "dentist" and sees every app's
-/// answer but this one's concludes the page is not there. The index holds
-/// what the list row shows — title, subtitle, tags, date — and nothing from
-/// the document body, which stays in the app's own full-text search where
-/// the excerpt can be quoted.
+/// answer but this one's concludes the page is not there. What each entry
+/// holds is `SpotlightItem`.
 ///
 /// Caught up rather than rebuilt. Every write bumps the store's version, and the index follows a
 /// few seconds later with the pages the workspace's change counter says were written since its
@@ -25,8 +22,6 @@ import UniformTypeIdentifiers
 /// privacy manifest's claims about the binary remain true.
 @MainActor
 final class SpotlightIndexer {
-    nonisolated static let domain = "app.pikos.pages"
-
     private let workspace: @MainActor () -> Workspace?
 
     init(workspace: @escaping @MainActor () -> Workspace?) {
@@ -50,13 +45,13 @@ final class SpotlightIndexer {
         await Task.detached(priority: .utility) {
             let index = CSSearchableIndex.default()
             if changes.everything {
-                try? await index.deleteSearchableItems(withDomainIdentifiers: [Self.domain])
+                try? await index.deleteSearchableItems(withDomainIdentifiers: [SpotlightItem.domain])
             } else if !changes.removed.isEmpty {
                 try? await index.deleteSearchableItems(withIdentifiers: changes.removed)
             }
             for batch in stride(from: 0, to: changes.pages.count, by: Self.batchSize) {
                 let items = changes.pages[batch..<min(batch + Self.batchSize, changes.pages.count)].map {
-                    Self.item(for: $0, folderName: $0.folderId.flatMap { names[$0] })
+                    SpotlightItem.make(for: $0, folderName: $0.folderId.flatMap { names[$0] })
                 }
                 try? await index.indexSearchableItems(items)
             }
@@ -79,7 +74,7 @@ final class SpotlightIndexer {
     static func clear() async {
         for key in [seqKey, epochKey, foldersKey] { UserDefaults.standard.removeObject(forKey: key) }
         try? await CSSearchableIndex.default().deleteSearchableItems(
-            withDomainIdentifiers: [domain])
+            withDomainIdentifiers: [SpotlightItem.domain])
     }
 
     /// The page a Spotlight result names, or nil for an activity that is not
@@ -88,29 +83,4 @@ final class SpotlightIndexer {
         guard activity.activityType == CSSearchableItemActionType else { return nil }
         return activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
     }
-
-    /// Under the title, where it is: Spotlight already shows the app's name, and "Work · Fri 17
-    /// Oct" is what tells two "Standup" pages apart. The subtitle follows when there is one.
-    private nonisolated static func item(for page: PageSummary, folderName: String?) -> CSSearchableItem {
-        let attributes = CSSearchableItemAttributeSet(contentType: .text)
-        attributes.title = page.title.isEmpty ? String(localized: "Untitled") : page.title
-        let date = page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) }
-        let place = [folderName ?? String(localized: "Inbox"), date.map(Self.dayLabel)]
-            .compactMap { $0 }
-            .joined(separator: " · ")
-        attributes.contentDescription = [place, page.subtitle].compactMap { $0 }.filter { !$0.isEmpty }
-            .joined(separator: "\n")
-        attributes.keywords = page.tags
-        attributes.dueDate = date
-        return CSSearchableItem(
-            uniqueIdentifier: page.id, domainIdentifier: domain, attributeSet: attributes)
-    }
-
-    private nonisolated static func dayLabel(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) { return String(localized: "Today") }
-        if calendar.isDateInTomorrow(date) { return String(localized: "Tomorrow") }
-        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-    }
 }
-
