@@ -535,6 +535,25 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(today.isSelected, "and today no longer is")
     }
 
+    // qa: IOS-66
+    func testTappingCalendarAgainGoesBackToToday() {
+        let calendar = app.buttons["Calendar"].firstMatch
+        calendar.tap()
+        let week = app.otherElements["Week"]
+        XCTAssertTrue(week.waitForExistence(timeout: Self.timeout))
+        let today = week.buttons.matching(NSPredicate(format: "label CONTAINS ', today'")).firstMatch
+        let other = week.buttons.matching(NSPredicate(format: "NOT (label CONTAINS ', today')")).firstMatch
+        other.tap()
+        XCTAssertTrue(other.isSelected)
+
+        calendar.tap()
+
+        let isBackOnToday = NSPredicate(format: "isSelected == true")
+        expectation(for: isBackOnToday, evaluatedWith: today)
+        waitForExpectations(timeout: Self.timeout)
+        XCTAssertFalse(other.isSelected, "the day it was on no longer is")
+    }
+
     // qa: IOS-24
     func testTappingABlockOpensItsPage() throws {
         let hour = Calendar.current.component(.hour, from: Date()) + 1

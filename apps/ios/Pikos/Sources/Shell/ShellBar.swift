@@ -51,6 +51,14 @@ struct ShellBar: View {
     ) -> some View {
         let isSelected = pane.wrappedValue == value
         return Button {
+            // A second tap on Calendar goes to today, as a second tap on a tab scrolls to the top.
+            let isRetapOnCalendar = isSelected && value == .week && route.path.isEmpty
+            if isRetapOnCalendar {
+                route.showWeek(on: Date())
+                route.calendarTopHour = nil
+                return
+            }
+
             // A segment always lands on its pane itself, never on a page left open over it.
             if !route.path.isEmpty {
                 withTransaction(\.disablesAnimations, true) { route.path = [] }
