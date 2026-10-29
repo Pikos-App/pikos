@@ -35,6 +35,15 @@ test.describe("startup", () => {
   });
 });
 
+test.describe("startup in dark mode", () => {
+  test.use({ colorScheme: "dark" });
+
+  test("draws dark before the host sends its theme", async ({ page }) => {
+    const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(background).toBe("rgb(22, 22, 19)");
+  });
+});
+
 test.describe("loading a document", () => {
   test("shows the document the host sends", async ({ page }) => {
     await sendToEditor(page, "load", { doc: docWithText("Hello from the host"), pageId: "p1" });
