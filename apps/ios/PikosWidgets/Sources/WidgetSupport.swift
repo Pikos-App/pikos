@@ -53,14 +53,6 @@ enum WidgetClock {
         return "\(DayLabel.today(calendar, now: date))T\(time)"
     }
 
-    /// The `YYYY-MM-DD` key `days` days from today.
-    static func day(offset days: Int, from date: Date = Date(), calendar: Calendar = .current)
-        -> String
-    {
-        let target = calendar.date(byAdding: .day, value: days, to: date) ?? date
-        return DayLabel.today(calendar, now: target)
-    }
-
     /// The next hour boundary — when an item can become overdue — for the
     /// widgets whose content changes with the clock rather than with a write.
     static func nextHour(after date: Date = .now) -> Date {

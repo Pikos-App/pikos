@@ -1,5 +1,4 @@
 import AppIntents
-import PikosCore
 import PikosSupport
 import WidgetKit
 
@@ -55,9 +54,7 @@ struct CompletePageIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        let url = try WorkspaceLocation.databaseURL()
-        let workspace = try await Workspace.open(path: url.path)
-        try await workspace.setPageStatus(pageId: pageId, done: done)
+        try await WidgetList.setDone(done, pageId: pageId, workspaceAt: WorkspaceLocation.databaseURL().path)
         // WidgetKit reloads the tapped widget's timeline itself once the
         // intent returns, but not its neighbours' — and the same page can be
         // on Now and on several List widgets at once. Every widget is reloaded so a

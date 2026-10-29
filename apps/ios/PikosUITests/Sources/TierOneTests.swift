@@ -59,6 +59,32 @@ final class TierOneTests: PikosUITestCase {
             "the widget's Focus button opens the page already timing")
     }
 
+    // qa: IOS-41:2
+    /// The List widget's own view at each home-screen size, through the debug widget gallery. A
+    /// widget's frame grows to hold whatever spills out of it, so it is held to the gallery's size.
+    func testEveryHomeScreenSizeOfTheListWidgetCutsALongTitleInsideItself() {
+        app.terminate()
+        app.launchArguments = ["-PikosWidgetGallery", "list-long"]
+        app.launch()
+
+        let sizes = [
+            "systemSmall": CGSize(width: 158, height: 158),
+            "systemMedium": CGSize(width: 338, height: 158),
+            "systemLarge": CGSize(width: 338, height: 354),
+        ]
+        let longTitle = NSPredicate(format: "label CONTAINS %@", "Get three contractor quotes")
+        for (family, size) in sizes {
+            let widget = app.otherElements["\(family) widget"]
+            XCTAssertTrue(widget.waitForExistence(timeout: Self.timeout), "the \(family) widget is drawn")
+
+            let title = widget.descendants(matching: .any).matching(longTitle).firstMatch
+            XCTAssertTrue(title.exists, "the \(family) widget shows the long title")
+            let drawn = CGSize(width: widget.frame.width.rounded(), height: widget.frame.height.rounded())
+            XCTAssertEqual(drawn, size, "nothing spills out of the \(family) widget")
+            XCTAssertTrue(widget.frame.contains(title.frame), "the \(family) widget cuts the long title inside itself")
+        }
+    }
+
     // qa: IOS-19
     /// A workspace a test build made under a migration number that now means something else.
     func testAWorkspaceFromAnotherBuildIsSetAsideAndANewOneWorks() {

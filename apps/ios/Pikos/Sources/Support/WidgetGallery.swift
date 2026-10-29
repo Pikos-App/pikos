@@ -6,7 +6,8 @@
 
     /// Every widget's own view at its family's size over sample entries, for the screen tour: no test
     /// can photograph a home screen. Launched with `-PikosWidgetGallery <board>`, one of `list`, `now`,
-    /// `lock`, `list-edge` and `now-edge`, and with `-PikosWidgetGalleryDark YES` for the dark theme.
+    /// `lock`, `list-edge`, `list-long` and `now-edge`, and with `-PikosWidgetGalleryDark YES` for the
+    /// dark theme.
     ///
     /// Sizes are the HIG's for a 6.1-inch iPhone. The lock screen is approximate: its vibrant
     /// rendering belongs to the system, so the accessories are drawn monochrome on a dark ground.
@@ -24,6 +25,7 @@
                 case "now": nowBoard
                 case "lock": lockBoard
                 case "list-edge": listEdgeBoard
+                case "list-long": listLongBoard
                 case "now-edge": nowEdgeBoard
                 default: listBoard
                 }
@@ -99,6 +101,15 @@
             }
         }
 
+        /// Every home-screen size over the same long titles, for the test that each is cut inside its widget.
+        private var listLongBoard: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                HomeTile(.systemSmall) { ListWidgetView(entry: sample.longTitles, family: .systemSmall) }
+                HomeTile(.systemMedium) { ListWidgetView(entry: sample.longTitles, family: .systemMedium) }
+                HomeTile(.systemLarge) { ListWidgetView(entry: sample.longTitles, family: .systemLarge) }
+            }
+        }
+
         private var nowEdgeBoard: some View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 22) {
@@ -143,6 +154,8 @@
                 .frame(width: size.width, height: size.height, alignment: .topLeading)
                 .background(WidgetGround.style)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("\(family) widget")
         }
     }
 

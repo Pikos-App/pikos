@@ -68,8 +68,15 @@ struct ListChoice: AppEntity {
         ListChoice(id: folderPrefix + folder.id, name: folder.name)
     }
 
-    var folderId: String? {
-        id.hasPrefix(Self.folderPrefix) ? String(id.dropFirst(Self.folderPrefix.count)) : nil
+    var source: WidgetList? {
+        switch id {
+        case Self.today.id: return .today
+        case Self.upcoming.id: return .upcoming
+        case Self.inbox.id: return .inbox
+        default:
+            guard id.hasPrefix(Self.folderPrefix) else { return nil }
+            return .folder(id: String(id.dropFirst(Self.folderPrefix.count)))
+        }
     }
 
     /// Quick add, holding the words that file a page into this list, or nil when no words can.
@@ -128,6 +135,7 @@ struct ListChoiceQuery: EntityQuery {
 struct ListEntry: TimelineEntry {
     let date: Date
     let list: ListChoice
+    /// Open pages only.
     let pages: [PageSummary]
     let today: String
     /// Set when the workspace could not be read. Shown rather than swallowed: an empty widget and
@@ -136,10 +144,6 @@ struct ListEntry: TimelineEntry {
 
     static let placeholder = ListEntry(
         date: .now, list: .today, pages: [], today: DayLabel.today(), failure: nil)
-
-    var open: [PageSummary] {
-        pages.filter { $0.status != "done" }
-    }
 }
 
 struct ListProvider: AppIntentTimelineProvider {
@@ -160,29 +164,10 @@ struct ListProvider: AppIntentTimelineProvider {
         let today = DayLabel.today()
         do {
             let workspace = try await WidgetWorkspace.open()
-            return ListEntry(date: .now, list: list, pages: try await pages(list, in: workspace), today: today, failure: nil)
+            let pages = try await list.source?.openPages(in: workspace) ?? []
+            return ListEntry(date: .now, list: list, pages: pages, today: today, failure: nil)
         } catch {
             return ListEntry(date: .now, list: list, pages: [], today: today, failure: error.localizedDescription)
-        }
-    }
-
-    /// The same reads the app's views make. Upcoming is the next seven days in time order; its
-    /// bounds are inclusive strings, so the upper one is the day after the last day wanted.
-    private func pages(_ list: ListChoice, in workspace: ReadOnlyWorkspace) async throws -> [PageSummary] {
-        switch list.id {
-        case ListChoice.today.id:
-            return try await workspace.listToday()
-        case ListChoice.upcoming.id:
-            let pages = try await workspace.listPages(
-                query: PageQuery(
-                    scheduledAfter: WidgetClock.day(offset: 1), scheduledBefore: WidgetClock.day(offset: 8),
-                    hasSchedule: true, openOnly: true))
-            return pages.sorted { ($0.scheduledStart ?? "") < ($1.scheduledStart ?? "") }
-        case ListChoice.inbox.id:
-            return try await workspace.listPages(query: PageQuery(folder: .inbox, openOnly: true))
-        default:
-            guard let id = list.folderId else { return [] }
-            return try await workspace.listPages(query: PageQuery(folder: .folder(id: id), openOnly: true))
         }
     }
 }
@@ -223,7 +208,7 @@ private struct HomeScreenView: View {
         case .systemSmall, .systemMedium: limit = 4
         default: limit = 10
         }
-        return Array(entry.open.prefix(limit))
+        return Array(entry.pages.prefix(limit))
     }
 
     /// "Today" beside a page with no time says nothing in the Today list.
@@ -239,8 +224,8 @@ private struct HomeScreenView: View {
                 Text(entry.list.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                if !entry.open.isEmpty {
-                    Text("\(entry.open.count)")
+                if !entry.pages.isEmpty {
+                    Text("\(entry.pages.count)")
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(WidgetInk.secondary)
                 }
@@ -257,7 +242,7 @@ private struct HomeScreenView: View {
 
             if entry.failure != nil {
                 WidgetNote(text: "Can't read your pages")
-            } else if entry.open.isEmpty {
+            } else if entry.pages.isEmpty {
                 WidgetNote(text: "Nothing open")
             } else {
                 ForEach(visible, id: \.id) { page in
@@ -267,8 +252,8 @@ private struct HomeScreenView: View {
                         detail: detail(page),
                         size: .list)
                 }
-                if family == .systemLarge, entry.open.count > visible.count {
-                    Text("+\(entry.open.count - visible.count) more")
+                if family == .systemLarge, entry.pages.count > visible.count {
+                    Text("+\(entry.pages.count - visible.count) more")
                         .font(.caption2)
                         .foregroundStyle(WidgetInk.secondary)
                 }
@@ -287,7 +272,7 @@ private struct InlineView: View {
     let entry: ListEntry
 
     var body: some View {
-        if let next = entry.open.first {
+        if let next = entry.pages.first {
             if let time = timeOfDay(next) {
                 Text("\(displayTitle(next)) · \(ClockTime.string(time))")
             } else {
@@ -307,7 +292,7 @@ private struct CircularView: View {
         ZStack {
             AccessoryWidgetBackground()
             VStack(spacing: -2) {
-                Text("\(entry.open.count)")
+                Text("\(entry.pages.count)")
                     .font(.title2.weight(.semibold).monospacedDigit())
                 Text(entry.list.name)
                     .font(.caption2)
@@ -317,7 +302,7 @@ private struct CircularView: View {
             }
         }
         .widgetURL(entry.list.link)
-        .accessibilityLabel("\(entry.open.count) pages open in \(entry.list.name)")
+        .accessibilityLabel("\(entry.pages.count) pages open in \(entry.list.name)")
     }
 }
 
@@ -330,8 +315,8 @@ private struct RectangularView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(entry.list.name)
-                if !entry.open.isEmpty {
-                    Text("\(entry.open.count)")
+                if !entry.pages.isEmpty {
+                    Text("\(entry.pages.count)")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -339,10 +324,10 @@ private struct RectangularView: View {
 
             if entry.failure != nil {
                 Text("Can't read your pages").font(.caption2).foregroundStyle(.secondary)
-            } else if entry.open.isEmpty {
+            } else if entry.pages.isEmpty {
                 Text("Nothing open").font(.caption2).foregroundStyle(.secondary)
             } else {
-                ForEach(entry.open.prefix(2), id: \.id) { page in
+                ForEach(entry.pages.prefix(2), id: \.id) { page in
                     HStack(spacing: 4) {
                         if let time = timeOfDay(page) {
                             Text(ClockTime.string(time))
