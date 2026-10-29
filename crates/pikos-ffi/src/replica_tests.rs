@@ -111,19 +111,21 @@ async fn records_cross_as_plain_fields_without_nulls() {
 }
 
 #[tokio::test]
-async fn a_bad_record_name_is_refused_rather_than_applied() {
+async fn a_record_name_this_build_cannot_read_is_held_for_an_update_rather_than_failing() {
     let mac = Temp::new("bad").await;
     mac.workspace.start_sync().await.unwrap();
 
-    let result = mac
+    let applied = mac
         .workspace
         .apply_records(vec![SyncRecord {
-            name: "nonsense".to_string(),
+            name: "widget:abc".to_string(),
             fields: Default::default(),
         }])
-        .await;
+        .await
+        .unwrap();
 
-    assert!(result.is_err());
+    assert_eq!(applied.held, 1);
+    assert!(mac.workspace.sync_summary().await.unwrap().needs_update);
 }
 
 #[tokio::test]

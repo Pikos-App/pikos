@@ -274,19 +274,19 @@ impl Workspace {
         &self,
         records: Vec<SyncRecord>,
     ) -> Result<SyncApplied, WorkspaceError> {
-        let records = records
-            .iter()
+        let records: Vec<(String, FieldMap)> = records
+            .into_iter()
             .map(|r| {
-                let map: FieldMap = r
+                let map = r
                     .fields
                     .iter()
                     .map(|(k, v)| (k.clone(), to_value(v)))
                     .collect();
-                Ok((parse_name(&r.name)?, map))
+                (r.name, map)
             })
-            .collect::<Result<Vec<_>, WorkspaceError>>()?;
+            .collect();
         Ok(applied(
-            pikos_db::replica::apply::apply(&self.pool, &records).await?,
+            pikos_db::replica::apply::apply_fetched(&self.pool, &records).await?,
         ))
     }
 

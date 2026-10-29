@@ -297,11 +297,11 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
             json(&still.iter().map(ToString::to_string).collect::<Vec<_>>())
         }
         Request::Apply { records } => {
-            let records = records
+            let records: Vec<_> = records
                 .into_iter()
-                .map(|r| Ok((parse_name(&r.name)?, from_wire(r.fields))))
-                .collect::<Result<Vec<_>, String>>()?;
-            let applied = pikos_db::replica::apply::apply(pool, &records)
+                .map(|r| (r.name, from_wire(r.fields)))
+                .collect();
+            let applied = pikos_db::replica::apply::apply_fetched(pool, &records)
                 .await
                 .map_err(failed)?;
             if applied.changed > 0 {

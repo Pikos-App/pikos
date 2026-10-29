@@ -116,6 +116,33 @@ enum Outcome {
 /// Merges `records` into the workspace in one transaction, with any held record whose parent
 /// arrives among them.
 pub async fn apply(pool: &SqlitePool, records: &[(RecordName, FieldMap)]) -> AppResult<Applied> {
+    apply_with_unnamed(pool, records, &[]).await
+}
+
+/// [`apply`] for records as a transport fetched them, named as their sender wrote. A name this
+/// build can't parse is a record type from a newer Pikos: it's held under that name, as a newer
+/// format is, rather than failing the batch, which every launch would fetch and fail again.
+pub async fn apply_fetched(
+    pool: &SqlitePool,
+    records: &[(String, FieldMap)],
+) -> AppResult<Applied> {
+    let mut named = Vec::with_capacity(records.len());
+    let mut unnamed = Vec::new();
+    for (name, map) in records {
+        match name.parse::<RecordName>() {
+            Ok(parsed) => named.push((parsed, map.clone())),
+            Err(_) => unnamed.push((name.clone(), map.clone())),
+        }
+    }
+
+    apply_with_unnamed(pool, &named, &unnamed).await
+}
+
+async fn apply_with_unnamed(
+    pool: &SqlitePool,
+    records: &[(RecordName, FieldMap)],
+    unnamed: &[(String, FieldMap)],
+) -> AppResult<Applied> {
     let records = records
         .iter()
         .map(|(name, map)| Ok((name.clone(), super::oversize::take_back(name, map.clone())?)))
@@ -123,7 +150,12 @@ pub async fn apply(pool: &SqlitePool, records: &[(RecordName, FieldMap)]) -> App
     let records = &records;
     crate::tx::retry_on_busy(|| async {
         let mut tx = Uncaptured::begin(pool).await?;
-        let applied = apply_in(&mut tx, records, false).await?;
+        for (name, map) in unnamed {
+            pen(tx.conn(), name, map, &Hold::NewerFormat, None).await?;
+        }
+
+        let mut applied = apply_in(&mut tx, records, false).await?;
+        applied.held += unnamed.len();
         tx.commit().await?;
         Ok(applied)
     })
@@ -437,14 +469,16 @@ async fn take_held(
     };
     let mut taken = Vec::with_capacity(rows.len());
     for (name, record, since) in rows {
+        // A type this build still can't read stays held.
+        let Ok(parsed) = name.parse::<RecordName>() else {
+            continue;
+        };
+
         sqlx::query("DELETE FROM replica_pen WHERE name = ?")
             .bind(&name)
             .execute(&mut *conn)
             .await?;
-        let name = name
-            .parse()
-            .map_err(|e| AppError::Internal(format!("held record name: {e}")))?;
-        taken.push((name, map_from_json(&record)?, Some(since)));
+        taken.push((parsed, map_from_json(&record)?, Some(since)));
     }
     Ok(taken)
 }
@@ -473,13 +507,24 @@ async fn hold_record(
     };
     let map = merged.as_ref().unwrap_or(map);
 
+    pen(conn, &name.to_string(), map, hold, since).await
+}
+
+/// Writes a held record under `name` as it is, replacing any held there before.
+async fn pen(
+    conn: &mut SqliteConnection,
+    name: &str,
+    map: &FieldMap,
+    hold: &Hold,
+    since: Option<&str>,
+) -> AppResult<()> {
     sqlx::query(
         "INSERT INTO replica_pen (name, record, reason, awaits, error, since)
          VALUES (?, ?, ?, ?, ?, COALESCE(?, pikos_hlc_next('00000000000000000000', pikos_now_ms())))
          ON CONFLICT (name) DO UPDATE SET record = excluded.record, reason = excluded.reason,
            awaits = excluded.awaits, error = excluded.error",
     )
-    .bind(name.to_string())
+    .bind(name)
     .bind(map_to_json(map))
     .bind(hold.reason())
     .bind(hold.awaits())

@@ -453,6 +453,47 @@ async fn a_record_from_a_newer_pikos_waits_rather_than_being_dropped() {
 }
 
 #[tokio::test]
+async fn a_record_of_a_type_from_a_newer_pikos_waits_and_the_rest_of_its_batch_still_applies() {
+    let (mac, phone) = (device().await, device().await);
+    let kept = create_page_impl(&mac, new_page("Kept")).await.unwrap();
+    let future = create_page_impl(&mac, new_page("Future")).await.unwrap();
+    let future_name = RecordName::live(Entity::Page, future.id.clone());
+    let names = pending(&mac, 100).await.unwrap();
+    let records: Vec<_> = build(&mac, &names)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|b| match b.name == future_name {
+            true => ("widget:abc".to_owned(), b.fields),
+            false => (b.name.to_string(), b.fields),
+        })
+        .collect();
+
+    super::apply_fetched(&phone, &records).await.unwrap();
+
+    assert!(get_page(&phone, &kept.id).await.unwrap().is_some());
+    let reason = text(
+        &phone,
+        "SELECT reason FROM replica_pen WHERE name = 'widget:abc'",
+    )
+    .await;
+    assert_eq!(reason.as_deref(), Some("newer_format"));
+    assert!(crate::replica::summary(&phone).await.unwrap().needs_update);
+
+    super::retry_held(&phone).await.unwrap();
+    assert!(get_page(&phone, &future.id).await.unwrap().is_none());
+
+    // An update that reads the type finds it under the name it arrived with.
+    sqlx::query("UPDATE replica_pen SET name = ? WHERE name = 'widget:abc'")
+        .bind(future_name.to_string())
+        .execute(&phone)
+        .await
+        .unwrap();
+    super::retry_held(&phone).await.unwrap();
+    assert!(get_page(&phone, &future.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
 async fn a_record_whose_write_fails_waits_and_the_rest_of_its_batch_still_applies() {
     let (mac, phone) = (device().await, device().await);
     let kept = create_page_impl(&mac, new_page("Kept")).await.unwrap();
