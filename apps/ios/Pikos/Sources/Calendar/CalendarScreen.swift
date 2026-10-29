@@ -240,14 +240,7 @@ struct CalendarScreen: View {
                     onSkip: { entry in Task { await act(.skip, on: entry) } },
                     onMove: { entry in moving = Moving(entry: entry) },
                     onCreate: { day, minute, minutes in create(on: day, at: minute, minutes: minutes) },
-                    onDrop: { page, day, minute in drop(page, on: day, at: minute) },
-                    onReschedule: { page, start, end in
-                        Task {
-                            await store.schedule(
-                                pageId: page.id, title: page.title, start: start, end: end,
-                                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
-                        }
-                    }
+                    onDrop: { page, day, minute in drop(page, on: day, at: minute) }
                 )
                 .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
                 // A new identity per range is what lets the grid slide rather

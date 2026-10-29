@@ -278,9 +278,9 @@ public enum CalendarGeometry {
     ///
     /// Overlapping blocks sit side by side in lanes, as Apple's Calendar draws them: each cluster
     /// splits the column into one equal lane per depth it uses, and a block takes its depth's lane.
-    /// Nothing is drawn over anything, so every title and every duration grip stays on its own
-    /// block. A cascade was tried and dropped: three pages within half an hour stacked into a pile
-    /// whose grips lay over the neighbouring blocks, and splitting only the close pairs made one
+    /// Nothing is drawn over anything, so every title stays on its own block. A cascade was tried
+    /// and dropped: three pages within half an hour stacked into a pile whose titles lay over the
+    /// neighbouring blocks, and splitting only the close pairs made one
     /// day mix two layouts. Lanes are narrow on a crowded hour in a multi-day view, where a block
     /// too narrow for its title shows its colour alone.
     public static func slots(for blocks: [SlotInput], columnWidth: CGFloat) -> [Slot] {

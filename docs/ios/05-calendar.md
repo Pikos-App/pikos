@@ -30,7 +30,7 @@ Two deliberate differences from the desktop are worth naming:
   about six hours on a phone screen.
 - **Overlapping events sit side by side, never one over another.** The desktop
   cascades them and folds depths past 1 into a "+N more" pill. On a phone a
-  cascade of three events within half an hour became a pile whose resize grips
+  cascade of three events within half an hour became a pile whose titles
   lay over the neighbouring blocks, so each overlapping cluster splits the
   column into equal lanes, one per column the Rust assigned, as Apple's
   Calendar does. The cost is narrow lanes on a crowded hour in a multi-day

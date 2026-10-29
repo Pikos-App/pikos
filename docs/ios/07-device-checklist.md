@@ -134,9 +134,8 @@ Cheap, and each one has caught something on other apps:
 - Calendar, day view: hold an empty hour until a block appears with a thud,
   then drag down. The block should grow a quarter hour at a time with a tick
   each, and letting go should open quick add on that range. A quick scroll
-  that starts on empty grid should scroll, not make a block. Then hold the
-  little bar at a block's bottom edge and drag: the block's end should follow,
-  and letting go should save it with Undo.
+  that starts on empty grid should scroll, not make a block. No block should
+  show a bar at its top or bottom edge to stretch it by.
 - Calendar: tap a one-off block. A card should come up over it with its time;
   +30 under Move should slide the block half an hour at once, and the card's
   time should follow. Tap outside: the change stays, and Undo on the notice

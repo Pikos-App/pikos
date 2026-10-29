@@ -481,32 +481,6 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(when.waitForExistence(timeout: 5), "quick add opens on the drawn start and end")
     }
 
-    // qa: IOS-15
-    func testDraggingABlocksBottomEdgeMakesItLonger() throws {
-        let hour = Calendar.current.component(.hour, from: Date()) + 1
-        try XCTSkipIf(hour > 23, "an hour from now is tomorrow")
-        let clock = "\(hour % 12 == 0 ? 12 : hour % 12)\(hour < 12 ? "am" : "pm")"
-        quickAdd("Budget review today at \(clock) for 30m")
-        assertRowExists("Budget review")
-        app.buttons["Calendar"].firstMatch.tap()
-
-        // In the calendar's scroll view: the list stays in the tree behind it, so its row matches too.
-        let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Budget review'")).firstMatch
-        XCTAssertTrue(block.waitForExistence(timeout: Self.timeout), "the page is on the calendar")
-        let before = block.label
-        // A half-hour block is half an hour tall. Grabbed just below the edge at its left, as a thumb does.
-        let hourHeight = block.frame.height * 2
-        let edge = block.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 1)).withOffset(CGVector(dx: 10, dy: 6))
-        edge.press(
-            forDuration: 0.25, thenDragTo: edge.withOffset(CGVector(dx: 0, dy: hourHeight)),
-            withVelocity: .slow, thenHoldForDuration: 0.2)
-
-        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5), "letting go saves the new end and offers it back")
-        XCTAssertNotEqual(block.label, before, "and the block says its new time")
-        let start = before.components(separatedBy: ", ").last?.components(separatedBy: " –").first ?? before
-        XCTAssertTrue(block.label.contains("\(start) –"), "with its start where it was: a resize, not a move")
-    }
-
     // qa: IOS-26
     func testThePageMenuCompletesAnOpenPageAndReopensAFinishedOne() {
         showView("Inbox")
