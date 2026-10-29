@@ -592,8 +592,8 @@ final class TierOneTests: PikosUITestCase {
     // qa: IOS-28
     /// Leaving the calendar for the list and coming back finds the hours where they were left.
     func testTheCalendarKeepsItsPlaceWhenTheListIsShownInBetween() throws {
-        try XCTSkipIf(Calendar.current.component(.hour, from: Date()) < 4, "near midnight the grid opens on this hour anyway")
-        quickAdd("Early swim today at 12:30am")
+        try XCTSkipIf(Calendar.current.component(.hour, from: Date()) < 9, "early in the day the grid opens on this hour anyway")
+        quickAdd("Early swim today at 6:30am")
         assertRowExists("Early swim")
         app.buttons["Calendar"].firstMatch.tap()
 
@@ -601,13 +601,13 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
         let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Early swim'")).firstMatch
         for _ in 0..<6 where !block.isHittable { grid.swipeDown(velocity: .fast) }
-        XCTAssertTrue(block.isHittable, "scrolled up to midnight")
+        XCTAssertTrue(block.isHittable, "scrolled up to the first open hour")
 
         app.buttons["List"].firstMatch.tap()
         assertRowExists("Early swim")
         app.buttons["Calendar"].firstMatch.tap()
         XCTAssertTrue(block.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(block.isHittable, "back on the calendar, still at midnight rather than the hour before now")
+        XCTAssertTrue(block.isHittable, "back on the calendar, still at dawn rather than the hour before now")
     }
 
     // qa: IOS-16
