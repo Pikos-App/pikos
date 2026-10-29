@@ -41,8 +41,20 @@ final class SyncStatusLineTests: XCTestCase {
         let many = SyncStatusLine(
             status: .upToDate, queue: .init(toSend: 4, needsUpdate: true, lastFetch: nil))
 
-        XCTAssertEqual(one.text, "1 change waiting to send")
-        XCTAssertEqual(many.text, "4 changes waiting to send · some changes need a newer Pikos")
+        XCTAssertEqual(one.text, "1 change waiting to send. \(SyncStatusLine.reassurance)")
+        XCTAssertEqual(
+            many.text, "4 changes waiting to send · some changes need a newer Pikos. \(SyncStatusLine.reassurance)")
+    }
+
+    func testABigUploadSaysHowMuchIsLeftAndThatLeavingIsSafe() {
+        let line = SyncStatusLine(
+            status: .syncing, queue: .init(toSend: 1819, needsUpdate: false, lastFetch: nil))
+
+        XCTAssertEqual(line.text, "Sending \(1819.formatted()) changes. \(SyncStatusLine.reassurance)")
+    }
+
+    func testSyncingWithNothingToSendStaysShort() {
+        XCTAssertEqual(SyncStatusLine(status: .syncing, queue: empty).text, "Syncing…")
     }
 
     func testAnotherAccountOffersToSyncWithIt() {

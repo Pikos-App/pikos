@@ -51,9 +51,9 @@ public struct SyncStatusLine: Equatable, Sendable {
         case .failed(let message):
             self.init(text: "Couldn't sync: \(message)", action: .none)
         case .syncing:
-            self.init(text: "Syncing…", action: .none)
+            self.init(text: Self.withReassurance(Self.syncing(queue), queue), action: .none)
         case .upToDate:
-            self.init(text: Self.settled(queue, now: now), action: .none)
+            self.init(text: Self.withReassurance(Self.settled(queue, now: now), queue), action: .none)
         }
     }
 
@@ -62,10 +62,29 @@ public struct SyncStatusLine: Equatable, Sendable {
         self.action = action
     }
 
+    /// Someone who has just imported thousands of pages watches this line and wonders what they may
+    /// do meanwhile. Everything is safe because the queue is kept in the workspace, so a quit or an
+    /// update only resumes the send at the next launch.
+    static let reassurance =
+        "You can keep editing, import more, or quit and update Pikos: what's waiting stays on this device and sends at the next launch."
+
+    private static func withReassurance(_ text: String, _ queue: Queue) -> String {
+        let isWaiting = queue.toSend > 0
+        return isWaiting ? "\(text). \(reassurance)" : text
+    }
+
+    private static func syncing(_ queue: Queue) -> String {
+        switch queue.toSend {
+        case 0: "Syncing…"
+        case 1: "Sending 1 change"
+        default: "Sending \(queue.toSend.formatted()) changes"
+        }
+    }
+
     private static func settled(_ queue: Queue, now: Date) -> String {
         var parts: [String] = []
         if queue.toSend > 0 {
-            parts.append(queue.toSend == 1 ? "1 change waiting to send" : "\(queue.toSend) changes waiting to send")
+            parts.append(queue.toSend == 1 ? "1 change waiting to send" : "\(queue.toSend.formatted()) changes waiting to send")
         } else {
             parts.append("Up to date")
         }
