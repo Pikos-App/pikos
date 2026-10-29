@@ -175,8 +175,8 @@ suite.
   suspends — but runs on return to the foreground when the last pass is over
   fifteen minutes old and inside the background refresh the OS grants, which
   is what every calendar app without push has here. The screen says so.
-- **Most of the desktop's settings.** Five tabs there, one screen here, on
-  purpose: keyboard shortcuts, window state and an editor line width describe
+- **Most of the desktop's settings.** Five tabs there, a short list of pages
+  here, on purpose: keyboard shortcuts, window state and an editor line width describe
   things a phone does not have, and the calendar's day count is an iPad
   question. What is on the screen is theme, list and calendar density, week
   start and the default folder — every one of them wired to something, because

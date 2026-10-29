@@ -283,37 +283,48 @@ final class ScreenTour: PikosUITestCase {
         let section = "6 Settings"
         relaunch(["PIKOS_DEMO_SETTINGS": "1"])
         shot(section, 1, "Settings")
-        app.collectionViews.firstMatch.swipeUp()
-        settle(0.5)
-        shot(section, 2, "Settings, further down")
-        app.collectionViews.firstMatch.swipeUp()
-        settle(0.5)
-        shot(section, 3, "Settings, the end")
-        if tap(scrolledTo(button("Reset preferences")), "reset") {
-            shot(section, 4, "Reset preferences")
-        }
-        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
-        if tap(scrolledTo(button("Delete all data")), "delete all") {
-            shot(section, 5, "Delete all data")
+        if tap(button("Reset preferences"), "reset") {
+            shot(section, 2, "Reset preferences")
         }
 
-        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
-        if tap(buttonStarting("Theme"), "theme picker") {
-            shot(section, 6, "A settings picker")
-        }
-        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
-        if tap(scrolledTo(buttonStarting("Calendars")), "calendars") {
-            settle(1)
-            shot(section, 7, "Calendars")
-            if tap(button("Add CalDAV account"), "add account") {
-                shot(section, 8, "Add a CalDAV account")
+        // iCloud has no row here: the debug build the tour runs has no sync.
+        for (number, page) in [(3, "Appearance"), (4, "Calendar"), (5, "Reminders"), (6, "New pages"), (7, "About")] {
+            relaunch(["PIKOS_DEMO_SETTINGS": "1"])
+            // In the list, since the calendar tab behind the sheet is also a button named Calendar.
+            if tap(app.collectionViews.buttons[page].firstMatch, page) {
+                shot(section, number, page)
             }
         }
 
         relaunch(["PIKOS_DEMO_SETTINGS": "1"])
-        if tap(scrolledTo(buttonStarting("Markdown")), "export markdown") {
+        if tap(button("Appearance"), "appearance"), tap(buttonStarting("Theme"), "theme picker") {
+            shot(section, 8, "A settings picker")
+        }
+
+        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
+        if tap(button("Your data"), "your data") {
+            shot(section, 10, "Your data")
+            app.collectionViews.firstMatch.swipeUp()
+            settle(0.5)
+            shot(section, 11, "Your data, the end")
+            if tap(scrolledTo(button("Delete all data")), "delete all") {
+                shot(section, 12, "Delete all data")
+            }
+        }
+
+        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
+        if tap(buttonStarting("Calendars"), "calendars") {
+            settle(1)
+            shot(section, 13, "Calendars")
+            if tap(button("Add CalDAV account"), "add account") {
+                shot(section, 14, "Add a CalDAV account")
+            }
+        }
+
+        relaunch(["PIKOS_DEMO_SETTINGS": "1"])
+        if tap(button("Your data"), "your data"), tap(scrolledTo(buttonStarting("Markdown")), "export markdown") {
             settle(3)
-            shot(section, 9, "Export share sheet")
+            shot(section, 15, "Export share sheet")
         }
     }
 

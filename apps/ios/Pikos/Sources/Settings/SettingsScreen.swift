@@ -1,9 +1,6 @@
-import PikosCore
-import PikosSupport
 import SwiftUI
-import UIKit
 
-/// Preferences, and what the app can tell you about itself.
+/// Preferences, and what the app can tell you about itself, as a list of pages.
 ///
 /// Deliberately shorter than the desktop's. That one has five tabs, and three
 /// of them describe things a phone does not have: keyboard shortcuts, window
@@ -16,157 +13,69 @@ import UIKit
 /// to notice a missing preference finds a decision rather than an oversight.
 struct SettingsScreen: View {
     @Environment(SettingsStore.self) private var settings
-    @Environment(WorkspaceStore.self) private var store
     @Environment(CalendarSyncStore.self) private var sync
-    @Environment(ExportStore.self) private var exports
-    @Environment(ReminderScheduler.self) private var reminders
     @Environment(\.dismiss) private var dismiss
 
     @State private var isResetConfirmed = false
-    @State private var isDeleteConfirmed = false
-    @State private var isDeleting = false
-    @State private var includeSyncedInExport = false
 
     var body: some View {
-        @Bindable var settings = settings
-
         NavigationStack {
             Form {
                 Group {
                     Section {
-                        Picker("Theme", selection: $settings.theme) {
-                            ForEach(Preferences.Theme.allCases, id: \.self) { theme in
-                                Text(theme.label).tag(theme)
-                            }
+                        NavigationLink {
+                            AppearanceSettings()
+                        } label: {
+                            Label("Appearance", systemImage: "paintbrush")
                         }
-                        Picker("List density", selection: $settings.listDensity) {
-                            ForEach(Preferences.ListDensity.allCases, id: \.self) { density in
-                                Text(density.label).tag(density)
-                            }
+                        NavigationLink {
+                            CalendarSettings()
+                        } label: {
+                            Label("Calendar", systemImage: "calendar")
                         }
-                        Picker("Calendar density", selection: $settings.calendarDensity) {
-                            ForEach(Preferences.CalendarDensity.allCases, id: \.self) { density in
-                                Text(density.label).tag(density)
-                            }
+                        NavigationLink {
+                            RemindersSettings()
+                        } label: {
+                            Label("Reminders", systemImage: "bell")
                         }
-                    } header: {
-                        Text("Appearance").sectionLabelStyle()
-                    } footer: {
-                        Text("Calendar density sets how tall an hour is, so how much of the day fits on screen at once.")
+                        NavigationLink {
+                            NewPagesSettings()
+                        } label: {
+                            Label("New pages", systemImage: "square.and.pencil")
+                        }
                     }
 
                     Section {
-                        Picker("Week starts on", selection: $settings.weekStart) {
-                            ForEach(Preferences.WeekStart.allCases, id: \.self) { start in
-                                Text(start.label).tag(start)
+                        if DeviceSync.isAvailable {
+                            NavigationLink {
+                                SettingsPage(title: "iCloud") { SyncSection() }
+                            } label: {
+                                Label("iCloud", systemImage: "icloud")
                             }
                         }
-                    } header: {
-                        Text("Dates").sectionLabelStyle()
-                    } footer: {
-                        Text("Used by every date picker. Defaults to your region.")
-                    }
-
-                    Section {
-                        Picker("Early hours end", selection: $settings.calendarCollapse.topHour) {
-                            ForEach(
-                                CalendarGeometry.Collapse.earliestTopHour...CalendarGeometry.Collapse.latestTopHour,
-                                id: \.self
-                            ) { hour in
-                                Text(Self.hourLabel(hour)).tag(hour)
-                            }
-                        }
-                        Picker("Late hours start", selection: $settings.calendarCollapse.bottomHour) {
-                            ForEach(
-                                CalendarGeometry.Collapse.earliestBottomHour...CalendarGeometry.Collapse.latestBottomHour,
-                                id: \.self
-                            ) { hour in
-                                Text(Self.hourLabel(hour)).tag(hour)
-                            }
-                        }
-                    } header: {
-                        Text("Calendar").sectionLabelStyle()
-                    } footer: {
-                        Text("The hours before and after these fold into a band at the top and foot of the calendar. Tap a band to open or fold it.")
-                    }
-
-                    Section {
-                        Picker("Default folder", selection: $settings.defaultFolderID) {
-                            Text("Inbox").tag(String?.none)
-                            ForEach(store.fileableFolders, id: \.id) { folder in
-                                Text(folder.name).tag(String?.some(folder.id))
-                            }
-                        }
-                    } header: {
-                        Text("New pages").sectionLabelStyle()
-                    } footer: {
-                        Text(defaultFolderFooter)
-                    }
-
-                    remindersSection
-
-                    Section {
                         NavigationLink {
                             CalendarSyncScreen()
                         } label: {
-                            LabeledContent("Calendars", value: calendarSummary)
+                            LabeledContent {
+                                Text(calendarSummary)
+                            } label: {
+                                Label("Calendars", systemImage: "calendar.badge.plus")
+                            }
                         }
-                    } header: {
-                        Text("External calendars").sectionLabelStyle()
+                        NavigationLink {
+                            YourDataSettings(closeSettings: { dismiss() })
+                        } label: {
+                            Label("Your data", systemImage: "externaldrive")
+                        }
                     }
-
-                    if DeviceSync.isAvailable {
-                        SyncSection()
-                    }
-
-                    yourDataSection
-
-                    exportSection
 
                     Section {
-                        // Not decoration: a page written by a newer build cannot be
-                        // saved over by this one, and when somebody hits that the
-                        // first useful question is which version each device is on.
-                        LabeledContent("Version", value: Self.version)
-                        Link(destination: URL(string: "mailto:hello@pikos.app")!) {
-                            LabeledContent {
-                                Text(verbatim: "hello@pikos.app").foregroundStyle(.textSecondary)
-                            } label: {
-                                Label("Send feedback", systemImage: "envelope")
-                            }
+                        NavigationLink {
+                            AboutSettings()
+                        } label: {
+                            Label("About", systemImage: "info.circle")
                         }
-                        Link(destination: Self.bugReportURL) {
-                            Label("Report a bug", systemImage: "ladybug")
-                        }
-                        Link(destination: URL(string: "https://pikos.app/privacy")!) {
-                            Label("Privacy", systemImage: "hand.raised")
-                        }
-                    } header: {
-                        Text("About").sectionLabelStyle()
                     }
-
-                    #if DEBUG
-                        // The first device run's checklist, answered on screen —
-                        // see docs/ios/07-device-checklist.md. Not in a release
-                        // build: a container path is nobody's business but the
-                        // developer's, and the attribute read behind it would
-                        // need a privacy declaration the shipped binary should
-                        // not have to make.
-                        Section {
-                            ForEach(Diagnostics.report()) { row in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(row.label).font(.caption).foregroundStyle(.textSecondary)
-                                    Text(row.value).font(.caption.monospaced()).textSelection(.enabled)
-                                }
-                            }
-                        } header: {
-                            Text("Diagnostics (debug build)").sectionLabelStyle()
-                        } footer: {
-                            Text(
-                                "Lock the phone, wait for a widget to refresh, then come back: every file above should still read “until first unlock”."
-                            )
-                        }
-                    #endif
 
                     Section {
                         // On the button, not the screen: iOS shows the confirmation as a popover
@@ -186,42 +95,10 @@ struct SettingsScreen: View {
                     } footer: {
                         Text("Returns the settings above to their defaults. Your pages are not touched.")
                     }
-
-                    Section {
-                        if isDeleting {
-                            HStack {
-                                ProgressView()
-                                Text("Deleting…").foregroundStyle(.textSecondary)
-                            }
-                        } else {
-                            Button("Delete all data", role: .destructive) {
-                                isDeleteConfirmed = true
-                            }
-                            .confirmationDialog(
-                                "Delete everything on this device?", isPresented: $isDeleteConfirmed,
-                                titleVisibility: .visible
-                            ) {
-                                Button("Delete all data", role: .destructive) {
-                                    Task { await deleteEverything() }
-                                }
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("Every page, folder and calendar connection. This cannot be undone.")
-                            }
-                        }
-                    } footer: {
-                        // Said before the tap. The trash makes an ordinary delete
-                        // recoverable, and somebody who has learned that will
-                        // reasonably expect the same here.
-                        Text(
-                            "Removes every page, folder and calendar connection from this device. There is no trash to recover from, so back up first if you want a copy."
-                        )
-                    }
                 }
                 .pikosFormRows()
             }
             .task { await sync.load() }
-            .task { exports.refreshDataFacts() }
             .navigationTitle("Settings")
             .pikosFormStyle()
             .navigationBarTitleDisplayMode(.inline)
@@ -230,226 +107,7 @@ struct SettingsScreen: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .sheet(item: exportReady) { ready in
-                ShareSheet(url: ready.url) { exports.ready = nil }
-            }
-            .alert(
-                "Export failed", isPresented: exportFailed,
-                actions: { Button("OK", role: .cancel) { exports.errorMessage = nil } },
-                message: { Text(exports.errorMessage ?? "") })
         }
-    }
-
-    /// An hour of the day as the calendar labels it, stepped from a real midnight.
-    private static func hourLabel(_ hour: Int) -> String {
-        let midnight = Calendar.current.startOfDay(for: .now)
-        let date = Calendar.current.date(byAdding: .hour, value: hour, to: midnight) ?? midnight
-        return date.formatted(.dateTime.hour())
-    }
-
-    // MARK: - Reminders
-
-    /// The two switches a reminder passes through — ours and the system's —
-    /// and the one lead that applies when a page never asked for its own.
-    ///
-    /// The system's state is shown here rather than discovered, because a
-    /// reminder that never arrives looks the same whether it was never
-    /// planned or never allowed, and only one of those is fixed on this
-    /// screen. Denied permission gets a link to where it is fixed.
-    @ViewBuilder
-    private var remindersSection: some View {
-        @Bindable var settings = settings
-
-        Section {
-            Toggle("Remind me", isOn: $settings.remindersEnabled)
-                .tint(.interactiveFill)
-
-            if settings.remindersEnabled {
-                Picker("Default reminder", selection: $settings.defaultReminderMinutes) {
-                    ForEach(Preferences.reminderLeadChoices, id: \.self) { minutes in
-                        Text(SettingsStore.leadLabel(minutes)).tag(minutes)
-                    }
-                }
-
-                switch reminders.authorization {
-                case .denied:
-                    LabeledContent("Notifications") {
-                        Text("Off in Settings").foregroundStyle(.statusOverdue)
-                    }
-                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                        Link("Allow notifications for Pikos", destination: url)
-                    }
-                case .notDetermined:
-                    Button("Allow notifications") {
-                        Task { await reminders.requestAuthorization() }
-                    }
-                default:
-                    // The next one, not a count: "Dentist, today at 2:30 PM"
-                    // is a claim the reader can check against their day, and
-                    // "7 reminders" is not.
-                    if let next = reminders.nextPlanned {
-                        LabeledContent("Next") {
-                            VStack(alignment: .trailing, spacing: 1) {
-                                Text(next.title.isEmpty ? "Untitled" : next.title)
-                                    .lineLimit(1)
-                                Text(
-                                    ReminderNotification.body(
-                                        scheduledStart: next.fireAt,
-                                        fireAt: WallClockDay.instant(from: Date()))
-                                )
-                                .font(.caption)
-                                .foregroundStyle(.textSecondary)
-                            }
-                        }
-                    } else {
-                        LabeledContent("Next", value: String(localized: "Nothing in the next two weeks"))
-                    }
-                }
-            }
-        } header: {
-            Text("Reminders").sectionLabelStyle()
-        } footer: {
-            Text(remindersFooter)
-        }
-        .task { await reminders.refreshAuthorization() }
-    }
-
-    private var remindersFooter: String {
-        guard settings.remindersEnabled else {
-            return String(localized: "Nothing rings on this phone. Reminders still fire on the desktop.")
-        }
-        return String(
-            localized: "Pages without a reminder of their own use the default. Use a Focus to silence them at night."
-        )
-    }
-
-    // MARK: - Export
-
-    /// The promise, made checkable.
-    ///
-    /// The marketing site says the data is a file on your device. On a
-    /// desktop that is something a person can go and look at; on a phone the
-    /// container is hidden, and the claim has to be taken on faith. This
-    /// section is the faith made visible: how big the file is, and a button
-    /// that puts a copy of it where the Files app shows it.
-    ///
-    /// Above Export rather than folded into it, because it answers a
-    /// different question. Export is "get this into another app"; this is
-    /// "where is my data, and can I hold a copy of it".
-    private var yourDataSection: some View {
-        Section {
-            LabeledContent("On this device") {
-                if let size = exports.workspaceSize {
-                    Text(size, format: .byteCount(style: .file))
-                } else {
-                    Text("—")
-                }
-            }
-            Button {
-                Task { await exports.backUpToFiles() }
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Back up to Files").foregroundStyle(.textPrimary)
-                        Text(lastBackupLabel)
-                            .font(.caption)
-                            .foregroundStyle(.textSecondary)
-                    }
-                    Spacer()
-                    if exports.isBackingUp {
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(exports.isBackingUp)
-        } header: {
-            Text("Your data").sectionLabelStyle()
-        } footer: {
-            Text(
-                "Your pages, folders and images are stored on this device. A backup copies all of them into Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it."
-            )
-        }
-    }
-
-    /// "Last backup Today at 9:41" or "Never backed up".
-    ///
-    /// The date is relative through the same wording the list uses for a
-    /// schedule, so a backup taken this morning says "Today" and not a date
-    /// the reader has to compare with the clock.
-    private var lastBackupLabel: String {
-        guard let date = exports.lastBackup else { return String(localized: "Never backed up") }
-        let day = DayLabel.relative(DayLabel.today(now: date), today: DayLabel.today())
-        let time = ClockTime.string(date)
-        return String(localized: "Last backup \(day) at \(time)")
-    }
-
-    /// Three formats, each saying what it is for before it is tapped.
-    ///
-    /// They are not interchangeable, and the difference only becomes visible
-    /// once the file is somewhere else: a CSV that imports back, a Markdown
-    /// tree that opens anywhere, and a calendar file.
-    @ViewBuilder
-    private var exportSection: some View {
-        Section {
-            // The whole-workspace file is Back up to Files, above: one backup, in one place.
-            ForEach(ExportStore.Format.allCases.filter { $0 != .backup }) { format in
-                Button {
-                    Task { await exports.export(format, includeSynced: includeSyncedInExport) }
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(format.title).foregroundStyle(.textPrimary)
-                            Text(format.detail)
-                                .font(.caption)
-                                .foregroundStyle(.textSecondary)
-                        }
-                        Spacer()
-                        if exports.isExporting == format {
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(exports.isExporting != nil)
-            }
-
-            // Only when there is a calendar to include. Without one the toggle
-            // is a question about something the reader does not have.
-            if hasCalendars {
-                Toggle("Include calendar events", isOn: $includeSyncedInExport)
-                    .tint(.interactiveFill)
-            }
-        } header: {
-            Text("Export").sectionLabelStyle()
-        } footer: {
-            if hasCalendars {
-                Text(
-                    "Off by default: events mirrored from a calendar are that calendar's copy, and your calendar app already has them."
-                )
-            }
-        }
-    }
-
-    private var hasCalendars: Bool {
-        sync.accounts.contains { !$0.calendars.isEmpty }
-    }
-
-    private var exportReady: Binding<ExportStore.Ready?> {
-        Binding(get: { exports.ready }, set: { exports.ready = $0 })
-    }
-
-    private var exportFailed: Binding<Bool> {
-        Binding(get: { exports.errorMessage != nil }, set: { if !$0 { exports.errorMessage = nil } })
-    }
-
-    private func deleteEverything() async {
-        isDeleting = true
-        defer { isDeleting = false }
-        await store.deleteAllData()
-        // The home screen's search must forget the titles too: a phone wiped
-        // of its notes that keeps offering them from Spotlight has not been
-        // wiped.
-        await SpotlightIndexer.clear()
-        dismiss()
     }
 
     /// How many calendars are mirroring, so the row says something without
@@ -462,38 +120,5 @@ struct SettingsScreen: View {
         let enabled = sync.accounts.flatMap(\.calendars).filter(\.enabled).count
         if sync.accounts.isEmpty { return String(localized: "None") }
         return String(localized: "\(enabled) syncing")
-    }
-
-    /// Says out loud when the stored folder no longer exists.
-    ///
-    /// The id outlives the folder — deleting one does not reach into settings
-    /// to clear it — so the picker falls back to showing Inbox. Without this
-    /// sentence that looks like the preference silently reset itself, which is
-    /// the one reading that would send somebody looking for a bug.
-    private var defaultFolderFooter: String {
-        let base = String(localized: "Where a new page lands when you create one from a widget or a link.")
-        guard let id = settings.defaultFolderID,
-            !store.fileableFolders.contains(where: { $0.id == id })
-        else { return base }
-        return base + " " + String(localized: "The folder this was set to no longer exists, so new pages go to the Inbox.")
-    }
-
-    /// The site's bug form, with the platform and version filled in as the desktop's link does.
-    private static var bugReportURL: URL {
-        var components = URLComponents(string: "https://pikos.app/bugs")!
-        components.queryItems = [URLQueryItem(name: "os", value: "iOS"), URLQueryItem(name: "version", value: version)]
-        return components.url!
-    }
-
-    /// The marketing version and build, as Xcode stamped them.
-    ///
-    /// Read from the bundle rather than from a constant in the source: a
-    /// constant is a second place to remember on every release, and the one
-    /// that gets forgotten is always the one the user is reading.
-    private static var version: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
-        guard let build = info?["CFBundleVersion"] as? String, build != short else { return short }
-        return "\(short) (\(build))"
     }
 }
