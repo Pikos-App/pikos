@@ -402,6 +402,37 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(kept.waitForExistence(timeout: Self.timeout), "the edit was saved on the way out")
     }
 
+    // qa: IOS-65
+    func testScrollingToTheTopOrTappingTheBarTitleBringsTheHeaderBack() {
+        quickAdd("Trip notes today")
+        assertRowExists("Trip notes")
+        app.staticTexts["Trip notes"].firstMatch.tap()
+        let title = textInput("Title")
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        let document = app.webViews.firstMatch
+        XCTAssertTrue(document.waitForExistence(timeout: Self.timeout))
+
+        document.tap()
+        app.typeText(String(repeating: "Day\n", count: 40))
+        XCTAssertTrue(waitForDisappearance(of: title), "writing in the document gives the header's height back")
+
+        // Short drags inside the document, so the finger never reaches the keyboard and dismisses it.
+        let drag = { (from: CGFloat, to: CGFloat) in
+            document.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.1, thenDragTo: document.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+        }
+        for _ in 0..<8 where !title.exists { drag(0.1, 0.6) }
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "scrolling to the top brings it back")
+        XCTAssertTrue(app.keyboards.firstMatch.exists, "with the document still writing")
+
+        drag(0.6, 0.1)
+        XCTAssertTrue(waitForDisappearance(of: title), "scrolling down again gives the height back")
+        app.navigationBars.buttons["Trip notes"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "tapping the bar's title brings it back")
+        XCTAssertTrue(
+            (title.value(forKey: "hasKeyboardFocus") as? Bool) ?? false, "with the title taking the typing")
+    }
+
     // qa: IOS-12:2
     /// The desktop's signature move on a phone: lift a page, drop it on an hour of today.
     /// One press, two outcomes: still opens the menu, moving carries the page (the drag tests below).

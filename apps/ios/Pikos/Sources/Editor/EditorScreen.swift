@@ -10,7 +10,8 @@ import UIKit
 /// The document is the shared Tiptap editor in a webview, so a page written here is byte-identical
 /// to one written on the desktop. Above it sits the desktop's page header, native: the title, the
 /// one-sentence subtitle, and the byline of status, folder, date, priority and tags, each of which
-/// changes itself. The header gives its height back while the document has the keyboard.
+/// changes itself. The header gives its height back while the document has the keyboard, and
+/// comes back when the page is scrolled to its top or the bar's title is tapped.
 struct EditorScreen: View {
     let pageId: String
 
@@ -27,6 +28,10 @@ struct EditorScreen: View {
     @State private var typing = TypingTimes()
     @State private var actions = PageActionState()
     @State private var isKeyboardVisible = false
+    /// The header asked back while the document keeps the keyboard, by scrolling to the top or
+    /// tapping the bar's title. Cleared when the keyboard goes, so the next time the document takes
+    /// it the header gives its height back again.
+    @State private var isHeaderRevealed = false
     @State private var isPickingPhoto = false
     @State private var pickedPhoto: PhotosPickerItem?
     @FocusState private var headerFocus: EditorHeader.Field?
@@ -83,7 +88,7 @@ struct EditorScreen: View {
                     .background(Color.statusDueSoon.opacity(0.14))
             }
 
-            if !isDocumentFocused {
+            if !isHeaderHidden {
                 EditorHeader(page: page, actions: $actions, focus: $headerFocus)
                     // Otherwise the webview squeezes it, and at large text its lines overlap.
                     .fixedSize(horizontal: false, vertical: true)
@@ -128,6 +133,9 @@ struct EditorScreen: View {
                 },
                 onReloadAnswered: { _, applied in
                     Task { @MainActor in openBody?.answered(applied: applied) }
+                },
+                onScrolledToTop: { isAtTop in
+                    Task { @MainActor in isHeaderRevealed = isAtTop }
                 }
             )
         }
@@ -154,6 +162,7 @@ struct EditorScreen: View {
         }
         .background(.surfacePrimary)
         .animation(.snappy, value: isDocumentFocused)
+        .animation(.snappy, value: isHeaderHidden)
         // The system picker runs out of process, so no photo-library
         // permission is asked for: the app only ever sees the one picture
         // chosen.
@@ -168,10 +177,21 @@ struct EditorScreen: View {
         ) { _ in isKeyboardVisible = true }
         .onReceive(
             NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
-        ) { _ in isKeyboardVisible = false }
-        .navigationTitle(isDocumentFocused ? (page.title.isEmpty ? "Untitled" : page.title) : "")
+        ) { _ in
+            isKeyboardVisible = false
+            isHeaderRevealed = false
+        }
         .toolbarBackground(.surfacePrimary, for: .navigationBar)
         .toolbar {
+            if isHeaderHidden {
+                ToolbarItem(placement: .principal) {
+                    Button(page.title.isEmpty ? "Untitled" : page.title, action: editTitle)
+                        .font(.headline)
+                        .foregroundStyle(.textPrimary)
+                        .lineLimit(1)
+                        .accessibilityHint("Shows the header and edits the title")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 FocusTimer(pageId: page.id, title: page.title)
             }
@@ -201,6 +221,19 @@ struct EditorScreen: View {
     /// The document has the keyboard, as opposed to the title or subtitle above it.
     private var isDocumentFocused: Bool {
         isKeyboardVisible && headerFocus == nil
+    }
+
+    private var isHeaderHidden: Bool {
+        isDocumentFocused && !isHeaderRevealed
+    }
+
+    /// Bring the header back with the title taking the keyboard from the document.
+    ///
+    /// The focus moves on the next turn: the title field only exists once the header is drawn, and
+    /// focus set on a field that isn't there yet is dropped.
+    private func editTitle() {
+        isHeaderRevealed = true
+        Task { @MainActor in headerFocus = .title }
     }
 
     private func load() async {
