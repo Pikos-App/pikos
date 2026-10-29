@@ -1472,7 +1472,9 @@ async fn apply_seeded_description(
 /// Rebuild each body still as seeded, its text hashing to the stored seed, the way a seed is built
 /// now: web addresses linked and "- " lines a bullet list. Any other body is the person's. The hash
 /// is restamped at the current projection version, so the next description change still sees the
-/// body as untouched, and `updated_at` stays put.
+/// body as untouched, and `updated_at` stays put. The write is captured like any edit: a detached
+/// page's body syncs and nothing else carries this change to another device, while a calendar's own
+/// page is out of sync scope and is never sent.
 pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let body = crate::page_chunks::body_sql("p.id");
     // sql-ok: body_sql is built from a compile-time constant
@@ -1483,7 +1485,7 @@ pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<
     ))
     .fetch_all(pool)
     .await?;
-    let mut tx = crate::replica::Uncaptured::begin(pool).await?;
+    let mut tx = pool.begin().await?;
     for (id, content, text, hash) in rows {
         if fnv_hex(&text) != hash {
             continue;
@@ -1508,9 +1510,9 @@ pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<
             sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
                 .bind(&text)
                 .bind(&id)
-                .execute(tx.conn())
+                .execute(&mut *tx)
                 .await?;
-            crate::page_chunks::write_body(tx.conn(), &id, &content).await?;
+            crate::page_chunks::write_body(&mut *tx, &id, &content).await?;
         }
         sqlx::query(
             "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = ?
@@ -1519,7 +1521,7 @@ pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<
         .bind(fnv_hex(&text))
         .bind(CONTENT_TEXT_PROJECTION_VERSION)
         .bind(&id)
-        .execute(tx.conn())
+        .execute(&mut *tx)
         .await?;
     }
     tx.commit().await?;

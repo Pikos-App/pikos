@@ -4819,19 +4819,43 @@ async fn upgrading_a_seed_is_not_sent_to_other_devices_as_an_edit() {
     crate::page_chunks::write_body(&pool, &untouched, &unlinked)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM replica_ops")
-        .execute(&pool)
-        .await
-        .unwrap();
+    let phone = crate::replica::two_devices::device().await;
+    crate::replica::two_devices::send(&pool, &phone).await;
 
     rebuild_seeded_bodies(&pool).await.unwrap();
+    let applied = crate::replica::two_devices::send(&pool, &phone).await;
 
-    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM replica_ops")
-        .fetch_one(&pool)
+    assert_eq!(hrefs(&page_content(&pool, &untouched).await).len(), 3);
+    assert_eq!(
+        applied,
+        Default::default(),
+        "the calendar's own page stays on its device"
+    );
+}
+
+#[tokio::test]
+async fn upgrading_a_detached_seed_links_its_addresses_on_the_other_device_too() {
+    use crate::replica::two_devices::{converge, device, link_state};
+    let mac = setup().await;
+    crate::replica::start(&mac).await.unwrap();
+    let page_id = seed_invite(&mac).await;
+    link_state(&mac, &page_id, "detached").await;
+    let unlinked = serde_json::json!({ "type": "doc", "content": INVITE.split('\n').map(|line| {
+        serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+    }).collect::<Vec<_>>() })
+    .to_string();
+    crate::page_chunks::write_body(&mac, &page_id, &unlinked)
         .await
         .unwrap();
-    assert_eq!(hrefs(&page_content(&pool, &untouched).await).len(), 3);
-    assert_eq!(pending, 0, "every device runs the upgrade itself");
+    let phone = device().await;
+    converge(&mac, &phone).await;
+
+    rebuild_seeded_bodies(&mac).await.unwrap();
+    converge(&mac, &phone).await;
+
+    let on_phone = page_content(&phone, &page_id).await;
+    assert_eq!(hrefs(&on_phone).len(), 3);
+    assert_eq!(on_phone, page_content(&mac, &page_id).await);
 }
 
 #[tokio::test]
