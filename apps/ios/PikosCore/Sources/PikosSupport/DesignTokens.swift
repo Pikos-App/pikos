@@ -35,6 +35,7 @@ public enum PikosToken {
     public static let statusDueSoon = TokenColor(light: 0xD4850FFF, dark: 0xF59E42FF)
     public static let statusOpen = TokenColor(light: 0x3B82F6FF, dark: 0x60A5FAFF)
     public static let statusDone = TokenColor(light: 0x10B981FF, dark: 0x34D399FF)
+    public static let priorityUrgent = TokenColor(light: 0x7C3AEDFF, dark: 0xA78BFAFF)
 
     public static let folderRed = TokenColor(light: 0xD9577AFF, dark: 0xD9577AFF)
     public static let folderOrange = TokenColor(light: 0xE09B4AFF, dark: 0xE09B4AFF)

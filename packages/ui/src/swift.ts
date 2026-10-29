@@ -29,6 +29,7 @@ export const NATIVE_SEMANTIC_GROUPS = [
   "Borders",
   "Interactive",
   "Status",
+  "Priority",
 ] as const;
 
 const TRANSPARENT: Rgba = { a: 0, b: 0, g: 0, r: 0 };

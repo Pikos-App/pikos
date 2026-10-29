@@ -32,7 +32,7 @@ struct CompletionToggle: View {
 
     private var stroke: Color {
         switch priority {
-        case .urgent: return .statusOverdue
+        case .urgent: return .priorityUrgent
         case .high: return .statusDueSoon
         default: return .borderPrimary
         }

@@ -322,7 +322,7 @@ enum PagePriority: Int64, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .urgent: return .statusOverdue
+        case .urgent: return .priorityUrgent
         case .high: return .statusDueSoon
         case .medium: return Color(PikosToken.yellow500)
         case .low: return .statusOpen

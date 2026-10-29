@@ -35,6 +35,8 @@ extension ShapeStyle where Self == Color {
     static var statusDueSoon: Color { Color(PikosToken.statusDueSoon) }
     static var statusOpen: Color { Color(PikosToken.statusOpen) }
     static var statusDone: Color { Color(PikosToken.statusDone) }
+
+    static var priorityUrgent: Color { Color(PikosToken.priorityUrgent) }
 }
 
 /// The desktop's type scale on a phone: each step is the desktop size × 1.15, snapped to the
