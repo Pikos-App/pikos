@@ -74,6 +74,32 @@ it("typing that coalesces with a body still waiting is saved over the body store
   expect(updatePage).toHaveBeenCalledWith("p1", { baseContent: "stored", content: "second" });
 });
 
+it("flushing a page with nothing waiting settles only after the write already queued for it lands", async () => {
+  const adapter = {} as unknown as StorageAdapter;
+  const { result } = renderHook(() => usePageWriteQueue({ adapter, emit: vi.fn(), mirror }));
+  let landWrite: () => void = () => {};
+  let isFlushed = false;
+
+  void result.current.enqueue(
+    "p1",
+    () =>
+      new Promise<void>((resolve) => {
+        landWrite = resolve;
+      })
+  );
+  const flushed = result.current.flushPage("p1").then(() => {
+    isFlushed = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(isFlushed).toBe(false);
+
+  landWrite();
+  await flushed;
+
+  expect(isFlushed).toBe(true);
+});
+
 it("a save the database merged with a newer body says what was typed and what was saved", async () => {
   const updatePage = vi.fn((id: string) => Promise.resolve({ content: "merged", id }));
   const adapter = { updatePage } as unknown as StorageAdapter;

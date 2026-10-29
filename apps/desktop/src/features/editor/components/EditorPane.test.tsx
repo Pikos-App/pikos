@@ -1,4 +1,6 @@
-import { act, screen } from "@testing-library/react";
+import { MockStorageAdapter } from "@pikos/core/testing";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { Editor } from "@tiptap/react";
 import { useEffect } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -27,6 +29,7 @@ const LINKING_BODY = JSON.stringify({
 HTMLElement.prototype.scrollTo = () => {};
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
 });
 
@@ -83,4 +86,48 @@ it("opens a page holding a page link without React refusing a flushSync mid-comm
     String(args[0]).includes("flushSync")
   );
   expect(flushSyncWarnings).toEqual([]);
+});
+
+it("retrying a save that failed sends the typed body again", async () => {
+  let latest: App | null = null;
+  renderWithProviders(
+    <EditorSettingsProvider>
+      <TooltipProvider>
+        <EditorPane />
+        <Probe onApp={(app) => (latest = app)} />
+      </TooltipProvider>
+    </EditorSettingsProvider>
+  );
+  const app = () => latest!;
+
+  await act(async () => {
+    await app().workspace.selectWorkspace();
+  });
+  let id = "";
+  await act(async () => {
+    id = (await app().pages.createPage({ title: "Draft" })).id;
+  });
+  await act(async () => {
+    app().ui.openPage(id);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  const updatePage = vi
+    .spyOn(MockStorageAdapter.prototype, "updatePage")
+    .mockRejectedValueOnce(new Error("disk full"));
+
+  const body = await screen.findByRole("textbox", { name: "Page content" });
+  act(() => {
+    (body as HTMLElement & { editor: Editor }).editor.commands.insertContent("typed");
+  });
+  const retry = await screen.findByRole(
+    "button",
+    { name: "Save failed. Click to retry" },
+    { timeout: 3000 }
+  );
+  const failed = updatePage.mock.calls[0]!;
+  fireEvent.click(retry);
+
+  await waitFor(() => expect(updatePage).toHaveBeenCalledTimes(2), { timeout: 3000 });
+  expect(updatePage.mock.calls[1]).toEqual(failed);
+  expect(failed[1].content).toContain("typed");
 });
