@@ -146,6 +146,20 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(RecordCodec.decode(record)?.fields["file"], .text(file.path))
     }
 
+    func testABodyCutBelowTheLimitDropsTheFileItLastSyncedAs() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).json")
+        try Data("the whole novel".utf8).write(to: file)
+        let long = SyncRecord(name: "body:p1", fields: ["content_at": .text("0001"), "file": .text(file.path)])
+        let short = SyncRecord(name: "body:p1", fields: ["content_at": .text("0002"), "content_0": .text("one line")])
+        let server = RecordCodec.encode(OutgoingRecord(record: long, storeName: "body:p1", builtAt: ""), zone: workspaceZone)
+
+        RecordCodec.fill(server, with: short)
+
+        let arriving = try XCTUnwrap(RecordCodec.decode(server))
+        XCTAssertNil(arriving.fields["file"])
+        XCTAssertEqual(arriving.fields["content_0"], .text("one line"))
+    }
+
     func testAFileNamedInATextFieldIsNotTakenAsOneToCopy() {
         let record = CKRecord(recordType: "asset", recordID: CKRecord.ID(recordName: "asset:x", zoneID: workspaceZone))
         record.encryptedValues["record"] = "asset:x"

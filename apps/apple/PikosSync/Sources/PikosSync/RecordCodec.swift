@@ -34,6 +34,10 @@ public enum RecordCodec {
         values[nameField] = source.name
         if case .text(let path) = source.fields[fileField] {
             record[fileField] = CKAsset(fileURL: URL(fileURLWithPath: path))
+        } else if record[fileField] != nil {
+            // A body that shrank below the inline limit: an arriving file wins over the field, so a
+            // stale one would put the long version back on the other device.
+            record[fileField] = nil
         }
         for (key, value) in source.fields where key != fileField {
             switch value {
