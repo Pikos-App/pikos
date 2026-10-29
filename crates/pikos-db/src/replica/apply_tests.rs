@@ -206,6 +206,45 @@ async fn typing_over_a_body_another_device_changed_since_it_loaded_keeps_both_ed
     );
 }
 
+#[tokio::test]
+async fn a_link_the_losing_body_added_is_gone_from_both_devices() {
+    let (mac, phone) = (device().await, device().await);
+    let trip = create_page_impl(&mac, new_page("Trip")).await.unwrap();
+    let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    converge(&mac, &phone).await;
+
+    let linking = serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [
+        { "type": "pageLink", "attrs": { "pageId": trip.id, "title": "Trip" } },
+    ]}]});
+    let write_body = |pool: &SqlitePool, content: String| {
+        let (pool, id) = (pool.clone(), page.id.clone());
+        async move {
+            update_page_impl(
+                &pool,
+                id,
+                PageUpdate {
+                    content: Some(content),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+    };
+    write_body(&mac, linking.to_string()).await;
+    tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+    write_body(&phone, body_of(&["eggs"])).await;
+    converge(&mac, &phone).await;
+
+    assert_converged(&mac, &phone).await;
+    let doc = |body: &str| serde_json::from_str::<serde_json::Value>(body).unwrap();
+    for pool in [&mac, &phone] {
+        let merged = get_page(pool, &page.id).await.unwrap().unwrap();
+        assert_eq!(doc(&merged.content), doc(&body_of(&["eggs"])));
+        assert!(merged.links.is_empty(), "links: {:?}", merged.links);
+    }
+}
+
 // qa: CLOUD-02
 #[tokio::test]
 async fn the_later_edit_to_one_field_wins_on_both() {

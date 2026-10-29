@@ -628,7 +628,7 @@ fn ensure_known_status(status: &str) -> AppResult<()> {
 ///
 /// Derived here, in the one writer, rather than sent by each client, so the app, the CLI and
 /// the phone can't disagree about what a page links to.
-fn links_of(content: &str) -> String {
+pub(crate) fn links_of(content: &str) -> String {
     let has_no_links = !content.contains("\"pageLink\"");
     if has_no_links {
         return "[]".to_string();

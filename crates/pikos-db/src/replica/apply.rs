@@ -218,6 +218,9 @@ struct Touched {
     /// Records this round created or brought back, which held records may be waiting on.
     arrived: Vec<String>,
     bodies: BTreeSet<String>,
+    /// Pages whose record changed without their body. `links` syncs as a page field, so a link
+    /// one device added can win here over the body this device kept, which no longer has it.
+    page_rows: BTreeSet<String>,
     tags: BTreeSet<String>,
     reminders: BTreeSet<String>,
     schedules: BTreeSet<String>,
@@ -236,8 +239,22 @@ impl Touched {
                 .fetch_optional(tx.conn())
                 .await?;
             if let Some(content) = content {
-                sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
+                sqlx::query("UPDATE pages SET content_text = ?, links = ? WHERE id = ?")
                     .bind(crate::pool::extract_text_from_tiptap(&content))
+                    .bind(crate::pages::links_of(&content))
+                    .bind(page)
+                    .execute(tx.conn())
+                    .await?;
+            }
+        }
+        for page in self.page_rows.difference(&self.bodies) {
+            let content: Option<String> = sqlx::query_scalar(&read_body)
+                .bind(page)
+                .fetch_optional(tx.conn())
+                .await?;
+            if let Some(content) = content {
+                sqlx::query("UPDATE pages SET links = ? WHERE id = ?")
+                    .bind(crate::pages::links_of(&content))
                     .bind(page)
                     .execute(tx.conn())
                     .await?;
@@ -925,6 +942,9 @@ fn note_touched(
 ) {
     let page = page_of(record).or_else(|| before.and_then(|row| page_in_row(entity, row)));
     match record.name.entity {
+        Entity::Page => {
+            touched.page_rows.extend(page.clone());
+        }
         Entity::Body => {
             touched.bodies.extend(page.clone());
         }
