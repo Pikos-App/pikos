@@ -186,7 +186,7 @@ struct WidgetPageRow: View {
                 // moment between the touch and the reload reads as
                 // "working" rather than "ignored".
                 .invalidatableContent()
-                .frame(minWidth: isList ? 24 : nil, minHeight: isList ? 24 : nil, alignment: .leading)
+                .frame(minWidth: isList ? 24 : nil, minHeight: isList ? 22 : nil, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

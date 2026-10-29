@@ -220,8 +220,8 @@ private struct HomeScreenView: View {
     private var visible: [PageSummary] {
         let limit: Int
         switch family {
-        case .systemSmall, .systemMedium: limit = 3
-        default: limit = 8
+        case .systemSmall, .systemMedium: limit = 4
+        default: limit = 10
         }
         return Array(entry.open.prefix(limit))
     }
@@ -234,7 +234,7 @@ private struct HomeScreenView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Text(entry.list.name)
                     .font(.subheadline.weight(.semibold))
