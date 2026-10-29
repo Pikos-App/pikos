@@ -36,13 +36,14 @@ final class TierOneTests: PikosUITestCase {
         grid.swipeUp()
 
         let show = app.buttons["Show the bar"]
-        XCTAssertTrue(show.waitForExistence(timeout: 5), "scrolling down shrinks the bar to one button")
-        XCTAssertFalse(app.buttons["Search"].isHittable, "and the rest of it is out of the way")
-        XCTAssertTrue(app.buttons["New page"].isHittable, "except capture")
+        XCTAssertTrue(show.waitForExistence(timeout: 5), "scrolling down folds the pane switch into one button")
+        XCTAssertFalse(app.buttons["List"].isHittable, "and the switch is out of the way")
+        XCTAssertTrue(app.buttons["Search"].isHittable, "search stays one tap away")
+        XCTAssertTrue(app.buttons["New page"].isHittable, "and so does capture")
 
         show.tap()
-        XCTAssertTrue(app.buttons["Search"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Search"].isHittable, "one tap brings the bar back")
+        XCTAssertTrue(app.buttons["List"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["List"].isHittable, "one tap brings the bar back")
     }
 
     // qa: IOS-20

@@ -10,6 +10,8 @@ struct ShellBar: View {
     /// Nil when the list and the calendar are both on screen, which leaves search and capture.
     let pane: Binding<Route.Pane>?
     /// Only while the panes take turns: side by side, the bar already holds just search and capture.
+    /// Shrinking folds the pane switch into one button and keeps search, so search is never more
+    /// than a tap away.
     var isMinimized = false
     let onSearch: () -> Void
     let onCapture: () -> Void
@@ -27,14 +29,12 @@ struct ShellBar: View {
         HStack(spacing: 4) {
             if isMinimized, let pane {
                 expandButton(pane.wrappedValue)
-            } else {
-                if let pane {
-                    segment(.list, title: "List", systemImage: "list.bullet", pane: pane)
-                    segment(.week, title: "Calendar", systemImage: "calendar", pane: pane)
-                }
-                searchButton
-                    .padding(.leading, 2)
+            } else if let pane {
+                segment(.list, title: "List", systemImage: "list.bullet", pane: pane)
+                segment(.week, title: "Calendar", systemImage: "calendar", pane: pane)
             }
+            searchButton
+                .padding(.leading, 2)
             captureButton
                 .padding(.leading, 2)
         }
