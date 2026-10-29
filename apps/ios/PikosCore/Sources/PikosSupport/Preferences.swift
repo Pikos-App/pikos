@@ -110,6 +110,10 @@ public struct Preferences: @unchecked Sendable {
         static let theme = "pikos.theme"
         static let listDensity = "pikos.listDensity"
         static let calendarDensity = "pikos.calendarDensity"
+        static let calendarEarlyHoursEnd = "pikos.calendarEarlyHoursEnd"
+        static let calendarLateHoursStart = "pikos.calendarLateHoursStart"
+        static let calendarEarlyHoursFolded = "pikos.calendarEarlyHoursFolded"
+        static let calendarLateHoursFolded = "pikos.calendarLateHoursFolded"
         static let weekStart = "pikos.weekStart"
         static let defaultFolderID = "pikos.defaultFolderId"
         static let remindersEnabled = "pikos.remindersEnabled"
@@ -165,6 +169,25 @@ public struct Preferences: @unchecked Sendable {
     public var calendarDensity: CalendarDensity {
         get { read(Key.calendarDensity, default: .normal) }
         set { store.set(newValue.rawValue, forKey: Key.calendarDensity) }
+    }
+
+    /// The calendar's early and late hours and whether each is folded into a band. The desktop's
+    /// defaults: midnight to 6 AM and 10 PM to midnight, both folded. Kept per device, as the
+    /// desktop keeps its own.
+    public var calendarCollapse: CalendarGeometry.Collapse {
+        get {
+            CalendarGeometry.Collapse(
+                topHour: integer(Key.calendarEarlyHoursEnd, default: 6),
+                bottomHour: integer(Key.calendarLateHoursStart, default: 22),
+                topCollapsed: bool(Key.calendarEarlyHoursFolded, default: true),
+                bottomCollapsed: bool(Key.calendarLateHoursFolded, default: true))
+        }
+        set {
+            store.set(newValue.topHour, forKey: Key.calendarEarlyHoursEnd)
+            store.set(newValue.bottomHour, forKey: Key.calendarLateHoursStart)
+            store.set(newValue.topCollapsed, forKey: Key.calendarEarlyHoursFolded)
+            store.set(newValue.bottomCollapsed, forKey: Key.calendarLateHoursFolded)
+        }
     }
 
     /// Defaults to the device's own idea of the week, which is already the
@@ -251,7 +274,8 @@ public struct Preferences: @unchecked Sendable {
     public func resetAll() {
         for key in [
             Key.theme, Key.listDensity, Key.calendarDensity, Key.weekStart, Key.defaultFolderID,
-            Key.remindersEnabled, Key.defaultReminderMinutes,
+            Key.remindersEnabled, Key.defaultReminderMinutes, Key.calendarEarlyHoursEnd,
+            Key.calendarLateHoursStart, Key.calendarEarlyHoursFolded, Key.calendarLateHoursFolded,
         ] {
             store.removeObject(forKey: key)
         }
@@ -267,6 +291,14 @@ public struct Preferences: @unchecked Sendable {
     /// The fallback is not theoretical: a build that renames a case leaves the
     /// old spelling in everyone's defaults, and an unrecognised value must read
     /// as "not set" rather than crash the screen that shows it.
+    private func integer(_ key: String, default fallback: Int) -> Int {
+        store.object(forKey: key) == nil ? fallback : store.integer(forKey: key)
+    }
+
+    private func bool(_ key: String, default fallback: Bool) -> Bool {
+        store.object(forKey: key) == nil ? fallback : store.bool(forKey: key)
+    }
+
     private func read<T: RawRepresentable>(_ key: String, default fallback: T) -> T
     where T.RawValue == String {
         guard let raw = store.string(forKey: key), let value = T(rawValue: raw) else {

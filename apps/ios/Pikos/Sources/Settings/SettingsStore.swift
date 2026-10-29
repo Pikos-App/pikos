@@ -38,6 +38,11 @@ public final class SettingsStore {
         set { preferences.calendarDensity = newValue }
     }
 
+    public var calendarCollapse: CalendarGeometry.Collapse {
+        get { preferences.calendarCollapse }
+        set { preferences.calendarCollapse = newValue }
+    }
+
     public var weekStart: Preferences.WeekStart {
         get { preferences.weekStart }
         set { preferences.weekStart = newValue }

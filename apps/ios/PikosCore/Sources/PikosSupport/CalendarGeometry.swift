@@ -35,22 +35,125 @@ public enum CalendarGeometry {
         public var minBlockHeight: CGFloat
         /// Pitch of one row in the all-day section.
         public var allDayRowHeight: CGFloat
+        /// The early and late hours folded into bands, or none.
+        public var collapse: Collapse
 
         public init(
             hourHeight: CGFloat = 64,
             minBlockHeight: CGFloat = 22,
-            allDayRowHeight: CGFloat = 24
+            allDayRowHeight: CGFloat = 24,
+            collapse: Collapse = .none
         ) {
             self.hourHeight = hourHeight
             self.minBlockHeight = minBlockHeight
             self.allDayRowHeight = allDayRowHeight
+            self.collapse = collapse
         }
 
-        public var dayHeight: CGFloat { hourHeight * 24 }
+        /// How tall the early hours are drawn: a band when folded, their hours when open.
+        public var topBandHeight: CGFloat {
+            collapse.isTopFolded ? Collapse.bandHeight : CGFloat(collapse.topHour) * hourHeight
+        }
+
+        /// Where the hours between the bands end.
+        public var middleEnd: CGFloat {
+            topBandHeight + CGFloat(collapse.bottomHour - collapse.topHour) * hourHeight
+        }
+
+        public var bottomBandHeight: CGFloat {
+            collapse.isBottomFolded ? Collapse.bandHeight : CGFloat(24 - collapse.bottomHour) * hourHeight
+        }
+
+        public var dayHeight: CGFloat { middleEnd + bottomBandHeight }
+
+        /// Where a minute of the day sits. Inside a folded band its hours are pressed into the band;
+        /// everywhere else an hour is `hourHeight` tall, as the desktop's `mapHourToY` has it.
+        public func y(atMinute minute: Double) -> CGFloat {
+            let hour = minute / 60
+            let top = Double(collapse.topHour)
+            let bottom = Double(collapse.bottomHour)
+            if hour <= top {
+                return collapse.isTopFolded
+                    ? CGFloat(hour / max(top, 1)) * topBandHeight : CGFloat(hour) * hourHeight
+            }
+            if hour >= bottom {
+                let past = hour - bottom
+                return middleEnd
+                    + (collapse.isBottomFolded
+                        ? CGFloat(past / max(24 - bottom, 1)) * bottomBandHeight : CGFloat(past) * hourHeight)
+            }
+            return topBandHeight + CGFloat(hour - top) * hourHeight
+        }
+
+        /// The minute at a point down the day: the inverse of `y(atMinute:)`.
+        public func minute(atY y: CGFloat) -> Double {
+            let top = Double(collapse.topHour)
+            let bottom = Double(collapse.bottomHour)
+            guard hourHeight > 0 else { return 0 }
+            if y <= topBandHeight {
+                return collapse.isTopFolded
+                    ? Double(y / max(topBandHeight, 1)) * top * 60 : Double(y / hourHeight) * 60
+            }
+            if y >= middleEnd {
+                let into = Double(y - middleEnd)
+                let hours =
+                    collapse.isBottomFolded
+                    ? into / Double(max(bottomBandHeight, 1)) * (24 - bottom) : into / Double(hourHeight)
+                return min(24 * 60, (bottom + hours) * 60)
+            }
+            return (top + Double((y - topBandHeight) / hourHeight)) * 60
+        }
 
         /// The minimum block height as minutes of this grid, which is how the
         /// column layout reads it: a floored block overlaps what its drawn height covers.
         public var shortestBlockMinutes: Double { Double(minBlockHeight / hourHeight * 60) }
+    }
+
+    /// The early and late hours, folded into bands so the day opens on the hours that get used,
+    /// as the desktop folds them (`DEFAULT_COLLAPSE_CONFIG`, `buildCollapseGeometry`).
+    public struct Collapse: Equatable, Sendable {
+        /// The early band covers midnight up to this hour.
+        public var topHour: Int
+        /// The late band covers this hour up to midnight.
+        public var bottomHour: Int
+        public var topCollapsed: Bool
+        public var bottomCollapsed: Bool
+
+        /// The desktop's band height.
+        public static let bandHeight: CGFloat = 40
+        /// Nothing folded: every hour its full height, as the grid was before bands.
+        public static let none = Collapse(topHour: 0, bottomHour: 24, topCollapsed: false, bottomCollapsed: false)
+        public static let earliestTopHour = 1
+        public static let latestTopHour = 12
+        public static let earliestBottomHour = 12
+        public static let latestBottomHour = 23
+
+        public init(topHour: Int, bottomHour: Int, topCollapsed: Bool, bottomCollapsed: Bool) {
+            self.topHour = min(max(topHour, 0), 23)
+            self.bottomHour = min(max(bottomHour, self.topHour + 1), 24)
+            self.topCollapsed = topCollapsed
+            self.bottomCollapsed = bottomCollapsed
+        }
+
+        /// A band with no hours in it can't fold.
+        public var isTopFolded: Bool { topCollapsed && topHour > 0 }
+        public var isBottomFolded: Bool { bottomCollapsed && bottomHour < 24 }
+    }
+
+    /// The folded band a timed block lies wholly inside, if any. Such a block is not drawn; its band
+    /// says how many it holds, as the desktop's `+N more` does.
+    public enum Band: Sendable {
+        case top, bottom
+    }
+
+    public static func foldedBand(start: String, end: String?, on day: String, metrics: Metrics) -> Band? {
+        guard let span = minuteSpan(start: start, end: end, on: day) else { return nil }
+        let collapse = metrics.collapse
+        if collapse.isTopFolded, span.end <= collapse.topHour * 60, span.start < collapse.topHour * 60 {
+            return .top
+        }
+        if collapse.isBottomFolded, span.start >= collapse.bottomHour * 60 { return .bottom }
+        return nil
     }
 
     // MARK: - Reading wall-clock strings
@@ -105,11 +208,33 @@ public enum CalendarGeometry {
         on day: String,
         metrics: Metrics
     ) -> (top: CGFloat, height: CGFloat)? {
-        guard let startDay = self.day(of: start) else { return nil }
+        guard let span = minuteSpan(start: start, end: end, on: day) else { return nil }
 
-        // `end` is the *stored* end. Absent means a point in time, which gets
-        // the minimum height — not a zero-height block, and not an assumed
-        // duration the user never typed.
+        // A block running out of a folded band starts at the band's edge, and one running into a
+        // band ends at it, as the desktop draws them: a start pressed into the band would say
+        // nothing about when, and the band already counts what lies inside it.
+        let collapse = metrics.collapse
+        let startsInTopBand = collapse.isTopFolded && span.start < collapse.topHour * 60
+        let endsInBottomBand = collapse.isBottomFolded && span.end > collapse.bottomHour * 60
+        let rawTop = metrics.y(atMinute: Double(span.start))
+        let rawBottom = metrics.y(atMinute: Double(span.end))
+        let top = startsInTopBand ? max(rawTop, metrics.topBandHeight - 4) : rawTop
+        let bottom = endsInBottomBand ? min(rawBottom, metrics.middleEnd + 4) : rawBottom
+        let height = max(metrics.minBlockHeight, bottom - top)
+
+        // Never let a block overflow the grid it sits in: a late event given a
+        // minimum height would otherwise hang past midnight.
+        let clampedTop = min(top, metrics.dayHeight - metrics.minBlockHeight)
+        let clampedHeight = min(height, metrics.dayHeight - clampedTop)
+        return (max(0, clampedTop), max(metrics.minBlockHeight, clampedHeight))
+    }
+
+    /// The minutes of `day` a timed event covers, or nil when it doesn't touch the day.
+    ///
+    /// `end` is the *stored* end. Absent means a point in time, which gets the minimum height —
+    /// not a zero-height block, and not an assumed duration the user never typed.
+    static func minuteSpan(start: String, end: String?, on day: String) -> (start: Int, end: Int)? {
+        guard let startDay = self.day(of: start) else { return nil }
         let endDay = end.flatMap { self.day(of: $0) }
 
         let startsBefore = startDay < day
@@ -126,16 +251,7 @@ public enum CalendarGeometry {
         } else {
             endMinute = startMinute
         }
-
-        let perMinute = metrics.hourHeight / 60
-        let top = CGFloat(startMinute) * perMinute
-        let height = max(metrics.minBlockHeight, CGFloat(endMinute - startMinute) * perMinute)
-
-        // Never let a block overflow the grid it sits in: a late event given a
-        // minimum height would otherwise hang past midnight.
-        let clampedTop = min(top, metrics.dayHeight - metrics.minBlockHeight)
-        let clampedHeight = min(height, metrics.dayHeight - clampedTop)
-        return (max(0, clampedTop), max(metrics.minBlockHeight, clampedHeight))
+        return (startMinute, endMinute)
     }
 
     /// Horizontal inset for a cascade column, as a fraction of the day column.
@@ -271,9 +387,8 @@ public enum CalendarGeometry {
         atY y: CGFloat, metrics: Metrics, slotMinutes: Int = 30
     ) -> Int {
         let slot = max(1, slotMinutes)
-        let perMinute = metrics.hourHeight / 60
-        guard perMinute > 0 else { return 0 }
-        let minute = Int((y / perMinute).rounded(.down))
+        guard metrics.hourHeight > 0 else { return 0 }
+        let minute = Int(metrics.minute(atY: y).rounded(.down))
         let snapped = (minute / slot) * slot
         return min(max(0, snapped), 24 * 60 - slot)
     }
@@ -294,9 +409,8 @@ public enum CalendarGeometry {
     /// The minutes a new block covers while a finger that pressed at `from` is drawn to `y`;
     /// `stretchNewBlock` in Rust holds the rule.
     public static func stretched(from start: Int, toY y: CGFloat, metrics: Metrics) -> (start: Int, end: Int) {
-        let perMinute = metrics.hourHeight / 60
-        guard perMinute > 0 else { return (start, start + 15) }
-        let range = stretchNewBlock(pressed: Int32(start), reached: Double(y / perMinute))
+        guard metrics.hourHeight > 0 else { return (start, start + 15) }
+        let range = stretchNewBlock(pressed: Int32(start), reached: metrics.minute(atY: y))
         return (Int(range.start), Int(range.end))
     }
 
@@ -321,7 +435,14 @@ public enum CalendarGeometry {
         return (dropped.start, dropped.end)
     }
 
-    /// A position over a day into a minute, snapped down to the quarter hour the desktop snaps to.
+    /// A position over a whole day's column into a minute, snapped down to the quarter hour.
+    public static func dropMinute(atY y: CGFloat, metrics: Metrics) -> Int {
+        let minute = Int(metrics.minute(atY: max(0, y)).rounded(.down))
+        return min(max(0, (minute / 15) * 15), 24 * 60 - 15)
+    }
+
+    /// A position over a window of hours into a minute, snapped down to the quarter hour the
+    /// desktop snaps to.
     public static func dropMinute(atY y: CGFloat, firstHour: Int, hourHeight: CGFloat) -> Int {
         guard hourHeight > 0 else { return firstHour * 60 }
         let minute = firstHour * 60 + Int((y / hourHeight * 60).rounded(.down))
@@ -336,6 +457,6 @@ public enum CalendarGeometry {
     /// particular minute to come round.
     public static func nowOffset(now: String, on day: String, metrics: Metrics) -> CGFloat? {
         guard self.day(of: now) == day, let minute = minutesIntoDay(now) else { return nil }
-        return CGFloat(minute) * metrics.hourHeight / 60
+        return metrics.y(atMinute: Double(minute))
     }
 }

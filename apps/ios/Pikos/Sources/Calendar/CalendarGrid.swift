@@ -45,6 +45,7 @@ struct CalendarGrid: View {
     @Environment(PageDragSession.self) private var drag
     @Environment(Route.self) private var route
     @Environment(\.shellLayout) private var shellLayout
+    @Environment(SettingsStore.self) private var settings
 
     /// A percentage rather than the height itself, because `@ScaledMetric` takes its base from a
     /// literal and the base is a setting.
@@ -53,8 +54,10 @@ struct CalendarGrid: View {
     private var hourHeight: CGFloat { hourHeightBase * typeScale / 100 }
 
     private var metrics: CalendarGeometry.Metrics {
-        CalendarGeometry.Metrics(hourHeight: hourHeight)
+        CalendarGeometry.Metrics(hourHeight: hourHeight, collapse: settings.calendarCollapse)
     }
+
+    private var collapse: CalendarGeometry.Collapse { settings.calendarCollapse }
 
     /// Capped so a fortnight-long holiday does not push the hours off the screen.
     private static let collapsedAllDayRows = 2
@@ -77,7 +80,7 @@ struct CalendarGrid: View {
                 .overlay(alignment: .bottom) {
                     if shellLayout == .single { barFade }
                 }
-                .modifier(RemembersTopHour(hourHeight: hourHeight, topInset: Self.timedTopInset))
+                .modifier(RemembersTopHour(metrics: metrics, topInset: Self.timedTopInset))
                 .onAppear {
                     proxy.scrollTo(Self.hourAnchor(route.calendarTopHour ?? openingHour), anchor: .top)
                 }
@@ -244,6 +247,13 @@ struct CalendarGrid: View {
                     ForEach(Array(days.enumerated()), id: \.element) { index, day in
                         dayColumn(day, index: index, columnWidth: columnWidth)
                     }
+                    if collapse.isTopFolded {
+                        foldedBand(.top, columnWidth: columnWidth)
+                    }
+                    if collapse.isBottomFolded {
+                        foldedBand(.bottom, columnWidth: columnWidth)
+                            .offset(y: metrics.middleEnd)
+                    }
                 }
             }
             .frame(height: metrics.dayHeight)
@@ -253,43 +263,138 @@ struct CalendarGrid: View {
     /// Labels straddle their rule, as the desktop's do, rather than sitting under it.
     private var hourGutter: some View {
         ZStack(alignment: .topTrailing) {
-            ForEach(1..<24, id: \.self) { hour in
+            ForEach(labelledHours, id: \.self) { hour in
                 Text(Self.hourLabel(hour))
                     .font(.pkUISm)
                     .monospacedDigit()
                     .foregroundStyle(.textTertiary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .offset(y: CGFloat(hour) * hourHeight - 7)
+                    .offset(y: metrics.y(atMinute: Double(hour * 60)) - 7)
+                    // Every block already says its own time; the labels would only be in VoiceOver's way.
+                    .accessibilityHidden(true)
+            }
+            if collapse.topHour > 0 {
+                bandToggle(.top, isFolded: collapse.isTopFolded)
+                    .offset(
+                        y: collapse.isTopFolded
+                            ? (metrics.topBandHeight - Self.foldButtonSize) / 2
+                            : metrics.topBandHeight - Self.foldButtonSize - 2)
+            }
+            if collapse.bottomHour < 24 {
+                bandToggle(.bottom, isFolded: collapse.isBottomFolded)
+                    .offset(
+                        y: collapse.isBottomFolded
+                            ? metrics.middleEnd + (metrics.bottomBandHeight - Self.foldButtonSize) / 2
+                            : metrics.middleEnd + 2)
             }
         }
         .frame(width: Self.gutterWidth - 8, height: metrics.dayHeight, alignment: .topTrailing)
         .padding(.trailing, 8)
-        // Every block already says its own time; twenty-three labels would only be in VoiceOver's way.
-        .accessibilityHidden(true)
+    }
+
+    /// The hours with a label: none inside a folded band, whose edges are labelled by the hours
+    /// either side of it.
+    private var labelledHours: [Int] {
+        (1..<24).filter { hour in
+            !(collapse.isTopFolded && hour < collapse.topHour)
+                && !(collapse.isBottomFolded && hour > collapse.bottomHour)
+        }
+    }
+
+    /// Opens a folded band or folds an open one, from the gutter beside it, as the desktop's band
+    /// does from its own gutter.
+    private func bandToggle(_ band: CalendarGeometry.Band, isFolded: Bool) -> some View {
+        Button {
+            setFolded(band, !isFolded)
+        } label: {
+            Image(systemName: isFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.textTertiary)
+                .frame(width: Self.foldButtonSize, height: Self.foldButtonSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            band == .top
+                ? (isFolded ? "Open the early hours" : "Fold the early hours")
+                : (isFolded ? "Open the late hours" : "Fold the late hours"))
+    }
+
+    /// A folded band across every day: a tap opens it, and each day says how many pages it holds.
+    private func foldedBand(_ band: CalendarGeometry.Band, columnWidth: CGFloat) -> some View {
+        let height = band == .top ? metrics.topBandHeight : metrics.bottomBandHeight
+        let range =
+            band == .top
+            ? "\(Self.hourLabel(0)) – \(Self.hourLabel(collapse.topHour))"
+            : "\(Self.hourLabel(collapse.bottomHour)) – \(Self.hourLabel(0))"
+        return Button {
+            setFolded(band, false)
+        } label: {
+            ZStack(alignment: .topLeading) {
+                Rectangle().fill(.surfaceSecondary.opacity(0.6))
+                ForEach(Array(days.enumerated()), id: \.element) { index, day in
+                    let count = foldedCount(band, on: day)
+                    if count > 0 {
+                        Text("+\(count)")
+                            .font(.system(.caption2, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.textSecondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.surfaceElevated))
+                            .frame(width: columnWidth, height: height)
+                            .offset(x: columnWidth * CGFloat(index))
+                    }
+                }
+            }
+            .frame(height: height)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: band == .top ? .bottom : .top) {
+            Rectangle().fill(.borderSecondary).frame(height: hairline)
+        }
+        .accessibilityLabel(band == .top ? "Early hours, \(range)" : "Late hours, \(range)")
+        .accessibilityHint("Opens them")
+    }
+
+    private func foldedCount(_ band: CalendarGeometry.Band, on day: String) -> Int {
+        timedEntries.filter {
+            CalendarGeometry.foldedBand(start: $0.scheduledStart, end: $0.scheduledEnd, on: day, metrics: metrics)
+                == band
+        }.count
+    }
+
+    private func setFolded(_ band: CalendarGeometry.Band, _ folded: Bool) {
+        withAnimation(reduceMotion ? nil : .pkQuick) {
+            if band == .top {
+                settings.calendarCollapse.topCollapsed = folded
+            } else {
+                settings.calendarCollapse.bottomCollapsed = folded
+            }
+        }
     }
 
     private var hourLines: some View {
         ZStack(alignment: .topLeading) {
-            VStack(spacing: 0) {
-                ForEach(0..<24, id: \.self) { _ in
-                    Rectangle()
-                        .fill(.borderSecondary)
-                        .frame(height: hairline)
-                        .frame(height: hourHeight, alignment: .top)
-                }
+            ForEach(labelledHours, id: \.self) { hour in
+                Rectangle()
+                    .fill(.borderSecondary)
+                    .frame(height: hairline)
+                    .offset(y: metrics.y(atMinute: Double(hour * 60)))
             }
             // Scrolled to rather than the rules themselves: an hour's label straddles its rule, so
-            // a rule at the very top left the label half under the all-day band.
-            VStack(spacing: 0) {
-                ForEach(0..<24, id: \.self) { hour in
-                    Color.clear
-                        .frame(width: 1, height: hourHeight)
-                        .id(Self.hourAnchor(hour))
-                }
+            // a rule at the very top left the label half under the all-day band. Placed by padding,
+            // not offset, because scrolling to a view goes by its layout frame.
+            ForEach(0..<24, id: \.self) { hour in
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .padding(.top, max(0, metrics.y(atMinute: Double(hour * 60)) - Self.hourLabelClearance))
+                    .id(Self.hourAnchor(hour))
             }
-            .padding(.top, -Self.hourLabelClearance)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityHidden(true)
     }
 
@@ -309,7 +414,10 @@ struct CalendarGrid: View {
     }
 
     private func dayColumn(_ day: String, index: Int, columnWidth: CGFloat) -> some View {
-        let timed = timedEntries
+        let timed = timedEntries.filter {
+            CalendarGeometry.foldedBand(start: $0.scheduledStart, end: $0.scheduledEnd, on: day, metrics: metrics)
+                == nil
+        }
         let pages = timed.map {
             LayoutPage(
                 id: $0.key, createdAt: $0.createdAt,
@@ -437,7 +545,7 @@ struct CalendarGrid: View {
         .onDrop(
             of: [.text],
             delegate: GridDropDelegate(
-                drag: drag, day: day, hourHeight: hourHeight, hover: $hover,
+                drag: drag, day: day, metrics: metrics, hover: $hover,
                 onDrop: { page, minute in
                     drops += 1
                     onDrop(page, day, minute)
@@ -462,7 +570,10 @@ struct CalendarGrid: View {
         .font(.system(.caption, weight: .semibold))
         .padding(.horizontal, 8)
         .padding(.top, 5)
-        .frame(width: max(width - 3, 1), height: max(26, CGFloat(length) / 60 * hourHeight), alignment: .top)
+        .frame(
+            width: max(width - 3, 1),
+            height: max(26, metrics.y(atMinute: Double(minute + length)) - metrics.y(atMinute: Double(minute))),
+            alignment: .top)
         .background {
             RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.surfaceElevated)
             RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.surfaceSelected)
@@ -470,7 +581,7 @@ struct CalendarGrid: View {
         .overlay(
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .strokeBorder(.interactivePrimary, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
-        .offset(x: 1.5, y: CGFloat(minute) / 60 * hourHeight)
+        .offset(x: 1.5, y: metrics.y(atMinute: Double(minute)))
         .allowsHitTesting(false)
     }
 
@@ -526,7 +637,7 @@ struct CalendarGrid: View {
     }
 
     private func minute(atY y: CGFloat) -> Int {
-        Int((y / hourHeight * 60).rounded())
+        Int(metrics.minute(atY: y).rounded())
     }
 
     /// The block as it would be with the drawn edge let go here.
@@ -585,7 +696,7 @@ struct CalendarGrid: View {
             .padding(.top, 5)
             .frame(
                 width: max(width - 3, 1),
-                height: CGFloat(stretch.end - stretch.start) / 60 * hourHeight,
+                height: metrics.y(atMinute: Double(stretch.end)) - metrics.y(atMinute: Double(stretch.start)),
                 alignment: .topLeading)
             .background {
                 RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.surfaceElevated)
@@ -594,7 +705,7 @@ struct CalendarGrid: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
                     .strokeBorder(.interactivePrimary, lineWidth: 1.5))
-            .offset(x: 1.5, y: CGFloat(stretch.start) / 60 * hourHeight)
+            .offset(x: 1.5, y: metrics.y(atMinute: Double(stretch.start)))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -743,6 +854,7 @@ struct CalendarGrid: View {
     private static let gripHold: Double = 0.1
     private static let hourLabelClearance: CGFloat = 12
     private static let timedTopInset: CGFloat = 8
+    private static let foldButtonSize: CGFloat = 22
     /// Narrower than this a title wraps a letter to a line, so a block shows its colour alone.
     private static let minimumTextWidth: CGFloat = 44
     /// Where the grid opens when today is not on screen, rather than at an empty midnight.
@@ -822,7 +934,7 @@ private struct GridFeedback: ViewModifier {
 /// Records the hour at the top of the grid as the person scrolls. iOS 17 has no scroll geometry
 /// to read, so there the grid opens on the hour before now, as it always did.
 private struct RemembersTopHour: ViewModifier {
-    let hourHeight: CGFloat
+    let metrics: CalendarGeometry.Metrics
     let topInset: CGFloat
     @Environment(Route.self) private var route
 
@@ -830,7 +942,7 @@ private struct RemembersTopHour: ViewModifier {
         if #available(iOS 18, *) {
             content.onScrollGeometryChange(for: Int.self) { geometry in
                 let offset = geometry.contentOffset.y + geometry.contentInsets.top - topInset
-                return hourHeight > 0 ? max(0, Int((offset / hourHeight).rounded())) : 0
+                return max(0, Int((metrics.minute(atY: max(0, offset)) / 60).rounded()))
             } action: { _, hour in
                 route.calendarTopHour = hour
             }
@@ -882,7 +994,7 @@ private struct LiftableBlock: ViewModifier {
 private struct GridDropDelegate: DropDelegate {
     let drag: PageDragSession
     let day: String
-    let hourHeight: CGFloat
+    let metrics: CalendarGeometry.Metrics
     @Binding var hover: DropHover?
     let onDrop: (PageFacts, Int) -> Void
 
@@ -892,7 +1004,7 @@ private struct GridDropDelegate: DropDelegate {
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         drag.beat()
-        let minute = CalendarGeometry.dropMinute(atY: max(0, info.location.y), firstHour: 0, hourHeight: hourHeight)
+        let minute = CalendarGeometry.dropMinute(atY: info.location.y, metrics: metrics)
         let next = DropHover(day: day, minute: minute)
         if hover != next { hover = next }
         return DropProposal(operation: .move)

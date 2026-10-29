@@ -68,6 +68,29 @@ struct SettingsScreen: View {
                     }
 
                     Section {
+                        Picker("Early hours end", selection: $settings.calendarCollapse.topHour) {
+                            ForEach(
+                                CalendarGeometry.Collapse.earliestTopHour...CalendarGeometry.Collapse.latestTopHour,
+                                id: \.self
+                            ) { hour in
+                                Text(Self.hourLabel(hour)).tag(hour)
+                            }
+                        }
+                        Picker("Late hours start", selection: $settings.calendarCollapse.bottomHour) {
+                            ForEach(
+                                CalendarGeometry.Collapse.earliestBottomHour...CalendarGeometry.Collapse.latestBottomHour,
+                                id: \.self
+                            ) { hour in
+                                Text(Self.hourLabel(hour)).tag(hour)
+                            }
+                        }
+                    } header: {
+                        Text("Calendar").sectionLabelStyle()
+                    } footer: {
+                        Text("The hours before and after these fold into a band at the top and foot of the calendar. Tap a band to open or fold it.")
+                    }
+
+                    Section {
                         Picker("Default folder", selection: $settings.defaultFolderID) {
                             Text("Inbox").tag(String?.none)
                             ForEach(store.fileableFolders, id: \.id) { folder in
@@ -215,6 +238,13 @@ struct SettingsScreen: View {
                 actions: { Button("OK", role: .cancel) { exports.errorMessage = nil } },
                 message: { Text(exports.errorMessage ?? "") })
         }
+    }
+
+    /// An hour of the day as the calendar labels it, stepped from a real midnight.
+    private static func hourLabel(_ hour: Int) -> String {
+        let midnight = Calendar.current.startOfDay(for: .now)
+        let date = Calendar.current.date(byAdding: .hour, value: hour, to: midnight) ?? midnight
+        return date.formatted(.dateTime.hour())
     }
 
     // MARK: - Reminders

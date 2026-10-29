@@ -342,4 +342,54 @@ final class CalendarGeometryTests: XCTestCase {
         XCTAssertEqual(stretch(23 * 60, toMinute: 25 * 60), [23 * 60, 24 * 60])
         XCTAssertEqual(stretch(30, toMinute: -60), [0, 45])
     }
+
+    // MARK: - Folding the early and late hours
+
+    private let folded = CalendarGeometry.Metrics(
+        hourHeight: 60,
+        collapse: CalendarGeometry.Collapse(topHour: 6, bottomHour: 22, topCollapsed: true, bottomCollapsed: true))
+
+    func testFoldedBandsPressTheirHoursIntoTheBandHeight() {
+        XCTAssertEqual(folded.topBandHeight, 40)
+        XCTAssertEqual(folded.y(atMinute: 6 * 60), 40)
+        XCTAssertEqual(folded.y(atMinute: 7 * 60), 100)
+        XCTAssertEqual(folded.y(atMinute: 22 * 60), 40 + 16 * 60)
+        XCTAssertEqual(folded.dayHeight, 40 + 16 * 60 + 40)
+    }
+
+    func testAPointMapsBackToTheMinuteItCameFrom() {
+        for minute in [0.0, 180, 360, 615, 1320, 1400, 1440] {
+            XCTAssertEqual(folded.minute(atY: folded.y(atMinute: minute)), minute, accuracy: 0.001)
+        }
+    }
+
+    func testNothingFoldedIsTheGridAsItWas() {
+        let plain = CalendarGeometry.Metrics(hourHeight: 60)
+        XCTAssertEqual(plain.y(atMinute: 615), 615)
+        XCTAssertEqual(plain.dayHeight, 24 * 60)
+    }
+
+    func testABlockInsideAFoldedBandIsCountedByTheBandRatherThanDrawn() {
+        XCTAssertEqual(
+            CalendarGeometry.foldedBand(
+                start: "2026-09-14T05:00:00", end: "2026-09-14T05:30:00", on: "2026-09-14", metrics: folded), .top)
+        XCTAssertEqual(
+            CalendarGeometry.foldedBand(
+                start: "2026-09-14T22:30:00", end: nil, on: "2026-09-14", metrics: folded), .bottom)
+        XCTAssertNil(
+            CalendarGeometry.foldedBand(
+                start: "2026-09-14T05:30:00", end: "2026-09-14T07:00:00", on: "2026-09-14", metrics: folded))
+    }
+
+    func testABlockRunningOutOfTheEarlyBandStartsAtItsEdge() {
+        let placed = CalendarGeometry.placement(
+            start: "2026-09-14T05:00:00", end: "2026-09-14T07:00:00", on: "2026-09-14", metrics: folded)
+        XCTAssertEqual(placed?.top, 36)
+        XCTAssertEqual(placed?.height, 100 - 36)
+    }
+
+    func testAPressOnTheFoldedGridLandsOnTheHourUnderIt() {
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: 100, metrics: folded, slotMinutes: 15), 7 * 60)
+        XCTAssertEqual(CalendarGeometry.dropMinute(atY: 100 + 37, metrics: folded), 7 * 60 + 30)
+    }
 }
