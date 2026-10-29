@@ -14,7 +14,7 @@ import Footer from "../components/Footer.astro";
     </a>
 
     <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Privacy policy</h1>
-    <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Effective: October 4, 2026</p>
+    <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Effective: October 29, 2026</p>
 
     <div class="mt-10 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
 
@@ -25,7 +25,7 @@ import Footer from "../components/Footer.astro";
       <h2 class="pt-4 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Your data stays on your device</h2>
 
       <p>
-        Everything you create in Pikos (notes, tasks, calendar events, folders) is stored in a standard, open database format on your machine, with your app preferences alongside it in local storage. There is no sign-up and no way for us to see what you write. You can copy, back up, or move your data at any time; there is no lock-in.
+        Everything you create in Pikos (notes, tasks, calendar events, folders) is stored in a standard, open database format on your machine, with your app preferences alongside it in local storage. It stays there unless you turn on iCloud sync, below, which keeps a copy in your own iCloud account. There is no sign-up and no way for us to see what you write. You can copy, back up, or move your data at any time; there is no lock-in.
       </p>
 
       <p>
@@ -39,7 +39,29 @@ import Footer from "../components/Footer.astro";
       </p>
 
       <p>
-        Any feature that needs the network is opt-in, a toggle in Settings. Calendar sync, below, is the first one. If you turn a feature on, the relevant third-party provider's privacy policy governs whatever data flows through them.
+        Any feature that needs the network is opt-in, a toggle in Settings. There are two, iCloud sync and calendar sync, both below. If you turn a feature on, the relevant third-party provider's privacy policy governs whatever data flows through them.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">iCloud sync</h2>
+
+      <p>
+        Pikos can keep your pages the same on your Mac and your iPhone through iCloud. This is opt-in and off by default on every device. Nothing is sent until you turn on Sync with iCloud in Settings → iCloud.
+      </p>
+
+      <p>
+        With it on, Pikos sends what you write to your own iCloud account: every page with its title, subtitle and body, its folder, tags, schedule, repeat rule, reminders and focus sessions, your folders, and the images in your pages. It goes into the private database of your iCloud account, which only you can read with your Apple ID. It never goes to us, and there's no Pikos server in between. Events from a connected calendar, your calendar accounts and their passwords, and the search index stay on each device.
+      </p>
+
+      <p>
+        Apple encrypts it on the way and on its servers. It's end-to-end encrypted, so that not even Apple can read it, only if you've turned on Advanced Data Protection for your Apple ID. Without it, Apple holds the keys, as it does for the rest of your iCloud data. Pikos adds no encryption of its own on top. Apple's privacy policy covers what it stores.
+      </p>
+
+      <p>
+        If you reset iCloud Keychain, the old encryption keys are gone and Apple can no longer read back what Pikos stored. Pikos then deletes that copy and uploads your pages again from the device.
+      </p>
+
+      <p>
+        Turning sync off stops sending and receiving on that device, and your pages stay on it. To delete the copy in iCloud, go to your Apple ID's iCloud settings, open Manage Storage, choose Pikos and delete its data. Pikos won't upload it again without asking you first.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">External calendar sync</h2>
@@ -75,7 +97,7 @@ import Footer from "../components/Footer.astro";
       </p>
 
       <p>
-        Delete All Data, in Settings → Data, is the complete erasure: every page and folder, the database itself, the app's logs, your preferences, and the stored credentials for any calendar account, whose access is revoked with the provider on the way out. It can't be undone, so export first if you want a copy.
+        Delete All Data, in Settings → Data, is the complete erasure: every page and folder, the database itself, the app's logs, your preferences, and the stored credentials for any calendar account, whose access is revoked with the provider on the way out. It can't be undone, so export first if you want a copy. It erases the device you run it on; to remove the copy in iCloud, delete it from your iCloud settings as described above.
       </p>
 
       <p>

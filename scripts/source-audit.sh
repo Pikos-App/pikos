@@ -178,6 +178,21 @@ else
   pass "One crate depends on an HTTP client"
 fi
 
+# ── 5b. iCloud device sync ──────────────────────────────────────────────────
+# The workspace leaves the device for the person's iCloud private database only
+# through the sync package. The phone's sync wiring imports CloudKit to name the
+# container and hands it straight to that package.
+hits=$(git ls-files -- '*.swift' \
+  | grep -v '^apps/apple/PikosSync/' \
+  | grep -v '^apps/ios/Pikos/Sources/Sync/' \
+  | xargs grep -nE '^[[:space:]]*(@[a-zA-Z]+[[:space:]]+)*import[[:space:]]+CloudKit\b' 2>/dev/null || true)
+
+if [ -n "$hits" ]; then
+  fail "CloudKit imported outside the sync package" $hits
+else
+  pass "CloudKit only in the sync package"
+fi
+
 # ── 6. Analytics / telemetry SDK imports ────────────────────────────────────
 hits=$(ts_src_files \
   | xargs grep -nEi '(from ['\''"](@sentry|sentry|mixpanel|posthog|amplitude|@segment|@google-analytics|@fullstory|logrocket|hotjar)|import.*(Sentry|Mixpanel|Posthog|Amplitude)|analytics\.(init|track|identify|page)\(|\bgtag\s*\(|umami\.track)' 2>/dev/null || true)
