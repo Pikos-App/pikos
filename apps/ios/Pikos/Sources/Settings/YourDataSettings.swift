@@ -19,6 +19,7 @@ struct YourDataSettings: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(CalendarSyncStore.self) private var sync
     @Environment(ExportStore.self) private var exports
+    @Environment(DeviceSync.self) private var deviceSync
 
     @State private var isDeleteConfirmed = false
     @State private var isDeleting = false
@@ -153,7 +154,13 @@ struct YourDataSettings: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("Every page, folder and calendar connection. This cannot be undone.")
+                    if deviceSync.isOn {
+                        Text(
+                            "Every page, folder and calendar connection. This cannot be undone. The copy in iCloud stays, and iCloud sync turns off on this device until you turn it on again."
+                        )
+                    } else {
+                        Text("Every page, folder and calendar connection. This cannot be undone.")
+                    }
                 }
             }
         } footer: {
@@ -181,6 +188,8 @@ struct YourDataSettings: View {
     private func deleteEverything() async {
         isDeleting = true
         defer { isDeleting = false }
+        // First, so a fetch can't pour the other devices' pages back into the emptied workspace.
+        await deviceSync.turnOff()
         await store.deleteAllData()
         // The home screen's search must forget the titles too: a phone wiped
         // of its notes that keeps offering them from Spotlight has not been

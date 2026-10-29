@@ -269,6 +269,9 @@
     "Every page, folder and calendar connection. This cannot be undone." : {
 
     },
+    "Every page, folder and calendar connection. This cannot be undone. The copy in iCloud stays, and iCloud sync turns off on this device until you turn it on again." : {
+
+    },
     "Everything Pikos knows is one database on this device, with your images beside it. A backup is a copy of both, in Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it." : {
 
     },
