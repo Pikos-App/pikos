@@ -3,16 +3,16 @@ import PikosSupport
 import SwiftUI
 import WidgetKit
 
-/// The day as it stands right now: what's happening, how long until the next thing, and what to do
-/// with the time in between.
+/// Today's coming hours, drawn as the app's calendar draws them: blocks in their folder colours,
+/// side by side or cascaded as the grid lays them out, each with a box that completes it in place.
+/// An empty hour opens quick add at that hour.
 ///
-/// Calendar and tasks in one place, which no list widget does: during a meeting it counts down to
-/// the end, in a gap it says how long the gap is and offers the page `NowPlan` picks, with a
-/// button that opens it with the focus timer running. The large size is a lean day calendar:
-/// pages by hour that complete in place, and empty hours that open quick add at that hour.
+/// It replaced the Now widget, which told the time left and suggested a page; Alex found a picture
+/// of the day more use than a sentence about it. The lock-screen sizes keep Now's sentence, since a
+/// grid doesn't fit beside the clock.
 ///
-/// It keeps Next Up's kind, so a Next Up widget already on a home screen becomes this one.
-struct NowWidget: Widget {
+/// It keeps Next Up's kind, so a Next Up or Now widget already on a home screen becomes this one.
+struct CalendarWidget: Widget {
     static let kind = "app.pikos.widget.next"
 
     var body: some WidgetConfiguration {
@@ -20,8 +20,8 @@ struct NowWidget: Widget {
             NowWidgetView(entry: entry)
                 .containerBackground(WidgetGround.style, for: .widget)
         }
-        .configurationDisplayName("Now")
-        .description("What's happening, what's next, and what to do in between. Large shows your day by the hour.")
+        .configurationDisplayName("Calendar")
+        .description("Today's coming hours, as your calendar draws them. Tick a page off where it sits.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -32,6 +32,8 @@ struct NowEntry: TimelineEntry {
     let date: Date
     let plan: NowPlan
     let pages: [PageSummary]
+    /// Folder id to its stored palette value, for the blocks' colours.
+    var folderColors: [String: String] = [:]
     let failure: String?
 
     static let placeholder = NowEntry(date: .now, plan: NowPlan(items: [], now: .now), pages: [], failure: nil)
@@ -91,10 +93,15 @@ struct NowProvider: TimelineProvider {
         let now = Date.now
         do {
             let pages = try await NowSource.pages()
+            let folders = try await WidgetWorkspace.open().listFolders()
+            let colors = Dictionary(
+                folders.compactMap { folder in CurrentPaletteColor.of(folder.color).map { (folder.id, $0) } },
+                uniquingKeysWith: { first, _ in first })
             let first = NowSource.plan(pages, at: now)
             let instants = [now] + first.changes.prefix(Self.maxEntries - 1)
             let entries = instants.map { at in
-                NowEntry(date: at, plan: NowSource.plan(pages, at: at), pages: pages, failure: nil)
+                NowEntry(
+                    date: at, plan: NowSource.plan(pages, at: at), pages: pages, folderColors: colors, failure: nil)
             }
             return Timeline(entries: entries, policy: .after(WidgetClock.nextHour()))
         } catch {
@@ -144,38 +151,16 @@ struct NowWidgetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .widgetURL(URL(string: "pikos://today"))
         case .systemLarge:
-            NowDay(entry: entry)
-        case .systemMedium where isEmptyDay, .systemSmall where isEmptyDay:
-            HStack(alignment: .top) {
-                NowHeadline(entry: entry, compact: false)
-                Spacer(minLength: 4)
-                NowAddButton(hour: nil)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .widgetURL(URL(string: "pikos://today"))
+            CalendarDay(entry: entry, hours: 8, allDayRows: 2)
         case .systemMedium:
-            HStack(alignment: .top, spacing: 12) {
-                NowHeadline(entry: entry, compact: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                NowNext(entry: entry, limit: 3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .widgetURL(URL(string: "pikos://today"))
+            CalendarDay(entry: entry, hours: 3, allDayRows: 1)
         default:
-            NowHeadline(entry: entry, compact: false, focusIsIconOnly: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .widgetURL(URL(string: "pikos://today"))
+            CalendarDay(entry: entry, hours: 3, allDayRows: 1, isNarrow: true)
         }
-    }
-
-    /// Nothing left today: the one thing to offer is adding something, as the large size does.
-    private var isEmptyDay: Bool {
-        entry.failure == nil && entry.pages.isEmpty
     }
 }
 
-/// Quick add for today, at an hour or without one.
-private struct NowAddButton: View {
+struct NowAddButton: View {
     let hour: Int?
 
     var body: some View {
@@ -282,117 +267,6 @@ private struct NowHeadline: View {
 }
 
 /// What's coming, for the medium size's right half.
-private struct NowNext: View {
-    let entry: NowEntry
-    let limit: Int
-
-    private var ahead: [PageSummary] {
-        entry.timed.filter { (timeOfDay($0) ?? .distantPast) > entry.date }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Next")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(WidgetInk.secondary)
-            if ahead.isEmpty {
-                WidgetNote(text: "Nothing else timed")
-            } else {
-                ForEach(ahead.prefix(limit), id: \.id) { page in
-                    WidgetPageRow(page: page, detail: timeOfDay(page).map { ClockTime.string($0) })
-                }
-            }
-            Spacer(minLength: 0)
-        }
-    }
-}
-
-/// The large size: the headline, then the rest of today by the hour.
-private struct NowDay: View {
-    let entry: NowEntry
-    /// The hours a large widget fits at a readable size.
-    private static let hours = 7
-
-    private var firstHour: Int {
-        let hour = Calendar.current.component(.hour, from: entry.date)
-        return min(hour, 24 - Self.hours)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top) {
-                NowHeadline(entry: entry, compact: true)
-                Spacer(minLength: 4)
-                NowAddButton(hour: nil)
-            }
-            Divider()
-            if !entry.untimed.isEmpty {
-                ForEach(entry.untimed.prefix(2), id: \.id) { page in
-                    WidgetPageRow(page: page)
-                }
-                if entry.untimed.count > 2 {
-                    Text("+\(entry.untimed.count - 2) more today")
-                        .font(.caption2)
-                        .foregroundStyle(WidgetInk.secondary)
-                }
-                Divider()
-            }
-            ForEach(firstHour..<(firstHour + Self.hours), id: \.self) { hour in
-                hourRow(hour)
-            }
-            Spacer(minLength: 0)
-        }
-        .widgetURL(URL(string: "pikos://calendar"))
-    }
-
-    private func pages(in hour: Int) -> [PageSummary] {
-        entry.timed.filter { page in
-            guard let start = timeOfDay(page) else { return false }
-            return Calendar.current.component(.hour, from: start) == hour
-        }
-    }
-
-    @ViewBuilder private func hourRow(_ hour: Int) -> some View {
-        let pages = pages(in: hour)
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(hourLabel(hour))
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(WidgetInk.secondary)
-                .frame(width: 34, alignment: .trailing)
-            if pages.isEmpty {
-                if let add = NowLink.add(atHour: hour) {
-                    Link(destination: add) {
-                        Rectangle()
-                            .fill(WidgetInk.rule)
-                            .frame(height: 1)
-                            .frame(maxWidth: .infinity, minHeight: 16)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel("New page at \(hourLabel(hour))")
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(pages.prefix(2), id: \.id) { page in
-                        WidgetPageRow(page: page, detail: minuteLabel(page))
-                    }
-                }
-            }
-        }
-    }
-
-    private func hourLabel(_ hour: Int) -> String {
-        let date = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: entry.date) ?? entry.date
-        return date.formatted(.dateTime.hour())
-    }
-
-    /// Only a page that doesn't start on the hour needs its time beside it.
-    private func minuteLabel(_ page: PageSummary) -> String? {
-        guard let start = timeOfDay(page), Calendar.current.component(.minute, from: start) != 0 else { return nil }
-        return ClockTime.string(start)
-    }
-}
-
-/// One line beside the lock-screen clock.
 private struct NowInline: View {
     let entry: NowEntry
 

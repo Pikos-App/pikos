@@ -81,11 +81,12 @@ Cheap, and each one has caught something on other apps:
   next two open pages with their times; the circular one the open count.
   Switch it to a folder in its settings: the heading should change to the
   folder's name.
-- Add Now at every size. With a timed page in progress it should count down
-  to the end; in a gap it should say how long the gap is and offer a page with
-  the reason it picked it. Its Focus button should open that page with the
-  timer already running. At the large size, tapping an empty hour should open
-  quick add holding "today at" that hour.
+- Add Calendar at every home-screen size. It should show the hours from now
+  with today's timed pages drawn as the calendar draws them, in their folder
+  colours, and today's all-day pages above. Tapping a block's box should tick
+  it without the app opening; tapping an empty hour should open quick add
+  holding "today at" that hour. On the lock screen it should say what's on now,
+  or how long until the next page.
 - Add New Page and Start Focus to Control Center. New Page set to `#home`
   should open quick add holding it. Tick a ring on the app's list, then go
   back to the home screen: every widget showing that page should have updated

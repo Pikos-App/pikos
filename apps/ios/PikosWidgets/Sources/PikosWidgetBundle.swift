@@ -6,7 +6,7 @@ import WidgetKit
 @main
 struct PikosWidgetBundle: WidgetBundle {
     var body: some Widget {
-        NowWidget()
+        CalendarWidget()
         ListWidget()
         FocusLiveActivity()
         if #available(iOS 18.0, *) {
