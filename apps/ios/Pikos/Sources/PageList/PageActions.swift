@@ -109,6 +109,23 @@ struct PageActionState {
 
     init() {}
 
+    /// Delete from the hold menu and from a row's swipe. A series goes with every date it has
+    /// left, so it asks first. A calendar's series doesn't: its dates are upstream's, and there is
+    /// no one date to skip here.
+    @MainActor
+    mutating func delete(_ page: PageFacts, in store: WorkspaceStore, afterDelete: @escaping () -> Void = {}) {
+        let asksAboutSeries = page.isRecurring && !page.scheduleLocked
+        if asksAboutSeries {
+            deletingSeries = SeriesDeletion(page: page, afterDelete: afterDelete)
+            return
+        }
+
+        Task {
+            await store.trash(pageId: page.id, title: page.title)
+            afterDelete()
+        }
+    }
+
     /// Bound to the presence of a page rather than a separate flag, so the two
     /// cannot disagree about whether the alert is up.
     var isRenaming: Bool {
@@ -246,16 +263,7 @@ struct PageActionsMenu: View {
         }
 
         Button(role: .destructive) {
-            // A series goes with every date it has left, so it asks first. A calendar's series
-            // doesn't: its dates are upstream's, and there is no one date to skip here.
-            if page.isRecurring && !page.scheduleLocked {
-                state.deletingSeries = PageActionState.SeriesDeletion(page: page, afterDelete: afterDelete)
-                return
-            }
-            Task {
-                await store.trash(pageId: page.id, title: page.title)
-                afterDelete()
-            }
+            state.delete(page, in: store, afterDelete: afterDelete)
         } label: {
             Label("Delete", systemImage: "trash")
         }

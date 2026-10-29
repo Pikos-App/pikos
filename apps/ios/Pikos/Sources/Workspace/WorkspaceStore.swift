@@ -436,7 +436,7 @@ public final class WorkspaceStore {
                     localized: """
                         Everything here is also in a menu, so none of it has to be learned. These are the ones worth knowing.
 
-                        In a list. Swipe left to send a page to another day or file it in a folder. Hold a page for everything else. Tap the title at the top to switch between Today, Upcoming, your Inbox and your folders.
+                        In a list. Swipe left to send a page to another day, file it in a folder or delete it. Hold a page for everything else. Tap the title at the top to switch between Today, Upcoming, your Inbox and your folders.
 
                         Several at once. Tap Select at the top, and act on everything you tick.
 

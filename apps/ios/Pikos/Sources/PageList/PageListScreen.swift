@@ -312,8 +312,9 @@ struct PageListScreen: View {
         .listRowSeparatorTint(.borderSecondary)
         .alignmentGuide(.listRowSeparatorLeading) { _ in separatorLeading }
         // `PKOS-0150`: the likeliest day, any other day, and a folder. The checkbox completes, so
-        // nothing is on the other side.
-        .swipeActions(edge: .trailing) {
+        // nothing is on the other side. Delete comes last and a full swipe never reaches it
+        // (`PKOS-0204`), so a calendar's page, with nothing else here, takes no full swipe.
+        .swipeActions(edge: .trailing, allowsFullSwipe: !page.scheduleLocked) {
             if !page.scheduleLocked {
                 if !done && !page.isRecurring {
                     let day = Self.swipeDay(for: page.scheduledStart)
@@ -336,6 +337,11 @@ struct PageListScreen: View {
                     Label("Folder", systemImage: "folder")
                 }
                 .tint(.interactiveFillNeutral)
+            }
+            Button(role: .destructive) {
+                actions.delete(facts, in: store)
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
         .contextMenu { PageActionsMenu(page: facts, state: $actions) }

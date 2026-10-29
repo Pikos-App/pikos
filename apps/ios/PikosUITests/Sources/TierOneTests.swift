@@ -604,6 +604,21 @@ final class TierOneTests: PikosUITestCase {
             app.navigationBars["Move to folder"].waitForExistence(timeout: 5), "and the folder, in a sheet")
     }
 
+    // qa: IOS-67
+    /// `PKOS-0204`: Delete ends the left swipe and goes to the trash with Undo.
+    func testARowSwipesLeftToDeleteWithUndo() {
+        showView("Inbox")
+        quickAdd("Return the library book")
+        assertRowExists("Return the library book")
+        row(titled: "Return the library book").swipeLeft()
+        let delete = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+
+        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5), "the delete offers itself back")
+        XCTAssertTrue(waitForDisappearance(of: row(titled: "Return the library book")), "and it leaves the Inbox")
+    }
+
     // qa: IOS-17
     /// Deleting a series asks this date or all of them; skipping one keeps the series.
     func testDeletingARepeatingPageAsksAndCanSkipJustOneDate() {

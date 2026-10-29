@@ -22,7 +22,7 @@ struct SwipeRowTip: Tip {
 
     var message: Text? {
         Text(
-            "Swipe a page left to send it to another day or file it in a folder. Hold a page for everything else, or drag it onto the day below to give it a time."
+            "Swipe a page left to send it to another day, file it in a folder or delete it. Hold a page for everything else, or drag it onto the day below to give it a time."
         )
     }
 
