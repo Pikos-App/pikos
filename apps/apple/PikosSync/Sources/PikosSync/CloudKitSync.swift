@@ -125,20 +125,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     /// to send and sends it now. Left to Apple's engine, a send waits on the system's schedule, which
     /// can hold a phone's edits for a day. A send that fails stays queued for the engine's own retry.
     public func localChangesHappened() async {
-        await queuePending(retryingFull: false)
-    }
-
-    private func queuePending(retryingFull: Bool) async {
-        guard let engine else { return }
-
-        let ids: [CKRecord.ID]
-        do {
-            ids = try await coordinator.pending(retryingFull: retryingFull)
-        } catch {
-            Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
-            return
-        }
-        engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
+        guard let engine, let ids = await queuePending(retryingFull: false) else { return }
         guard await coordinator.hasNewChanges(ids) else { return }
 
         do {
@@ -146,6 +133,22 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         } catch {
             await coordinator.sendFailed(ids)
             Self.log.error("sending changes failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Hands what's waiting to the engine without asking it to send. Inside one of the engine's own
+    /// callbacks this is all that's safe: `sendChanges` there traps in CloudKit and takes the app down.
+    @discardableResult
+    private func queuePending(retryingFull: Bool) async -> [CKRecord.ID]? {
+        guard let engine else { return nil }
+
+        do {
+            let ids = try await coordinator.pending(retryingFull: retryingFull)
+            engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
+            return ids
+        } catch {
+            Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 
@@ -280,6 +283,6 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             engine.state.add(pendingRecordZoneChanges: again.map { .saveRecord($0) })
         }
         // Building a page's body queues the images it shows, which no local write announces.
-        await localChangesHappened()
+        await queuePending(retryingFull: false)
     }
 }
