@@ -332,7 +332,7 @@ mod tests {
         assert!(all_day < schedule_sort_key("2026-09-15T00:00:00", &now));
     }
 
-    // qa: LIST-21:3
+    // qa: LIST-21:4
     #[test]
     fn todays_section_puts_all_day_pages_last() {
         let pages = vec!["2026-09-13", "2026-09-13T18:00:00", "2026-09-13T08:00:00"];

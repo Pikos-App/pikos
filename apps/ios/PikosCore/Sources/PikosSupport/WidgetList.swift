@@ -16,13 +16,12 @@ public enum WidgetList: Equatable, Sendable {
     public func openPages(in workspace: ReadOnlyWorkspace) async throws -> [PageSummary] {
         switch self {
         case .today:
-            return try await workspace.listToday()
+            return try await workspace.listToday().sorted(by: Self.inTimeOrder)
         case .upcoming:
             let query = PageQuery(
                 scheduledAfter: Self.day(offset: 1), scheduledBefore: Self.day(offset: 8), hasSchedule: true,
                 openOnly: true)
-            return try await workspace.listPages(query: query)
-                .sorted { PageSort.instant(of: $0.scheduledStart ?? "") < PageSort.instant(of: $1.scheduledStart ?? "") }
+            return try await workspace.listPages(query: query).sorted(by: Self.inTimeOrder)
         case .inbox:
             return try await workspace.listPages(query: PageQuery(folder: .inbox, openOnly: true))
         case .folder(let id):
@@ -34,6 +33,11 @@ public enum WidgetList: Equatable, Sendable {
     public static func setDone(_ done: Bool, pageId: String, workspaceAt path: String) async throws {
         let workspace = try await Workspace.open(path: path)
         try await workspace.setPageStatus(pageId: pageId, done: done)
+    }
+
+    /// Both reads come back in stored order, not the app's time order, so the widget sorts them.
+    private static func inTimeOrder(_ a: PageSummary, _ b: PageSummary) -> Bool {
+        PageSort.instant(of: a.scheduledStart ?? "") < PageSort.instant(of: b.scheduledStart ?? "")
     }
 
     private static func day(offset days: Int) -> String {
