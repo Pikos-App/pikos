@@ -22,8 +22,8 @@ public enum SyncStatus: Equatable, Sendable {
     case failed(String)
 }
 
-/// The CloudKit transport, over Apple's sync engine. It owns scheduling, batching, retries, change
-/// tokens and push; the workspace's engine owns every record and every merge.
+/// The CloudKit transport, over Apple's sync engine. It owns batching, retries, change tokens and
+/// push; the workspace's engine owns every record and every merge.
 @available(iOS 17.0, macOS 14.0, *)
 public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     private let coordinator: SyncCoordinator
@@ -122,18 +122,30 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     }
 
     /// Call after any local write, the app's own or one another process made: queues what's waiting
-    /// to send, and Apple's engine sends it when it next can.
+    /// to send and sends it now. Left to Apple's engine, a send waits on the system's schedule, which
+    /// can hold a phone's edits for a day. A send that fails stays queued for the engine's own retry.
     public func localChangesHappened() async {
         await queuePending(retryingFull: false)
     }
 
     private func queuePending(retryingFull: Bool) async {
         guard let engine else { return }
+
+        let ids: [CKRecord.ID]
         do {
-            let ids = try await coordinator.pending(retryingFull: retryingFull)
-            engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
+            ids = try await coordinator.pending(retryingFull: retryingFull)
         } catch {
             Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
+        guard await coordinator.hasNewChanges(ids) else { return }
+
+        do {
+            try await engine.sendChanges()
+        } catch {
+            await coordinator.sendFailed(ids)
+            Self.log.error("sending changes failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

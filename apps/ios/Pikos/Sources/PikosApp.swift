@@ -150,6 +150,11 @@ struct PikosApp: App {
             ) { _ in
                 Task { await deviceSync.fetchNow() }
             }
+            .onReceive(
+                NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            ) { _ in
+                Task { await deviceSync.localChangesHappened() }
+            }
             // Opening the workspace runs migrations, so it happens once, in
             // the app process. A widget must never be the process that
             // migrates.

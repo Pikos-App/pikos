@@ -85,8 +85,19 @@ final class DeviceSync {
         await turnOn()
     }
 
+    /// Asks iOS for time to finish the send, so an edit made just before the app is put away still
+    /// leaves the phone; past that time the send stays queued for the next launch.
     func localChangesHappened() async {
-        await starter?.localChangesHappened()
+        guard let starter else { return }
+
+        // Both closures run on the main actor, so the shared identifier never races.
+        nonisolated(unsafe) var task = UIBackgroundTaskIdentifier.invalid
+        task = UIApplication.shared.beginBackgroundTask(withName: "iCloud send") {
+            UIApplication.shared.endBackgroundTask(task)
+            task = .invalid
+        }
+        await starter.localChangesHappened()
+        if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
     }
 
     func fetchNow() async {

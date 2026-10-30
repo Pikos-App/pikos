@@ -516,4 +516,45 @@ final class SyncCoordinatorTests: XCTestCase {
             XCTAssertEqual((error as? CKError)?.code, .networkUnavailable)
         }
     }
+
+    func testARecordThatKeepsFailingIsNotSentAgainUntilSomethingElseChanges() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Too big"), storeName: "page:p1")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let stuck = try await coordinator.pending()
+        _ = await coordinator.failed(stuck[0], code: .networkFailure)
+
+        let retriesStuck = await coordinator.hasNewChanges(try await coordinator.pending())
+        await store.queue(page("p2", title: "Laundry"), storeName: "page:p2")
+        let sendsNewEdit = await coordinator.hasNewChanges(try await coordinator.pending())
+
+        XCTAssertFalse(retriesStuck)
+        XCTAssertTrue(sendsNewEdit)
+    }
+
+    func testAfterASendFailsOfflineNothingIsSentAgainUntilAnotherEdit() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let ids = try await coordinator.pending()
+
+        await coordinator.sendFailed(ids)
+
+        let retries = await coordinator.hasNewChanges(try await coordinator.pending())
+        XCTAssertFalse(retries)
+    }
+
+    func testOnceAFailingRecordIsSavedItsNextEditSendsAtOnce() async throws {
+        let store = FakeStore()
+        await store.queue(page("p1", title: "Groceries"), storeName: "page:p1")
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let ids = try await coordinator.pending()
+        _ = await coordinator.failed(ids[0], code: .networkFailure)
+        let builtAgain = try await coordinator.record(for: ids[0])
+        _ = try await coordinator.saved([try XCTUnwrap(builtAgain)])
+
+        let sendsNextEdit = await coordinator.hasNewChanges(try await coordinator.pending())
+
+        XCTAssertTrue(sendsNextEdit)
+    }
 }

@@ -38,6 +38,9 @@ public actor SyncCoordinator {
     /// the next save that goes through. Meanwhile only a fetch queues records again, so a full
     /// account is tried every few minutes rather than after every send.
     private var storageFull = false
+    /// Records whose last send failed, by store name. A record that keeps failing is left to Apple's
+    /// engine, which backs off, rather than sent again at every check for local changes.
+    private var failing: Set<String> = []
 
     /// Save failures that sending the same record again can fix, as in Apple's sync-engine sample,
     /// plus a record held back only because another in its batch failed. Every other code is
@@ -69,6 +72,11 @@ public actor SyncCoordinator {
             names[address.storeName] = address.name
         }
         return addresses.map { CKRecord.ID(recordName: $0.storeName, zoneID: zone) }
+    }
+
+    /// Whether any of `ids` is worth a send now: one that hasn't failed since it last went.
+    public func hasNewChanges(_ ids: [CKRecord.ID]) -> Bool {
+        ids.contains { !failing.contains($0.recordName) }
     }
 
     /// The record to send for a pending id, built now from the live row, or nil when it no longer
@@ -106,6 +114,7 @@ public actor SyncCoordinator {
         for record in records {
             let storeName = record.recordID.recordName
             serverCopies[storeName] = record
+            failing.remove(storeName)
             if let outgoing = inFlight.removeValue(forKey: storeName) {
                 sent.append((outgoing.record.name, outgoing.builtAt))
                 metadata.append((outgoing.record.name, RecordCodec.systemFields(of: record)))
@@ -124,6 +133,7 @@ public actor SyncCoordinator {
         let storeName = server.recordID.recordName
         inFlight[storeName] = nil
         serverCopies[storeName] = server
+        failing.remove(storeName)
         if let record = RecordCodec.decode(server) {
             names[storeName] = record.name
             try await store.applyRecords([record])
@@ -135,6 +145,7 @@ public actor SyncCoordinator {
     /// record again now.
     public func failed(_ id: CKRecord.ID, code: CKError.Code) -> Bool {
         inFlight[id.recordName] = nil
+        failing.insert(id.recordName)
         if code == .quotaExceeded {
             storageFull = true
             return false
@@ -154,6 +165,12 @@ public actor SyncCoordinator {
         if storageFull { return .storageFull }
 
         return refusedForGood.isEmpty ? .upToDate : .unsent(refusedForGood.count)
+    }
+
+    /// A send that failed as a whole, such as offline. Records it built may still be confirmed by a
+    /// send already under way, so they stay in flight.
+    public func sendFailed(_ ids: [CKRecord.ID]) {
+        failing.formUnion(ids.map(\.recordName))
     }
 
     /// The server no longer has a record this device built on: the next send starts fresh.
