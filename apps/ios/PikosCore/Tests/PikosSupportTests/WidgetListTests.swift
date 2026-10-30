@@ -42,7 +42,7 @@ final class WidgetListTests: XCTestCase {
         XCTAssertEqual(titles, ["Call mom"])
     }
 
-    // qa: LIST-21
+    // qa: LIST-21:3
     func testUpcomingPutsADaysAllDayPageAfterItsTimedPages() async throws {
         let workspace = try await Workspace.open(path: path)
         let tomorrow = DayLabel.today(now: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
