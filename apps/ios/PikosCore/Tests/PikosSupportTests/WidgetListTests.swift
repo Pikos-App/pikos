@@ -41,4 +41,17 @@ final class WidgetListTests: XCTestCase {
         let titles = try await WidgetList.today.openPages(in: widget).map(\.title)
         XCTAssertEqual(titles, ["Call mom"])
     }
+
+    // qa: LIST-21
+    func testUpcomingPutsADaysAllDayPageAfterItsTimedPages() async throws {
+        let workspace = try await Workspace.open(path: path)
+        let tomorrow = DayLabel.today(now: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        _ = try await workspace.createPage(page: NewPage(title: "Bins out", scheduledStart: tomorrow))
+        _ = try await workspace.createPage(page: NewPage(title: "Dentist", scheduledStart: tomorrow + "T09:00:00"))
+
+        let widget = try await ReadOnlyWorkspace.openExisting(path: path)
+        let titles = try await WidgetList.upcoming.openPages(in: widget).map(\.title)
+
+        XCTAssertEqual(titles, ["Dentist", "Bins out"])
+    }
 }

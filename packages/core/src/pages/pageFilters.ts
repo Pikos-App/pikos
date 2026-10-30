@@ -1,4 +1,4 @@
-import { addDays } from "date-fns";
+import { addDays, endOfDay } from "date-fns";
 
 import type { PageSummary } from "../types";
 import { formatDateOnly, isAllDayIso, localToday, parseLocalISO } from "../utils/dates";
@@ -79,18 +79,13 @@ export function belongsToView(page: PageSummary, viewId: string, todayStr: strin
 }
 
 /**
- * Convert a scheduledStart ISO string to a sort key (milliseconds).
- * All-day strings ('YYYY-MM-DD') for today sort at "now" so they land
- * between overdue (past) and upcoming (future) timed items.
- * All-day strings for other days sort at midnight (start of day).
+ * A page's start as a sort key in milliseconds. An all-day page sorts at the
+ * last moment of its day, after that day's timed pages, today included.
  * Timed strings are parsed as Date so JS DST normalization applies.
  */
 function toSortMs(page: PageSummary): number {
   const iso = viewerStart(page) ?? "";
-  if (isAllDayIso(iso)) {
-    if (iso === localToday()) return Date.now();
-    return parseLocalISO(iso).getTime();
-  }
+  if (isAllDayIso(iso)) return endOfDay(parseLocalISO(iso)).getTime();
   return parseLocalISO(iso).getTime();
 }
 

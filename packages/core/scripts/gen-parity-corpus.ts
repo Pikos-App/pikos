@@ -363,13 +363,11 @@ const TEMPLATE_PAGE: PageSummary = {
 // three things that decide what a phone shows on its home screen and in what
 // order.
 //
-// These read the wall clock, which is why the capture below freezes it. Three
-// of the functions here reach for `new Date()` or `Date.now()` internally and
-// take no reference parameter: `localToday`, `groupTodayPages`'s "now", and the
-// rule inside `toSortMs` that sorts an all-day item dated *today* at the
-// current moment rather than at midnight. That last one is the subtle
-// behaviour most worth pinning and the one a corpus taken from a live clock
-// could never reproduce twice.
+// These read the wall clock, which is why the capture below freezes it: two of
+// the functions here reach for `new Date()` internally and take no reference
+// parameter, `localToday` and `groupTodayPages`'s "now". Freezing it also pins
+// that an all-day item dated today sorts after today's timed items whatever the
+// hour, which a corpus taken from a live clock could not show.
 
 const REAL_DATE = Date;
 
@@ -418,7 +416,7 @@ const VIEW_PAGES: PageSummary[] = [
   // Earlier today, timed — overdue after that hour, not before. The boundary
   // the reference times are chosen to cross.
   { ...TEMPLATE_PAGE, id: "v_today_early", scheduledStart: "2026-03-15T01:45:00", sortOrder: 3 },
-  // All-day today — never overdue, and sorts at "now".
+  // All-day today — never overdue, and sorts after today's timed items.
   { ...TEMPLATE_PAGE, id: "v_today_allday", scheduledStart: "2026-03-15", sortOrder: 4 },
   // Later today, timed.
   { ...TEMPLATE_PAGE, id: "v_today_late", scheduledStart: "2026-03-15T18:30:00", sortOrder: 5 },

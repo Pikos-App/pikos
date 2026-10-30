@@ -22,7 +22,7 @@ public enum WidgetList: Equatable, Sendable {
                 scheduledAfter: Self.day(offset: 1), scheduledBefore: Self.day(offset: 8), hasSchedule: true,
                 openOnly: true)
             return try await workspace.listPages(query: query)
-                .sorted { ($0.scheduledStart ?? "") < ($1.scheduledStart ?? "") }
+                .sorted { PageSort.instant(of: $0.scheduledStart ?? "") < PageSort.instant(of: $1.scheduledStart ?? "") }
         case .inbox:
             return try await workspace.listPages(query: PageQuery(folder: .inbox, openOnly: true))
         case .folder(let id):

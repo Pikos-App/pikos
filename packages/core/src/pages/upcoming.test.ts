@@ -133,7 +133,7 @@ describe("groupUpcomingPages", () => {
     expect(sections).toHaveLength(2);
   });
 
-  it("sorts within a day by scheduled start, all-day first on a future day", () => {
+  it("sorts within a day by scheduled start, all-day after the timed pages", () => {
     const sections = groupUpcomingPages(
       [
         makePage({ scheduledStart: "2026-03-27T15:00:00", title: "afternoon" }),
@@ -142,7 +142,7 @@ describe("groupUpcomingPages", () => {
       ],
       TODAY
     );
-    expect(sections[0]?.pages.map((p) => p.title)).toEqual(["all-day", "morning", "afternoon"]);
+    expect(sections[0]?.pages.map((p) => p.title)).toEqual(["morning", "afternoon", "all-day"]);
   });
 
   it("buckets a timed page by its day, not its time", () => {

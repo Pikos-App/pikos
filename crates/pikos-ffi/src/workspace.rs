@@ -1079,15 +1079,13 @@ impl Workspace {
         .collect();
 
         let days: Vec<UpcomingDay> =
-            pikos_core::views::group_upcoming(pages, &today, &now, |page| {
-                page.scheduled_start.as_deref()
-            })
-            .into_iter()
-            .map(|day| UpcomingDay {
-                date: day.date,
-                pages: day.pages,
-            })
-            .collect();
+            pikos_core::views::group_upcoming(pages, &now, |page| page.scheduled_start.as_deref())
+                .into_iter()
+                .map(|day| UpcomingDay {
+                    date: day.date,
+                    pages: day.pages,
+                })
+                .collect();
         Ok(self
             .reads
             .noted(days, |days| days.iter().map(|day| day.pages.len()).sum()))

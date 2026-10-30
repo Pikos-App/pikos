@@ -1150,7 +1150,7 @@ async fn order_start(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
 }
 
 #[tokio::test]
-async fn order_start_reads_every_stored_start_as_a_full_wall_clock() {
+async fn order_start_reads_a_time_as_a_full_wall_clock_and_all_day_as_the_end_of_its_day() {
     let pool = test_pool().await;
     for (id, start) in [
         ("all-day", Some("2026-06-15")),
@@ -1165,7 +1165,7 @@ async fn order_start_reads_every_stored_start_as_a_full_wall_clock() {
     }
     assert_eq!(
         order_start(&pool, "all-day").await.as_deref(),
-        Some("2026-06-15T00:00:00")
+        Some("2026-06-15T24:00:00")
     );
     assert_eq!(
         order_start(&pool, "minutes").await.as_deref(),

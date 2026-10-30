@@ -14,7 +14,7 @@ import type {
   ViewScope,
   ViewWindow,
 } from "../types";
-import { parseLocalISO } from "../utils/dates";
+import { isAllDayIso, parseLocalISO } from "../utils/dates";
 import { emojiAwareCompare } from "../utils/sort";
 import { utcToWallClock, wallClockToUtc } from "../utils/zoned";
 
@@ -26,7 +26,7 @@ export const UPCOMING_DAYS = 7;
 
 const PRIORITY_TIERS = [1, 2, 3, 4, 0];
 
-/** A stored start as a full wall clock, as `order_start` computes it. */
+/** A stored start as a full wall clock: an all-day date at the start of its day. */
 export function wallClock(start: string): string {
   if (start.length === 10) return `${start}T00:00:00`;
   if (start.length === 16) return `${start}:00`;
@@ -49,6 +49,14 @@ export function startIn(page: PageSummary, zone: string): string | null {
   return utcToWallClock(zone, wallClockToUtc(page.timezone!, wallClock(page.scheduledStart)));
 }
 
+/** The page's key in date order, as `order_start` computes it: its start in `zone`, or for an
+ *  all-day page `T24:00:00`, after every time on its day and before the next day's midnight. */
+function orderKeyIn(page: PageSummary, zone: string): string | null {
+  const start = startIn(page, zone);
+  if (start == null || !isAllDayIso(page.scheduledStart!)) return start;
+  return `${page.scheduledStart}T24:00:00`;
+}
+
 function inScope(page: PageSummary, scope: ViewScope): boolean {
   if (scope.kind === "inbox") return page.folderId == null;
   if (scope.kind === "folder") return page.folderId === scope.folderId;
@@ -63,7 +71,7 @@ function inDates(start: string | null, bounds: DateBounds): boolean {
 
 /** A page's place in its view, in the same shape as the database's cursor. */
 function cursorOf(page: PageSummary, key: ViewKey): ViewCursor {
-  const start = startIn(page, key.zone);
+  const start = orderKeyIn(page, key.zone);
   const tie = { createdAt: page.createdAt, id: page.id, sortOrder: page.sortOrder };
   if (key.dates) return { key: start, section: 0, ...tie };
   switch (key.sort) {

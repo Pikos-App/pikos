@@ -4,8 +4,6 @@ import XCTest
 
 /// The four orders, on the cases that look right while being wrong.
 final class PageSortTests: XCTestCase {
-    private let now = "2026-09-14T15:00:00"
-
     private func page(
         _ title: String, priority: Int64 = 0, order: Int64 = 0, at start: String? = nil
     ) -> PageSort.Key {
@@ -13,7 +11,7 @@ final class PageSortTests: XCTestCase {
     }
 
     private func titles(_ keys: [PageSort.Key], by mode: PageSort.Mode) -> [String] {
-        PageSort.order(keys, by: mode, now: now) { $0 }.map(\.title)
+        PageSort.order(keys, by: mode) { $0 }.map(\.title)
     }
 
     func testManualFollowsTheStoredOrder() {
@@ -21,29 +19,17 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .manual), ["a", "b", "c"])
     }
 
-    /// Unscheduled pages sink; a timed page and an all-day one on the same
-    /// day order by the clock, with the all-day page at midnight.
-    func testDatePutsTheUnscheduledLastAndAllDayAtMidnight() {
+    /// Unscheduled pages sink; an all-day page follows its day's timed pages
+    /// and precedes the next day's.
+    func testDatePutsTheUnscheduledLastAndAllDayAfterItsDaysTimedPages() {
         let keys = [
             page("nothing"),
             page("lunch", at: "2026-09-20T12:00:00"),
             page("that day", at: "2026-09-20"),
             page("sooner", at: "2026-09-16T09:00:00"),
+            page("next day", at: "2026-09-21T00:00:00"),
         ]
-        XCTAssertEqual(titles(keys, by: .date), ["sooner", "that day", "lunch", "nothing"])
-    }
-
-    /// An all-day page dated today sits at *now*: after this morning's
-    /// meeting, before this evening's.
-    func testAnAllDayPageTodaySitsAtNow() {
-        let keys = [
-            page("evening", at: "2026-09-14T19:00:00"),
-            page("today", at: "2026-09-14"),
-            page("morning", at: "2026-09-14T09:00:00"),
-        ]
-        XCTAssertEqual(titles(keys, by: .date), ["morning", "today", "evening"])
-        XCTAssertEqual(PageSort.instant(of: "2026-09-14", now: now), now)
-        XCTAssertEqual(PageSort.instant(of: "2026-09-15", now: now), "2026-09-15T00:00:00")
+        XCTAssertEqual(titles(keys, by: .date), ["sooner", "lunch", "that day", "next day", "nothing"])
     }
 
     /// Urgent first, none last, and the date breaks ties within a tier.

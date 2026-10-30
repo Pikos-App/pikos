@@ -211,6 +211,8 @@ async fn a_range_holds_every_page_touching_it_in_the_viewers_zone() {
     .await;
     page(&pool, "before", None, Some("2026-06-14T09:00:00"), None).await;
     page(&pool, "after", None, Some("2026-06-22T00:00:00"), None).await;
+    page(&pool, "last-day-all-day", None, Some("2026-06-21"), None).await;
+    page(&pool, "all-day-after", None, Some("2026-06-22"), None).await;
     page(
         &pool,
         "long-span",
@@ -260,6 +262,7 @@ async fn a_range_holds_every_page_touching_it_in_the_viewers_zone() {
             "done",
             "first-day-timed",
             "la-early",
+            "last-day-all-day",
             "last-day-timed",
             "long-span",
             "overnight",
@@ -269,6 +272,19 @@ async fn a_range_holds_every_page_touching_it_in_the_viewers_zone() {
     assert!(!ids_in(&pool, Some(start), end, "America/New_York", true)
         .await
         .contains(&"done".to_string()));
+    let to_noon_on_the_21st = ids_in(
+        &pool,
+        Some(start),
+        "2026-06-21T16:00:00Z",
+        "America/New_York",
+        false,
+    )
+    .await;
+    assert!(
+        to_noon_on_the_21st.contains(&"last-day-all-day".to_string())
+            && !to_noon_on_the_21st.contains(&"last-day-timed".to_string()),
+        "{to_noon_on_the_21st:?}"
+    );
 
     // The same week in LA: la-late is on the 21st there, la-early on the 14th.
     let la = ids_in(

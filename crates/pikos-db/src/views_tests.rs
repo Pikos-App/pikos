@@ -204,9 +204,9 @@ async fn workspace() -> SqlitePool {
     pool
 }
 
-/// The app's comparator (`sortPages` in packages/core, ties broken by order value, then creation
-/// time, then id), written out plainly over the seeds, independent of the stored columns and the
-/// indexes.
+/// The app's comparator (`sortPages` in packages/core: by day, a day's timed pages before its
+/// all-day ones, ties broken by order value, then creation time, then id), written out plainly
+/// over the seeds, independent of the stored columns and the indexes.
 fn reference_order(scope: &ViewScope, sort: ViewSort, zone: &str) -> Vec<String> {
     let mut rows: Vec<Seed> = seeds()
         .into_iter()
@@ -217,15 +217,16 @@ fn reference_order(scope: &ViewScope, sort: ViewSort, zone: &str) -> Vec<String>
             ViewScope::Everywhere => true,
         })
         .collect();
-    let date = |p: &Seed| -> Option<String> {
+    let date = |p: &Seed| -> Option<(String, bool, String)> {
         let start = p.start?;
-        match p.synced_in {
+        let wall = match p.synced_in {
             Some(source) if start.len() > 10 => {
                 let utc = crate::sql_functions::utc_of(start, source)?;
-                wall_of(&utc, zone)
+                wall_of(&utc, zone)?
             }
-            _ => Some(crate::views::wall_clock(start)),
-        }
+            _ => crate::views::wall_clock(start),
+        };
+        Some((wall[..10].to_string(), start.len() == 10, wall))
     };
     let tie = |p: &Seed| (p.sort_order, p.created_at, p.id);
     rows.sort_by(|a, b| match sort {
@@ -511,4 +512,61 @@ async fn todays_sections_and_upcomings_days_page_out_in_date_order() {
             );
         }
     }
+}
+
+// qa: LIST-21:2
+#[tokio::test]
+async fn an_all_day_page_sorts_after_its_days_timed_pages_and_before_the_next_day() {
+    let pool = workspace().await;
+    sqlx::query(
+        "INSERT INTO pages (id, title, content_text, status, priority, tags, sort_order,
+           scheduled_start, created_at, updated_at)
+         VALUES ('next-midnight', 'Next', '', 'not_started', 0, '[]', 0, '2026-06-16T00:00:00',
+           '2026-06-01T09:00:00', '2026-06-01T09:00:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let the_15th_on = [
+        "midnight",
+        "la-6am",
+        "paris-3pm",
+        "minutes",
+        "seconds",
+        "paris-all-day",
+        "all-day",
+        "next-midnight",
+    ];
+    let inbox = ViewKey {
+        scope: ViewScope::Inbox,
+        sort: ViewSort::Date,
+        zone: "America/New_York".into(),
+        dates: None,
+    };
+    for size in [1, 2, 50] {
+        let order: Vec<String> = paged(&pool, &inbox, size)
+            .await
+            .into_iter()
+            .filter(|id| the_15th_on.contains(&id.as_str()))
+            .collect();
+        assert_eq!(order, the_15th_on, "windows of {size}");
+    }
+
+    let day = |d: u32| chrono::NaiveDate::from_ymd_opt(2026, 6, d).unwrap();
+    let dated = |from, until| ViewKey {
+        scope: ViewScope::Everywhere,
+        sort: ViewSort::Date,
+        zone: "America/New_York".into(),
+        dates: Some(DateBounds { from, until }),
+    };
+    let overdue = paged(&pool, &dated(None, day(15)), 50).await;
+    assert!(
+        !overdue.contains(&"all-day".to_string()),
+        "not overdue on its own day: {overdue:?}"
+    );
+    let today = paged(&pool, &dated(Some(day(15)), day(16)), 1).await;
+    assert_eq!(today.last().map(String::as_str), Some("f-all-day"));
+    assert!(today.contains(&"all-day".to_string()));
+    let tomorrow = paged(&pool, &dated(Some(day(16)), day(17)), 50).await;
+    assert_eq!(tomorrow, ["next-midnight"]);
 }

@@ -100,21 +100,24 @@ pub fn is_overdue(scheduled_start: &str, today: &str) -> bool {
 
 /// Where a page sorts within a date-grouped section, soonest first.
 ///
-/// The one non-obvious rule, carried from the TypeScript deliberately: an
-/// all-day item dated *today* sorts at `now`, not at midnight. Sorting it at
-/// midnight would bury every all-day task under the morning's timed ones and
-/// above nothing — "sometime today" belongs between what has already passed and
-/// what has not, which is exactly where `now` puts it. All-day items on any
-/// other day sort at that day's midnight, where there is no such ambiguity.
+/// An all-day page sorts at the last instant of its day, after that day's
+/// timed pages and before the next day's midnight, on every day including
+/// today.
 ///
-/// An unparseable value sorts at `now` as well, which keeps it visible in the
-/// middle of the list rather than pinning it to the top or the bottom, where it
-/// would look deliberate.
-pub fn schedule_sort_key(scheduled_start: &str, today: &str, now: &NaiveDateTime) -> NaiveDateTime {
-    if is_all_day_iso(scheduled_start) && scheduled_start == today {
+/// An unparseable value sorts at `now`, which keeps it visible in the middle of
+/// the list rather than pinning it to the top or the bottom, where it would
+/// look deliberate.
+pub fn schedule_sort_key(scheduled_start: &str, now: &NaiveDateTime) -> NaiveDateTime {
+    let Some(start) = parse_local_iso(scheduled_start) else {
         return *now;
+    };
+    if is_all_day_iso(scheduled_start) {
+        return start
+            .date()
+            .and_hms_nano_opt(23, 59, 59, 999_999_999)
+            .unwrap_or(start);
     }
-    parse_local_iso(scheduled_start).unwrap_or(*now)
+    start
 }
 
 /// Today's two sections, in the order they are drawn.
@@ -156,7 +159,7 @@ pub fn group_today<T>(
         .partition(|page| start_of(page).is_some_and(|start| is_overdue(start, today)));
     let key = |page: &T| {
         start_of(page)
-            .map(|start| schedule_sort_key(start, today, now))
+            .map(|start| schedule_sort_key(start, now))
             .unwrap_or(*now)
     };
     overdue.sort_by_key(&key);
@@ -179,7 +182,6 @@ pub fn group_today<T>(
 /// locks on the same door rather than the only one.
 pub fn group_upcoming<T>(
     pages: Vec<T>,
-    today: &str,
     now: &NaiveDateTime,
     start_of: impl Fn(&T) -> Option<&str>,
 ) -> Vec<UpcomingDay<T>> {
@@ -200,7 +202,7 @@ pub fn group_upcoming<T>(
     for day in &mut days {
         let key = |page: &T| {
             start_of(page)
-                .map(|start| schedule_sort_key(start, today, now))
+                .map(|start| schedule_sort_key(start, now))
                 .unwrap_or(*now)
         };
         day.pages.sort_by_key(key);
@@ -313,31 +315,39 @@ mod tests {
         assert!(!is_overdue("nope", "2026-09-13"));
     }
 
-    /// The rule worth porting rather than simplifying: "sometime today" sits
-    /// between what has passed and what has not.
     #[test]
-    fn an_all_day_item_today_sorts_at_now_rather_than_at_midnight() {
-        let today = "2026-09-13";
+    fn an_all_day_item_today_sorts_after_todays_timed_ones_whatever_the_time() {
         let now = at("2026-09-13T10:00:00");
-
-        let all_day = schedule_sort_key("2026-09-13", today, &now);
-        assert_eq!(all_day, now);
-        assert!(schedule_sort_key("2026-09-13T09:00:00", today, &now) < all_day);
-        assert!(schedule_sort_key("2026-09-13T11:00:00", today, &now) > all_day);
+        let all_day = schedule_sort_key("2026-09-13", &now);
+        assert!(schedule_sort_key("2026-09-13T09:00:00", &now) < all_day);
+        assert!(schedule_sort_key("2026-09-13T23:59:59", &now) < all_day);
+        assert!(all_day < schedule_sort_key("2026-09-14T00:00:00", &now));
     }
 
     #[test]
-    fn an_all_day_item_on_another_day_sorts_at_that_days_midnight() {
+    fn an_all_day_item_on_another_day_sorts_after_that_days_timed_ones() {
         let now = at("2026-09-13T10:00:00");
+        let all_day = schedule_sort_key("2026-09-14", &now);
+        assert!(schedule_sort_key("2026-09-14T23:59:59", &now) < all_day);
+        assert!(all_day < schedule_sort_key("2026-09-15T00:00:00", &now));
+    }
+
+    // qa: LIST-21:2
+    #[test]
+    fn todays_section_puts_all_day_pages_last() {
+        let pages = vec!["2026-09-13", "2026-09-13T18:00:00", "2026-09-13T08:00:00"];
+        let groups = group_today(pages, "2026-09-13", &at("2026-09-13T12:00:00"), |p| {
+            Some(*p)
+        });
         assert_eq!(
-            schedule_sort_key("2026-09-14", "2026-09-13", &now),
-            at("2026-09-14T00:00:00")
+            groups.today,
+            ["2026-09-13T08:00:00", "2026-09-13T18:00:00", "2026-09-13"]
         );
     }
 
     #[test]
     fn an_unreadable_schedule_sorts_where_it_stays_visible() {
         let now = at("2026-09-13T10:00:00");
-        assert_eq!(schedule_sort_key("banana", "2026-09-13", &now), now);
+        assert_eq!(schedule_sort_key("banana", &now), now);
     }
 }

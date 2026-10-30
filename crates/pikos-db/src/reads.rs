@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{Days, NaiveDate, NaiveDateTime};
+use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime};
 use serde::Serialize;
 use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 
@@ -99,15 +99,19 @@ fn parse_wall(text: &str) -> Option<NaiveDateTime> {
 /// A page's start and end as wall clocks in `zone`, the way the calendar places it: an all-day
 /// page covers its start date through its end date, a timed page with no end is a moment.
 fn interval(page: &PageSummary, start: &str, zone: &str) -> Option<(NaiveDateTime, NaiveDateTime)> {
-    let start = parse_wall(start)?;
     let scheduled = page.scheduled_start.as_deref()?;
     if scheduled.len() == 10 {
+        let first = NaiveDate::parse_from_str(scheduled, "%Y-%m-%d").ok()?;
         let last = match page.scheduled_end.as_deref() {
             Some(end) if end.len() == 10 => NaiveDate::parse_from_str(end, "%Y-%m-%d").ok()?,
-            _ => start.date(),
+            _ => first,
         };
-        return Some((start, (last + Days::new(1)).and_hms_opt(0, 0, 0)?));
+        return Some((
+            first.and_hms_opt(0, 0, 0)?,
+            (last + Days::new(1)).and_hms_opt(0, 0, 0)?,
+        ));
     }
+    let start = parse_wall(start)?;
     let end = match (
         page.scheduled_end.as_deref(),
         page.schedule_locked,
@@ -167,7 +171,14 @@ pub async fn list_range(
         if absolute {
             builder.push_bind(end.to_string());
         } else {
-            builder.push_bind(end_wall.format(WALL_FORMAT).to_string());
+            // An all-day page's key is the end of its day, so a range ending mid-day reads to the
+            // next midnight; `interval` makes the exact test.
+            let reads_to = if end_wall.time() == NaiveTime::MIN {
+                end_wall
+            } else {
+                (end_wall.date() + Days::new(1)).and_time(NaiveTime::MIN)
+            };
+            builder.push_bind(reads_to.format(WALL_FORMAT).to_string());
         }
         if let Some(start_wall) = start_wall {
             let reach_back = start_wall - reach;

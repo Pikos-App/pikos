@@ -120,6 +120,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "041",
         include_str!("../migrations/041_replica_pen_failed.sql"),
     ),
+    (
+        "042",
+        include_str!("../migrations/042_all_day_after_timed.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while

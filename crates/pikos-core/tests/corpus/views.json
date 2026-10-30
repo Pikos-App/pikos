@@ -402,13 +402,13 @@
       "todayGroups": {
         "ok": true,
         "overdue": [
-          "v_old_allday",
-          "v_old_timed"
+          "v_old_timed",
+          "v_old_allday"
         ],
         "today": [
           "v_today_early",
-          "v_today_allday",
-          "v_today_late"
+          "v_today_late",
+          "v_today_allday"
         ]
       },
       "upcomingDays": {
@@ -417,16 +417,16 @@
             "date": "2026-03-15",
             "pages": [
               "v_today_early",
-              "v_today_allday",
-              "v_today_late"
+              "v_today_late",
+              "v_today_allday"
             ]
           },
           {
             "date": "2026-03-16",
             "pages": [
-              "v_filed",
               "v_tie_a",
-              "v_tie_b"
+              "v_tie_b",
+              "v_filed"
             ]
           },
           {
@@ -597,14 +597,14 @@
       "todayGroups": {
         "ok": true,
         "overdue": [
-          "v_old_allday",
           "v_old_timed",
-          "v_today_allday",
+          "v_old_allday",
           "v_today_early",
           "v_today_late",
-          "v_filed",
+          "v_today_allday",
           "v_tie_a",
           "v_tie_b",
+          "v_filed",
           "v_day3"
         ],
         "today": []
@@ -779,16 +779,16 @@
       "todayGroups": {
         "ok": true,
         "overdue": [
-          "v_old_allday",
           "v_old_timed",
-          "v_today_allday",
+          "v_old_allday",
           "v_today_early",
-          "v_today_late"
+          "v_today_late",
+          "v_today_allday"
         ],
         "today": [
-          "v_filed",
           "v_tie_a",
-          "v_tie_b"
+          "v_tie_b",
+          "v_filed"
         ]
       },
       "upcomingDays": {
@@ -796,9 +796,9 @@
           {
             "date": "2026-03-16",
             "pages": [
-              "v_filed",
               "v_tie_a",
-              "v_tie_b"
+              "v_tie_b",
+              "v_filed"
             ]
           },
           {
@@ -975,14 +975,14 @@
       "todayGroups": {
         "ok": true,
         "overdue": [
-          "v_old_allday",
           "v_old_timed",
-          "v_today_allday",
+          "v_old_allday",
           "v_today_early",
           "v_today_late",
-          "v_filed",
+          "v_today_allday",
           "v_tie_a",
           "v_tie_b",
+          "v_filed",
           "v_day3"
         ],
         "today": [
@@ -1159,14 +1159,14 @@
       "todayGroups": {
         "ok": true,
         "overdue": [
-          "v_old_allday",
           "v_old_timed",
-          "v_today_allday",
+          "v_old_allday",
           "v_today_early",
           "v_today_late",
-          "v_filed",
+          "v_today_allday",
           "v_tie_a",
           "v_tie_b",
+          "v_filed",
           "v_day3",
           "v_day7",
           "v_day8"
@@ -1489,14 +1489,14 @@
       "todayGroups": {
         "ok": true,
         "overdue": [
-          "v_old_allday",
           "v_old_timed",
-          "v_today_allday",
+          "v_old_allday",
           "v_today_early",
           "v_today_late",
-          "v_filed",
+          "v_today_allday",
           "v_tie_a",
           "v_tie_b",
+          "v_filed",
           "v_day3",
           "v_day7",
           "v_day8",

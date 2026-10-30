@@ -55,22 +55,35 @@ describe("sortPages", () => {
     expect(sorted.map((p) => p.title)).toEqual(["Has date", "No date"]);
   });
 
-  it("date mode — all-day today sorts at 'now'", () => {
-    const today = "2026-03-27";
+  it("date mode — all-day today sorts after today's timed pages, whatever the time", () => {
     vi.useFakeTimers();
-    // Set "now" to 2026-03-27T12:00:00 local
     vi.setSystemTime(new Date(2026, 2, 27, 12, 0, 0));
 
     const pages = [
-      makePage({ scheduledStart: "2026-03-27T08:00:00", title: "Overdue timed" }),
-      makePage({ scheduledStart: today, title: "All-day today" }),
-      makePage({ scheduledStart: "2026-03-27T15:00:00", title: "Future timed" }),
+      makePage({ scheduledStart: "2026-03-28T00:00:00", title: "Tomorrow midnight" }),
+      makePage({ scheduledStart: "2026-03-27", title: "All-day today" }),
+      makePage({ scheduledStart: "2026-03-27T23:59:59", title: "Late" }),
+      makePage({ scheduledStart: "2026-03-27T08:00:00", title: "Morning" }),
     ];
     const sorted = sortPages(pages, "date");
-    // Overdue (8 AM) < all-day today (at "now" = noon) < future (3 PM)
-    expect(sorted.map((p) => p.title)).toEqual(["Overdue timed", "All-day today", "Future timed"]);
+    expect(sorted.map((p) => p.title)).toEqual([
+      "Morning",
+      "Late",
+      "All-day today",
+      "Tomorrow midnight",
+    ]);
 
     vi.useRealTimers();
+  });
+
+  it("date mode — an all-day page on another day sorts after that day's timed pages", () => {
+    const pages = [
+      makePage({ scheduledStart: "2026-04-02", title: "All-day" }),
+      makePage({ scheduledStart: "2026-04-02T18:00:00", title: "Evening" }),
+      makePage({ scheduledStart: "2026-04-01T18:00:00", title: "Day before" }),
+    ];
+    const sorted = sortPages(pages, "date");
+    expect(sorted.map((p) => p.title)).toEqual(["Day before", "Evening", "All-day"]);
   });
 
   it("title mode — alphabetical", () => {
@@ -263,11 +276,11 @@ describe("groupTodayPages", () => {
     vi.setSystemTime(new Date(2026, 2, 27, 14, 0, 0));
 
     const pages = [
-      makePage({ scheduledStart: "2026-03-27T09:00:00", title: "Timed" }),
       makePage({ scheduledStart: "2026-03-27", title: "All-day" }),
+      makePage({ scheduledStart: "2026-03-27T16:00:00", title: "Timed" }),
     ];
     const { overdue, today } = groupTodayPages(pages);
-    expect(today.map((p) => p.title).sort()).toEqual(["All-day", "Timed"]);
+    expect(today.map((p) => p.title)).toEqual(["Timed", "All-day"]);
     expect(overdue).toHaveLength(0);
 
     vi.useRealTimers();

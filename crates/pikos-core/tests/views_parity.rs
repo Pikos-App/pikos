@@ -9,10 +9,9 @@
 //! Grading the *sections* rather than only the predicates is the point. The
 //! predicates are three string comparisons and would pass a port that had the
 //! ordering entirely wrong; what a reader sees is the order, and two of its
-//! rules are easy to get plausibly wrong. An all-day item dated today sorts at
-//! the current moment rather than at midnight, so "sometime today" lands
-//! between what has passed and what has not instead of at the top of the list.
-//! And the sort is stable, so two pages sharing a moment keep the order the
+//! rules are easy to get plausibly wrong. An all-day item sorts after its day's
+//! timed items, today included, rather than at its day's midnight. And the sort
+//! is stable, so two pages sharing a moment keep the order the
 //! user arranged them in rather than swapping on every redraw.
 //!
 //! The generator freezes the clock to capture any of this: the TypeScript reads
@@ -279,7 +278,7 @@ fn upcoming_groups_the_same_days_holding_the_same_pages() {
             .filter(|p| belongs_to_upcoming(start_of(p), &case.today))
             .collect();
 
-        let days = group_upcoming(listed, &case.today, &now, start_of);
+        let days = group_upcoming(listed, &now, start_of);
         let actual: Vec<(String, Vec<String>)> = days
             .into_iter()
             .map(|d| (d.date, d.pages.into_iter().map(|p| p.id).collect()))
@@ -309,7 +308,7 @@ fn the_corpus_reaches_the_cases_worth_grading() {
         .expect("the suite's primary reference is in the corpus");
 
     // An all-day item dated today, sorted against timed items on both sides of
-    // the current moment — the rule that would look fine if it were wrong.
+    // the current moment, so a rule keyed to the clock would be caught.
     let today_day = sun_noon
         .upcoming_days
         .days

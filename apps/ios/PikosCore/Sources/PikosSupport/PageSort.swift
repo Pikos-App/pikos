@@ -4,12 +4,11 @@ import Foundation
 ///
 /// The desktop's four modes (`SortMode` in `@pikos/core`), with the same
 /// rules: manual is the hand-arranged `sort_order`; date puts the unscheduled
-/// last and an all-day page dated today at *now*, so it lands between what
-/// has passed and what has not; priority runs urgent to low with "none" last
-/// and dates breaking ties; title is the reader's own collation. Here rather
-/// than in the app so the rules can be tested on the host — the two that go
-/// wrong quietly are the unscheduled sinking and the all-day-today placement,
-/// and neither needs a simulator to check.
+/// last and an all-day page after its day's timed pages; priority runs urgent
+/// to low with "none" last and dates breaking ties; title is the reader's own
+/// collation. Here rather than in the app so the rules can be tested on the
+/// host — the two that go wrong quietly are the unscheduled sinking and the
+/// all-day placement, and neither needs a simulator to check.
 ///
 /// Generic over the page, because the summary type is generated and lives in
 /// a package this one cannot see; the caller hands over the four facts.
@@ -46,44 +45,39 @@ public enum PageSort {
 
     /// The pages in the mode's order. Stable, so equal keys keep their
     /// incoming order — which for manual is the workspace's own.
-    ///
-    /// `now` is a wall clock (`YYYY-MM-DDTHH:MM:SS`), passed in rather than
-    /// read so the all-day-today rule is testable on both sides of a minute.
-    public static func order<Page>(
-        _ pages: [Page], by mode: Mode, now: String, key: (Page) -> Key
-    ) -> [Page] {
+    public static func order<Page>(_ pages: [Page], by mode: Mode, key: (Page) -> Key) -> [Page] {
         let keyed = pages.enumerated().map { (index: $0.offset, page: $0.element, key: key($0.element)) }
         let sorted = keyed.sorted { lhs, rhs in
-            let comparison = compare(lhs.key, rhs.key, by: mode, now: now)
+            let comparison = compare(lhs.key, rhs.key, by: mode)
             return comparison == .orderedSame ? lhs.index < rhs.index : comparison == .orderedAscending
         }
         return sorted.map { $0.page }
     }
 
-    static func compare(_ a: Key, _ b: Key, by mode: Mode, now: String) -> ComparisonResult {
+    static func compare(_ a: Key, _ b: Key, by mode: Mode) -> ComparisonResult {
         switch mode {
         case .manual:
             return compareNumbers(a.sortOrder, b.sortOrder)
         case .title:
             return a.title.localizedStandardCompare(b.title)
         case .date:
-            return compareDates(a.scheduledStart, b.scheduledStart, now: now)
+            return compareDates(a.scheduledStart, b.scheduledStart)
         case .priority:
             let tiers = compareNumbers(a.priority == 0 ? 5 : a.priority, b.priority == 0 ? 5 : b.priority)
             guard tiers == .orderedSame else { return tiers }
-            return compareDates(a.scheduledStart, b.scheduledStart, now: now)
+            return compareDates(a.scheduledStart, b.scheduledStart)
         }
     }
 
     /// Scheduled before unscheduled; then by instant.
-    private static func compareDates(_ a: String?, _ b: String?, now: String) -> ComparisonResult {
+    private static func compareDates(_ a: String?, _ b: String?) -> ComparisonResult {
         switch (a, b) {
         case (nil, nil): return .orderedSame
         case (nil, _): return .orderedDescending
         case (_, nil): return .orderedAscending
         case (let a?, let b?):
-            let left = instant(of: a, now: now)
-            let right = instant(of: b, now: now)
+            let left = instant(of: a)
+            let right = instant(of: b)
             return left == right ? .orderedSame : (left < right ? .orderedAscending : .orderedDescending)
         }
     }
@@ -92,12 +86,10 @@ public enum PageSort {
     ///
     /// Zero-padded ISO compares correctly as text, which is what lets this
     /// stay string arithmetic. A timed value is already one. An all-day value
-    /// dated today becomes *now*, so it sits between the morning's passed
-    /// meetings and the afternoon's; any other all-day value becomes its
-    /// midnight, ahead of everything timed that day.
-    static func instant(of iso: String, now: String) -> String {
-        guard !iso.contains("T") else { return iso }
-        return iso == String(now.prefix(10)) ? now : iso + "T00:00:00"
+    /// becomes the end of its day, after everything timed that day and before
+    /// the next day's midnight.
+    static func instant(of iso: String) -> String {
+        iso.contains("T") ? iso : iso + "T24:00:00"
     }
 
     private static func compareNumbers(_ a: Int64, _ b: Int64) -> ComparisonResult {

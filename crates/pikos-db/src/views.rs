@@ -223,8 +223,22 @@ pub(crate) const WALL_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
 /// Upcoming's days, counting today: `UPCOMING_WINDOW_DAYS` in packages/core.
 pub(crate) const UPCOMING_DAYS: u64 = 7;
 
-/// A stored start as a full wall clock, as `order_start` computes it: an all-day date at the start
-/// of its day, a time without seconds given them.
+/// The time `order_start` gives an all-day date, so it sorts as text after every time on its day
+/// and before the next day's midnight.
+const ALL_DAY_TIME: &str = "T24:00:00";
+
+/// Where an instant stream resumes after a floating all-day cursor: the next day's midnight, since
+/// every time on the cursor's day sorts before it and none sorts equal. None for any other key.
+fn after_all_day(key: &str) -> Option<String> {
+    let day = key.strip_suffix(ALL_DAY_TIME)?;
+    let next = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d")
+        .ok()?
+        .succ_opt()?;
+    Some(format!("{next}T00:00:00"))
+}
+
+/// A stored start as a full wall clock: an all-day date at the start of its day, a time without
+/// seconds given them.
 pub(crate) fn wall_clock(start: &str) -> String {
     match start.len() {
         10 => format!("{start}T00:00:00"),
@@ -299,7 +313,16 @@ async fn read_stream(
         builder.push(" AND priority = ");
         builder.push_bind(tier);
     }
-    if let Some(cursor) = after {
+    let resume_at = match (stream, after) {
+        (Stream::Absolute, Some(cursor)) => cursor.key.as_deref().and_then(after_all_day),
+        _ => None,
+    };
+    if let Some(midnight) = resume_at {
+        let utc = utc_of(&midnight, &key.zone)
+            .ok_or_else(|| AppError::Invalid(format!("no instant for {midnight}")))?;
+        builder.push(" AND abs_start_utc >= ");
+        builder.push_bind(utc);
+    } else if let Some(cursor) = after {
         match (key_column, &cursor.key) {
             (Some((column, _)), Some(cursor_key)) => {
                 builder.push(format!(" AND ({column}, sort_order, created_at, id) > ("));
