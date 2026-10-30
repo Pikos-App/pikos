@@ -74,43 +74,50 @@ struct PageRow: View {
                 }
             }
 
-            if let detailLine {
-                detailLine
-                    .font(.pkBodySm)
-                    .foregroundStyle(.textTertiary)
-                    .lineLimit(1)
+            if subtitle != nil || hasMarkers {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.pkBodySm)
+                            .foregroundStyle(.textTertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    markers
+                }
             }
         }
         .padding(.top, 12 + settings.listDensity.rowPadding)
         .padding(.bottom, 11 + settings.listDensity.rowPadding)
     }
 
-    /// Folder, first tag and subtitle as one line, subtitle last so a long one truncates rather
-    /// than pushing the short labels off the row. Repeating isn't marked: the page itself says so.
-    private var detailLine: Text? {
-        var parts: [Text] = []
+    private var subtitle: String? {
+        guard settings.listDensity != .compact, let subtitle = page.subtitle, !subtitle.isEmpty else { return nil }
 
-        if showsFolder, let folder {
-            let dot = Text(Image(systemName: "circle.fill"))
-                .font(.system(size: 7))
-                .foregroundStyle(Color(hex: folder.color) ?? Color.textDisabled)
-            parts.append((dot + Text(verbatim: " \(folder.name)")).accessibilityLabel("In \(folder.name)"))
+        return subtitle
+    }
+
+    private var hasMarkers: Bool {
+        page.isRecurring || (showsFolder && folder != nil)
+    }
+
+    /// Small marks under the date, so the subtitle keeps the line's width: whether the page
+    /// repeats, and in the date views the folder's colour. Tags aren't listed; the page shows them.
+    private var markers: some View {
+        HStack(spacing: 6) {
+            if page.isRecurring {
+                Image(systemName: "repeat")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.textTertiary)
+                    .accessibilityLabel("Repeats")
+            }
+            if showsFolder, let folder {
+                Circle()
+                    .fill(Color(hex: folder.color) ?? Color.textDisabled)
+                    .frame(width: 8, height: 8)
+                    .accessibilityLabel("In \(folder.name)")
+            }
         }
-
-        if let tag = page.tags.first {
-            let more = page.tags.count > 1 ? " +\(page.tags.count - 1)" : ""
-            parts.append(
-                Text(verbatim: "#\(tag)\(more)")
-                    .accessibilityLabel("Tagged \(page.tags.joined(separator: ", "))"))
-        }
-
-        if settings.listDensity != .compact, let subtitle = page.subtitle, !subtitle.isEmpty {
-            parts.append(Text(subtitle))
-        }
-
-        guard let first = parts.first else { return nil }
-
-        return parts.dropFirst().reduce(first) { $0 + Text(verbatim: "  ·  ") + $1 }
     }
 
     private var folder: Folder? {
