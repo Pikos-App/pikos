@@ -135,8 +135,15 @@ export function collapseUnderWidth(
           (b.widthPct / 100) * columnWidth < OVERFLOW_MIN_WIDTH_PX)
     );
     if (collapsed.length === 0) continue;
+    let pill = pillFor(collapsed, columnWidth, chipHeight, zoom);
+    let covered = coveredTitles(cluster, first, collapsed, pill);
+    while (covered.length > 0) {
+      collapsed.push(...covered);
+      pill = pillFor(sortedLike(cluster, collapsed), columnWidth, chipHeight, zoom);
+      covered = coveredTitles(cluster, first, collapsed, pill);
+    }
     for (const b of collapsed) collapsedIds.add(b.page.id);
-    pills.push(pillFor(collapsed, columnWidth, chipHeight, zoom));
+    pills.push(pill);
   }
   if (pills.length === 0) return { pills, visible: blocks };
   return { pills, visible: blocks.filter((b) => !collapsedIds.has(b.page.id)) };
@@ -156,6 +163,29 @@ function groupByPixelOverlap(blocks: CalendarBlock[]): CalendarBlock[][] {
   const clusters: CalendarBlock[][] = Array.from({ length: cluster + 1 }, () => []);
   for (const b of blocks) clusters[clusterOf.get(b)!]!.push(b);
   return clusters;
+}
+
+/** Blocks still showing whose title row the pill would sit on. Three pages at one time share the
+ *  right half between the second and third, so the third's pill landed on the second and read
+ *  "+1 more" over a page nobody could see. */
+function coveredTitles(
+  cluster: CalendarBlock[],
+  first: CalendarBlock,
+  collapsed: CalendarBlock[],
+  pill: OverflowPill
+): CalendarBlock[] {
+  return cluster.filter((b) => {
+    if (b === first || collapsed.includes(b)) return false;
+    const sharesColumn =
+      b.leftPct < pill.leftPct + pill.widthPct && pill.leftPct < b.leftPct + b.widthPct;
+    const titleUnderPill = Math.abs(b.top - pill.top) < pill.height;
+    return sharesColumn && titleUnderPill;
+  });
+}
+
+/** `blocks` in the order `cluster` holds them, which is the order a pill lists them in. */
+function sortedLike(cluster: CalendarBlock[], blocks: CalendarBlock[]): CalendarBlock[] {
+  return cluster.filter((b) => blocks.includes(b));
 }
 
 function pillFor(

@@ -186,6 +186,31 @@ describe("collapseUnderWidth", () => {
     ]);
   });
 
+  // qa: CAL-29
+  it("counts a block whose title the pill would cover into the pill", () => {
+    // Three pages at one time: the second and third share the right half, and the third, past the
+    // depth cap, folds into a pill drawn over the second's title.
+    const blocks = [
+      makeBlock("first", 0, 50, 100, 60, 0),
+      makeBlock("second", 50, 50, 100, 60, 1),
+      makeBlock("third", 50, 50, 100, 60, 2),
+    ];
+    const { pills, visible } = collapseUnderWidth(blocks, 200);
+    expect(visible.map((b) => b.page.id)).toEqual(["first"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["second", "third"]]);
+  });
+
+  it("leaves a cascaded block whose title stays clear of the pill", () => {
+    const blocks = [
+      makeBlock("host", 0, 100, 0, 300, 0),
+      makeBlock("guest", 12, 88, 50, 200, 1),
+      makeBlock("deep", 24, 76, 150, 60, 2),
+    ];
+    const { pills, visible } = collapseUnderWidth(blocks, 300);
+    expect(visible.map((b) => b.page.id)).toEqual(["host", "guest"]);
+    expect(pills.map((p) => p.pageIds)).toEqual([["deep"]]);
+  });
+
   it("keeps a cluster's first event when every block in it is too narrow", () => {
     const blocks = [makeBlock("left", 0, 50, 100), makeBlock("right", 50, 50, 100)];
     const { pills, visible } = collapseUnderWidth(blocks, 110);
