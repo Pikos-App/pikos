@@ -94,8 +94,7 @@ fn only_a_file_pikos_saved_is_named_as_one() {
 }
 
 // The cross-language fixture directory; `assetPath.conformance.test.ts` reads the same file.
-const ASSET_PATHS: &str =
-    include_str!("../tests/fixtures/asset-paths.json");
+const ASSET_PATHS: &str = include_str!("../tests/fixtures/asset-paths.json");
 
 // qa: PRIV-04:4
 #[test]

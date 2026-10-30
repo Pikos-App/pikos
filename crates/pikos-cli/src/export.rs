@@ -58,8 +58,7 @@ async fn write(
         Format::Markdown => {
             let workspace_dir = Path::new(db_path).parent().unwrap_or(Path::new("."));
             let assets_dir = workspace_dir.join(pikos_db::assets::ASSET_DIR);
-            pikos_db::export::write_markdown_export(pool, out, &assets_dir, include_synced)
-                .await?;
+            pikos_db::export::write_markdown_export(pool, out, &assets_dir, include_synced).await?;
         }
         Format::Csv => {
             let csv = pikos_db::export::build_export_csv(pool, include_synced).await?;

@@ -2508,7 +2508,10 @@ fn export_out(db: &str, name: &str) -> PathBuf {
 }
 
 fn export(db: &str, format: &str, out: &std::path::Path) -> Output {
-    cli(db, &["export", format, "--out", out.to_str().unwrap(), "--json"])
+    cli(
+        db,
+        &["export", format, "--out", out.to_str().unwrap(), "--json"],
+    )
 }
 
 #[tokio::test]
@@ -2535,7 +2538,11 @@ async fn export_markdown_writes_each_page_with_its_images() {
     let out = export_out(dbs, "markdown");
     let run = export(dbs, "markdown", &out);
 
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     assert_eq!(json(&run)["path"], out.to_str().unwrap());
     let page = std::fs::read_to_string(out.join("Trip notes.md")).unwrap();
     assert!(page.contains("title: \"Trip notes\""), "{page}");
@@ -2552,10 +2559,17 @@ async fn export_csv_writes_a_row_per_page() {
     let out = export_out(dbs, "pages.csv");
     let run = export(dbs, "csv", &out);
 
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let csv = std::fs::read_to_string(&out).unwrap();
     assert_eq!(csv.lines().count(), 3, "{csv}");
-    assert!(csv.contains("Buy milk") && csv.contains("Call Sam"), "{csv}");
+    assert!(
+        csv.contains("Buy milk") && csv.contains("Call Sam"),
+        "{csv}"
+    );
 }
 
 #[tokio::test]
@@ -2575,7 +2589,11 @@ async fn export_ics_writes_a_scheduled_page_as_an_event() {
     let out = export_out(dbs, "pages.ics");
     let run = export(dbs, "ics", &out);
 
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let ics = std::fs::read_to_string(&out).unwrap();
     assert_eq!(ics.matches("BEGIN:VEVENT").count(), 1, "{ics}");
     assert!(ics.contains("SUMMARY:Dentist"), "{ics}");
@@ -2590,7 +2608,11 @@ async fn export_sqlite_writes_a_backup_that_opens_with_the_pages() {
     let out = export_out(dbs, "backup.sqlite");
     let run = export(dbs, "sqlite", &out);
 
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let title: String = scalar(out.to_str().unwrap(), "SELECT title FROM pages").await;
     assert_eq!(title, "Kept safe");
 }
@@ -2606,5 +2628,8 @@ async fn export_refuses_to_overwrite_an_existing_file() {
     let run = export(dbs, "csv", &out);
 
     assert!(!run.status.success());
-    assert_eq!(std::fs::read_to_string(&out).unwrap(), "last night's export");
+    assert_eq!(
+        std::fs::read_to_string(&out).unwrap(),
+        "last night's export"
+    );
 }
