@@ -349,7 +349,7 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-10
-    /// The switcher is spring-loaded: a page held over the title opens it, and a folder in it takes the drop.
+    /// The menu is spring-loaded: a page held over the title opens it, and a folder in it takes the drop.
     func testAPageCarriedOntoAFolderInTheSwitcherMovesThere() {
         app.buttons["Switch view"].firstMatch.tap()
         let newFolder = app.buttons["New folder"].firstMatch
@@ -366,8 +366,9 @@ final class TierOneTests: PikosUITestCase {
         let folder = app.buttons.matching(NSPredicate(format: "label == 'Errands' OR label BEGINSWITH 'Errands, '")).firstMatch
         XCTAssertTrue(folder.waitForExistence(timeout: Self.timeout))
         let folderPoint = CGPoint(x: folder.frame.midX, y: folder.frame.midY)
-        switcher.tap()
-        XCTAssertTrue(waitForDisappearance(of: folder), "the switcher closes before the drag")
+        // On the strip of list left showing: the middle of the dimmed screen is under the menu.
+        app.buttons["Close menu"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(waitForDisappearance(of: folder), "the menu closes before the drag")
 
         TouchPath(stops: [
             .init(point: CGPoint(x: page.frame.midX, y: page.frame.midY), hold: 1.2),
@@ -378,6 +379,38 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(
             app.staticTexts["Moved to Errands"].waitForExistence(timeout: 5), "the drop files the page and says where")
         XCTAssertTrue(waitForDisappearance(of: page), "and it leaves the Inbox")
+    }
+
+    // qa: IOS-70
+    func testTheMenuButtonOpensADrawerThatHoldsSettingsAndClosesFromTheStrip() {
+        let menu = app.buttons["Switch view"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["Settings"].exists, "Settings has left the header")
+
+        menu.tap()
+        let trash = app.buttons["Trash"].firstMatch
+        XCTAssertTrue(trash.waitForExistence(timeout: Self.timeout), "the menu holds the trash")
+        XCTAssertLessThan(trash.frame.maxX, app.frame.maxX - 40, "and leaves a strip of the list beside it")
+        app.buttons["Close menu"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(waitForDisappearance(of: trash), "a tap on the strip closes it")
+
+        menu.tap()
+        app.buttons["Settings"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: Self.timeout), "and Settings opens from it")
+    }
+
+    // qa: IOS-71
+    func testASwipeInFromTheLeftEdgeOpensTheMenuAndASwipeBackClosesIt() {
+        XCTAssertTrue(app.buttons["Switch view"].firstMatch.waitForExistence(timeout: Self.timeout))
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)))
+        let trash = app.buttons["Trash"].firstMatch
+        XCTAssertTrue(trash.waitForExistence(timeout: Self.timeout), "the swipe opens the menu")
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.6)))
+        XCTAssertTrue(waitForDisappearance(of: trash), "and a swipe back closes it")
     }
 
     // qa: IOS-09:2

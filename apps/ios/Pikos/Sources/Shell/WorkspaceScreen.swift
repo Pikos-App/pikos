@@ -59,6 +59,7 @@ struct WorkspaceScreen: View {
             }
         }
         .background(.surfacePrimary)
+        .overlay { ScopeDrawer(opensFromEdge: layout == .sideBySide || route.pane == .list) }
         .toolbar(.hidden, for: .navigationBar)
         .onDrop(of: [.text], delegate: PageDragWatch(drag: drag))
         .environment(drag)

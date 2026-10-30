@@ -6,7 +6,7 @@ import TipKit
 /// The list pane: the view being shown, the rest of today under it, and every verb a row has.
 /// The day under it is left out wherever the calendar is on screen beside it.
 ///
-/// The title is the switcher, as it is on the desktop when the sidebar is hidden; the sort/select
+/// The title opens the switcher as a drawer, the desktop's sidebar folded away; the sort/select
 /// menu is the header's one tool. Search lives in the bottom bar, in reach from either pane.
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
@@ -24,7 +24,6 @@ struct PageListScreen: View {
     private let swipeTip = SwipeRowTip()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.shellLayout) private var layout
 
     var body: some View {
@@ -38,13 +37,6 @@ struct PageListScreen: View {
                 } else {
                     DayPeek()
                         .transition(.move(edge: .bottom))
-                }
-            }
-            // An overlay, so the switcher's height never sets the pane's: as a stacked sibling, a
-            // keyboard raised to name a folder made the pane overflow and push the header under the clock.
-            .overlay(alignment: .top) {
-                if route.isSwitcherPresented {
-                    switcherLayer
                 }
             }
         }
@@ -61,7 +53,6 @@ struct PageListScreen: View {
             SchedulePageSheet(pages: batch.pages) { leaveSelection() }
         }
         .animation(reduceMotion ? nil : .pkQuick, value: isSelecting)
-        .animation(reduceMotion ? nil : .pkQuick, value: route.isSwitcherPresented)
         .onChange(of: store.scope) { _, _ in leaveSelection() }
         .onChange(of: isSelecting) { _, selecting in route.isSelectingPages = selecting }
         .task {
@@ -117,47 +108,39 @@ struct PageListScreen: View {
                         .font(.pkUI)
                         .foregroundStyle(.textAction)
                         .frame(minWidth: 44, minHeight: 44)
+                        .padding(.trailing, 8)
                 } else {
                     // Its room is kept, so the tools beside it stay put when the first page arrives.
                     Text("Select")
                         .font(.pkUI)
                         .frame(minWidth: 44, minHeight: 44)
+                        .padding(.trailing, 8)
                         .hidden()
                 }
-                Button {
-                    route.isSettingsPresented = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.textSecondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Settings")
             }
         }
     }
 
-    /// Spring-loaded, so a page carried onto the title and held there opens the folders to drop it on.
+    /// The menu button and the title are one control, spring-loaded, so a page carried onto either
+    /// and held there opens the folders to drop it on.
     private var switcherButton: some View {
         Button {
-            route.isSwitcherPresented = drag.page != nil || !route.isSwitcherPresented
+            route.isSwitcherPresented = true
         } label: {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(.textSecondary)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(store.scope.title)
                         .font(.pkScreenTitle)
                         .foregroundStyle(.textPrimary)
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
+                    Text(subline)
+                        .font(.pkUISm)
                         .foregroundStyle(.textTertiary)
-                        .rotationEffect(.degrees(route.isSwitcherPresented ? 180 : 0))
+                        .lineLimit(1)
                 }
-                Text(subline)
-                    .font(.pkUISm)
-                    .foregroundStyle(.textTertiary)
-                    .lineLimit(1)
             }
             .contentShape(Rectangle())
         }
@@ -206,26 +189,6 @@ struct PageListScreen: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("Sort")
-    }
-
-    /// Capped by the pane as well as by 560 points: a phone on its side has about 300 under the
-    /// header, and the trash at the switcher's foot has to stay above the bar.
-    private var switcherLayer: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                Color.black.opacity(colorScheme == .dark ? 0.5 : 0.16)
-                    .ignoresSafeArea(edges: .bottom)
-                    .onTapGesture { route.isSwitcherPresented = false }
-                    .accessibilityHidden(true)
-                    .transition(.opacity)
-                ScopeSwitcher()
-                    .frame(maxHeight: min(560, geometry.size.height - ShellBar.clearance))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 6)
-                    .transition(.opacity)
-            }
-        }
     }
 
     // MARK: - Content

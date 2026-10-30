@@ -2,19 +2,18 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// Every place the list can be, dropped from its title: the desktop's sidebar, folded into the
-/// switcher the desktop already shows when its window is too narrow for one.
+/// Every place the list can be: the desktop's sidebar, drawn in from the left on a phone and
+/// beside the list where the window has room for three panels.
 ///
-/// It also carries what the corner buttons used to hide — the trash and Settings — so the top of
-/// the screen is a name and two tools, and nothing else. Where the window has room for three
-/// panels it is the sidebar itself, unfolded.
+/// It also carries what the corner buttons used to hide, the trash and Settings, so the top of the
+/// screen is a name and two tools, and nothing else.
 struct ScopeSwitcher: View {
     enum Style {
-        case dropdown
+        case drawer
         case sidebar
     }
 
-    var style: Style = .dropdown
+    var style: Style = .drawer
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -26,25 +25,22 @@ struct ScopeSwitcher: View {
 
     var body: some View {
         switch style {
-        case .dropdown:
+        case .drawer:
+            // The shadow is the ground's alone: on the whole view it fell under every row.
             rows
-                .background(ground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(.borderSecondary, lineWidth: 1))
-                .shadow(color: .black.opacity(0.14), radius: 24, y: 10)
-                .accessibilityAddTraits(.isModal)
+                .background {
+                    ground
+                        .ignoresSafeArea()
+                        .shadow(color: .black.opacity(0.14), radius: 24, x: 6)
+                }
         case .sidebar:
             rows
                 .background(ground)
         }
     }
 
-    /// A raised card over the list, or the desktop sidebar's tone beside it.
-    private var ground: Color {
-        style == .sidebar ? .surfaceTertiary : .surfaceElevated
-    }
+    /// The desktop sidebar's tone, in the drawer as beside the list.
+    private let ground = Color.surfaceTertiary
 
     private var rows: some View {
         ScrollView {
@@ -138,9 +134,13 @@ struct ScopeSwitcher: View {
                 route.isSwitcherPresented = false
                 route.isTrashPresented = true
             }
+            footerButton("Settings", systemImage: "gearshape") {
+                route.isSwitcherPresented = false
+                route.isSettingsPresented = true
+            }
         }
         .frame(height: 48)
-        .background(ground)
+        .background(ground.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Rectangle().fill(.borderSecondary).frame(height: 1) }
     }
 

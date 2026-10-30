@@ -42,6 +42,8 @@ struct WorkspaceSplitView: View {
                     .routeDestinations()
             }
         }
+        // For when the sidebar is folded away, as it is on an iPad held upright.
+        .overlay { ScopeDrawer(opensFromEdge: false) }
         .onDrop(of: [.text], delegate: PageDragWatch(drag: drag))
         .environment(drag)
     }
