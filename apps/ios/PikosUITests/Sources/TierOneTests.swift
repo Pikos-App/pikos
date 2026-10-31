@@ -129,6 +129,40 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(row(titled: "Fix the sink").staticTexts["#home"].exists, "and tagged with it")
     }
 
+    // qa: IOS-73
+    /// The link the List widget's add button opens on Today.
+    func testALinkNamingADayOpensQuickAddOnThatDayWithNothingTyped() throws {
+        var link = URLComponents(string: "pikos://quick-add")!
+        link.queryItems = [URLQueryItem(name: "text", value: "today ")]
+        app.open(try XCTUnwrap(link.url))
+
+        let input = textInput("What needs doing?")
+        XCTAssertTrue(input.waitForExistence(timeout: Self.timeout), "quick add opens")
+        XCTAssertTrue(app.buttons["When: Today"].waitForExistence(timeout: 5), "on today")
+        XCTAssertTrue((input.value as? String ?? "").isEmpty, "with nothing typed")
+    }
+
+    // qa: IOS-74
+    func testPickingADayByHandTakesTheTypedDayOutOfTheLine() {
+        app.buttons["New page"].firstMatch.tap()
+        let input = textInput("What needs doing?")
+        XCTAssertTrue(input.waitForExistence(timeout: Self.timeout))
+        input.tap()
+        input.typeText("Fix the sink tomorrow")
+        let when = app.buttons["When: Tomorrow"].firstMatch
+        XCTAssertTrue(when.waitForExistence(timeout: 5), "the typed day is read")
+
+        when.tap()
+        app.buttons["Today"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["When: Today"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            (input.value as? String)?.trimmingCharacters(in: .whitespaces), "Fix the sink",
+            "the typed day leaves the line")
+        app.buttons["Add"].firstMatch.tap()
+
+        assertRowExists("Fix the sink", "and the page is on the day picked")
+    }
+
     // qa: IOS-19
     /// A workspace a test build made under a migration number that now means something else.
     func testAWorkspaceFromAnotherBuildIsSetAsideAndANewOneWorks() {

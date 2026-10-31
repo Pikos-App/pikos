@@ -163,6 +163,26 @@ final class Route {
         isQuickAddPresented = true
     }
 
+    /// Quick add from a link, with a day its words name already chosen rather than typed, so the
+    /// widgets' "today" opens on today with an empty line. "today at 3pm" opens on that time, as a
+    /// pressed calendar slot does.
+    private func presentQuickAdd(linked words: String) {
+        let parsed = ParsedLine(line: words, reference: Date())
+        quickAddPrefill = words
+        quickAddPrefillDate = nil
+        quickAddPrefillMinutes = nil
+
+        if let start = parsed.scheduledStart, let rest = parsed.removingWhen(from: words) {
+            quickAddPrefill = rest
+            if start.contains("T") {
+                quickAddPrefillDate = QuickAddSheet.wallClock(start)
+            } else {
+                quickAddContext = QuickAddContext(day: start)
+            }
+        }
+        isQuickAddPresented = true
+    }
+
     /// Forget both prefills. Called when the sheet closes, whatever opened it.
     func clearQuickAddPrefill() {
         quickAddPrefill = ""
@@ -239,10 +259,7 @@ final class Route {
             showWeek(on: Date())
 
         case .quickAdd(let prefill):
-            quickAddPrefill = prefill
-            quickAddPrefillDate = nil
-            quickAddPrefillMinutes = nil
-            isQuickAddPresented = true
+            presentQuickAdd(linked: prefill)
 
         case .search(let prefill):
             searchPrefill = prefill

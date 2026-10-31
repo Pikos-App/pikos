@@ -43,6 +43,19 @@ public enum QuickAddHighlight {
         return tokens.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
 
+    /// The line without the words read as a date or a time, for a date the controls hold instead.
+    /// A repeat's or a reminder's words are `when` too, so a caller with either keeps the line.
+    public static func removingWhen(from line: String, title: String) -> String {
+        var kept = ""
+        var from = line.startIndex
+        for token in tokens(in: line, title: title) where token.kind == .when {
+            kept += line[from..<token.range.lowerBound]
+            from = line[token.range.upperBound...].firstIndex { !$0.isWhitespace } ?? line.endIndex
+        }
+
+        return kept + line[from...]
+    }
+
     private struct Word {
         let range: Range<String.Index>
     }

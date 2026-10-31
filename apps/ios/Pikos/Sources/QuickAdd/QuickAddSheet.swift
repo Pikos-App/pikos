@@ -203,10 +203,10 @@ struct QuickAddSheet: View {
         .animation(reduceMotion ? nil : .pkQuick, value: parsed?.hasAnything)
         .animation(reduceMotion ? nil : .pkQuick, value: isPickingDate)
         .onChange(of: schedule) { _, new in
-            if new != appliedSchedule { scheduleIsManual = true }
+            if new != appliedSchedule { takeScheduleByHand() }
         }
         .onChange(of: date) { _, new in
-            if new != appliedDate { scheduleIsManual = true }
+            if new != appliedDate { takeScheduleByHand() }
         }
         .onChange(of: folderId) { _, new in
             if new != appliedFolderId { folderIsManual = true }
@@ -225,6 +225,13 @@ struct QuickAddSheet: View {
         .onDisappear {
             route.quickAddDraft = isFinished ? "" : line
         }
+    }
+
+    /// A date picked by hand takes the typed one out of the line, so the line never names a day
+    /// the page won't be on.
+    private func takeScheduleByHand() {
+        scheduleIsManual = true
+        if let rest = parsed?.removingWhen(from: line) { line = rest }
     }
 
     private var canSave: Bool { !savedTitle.isEmpty && !isSaving }
@@ -624,6 +631,13 @@ struct ParsedLine {
         if case .set(let value) = input.priority { priority = value }
         reminders = input.reminderMinutes
         content = input.content
+    }
+
+    /// `line` with its date and time taken out, for a date the controls hold instead. Nil with no
+    /// date, or with a repeat or a reminder, whose words would go with it.
+    func removingWhen(from line: String) -> String? {
+        guard scheduledStart != nil, repeats == nil, reminders.isEmpty else { return nil }
+        return QuickAddHighlight.removingWhen(from: line, title: title)
     }
 
     var hasAnything: Bool {

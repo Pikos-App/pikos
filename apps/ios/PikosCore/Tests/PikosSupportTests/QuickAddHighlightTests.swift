@@ -37,4 +37,20 @@ final class QuickAddHighlightTests: XCTestCase {
         XCTAssertTrue(read("Water the plants", title: "Water the plants").isEmpty)
         XCTAssertTrue(read("", title: "").isEmpty)
     }
+
+    func testRemovingTheDateKeepsEverythingElseAsTyped() {
+        let line = "Call the dentist tomorrow at 3pm #health // ask  about the bill"
+        XCTAssertEqual(
+            QuickAddHighlight.removingWhen(from: line, title: "Call the dentist"),
+            "Call the dentist #health // ask  about the bill")
+    }
+
+    func testALineThatWasOnlyADateBecomesEmpty() {
+        XCTAssertEqual(QuickAddHighlight.removingWhen(from: "today ", title: ""), "")
+        XCTAssertEqual(QuickAddHighlight.removingWhen(from: "today at 3pm #home ", title: ""), "#home ")
+    }
+
+    func testALineWithNoDateIsLeftAlone() {
+        XCTAssertEqual(QuickAddHighlight.removingWhen(from: "Buy milk #home", title: "Buy milk"), "Buy milk #home")
+    }
 }
