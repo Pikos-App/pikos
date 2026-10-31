@@ -44,6 +44,7 @@ struct QuickAddSheet: View {
     @State private var isFinished = false
 
     @State private var line: String
+    @State private var note = ""
     @State private var folderId: String?
     @State private var schedule: Schedule = .none
     @State private var date = Date()
@@ -164,6 +165,13 @@ struct QuickAddSheet: View {
                     .transition(.opacity)
             }
 
+            TextField("Add a note", text: $note, axis: .vertical)
+                .font(.pkBodySm)
+                .foregroundStyle(.textPrimary)
+                .lineLimit(1...6)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+
             Rectangle().fill(.borderSecondary).frame(height: 1)
 
             chipRow
@@ -223,7 +231,7 @@ struct QuickAddSheet: View {
             if !line.isEmpty { reparse() }
         }
         .onDisappear {
-            route.quickAddDraft = isFinished ? "" : line
+            route.quickAddDraft = isFinished ? "" : lineWithNote
         }
     }
 
@@ -232,6 +240,24 @@ struct QuickAddSheet: View {
     private func takeScheduleByHand() {
         scheduleIsManual = true
         if let rest = parsed?.removingWhen(from: line) { line = rest }
+    }
+
+    private var typedNote: String? {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// The line with the note after it as the `//` body, which the parser already makes the
+    /// page's content.
+    private var lineWithNote: String {
+        guard let typedNote else { return line }
+        return parsed?.content == nil ? "\(line) // \(typedNote)" : "\(line)\n\(typedNote)"
+    }
+
+    /// The `//` body typed in the line, then the note.
+    private var pageContent: String? {
+        let parts = [parsed?.content, typedNote].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
     private var canSave: Bool { !savedTitle.isEmpty && !isSaving }
@@ -481,7 +507,7 @@ struct QuickAddSheet: View {
             // exactly this reason, and defaulting it here would let a line
             // typed at 23:59 land on a different day than the one shown.
             let created = await store.createFromQuickAdd(
-                line, reference: parsed?.reference ?? Date(), folderId: folderId)
+                lineWithNote, reference: parsed?.reference ?? Date(), folderId: folderId)
             // The chip overrules the line, the way a picked date does: a
             // priority chosen by hand after typing "!high" is the later
             // decision, and "None" chosen by hand is a real one.
@@ -500,7 +526,7 @@ struct QuickAddSheet: View {
             NewPage(
                 title: savedTitle,
                 folderId: folderId,
-                content: parsed?.content.map { plainTextToDocument(text: $0) },
+                content: pageContent.map { plainTextToDocument(text: $0) },
                 tags: parsed?.tags,
                 scheduledStart: manualScheduledStart,
                 scheduledEnd: manualEnd.map(Self.storedWallClock)

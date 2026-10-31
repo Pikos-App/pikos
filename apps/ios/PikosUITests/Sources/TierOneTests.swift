@@ -163,6 +163,25 @@ final class TierOneTests: PikosUITestCase {
         assertRowExists("Fix the sink", "and the page is on the day picked")
     }
 
+    // qa: IOS-75
+    func testANoteTypedInQuickAddIsThePagesContent() {
+        app.buttons["New page"].firstMatch.tap()
+        let input = textInput("What needs doing?")
+        XCTAssertTrue(input.waitForExistence(timeout: Self.timeout))
+        input.tap()
+        input.typeText("Trip notes today")
+        let note = textInput("Add a note")
+        note.tap()
+        note.typeText("Pack the charger")
+        app.buttons["Add"].firstMatch.tap()
+
+        assertRowExists("Trip notes")
+        app.staticTexts["Trip notes"].firstMatch.tap()
+        XCTAssertTrue(
+            app.webViews.firstMatch.staticTexts["Pack the charger"].waitForExistence(timeout: Self.timeout),
+            "the note opens as the page's content")
+    }
+
     // qa: IOS-19
     /// A workspace a test build made under a migration number that now means something else.
     func testAWorkspaceFromAnotherBuildIsSetAsideAndANewOneWorks() {
