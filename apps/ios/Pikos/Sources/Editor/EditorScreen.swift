@@ -11,7 +11,7 @@ import UIKit
 /// to one written on the desktop. Above it sits the desktop's page header, native: the title, the
 /// one-sentence subtitle, and the byline of status, folder, date, priority and tags, each of which
 /// changes itself. The header gives its height back while the document has the keyboard or a focus
-/// session runs, and comes back when the page is scrolled to its top or the bar's title is tapped.
+/// session runs, and comes back when the bar's title is tapped.
 struct EditorScreen: View {
     let pageId: String
 
@@ -28,9 +28,9 @@ struct EditorScreen: View {
     @State private var typing = TypingTimes()
     @State private var actions = PageActionState()
     @State private var isKeyboardVisible = false
-    /// The header asked back while it would be hidden, by scrolling to the top or tapping the bar's
-    /// title. Cleared when the keyboard goes or a focus session starts or stops, so the header gives
-    /// its height back again the next time either hides it.
+    /// The header asked back while it would be hidden, by tapping the bar's title. Cleared when the
+    /// title and subtitle let go of the keyboard, the keyboard goes, or a focus session starts or
+    /// stops, so going back to the document gives the header's height back again.
     @State private var isHeaderRevealed = false
     @State private var focusStartedAt: Date?
     @State private var isPickingPhoto = false
@@ -134,9 +134,6 @@ struct EditorScreen: View {
                 },
                 onReloadAnswered: { _, applied in
                     Task { @MainActor in openBody?.answered(applied: applied) }
-                },
-                onScrolledToTop: { isAtTop in
-                    Task { @MainActor in isHeaderRevealed = isAtTop }
                 }
             )
         }
@@ -183,6 +180,9 @@ struct EditorScreen: View {
             isHeaderRevealed = false
         }
         .onChange(of: focusStartedAt == nil) { _, _ in isHeaderRevealed = false }
+        .onChange(of: headerFocus) { _, field in
+            if field == nil { isHeaderRevealed = false }
+        }
         .toolbarBackground(.surfacePrimary, for: .navigationBar)
         .toolbar {
             if isHeaderHidden {

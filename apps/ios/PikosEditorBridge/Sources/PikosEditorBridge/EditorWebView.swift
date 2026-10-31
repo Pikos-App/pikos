@@ -64,10 +64,6 @@ public struct EditorWebView: UIViewRepresentable {
     /// showed that body.
     public var onReloadAnswered: (_ pageId: String, _ applied: Bool) -> Void
 
-    /// Fired when a scroll by the user's finger reaches the document's top or leaves it. A scroll
-    /// the editor makes to follow the caret is not reported, so typing at the top reveals nothing.
-    public var onScrolledToTop: (_ isAtTop: Bool) -> Void
-
     public init(
         pageId: String,
         documentJSON: String,
@@ -82,8 +78,7 @@ public struct EditorWebView: UIViewRepresentable {
         onImageRequested: @escaping () -> Void = {},
         onReady: @escaping (TimeInterval) -> Void = { _ in },
         onInputTiming: @escaping (Int, Double, Double) -> Void = { _, _, _ in },
-        onReloadAnswered: @escaping (String, Bool) -> Void = { _, _ in },
-        onScrolledToTop: @escaping (Bool) -> Void = { _ in }
+        onReloadAnswered: @escaping (String, Bool) -> Void = { _, _ in }
     ) {
         self.pageId = pageId
         self.documentJSON = documentJSON
@@ -99,7 +94,6 @@ public struct EditorWebView: UIViewRepresentable {
         self.onReady = onReady
         self.onInputTiming = onInputTiming
         self.onReloadAnswered = onReloadAnswered
-        self.onScrolledToTop = onScrolledToTop
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -132,7 +126,6 @@ public struct EditorWebView: UIViewRepresentable {
         webView.scrollView.alwaysBounceVertical = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.keyboardDismissMode = .interactive
-        webView.scrollView.delegate = context.coordinator
 
         #if DEBUG
         // Safari's Web Inspector can attach to the editor on a debug build,
@@ -164,7 +157,6 @@ public struct EditorWebView: UIViewRepresentable {
     public static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: messageHandlerName)
         webView.navigationDelegate = nil
-        webView.scrollView.delegate = nil
         webView.stopLoading()
         coordinator.controller?.detach()
     }
@@ -213,7 +205,7 @@ public struct EditorWebView: UIViewRepresentable {
     // MARK: - Coordinator
 
     public final class Coordinator: NSObject, EditorMessageSink, WKScriptMessageHandler,
-        WKNavigationDelegate, UIScrollViewDelegate
+        WKNavigationDelegate
     {
         var parent: EditorWebView
         /// The webview this coordinator drives. Weak because the webview owns
@@ -226,9 +218,6 @@ public struct EditorWebView: UIViewRepresentable {
         /// agree without a message; only a locked page costs one.
         var appliedEditable: Bool?
         var loadStartedAt: Date?
-        /// Kept through every scroll, the caret's included, so a finger that brings the document
-        /// back to its top after the caret carried it down is reported as arriving there.
-        var isAtTop = true
         /// Held so `dismantleUIView` can detach it — the view itself is a value
         /// type and will not be the same instance by then.
         var controller: EditorController?
@@ -333,16 +322,6 @@ public struct EditorWebView: UIViewRepresentable {
                 // one lets the webview scroll itself, so the message is ignored
                 // rather than acted on — see the scrollView configuration above.
                 break
-            }
-        }
-
-        public func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            let wasAtTop = isAtTop
-            isAtTop = scrollView.contentOffset.y <= 0
-            let isFingerScroll = scrollView.isTracking || scrollView.isDecelerating
-
-            if isFingerScroll && isAtTop != wasAtTop {
-                parent.onScrolledToTop(isAtTop)
             }
         }
 
