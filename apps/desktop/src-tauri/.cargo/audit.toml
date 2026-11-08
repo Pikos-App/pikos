@@ -20,10 +20,12 @@ ignore = [
     "RUSTSEC-2026-0235",
     "RUSTSEC-2023-0071",
 
-    # zip 4.6: extraction follows symlinks and keeps SUID bits. Only tauri-plugin-updater uses
-    # it, to unpack Windows update archives, and no shipped target compiles it. No stable
-    # updater has moved to zip 9 yet. Verified 2026-10-16.
+    # zip 4.6: extraction follows symlinks and keeps SUID bits, and a symlink entry with a large
+    # declared size aborts it. Only tauri-plugin-updater uses it, to unpack Windows update
+    # archives, and no shipped target compiles it. No stable updater has moved to zip 9 yet.
+    # Verified 2026-10-16, and for 0429 on 2026-11-07.
     "RUSTSEC-2026-0367",
     "RUSTSEC-2026-0368",
     "RUSTSEC-2026-0369",
+    "RUSTSEC-2026-0429",
 ]
