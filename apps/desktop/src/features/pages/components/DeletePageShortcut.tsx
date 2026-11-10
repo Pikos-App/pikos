@@ -37,6 +37,7 @@ export function DeletePageShortcut() {
   }
 
   useKeyboardShortcut("Mod+Backspace", deleteSelectedOrActive, {
+    destructive: true,
     group: "Navigation",
     label: "Delete page",
   });
@@ -47,6 +48,8 @@ export function DeletePageShortcut() {
   useKeyboardShortcut("Mod+Shift+Backspace", deleteSelectedOrActive, {
     allowInInputs: true,
     group: "Navigation",
+    // The palette already lists Delete page, and nothing in it has the focus this one is for.
+    inPalette: false,
     label: "Delete page (works in text inputs)",
     preventDefault: true,
     when: () => !Keyboard.isModalOpen(),

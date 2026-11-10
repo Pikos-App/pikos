@@ -241,13 +241,6 @@ appTest(
         await run("Delete page");
         await expect(rows.filter({ hasText: "alpha page" })).toHaveCount(0);
       },
-      "Delete page (works in text inputs)": async () => {
-        await run("Delete page (works in text inputs)");
-        await expect(rows.filter({ hasText: "alpha page" })).toHaveCount(0);
-        await run("Undo delete");
-        await openAlpha();
-        await expect(title).toHaveText("alpha page");
-      },
       "Export page as Markdown": async () => {
         await run("Export page as Markdown");
         await expect(app.getByText("Exported to Downloads", { exact: true })).toBeVisible();
