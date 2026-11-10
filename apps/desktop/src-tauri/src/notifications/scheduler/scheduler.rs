@@ -120,9 +120,17 @@ pub async fn request_notification_permission(
     }
 }
 
-/// Tauri command: check current notification permission status.
+/// Tauri command: check current notification permission status. On macOS it asks the
+/// system, as a tick does: the plugin's desktop answer is always granted, so a denial in
+/// System Settings never reached the panel's blocked banner.
 #[tauri::command]
 pub async fn check_notification_permission(app: tauri::AppHandle) -> crate::error::AppResult<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        Ok(!crate::notifications::macos::notifications_off().await)
+    }
+    #[cfg(not(target_os = "macos"))]
     match app.notification().permission_state() {
         Ok(state) => Ok(state == tauri_plugin_notification::PermissionState::Granted),
         Err(e) => Err(crate::error::AppError::Internal(e.to_string())),

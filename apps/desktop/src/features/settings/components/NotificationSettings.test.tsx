@@ -61,4 +61,20 @@ describe("NotificationSettings permission", () => {
     );
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
+
+  it("shows the blocked banner when the window comes back after notifications were turned off", async () => {
+    listNotificationHistory.mockResolvedValue([]);
+    const platform = new NoopPlatformAdapter();
+    vi.spyOn(platform, "checkNotificationPermission")
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    setPlatform(platform);
+    renderWithProviders(<NotificationSettings />);
+    await screen.findByText(/Nothing yet/);
+    expect(screen.queryByText("Notifications blocked by your system")).not.toBeInTheDocument();
+
+    fireEvent.focus(window);
+
+    expect(await screen.findByText("Notifications blocked by your system")).toBeInTheDocument();
+  });
 });
