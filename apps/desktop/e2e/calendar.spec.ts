@@ -696,6 +696,19 @@ appTest("a page restored from the trash opens no popover", async ({ app }) => {
   await expect(app.getByPlaceholder("Untitled")).not.toBeVisible();
 });
 
+appTest("a block's open popover goes when a double-click opens its page", async ({ app }) => {
+  await quickAdd(app, "Review today 3pm");
+  await openCalendarMode(app);
+  const block = calendarRegion(app).getByRole("button", { name: /^Review/ });
+  await block.click();
+  await expect(app.getByRole("dialog")).toBeVisible();
+
+  await block.dblclick();
+
+  await expect(app.locator(".ProseMirror")).toBeVisible();
+  await expect(app.getByRole("dialog")).toHaveCount(0);
+});
+
 appTest("the current-time line moves as time passes @mock-only", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T10:00:00") });
   await page.clock.resume();
