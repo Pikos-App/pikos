@@ -77,12 +77,13 @@ struct CalendarGrid: View {
                     if shellLayout == .single { barFade }
                 }
                 .modifier(RemembersTopHour(metrics: metrics, topInset: Self.timedTopInset))
-                .onAppear {
-                    proxy.scrollTo(Self.hourAnchor(route.calendarTopHour ?? openingHour), anchor: .top)
-                }
-                .onChange(of: route.calendarTopHour == nil) { _, cleared in
-                    if cleared { proxy.scrollTo(Self.hourAnchor(openingHour), anchor: .top) }
-                }
+                .modifier(
+                    OpensAtHour(
+                        remembered: route.calendarTopHour, opening: openingHour, proxy: proxy,
+                        offset: { hour in
+                            max(0, metrics.y(atMinute: Double(hour * 60)) - Self.hourLabelClearance)
+                                + Self.timedTopInset
+                        }))
             }
         }
         .background(.surfacePrimary)
@@ -721,7 +722,7 @@ struct CalendarGrid: View {
         return max(0, minute / 60 - 1)
     }
 
-    private static func hourAnchor(_ hour: Int) -> String {
+    fileprivate static func hourAnchor(_ hour: Int) -> String {
         "hour-\(hour)"
     }
 
@@ -799,6 +800,49 @@ private struct RemembersTopHour: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// Puts the grid at the hour remembered, or at the opening hour when nothing is, as it appears
+/// and again whenever the remembered hour is cleared.
+///
+/// iOS 18 sets the scroll position itself. A scroll to an hour's anchor, asked for as the grid
+/// appeared, went nowhere there, so every grid opened at its first hour: paging to another day
+/// lost the hours being read, and the hour before now was never what showed.
+private struct OpensAtHour: ViewModifier {
+    let remembered: Int?
+    let opening: Int
+    let proxy: ScrollViewProxy
+    /// Where an hour sits in the scroll content.
+    let offset: (Int) -> CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.modifier(PositionsAtHour(remembered: remembered, opening: opening, offset: offset))
+        } else {
+            content
+                .onAppear { proxy.scrollTo(CalendarGrid.hourAnchor(remembered ?? opening), anchor: .top) }
+                .onChange(of: remembered == nil) { _, cleared in
+                    if cleared { proxy.scrollTo(CalendarGrid.hourAnchor(opening), anchor: .top) }
+                }
+        }
+    }
+}
+
+@available(iOS 18, *)
+private struct PositionsAtHour: ViewModifier {
+    let remembered: Int?
+    let opening: Int
+    let offset: (Int) -> CGFloat
+    @State private var position = ScrollPosition()
+
+    func body(content: Content) -> some View {
+        content
+            .scrollPosition($position)
+            .onAppear { position.scrollTo(y: offset(remembered ?? opening)) }
+            .onChange(of: remembered == nil) { _, cleared in
+                if cleared { position.scrollTo(y: offset(opening)) }
+            }
     }
 }
 

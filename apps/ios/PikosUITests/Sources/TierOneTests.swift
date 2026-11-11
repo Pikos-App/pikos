@@ -743,6 +743,37 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(block.isHittable, "back on the calendar, still at dawn rather than the hour before now")
     }
 
+    // qa: IOS-76
+    func testPagingTheCalendarKeepsTheHoursOnScreen() throws {
+        try XCTSkipIf(Calendar.current.component(.hour, from: Date()) >= 15, "late in the day the grid opens near the evening anyway")
+        quickAdd("Late swim today at 9pm")
+        quickAdd("Late run tomorrow at 9pm")
+        app.buttons["Calendar"].firstMatch.tap()
+
+        let grid = app.scrollViews.firstMatch
+        XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
+        let swim = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Late swim'")).firstMatch
+        XCTAssertTrue(swim.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(swim.isHittable, "the grid opens away from the evening")
+        for _ in 0..<6 where !swim.isHittable { grid.swipeUp(velocity: .fast) }
+        XCTAssertTrue(swim.isHittable, "scrolled down to the evening")
+
+        app.buttons["Next"].firstMatch.tap()
+        let run = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Late run'")).firstMatch
+        XCTAssertTrue(run.waitForExistence(timeout: Self.timeout), "the next day is on screen")
+        XCTAssertTrue(run.isHittable, "still in the evening")
+
+        grid.swipeRight()
+        XCTAssertTrue(swim.waitForExistence(timeout: Self.timeout), "a swipe goes back a day")
+        XCTAssertTrue(swim.isHittable, "still in the evening after a swipe")
+
+        app.buttons["Next"].firstMatch.tap()
+        XCTAssertTrue(run.waitForExistence(timeout: Self.timeout))
+        app.otherElements["Week"].buttons.matching(NSPredicate(format: "label CONTAINS ', today'")).firstMatch.tap()
+        XCTAssertTrue(swim.waitForExistence(timeout: Self.timeout), "the week strip goes back to today")
+        XCTAssertTrue(swim.isHittable, "still in the evening after picking a day")
+    }
+
     // qa: IOS-16
     /// `PKOS-0150`: a left swipe offers the likeliest day, When and Folder.
     func testARowSwipesLeftToADayWhenOrAFolder() {
