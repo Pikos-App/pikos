@@ -1,5 +1,6 @@
 import type { Folder, PageSummary } from "@pikos/core";
 import { pageActions, writableFolders } from "@pikos/core";
+import { Fragment } from "react";
 
 import {
   ContextMenuContent,
@@ -9,6 +10,8 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+
+import { useExportPage } from "../hooks/useExportPage";
 
 interface PageRowMenuProps {
   page: PageSummary;
@@ -34,6 +37,9 @@ export function PageRowMenu({
   onRename,
   page,
 }: PageRowMenuProps) {
+  const { exportPage } = useExportPage();
+  const isOnePage = actsOn === 1;
+
   return (
     <ContextMenuContent onCloseAutoFocus={onCloseAutoFocus}>
       {pageActions(page, actsOn).map((action) => {
@@ -80,15 +86,23 @@ export function PageRowMenu({
                 No date
               </ContextMenuItem>
             ) : null;
+          // Export reads the page and refuses nothing, so it has no place in the shared
+          // action rules; it sits above Delete to keep the destructive item last.
           case "delete":
             return (
-              <ContextMenuItem
-                className="text-destructive focus:text-destructive"
-                key={action.id}
-                onSelect={onDelete}
-              >
-                {actsOn > 1 ? `Delete ${actsOn} pages` : "Delete"}
-              </ContextMenuItem>
+              <Fragment key={action.id}>
+                {isOnePage && (
+                  <ContextMenuItem onSelect={() => void exportPage(page)}>
+                    Export as Markdown
+                  </ContextMenuItem>
+                )}
+                <ContextMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={onDelete}
+                >
+                  {isOnePage ? "Delete" : `Delete ${actsOn} pages`}
+                </ContextMenuItem>
+              </Fragment>
             );
         }
       })}

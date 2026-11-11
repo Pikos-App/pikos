@@ -122,7 +122,7 @@ function SingleToast({
       {action && (
         <button
           aria-label={action.label}
-          className="shrink-0 text-xs font-medium text-primary hover:text-primary/80"
+          className="shrink-0 text-xs font-medium text-action hover:text-action/80"
           onClick={handleAction}
         >
           {action.label}

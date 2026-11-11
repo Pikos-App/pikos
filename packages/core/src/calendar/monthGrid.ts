@@ -1,18 +1,5 @@
-// Pure month-grid math: the padded weeks × 7 cell grid, and the per-cell
-// event placement (ordering + "+K more" capping) the month view renders.
-//
-// MULTI-DAY REPRESENTATION (v1 decision): a multi-day event renders as a chip
-// in EVERY cell it covers, flagged with `continuesBefore`/`continuesAfter` so
-// the component can cut the corresponding corner radius. It is deliberately
-// NOT a single bar spanning cells the way `assignStableAllDayRows` +
-// `buildAllDayBars` lay out the week grid's all-day strip: those produce a
-// shared ROW index across the whole visible range, which only pays off with
-// absolute positioning inside one continuous strip. A month cell instead caps
-// its own list at N and owns its own "+K more" count, so a shared row index
-// would have to be reconciled against every cell's independent cap (a bar on
-// row 4 is above the fold in one cell and below it in the next). Per-cell
-// chips keep both the math and the DOM simple; spanning bars stay open as a
-// follow-up once the cap rule is settled.
+// Pure month-grid math: the padded weeks × 7 cell grid, and the event placement
+// (ordering, lanes, "+K more" capping) the month view renders.
 
 import { addDays, isSameDay, startOfDay, startOfWeek } from "date-fns";
 
@@ -195,18 +182,7 @@ export function placeMonthCellEvents(
     });
   }
 
-  // Banner group: all-day schedules and any event covering more than one day.
-  const isBanner = (e: MonthCellEvent) => e.isAllDay || e.spanDays > 1;
-  events.sort((a, b) => {
-    const bannerDelta = Number(isBanner(b)) - Number(isBanner(a));
-    if (bannerDelta !== 0) return bannerDelta;
-    if (isBanner(a) && isBanner(b) && a.spanDays !== b.spanDays) return b.spanDays - a.spanDays;
-    return (
-      a.startDate.getTime() - b.startDate.getTime() ||
-      a.page.createdAt.localeCompare(b.page.createdAt) ||
-      a.page.id.localeCompare(b.page.id)
-    );
-  });
+  events.sort(compareMonthEvents);
 
   const cap = Math.max(maxVisible, 0);
   return {
@@ -214,4 +190,94 @@ export function placeMonthCellEvents(
     overflowCount: Math.max(events.length - cap, 0),
     visible: events.slice(0, cap),
   };
+}
+
+/** Banner group first: all-day schedules and any event covering more than one day. */
+function compareMonthEvents(a: MonthCellEvent, b: MonthCellEvent): number {
+  const isBanner = (e: MonthCellEvent) => e.isAllDay || e.spanDays > 1;
+  const bannerDelta = Number(isBanner(b)) - Number(isBanner(a));
+  if (bannerDelta !== 0) return bannerDelta;
+
+  if (isBanner(a) && isBanner(b) && a.spanDays !== b.spanDays) return b.spanDays - a.spanDays;
+
+  return (
+    a.startDate.getTime() - b.startDate.getTime() ||
+    a.page.createdAt.localeCompare(b.page.createdAt) ||
+    a.page.id.localeCompare(b.page.id)
+  );
+}
+
+/** An event's run of days inside one week row, drawn as one bar from its first cell. */
+export interface MonthWeekBar {
+  /** The run's first cell's event, with `continuesAfter` taken from its last cell. */
+  event: MonthCellEvent;
+  /** Row inside the week, shared by every cell the bar covers. */
+  lane: number;
+  /** Cells the bar covers, counting its first. */
+  spanCols: number;
+}
+
+/** One cell of a week row as `placeMonthWeek` lays it out. */
+export interface MonthWeekCell {
+  /** Lane by lane, down to the lowest visible lane anything covers in this cell: the bar
+   * that starts here, or null for a lane left empty or crossed by an earlier cell's bar. */
+  lanes: (MonthWeekBar | null)[];
+  /** Events covering this cell on a lane past the cap. */
+  overflowCount: number;
+}
+
+/**
+ * Lays out one week row of the month grid so a multi-day event is one bar.
+ *
+ * Lanes are shared across the row, the way the week grid's all-day strip shares
+ * rows, so the cap applies per lane rather than per cell: a bar is either shown in
+ * every cell it covers or hidden and counted in each one's "+K more". A per-cell cap
+ * would show a bar in one cell and hide it in the next.
+ *
+ * Events take the lowest lane free across their days, in `compareMonthEvents`
+ * order, so banners settle first and single-day events fill the gaps they leave.
+ */
+export function placeMonthWeek(
+  pages: PageSummary[],
+  days: Date[],
+  maxVisible: number = MONTH_CELL_MAX_EVENTS
+): MonthWeekCell[] {
+  const runs = new Map<string, { bar: MonthWeekBar; firstCol: number; lastCol: number }>();
+  days.forEach((day, col) => {
+    for (const event of placeMonthCellEvents(pages, day, Infinity).visible) {
+      const identity = `${event.page.id}:${event.page.scheduledStart}`;
+      const run = runs.get(identity);
+      if (run) {
+        run.lastCol = col;
+        run.bar.spanCols++;
+        run.bar.event = { ...run.bar.event, continuesAfter: event.continuesAfter };
+      } else {
+        runs.set(identity, { bar: { event, lane: 0, spanCols: 1 }, firstCol: col, lastCol: col });
+      }
+    }
+  });
+
+  const taken: boolean[][] = days.map(() => []);
+  const ordered = [...runs.values()].sort((a, b) => compareMonthEvents(a.bar.event, b.bar.event));
+  for (const run of ordered) {
+    const cols = taken.slice(run.firstCol, run.lastCol + 1);
+    let lane = 0;
+    while (cols.some((lanes) => lanes[lane])) lane++;
+
+    run.bar.lane = lane;
+    for (const lanes of cols) lanes[lane] = true;
+  }
+
+  const cap = Math.max(maxVisible, 0);
+  return days.map((_, col) => {
+    const visibleDepth = Math.min(taken[col]!.length, cap);
+    const lanes: (MonthWeekBar | null)[] = Array.from({ length: visibleDepth }, () => null);
+    for (const run of ordered) {
+      const startsHere = run.firstCol === col && run.bar.lane < cap;
+      if (startsHere) lanes[run.bar.lane] = run.bar;
+    }
+
+    const overflowCount = taken[col]!.slice(cap).filter(Boolean).length;
+    return { lanes, overflowCount };
+  });
 }

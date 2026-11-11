@@ -8,6 +8,7 @@ import type { Page, Workspace } from "@pikos/core";
 export type WorkspaceEvent =
   | "page:created"
   | "page:updated"
+  | "page:merged"
   | "page:deleted"
   | "folder:deleted"
   | "workspace:loaded";
@@ -15,6 +16,9 @@ export type WorkspaceEvent =
 export interface WorkspaceEventPayloadMap {
   "page:created": Page;
   "page:updated": Page;
+  /** A body typed over an older one was merged with the one stored (`page`), so what was
+   *  saved is not what was `typed`. */
+  "page:merged": { page: Page; typed: string };
   "page:deleted": string;
   /** A folder went to the trash, taking its pages with it. Its own event because
    *  the adapter soft-deletes those pages itself, so no page write announces them. */

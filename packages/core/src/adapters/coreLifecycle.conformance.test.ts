@@ -119,7 +119,6 @@ async function apply(
           ],
           type: "doc",
         }),
-        contentText: step.contentText ?? "",
         folderId: step.folder ? (ids.get(step.folder) ?? null) : null,
         priority: 0,
         status: "not_started",

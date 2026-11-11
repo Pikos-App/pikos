@@ -1,7 +1,44 @@
 // Lives in shared/ rather than features/calendar so settings, layout, and
 // CalendarSettingsContext can reference these without a cross-feature import.
 
-export type CalendarDensity = "compact" | "normal" | "spacious";
+/**
+ * Calendar density is the hour height in px at the default text size, picked from
+ * unnamed steps. It was three named presets, and the names stopped meaning
+ * anything once the text size multiplies the hour: "compact" at 28px showed fewer
+ * hours than the default.
+ *
+ * The densest step is 30 rather than the evenly spaced 28: at 28 a block running
+ * into the collapsed evening band gains the band's fixed inset, which doesn't
+ * scale with the text, and crosses its time-row tier at some text sizes only.
+ */
+export const CALENDAR_DENSITY_STEPS = [30, 40, 52, 64, 76, 88] as const;
+
+export type CalendarDensity = (typeof CALENDAR_DENSITY_STEPS)[number];
+
+export const DEFAULT_CALENDAR_DENSITY: CalendarDensity = 64;
+
+/** The presets a density was stored as before it was a range. */
+export const LEGACY_CALENDAR_DENSITIES = {
+  compact: 40,
+  normal: 64,
+  spacious: 88,
+} as const satisfies Record<string, CalendarDensity>;
+
+/** A stored density as a step, reading a legacy preset name as its height, so a
+ *  preference saved before the range existed keeps its calendar. */
+export function toCalendarDensity(stored: unknown): CalendarDensity {
+  const legacy = LEGACY_CALENDAR_DENSITIES[stored as keyof typeof LEGACY_CALENDAR_DENSITIES];
+  if (legacy !== undefined) return legacy;
+
+  return CALENDAR_DENSITY_STEPS.find((step) => step === stored) ?? DEFAULT_CALENDAR_DENSITY;
+}
+
+/** The next step roomier (`1`) or denser (`-1`), or the same step at either end. */
+export function stepCalendarDensity(density: CalendarDensity, direction: 1 | -1): CalendarDensity {
+  const index = CALENDAR_DENSITY_STEPS.indexOf(density);
+
+  return CALENDAR_DENSITY_STEPS[index + direction] ?? density;
+}
 
 /**
  * User-selectable day count for the calendar grid. Numbers are literal column

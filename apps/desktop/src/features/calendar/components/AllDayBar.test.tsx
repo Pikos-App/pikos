@@ -77,6 +77,17 @@ describe("AllDayBar — detached synced rendering", () => {
     expect(bar.className).not.toContain("opacity-50");
   });
 
+  it("is drawn at full strength, the same as a native page", () => {
+    renderBar(makePage({ syncState: null }));
+    const nativeClasses = screen.getByRole("button", { name: "Conference" }).className;
+    cleanup();
+
+    renderBar(makePage({ syncState: "detached" }));
+    const bar = screen.getByRole("button", { name: "Conference" });
+
+    expect(bar.className).toBe(nativeClasses);
+  });
+
   it("applies the done treatment when the page is done", () => {
     renderBar(makePage({ status: "done", syncState: "detached" }));
     const bar = screen.getByRole("button", { name: "Conference" });

@@ -84,6 +84,16 @@ than half-written: raw HTML, an image inside a line of text, a list mixing tasks
 and plain items, a numbered task list, a heading inside a list item, and code
 inside a link.
 
+To change part of a page, `update --section <heading>` names a heading by its
+text, and `--append`, `--insert` or `--replace-section` takes the markdown that
+goes at the end of that section, straight under its heading, or in place of what
+is under it, up to the next heading of the same or a higher level. `--append`
+alone adds to the end of the page. Only the new markdown is converted; every
+other block is kept exactly as stored, so a part markdown can't carry survives,
+and an edit that changes nothing writes nothing. A heading that isn't on the page,
+or is there twice, is refused with the headings it found. Over MCP the same edits
+are `update_page`'s `section`, `append`, `insert` and `replaceSection`.
+
 `add --dry-run` runs the parser and prints what it made of the text — the exact
 shape `add` would then persist — without writing. It is the agent-preview mode:
 show the parse, then re-issue the same text to commit it.
@@ -161,7 +171,16 @@ with the installed desktop app and `open_pool` migrates on connect.
 
 - **DB newer than the CLI**: the embedded migrator fails closed
   (`VersionMissing` → `SchemaTooNew`, exit 6), so a stale CLI never writes
-  against an unknown schema.
+  against an unknown schema. A long-lived `pikos mcp` that opened the file
+  before a newer Pikos migrated it refuses every write from then on, with the
+  same kind and both versions named.
+
+Never copy or move another file over the workspace while anything has it open,
+whether the app, the CLI or an MCP server. The open process reads the new file
+through its old write-ahead log and memory map: the next read reports the file
+malformed, or the process crashes. A raw `sqlite3` write alongside is safe for
+the file, but cannot touch pages: their triggers call functions only Pikos
+registers. Restore through the app's backups instead.
 - **DB older than the CLI**: refused up front (exit 8) unless `--migrate` is
   passed. Migrating is one-way and would leave the installed app unable to open
   its own workspace until it is updated too.

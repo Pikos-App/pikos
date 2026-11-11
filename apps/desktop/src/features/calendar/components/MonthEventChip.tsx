@@ -2,7 +2,7 @@ import type { MonthCellEvent, VirtualOccurrence } from "@pikos/core";
 import { DEFAULT_EVENT_COLOR, formatTime12h, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -10,6 +10,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -19,6 +20,11 @@ interface MonthEventChipProps {
    * week grid's all-day section uses. */
   folderColor: string | undefined;
   onDoubleClick: (pageId: string) => void;
+  /** The event's first day is drawn in an earlier row of this grid, whose bar carries the
+   * checkbox, so this row's bar goes without one. */
+  startShownAbove: boolean;
+  /** Set when the chip is a bar reaching past its own cell. */
+  width?: string | undefined;
 }
 
 /**
@@ -29,7 +35,13 @@ interface MonthEventChipProps {
  * downstream of the click — the popover pair, the recurring/synced action
  * routing — is the same code path the week grid takes.
  */
-export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEventChipProps) {
+export function MonthEventChip({
+  event,
+  folderColor,
+  onDoubleClick,
+  startShownAbove,
+  width,
+}: MonthEventChipProps) {
   const { continuesAfter, continuesBefore, isAllDay, page, startDate } = event;
   const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
 
@@ -59,21 +71,20 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
         <button
           aria-label={label}
           className={cn(
-            "flex w-full cursor-default! items-center gap-1",
+            "relative flex w-full cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
-            page.syncState === "detached" && !done && "opacity-70",
             done && "opacity-50",
-            // A multi-day event is drawn as one chip per covered cell (see
-            // core/monthGrid's header note); squaring the shared corners keeps
-            // the run reading as a single band across the week row.
+            // Square ends say the event carries on into the previous or next week row.
             continuesBefore && "rounded-tl-none rounded-bl-none border-l-0",
             continuesAfter && "rounded-tr-none rounded-br-none"
           )}
           onClick={handleClick}
           onMouseDown={(e) => e.stopPropagation()}
-          style={chipFolderStyle(folderColor)}
+          style={{ ...chipFolderStyle(folderColor), width }}
         >
-          {showsCheckbox ? (
+          {!showsCheckbox ? (
+            <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : startShownAbove ? null : (
             <TaskCheckbox
               as="span"
               borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
@@ -82,14 +93,12 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
               onChange={handleCheckboxClick}
               size="xs"
             />
-          ) : (
-            <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
           <span className="min-w-0 truncate text-left">{page.title || "Untitled"}</span>
           <SyncSourceIcon className="ml-auto h-3 w-3 shrink-0" syncState={page.syncState} />
         </button>
       </PopoverTrigger>
-      <PopoverContent
+      <BlockPopoverContent
         align="start"
         className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         onClick={(e) => e.stopPropagation()}
@@ -117,7 +126,7 @@ export function MonthEventChip({ event, folderColor, onDoubleClick }: MonthEvent
             page={page}
           />
         )}
-      </PopoverContent>
+      </BlockPopoverContent>
     </Popover>
   );
 }

@@ -46,6 +46,16 @@ describe("isDueSoon", () => {
     expect(isDueSoon("2026-06-19")).toBe(false);
     expect(isDueSoon("2026-06-14")).toBe(false);
   });
+
+  it("counts an all-day date today from the first minute of the day to the last", () => {
+    expect(isDueSoon("2026-06-15", new Date("2026-06-15T00:01:00Z"))).toBe(true);
+    expect(isDueSoon("2026-06-15", new Date("2026-06-15T23:59:00Z"))).toBe(true);
+  });
+
+  it("stops counting a timed schedule once its time has passed", () => {
+    expect(isDueSoon("2026-06-15T09:00:00")).toBe(false);
+    expect(isDueSoon("2026-06-15T14:00:00")).toBe(true);
+  });
 });
 
 describe("formatPageDate", () => {
@@ -66,6 +76,10 @@ describe("formatPageDate", () => {
   it("appends the year only outside the current one", () => {
     expect(formatPageDate("2027-01-04").label).toBe("Jan 4, 2027");
     expect(formatPageDate("2026-01-04").label).toBe("Jan 4");
+  });
+
+  it("says Today for an all-day date today", () => {
+    expect(formatPageDate("2026-06-15").label).toBe("Today");
   });
 
   it("treats today's all-day date as not past", () => {

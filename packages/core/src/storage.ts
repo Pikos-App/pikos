@@ -78,7 +78,10 @@ export type PageUpdate = Partial<
     | "detachIsReversible"
     | "contentSchemaVersion"
   >
->;
+> & {
+  /** The body `content` was typed over: a body changed elsewhere since is merged, not overwritten. */
+  baseContent?: string | null;
+};
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),
 // never via createFolder/updateFolder — so it's excluded from both input shapes.
 export type NewFolder = Omit<
@@ -215,6 +218,9 @@ export interface StorageAdapter {
    * the user's and the next upstream change parks rather than overwrites.
    */
   clearPendingDescription(id: string): Promise<void>;
+  /** The withheld description as Tiptap JSON shaped like a seed, addresses linked, or null once
+   *  nothing is parked. */
+  pendingDescriptionDocument(id: string): Promise<string | null>;
   /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
   softDeletePage(id: string): Promise<void>;
   restorePage(id: string): Promise<void>;
@@ -287,6 +293,8 @@ export interface StorageAdapter {
   listRecentPages(exclude: string | null, limit: number): Promise<PageSummary[]>;
   /** Tags on open pages, most used first. */
   listTags(): Promise<TagCount[]>;
+  /** The pages, not trashed, whose bodies link to `id`, by title. */
+  listBacklinks(id: string): Promise<PageSummary[]>;
   /** Move `ids`, in that order, between two open neighbours in their folder's manual order.
    *  Rejects with a conflict when the neighbours aren't where they were. */
   movePages(ids: string[], place: Placement): Promise<MoveOutcome>;
@@ -442,6 +450,8 @@ export interface StorageAdapter {
   backupBeforeImport(): Promise<void>;
   /** Render the workspace into `format`; resolves to where it landed. */
   exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string>;
+  /** Write one page as Markdown, for sharing on its own; resolves to its `.md` file. */
+  exportPageMarkdown(id: string): Promise<string>;
   /** Aggregate counts for the Data settings panel. `weekStartsOn` buckets the
    *  activity chart, since the counting happens where the rows are and the
    *  preference lives with the user. */

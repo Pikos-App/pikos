@@ -3,6 +3,7 @@
 // change to how a done clone is linked back to its series — has one place to
 // update instead of every list/filter/context site.
 
+import { CONTENT_SCHEMA_VERSION } from "../types";
 import type { Page, PageSummary, Tag } from "../types";
 
 type PageLike = Pick<Page | PageSummary, "status">;
@@ -15,9 +16,15 @@ export function isDone(page: PageLike): boolean {
   return page.status === "done";
 }
 
-/** Drop the heavy content fields — list state holds summaries, never full pages. */
+/** A body a newer Pikos wrote. It opens read-only, because this editor may not know its nodes and
+ *  the writer refuses to save over it. */
+export function isBodyFromNewerBuild(page: Pick<Page, "contentSchemaVersion">): boolean {
+  return page.contentSchemaVersion > CONTENT_SCHEMA_VERSION;
+}
+
+/** Drop the body — list state holds summaries, never full pages. */
 export function toPageSummary(page: Page): PageSummary {
-  const { content: _, contentText: _ct, ...summary } = page;
+  const { content: _, ...summary } = page;
   return summary;
 }
 

@@ -12,7 +12,11 @@ import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { requireMockStorage } from "@/shared/adapters/mockStorageChunk";
-import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
+import {
+  connectDb,
+  onWorkspaceDamaged,
+  TauriSQLiteAdapter,
+} from "@/shared/adapters/TauriSQLiteAdapter";
 import { STORAGE_BACKEND } from "@/shared/constants/testMode";
 import {
   createWorkspaceEventBus,
@@ -20,6 +24,7 @@ import {
   type WorkspaceEventBus,
   type WorkspaceEventPayloadMap,
 } from "@/shared/events/workspaceEvents";
+import { ExpansionHold } from "@/shared/hooks/useRecurrenceExpansion";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 import { VIEW_CACHE } from "@/shared/viewCache/config";
@@ -32,10 +37,11 @@ type DataLoader = () => Promise<void>;
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
   isLoading: boolean;
-  /** Set when the auto-init or selectWorkspace path fails. UI surfaces this
-   *  so the user sees the actual error + a guidance message instead of an
-   *  indefinite blank screen. No in-app retry — connect_db failure is
-   *  almost always a path/permission issue that needs a relaunch. */
+  /** Set when the auto-init or selectWorkspace path fails, or when any command
+   *  later finds the workspace file damaged. UI surfaces this so the user sees
+   *  the actual error + a guidance message instead of an indefinite blank
+   *  screen. No in-app retry — connect_db failure is almost always a
+   *  path/permission issue that needs a relaunch. */
   loadError: unknown;
   /** Reload pages + folders from the DB (e.g. after an external seed). */
   reload: () => Promise<void>;
@@ -58,6 +64,8 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
   adapter: StorageAdapter;
   /** Lists loaded a window at a time; null while the full in-memory list is the only path. */
   viewCache: ViewCacheController;
+  /** The calendar's recurring occurrences, held while it is unmounted. */
+  calendarExpansion: ExpansionHold;
   eventBus: WorkspaceEventBus;
   /** Register a data loader called during init/reload/resetAndSeed. Pass null to unregister. */
   registerDataLoader: (loader: DataLoader | null) => void;
@@ -70,7 +78,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
   // time this runs, and what it throws if it isn't. The bridge lane uses the
   // real adapter with its transport already repointed in main.tsx.
-  const [{ adapter, viewCache }] = useState(() => {
+  const [{ adapter, calendarExpansion, viewCache }] = useState(() => {
     const raw: StorageAdapter =
       STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter();
     // The controller needs the adapter, and the adapter reports to the controller.
@@ -80,7 +88,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       started: () => ref.controller?.writeStarted(),
     });
     ref.controller = new ViewCacheController(watched, VIEW_CACHE);
-    return { adapter: watched, viewCache: ref.controller };
+    return {
+      adapter: watched,
+      calendarExpansion: new ExpansionHold(),
+      viewCache: ref.controller,
+    };
   });
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -121,6 +133,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // in-flight promise instead of racing. selectWorkspace() reuses the same ref.
   const initPromiseRef = useRef<Promise<void> | null>(null);
 
+  // Declared before init so a file found damaged while it loads is already heard.
+  useEffect(
+    () =>
+      onWorkspaceDamaged((error) => {
+        setLoadError(error);
+        setIsLoading(false);
+      }),
+    []
+  );
+
   useEffect(() => {
     initPromiseRef.current ??= runInit();
     void initPromiseRef.current;
@@ -146,7 +168,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch
       if (STORAGE_BACKEND === "bridge") {
-        await initBridgeWorkspace();
+        await initBridgeWorkspace().catch((e: unknown) => {
+          log.error("auto-init failed", e);
+          setLoadError(e);
+          setIsLoading(false);
+        });
         return;
       }
 
@@ -348,6 +374,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const value: WorkspaceInternalValue = {
     adapter,
+    calendarExpansion,
     consumePendingNavigation,
     eventBus,
     isLoading,
@@ -377,6 +404,12 @@ export function useWorkspace(): WorkspaceContextValue {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useViewCacheController(): ViewCacheController | null {
   return useContext(WorkspaceContext)?.viewCache ?? null;
+}
+
+/** The calendar's held occurrences; null outside a workspace. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCalendarExpansionHold(): ExpansionHold | null {
+  return useContext(WorkspaceContext)?.calendarExpansion ?? null;
 }
 
 /**

@@ -18,8 +18,9 @@ afterEach(() => {
 });
 
 function Harness({ onReady }: { onReady: (ws: ReturnType<typeof useWorkspace>) => void }) {
-  onReady(useWorkspace());
-  return <RestoreSection />;
+  const ws = useWorkspace();
+  onReady(ws);
+  return <RestoreSection storage={ws.storage} />;
 }
 
 async function render() {

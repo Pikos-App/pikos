@@ -149,12 +149,18 @@ describe("PageListItem menu", () => {
       .map((item) => item.textContent ?? "");
   }
 
-  it("lists Rename, Move to folder, No date and Delete, in that order", () => {
+  it("lists Rename, Move to folder, No date, Export as Markdown and Delete, in that order", () => {
     renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(menuItems()).toEqual(["Rename", "Move to folder", "No date", "Delete"]);
+    expect(menuItems()).toEqual([
+      "Rename",
+      "Move to folder",
+      "No date",
+      "Export as Markdown",
+      "Delete",
+    ]);
   });
 
   it("drops Rename and counts the pages when it acts on a selection", () => {
@@ -224,5 +230,17 @@ describe("PageListItem — a synced event shows the viewer's time", () => {
     renderItem(makePage({ scheduledStart: "2026-08-07T11:00:00" }), vi.fn());
 
     expect(dateLabel()).toContain("11:00am");
+  });
+
+  it("says on hover that its calendar sets the date, which is why a bulk move leaves it", () => {
+    renderItem(syncedPage("2026-08-07T11:00:00", "America/New_York"), vi.fn());
+
+    expect(screen.getByTitle(/Its calendar sets this date/)).toBeTruthy();
+  });
+
+  it("says nothing about a calendar on a page the user dates", () => {
+    renderItem(makePage({ scheduledStart: "2026-08-07T11:00:00" }), vi.fn());
+
+    expect(screen.queryByTitle(/Its calendar sets this date/)).toBeNull();
   });
 });

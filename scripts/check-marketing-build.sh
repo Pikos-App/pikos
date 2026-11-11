@@ -16,9 +16,9 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 git clone --quiet --depth 1 "file://$ROOT" "$WORK/repo"
-# The changelog entry is written just before the cut and committed with the version bump.
-cp "$ROOT/apps/marketing/src/pages/release-notes.astro" \
-  "$WORK/repo/apps/marketing/src/pages/release-notes.astro"
+# The version's notes file may be written just before the cut and committed with the version bump.
+cp "$ROOT"/apps/marketing/src/content/release-notes/*.md \
+  "$WORK/repo/apps/marketing/src/content/release-notes/"
 
 cd "$WORK/repo/apps/marketing"
 log="$WORK/build.log"

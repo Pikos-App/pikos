@@ -32,7 +32,7 @@ appTest(
     await openPageInEditor(app, "policy review");
 
     // Default is priority=0 ("Priority" label).
-    const priorityChip = app.getByRole("button", { name: "Priority: Priority" });
+    const priorityChip = app.getByRole("button", { name: "Priority: No priority" });
     await expect(priorityChip).toBeVisible();
 
     await priorityChip.click();

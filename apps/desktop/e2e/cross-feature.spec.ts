@@ -96,6 +96,11 @@ appTest(
     // date chip uses the abbreviated form ("Jun"). en-US short months are the
     // first three letters of the long name, so slice to match the chip.
     const dropMonthDay = `${dropMatch[1]!.slice(0, 3)} ${dropMatch[2]!}`;
+    // On the week's last day that column is today, which the chip reads as "Today".
+    const todayMonthDay = await app.evaluate(() =>
+      new Date().toLocaleDateString("en-US", { day: "numeric", month: "short" })
+    );
+    const dropLabel = dropMonthDay === todayMonthDay ? "Today" : dropMonthDay;
 
     // dnd-kit sensor needs ≥8px before activation — first nudge inside the
     // page list, then move onto the column.
@@ -117,7 +122,7 @@ appTest(
 
     // Page list now shows a date chip on the same item — the formatted date
     // includes the dropped column's "Month Day" text.
-    await expect(item).toContainText(dropMonthDay);
+    await expect(item).toContainText(dropLabel);
 
     // Editor byline (right panel) reflects the schedule too. Open the page
     // and assert the schedule chip has flipped from "Set schedule" to

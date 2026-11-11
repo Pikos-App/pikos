@@ -55,6 +55,7 @@ describe("production document schema", () => {
       image: ["alt", "data-asset-path", "height", "src", "title", "width"],
       listItem: [],
       orderedList: ["start", "tight", "type"],
+      pageLink: ["pageId", "title"],
       paragraph: ["indent"],
       table: [],
       tableCell: ["colspan", "colwidth", "rowspan"],

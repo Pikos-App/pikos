@@ -1,0 +1,10 @@
+{
+  "measured": "2026-10-23",
+  "commit": "1d98969f",
+  "shape": "prose",
+  "sizes": [
+    { "words": 20000, "open": 76, "key": 15, "find": 25 },
+    { "words": 100000, "open": 78, "key": 24, "find": 68 },
+    { "words": 500000, "open": 91, "key": 112, "find": 360 }
+  ]
+}

@@ -43,4 +43,38 @@ describe("ReleaseNotes", () => {
     render(<ReleaseNotes body={"First line.\nSecond line."} />);
     expect(screen.getByText("First line. Second line.")).toBeInTheDocument();
   });
+
+  it("renders a [link](url) as a link without the brackets", () => {
+    render(<ReleaseNotes body={"See [the speed page](https://pikos.app/speed)."} />);
+    expect(screen.getByRole("link", { name: "the speed page" })).toHaveAttribute(
+      "href",
+      "https://pikos.app/speed"
+    );
+    expect(screen.queryByText(/\]\(/)).not.toBeInTheDocument();
+  });
+});
+
+const PUBLISHED = import.meta.glob<string>("../../../../marketing/src/content/release-notes/*.md", {
+  eager: true,
+  import: "default",
+  query: "?raw",
+});
+const FRONT_MATTER = /^---\n[\s\S]*?\n---\n/;
+const UNDRAWN_MARKDOWN = /\*\*|`|\]\(|^\s*(#|[-*+] |\d+\. |>)|<\/?[a-z]/m;
+
+describe("every published release note", () => {
+  it("finds the notes", () => {
+    expect(Object.keys(PUBLISHED).length).toBeGreaterThan(0);
+  });
+
+  it.each(Object.entries(PUBLISHED))("%s draws with no Markdown left over", (_path, file) => {
+    const forDialog = file.replace(FRONT_MATTER, "").split(/^<!-- more -->$/m)[0]!;
+    const { container } = render(
+      <ReleaseNotes body={`${forDialog}\n[See everything](https://pikos.app/release-notes)`} />
+    );
+
+    for (const block of container.querySelectorAll("p, li")) {
+      expect(block.textContent).not.toMatch(UNDRAWN_MARKDOWN);
+    }
+  });
 });

@@ -381,6 +381,22 @@ pub async fn list_recent_pages(
         .collect())
 }
 
+/// The pages, not trashed, whose bodies link to `id`, by title.
+pub async fn list_backlinks(pool: &SqlitePool, id: &str) -> AppResult<Vec<PageSummary>> {
+    // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
+    let rows = sqlx::query_as::<_, PageSummaryRow>(&format!(
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages \
+         WHERE links <> '[]' AND deleted_at IS NULL AND id <> ? \
+         AND EXISTS (SELECT 1 FROM json_each(pages.links) WHERE value = ?) \
+         ORDER BY title COLLATE NOCASE"
+    ))
+    .bind(id)
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(PageSummary::from).collect())
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq, sqlx::FromRow, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]

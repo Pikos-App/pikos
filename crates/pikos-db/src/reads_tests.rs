@@ -559,3 +559,93 @@ async fn tags_list_most_used_first_and_stay_exact_through_every_write() {
         assert_eq!(listed, tag_truth(&pool).await, "after write {i}");
     }
 }
+
+async fn linking(pool: &SqlitePool, title: &str, targets: &[&str]) -> String {
+    let links: Vec<serde_json::Value> = targets
+        .iter()
+        .map(|id| serde_json::json!({ "type": "pageLink", "attrs": { "pageId": id, "title": "" } }))
+        .collect();
+    let content = serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "paragraph", "content": links }],
+    });
+    let page = crate::pages::create_page_impl(
+        pool,
+        crate::pages::NewPage {
+            folder_id: None,
+            title: title.to_string(),
+            subtitle: None,
+            content: content.to_string(),
+            status: "not_started".to_string(),
+            priority: 0,
+            tags: vec![],
+            scheduled_start: None,
+            scheduled_end: None,
+            completed_at: None,
+            parent_id: None,
+            last_opened_at: None,
+            created_at: None,
+            updated_at: None,
+        },
+    )
+    .await
+    .unwrap();
+    page.id
+}
+
+async fn backlink_titles(pool: &SqlitePool, id: &str) -> Vec<String> {
+    list_backlinks(pool, id)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|p| p.title)
+        .collect()
+}
+
+#[tokio::test]
+async fn backlinks_follow_the_bodies_that_link_and_skip_the_trashed() {
+    let pool = test_pool().await;
+    page(&pool, "target", None, None, None).await;
+    let beta = linking(&pool, "Beta", &["target", "other"]).await;
+    let alpha = linking(&pool, "alpha", &["target"]).await;
+    linking(&pool, "Unrelated", &["other"]).await;
+
+    assert_eq!(backlink_titles(&pool, "target").await, ["alpha", "Beta"]);
+
+    crate::pages::update_page_impl(
+        &pool,
+        beta.clone(),
+        crate::pages::PageUpdate {
+            content: Some(r#"{"type":"doc","content":[]}"#.to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    exec(
+        &pool,
+        &format!("UPDATE pages SET deleted_at = '2026-06-02' WHERE id = '{alpha}'"),
+    )
+    .await;
+
+    assert!(backlink_titles(&pool, "target").await.is_empty());
+}
+
+#[tokio::test]
+async fn backlinks_read_the_linking_pages_through_their_index() {
+    let pool = test_pool().await;
+
+    let plan: Vec<String> = sqlx::query(
+        "EXPLAIN QUERY PLAN SELECT id FROM pages WHERE links <> '[]' AND deleted_at IS NULL \
+         AND EXISTS (SELECT 1 FROM json_each(pages.links) WHERE value = 'x')",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| sqlx::Row::get::<String, _>(row, "detail"))
+    .collect();
+
+    let uses_index = plan.iter().any(|d| d.contains("idx_pages_links"));
+    assert!(uses_index, "{plan:?}");
+}

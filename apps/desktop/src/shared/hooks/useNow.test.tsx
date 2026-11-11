@@ -38,6 +38,18 @@ describe("useNow", () => {
     expect(screen.getByText("12:30")).toBeInTheDocument();
   });
 
+  it("catches up as soon as the window comes back, though its timer was held back", async () => {
+    vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
+    const { result } = renderHook(() => useNow());
+
+    vi.setSystemTime(new Date("2026-03-31T12:20:10.000"));
+    await act(() => window.dispatchEvent(new Event("focus")));
+    expect(result.current.getMinutes()).toBe(20);
+
+    await act(() => vi.advanceTimersByTime(50_000));
+    expect(result.current.getMinutes()).toBe(21);
+  });
+
   it("stops its timers on unmount", () => {
     vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
     const { unmount } = renderHook(() => useNow());

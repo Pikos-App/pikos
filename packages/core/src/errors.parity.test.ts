@@ -29,7 +29,7 @@ function rustKinds(): string[] {
   const source = readFileSync(ERROR_RS, "utf8");
   const body = source.split("pub fn kind(&self)")[1];
   if (!body) throw new Error("AppError::kind() not found — did error.rs move?");
-  const arms = body.split("}")[0] ?? "";
+  const arms = body.split("impl Serialize")[0] ?? "";
   return [...arms.matchAll(/=>\s*"([A-Za-z]+)"/g)].map((m) => m[1]!).sort();
 }
 

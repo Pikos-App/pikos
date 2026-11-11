@@ -315,9 +315,27 @@ fn row(title: &str, folder: &str, [start, end, zone, original, rule]: [Option<&s
     )
 }
 
-/// The seed corpus, `S-01` to `S-22`, as Fastmail serves it. Fastmail holds one copy of an event
-/// per account, so the shared kickoff is in the second calendar only, and the summer course ended
-/// before the sync window, so it never arrives.
+/// The wall-clock day of the last occurrence of each seeded series that ends. The sync window
+/// starts a week before today and a series that ended before it isn't mirrored, so the real clock
+/// takes each of these out of the set in turn, as it took the summer course before the recording.
+const SERIES_LAST_DAYS: [(&str, &str); 3] = [
+    ("Physio", "2026-10-26"),
+    ("Swim practice", "2026-11-12"),
+    ("Swim class (term ends)", "2026-11-14"),
+];
+
+/// Whether a series last occurring on `last_day` still yields an occurrence the reconciler counts
+/// as in the window: any after midnight on the day before it starts.
+fn still_in_window(last_day: &str) -> bool {
+    let last_day = NaiveDate::parse_from_str(last_day, "%Y-%m-%d").expect("last day");
+    let window_start = pikos_db::reconciler::backfill_window_start();
+
+    last_day >= window_start - chrono::Days::new(1)
+}
+
+/// The seed corpus, `S-01` to `S-22`, as Fastmail serves it, less any series [`SERIES_LAST_DAYS`]
+/// says has ended. Fastmail holds one copy of an event per account, so the shared kickoff is in
+/// the second calendar only.
 fn seeded() -> Vec<Synced> {
     let (la, london, tokyo) = (
         Some("America/Los_Angeles"),
@@ -326,7 +344,7 @@ fn seeded() -> Vec<Synced> {
     );
     let qa = "Pikos QA";
     let series = |rule| [None, None, None, None, Some(rule)];
-    vec![
+    let mut rows = vec![
         row(
             "Anniversary",
             qa,
@@ -493,7 +511,16 @@ fn seeded() -> Vec<Synced> {
                 Some("FREQ=WEEKLY;BYDAY=WE []"),
             ],
         ),
-    ]
+    ];
+
+    rows.retain(|r| {
+        SERIES_LAST_DAYS
+            .iter()
+            .find(|(title, _)| *title == r.0)
+            .is_none_or(|(_, last_day)| still_in_window(last_day))
+    });
+
+    rows
 }
 
 /// `rows` after the five edits `seed.py cycle` makes upstream: the standup renamed, the London

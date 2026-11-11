@@ -102,7 +102,7 @@ function TypedConfirmBody({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="h-9 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/40 disabled:cursor-not-allowed"
+            className="h-9 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-subtle disabled:cursor-not-allowed"
             disabled={busy}
             id={inputId}
             onChange={(e) => setTyped(e.target.value)}

@@ -98,7 +98,7 @@ let pages = try await workspace.listPages(query: PageQuery(folder: .inbox))
 let page  = try await workspace.getPage(id: pageId)
 _ = try await workspace.updatePage(
     id: page.id,
-    edit: PageEdit(content: json, contentText: plainText))
+    edit: PageEdit(content: json))
 let hits  = try await workspace.search(query: "invoice", limit: 20)
 ```
 

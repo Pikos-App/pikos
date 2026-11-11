@@ -1791,32 +1791,34 @@ async fn the_day_before_sentinel_never_reads_as_a_lead_time() {
     );
 }
 
-// ─── Quiet-hours suppression ─────────────────────────────────────────────────
+// ─── Reminders nobody was shown ──────────────────────────────────────────────
 
 #[tokio::test]
-async fn a_suppressed_reminder_is_logged_without_pinning_the_dedup() {
-    // Quiet hours drop the delivery; the row exists only so the history can say
-    // so. Every dedup predicate reads type='reminder', so the reminder must still
-    // read as un-fired afterwards.
-    let pool = test_pool().await;
-    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
-    insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
-    insert_reminder(&pool, "p1", 10).await;
+async fn a_reminder_not_shown_is_logged_without_pinning_the_dedup() {
+    for (reason, log_type) in [
+        (NotShown::QuietHours, "suppressed"),
+        (NotShown::NotificationsOff, "refused"),
+    ] {
+        let pool = test_pool().await;
+        insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+        insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
+        insert_reminder(&pool, "p1", 10).await;
 
-    log_reminder_suppressed(&pool, "p1", "s1#10", NOW_TS)
-        .await
-        .unwrap();
-
-    assert_eq!(log_count(&pool, "suppressed").await, 1);
-    assert_eq!(log_count(&pool, "reminder").await, 0);
-    assert_eq!(
-        due_explicit_reminders(&pool, &window())
+        log_reminder_not_shown(&pool, "p1", "s1#10", NOW_TS, reason)
             .await
-            .unwrap()
-            .len(),
-        1,
-        "a suppression must not act as a dedup anchor"
-    );
+            .unwrap();
+
+        assert_eq!(log_count(&pool, log_type).await, 1);
+        assert_eq!(log_count(&pool, "reminder").await, 0);
+        assert_eq!(
+            due_explicit_reminders(&pool, &window())
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "{reason:?} must not act as a dedup anchor"
+        );
+    }
 }
 
 // ─── History ─────────────────────────────────────────────────────────────────
@@ -1834,9 +1836,15 @@ async fn history_lists_every_kind_newest_first_with_the_page_title() {
     log_reminder_fired(&pool, "p1", "s1#10", "2026-05-25 08:50:00")
         .await
         .unwrap();
-    log_reminder_suppressed(&pool, "p1", "s2#10", "2026-05-25 09:10:00")
-        .await
-        .unwrap();
+    log_reminder_not_shown(
+        &pool,
+        "p1",
+        "s2#10",
+        "2026-05-25 09:10:00",
+        NotShown::QuietHours,
+    )
+    .await
+    .unwrap();
     log_daily_summary(&pool, "2026-05-25 07:00:00")
         .await
         .unwrap();
@@ -1902,11 +1910,12 @@ async fn seed_page_with_history(pool: &sqlx::SqlitePool, page_id: &str) {
     )
     .await
     .unwrap();
-    log_reminder_suppressed(
+    log_reminder_not_shown(
         pool,
         page_id,
         &format!("{schedule_id}#10"),
         "2026-05-25 08:51:00",
+        NotShown::QuietHours,
     )
     .await
     .unwrap();

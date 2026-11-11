@@ -153,7 +153,7 @@ appTest(
       "SET-02 calendar text size, density, days and week start apply",
       async () => {
         await pickIn(app, "Calendar text size", "16");
-        await chooseIn(app, "Calendar density", "Spacious");
+        await chooseIn(app, "Calendar density", "5");
         await chooseIn(app, "Calendar days shown", "3");
         await chooseIn(app, "Week starts on", "Sunday");
       }

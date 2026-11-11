@@ -284,7 +284,7 @@ pub async fn recompute_recurring_schedule(
 /// into a larger one.
 pub async fn recompute_recurring_schedule_pool(pool: &SqlitePool, page_id: &str) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
-        let mut tx = pool.begin().await?;
+        let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
         recompute_recurring_schedule(&mut tx, page_id).await?;
         tx.commit().await?;
         Ok(())

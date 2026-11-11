@@ -67,7 +67,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     loadMoreCompleted,
     onExpandCompleted,
     renamingId,
-    requestDelete,
+    requestDeleteMany,
     setRenamingId,
     visiblePages,
   } = usePageListContext();
@@ -255,23 +255,57 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   }, [activePage?.id]);
 
+  /** Pages in rendered order: `rows` already encodes Today's overdue→today grouping, per-view
+   *  sort, and which sections are expanded. `visiblePages` would diverge from the screen on Today
+   *  (no sort applied in usePageList — grouping does the ordering) and would also miss the
+   *  overdueCollapsed / completedCollapsed gates. */
+  function navigablePages(): PageSummary[] {
+    return rows.flatMap((r) => (r.type === "page" ? [r.page] : []));
+  }
+
+  /** Where the open page last sat in this list. Deleting it closes it, and this is what the
+   *  arrows step from afterwards. */
+  const lastActiveRef = useRef<{ id: string; index: number; viewId: string } | null>(null);
+  useEffect(() => {
+    if (!activePage) return;
+    const index = navigablePages().findIndex((p) => p.id === activePage.id);
+    lastActiveRef.current =
+      index === -1 ? null : { id: activePage.id, index, viewId: activeViewId };
+  });
+
+  /** The row the deleted open page held, or null when no page was deleted from under the arrows.
+   *  A page closed with Mod+W is still in the list, so the arrows stay off as before. */
+  function deletedActiveIndex(navigable: PageSummary[]): number | null {
+    const last = lastActiveRef.current;
+    const isDeletedHere =
+      last !== null && last.viewId === activeViewId && !navigable.some((p) => p.id === last.id);
+    return isDeletedHere ? last.index : null;
+  }
+
   function navigatePage(direction: 1 | -1) {
-    // Walk pages in rendered order — `rows` already encodes Today's
-    // overdue→today grouping, per-view sort, and which sections are expanded.
-    // Using `visiblePages` here would diverge from the screen on Today (no sort
-    // applied in usePageList — grouping does the ordering) and would also miss
-    // the overdueCollapsed / completedCollapsed gates.
-    const navigable = rows.flatMap((r) => (r.type === "page" ? [r.page] : []));
+    const navigable = navigablePages();
     if (!navigable.length) return;
     if (sidebarCollapsed) setSidebarCollapsed(false);
     listRef.current?.setAttribute("data-keyboard-nav", "1");
-    const currentIdx = activePage ? navigable.findIndex((p) => p.id === activePage.id) : -1;
+
+    if (!activePage) {
+      const deletedIdx = deletedActiveIndex(navigable);
+      if (deletedIdx === null) return;
+
+      // The page that followed the deleted one has moved up into its row.
+      const stepIdx = direction === 1 ? deletedIdx : deletedIdx - 1;
+      const page = navigable[Math.max(0, Math.min(navigable.length - 1, stepIdx))];
+      if (page) handleSelectPage(page);
+      return;
+    }
+
+    const currentIdx = navigable.findIndex((p) => p.id === activePage.id);
     if (currentIdx === -1) {
       // Active page not in navigable list (e.g. it's inside a collapsed section).
       // Up → last visible page; down → do nothing (avoid jumping to top).
       if (direction === -1) {
         const page = navigable[navigable.length - 1];
-        if (page) handleSelectPage(page);
+        if (page) handleSelectPage(page, { browsed: true });
       }
       return;
     }
@@ -279,11 +313,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     if (cached && direction === 1 && newIdx === currentIdx) {
       // The last loaded row: the next one is in the list but not loaded yet.
       const next = cached.ids[cached.ids.indexOf(navigable[currentIdx]?.id ?? "") + 1];
-      if (next) void cached.rows([next]).then(() => handleSelectPage(next));
+      if (next) void cached.rows([next]).then(() => handleSelectPage(next, { browsed: true }));
       return;
     }
     const page = navigable[newIdx];
-    if (page) handleSelectPage(page);
+    if (page) handleSelectPage(page, { browsed: true });
   }
 
   useKeyboardShortcut(
@@ -368,7 +402,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   // Stand down only when focus is on a control that natively consumes arrows
   // (popover trigger, listbox, etc.) so it owns the key press.
   function canNavigatePages() {
-    if (renamingId || activePage === null) return false;
+    if (renamingId) return false;
+
+    if (activePage === null && deletedActiveIndex(navigablePages()) === null) return false;
     return !isArrowKeyConsumer(document.activeElement);
   }
   // Discrete presses navigate immediately. Held-key auto-repeats (e.repeat) are
@@ -400,9 +436,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   });
 
   function handlePageClick(page: (typeof visiblePages)[0], e: React.MouseEvent) {
-    const allIds = visiblePages.map((p) => p.id);
     if (e.shiftKey) {
-      setRangeSelection(allIds, page.id, activePage?.id ?? undefined);
+      const onScreenIds = navigablePages().map((p) => p.id);
+      setRangeSelection(onScreenIds, page.id, activePage?.id);
       return;
     }
     if (e.metaKey || e.ctrlKey) {
@@ -434,20 +470,26 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     return Math.max(loadedSelection().length, 1);
   }
 
-  /** Run an action on all selected pages (if page is selected), or just the given page. */
-  function batchAction(page: PageSummary, action: (p: PageSummary) => void) {
+  /** Run an action on the selected pages (if page is selected), or just the given page. */
+  function onMenuTargets(page: PageSummary, action: (pages: PageSummary[]) => void) {
     if (menuActsOn(page.id) === 1) {
-      action(page);
+      action([page]);
       return;
     }
     if (!cached) {
-      for (const p of loadedSelection()) action(p);
+      action(loadedSelection());
       clearSelection();
       return;
     }
     void selectedPages().then((batch) => {
-      for (const p of batch) action(p);
+      action(batch);
       clearSelection();
+    });
+  }
+
+  function batchAction(page: PageSummary, action: (p: PageSummary) => void) {
+    onMenuTargets(page, (pages) => {
+      for (const p of pages) action(p);
     });
   }
 
@@ -461,7 +503,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         key={page.id}
         menuActsOn={menuActsOn(page.id)}
         onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
-        onDelete={() => batchAction(page, (p) => requestDelete(p, menuActsOn(page.id)))}
+        onDelete={() => onMenuTargets(page, (ps) => requestDeleteMany(ps, menuActsOn(page.id)))}
         onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}
         onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         onRenameCancel={handleRenameCancel}
@@ -581,7 +623,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       case "load-more":
         return (
           <button
-            className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+            className="w-full px-3 py-1.5 text-left text-xs text-subtle transition-colors hover:text-muted-foreground"
             onClick={() => void loadMoreCompleted()}
           >
             Show more completed
@@ -598,6 +640,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         return <div aria-hidden style={{ height: row.count * placeholderHeight(density) }} />;
     }
   }
+
+  const hasMultiSelection = selectedPageIds.size > 1;
 
   return (
     <div
@@ -657,6 +701,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           </div>
         </SortableContext>
       </div>
+
+      {hasMultiSelection && (
+        <div
+          className="type-ui-sm mt-auto border-t border-border px-3 py-1.5 text-muted-foreground"
+          role="status"
+        >
+          <span className="tabular-nums">{selectedPageIds.size}</span> selected · right-click for
+          actions
+        </div>
+      )}
 
       {/* Drag handle — right edge */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only resize, kbd control deferred to the post-launch a11y backlog */}

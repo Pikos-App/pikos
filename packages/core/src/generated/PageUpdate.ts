@@ -8,7 +8,13 @@ export type PageUpdate = {
   title?: string | null;
   subtitle?: string | null;
   content?: string | null;
-  contentText?: string | null;
+  /**
+   * The body an editor's `content` was typed over. Given, the content lands only over that
+   * body; over any other it is merged against it first, so an edit made elsewhere since the
+   * editor loaded is never overwritten. A body rather than the sync clock, because a write from
+   * the CLI with sync off moves no clock.
+   */
+  baseContent?: string | null;
   status?: "not_started" | "done";
   priority?: number;
   tags?: Array<string> | null;
@@ -16,7 +22,6 @@ export type PageUpdate = {
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;
-  links?: Array<string> | null;
   parentId?: string | null;
   lastOpenedAt?: string | null;
 };

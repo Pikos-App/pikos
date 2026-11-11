@@ -1,7 +1,10 @@
+import { execFileSync } from "node:child_process";
+
 import type { Locator, Page } from "@playwright/test";
 
 import {
   test as appTest,
+  bridgeCall,
   expect,
   mod,
   openEditorForPage,
@@ -366,6 +369,249 @@ appTest(
       await app.getByPlaceholder("Paste or type a URL…").fill("https://pikos.app");
       await app.keyboard.press("Enter");
       await expect(body.getByRole("link", { name: "Pikos is local-first" })).toBeVisible();
+    });
+  }
+);
+
+appTest(
+  "typing [[ links an existing page picked by its title, and never makes one",
+  { tag: ["@EDIT-25"] },
+  async ({ app }) => {
+    for (const title of ["Garden plans", "Garage sale", "Reading list", "Hub"]) {
+      await quickAdd(app, title);
+    }
+    const body = await openEditorForPage(app, "Hub");
+    const picker = app.getByRole("listbox", { name: "Link to page" });
+    const link = (title: string) => body.getByRole("button", { exact: true, name: title });
+    const rows = app.locator("[data-page-list-item]");
+
+    await appTest.step("EDIT-25 the picker lists only the pages whose titles match", async () => {
+      await app.keyboard.type("[[Gar");
+      await expect(picker.getByRole("option")).toHaveCount(2);
+      for (const title of ["Garden plans", "Garage sale"]) {
+        await expect(picker.getByRole("option", { name: title })).toBeVisible();
+      }
+    });
+
+    await appTest.step("EDIT-25 with no match it says so and makes nothing", async () => {
+      await app.keyboard.type("xyz");
+      await expect(app.getByRole("status").filter({ hasText: "No pages match" })).toBeVisible();
+      await app.keyboard.press("Enter");
+      await expect(rows).toHaveCount(4);
+      await expect(body.getByRole("button")).toHaveCount(0);
+      await clearBody(app);
+    });
+
+    await appTest.step("EDIT-25 Escape closes the picker", async () => {
+      await app.keyboard.type("[[Rea");
+      await expect(picker).toBeVisible();
+      await app.keyboard.press("Escape");
+      await expect(picker).toHaveCount(0);
+      await expect(body.getByRole("button")).toHaveCount(0);
+      await clearBody(app);
+    });
+
+    await appTest.step("EDIT-25 Enter inserts the link", async () => {
+      await app.keyboard.type("[[Garden");
+      await expect(picker.getByRole("option")).toHaveCount(1);
+      await app.keyboard.press("Enter");
+      await expect(picker).toHaveCount(0);
+      await expect(link("Garden plans")).toBeVisible();
+    });
+
+    await appTest.step("EDIT-25 a click inserts the link", async () => {
+      await app.keyboard.type("and [[Read");
+      await picker.getByRole("option", { name: "Reading list" }).click();
+      await expect(link("Reading list")).toBeVisible();
+    });
+
+    await appTest.step("EDIT-25 [[ in a code block opens nothing", async () => {
+      await app.keyboard.press("Enter");
+      await app.keyboard.type("``` ");
+      await app.keyboard.type("[[Gar");
+      await expect(body.getByRole("code")).toContainText("[[Gar");
+      await expect(picker).toHaveCount(0);
+      await expect(app.getByText("No pages match")).toHaveCount(0);
+    });
+
+    await appTest.step("EDIT-25 clicking the link opens that page", async () => {
+      await link("Garden plans").click();
+      await expect(app.getByLabel("Page title")).toHaveText("Garden plans");
+    });
+  }
+);
+
+appTest(
+  "a renamed page's links show its new title, and its byline counts and lists the pages linking here",
+  { tag: ["@EDIT-26"] },
+  async ({ app }) => {
+    await quickAdd(app, "Plans");
+    await quickAdd(app, "Garden journal");
+    const body = await openEditorForPage(app, "Garden journal");
+    await app.keyboard.type("See [[Plans");
+    await expect(app.getByRole("listbox", { name: "Link to page" })).toBeVisible();
+    await app.keyboard.press("Enter");
+    const link = (title: string) => body.getByRole("button", { exact: true, name: title });
+    await expect(link("Plans")).toBeVisible();
+    await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+    const items = app.locator("[data-page-list-item]");
+    const backlinks = app.getByRole("button", { name: "Linked from 1 page" });
+
+    await appTest.step("EDIT-26 the link shows the new title at once and still opens it", async () => {
+      await items.filter({ hasText: "Plans" }).click();
+      await app.getByLabel("Page title").click();
+      await app.keyboard.press(mod("Mod+a"));
+      await app.keyboard.type("Plans for spring");
+      await app.keyboard.press("Enter");
+      await items.filter({ hasText: "Garden journal" }).click();
+      await expect(link("Plans for spring")).toBeVisible();
+      await link("Plans for spring").click();
+      await expect(app.getByLabel("Page title")).toHaveText("Plans for spring");
+    });
+
+    await appTest.step("EDIT-26 the byline shows the count after the tags", async () => {
+      await expect(backlinks).toHaveText("1");
+      const tags = await app.getByRole("button", { name: /^Tags: / }).boundingBox();
+      const count = await backlinks.boundingBox();
+      expect(count!.x).toBeGreaterThan(tags!.x + tags!.width);
+    });
+
+    await appTest.step("EDIT-26 it lists the linking pages and opens one", async () => {
+      await backlinks.click();
+      await app.getByRole("menuitem", { name: "Garden journal" }).click();
+      await expect(app.getByLabel("Page title")).toHaveText("Garden journal");
+    });
+
+    await appTest.step("EDIT-26 it is absent when nothing links to the page", async () => {
+      await expect(app.getByRole("button", { name: /^Linked from / })).toHaveCount(0);
+    });
+  }
+);
+
+/** The distinct text colours inside a code block: one when nothing is coloured. */
+function codeColours(code: Locator) {
+  return code.evaluate((el) => {
+    const colours = new Set<string>();
+    for (const node of [el, ...Array.from(el.querySelectorAll("*"))]) {
+      const hasOwnText = Array.from(node.childNodes).some(
+        (child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()
+      );
+      if (hasOwnText) colours.add(getComputedStyle(node).color);
+    }
+    return colours.size;
+  });
+}
+
+async function paste(body: Locator, text: string) {
+  await body.evaluate((el, plain) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", plain);
+    el.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data })
+    );
+  }, text);
+}
+
+const PYTHON = [
+  "def greet(name):",
+  '    print(f"Hello, {name}")',
+  "    return None",
+  "",
+  "class Greeter:",
+  "    def __init__(self):",
+  "        self.count = 0",
+].join("\n");
+
+appTest(
+  "a code block is coloured by the language picked or guessed on paste",
+  { tag: ["@EDIT-27"] },
+  async ({ app }) => {
+    await quickAdd(app, "Snippets");
+    const body = await openEditorForPage(app, "Snippets");
+    const code = body.getByRole("code");
+    const language = body.getByRole("combobox", { name: "Code language" });
+
+    await appTest.step("EDIT-27 a language picked colours the code; Plain text doesn't", async () => {
+      await app.keyboard.type("``` ");
+      await app.keyboard.type("def greet(name): return None");
+      await expect(language).toHaveValue("");
+      expect(await codeColours(code)).toBe(1);
+      await language.selectOption({ label: "Python" });
+      await expect.poll(() => codeColours(code)).toBeGreaterThan(1);
+      await language.selectOption({ label: "Plain text" });
+      await expect.poll(() => codeColours(code)).toBe(1);
+    });
+
+    await appTest.step("EDIT-27 code pasted into an unlabeled block gets a guessed language", async () => {
+      await clearBody(app);
+      await app.keyboard.type("``` ");
+      await expect(language).toHaveValue("");
+      await paste(body, PYTHON);
+      await expect(language).toHaveValue("python");
+      await expect.poll(() => codeColours(code)).toBeGreaterThan(1);
+    });
+
+    await appTest.step("EDIT-27 an untagged fenced block pasted gets one too, and it can be changed", async () => {
+      await clearBody(app);
+      await paste(body, "```\n" + PYTHON + "\n```");
+      await expect(language).toHaveValue("python");
+      await language.selectOption({ label: "Ruby" });
+      await expect(language).toHaveValue("ruby");
+    });
+  }
+);
+
+appTest(
+  "a failed save shows Not saved beside the word count, says why, and retries on a click",
+  { tag: ["@EDIT-28"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "EDIT-28 fails a write in the real writer's database");
+    await quickAdd(app, "Ledger");
+    const body = await openEditorForPage(app, "Ledger");
+    const notSaved = app.getByRole("button", { name: "Save failed. Click to retry" });
+    const byline = app.getByRole("button", { name: /^Tags: / });
+    const db = await bridgeCall<string>(app, "bridge_workspace_path");
+    const sql = (statement: string) =>
+      execFileSync("sqlite3", ["-cmd", ".timeout 5000", db, statement]);
+
+    await appTest.step("EDIT-28 an ordinary autosave shows nothing", async () => {
+      await app.keyboard.type("first line");
+      await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+      await expect(notSaved).toHaveCount(0);
+    });
+
+    const before = await byline.boundingBox();
+    sql(
+      "CREATE TRIGGER refuse_writes BEFORE UPDATE ON pages BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;"
+    );
+
+    await appTest.step("EDIT-28 a failed save shows Not saved beside the word count", async () => {
+      await app.keyboard.type(" and a second");
+      await expect(notSaved).toHaveText("Not saved");
+      const info = await app.getByRole("button", { name: "Page info" }).boundingBox();
+      const status = await notSaved.boundingBox();
+      expect(Math.abs(status!.y + status!.height / 2 - (info!.y + info!.height / 2))).toBeLessThan(4);
+      expect(status!.x + status!.width).toBeLessThanOrEqual(info!.x);
+    });
+
+    await appTest.step("EDIT-28 nothing in the properties row moves", async () => {
+      expect(await byline.boundingBox()).toEqual(before);
+    });
+
+    await appTest.step("EDIT-28 its tooltip says why", async () => {
+      await notSaved.hover();
+      await expect(app.getByRole("tooltip")).toContainText(/^Storage error while saving/);
+    });
+
+    await appTest.step("EDIT-28 clicking it retries, and the text is kept", async () => {
+      sql("DROP TRIGGER refuse_writes;");
+      await notSaved.click();
+      await expect(notSaved).toHaveCount(0);
+      await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+      await app.reload();
+      await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+      await app.locator("[data-page-list-item]").filter({ hasText: "Ledger" }).click();
+      await expect(body).toHaveText("first line and a second");
     });
   }
 );

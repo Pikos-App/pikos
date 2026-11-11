@@ -151,7 +151,7 @@ function FeatureBadge({
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
         active
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-          : "border-border bg-muted/50 text-muted-foreground/50"
+          : "border-border bg-muted/50 text-subtle"
       )}
       role="group"
     >

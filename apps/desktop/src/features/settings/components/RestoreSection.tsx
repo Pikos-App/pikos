@@ -5,13 +5,12 @@
 // rename a file. This is the same list, in the place people look when something
 // has gone wrong.
 
-import type { BackupEntry, BackupKind } from "@pikos/core";
+import type { BackupEntry, BackupKind, StorageAdapter } from "@pikos/core";
 import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
 
 import { SettingsSection } from "./SettingsSection";
@@ -47,8 +46,9 @@ type Load =
   | { status: "ready"; backups: BackupEntry[] }
   | { status: "error"; message: string };
 
-export function RestoreSection() {
-  const { storage } = useWorkspace();
+/** `storage` comes from the caller because the damaged-workspace screen shows this list
+ *  before the workspace counts as loaded, when `useWorkspace().storage` is still null. */
+export function RestoreSection({ storage }: { storage: StorageAdapter | null }) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [chosen, setChosen] = useState<BackupEntry | null>(null);
   const [restoring, setRestoring] = useState(false);

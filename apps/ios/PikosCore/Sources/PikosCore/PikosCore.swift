@@ -923,12 +923,6 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func applyRecords(records: [SyncRecord]) async throws  -> SyncApplied
     
-    /**
-     * A page body's clock as stored now, None while sync has never started. Keep it with the body
-     * the editor loaded and pass it to `save_body_if_unchanged`.
-     */
-    func bodyClock(pageId: String) async throws  -> String?
-    
     func buildRecords(names: [String]) async throws  -> [BuiltRecord]
     
     /**
@@ -975,11 +969,6 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * couldn't.
      */
     func retryHeldRecords() async throws  -> SyncApplied
-    
-    /**
-     * Saves a body only if it is still the one the editor loaded.
-     */
-    func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?) async throws  -> BodySave
     
     /**
      * Keeps CloudKit's metadata for records it saved or fetched.
@@ -1937,26 +1926,6 @@ open func applyRecords(records: [SyncRecord])async throws  -> SyncApplied  {
         )
 }
     
-    /**
-     * A page body's clock as stored now, None while sync has never started. Keep it with the body
-     * the editor loaded and pass it to `save_body_if_unchanged`.
-     */
-open func bodyClock(pageId: String)async throws  -> String?  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_pikos_ffi_fn_method_workspace_body_clock(
-                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
-                )
-            },
-            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
-            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
-            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionString.lift,
-            errorHandler: FfiConverterTypeWorkspaceError_lift
-        )
-}
-    
 open func buildRecords(names: [String])async throws  -> [BuiltRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -2154,25 +2123,6 @@ open func retryHeldRecords()async throws  -> SyncApplied  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncApplied_lift,
-            errorHandler: FfiConverterTypeWorkspaceError_lift
-        )
-}
-    
-    /**
-     * Saves a body only if it is still the one the editor loaded.
-     */
-open func saveBodyIfUnchanged(pageId: String, content: String, loadedClock: String?)async throws  -> BodySave  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_pikos_ffi_fn_method_workspace_save_body_if_unchanged(
-                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(content),FfiConverterOptionString.lower(loadedClock)
-                )
-            },
-            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
-            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
-            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBodySave_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -5813,11 +5763,9 @@ public struct PageEdit: Equatable, Hashable {
      */
     public var content: String?
     /**
-     * Plain text for the search index. Supply it alongside `content` — the
-     * editor extracts it already, and re-deriving it here would parse the
-     * document a second time.
+     * The body `content` was typed over: an edit made elsewhere since is merged, not overwritten.
      */
-    public var contentText: String?
+    public var baseContent: String?
     public var status: String?
     public var priority: Int64?
     public var tags: [String]?
@@ -5836,17 +5784,15 @@ public struct PageEdit: Equatable, Hashable {
          * Tiptap JSON. Setting this re-stamps `content_schema_version`.
          */content: String? = nil, 
         /**
-         * Plain text for the search index. Supply it alongside `content` — the
-         * editor extracts it already, and re-deriving it here would parse the
-         * document a second time.
-         */contentText: String? = nil, status: String? = nil, priority: Int64? = nil, tags: [String]? = nil, 
+         * The body `content` was typed over: an edit made elsewhere since is merged, not overwritten.
+         */baseContent: String? = nil, status: String? = nil, priority: Int64? = nil, tags: [String]? = nil, 
         /**
          * Absent leaves the page where it is; see [`FolderAssignment`].
          */folder: FolderAssignment? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.content = content
-        self.contentText = contentText
+        self.baseContent = baseContent
         self.status = status
         self.priority = priority
         self.tags = tags
@@ -5872,7 +5818,7 @@ public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
                 title: FfiConverterOptionString.read(from: &buf), 
                 subtitle: FfiConverterOptionString.read(from: &buf), 
                 content: FfiConverterOptionString.read(from: &buf), 
-                contentText: FfiConverterOptionString.read(from: &buf), 
+                baseContent: FfiConverterOptionString.read(from: &buf), 
                 status: FfiConverterOptionString.read(from: &buf), 
                 priority: FfiConverterOptionInt64.read(from: &buf), 
                 tags: FfiConverterOptionSequenceString.read(from: &buf), 
@@ -5884,7 +5830,7 @@ public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.title, into: &buf)
         FfiConverterOptionString.write(value.subtitle, into: &buf)
         FfiConverterOptionString.write(value.content, into: &buf)
-        FfiConverterOptionString.write(value.contentText, into: &buf)
+        FfiConverterOptionString.write(value.baseContent, into: &buf)
         FfiConverterOptionString.write(value.status, into: &buf)
         FfiConverterOptionInt64.write(value.priority, into: &buf)
         FfiConverterOptionSequenceString.write(value.tags, into: &buf)
@@ -8385,89 +8331,6 @@ public func FfiConverterTypeBlockEdge_lift(_ buf: RustBuffer) throws -> BlockEdg
 #endif
 public func FfiConverterTypeBlockEdge_lower(_ value: BlockEdge) -> RustBuffer {
     return FfiConverterTypeBlockEdge.lower(value)
-}
-
-
-
-/**
- * What a conditional body save did.
- */
-
-public enum BodySave: Equatable, Hashable {
-    
-    /**
-     * Saved; the clock to save with next time.
-     */
-    case saved(clock: String?
-    )
-    /**
-     * Another device's edit moved the body on since it was loaded. Nothing was written: take this
-     * body, replay the unsaved edits onto it, and save again.
-     */
-    case moved(content: String, clock: String?
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension BodySave: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBodySave: FfiConverterRustBuffer {
-    typealias SwiftType = BodySave
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BodySave {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .saved(clock: try FfiConverterOptionString.read(from: &buf)
-        )
-        
-        case 2: return .moved(content: try FfiConverterString.read(from: &buf), clock: try FfiConverterOptionString.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: BodySave, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .saved(clock):
-            writeInt(&buf, Int32(1))
-            FfiConverterOptionString.write(clock, into: &buf)
-            
-        
-        case let .moved(content,clock):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(content, into: &buf)
-            FfiConverterOptionString.write(clock, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBodySave_lift(_ buf: RustBuffer) throws -> BodySave {
-    return try FfiConverterTypeBodySave.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBodySave_lower(_ value: BodySave) -> RustBuffer {
-    return FfiConverterTypeBodySave.lower(value)
 }
 
 
@@ -11537,7 +11400,7 @@ public func parseQuickAdd(input: String, reference: String) -> QuickAddResult?  
  * For a caller building a page by hand from a parsed line — the phone's
  * quick-add sheet, when a date picked in the picker overrides the parse — so
  * the body typed after `//` is not lost on that path. The same builder the
- * data layer uses for a synced event's description, so the two cannot drift.
+ * data layer uses for a page created from text, so the two cannot drift.
  */
 public func plainTextToDocument(text: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -11666,7 +11529,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_func_parse_quick_add() != 46428) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 58750) {
+    if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 16292) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_drop_schedule() != 19000) {
@@ -11708,9 +11571,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_apply_records() != 40556) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_body_clock() != 20974) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_pikos_ffi_checksum_method_workspace_build_records() != 60036) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11742,9 +11602,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_retry_held_records() != 3988) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_pikos_ffi_checksum_method_workspace_save_body_if_unchanged() != 63885) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_save_system_fields() != 44227) {

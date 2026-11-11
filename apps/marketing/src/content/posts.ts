@@ -1,3 +1,5 @@
+import { isOut } from "./published";
+
 /**
  * Every blog post's metadata, written once.
  *
@@ -16,6 +18,8 @@ export interface Post {
   /** ISO date. A date ahead of the build schedules the post; see `published`. */
   date: string;
   tag: string;
+  /** The release a post announces, which holds it back until that release is published. */
+  version?: string;
 }
 
 export const posts: Post[] = [
@@ -26,6 +30,7 @@ export const posts: Post[] = [
       "Pikos 0.4.1 opens a page in under a tenth of a second with fifty pages or half a million. What changed, how it stays that way, and how to check it yourself.",
     date: "2026-10-14",
     tag: "Releases",
+    version: "0.4.1",
   },
   {
     slug: "your-calendar-inside-pikos",
@@ -34,6 +39,7 @@ export const posts: Post[] = [
       "Pikos 0.4.0 syncs your calendar in: Google, iCloud, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
     date: "2026-09-28",
     tag: "Releases",
+    version: "0.4.0",
   },
   {
     slug: "the-code-is-public",
@@ -71,11 +77,12 @@ export const posts: Post[] = [
 /**
  * A date ahead of the build is a scheduled post, not a published one, so it stays out of the
  * listing and the feed until a build runs on or after that day. Nothing reads the clock at request
- * time: this is a static site, so shipping a post on its date needs a build on its date.
+ * time: this is a static site, so shipping a post on its date needs a build on its date. A post
+ * announcing a release newer than `releasedVersion` waits for it the same way (`published.ts`).
  */
-export function published(all: Post[] = posts): Post[] {
+export function published(releasedVersion: string, all: Post[] = posts): Post[] {
   const today = new Date().toISOString().slice(0, 10);
-  return all.filter((p) => p.date <= today);
+  return all.filter((p) => p.date <= today && (!p.version || isOut(p.version, releasedVersion)));
 }
 
 /**

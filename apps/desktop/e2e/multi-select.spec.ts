@@ -13,7 +13,7 @@ async function createPages(app: Page, titles: string[]) {
 
 appTest(
   "multi-select pages with Cmd+Click",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["alpha page", "beta page", "gamma page"]);
 
@@ -41,7 +41,7 @@ appTest(
 
 appTest(
   "multi-select range with Shift+Click",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["range-a", "range-b", "range-c", "range-d"]);
 
@@ -62,11 +62,55 @@ appTest(
   }
 );
 
+appTest(
+  "Shift+Click in a folder ranges from the last Cmd-clicked page, not the open one",
+  { tag: ["@LIST-09:12"] },
+  async ({ app }) => {
+    await createFolder(app, "Range QA");
+    await createPages(app, ["anchor-a", "anchor-b", "anchor-c", "anchor-d"]);
+    const list = app.locator("[data-page-list-item]");
+    const [a, b, c, d] = ["anchor-a", "anchor-b", "anchor-c", "anchor-d"].map((t) =>
+      list.filter({ hasText: t })
+    );
+
+    await a!.click();
+    await c!.click({ modifiers: ["Meta"] });
+    await d!.click({ modifiers: ["Shift"] });
+
+    await expect(c!).toHaveAttribute("data-selected", "true");
+    await expect(d!).toHaveAttribute("data-selected", "true");
+    await expect(b!).not.toHaveAttribute("data-selected");
+  }
+);
+
+appTest(
+  "Shift+Click ranges into the expanded Completed section",
+  { tag: ["@LIST-09:12"] },
+  async ({ app }) => {
+    await createPages(app, ["done-range-a", "done-range-b", "done-range-c"]);
+    const list = app.locator("[data-page-list-item]");
+    await list
+      .filter({ hasText: "done-range-c" })
+      .getByRole("checkbox", { name: /Mark done/i })
+      .click();
+    await app.getByRole("button", { exact: true, name: "Completed" }).click();
+    const [a, b, c] = ["done-range-a", "done-range-b", "done-range-c"].map((t) =>
+      list.filter({ hasText: t })
+    );
+    await expect(c!).toBeVisible();
+
+    await a!.click();
+    await c!.click({ modifiers: ["Shift"] });
+
+    for (const page of [a, b, c]) await expect(page!).toHaveAttribute("data-selected", "true");
+  }
+);
+
 // ─── Escape clears selection ───────────────────────────────────────────────
 
 appTest(
   "Escape clears multi-selection",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["esc-page-1", "esc-page-2"]);
 
@@ -88,7 +132,7 @@ appTest(
 
 appTest(
   "Cmd+Click keeps every page it adds selected",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["keep-a", "keep-b", "keep-c"]);
     const list = app.locator("[data-page-list-item]");
@@ -104,7 +148,7 @@ appTest(
 
 appTest(
   "a click outside the list clears a multi-selection",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["out-1", "out-2"]);
     const list = app.locator("[data-page-list-item]");
@@ -140,7 +184,7 @@ appTest("Cmd+A selects all visible pages", async ({ app }) => {
 
 appTest(
   "Cmd+A then Space marks all selected pages as completed",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     const titles = ["space-bulk-1", "space-bulk-2", "space-bulk-3"];
     await createPages(app, titles);
@@ -269,7 +313,7 @@ appTest(
 
 appTest(
   "bulk delete selected pages with Cmd+Backspace",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["del-bulk-1", "del-bulk-2", "del-bulk-3"]);
 
@@ -293,7 +337,7 @@ appTest(
 
 appTest(
   "plain click clears multi-selection",
-  { tag: ["@LIST-09:10"] },
+  { tag: ["@LIST-09:12"] },
   async ({ app }) => {
     await createPages(app, ["clear-sel-1", "clear-sel-2", "clear-sel-3"]);
 

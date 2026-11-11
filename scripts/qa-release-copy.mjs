@@ -2,17 +2,20 @@
 // Write a release's QA copy: the master with every row marked, and the counts on top.
 //
 //   pnpm qa:release <version> [--kind patch|minor|major] [--since <rev>] [--until <rev>]
-//                             [--waive-sweep "<why>"] [--force]
+//                             [--driven-on <rev>] [--macos-update] [--force]
 //
-// A row is touched when a changed file matches its section's `paths:` globs, when a
-// file importing a changed module does, or when a changed spec carries the row's tag.
-// Touched rows are marked automated (from `qa-marks.mjs`, never typed) or manual;
-// the rest are untouched. The result is a candidate set, deliberately over-inclusive,
-// for a person to judge before anyone drives a row.
+// A row is touched when a changed file matches its paths (its own, or else its section's),
+// when a file importing a changed module does, when a changed spec carries the row's tag, or
+// when a library it serves moved. A manual row is also on the list when it checks the release
+// build, when the ledger says nobody has driven it for six months, or after a major macOS
+// update (`PKOS-0145`). Touched rows are marked automated (from `qa-marks.mjs`, never typed) or
+// manual; the rest are untouched. The result is a candidate set for a person to judge before
+// anyone drives a row.
 //
 // Run again on a copy that exists, it keeps what a person has done: a ticked row, or a row
-// marked both or judged untouched with its reason, stays so unless a commit since the last run
-// reaches it; a deferred row stays deferred.
+// marked both or judged untouched with its reason, stays so unless a commit since the build the
+// rows were driven on reaches it; a deferred row stays deferred. `--driven-on` names that build,
+// and the copy remembers it; without it, the commit the copy was last written at stands in.
 // `--force` starts over.
 //
 // Reads the master and writes the copy in the working tree, so it runs where the
@@ -27,39 +30,76 @@ import {
   importGraph,
   isTouched,
   readCopy,
+  readLedger,
   readMaster,
+  RELEASE_BUILD_ROWS,
   ROOT,
   touches,
 } from "./lib/qa-rows.mjs";
 
 const KINDS = ["patch", "minor", "major"];
 
-/** What a release kind adds to the touched set, whatever changed: a minor release runs the
- *  screen tour, a major one sweeps every row. */
-function touchForKind(kind, sections, reasons) {
+/** `date` (YYYY-MM-DD) less six months, to the day, comparable as a string. */
+function sixMonthsBefore(date) {
+  const [y, m, d] = date.split("-").map(Number);
+  const months = y * 12 + (m - 1) - 6;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${Math.floor(months / 12)}-${pad((months % 12) + 1)}-${pad(d)}`;
+}
+
+/**
+ * What the release adds to the touched set, whatever changed: a minor release runs the screen
+ * tour, a major one sweeps every row; a manual row that checks the release build, or that the
+ * ledger hasn't seen driven since six months before `until`, comes back, and after a major macOS
+ * update every manual row does.
+ */
+function touchForRelease({ automated, kind, macosUpdate, reasons, sections, until }) {
   const touch = (key, why) => (reasons.get(key) ?? reasons.set(key, new Set()).get(key)).add(why);
+  const touchSection = (s, why) => {
+    touch(s.key, why);
+    for (const row of s.rows.filter((r) => r.paths)) touch(row.id, why);
+  };
+  const ledger = readLedger();
+  const cutoff = sixMonthsBefore(git("log", "-1", "--format=%cs", until));
+
   for (const s of sections) {
-    if (kind === "major") touch(s.key, "a major release sweeps every row");
+    if (kind === "major") touchSection(s, "a major release sweeps every row");
     else if (kind === "minor" && s.key === "TOUR")
-      touch(s.key, "a minor release runs the screen tour");
+      touchSection(s, "a minor release runs the screen tour");
+
+    for (const row of s.rows.filter((r) => r.manualForGood || !automated[r.id])) {
+      const driven = ledger[row.id];
+      if (RELEASE_BUILD_ROWS.includes(row.id)) touch(row.id, "it checks the release build");
+      if (macosUpdate) touch(row.id, "a major macOS update");
+      if (!driven) touch(row.id, "no drive recorded");
+      else if (driven < cutoff) touch(row.id, `last driven ${driven}`);
+    }
   }
 }
 
 function parseArgs(argv) {
-  const opts = { force: false, since: null, until: "HEAD", version: null, waive: null };
+  const opts = {
+    drivenOn: null,
+    force: false,
+    macosUpdate: false,
+    since: null,
+    until: "HEAD",
+    version: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--force") opts.force = true;
     else if (arg === "--since") opts.since = argv[++i];
     else if (arg === "--until") opts.until = argv[++i];
-    else if (arg === "--waive-sweep") opts.waive = argv[++i];
+    else if (arg === "--driven-on") opts.drivenOn = git("rev-parse", "--short", argv[++i]);
+    else if (arg === "--macos-update") opts.macosUpdate = true;
     else if (arg === "--kind") opts.kind = argv[++i];
     else if (!arg.startsWith("--") && !opts.version) opts.version = arg;
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!opts.version)
     throw new Error(
-      "usage: qa-release-copy.mjs <version> [--kind patch|minor|major] [--since <rev>] [--until <rev>] [--waive-sweep <why>] [--force]"
+      "usage: qa-release-copy.mjs <version> [--kind patch|minor|major] [--since <rev>] [--until <rev>] [--driven-on <rev>] [--macos-update] [--force]"
     );
   if (opts.kind && !KINDS.includes(opts.kind))
     throw new Error(`--kind is one of ${KINDS.join(", ")}`);
@@ -79,26 +119,34 @@ function main() {
   const range = `${opts.since}..${opts.until}`;
   const dest = join(ROOT, ".agent/releases", opts.version, "qa.md");
   const previous = existsSync(dest) && !opts.force ? readCopy(dest) : null;
-  const waive = opts.waive ?? previous?.waiver ?? null;
   const kind = opts.kind ?? previous?.kind ?? "patch";
+  const drivenOn = opts.drivenOn ?? previous?.drivenOn ?? null;
   const { lines, sections } = readMaster();
   const automated = automatedRows();
   const graph = importGraph();
-  const { reasons, sweep, unmapped } = touches({ automated, graph, range, sections, waive });
-  touchForKind(kind, sections, reasons);
+  const { libraries, reasons, unmapped } = touches({ automated, graph, range, sections });
+  touchForRelease({
+    automated,
+    kind,
+    macosUpdate: opts.macosUpdate,
+    reasons,
+    sections,
+    until: opts.until,
+  });
   const head = git("rev-parse", "--short", opts.until);
 
-  // What landed since the copy was last written. A row it reaches has to be driven again;
-  // every other row keeps the tick, or the reason for driving it anyway, a person gave it.
+  // What landed since the build the rows were driven on. A row it reaches has to be driven
+  // again; every other row keeps the tick, or the reason for driving it anyway, a person gave it.
+  const base = drivenOn ?? previous?.sha;
   const since =
-    previous?.sha && git("rev-parse", previous.sha) !== git("rev-parse", opts.until)
-      ? touches({ automated, graph, range: `${previous.sha}..${opts.until}`, sections, waive })
-          .reasons
+    previous && base && git("rev-parse", base) !== git("rev-parse", opts.until)
+      ? touches({ automated, graph, range: `${base}..${opts.until}`, sections }).reasons
       : new Map();
   let carried = 0;
   let reset = 0;
 
   const marks = new Map();
+  const owed = [];
   for (const s of sections) {
     for (const row of s.rows) {
       const touched = isTouched(reasons, s, row);
@@ -112,7 +160,11 @@ function main() {
       let ticked = mark !== "manual";
 
       const before = previous?.rows.get(row.id);
-      if (mark === "manual" && before?.mark === "deferred") {
+      if (mark === "manual" && s.deferred) {
+        mark = "deferred";
+        tail = s.deferred;
+        ticked = false;
+      } else if (mark === "manual" && before?.mark === "deferred") {
         // Nothing since can undo a drive that never happened, so the deferral holds.
         mark = "deferred";
         tail = before.tail;
@@ -142,6 +194,7 @@ function main() {
         }
       }
       marks.set(row.id, mark);
+      if (mark === "manual" && !row.manualForGood) owed.push(row.id);
       const box = ticked ? "- [x]" : "- [ ]";
       lines[row.line] =
         `${lines[row.line].replace(/^- \[[ x]\]/, box)} · **${mark}**${tail ? ` ${tail}` : ""}`;
@@ -150,12 +203,10 @@ function main() {
 
   const count = (mark) => [...marks.values()].filter((m) => m === mark).length;
   const touchedCount = marks.size - count("untouched");
-  const sweepLine =
-    sweep.length === 0
-      ? "Full sweep: not triggered."
-      : waive
-        ? `Full sweep: triggered by ${sweep.join("; ")}. Waived: ${waive}`
-        : `Full sweep: triggered by ${sweep.join("; ")}. Every section is touched.`;
+  const librariesLine =
+    libraries.length === 0
+      ? "Every library that moved reaches a row, or none moved."
+      : `Libraries that moved and reach no row, for a person to judge: ${libraries.map((l) => `\`${l}\``).join(", ")}.`;
 
   const reached = sections
     .filter((s) => reasons.has(s.key) || s.rows.some((r) => reasons.has(r.id)))
@@ -177,7 +228,7 @@ function main() {
   const copy = [
     `# QA — ${opts.version}`,
     "",
-    `Generated by \`scripts/qa-release-copy.mjs\` from \`${range}\` at \`${head}\`, for a ${kind} release. The marks are a`,
+    `Generated by \`scripts/qa-release-copy.mjs\` from \`${range}\` at \`${head}\`, for a ${kind} release.${drivenOn ? ` Ticked rows were driven on \`${drivenOn}\`.` : ""} The marks are a`,
     "computed candidate set: judge them against the commits before driving a row. Tick a manual",
     "row when a person has driven it; mark a row **both**, with the reason, when a person drives an",
     "automated row anyway. Mark a manual row **deferred**, with the reason, when it can't be driven",
@@ -191,11 +242,13 @@ function main() {
     `| In the master | ${marks.size} |`,
     `| Touched | ${touchedCount} |`,
     `| Automated, so nobody drives them | ${count("automated")} |`,
-    `| For a person to drive | ${count("manual") + count("both")} |`,
+    `| For a person to drive | ${count("manual") + count("both") - owed.length} |`,
+    `| Owed a test, which blocks the tag (\`PKOS-0193\`) | ${owed.length} |`,
     `| Deferred | ${count("deferred")} |`,
     `| Untouched | ${count("untouched")} |`,
     "",
-    sweepLine,
+    ...(owed.length > 0 ? [`Owed a test: ${owed.join(", ")}.`, ""] : []),
+    librariesLine,
     "",
     "## Changed files no row covers",
     "",
@@ -213,7 +266,7 @@ function main() {
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, copy);
   console.log(
-    `${dest}\n${touchedCount} of ${marks.size} rows touched: ${count("automated")} automated, ${count("manual") + count("both")} to drive, ${unmapped.length} changed file(s) map to no row.`
+    `${dest}\n${touchedCount} of ${marks.size} rows touched: ${count("automated")} automated, ${count("manual") + count("both") - owed.length} to drive, ${owed.length} owed a test, ${unmapped.length} changed file(s) map to no row.`
   );
   if (previous) {
     console.log(`Kept ${carried} row(s) a person had driven; ${reset} need driving again.`);

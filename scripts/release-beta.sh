@@ -5,9 +5,9 @@ set -euo pipefail
 #
 # Cuts a PRERELEASE tag from the current feature branch. Separate from
 # release.sh because every gate that script enforces is wrong here: there is no
-# green ci.yml run to require (ci.yml only runs on main and PRs), no website
-# changelog entry to match, and RELEASE_NOTES.md must survive for the real
-# release rather than be consumed and reset.
+# green ci.yml run to require (ci.yml only runs on main and PRs), and no notes of
+# its own: release.yml reads the notes file of the release the beta leads up to,
+# which has to be committed on the branch.
 #
 # The hyphen in the version is load-bearing, not cosmetic. release.yml keys the
 # prerelease flag off it, and GitHub then leaves the tag out of

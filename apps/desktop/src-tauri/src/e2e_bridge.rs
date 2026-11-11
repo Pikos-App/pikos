@@ -225,6 +225,19 @@ impl Bridge {
                 return Ok(Value::Bool(db::sync::google_sync_available()));
             }
             "bridge_log" => return to_value(LOGGED.lock().map(|l| l.clone()).unwrap_or_default()),
+            // The app quitting: its database closes, and the next connect opens the file
+            // afresh, as a relaunch does.
+            "bridge_quit" => {
+                let open = {
+                    let mut pools = self.pools.lock().await;
+                    pools.recent.retain(|token| token != &db);
+                    pools.cells.remove(&db).and_then(|cell| cell.get().cloned())
+                };
+                if let Some(pool) = open {
+                    pool.close().await;
+                }
+                return Ok(Value::Null);
+            }
             "expand_recurrence_range" => {
                 let rules = arg(&mut args, "rules")?;
                 let range_start = arg(&mut args, "range_start")?;
@@ -240,6 +253,17 @@ impl Bridge {
         match command.as_str() {
             "dev_seed_synced_calendar" => {
                 return reply(db::dev::dev_seed_synced_calendar_impl(&pool).await);
+            }
+            // Stands in for a body a newer Pikos synced here, which no command of this build writes.
+            "bridge_mark_body_newer" => {
+                let id: String = arg(&mut args, "id")?;
+                return sqlx::query("UPDATE pages SET content_schema_version = ? WHERE id = ?")
+                    .bind(pikos_db::CONTENT_SCHEMA_VERSION + 1)
+                    .bind(id)
+                    .execute(&pool)
+                    .await
+                    .map(|_| Value::Null)
+                    .map_err(|e| app_error(AppError::from(e)));
             }
             // A spec runs the real CLI against the file the app is using.
             "bridge_workspace_path" => return to_value(self.workspace_path(&db)),
@@ -269,6 +293,34 @@ impl Bridge {
                 return reply(db::dev::vacuum_into(&pool, &dest).await.map(|()| dest));
             }
             "list_backups" => return reply(pikos_db::list_backups(&self.workspace_path(&db))),
+            // The app writes exports to ~/Downloads; a Downloads folder beside the token's
+            // database stands in for it, as the backups' folder does above.
+            "export_page_markdown" => {
+                let page_id: String = arg(&mut args, "page_id")?;
+                let written = db::dev::write_page_markdown(
+                    &pool,
+                    &page_id,
+                    &self.downloads_dir(&db),
+                    &self.dir.join(&db).join(db::assets::ASSET_DIR),
+                )
+                .await;
+                return reply(written.map(|path| path.to_string_lossy().into_owned()));
+            }
+            "export_markdown" => {
+                let include_synced: bool = arg(&mut args, "include_synced")?;
+                let stamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+                let base_dir = self
+                    .downloads_dir(&db)
+                    .join(format!("pikos-markdown-{stamp}"));
+                let written = db::dev::write_markdown_export(
+                    &pool,
+                    &base_dir,
+                    &self.dir.join(&db).join(db::assets::ASSET_DIR),
+                    include_synced,
+                )
+                .await;
+                return reply(written.map(|_| base_dir.to_string_lossy().into_owned()));
+            }
             "get_usage_stats" => {
                 let week_start = arg(&mut args, "week_start")?;
                 return reply(db::dev::get_usage_stats_impl(&pool, week_start).await);
@@ -358,6 +410,10 @@ impl Bridge {
             .join("workspace.sqlite")
             .to_string_lossy()
             .into_owned()
+    }
+
+    fn downloads_dir(&self, token: &str) -> PathBuf {
+        self.dir.join(token).join("Downloads")
     }
 
     /// The token's database, refusing one that `connect_db` never opened, the

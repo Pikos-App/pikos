@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import type { GhostContent } from "../hooks/useDragGhost";
-import { chipFolderStyle } from "../utils/calendarColors";
+import { BLOCK_TIME_TEXT_CLASS, chipFolderStyle } from "../utils/calendarColors";
 
 export interface DragGhostOverlayProps {
   content: GhostContent;
@@ -66,7 +66,10 @@ export function DragGhostOverlay({
             </p>
           </div>
           {content.height >= 40 && (
-            <p className="type-ui-sm mt-0.5 truncate text-subtle" ref={ghostTimeLabelRefCallback} />
+            <p
+              className={cn("type-ui-sm mt-0.5 truncate", BLOCK_TIME_TEXT_CLASS)}
+              ref={ghostTimeLabelRefCallback}
+            />
           )}
         </>
       )}

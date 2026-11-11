@@ -73,7 +73,7 @@ export function SearchablePopover({
             autoComplete="off"
             autoCorrect="off"
             autoFocus
-            className="w-full bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/40"
+            className="w-full bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-subtle"
             onChange={(e) => handleQueryChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") close();

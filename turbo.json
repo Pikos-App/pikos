@@ -4,7 +4,8 @@
     "tsconfig.base.json",
     "eslint.config.js",
     "crates/pikos-db/tests/fixtures/**",
-    "crates/pikos-recurrence/tests/fixtures/**"
+    "crates/pikos-recurrence/tests/fixtures/**",
+    "apps/marketing/src/content/release-notes/**"
   ],
   "tasks": {
     "build": {

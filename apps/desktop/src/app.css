@@ -212,6 +212,7 @@ button,
   --border-secondary: #e6e5e2;
   --border-subtle: #f0efed;
   --border-focus: #2dd4a8;
+  --border-control: #d5d4d0;
 
   /* ─── Interactive ─── */
   --interactive-primary: #1aae8a;
@@ -226,6 +227,15 @@ button,
   --status-due-soon: #d4850f;
   --status-open: #3b82f6;
   --status-done: #10b981;
+
+  /* ─── Code (each at least 4.5:1 on surface-inset, a code block's fill) ─── */
+  --code-keyword: #6d28d9;
+  --code-string: #166534;
+  --code-number: #9a3412;
+  --code-title: #1d4ed8;
+  --code-type: #115e59;
+  --code-comment: var(--text-secondary);
+  --code-deletion: #b91c1c;
 
   /* ─── Shadows (theme-aware — used via var(), not Tailwind utilities) ─── */
   --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -324,6 +334,7 @@ button,
   --border-secondary: #272724;
   --border-subtle: #1e1e1b;
   --border-focus: #2dd4a8;
+  --border-control: #7a7975;
 
   /* ─── Interactive ─── */
   --interactive-primary: #2dd4a8;
@@ -338,6 +349,15 @@ button,
   --status-due-soon: #f59e42;
   --status-open: #60a5fa;
   --status-done: #34d399;
+
+  /* ─── Code ─── */
+  --code-keyword: #c4b5fd;
+  --code-string: #86efac;
+  --code-number: #fdba74;
+  --code-title: #93c5fd;
+  --code-type: #5eead4;
+  --code-comment: var(--text-tertiary);
+  --code-deletion: #fca5a5;
 
   /* ─── Shadows ─── */
   --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -388,10 +408,12 @@ button,
   --color-border-secondary: var(--border-secondary);
   --color-border-subtle: var(--border-subtle);
   --color-border-focus: var(--border-focus);
+  --color-border-control: var(--border-control);
 
   /* ── Semantic interactive tokens ── */
   --color-interactive-primary: var(--interactive-primary);
   --color-interactive-primary-hover: var(--interactive-primary-hover);
+  --color-interactive-fill: var(--interactive-fill);
   --color-interactive-secondary: var(--interactive-secondary);
   --color-interactive-secondary-hover: var(--interactive-secondary-hover);
 
@@ -405,6 +427,7 @@ button,
   --color-subtle: var(--text-tertiary);
   --color-faint: var(--text-disabled);
   --color-due-soon: var(--text-due-soon);
+  --color-action: var(--text-action);
 
   /* ── shadcn/ui backward-compatible aliases ── */
   --color-background: var(--background);

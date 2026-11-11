@@ -723,7 +723,7 @@ async fn write_contention_converges() {
             &edit_pool,
             pid,
             PageUpdate {
-                content_text: Some("my notes".into()),
+                content: Some(pikos_db::build_tiptap_doc("my notes")),
                 ..Default::default()
             },
         )
@@ -895,7 +895,7 @@ async fn backfill_does_not_block_interactive_writes() {
             pool,
             "p-edit".into(),
             PageUpdate {
-                content_text: Some("edited mid-sync".into()),
+                content: Some(pikos_db::build_tiptap_doc("edited mid-sync")),
                 ..Default::default()
             },
         )

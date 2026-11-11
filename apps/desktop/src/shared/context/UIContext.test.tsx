@@ -207,6 +207,45 @@ describe("openPage", () => {
   });
 });
 
+describe("stepHistory", () => {
+  async function openThree() {
+    const hook = renderHookWithProviders(() => ({
+      pages: usePages(),
+      ui: useUI(),
+      workspace: useWorkspace(),
+    }));
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    const ids: string[] = [];
+    await act(async () => {
+      for (const title of ["One", "Two", "Three"]) {
+        ids.push((await hook.result.current.pages.createPage({ title })).id);
+      }
+    });
+    for (const id of ids) act(() => hook.result.current.ui.openPage(id));
+    return { hook, ids };
+  }
+
+  it("goes back to the page opened before, then forward again", async () => {
+    const { hook, ids } = await openThree();
+
+    await act(() => hook.result.current.ui.stepHistory(-1));
+    expect(hook.result.current.ui.activePageId).toBe(ids[1]);
+
+    await act(() => hook.result.current.ui.stepHistory(1));
+    expect(hook.result.current.ui.activePageId).toBe(ids[2]);
+  });
+
+  it("passes over a page deleted since it was opened", async () => {
+    const { hook, ids } = await openThree();
+    await act(() => hook.result.current.pages.softDeletePage(ids[1]!));
+
+    await act(() => hook.result.current.ui.stepHistory(-1));
+    expect(hook.result.current.ui.activePageId).toBe(ids[0]);
+  });
+});
+
 // ─── getSortMode / setSortMode ──────────────────────────────────────────────
 
 describe("sort modes", () => {

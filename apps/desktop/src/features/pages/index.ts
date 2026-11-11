@@ -1,4 +1,5 @@
 export { DeletePageShortcut } from "./components/DeletePageShortcut";
+export { ExportPageShortcut } from "./components/ExportPageShortcut";
 export { PageListItem } from "./components/PageListItem";
 export { QuickAddDialog } from "./components/QuickAddDialog";
 export { SeriesDeleteDialog } from "./components/SeriesDeleteDialog";

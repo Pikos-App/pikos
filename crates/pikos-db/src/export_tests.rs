@@ -9,6 +9,7 @@
 use crate::export::*;
 use crate::{insert_test_folder, insert_test_page, insert_test_page_sync, test_pool, TestPage};
 use sqlx::{Row, SqlitePool};
+use std::collections::HashMap;
 
 /// A page written straight to SQL, so a test can set `content` and
 /// `content_text` independently — which is exactly what the exports read and
@@ -415,9 +416,9 @@ fn frontmatter_escapes_quotes_in_title_and_tags() {
 
 #[test]
 fn markdown_body_empty_inputs_yield_empty_string() {
-    assert_eq!(markdown_body(""), "");
-    assert_eq!(markdown_body("{}"), "");
-    assert_eq!(markdown_body("not json at all"), ""); // parse error → empty
+    assert_eq!(markdown_body("", &HashMap::new()), "");
+    assert_eq!(markdown_body("{}", &HashMap::new()), "");
+    assert_eq!(markdown_body("not json at all", &HashMap::new()), ""); // parse error → empty
 }
 
 #[test]
@@ -426,7 +427,7 @@ fn markdown_body_converts_prosemirror_to_markdown() {
         {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Title"}]},
         {"type":"paragraph","content":[{"type":"text","text":"hello"}]}
     ]}"#;
-    let body = markdown_body(content);
+    let body = markdown_body(content, &HashMap::new());
     assert!(body.contains("## Title"));
     assert!(body.contains("hello"));
 }
@@ -437,7 +438,7 @@ fn exported_markdown_file_is_frontmatter_then_body() {
     // followed by the converted body.
     let content = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"note"}]}]}"#;
     let fm = build_frontmatter("My Page", "done", 2, "[]", None, None, "c", "u");
-    let full = format!("{fm}{}", markdown_body(content));
+    let full = format!("{fm}{}", markdown_body(content, &HashMap::new()));
 
     assert!(full.starts_with("---\ntitle: \"My Page\"\n"));
     assert!(full.contains("status: done\n"));

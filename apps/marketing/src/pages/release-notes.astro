@@ -1,6 +1,23 @@
 ---
+import { getCollection, render } from "astro:content";
+
 import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
+import { formatDate } from "../content/posts";
+import { isOut, publishedVersion } from "../content/published";
+
+const released = await publishedVersion();
+const entries = (await getCollection("releaseNotes"))
+  .filter((entry) => isOut(entry.id, released))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const releases = await Promise.all(
+  entries.map(async (entry) => {
+    const { Content } = await render(entry);
+    const isoDate = entry.data.date.toISOString().slice(0, 10);
+
+    return { Content, badge: entry.data.badge, isoDate, version: entry.id };
+  }),
+);
 ---
 
 <Base title="Release notes - Pikos" description="What's new in Pikos. A running log of features, fixes, and improvements.">
@@ -17,178 +34,21 @@ import Footer from "../components/Footer.astro";
     <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">What ships in each release.</p>
 
     <div class="mt-12 space-y-16">
+      {releases.map(({ Content, badge, isoDate, version }) => (
+        <article id={version}>
+          <div class="flex items-center gap-3">
+            <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{version}</h2>
+            {badge && (
+              <span class="rounded-full bg-warning-400/15 px-2.5 py-0.5 text-xs font-medium text-warning-600 dark:bg-warning-500/20 dark:text-warning-400">{badge}</span>
+            )}
+          </div>
+          <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime={isoDate}>{formatDate(isoDate)}</time>
 
-      <!-- ── 0.4.1 ─────────────────────────────────────────────────────── -->
-      <article>
-        <div class="flex items-center gap-3">
-          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.4.1</h2>
-        </div>
-        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-10-14">October 14, 2026</time>
-
-        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
-
-          <p>
-            Fast at any size. Pikos now loads only what's on screen, so opening a page, searching, and switching views take the same time with fifty pages or half a million. The numbers, and how to check them on your own machine, are on <a href="/speed" class="text-primary-500 hover:underline dark:text-primary-400">the speed page</a>.
-          </p>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Fixed</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li><strong>The current-time line moves.</strong> It used to stay where it was when you opened the calendar.</li>
-            <li><strong>Old repeating meetings stay gone.</strong> Calendar sync no longer brings in series that ended before you connected, and each meeting shows once.</li>
-            <li><strong>Changes from the CLI show up on their own.</strong> Add or edit a page with <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">pikos</code> and the open app picks it up, without losing your place in the list.</li>
-            <li><strong>Meeting links are links.</strong> A Google Meet or Zoom link in a synced event's description is clickable.</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">CLI and MCP</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li><strong>Pages read and write as Markdown.</strong> Editing a page from the CLI or MCP keeps its formatting.</li>
-            <li><strong>More to change.</strong> Move pages between folders, edit tags, manage folders and the trash, and skip, move or reopen one occurrence of a repeating page.</li>
-          </ul>
-
-          <p>
-            Plus right-click and <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Esc</code> shortcuts on the calendar, and a couple dozen smaller fixes to sync, search, Quick Add, and export.
-          </p>
-
-        </div>
-      </article>
-
-      <!-- ── 0.4.0 ─────────────────────────────────────────────────────── -->
-      <article>
-        <div class="flex items-center gap-3">
-          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.4.0</h2>
-        </div>
-        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-09-28">September 28, 2026</time>
-
-        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
-
-          <p>
-            Your real calendar, inside Pikos. Connect the calendar you already use and the meeting you're walking into becomes a page you can write notes on.
-          </p>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">New</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li><strong>Calendar sync.</strong> Connect Google Calendar, iCloud, or any CalDAV server. Your events arrive as real pages you can write on, tag, and search. It's read-only and opt-in, so nothing you do in Pikos is ever sent back out. <a href="/calendar-sync" class="text-primary-500 hover:underline dark:text-primary-400">How to set it up</a>.</li>
-            <li><strong>Focus timer.</strong> Start a session from any page and Pikos drops to just that page until you're done. It charts your focus time by week.</li>
-            <li><strong>Text size.</strong> The interface, the editor, and the calendar each scale on their own. Set them in settings, or press <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Cmd +</code> and <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Cmd -</code> (<code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">Ctrl</code> on Linux), which size whichever panel you're looking at.</li>
-            <li><strong>MCP server.</strong> The command-line tool can hand your workspace to an AI agent over MCP, so an assistant can read and write pages with no Pikos account or server in the middle. <a href="/cli" class="text-primary-500 hover:underline dark:text-primary-400">What it does</a>.</li>
-          </ul>
-
-          <p>
-            0.4.0 upgrades your workspace and 0.3.1 can't open it afterwards. Pikos backs up the old one before it does, so nothing is lost either way.
-          </p>
-
-        </div>
-      </article>
-
-      <!-- ── 0.3.1 ─────────────────────────────────────────────────────── -->
-      <article>
-        <div class="flex items-center gap-3">
-          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.3.1</h2>
-        </div>
-        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-06-16">June 16, 2026</time>
-
-        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Fixed</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li><strong>Linux:</strong> An attempt at stopping the blank or white window on some distributions, including Fedora. It didn't work. The window still turns up on some setups and the cause is still open.</li>
-          </ul>
-        </div>
-      </article>
-
-      <!-- ── 0.3.0 ─────────────────────────────────────────────────────── -->
-      <article>
-        <div class="flex items-center gap-3">
-          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.3.0</h2>
-          <span class="rounded-full bg-warning-400/15 px-2.5 py-0.5 text-xs font-medium text-warning-600 dark:bg-warning-500/20 dark:text-warning-400">Desktop Preview</span>
-        </div>
-        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-06-10">June 10, 2026</time>
-
-        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
-
-          <p>
-            The first public release of Pikos for macOS. Notes, tasks, and calendar in one app, stored on your device. iCloud sync between Macs and an iPhone app are coming. Until then, Pikos runs on a single device and your data never leaves it.
-          </p>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Editor</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Rich text with bold, italic, underline, strikethrough, and inline code</li>
-            <li>Headings, bullet and ordered lists, task checklists, code blocks, blockquotes, tables, images, and horizontal rules</li>
-            <li>Slash menu: type <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">/</code> to insert any block with fuzzy search</li>
-            <li>Floating format toolbar on selection</li>
-            <li>Add links, auto-link on paste, click any link to edit it</li>
-            <li>Find in page with match highlighting and navigation</li>
-            <li>Paste Markdown and it converts to rich text</li>
-            <li>Tab to indent nested lists; smart quotes and dashes</li>
-            <li>Autosave as you type</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Pages and organization</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Quick Add reads a single line of plain English: priority, due date, recurrence, tags, and folder all parsed from how you'd write it</li>
-            <li>Optional one-line subtitle on every page, shown in the page list and on calendar blocks</li>
-            <li>Status (Open / Done) and a four-level priority system (Urgent, High, Medium, Low)</li>
-            <li>Tags with inline creation, autocomplete, and search</li>
-            <li>Folders with custom colors</li>
-            <li>Smart views: Today (scheduled or overdue) and Inbox (unfoldered pages), with badge counts in the sidebar</li>
-            <li>Sort by manual order, date, title, or priority, remembered per view</li>
-            <li>Drag and drop to reorder within a view or move between folders</li>
-            <li>Soft delete with undo; every view has its own Completed section</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Calendar and scheduling</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Week view with all-day band, timed grid, and a live "now" indicator</li>
-            <li>Click and drag to create a block, drag to reschedule, drag edges to resize</li>
-            <li>Inline date and time picker that keeps duration when you move things</li>
-            <li>Recurring schedules (daily, weekly, monthly, yearly, or custom) set from the page popover or Quick Add</li>
-            <li>Future occurrences appear on the calendar; reschedule one without touching the rest</li>
-            <li>Completing an overdue recurring page asks whether to skip the missed days or step through them one at a time</li>
-            <li>Reminders with configurable lead time, fired as native desktop notifications</li>
-            <li>Keyboard navigation across weeks; <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">T</code> jumps to today</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Search</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Search palette over titles and content. Title matches rank above content matches</li>
-            <li>Result previews show the matching text with your query highlighted</li>
-            <li>Results show priority, date, and tags inline</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Layout and navigation</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Three-panel layout: sidebar, page list, and editor or calendar. Each resizable, widths remembered</li>
-            <li>Toggle between editor and calendar without leaving the active page</li>
-            <li>Full keyboard navigation, with shortcuts for every primary action</li>
-            <li>Right-click menus on pages and folders</li>
-            <li>Open Pikos with a <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">pikos://</code> link to jump to a page, Today, Inbox, or open Quick Add pre-filled</li>
-            <li>First launch starts with a working tutorial, not an empty screen</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Import and export</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Import an Obsidian vault. Markdown files with YAML frontmatter become pages, and your folder structure carries over</li>
-            <li>CSV import with a step to map columns to fields</li>
-            <li>Export as a SQLite backup, a Markdown folder, or CSV: open formats you can read without Pikos</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Your device. Your data.</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Everything stored on your device. Nothing leaves it.</li>
-            <li>No account, no sign-up, no tracking.</li>
-            <li>The only outbound request is the update check on launch. You can turn it off.</li>
-          </ul>
-
-          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Appearance and platform</h3>
-          <ul class="list-disc space-y-1.5 pl-5">
-            <li>Light, dark, and (on macOS) system theme modes</li>
-            <li>Native macOS app menu and window chrome; remembers window size and position between launches</li>
-            <li>Full keyboard-shortcut reference in Settings</li>
-            <li>Built-in updater with a manual "Check for Updates" in the app menu</li>
-          </ul>
-
-        </div>
-      </article>
-
+          <div class="notes mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+            <Content />
+          </div>
+        </article>
+      ))}
     </div>
 
   </main>
@@ -198,4 +58,42 @@ import Footer from "../components/Footer.astro";
 
 <style>
 
-  </style>
+  .notes :global(h3) {
+    padding-top: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  :global(html.dark) .notes :global(h3) {
+    color: var(--color-neutral-50);
+  }
+
+  .notes :global(ul) {
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .notes :global(li + li) {
+    margin-top: 0.375rem;
+  }
+
+  .notes :global(a) {
+    color: var(--color-primary-500);
+  }
+  :global(html.dark) .notes :global(a) {
+    color: var(--color-primary-400);
+  }
+  .notes :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .notes :global(code) {
+    border-radius: 0.25rem;
+    background-color: var(--color-neutral-100);
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+  }
+  :global(html.dark) .notes :global(code) {
+    background-color: var(--color-neutral-800);
+  }
+</style>

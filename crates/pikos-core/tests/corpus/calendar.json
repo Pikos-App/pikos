@@ -852,7 +852,7 @@
           "scheduledStart": "2026-03-16T14:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -978,7 +978,7 @@
           "scheduledStart": "2026-03-16T10:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1080,7 +1080,7 @@
           "scheduledStart": "2026-03-16T10:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1194,7 +1194,7 @@
           "scheduledStart": "2026-03-16T11:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1320,7 +1320,7 @@
           "scheduledStart": "2026-03-16T11:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1405,7 +1405,7 @@
           "pageId": "p2"
         },
         {
-          "cascadeDepth": 2,
+          "cascadeDepth": 0,
           "isContinuationAfter": false,
           "isContinuationBefore": false,
           "pageId": "p3"
@@ -1434,7 +1434,7 @@
           "scheduledStart": "2026-03-16T09:30:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1560,7 +1560,7 @@
           "scheduledStart": "2026-03-16T09:10:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1650,7 +1650,7 @@
           "scheduledStart": "2026-03-15T22:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1716,7 +1716,7 @@
           "scheduledStart": "2026-03-16T22:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1782,7 +1782,7 @@
           "scheduledStart": "2026-03-15T08:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1860,7 +1860,7 @@
           "scheduledStart": "2026-03-16T09:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -1974,7 +1974,7 @@
           "scheduledStart": "2026-03-16T10:30:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -2094,7 +2094,7 @@
           "scheduledStart": "2026-03-16T09:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -2178,7 +2178,7 @@
           "scheduledStart": "2026-03-16T09:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [
@@ -2262,7 +2262,7 @@
           "scheduledStart": "2026-03-16T09:00:00"
         }
       ],
-      "shortestBlockMinutes": 24
+      "shortestBlockMinutes": 15
     },
     {
       "blocks": [

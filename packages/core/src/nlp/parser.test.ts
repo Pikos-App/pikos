@@ -2027,6 +2027,53 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
+  describe("a time-of-day word with no date beside it is part of the title", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-15T20:00:00", title: "Evening review" },
+          type: "single",
+        },
+        input: "Evening review today 8pm",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00", title: "Morning pages" },
+          type: "single",
+        },
+        input: "Morning pages tomorrow 9am",
+      },
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-03-16T05:00:00",
+            scheduledStart: "2026-03-15T21:00:00",
+            title: "night shift",
+          },
+          type: "single",
+        },
+        input: "night shift today 9pm to 5am",
+      },
+      {
+        expected: {
+          input: { title: "Morning pages" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Morning pages",
+      },
+      {
+        expected: {
+          input: { title: "Stretch in the evening" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Stretch in the evening",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+  });
+
   // ─── time-without-date anchor — additional weekday cases ────────────────────
   describe("time-without-date weekday anchoring", () => {
     // NOW = 2026-03-15 (Sunday).
@@ -3467,6 +3514,38 @@ describe("NL Page Creation Parser", () => {
         if (inp.scheduledEnd) expect(inp.scheduledStart).toBeDefined();
       }
     });
+  });
+});
+
+describe("a rename leaves the date to the page's slot", () => {
+  const rename = (s: string) => parseInput(s, NOW, { rename: true });
+
+  it("reads tags, folder and priority out of the title", () => {
+    expect(rename("standup #work ~projects !high")).toEqual({
+      input: { folderQuery: "projects", priority: "high", tags: ["work"], title: "standup" },
+      type: "single",
+    });
+  });
+
+  it("reads a repeat without dating it", () => {
+    const r = rename("standup every weekday");
+    expect(r.type).toBe("recurring");
+    if (r.type !== "recurring") return;
+    expect(r.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    expect(r.input).toEqual({ tags: [], title: "standup" });
+  });
+
+  it.each([
+    ["a date", "prep for tomorrow"],
+    ["a time", "call at 3pm"],
+    ["a month name", "review March plan"],
+    ["a duration", "focus for 30m"],
+    ["a reminder", "pay rent remind me 1d before"],
+    ["a body", "buy a gift // the blue one"],
+    ["days without every", "gym m/w/f"],
+    ["bare weekdays", "weekdays meeting"],
+  ])("keeps %s in the title", (_, title) => {
+    expect(rename(title)).toEqual({ input: { tags: [], title }, type: "single" });
   });
 });
 

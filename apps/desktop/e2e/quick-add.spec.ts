@@ -14,7 +14,7 @@ appTest("create page via Quick Add @smoke", async ({ app }) => {
 
   await expect(dialog.getByRole("button", { name: "Folder: Inbox" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Priority: Priority" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Priority: No priority" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Tags: none" })).toBeVisible();
 
   await input.fill("team meeting @tomorrow at 2pm !high #work");
@@ -495,7 +495,7 @@ appTest(
     // page while the menu is open, so we can't assert input focus state in
     // between — only after close. The contract we care about: after close,
     // focus is back on the input (NOT on the chip trigger).
-    await dialog.getByRole("button", { name: "Priority: Priority" }).click();
+    await dialog.getByRole("button", { name: "Priority: No priority" }).click();
     await app.getByRole("menuitem", { name: /High/ }).click();
     await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
     await expect(input).toBeFocused();

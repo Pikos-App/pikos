@@ -106,8 +106,15 @@ export function NotificationSettings() {
       });
   }
 
+  // Asked again on each return to the window, since the setting is changed in System Settings.
   useEffect(() => {
-    void checkPermission();
+    function recheck() {
+      void checkPermission();
+    }
+
+    recheck();
+    window.addEventListener("focus", recheck);
+    return () => window.removeEventListener("focus", recheck);
   }, []);
 
   useEffect(() => {
@@ -117,6 +124,14 @@ export function NotificationSettings() {
   function handleOpenPage(pageId: string) {
     ui.setSettingsOpen(false);
     ui.openPage(pageId);
+  }
+
+  function handleOpenNotificationSettings() {
+    getPlatform()
+      .openNotificationSettings()
+      .catch((e: unknown) => {
+        log.warn("openNotificationSettings failed", e instanceof Error ? e.name : "unknown");
+      });
   }
 
   async function handleRequestPermission() {
@@ -149,7 +164,7 @@ export function NotificationSettings() {
       <section className="mb-8">
         <h2 className="mb-1 text-base font-semibold">Notifications</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Desktop reminders for scheduled pages. Notifications are fully local — nothing leaves your
+          Desktop reminders for scheduled pages. Notifications are fully local. Nothing leaves your
           device.
         </p>
 
@@ -197,7 +212,7 @@ export function NotificationSettings() {
                 className="mt-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
                 onClick={() => void handleRequestPermission()}
               >
-                Request permission
+                Open System Settings
               </button>
             </div>
           </div>
@@ -343,10 +358,14 @@ export function NotificationSettings() {
           </button>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          What Pikos sent you over the last 30 days, including anything quiet hours silenced.
+          What Pikos sent you over the last 30 days, including anything that wasn't shown.
         </p>
         <div className="rounded-lg border border-border bg-card px-4">
-          <NotificationHistory entries={history} onOpenPage={handleOpenPage} />
+          <NotificationHistory
+            entries={history}
+            onOpenNotificationSettings={handleOpenNotificationSettings}
+            onOpenPage={handleOpenPage}
+          />
         </div>
       </section>
     </div>

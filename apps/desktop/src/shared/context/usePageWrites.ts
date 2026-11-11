@@ -27,7 +27,6 @@ export interface NewPageFields {
   tags?: string[];
   priority?: PagePriority;
   content?: string;
-  contentText?: string;
 }
 
 export interface PageWrites {
@@ -61,17 +60,9 @@ export function usePageWrites({
   pagesRef: RefObject<PageSummary[]>;
   setPages: Dispatch<SetStateAction<PageSummary[]>>;
 }): PageWrites {
-  async function createPage({
-    content,
-    contentText,
-    folderId,
-    priority,
-    tags,
-    title,
-  }: NewPageFields) {
+  async function createPage({ content, folderId, priority, tags, title }: NewPageFields) {
     const page = await adapter.createPage({
       content: content ?? "",
-      contentText: contentText ?? "",
       folderId: folderId ?? null,
       priority: priority ?? 0,
       status: "not_started",

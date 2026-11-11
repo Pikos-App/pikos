@@ -65,7 +65,7 @@ export function TaskCheckbox({
         "task-checkbox flex shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
         SIZE_CLASS[size],
         checked && "border-muted-foreground/40 bg-muted-foreground/40",
-        !checked && !borderColor && "border-border-primary",
+        !checked && !borderColor && "border-border-control",
         className
       )}
       onClick={(e: React.MouseEvent) => {

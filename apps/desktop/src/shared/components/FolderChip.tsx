@@ -127,7 +127,7 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
             )}
 
             {filteredFolders.length === 0 && !canCreate && (
-              <p className="px-3 py-2 text-xs text-muted-foreground/40">No folders found</p>
+              <p className="px-3 py-2 text-xs text-subtle">No folders found</p>
             )}
           </>
         );

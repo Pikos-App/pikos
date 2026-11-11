@@ -185,4 +185,42 @@ describe("useHeightResize", () => {
     act(() => dispatchMove(220)); // 130 + 20 → 150
     expect(result.current.height).toBe(150);
   });
+
+  it("draws the stored height, min and max multiplied by the scale", () => {
+    localStorage.setItem("pikos:test:height", JSON.stringify(100));
+    const { result } = renderHook(() =>
+      useHeightResize({
+        defaultHeight: 80,
+        max: 240,
+        min: 40,
+        scale: 2,
+        storageKey: "pikos:test:height",
+      })
+    );
+    expect(result.current.height).toBe(200);
+
+    act(() => result.current.onResizeStart(press(100)));
+    act(() => dispatchMove(2000));
+    expect(result.current.height).toBe(480);
+
+    act(() => dispatchMove(-2000));
+    expect(result.current.height).toBe(80);
+  });
+
+  it("stores a scaled drag in unscaled pixels", () => {
+    const { result } = renderHook(() =>
+      useHeightResize({
+        defaultHeight: 80,
+        max: 240,
+        min: 40,
+        scale: 2,
+        storageKey: "pikos:test:height",
+      })
+    );
+    act(() => result.current.onResizeStart(press(100)));
+    act(() => dispatchMove(140));
+
+    expect(result.current.height).toBe(200);
+    expect(JSON.parse(localStorage.getItem("pikos:test:height")!)).toBe(100);
+  });
 });

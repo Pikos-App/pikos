@@ -105,7 +105,7 @@ export function PageListHeader({
                 >
                   {icon}
                   {label}
-                  {sortMode === value && <span className="ml-auto text-primary">✓</span>}
+                  {sortMode === value && <span className="ml-auto text-action">✓</span>}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

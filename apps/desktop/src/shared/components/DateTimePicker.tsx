@@ -24,6 +24,7 @@ import {
   getHours,
   getMinutes,
   isSameDay,
+  nextMonday,
   startOfDay,
 } from "date-fns";
 import { Calendar, Pencil } from "lucide-react";
@@ -35,6 +36,13 @@ import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useMonthNav } from "@/shared/hooks/useMonthNav";
 
 import { CAL_HEIGHT, MiniCalendar } from "./MiniCalendar";
+
+/** Next week is the coming Monday, as on the phone, so a Monday gives the Monday after. */
+const QUICK_PICKS: readonly (readonly [string, (today: Date) => Date])[] = [
+  ["Today", (today) => today],
+  ["Tomorrow", (today) => addDays(today, 1)],
+  ["Next week", (today) => nextMonday(today)],
+];
 
 export interface DateTimePickerProps {
   /** ISO 8601 date (date-only or datetime) or null (no schedule). */
@@ -176,8 +184,7 @@ export function DateTimePicker({
     }
   }
 
-  function quickPick(daysOffset: number) {
-    const date = startOfDay(addDays(new Date(), daysOffset));
+  function quickPick(date: Date) {
     if (selectedTime) {
       onChange(toISODateTime(date, selectedTime.hour24, selectedTime.minute));
     } else {
@@ -374,14 +381,8 @@ export function DateTimePicker({
         <div className="p-3">
           <div className="flex w-full items-start justify-between">
             <div className="mb-3 flex items-center gap-0.5 text-xs">
-              {(
-                [
-                  ["Today", 0],
-                  ["Tomorrow", 1],
-                  ["Next week", 7],
-                ] as const
-              ).map(([label, offset], idx) => {
-                const pickDate = startOfDay(addDays(new Date(), offset));
+              {QUICK_PICKS.map(([label, resolve], idx) => {
+                const pickDate = resolve(startOfDay(new Date()));
                 const isActive = selectedDate !== null && isSameDay(selectedDate, pickDate);
                 return (
                   <span className="flex items-center" key={label}>
@@ -393,11 +394,9 @@ export function DateTimePicker({
                     <button
                       className={cn(
                         "transition-colors",
-                        isActive
-                          ? "font-medium text-primary"
-                          : "text-foreground/55 hover:text-foreground"
+                        isActive ? "font-medium text-action" : "text-subtle hover:text-foreground"
                       )}
-                      onClick={() => quickPick(offset)}
+                      onClick={() => quickPick(pickDate)}
                     >
                       {label}
                     </button>
@@ -407,7 +406,7 @@ export function DateTimePicker({
             </div>
             {hasDate && (
               <button
-                className="text-xs text-foreground/55 hover:text-foreground"
+                className="text-xs text-subtle hover:text-foreground"
                 onClick={handleClearAll}
               >
                 No date
@@ -433,12 +432,12 @@ export function DateTimePicker({
               style={{ height: CAL_HEIGHT }}
             >
               <button
-                aria-label="All day — no specific time"
+                aria-label="All day, no specific time"
                 className={cn(
                   "self-start text-xs transition-colors",
                   selectedTime === null
-                    ? "font-medium text-primary"
-                    : "text-foreground/40 hover:text-foreground"
+                    ? "font-medium text-action"
+                    : "text-subtle hover:text-foreground"
                 )}
                 onClick={clearTime}
               >
@@ -482,10 +481,10 @@ export function DateTimePicker({
                       className={cn(
                         "flex w-full rounded px-1.5 py-[3px] text-left text-xs transition-colors",
                         isSelected
-                          ? "font-medium text-primary"
+                          ? "font-medium text-action"
                           : isFocused
                             ? "bg-accent text-foreground"
-                            : "text-foreground/55 hover:text-foreground"
+                            : "text-subtle hover:text-foreground"
                       )}
                       data-h={slot.hour24}
                       data-m={slot.minute}
@@ -504,7 +503,7 @@ export function DateTimePicker({
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
-                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/60"
+                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-subtle"
                 onBlur={applyCustomTimeInput}
                 onChange={(event) => setCustomTimeStr(event.target.value)}
                 onKeyDown={(event) => {
@@ -533,9 +532,7 @@ export function DateTimePicker({
                     aria-pressed={isActive}
                     className={cn(
                       "rounded px-1.5 py-0.5 text-xs transition-colors",
-                      isActive
-                        ? "font-medium text-primary"
-                        : "text-foreground/55 hover:text-foreground"
+                      isActive ? "font-medium text-action" : "text-subtle hover:text-foreground"
                     )}
                     key={minutes}
                     onClick={() => selectDuration(isActive ? null : minutes)}
@@ -552,7 +549,7 @@ export function DateTimePicker({
                     autoComplete="off"
                     autoCorrect="off"
                     autoFocus
-                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/60"
+                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-subtle"
                     inputMode="text"
                     onBlur={applyCustomDuration}
                     onChange={(event) => setCustomDurationStr(event.target.value)}
@@ -581,8 +578,8 @@ export function DateTimePicker({
                     className={cn(
                       "group inline-flex h-6 w-full items-center gap-1 rounded px-1.5 text-xs transition-colors",
                       isCustomDuration
-                        ? "font-medium text-primary"
-                        : "text-foreground/55 hover:text-foreground"
+                        ? "font-medium text-action"
+                        : "text-subtle hover:text-foreground"
                     )}
                     onClick={() => {
                       setCustomDurationStr(
@@ -627,9 +624,7 @@ export function DateTimePicker({
                     aria-pressed={isActive}
                     className={cn(
                       "rounded px-1.5 py-0.5 text-xs transition-colors",
-                      isActive
-                        ? "font-medium text-primary"
-                        : "text-foreground/55 hover:text-foreground"
+                      isActive ? "font-medium text-action" : "text-subtle hover:text-foreground"
                     )}
                     key={days}
                     onClick={() => selectEndDays(isActive ? null : days)}
@@ -656,9 +651,7 @@ export function DateTimePicker({
                     aria-pressed={isCustomSpan}
                     className={cn(
                       "group inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-xs transition-colors",
-                      isCustomSpan
-                        ? "font-medium text-primary"
-                        : "text-foreground/55 hover:text-foreground"
+                      isCustomSpan ? "font-medium text-action" : "text-subtle hover:text-foreground"
                     )}
                   >
                     <span>{isCustomSpan ? `${spanDays}d` : "Custom"}</span>

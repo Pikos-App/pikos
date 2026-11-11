@@ -102,15 +102,14 @@ pub enum WorkspaceError {
 
 impl WorkspaceError {
     fn opening(error: AppError) -> Self {
+        if let AppError::TooNew { .. } = error {
+            return WorkspaceError::TooNew;
+        }
         if let AppError::Db(sqlx::Error::Migrate(ref migrate)) = error {
-            match **migrate {
-                sqlx::migrate::MigrateError::VersionMismatch(_) => {
-                    return WorkspaceError::MadeByAnotherBuild {
-                        message: error.to_string(),
-                    }
-                }
-                sqlx::migrate::MigrateError::VersionMissing(_) => return WorkspaceError::TooNew,
-                _ => {}
+            if let sqlx::migrate::MigrateError::VersionMismatch(_) = **migrate {
+                return WorkspaceError::MadeByAnotherBuild {
+                    message: error.to_string(),
+                };
             }
         }
         WorkspaceError::Open {
@@ -812,11 +811,9 @@ pub struct PageEdit {
     /// Tiptap JSON. Setting this re-stamps `content_schema_version`.
     #[uniffi(default = None)]
     pub content: Option<String>,
-    /// Plain text for the search index. Supply it alongside `content` — the
-    /// editor extracts it already, and re-deriving it here would parse the
-    /// document a second time.
+    /// The body `content` was typed over: an edit made elsewhere since is merged, not overwritten.
     #[uniffi(default = None)]
-    pub content_text: Option<String>,
+    pub base_content: Option<String>,
     #[uniffi(default = None)]
     pub status: Option<String>,
     #[uniffi(default = None)]
@@ -1317,15 +1314,6 @@ impl Workspace {
     pub async fn create_page(&self, page: NewPage) -> Result<Page, WorkspaceError> {
         let scheduled_start = page.scheduled_start;
         let scheduled_end = page.scheduled_end;
-        // The searchable text is derived from the document here rather than
-        // asked for alongside it: a caller that supplies one and not the
-        // other creates a page whose body full-text search cannot see, and
-        // nothing about the call would say so.
-        let content_text = page
-            .content
-            .as_deref()
-            .map(pikos_db::extract_text_from_tiptap)
-            .filter(|text| !text.is_empty());
         let created = pikos_db::create_page_impl(
             &self.pool,
             DbNewPage {
@@ -1333,14 +1321,12 @@ impl Workspace {
                 title: page.title,
                 subtitle: page.subtitle.filter(|s| !s.trim().is_empty()),
                 content: page.content.unwrap_or_else(|| EMPTY_DOCUMENT.to_string()),
-                content_text,
                 status: "not_started".to_string(),
                 priority: 0,
                 tags: page.tags.unwrap_or_default(),
                 scheduled_start: None,
                 scheduled_end: None,
                 completed_at: None,
-                links: Vec::new(),
                 parent_id: None,
                 last_opened_at: None,
                 created_at: None,
@@ -1909,7 +1895,7 @@ impl Workspace {
                     }
                 }),
                 content: edit.content,
-                content_text: edit.content_text,
+                base_content: edit.base_content,
                 status: edit.status,
                 priority: edit.priority,
                 tags: edit.tags,

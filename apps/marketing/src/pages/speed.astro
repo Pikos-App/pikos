@@ -5,10 +5,11 @@ import SpeedBars from "../components/SpeedBars.astro";
 import SpeedTable from "../components/SpeedTable.astro";
 import { type Op, type Series, fmtPages, fmtTime } from "../lib/speed";
 import app from "../data/app.json";
+import editor from "../data/editor.json";
 
 const title = "Pikos speed: fast with 50 pages, fast with 500,000";
 const description =
-  "Opening a page, searching, switching views, completing a task, and paging through the calendar, timed in the app itself, from fifty pages to half a million. Measured on a laptop, with the details and the commands to check it.";
+  "Opening a page, searching, switching views, completing a task, and paging through the calendar, timed in the app itself, from fifty pages to half a million. Plus typing in a page of half a million words. Measured on a laptop, with the details and the commands to check it.";
 
 // ── The app, as a person uses it ─────────────────────────────────────────────────────────────
 type AppSize = { seeded: number; [action: string]: unknown };
@@ -40,6 +41,12 @@ const yearsAtTenADay = Math.round(largestPages / 10 / 365);
 
 const measuredOn = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+
+const editorActions = [
+  { key: "open", label: "Open the page, to its first screen" },
+  { key: "key", label: "Type a letter, until it shows" },
+  { key: "find", label: "Find, after the first letter" },
+] as const;
 
 const benchCommands = `brew install pikos-app/tap/pikos-cli
 pikos stress seed --db ~/pikos-bench.db --pages 500000
@@ -118,9 +125,45 @@ const bullet = "flex items-start gap-2";
           <span class="mt-0.5 text-warning-400">→</span>
           <span>The pages are generated: ordinary English words, forty to a page, from a fixed list and a fixed seed, so the same workspace can be built again anywhere.</span>
         </li>
+      </ul>
+    </section>
+
+    <!-- Long pages -->
+    <section class="mt-24">
+      <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Long pages</h2>
+      <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+        The numbers above are about how many pages you have. These are about how long one page is. A long novel is about 100,000 words, and up to there everything takes under a tenth of a second. At half a million words, a letter takes about a tenth of a second to show and Find takes about a third.
+      </p>
+      <div class="mt-8 overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
+        <table class="w-full min-w-[28rem] text-sm">
+          <thead>
+            <tr class="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
+              <th class="px-4 py-2.5 text-left text-xs font-semibold text-neutral-900 dark:text-neutral-50">Words on the page</th>
+              {editor.sizes.map((s) => (
+                <th class="px-4 py-2.5 text-right text-xs font-semibold text-neutral-900 tabular-nums dark:text-neutral-50">{fmtPages(s.words)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {editorActions.map((a) => (
+              <tr class="border-b border-neutral-100 last:border-b-0 dark:border-neutral-800">
+                <td class="px-4 py-2.5 text-left text-neutral-700 dark:text-neutral-300">{a.label}</td>
+                {editor.sizes.map((s) => (
+                  <td class="px-4 py-2.5 text-right text-neutral-900 tabular-nums dark:text-neutral-50">{fmtTime(s[a.key])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul class="mt-6 space-y-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
         <li class={bullet}>
           <span class="mt-0.5 text-warning-400">→</span>
-          <span>Not here yet: typing in a very long page. The editor is next, and its numbers go on this page when they're good.</span>
+          <span>On {measuredOn(editor.measured)}, on the same laptop, from commit <code class={code}>{editor.commit}</code>. The editor ran in WebKit, the engine the Mac app draws with, in a browser rather than the app, since nearly all the time is in the editor, not the database.</span>
+        </li>
+        <li class={bullet}>
+          <span class="mt-0.5 text-warning-400">→</span>
+          <span>The pages are generated prose with headings, lists, tasks, quotes, and code. Each time runs from the key press or click to the next frame drawn, and a letter is the median of fifteen typed in the middle of the page.</span>
         </li>
       </ul>
     </section>
@@ -136,6 +179,11 @@ const bullet = "flex items-start gap-2";
         <h3 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the app</h3>
         <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
           The numbers above come from a build of Pikos with a timer compiled in. On a Mac, build it from <a href="https://github.com/Pikos-App/pikos" class={link}>source</a> and run <code class={code}>node apps/marketing/scripts/benchmark-app.mjs</code>. It builds the workspaces, launches the app {app.launches} times at each size, and takes about fifty minutes. <code class={code}>--quick</code> runs a shorter pass.
+        </p>
+
+        <h3 class="mt-10 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time a long page</h3>
+        <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          From the same source, run <code class={code}>pnpm --filter @pikos/desktop test:e2e:scale</code>. It builds pages of 20,000, 100,000, and 500,000 words, times each of them, and prints a table. It takes about a minute.
         </p>
 
         <h3 class="mt-10 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Time the database</h3>

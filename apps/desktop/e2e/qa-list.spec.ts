@@ -10,7 +10,9 @@ import {
   dayFrom,
   expect,
   mod,
+  openCalendarMode,
   quickAdd,
+  ringDoorbell,
   seedSynced,
   stamp,
   WRITE_QUEUE_DEBOUNCE_MS,
@@ -690,6 +692,202 @@ appTest(
       await deleteFromMenu(mirror);
       await expect(app.getByRole("alertdialog")).toHaveCount(0);
       await expect(app.getByRole("alert", { name: /Deleted “Weekly 1:1 \(London\)”/ })).toBeVisible();
+    });
+  }
+);
+
+appTest(
+  "Cmd+[ and Cmd+] step back and forward through the pages opened",
+  { tag: ["@LIST-16"] },
+  async ({ app }) => {
+    for (const title of ["first stop", "second stop", "third stop"]) await quickAdd(app, title);
+    await createFolder(app, "Errands");
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    const items = app.locator("[data-page-list-item]");
+    const shown = app.getByLabel("Page title");
+    const back = () => app.keyboard.press(mod("Mod+["));
+    const forward = () => app.keyboard.press(mod("Mod+]"));
+    async function open(title: string) {
+      await items.filter({ hasText: title }).click();
+      await expect(shown).toHaveText(title);
+    }
+
+    await appTest.step("LIST-16 back twice reaches the first, forward once the second", async () => {
+      await open("first stop");
+      await open("second stop");
+      await open("third stop");
+      await back();
+      await expect(shown).toHaveText("second stop");
+      await back();
+      await expect(shown).toHaveText("first stop");
+      await forward();
+      await expect(shown).toHaveText("second stop");
+    });
+
+    await appTest.step("LIST-16 a run of arrow steps through the list is one step", async () => {
+      const order = await firstLines(app);
+      await open(order[0]!);
+      await app.keyboard.press("ArrowDown");
+      await expect(shown).toHaveText(order[1]!);
+      await app.keyboard.press("ArrowDown");
+      await expect(shown).toHaveText(order[2]!);
+      await back();
+      await expect(shown).toHaveText(order[0]!);
+    });
+
+    await appTest.step("LIST-16 switching folder or calendar week is no step", async () => {
+      // Arrowing hides the rows from the pointer until it moves over the list.
+      await app.getByRole("group", { name: "Inbox" }).hover();
+      await open("first stop");
+      await open("third stop");
+      await app
+        .getByRole("group", { name: "Views and folders" })
+        .getByRole("button", { exact: true, name: "Errands" })
+        .click();
+      await openCalendarMode(app);
+      await app.getByRole("button", { exact: true, name: "Next week" }).click();
+      await back();
+      await expect(shown).toHaveText("third stop");
+      await back();
+      await expect(shown).toHaveText("first stop");
+    });
+
+    await appTest.step("LIST-16 a page deleted since is skipped", async () => {
+      await app.getByRole("button", { name: /^Inbox/ }).click();
+      await open("first stop");
+      await open("second stop");
+      await open("third stop");
+      await items.filter({ hasText: "second stop" }).click({ button: "right" });
+      await app.getByRole("menuitem", { exact: true, name: "Delete" }).click();
+      await expect(items.filter({ hasText: "second stop" })).toHaveCount(0);
+      await expect(shown).toHaveText("third stop");
+      await back();
+      await expect(shown).toHaveText("first stop");
+    });
+  }
+);
+
+appTest(
+  "Cmd-clicking three pages counts them at the foot of the list until the selection clears",
+  { tag: ["@LIST-18"] },
+  async ({ app }) => {
+    for (const title of ["pick one", "pick two", "pick three"]) await quickAdd(app, title);
+    const items = app.locator("[data-page-list-item]");
+    const count = app.getByRole("status").filter({ hasText: "selected · right-click for actions" });
+
+    await appTest.step("LIST-18 three Cmd-clicks read 3 selected", async () => {
+      for (const title of ["pick one", "pick two", "pick three"]) {
+        await items.filter({ hasText: title }).click({ modifiers: ["ControlOrMeta"] });
+      }
+      await expect(count).toHaveText("3 selected · right-click for actions");
+    });
+
+    await appTest.step("LIST-18 the count goes when the selection clears", async () => {
+      await items.filter({ hasText: "pick two" }).click();
+      await expect(count).toHaveCount(0);
+    });
+  }
+);
+
+appTest(
+  "an all-day page due today reads Today in the due-soon colour",
+  { tag: ["@LIST-19"] },
+  async ({ app }) => {
+    await quickAdd(app, "renew the permit today");
+    await quickAdd(app, "return the books in 2 days");
+    await quickAdd(app, "book the venue in 10 days");
+    const date = (title: string) =>
+      app
+        .locator("[data-page-list-item]")
+        .filter({ hasText: title })
+        .getByRole("button", { name: /^Toggle date format: / });
+    const colour = (title: string) => date(title).evaluate((el) => getComputedStyle(el).color);
+
+    await appTest.step("LIST-19 its date reads Today", async () => {
+      await expect(date("renew the permit")).toHaveText("Today");
+    });
+
+    await appTest.step("LIST-19 in the colour of a page due in the next few days", async () => {
+      expect(await colour("renew the permit")).toBe(await colour("return the books"));
+      expect(await colour("renew the permit")).not.toBe(await colour("book the venue"));
+    });
+  }
+);
+
+appTest(
+  "after Move to today, a calendar page left overdue says on hover that its calendar sets the date",
+  { tag: ["@LIST-20"] },
+  async ({ app }) => {
+    await seedSynced(app);
+    await quickAdd(app, "call the landlord");
+    await scheduleOnPickerDay(app, "call the landlord", -1);
+    await app.getByRole("button", { name: /^Today/ }).click();
+    await expandOverdue(app);
+    const items = app.locator("[data-page-list-item]");
+    const date = (title: string) =>
+      items.filter({ hasText: title }).getByRole("button", { name: /^Toggle date format: / });
+
+    await app.getByRole("button", { name: "Move to today" }).click();
+    await expect(app.getByRole("alert", { name: /^Moved 1 · / })).toBeVisible();
+
+    await appTest.step("LIST-20 the calendar page's date tooltip ends with why", async () => {
+      await date("Budget sign-off").hover();
+      await expect(date("Budget sign-off")).toHaveAttribute(
+        "title",
+        /Its calendar sets this date$/
+      );
+      await expect(date("call the landlord")).not.toHaveAttribute("title", /calendar/);
+    });
+  }
+);
+
+appTest(
+  "a [[link]] written with the CLI links the page, reads back by its new title, and survives being written back",
+  { tag: ["@CLI-16"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "CLI-16 runs the real CLI on the real writer's file");
+    await quickAdd(app, "Plans");
+    await quickAdd(app, "Garden journal");
+    const db = await bridgeCall<string>(app, "bridge_workspace_path");
+    const journal = app.locator("[data-page-list-item]").filter({ hasText: "Garden journal" });
+    const id = (await journal.getAttribute("data-page-id"))!;
+    const cli = (...args: string[]) =>
+      execFileSync(pikosCli(), ["--db", db, ...args], { encoding: "utf8" });
+    const body = app.getByRole("textbox", { name: "Page content" });
+    const link = (title: string) => body.getByRole("button", { exact: true, name: title });
+    async function writeBody(text: string) {
+      cli("update", id, "--content", text);
+      await ringDoorbell(app);
+      await app.locator("[data-page-list-item]").filter({ hasText: "Plans" }).click();
+      await journal.click();
+      await expect(app.getByLabel("Page title")).toHaveText("Garden journal");
+    }
+
+    await appTest.step("CLI-16 pikos update --content makes the link", async () => {
+      await writeBody("See [[Plans]]");
+      await expect(link("Plans")).toBeVisible();
+    });
+
+    await appTest.step("CLI-16 after a rename in the app, pikos read gives the new title", async () => {
+      await app.locator("[data-page-list-item]").filter({ hasText: "Plans" }).click();
+      await app.getByLabel("Page title").click();
+      await app.keyboard.press(mod("Mod+a"));
+      await app.keyboard.type("Plans for spring");
+      await app.keyboard.press("Enter");
+      await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+      expect(cli("read", id)).toContain("See [[Plans for spring]]");
+    });
+
+    await appTest.step("CLI-16 writing that back keeps the link", async () => {
+      await writeBody("See [[Plans for spring]]");
+      await link("Plans for spring").click();
+      await expect(app.getByLabel("Page title")).toHaveText("Plans for spring");
+    });
+
+    await appTest.step("CLI-16 a title no page has stays plain text", async () => {
+      await writeBody("See [[Nobody here]]");
+      await expect(body).toHaveText("See [[Nobody here]]");
+      await expect(body.getByRole("button")).toHaveCount(0);
     });
   }
 );

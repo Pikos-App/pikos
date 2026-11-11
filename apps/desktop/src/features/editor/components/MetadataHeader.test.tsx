@@ -6,6 +6,7 @@ import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import type { JSONContent } from "@tiptap/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -55,7 +56,7 @@ function Harness({
   page,
 }: {
   onApi: (api: PagesApi, ws: WorkspaceApi) => void;
-  onAppendToBody: (text: string) => void;
+  onAppendToBody: (doc: JSONContent) => boolean;
   page: Page;
 }) {
   const pages = usePages();
@@ -72,7 +73,10 @@ function Harness({
   );
 }
 
-async function renderHeader(page: Page, onAppendToBody: (text: string) => void = vi.fn()) {
+async function renderHeader(
+  page: Page,
+  onAppendToBody: (doc: JSONContent) => boolean = vi.fn(() => true)
+) {
   let pagesApi!: PagesApi;
   let workspaceApi!: WorkspaceApi;
   const utils = renderWithProviders(
@@ -138,6 +142,32 @@ describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own
 // calendar: the folder carries the same name and stays in the sidebar, so a
 // notice saying only "Removed from Work" reads as contradicting the folder chip
 // beside it. Two screen reviews filed that as a bug.
+describe("MetadataHeader — pages linking here", () => {
+  const linker = (id: string) => makePage({ id, title: `Linker ${id}` });
+
+  it("shows the count in the byline, after the tags", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "listBacklinks").mockResolvedValue([
+      linker("a"),
+      linker("b"),
+    ]);
+    await renderHeader(makePage({ tags: ["work"] }));
+
+    const links = await screen.findByRole("button", { name: "Linked from 2 pages" });
+    const tags = screen.getByRole("button", { name: /^Tags:/ });
+    expect(tags.compareDocumentPosition(links) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText("Page title")).not.toContainElement(links);
+  });
+
+  it("leaves the byline ending at the tags when nothing links here", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "listBacklinks").mockResolvedValue([]);
+    await renderHeader(makePage({ tags: ["work"] }));
+
+    const tags = screen.getByRole("button", { name: /^Tags:/ });
+    expect(screen.queryByRole("button", { name: /^Linked from/ })).not.toBeInTheDocument();
+    expect(tags.closest(".flex-wrap")?.lastElementChild).toContainElement(tags);
+  });
+});
+
 describe("MetadataHeader — detached notice", () => {
   it("says a page can rejoin when its calendar is only switched off", async () => {
     await renderHeader(
@@ -214,8 +244,15 @@ describe("MetadataHeader — calendar description-changed notice", () => {
     expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
   });
 
-  it("hands the parked text to the editor on Append", async () => {
-    const append = vi.fn();
+  async function clickAppend(appended: boolean) {
+    const doc = { content: [{ type: "paragraph" }], type: "doc" };
+    vi.spyOn(MockStorageAdapter.prototype, "pendingDescriptionDocument").mockResolvedValue(
+      JSON.stringify(doc)
+    );
+    const clear = vi
+      .spyOn(MockStorageAdapter.prototype, "clearPendingDescription")
+      .mockResolvedValue();
+    const append = vi.fn(() => appended);
     await renderHeader(
       makePage({
         detachIsReversible: false,
@@ -226,12 +263,29 @@ describe("MetadataHeader — calendar description-changed notice", () => {
       append
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Append" }));
-    expect(append).toHaveBeenCalledWith("New agenda for the meeting.");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Append" }));
+      await Promise.resolve();
+    });
+
+    return { append, clear, doc };
+  }
+
+  it("hands the parked description's document to the editor on Append, then clears it", async () => {
+    const { append, clear, doc } = await clickAppend(true);
+
+    expect(append).toHaveBeenCalledWith(doc);
+    expect(clear).toHaveBeenCalledWith("p1");
+  });
+
+  it("keeps the description parked when the editor took nothing", async () => {
+    const { clear } = await clickAppend(false);
+
+    expect(clear).not.toHaveBeenCalled();
   });
 
   it("leaves the body alone on Dismiss", async () => {
-    const append = vi.fn();
+    const append = vi.fn(() => true);
     await renderHeader(
       makePage({
         detachIsReversible: false,

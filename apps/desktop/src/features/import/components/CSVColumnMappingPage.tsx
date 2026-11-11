@@ -209,7 +209,7 @@ export function CSVColumnMappingPage({
                     className={cn(
                       "appearance-none rounded-md border border-border bg-background px-3 py-1.5 pr-8 text-sm transition-colors hover:bg-accent",
                       cm.pikosField === "skip" && "text-muted-foreground",
-                      cm.pikosField === "title" && "border-primary/50 text-primary"
+                      cm.pikosField === "title" && "border-primary/50 text-action"
                     )}
                     onChange={(e) =>
                       handleFieldChange(cm.csvHeader, e.target.value as PikosFieldKey)
@@ -258,7 +258,7 @@ export function CSVColumnMappingPage({
           Cancel
         </button>
         <button
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          className="rounded-md bg-interactive-fill px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-fill/90 disabled:pointer-events-none disabled:opacity-50"
           disabled={!hasTitleMapped}
           onClick={handleConfirm}
         >

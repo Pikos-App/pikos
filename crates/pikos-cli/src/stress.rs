@@ -102,10 +102,9 @@ impl Rng {
     }
 }
 
-/// A body as the editor saves one, with its plain text for search beside it.
+/// A body as the editor saves one.
 fn set_body(page: &mut NewPage, text: String) {
     page.content = build_tiptap_doc(&text);
-    page.content_text = Some(text);
 }
 
 fn sentence(rng: &mut Rng, words: usize) -> String {
@@ -590,7 +589,6 @@ pub async fn bench(
                     id.clone(),
                     PageUpdate {
                         content: Some(build_tiptap_doc(&text)),
-                        content_text: Some(text),
                         ..Default::default()
                     },
                 )

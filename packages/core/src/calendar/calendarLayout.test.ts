@@ -24,7 +24,7 @@ import {
   timedPagesByDay,
   timedPagesInRange,
 } from "./calendarLayout";
-import type { CalendarDensity } from "./dayCount";
+import { CALENDAR_DENSITY_STEPS, type CalendarDensity } from "./dayCount";
 
 // ─── collapseUnderWidth ──────────────────────────────────────────────────────
 
@@ -1190,7 +1190,7 @@ describe("remapBlocksForCollapse — boundary cases", () => {
 
 describe("block treatment across the calendar text-size ladder", () => {
   const TEXT_SIZE_RUNGS = [10, 12, 14, 16, 18, 20, 22, 24, 28];
-  const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
+  const DENSITIES = CALENDAR_DENSITY_STEPS;
   const day = new Date(2026, 2, 15);
 
   function at(minutes: number): string {
@@ -1261,16 +1261,18 @@ describe("block treatment across the calendar text-size ladder", () => {
   });
 });
 
-describe("block height floor", () => {
+describe("the shortest block", () => {
   const day = new Date(2026, 2, 15);
-  const compact = computeCalendarMetrics("compact");
+  const compact = computeCalendarMetrics(40);
 
-  it("draws an item with no end time at compact density as tall as a normal quarter hour", () => {
-    const [b] = buildDayBlocks([makePage({ scheduledStart: "2026-03-15T09:00:00" })], day, compact);
-    expect(b!.height).toBe(16);
+  it("draws an item with no end time as tall as a quarter hour at the densest step", () => {
+    const densest = computeCalendarMetrics(CALENDAR_DENSITY_STEPS[0]);
+    const [b] = buildDayBlocks([makePage({ scheduledStart: "2026-03-15T09:00:00" })], day, densest);
+    expect(b!.height).toBe(densest.hourHeight / 4);
+    expect(b!.isCompact).toBe(true);
   });
 
-  it("sets a floored item beside the event it would otherwise cover", () => {
+  it("leaves an item with no end time full width above the event that follows it", () => {
     const pages = [
       makePage({ id: "reminder", scheduledStart: "2026-03-15T09:00:00" }),
       makePage({
@@ -1282,8 +1284,8 @@ describe("block height floor", () => {
     const blocks = buildDayBlocks(pages, day, compact);
     const reminder = blocks.find((b) => b.page.id === "reminder")!;
     const call = blocks.find((b) => b.page.id === "call")!;
-    expect(reminder.top + reminder.height).toBeGreaterThan(call.top);
-    expect(reminder.leftPct + reminder.widthPct).toBeLessThanOrEqual(call.leftPct);
+    expect(reminder.top + reminder.height).toBe(call.top);
+    expect(reminder.widthPct).toBe(call.widthPct);
   });
 
   it("keeps an item starting in the day's last minutes on the grid", () => {

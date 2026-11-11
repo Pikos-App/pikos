@@ -833,12 +833,12 @@ public final class WorkspaceStore {
     /// keystroke while the editor is open, and reloading the page list under the
     /// user on each one would be both wasteful and visibly janky. The list
     /// refreshes when the editor closes.
-    public func saveDocument(pageId: String, json: String, plainText: String) async {
+    public func saveDocument(pageId: String, json: String) async {
         guard let workspace else { return }
         await untilWritten {
             do {
                 _ = try await workspace.updatePage(
-                    id: pageId, edit: PageEdit(content: json, contentText: plainText))
+                    id: pageId, edit: PageEdit(content: json))
             } catch {
                 errorMessage = error.localizedDescription
             }

@@ -1,12 +1,14 @@
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
 import { isDone, isTimedIso, rruleToLabel, syncedScheduleLabel } from "@pikos/core";
-import { AlertTriangle, CalendarDays, CalendarSync } from "lucide-react";
+import { CalendarDays, CalendarSync } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { type MetadataChip, PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { usePages } from "@/shared/context/PagesContext";
 
+import { useBacklinks } from "../hooks/useBacklinks";
+import { BacklinksButton } from "./BacklinksButton";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
 interface BylineProps {
@@ -19,14 +21,11 @@ interface BylineProps {
   onTagToggle: (name: string) => void;
   onRecurrenceChange: (rrule: string | null) => void;
   onOpenInCalendar?: () => void;
-  saveError?: string | null;
-  onErrorClick?: () => void;
 }
 
 export function Byline({
   allTags,
   folders,
-  onErrorClick,
   onFolderChange,
   onOpenInCalendar,
   onPriorityChange,
@@ -34,11 +33,12 @@ export function Byline({
   onStatusChange,
   onTagToggle,
   page,
-  saveError,
 }: BylineProps) {
   const done = isDone(page);
   const { recurrenceRules } = usePages();
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
+  const backlinks = useBacklinks(page.id);
+  const hasBacklinks = backlinks.length > 0;
 
   // Synced events lock title, folder placement, schedule, and recurrence to the
   // mirror; body, status, reminders, priority, and tags stay user-editable.
@@ -173,31 +173,15 @@ export function Byline({
             ],
             key: "tags",
           },
-          saveError != null && {
+          hasBacklinks && {
             chips: [
               {
-                id: "save-error",
+                id: "backlinks",
                 kind: "node",
-                node: (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        aria-label="Save failed. Click to retry"
-                        className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
-                        onClick={onErrorClick}
-                      >
-                        <AlertTriangle size={12} strokeWidth={2} />
-                        <span>Not saved</span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[260px]" side="bottom">
-                      {saveError}
-                    </TooltipContent>
-                  </Tooltip>
-                ),
+                node: <BacklinksButton backlinks={backlinks} />,
               },
             ],
-            key: "save-error",
+            key: "backlinks",
           },
         ]}
         layout="byline"

@@ -1,3 +1,4 @@
+import { CALENDAR_DENSITY_STEPS } from "@pikos/core";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -47,23 +48,23 @@ describe("dayCount", () => {
 });
 
 describe("density", () => {
-  it("defaults to 'normal'", () => {
+  it("defaults to a 64px hour", () => {
     const { result } = setup();
-    expect(result.current.density).toBe("normal");
+    expect(result.current.density).toBe(64);
     expect(result.current.metrics.hourHeight).toBe(64);
   });
 
   it("metrics scale with density", () => {
     const { result } = setup();
-    act(() => result.current.setDensity("compact"));
+    act(() => result.current.setDensity(40));
     expect(result.current.metrics.hourHeight).toBe(40);
-    act(() => result.current.setDensity("spacious"));
+    act(() => result.current.setDensity(88));
     expect(result.current.metrics.hourHeight).toBe(88);
   });
 
   it("gridHeight = 24 * hourHeight for all densities", () => {
     const { result } = setup();
-    for (const d of ["compact", "normal", "spacious"] as const) {
+    for (const d of CALENDAR_DENSITY_STEPS) {
       act(() => result.current.setDensity(d));
       expect(result.current.metrics.gridHeight).toBe(result.current.metrics.hourHeight * 24);
     }
@@ -71,8 +72,16 @@ describe("density", () => {
 
   it("persists to localStorage", () => {
     const { result } = setup();
-    act(() => result.current.setDensity("spacious"));
-    expect(JSON.parse(localStorage.getItem("pikos:calendarDensity")!)).toBe("spacious");
+    act(() => result.current.setDensity(88));
+    expect(JSON.parse(localStorage.getItem("pikos:calendarDensity")!)).toBe(88);
+  });
+
+  it("keeps a preset saved before density was a range, and steps from it", () => {
+    localStorage.setItem("pikos:calendarDensity", JSON.stringify("spacious"));
+    const { result } = setup();
+    expect(result.current.metrics.hourHeight).toBe(88);
+    act(() => result.current.stepDensity(-1));
+    expect(result.current.metrics.hourHeight).toBe(76);
   });
 });
 
@@ -164,7 +173,7 @@ describe("text size", () => {
 
   it("grows the hour along with the text", () => {
     const { result } = setup();
-    act(() => result.current.setDensity("compact"));
+    act(() => result.current.setDensity(40));
     const atDefault = result.current.metrics.hourHeight;
     act(() => result.current.setTextSize(28));
     expect(result.current.metrics.hourHeight).toBeGreaterThan(atDefault);
@@ -176,7 +185,7 @@ describe("text size", () => {
   // which let the type outgrow the block holding it at every other size.
   it("scales any density by the text size, in proportion", () => {
     const { result } = setup();
-    act(() => result.current.setDensity("spacious"));
+    act(() => result.current.setDensity(88));
     const atDefault = result.current.metrics.hourHeight;
     act(() => result.current.setTextSize(28));
     expect(result.current.metrics.hourHeight).toBe(atDefault * 2);

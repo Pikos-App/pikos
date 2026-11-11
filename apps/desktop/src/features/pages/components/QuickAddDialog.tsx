@@ -16,6 +16,8 @@ import {
   localToday,
   NLP_PRIORITY_MAP,
   parseInput,
+  PRIORITY_COLORS,
+  quickAddHighlightTokens,
   snapScheduleToRule,
   storageErrorUserMessage,
   toStorageError,
@@ -38,6 +40,7 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
+import { QuickAddInput } from "./QuickAddInput";
 
 const log = createLogger("QuickAddDialog");
 
@@ -54,6 +57,11 @@ function bodyToTiptap(text: string): string {
       line ? { content: [{ text: line, type: "text" }], type: "paragraph" } : { type: "paragraph" }
     );
   return JSON.stringify({ content, type: "doc" });
+}
+
+/** The parse the chips preview: a finite run previews its first page. */
+function firstParsed(result: ParseResult): ParsedInput | undefined {
+  return result.type === "finite" ? result.inputs[0] : result.input;
 }
 
 /** How a parsed reminder lead reads on the preview chip. */
@@ -166,6 +174,12 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const placeholder = useQuickAddPlaceholder(true);
 
+  // Parsed every keystroke rather than on the chips' debounce, so a colour never trails its word.
+  const liveParse = inputValue.trim() ? firstParsed(parseInput(inputValue)) : undefined;
+  const highlightTokens = liveParse ? quickAddHighlightTokens(inputValue, liveParse.title) : [];
+  const highlightPriorityClass =
+    PRIORITY_COLORS[liveParse?.priority ? (NLP_PRIORITY_MAP[liveParse.priority] ?? 0) : 0];
+
   function refocusInput() {
     inputRef.current?.focus();
   }
@@ -210,12 +224,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       }
 
       const result = parseInput(inputValue);
-      const parsed =
-        result.type === "single"
-          ? result.input
-          : result.type === "finite"
-            ? result.inputs[0]
-            : result.input;
+      const parsed = firstParsed(result);
       if (!parsed) return;
 
       // Show recurrence / finite preview.
@@ -318,12 +327,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
   /** Actually creates the page(s) from a parse result (after any confirmation). */
   async function executeCreate(result: ParseResult): Promise<{ id: string; title: string } | null> {
-    const parsed =
-      result.type === "single"
-        ? result.input
-        : result.type === "finite"
-          ? result.inputs[0]
-          : result.input;
+    const parsed = firstParsed(result);
 
     // Folder: NLP folderQuery takes precedence over chip selection.
     let resolvedFolderId = folderValue;
@@ -362,7 +366,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     // the page shows the note already typed out.
     if (parsed?.content) {
       patch.content = bodyToTiptap(parsed.content);
-      patch.contentText = parsed.content;
     }
 
     /** The parsed reminder leads, written as rows on a page that now exists. */
@@ -424,7 +427,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         if (finTags.length > 0) finPatch.tags = finTags;
         if (inp.content) {
           finPatch.content = bodyToTiptap(inp.content);
-          finPatch.contentText = inp.content;
         }
         const pg = await createPage({
           folderId: resolvedFolderId,
@@ -498,22 +500,18 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       <div className="px-4 pt-4 pb-3">
         {addedFeedback !== null ? (
           <p className="animate-in truncate text-base text-muted-foreground fade-in-0">
-            <span className="mr-1.5 text-primary">✓</span>
+            <span className="mr-1.5 text-action">✓</span>
             {addedFeedback}
           </p>
         ) : (
-          <input
+          <QuickAddInput
             aria-describedby="quick-add-error"
             aria-invalid={validationError !== null || submitError !== null}
             aria-label="Quick add input"
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className={cn(
-              "w-full bg-transparent text-base text-foreground outline-none",
-              "placeholder:text-muted-foreground/40",
-              shake && "animate-shake"
-            )}
+            className={cn("placeholder:text-subtle", shake && "animate-shake")}
             onChange={(event) => {
               setInputValue(event.target.value);
               if (validationError !== null) setValidationError(null);
@@ -521,7 +519,9 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
+            priorityClass={highlightPriorityClass}
             ref={inputRef}
+            tokens={highlightTokens}
             value={inputValue}
           />
         )}
@@ -668,7 +668,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         />
 
         <button
-          className="ml-auto shrink-0 rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-auto shrink-0 rounded bg-interactive-fill px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-interactive-fill/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => void handleSubmit()}
         >
           Add

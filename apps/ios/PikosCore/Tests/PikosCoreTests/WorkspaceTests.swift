@@ -60,7 +60,7 @@ final class WorkspaceTests: XCTestCase {
 
         let saved = try await workspace.updatePage(
             id: page.id,
-            edit: PageEdit(content: #"{"type":"doc","content":[]}"#, contentText: ""))
+            edit: PageEdit(content: #"{"type":"doc","content":[]}"#))
 
         XCTAssertEqual(saved.contentSchemaVersion, workspace.contentSchemaVersion())
     }
@@ -104,7 +104,7 @@ final class WorkspaceTests: XCTestCase {
         _ = try await workspace.updatePage(
             id: page.id,
             edit: PageEdit(
-                content: #"{"type":"doc"}"#, contentText: "the quick brown fox"))
+                content: #"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"the quick brown fox"}]}]}"#))
 
         let hits = try await workspace.search(query: "brown", includeCompleted: false, limit: 10).hits
         XCTAssertEqual(hits.map(\.pageId), [page.id])

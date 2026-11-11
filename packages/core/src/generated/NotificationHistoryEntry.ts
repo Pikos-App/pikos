@@ -14,8 +14,8 @@ export type NotificationHistoryEntry = {
   pageTitle?: string | null;
   scheduleId?: string | null;
   /**
-   * `reminder` (delivered), `suppressed` (quiet hours ate it) or `overdue`
-   * (the daily summary marker). Named `kind` because `type` is a Rust keyword;
+   * `reminder` (delivered), `suppressed` (quiet hours ate it), `refused`
+   * (notifications are off for Pikos) or `overdue` (the daily summary marker). Named `kind` because `type` is a Rust keyword;
    * the column is `type`.
    */
   kind: string;

@@ -3,7 +3,6 @@ import type { Locator, Page } from "@playwright/test";
 import {
   test as appTest,
   bridgeCall,
-  dayFrom,
   expect,
   mod,
   openCalendarMode,
@@ -106,15 +105,24 @@ appTest(
     await appTest.step(
       "SYNC-11 an event that crosses midnight sits on the day it happens here",
       async () => {
-        await app.getByRole("button", { name: "Tokyo sync, 9–9:30 PM" }).click();
-        await expect(app.getByRole("dialog")).toContainText("Today 9:00pm · 30m");
+        // Seeded at 10am Tokyo tomorrow, which keeps no daylight saving, so the evening hour it
+        // lands on here moves with this zone's.
+        const hour = await app.evaluate(() => {
+          const now = new Date();
+          const tokyoTenAm = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 1);
+
+          return new Date(tokyoTenAm).getHours() - 12;
+        });
+        await app.getByRole("button", { name: `Tokyo sync, ${hour}–${hour}:30 PM` }).click();
+        await expect(app.getByRole("dialog")).toContainText(`Today ${hour}:00pm · 30m`);
         await app.keyboard.press("Escape");
       }
     );
 
     await appTest.step("SYNC-11 an all-day event stays on its date", async () => {
       await openCalendarFolder(app, "Personal");
-      await expect(rows(app, "Company offsite")).toContainText((await dayFrom(app, 0)).monthDay);
+      // Seeded for today, which a list writes as "Today" rather than the date.
+      await expect(rows(app, "Company offsite")).toContainText("Today");
     });
   }
 );
@@ -651,13 +659,18 @@ appTest(
     await appTest.step("SYNC-16 an edited body keeps its words and shows the notice", async () => {
       await upstream(app, "upstream_sync", {
         calendar: "Personal",
-        events: [{ description: "Agenda two: blockers first.", title: "Team standup" }],
+        events: [
+          {
+            description: "Agenda two: blockers first.\nJoin https://meet.example.com/standup",
+            title: "Team standup",
+          },
+        ],
       });
       await open("Team standup");
       await expect(notice).toBeVisible();
       await expect(body).toHaveText("My prep: land the calendar-sync PR before we demo.");
       await app.getByRole("button", { exact: true, name: "View" }).click();
-      await expect(app.getByText("Agenda two: blockers first.")).toBeVisible();
+      await expect(app.getByText("Agenda two: blockers first.", { exact: false })).toBeVisible();
     });
 
     await appTest.step("SYNC-16 Append puts it under the body and clears the notice", async () => {
@@ -665,6 +678,10 @@ appTest(
       await expect(notice).toHaveCount(0);
       await expect(body).toContainText("My prep: land the calendar-sync PR before we demo.");
       await expect(body).toContainText("Agenda two: blockers first.");
+      await expect(body).toContainText("Join https://meet.example.com/standup");
+      await expect(
+        body.getByRole("link", { name: "https://meet.example.com/standup" })
+      ).toHaveAttribute("href", "https://meet.example.com/standup");
     });
 
     await appTest.step(

@@ -15,6 +15,10 @@
 //!   ~20ms, but a completion racing it burns all 8 retries in microseconds if
 //!   they don't back off. Hence the backoff below.
 //!
+//! The retry is bounded by [`WRITE_TX_DEADLINE`], so a writer that reads first and loses
+//! the lock to a longer hold still fails. One that opens with `BEGIN IMMEDIATE` takes the
+//! write lock before its first read, which `busy_timeout` does wait for.
+//!
 //! This is the systemic counterpart to "fold concurrent writes into one
 //! transaction": every user-facing writer goes through [`retry_on_busy`] so a
 //! lost snapshot race self-heals instead of surfacing as a dropped write. No

@@ -17,7 +17,7 @@
   "dependencies": {
     "@pikos/core": "workspace:*",
     "@pikos/editor-schema": "workspace:*",
-    "@tiptap/core": "^3.20.1"
+    "@tiptap/core": "^3.32.0"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

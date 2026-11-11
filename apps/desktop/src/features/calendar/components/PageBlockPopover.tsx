@@ -10,7 +10,7 @@ import {
   syncedScheduleLabel,
 } from "@pikos/core";
 import { CalendarOff, CalendarX, ExternalLink, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
@@ -22,6 +22,7 @@ import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggl
 import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
 
 import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
+import { blockTitleEdit } from "../utils/blockTitleEdit";
 import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface PageBlockPopoverProps {
   page: PageSummary;
@@ -53,6 +54,10 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
   // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);
+  const [openingTitle] = useState(page.title);
+  // Enter commits and closes, and the blur that follows reads either the typed text
+  // or the title it became; neither may commit again and create a second repeat.
+  const committedTitle = useRef<{ title: string; typed: string } | null>(null);
 
   // Sync every keystroke to the store (debounced write) so close paths that
   // don't run our blur handler — outside click, Escape, parent unmount — still
@@ -71,21 +76,34 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
     togglePageStatus(page, done ? "not_started" : "done");
   }
 
-  function handleTitleBlur(e: React.FocusEvent<HTMLInputElement>) {
-    const value = e.currentTarget.value.trim();
-    if (value !== page.title) {
-      updatePage(page.id, { title: value || page.title });
+  function commitTitle(typed: string, emptyTitle: string) {
+    const last = committedTitle.current;
+    const isCommitted = typed === last?.typed || typed === last?.title;
+    if (isCommitted) return;
+
+    const isRenamed = typed !== "" && typed !== openingTitle;
+    if (!isRenamed) {
+      const title = typed || emptyTitle;
+      if (title !== page.title) updatePage(page.id, { title });
+      return;
     }
+
+    const { patch, rrule } = blockTitleEdit(typed, openingTitle || emptyTitle, page, folders);
+    const title = patch.title ?? typed;
+    committedTitle.current = { title, typed };
+    setTitleValue(title);
+    updatePage(page.id, patch);
+    if (rrule) void handleRecurrenceChange(rrule);
+  }
+
+  function handleTitleBlur(e: React.FocusEvent<HTMLInputElement>) {
+    commitTitle(e.currentTarget.value.trim(), page.title);
   }
 
   function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
-      const value = e.currentTarget.value.trim();
-      const nextTitle = value || "Untitled";
-      if (nextTitle !== page.title) {
-        updatePage(page.id, { title: nextTitle });
-      }
+      commitTitle(e.currentTarget.value.trim(), "Untitled");
       onClose?.();
     }
   }
@@ -188,14 +206,14 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         // whose title cannot be typed over at all.
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-            {titleValue || <span className="text-muted-foreground/40">Untitled</span>}
+            {titleValue || <span className="text-subtle">Untitled</span>}
           </span>
           <SyncedLockHint />
         </div>
       ) : (
         <input
           autoFocus
-          className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+          className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-subtle"
           onBlur={handleTitleBlur}
           onChange={handleTitleChange}
           onFocus={(e) => {
@@ -320,7 +338,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
       <div className="flex items-center justify-between border-t border-border/40 pt-1">
         <button
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-foreground focus:outline-none"
+          className="inline-flex items-center gap-1.5 text-xs text-subtle transition-colors hover:text-foreground focus:outline-none"
           onClick={handleOpenPage}
         >
           <ExternalLink size={11} />
@@ -329,7 +347,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         <div className="flex items-center gap-2">
           {onRemoveDate && page.scheduledStart && !locked && (
             <TooltipIconButton
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-foreground focus:outline-none"
+              className="inline-flex items-center gap-1 text-xs text-subtle transition-colors hover:text-foreground focus:outline-none"
               icon={<CalendarX size={11} />}
               label="Remove date"
               onClick={() => {
@@ -340,7 +358,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           )}
           {onDelete && (
             <TooltipIconButton
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
+              className="inline-flex items-center gap-1 text-xs text-subtle transition-colors hover:text-destructive focus:outline-none"
               icon={isOccurrence ? <CalendarX size={11} /> : <Trash2 size={11} />}
               label={isOccurrence ? occurrenceDeleteLabel(locked) : "Delete page"}
               onClick={onDelete}

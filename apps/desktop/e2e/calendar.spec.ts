@@ -6,7 +6,14 @@
 
 import type { Page } from "@playwright/test";
 
-import { test as appTest, expect, mod, openCalendarMode, quickAdd } from "./fixtures";
+import {
+  test as appTest,
+  createFolder,
+  expect,
+  mod,
+  openCalendarMode,
+  quickAdd,
+} from "./fixtures";
 
 /** The last visible all-day column — always >= today within the current week,
  * so the page's denormalised scheduledStart isn't stripped by the
@@ -689,6 +696,19 @@ appTest("a page restored from the trash opens no popover", async ({ app }) => {
   await expect(app.getByPlaceholder("Untitled")).not.toBeVisible();
 });
 
+appTest("a block's open popover goes when a double-click opens its page", async ({ app }) => {
+  await quickAdd(app, "Review today 3pm");
+  await openCalendarMode(app);
+  const block = calendarRegion(app).getByRole("button", { name: /^Review/ });
+  await block.click();
+  await expect(app.getByRole("dialog")).toBeVisible();
+
+  await block.dblclick();
+
+  await expect(app.locator(".ProseMirror")).toBeVisible();
+  await expect(app.getByRole("dialog")).toHaveCount(0);
+});
+
 appTest("the current-time line moves as time passes @mock-only", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T10:00:00") });
   await page.clock.resume();
@@ -730,7 +750,7 @@ appTest(
   }
 );
 
-appTest("Escape in the editor goes to the calendar", { tag: ["@CAL-21"] }, async ({ app }) => {
+appTest("Escape in the editor unfocuses it first", { tag: ["@CAL-21:2"] }, async ({ app }) => {
   await quickAdd(app, "Review today 2pm");
   await quickAdd(app, "Loose notes");
   const calendar = calendarRegion(app);
@@ -743,6 +763,9 @@ appTest("Escape in the editor goes to the calendar", { tag: ["@CAL-21"] }, async
     await app.keyboard.type("agenda");
     await app.keyboard.press(mod("Mod+a"));
     await app.keyboard.press("Escape");
+    await expect(editor).toBeFocused();
+    await app.keyboard.press("Escape");
+    await expect(editor).not.toBeFocused();
     await expect(editor).toBeVisible();
     await app.keyboard.press("Escape");
     await expect(calendar).toBeVisible();
@@ -753,6 +776,8 @@ appTest("Escape in the editor goes to the calendar", { tag: ["@CAL-21"] }, async
     await calendar.getByRole("button", { name: "Review" }).first().dblclick();
     await expect(editor).toBeVisible();
     await editor.click();
+    await app.keyboard.press("Escape");
+    await expect(editor).not.toBeFocused();
     await app.keyboard.press("Escape");
     await expect(calendar).toBeVisible();
   });
@@ -773,3 +798,36 @@ appTest("Escape in the editor goes to the calendar", { tag: ["@CAL-21"] }, async
     await expect(calendar).toBeVisible();
   });
 });
+
+appTest(
+  "after Escape unfocuses the editor, Space completes the open page and the arrows move",
+  { tag: ["@CAL-21:2"] },
+  async ({ app }) => {
+    await createFolder(app, "Errands");
+    await quickAdd(app, "Buy stamps");
+    await quickAdd(app, "Post parcel");
+    await quickAdd(app, "Fetch keys");
+    const editor = app.getByRole("textbox", { name: "Page content" });
+    const rows = app.locator("[data-page-list-item]");
+
+    async function escapeFromTopPage() {
+      await rows.first().click();
+      await editor.click();
+      await app.keyboard.press("Escape");
+      await expect(editor).not.toBeFocused();
+    }
+
+    await appTest.step("Space completes the open page", async () => {
+      await escapeFromTopPage();
+      await app.keyboard.press("Space");
+      await expect(rows).toHaveCount(2);
+      await expect(editor).toBeVisible();
+    });
+
+    await appTest.step("the arrows move to the next page", async () => {
+      await escapeFromTopPage();
+      await app.keyboard.press("ArrowDown");
+      await expect(rows.nth(1)).toHaveAttribute("data-active", "true");
+    });
+  }
+);

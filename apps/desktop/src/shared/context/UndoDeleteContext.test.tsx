@@ -120,6 +120,63 @@ describe("requestDeletePage", () => {
   });
 });
 
+describe("requestDeletePages", () => {
+  async function setupTwo() {
+    const ctx = await setup();
+    let otherId!: string;
+    await act(async () => {
+      otherId = (await ctx.hook.result.current.pages.createPage({ title: "Other" })).id;
+    });
+    const pages = [
+      { id: ctx.pageId, title: "Test Page" },
+      { id: otherId, title: "Other" },
+    ];
+
+    return { ...ctx, otherId, pages };
+  }
+
+  it("shows one toast naming the count, whose Undo restores every page", async () => {
+    const restoreSpy = vi.spyOn(MockStorageAdapter.prototype, "restorePage");
+    const { hook, otherId, pageId, pages } = await setupTwo();
+
+    act(() => hook.result.current.undo.requestDeletePages(pages));
+
+    expect([...hook.result.current.undo.hiddenPageIds]).toEqual([pageId, otherId]);
+    const items = hook.result.current.undo.toastItems;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.label).toBe("2 pages moved to Trash");
+
+    act(() => items[0]!.action?.onClick());
+
+    expect(hook.result.current.undo.hiddenPageIds.size).toBe(0);
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
+    expect(restoreSpy).toHaveBeenCalledWith(pageId);
+    expect(restoreSpy).toHaveBeenCalledWith(otherId);
+  });
+
+  it("reads as a single delete when the selection holds one page", async () => {
+    const { hook, pageId } = await setup();
+
+    act(() => hook.result.current.undo.requestDeletePages([{ id: pageId, title: "Test Page" }]));
+
+    expect(hook.result.current.undo.toastItems.map((t) => t.label)).toEqual([
+      "Deleted “Test Page”",
+    ]);
+  });
+
+  it("unhides every page when its toast times out", async () => {
+    const { hook, pages } = await setupTwo();
+
+    act(() => hook.result.current.undo.requestDeletePages(pages));
+    act(() =>
+      hook.result.current.undo.handleToastDismiss(hook.result.current.undo.toastItems[0]!.id)
+    );
+
+    expect(hook.result.current.undo.hiddenPageIds.size).toBe(0);
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
+  });
+});
+
 // ─── Folder deletion ─────────────────────────────────────────────────────────
 
 describe("requestDeleteFolder", () => {

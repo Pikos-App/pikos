@@ -1,0 +1,25 @@
+# The site leaves out the notes and post of a release that isn't published yet
+# (apps/marketing/src/content/published.ts), so publishing one has to rebuild it. Cloudflare
+# Pages builds main on every push; this is the build for the publish, through the project's
+# deploy hook.
+name: Site
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      # The hook URL is the credential: anyone holding it can start a build.
+      - name: Rebuild pikos.app
+        env:
+          HOOK: ${{ secrets.PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::No PAGES_DEPLOY_HOOK secret, so pikos.app won't show ${{ github.event.release.tag_name }}'s notes until the next push to main."
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$HOOK"

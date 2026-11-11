@@ -1,5 +1,5 @@
 import type { CalendarDayCount, CalendarDensity } from "@pikos/core";
-import { writableFolders } from "@pikos/core";
+import { CALENDAR_DENSITY_STEPS, writableFolders } from "@pikos/core";
 
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { IS_LINUX } from "@/shared/constants/platform";
@@ -53,11 +53,8 @@ const CALENDAR_DAY_COUNT_OPTIONS: readonly { id: CalendarDayCount; label: string
   { id: 7, label: "7" },
 ];
 
-const CALENDAR_DENSITY_OPTIONS: readonly { id: CalendarDensity; label: string }[] = [
-  { id: "compact", label: "Compact" },
-  { id: "normal", label: "Normal" },
-  { id: "spacious", label: "Spacious" },
-];
+const CALENDAR_DENSITY_OPTIONS: readonly { id: CalendarDensity; label: string }[] =
+  CALENDAR_DENSITY_STEPS.map((step, index) => ({ id: step, label: String(index + 1) }));
 
 const LIST_DENSITY_OPTIONS: readonly { id: ListDensity; label: string }[] = [
   { id: "compact", label: "Compact" },
@@ -151,7 +148,7 @@ export function GeneralSettingsPreferences() {
           value={calendarTextSize}
         />
         <SettingChoice
-          description="How tall each hour row renders."
+          description="How tall each hour row renders. ⌥⌘= and ⌥⌘− step it from anywhere."
           label="Calendar density"
           onChange={setCalendarDensity}
           options={CALENDAR_DENSITY_OPTIONS}

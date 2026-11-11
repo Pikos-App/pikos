@@ -205,7 +205,6 @@ describe("recurrence lifecycle conformance", () => {
       const series = scenario.series ?? table.series;
       const head = await adapter.createPage({
         content: "",
-        contentText: "",
         folderId: null,
         priority: 0,
         scheduledEnd: series.end,

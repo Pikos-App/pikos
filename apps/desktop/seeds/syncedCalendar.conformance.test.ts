@@ -9,7 +9,7 @@
 // page_schedules row, and a series' head is *derived* from the rule where the writer
 // stamps it. The table names the outcome, so each side answers in its own basis.
 
-import { formatDateOnly, getLocalTimezone } from "@pikos/core";
+import { extractText, formatDateOnly, getLocalTimezone } from "@pikos/core";
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { addDays, endOfMonth, format } from "date-fns";
@@ -241,7 +241,8 @@ const CHECKS: Record<keyof Expect, (want: Expect, adapter: MockStorageAdapter) =
       expect(page.pendingDescription ?? null, `${at} withheld description`).toBe(
         expected.pendingDescription ?? null
       );
-      expect(page.contentText ?? "", `${at} indexed body text`).toBe(expected.bodyText ?? "");
+      const bodyText = page.content ? extractText(JSON.parse(page.content)) : "";
+      expect(bodyText, `${at} indexed body text`).toBe(expected.bodyText ?? "");
       expect(adapter.isPageUserModified(page.id), `${at} ownership`).toBe(
         expected.userModified ?? false
       );

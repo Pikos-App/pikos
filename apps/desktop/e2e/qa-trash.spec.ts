@@ -123,7 +123,7 @@ appTest(
 );
 
 appTest(
-  "Empty trash needs delete typed, Delete Forever asks first, and both are for good",
+  "Empty trash and Delete Forever each ask once, and both are for good",
   { tag: ["@TRASH-06"] },
   async ({ app }) => {
     for (const title of ["first gone", "second gone", "third gone"]) {
@@ -140,14 +140,11 @@ appTest(
       await expect(trashList(app).getByText("first gone")).toHaveCount(0);
     });
 
-    await appTest.step("TRASH-06 Empty trash stays shut until delete is typed", async () => {
+    await appTest.step("TRASH-06 Empty trash asks once, with no word to type", async () => {
       await app.getByRole("button", { name: "Empty trash" }).click();
       const confirm = app.getByRole("alertdialog", { name: "Empty the trash?" });
-      const go = confirm.getByRole("button", { name: "Empty trash" });
-      await expect(go).toBeDisabled();
-      await confirm.getByLabel(/Type delete to confirm/).fill("delete");
-      await expect(go).toBeEnabled();
-      await go.click();
+      await expect(confirm.getByRole("textbox")).toHaveCount(0);
+      await confirm.getByRole("button", { name: "Empty trash" }).click();
       await expect(app.getByText("The trash is empty.")).toBeVisible();
     });
 
@@ -212,6 +209,45 @@ appTest(
       await expect(listRow(app, "stretch")).toHaveCount(1);
       await expect(listRow(app, "stretch").getByRole("checkbox", { name: "Mark done" })).toBeVisible();
       await untouched();
+    });
+  }
+);
+
+appTest(
+  "deleting three selected pages shows one banner whose Undo, or Cmd+Z, brings all three back",
+  { tag: ["@TRASH-11"] },
+  async ({ app }) => {
+    const titles = ["sweep one", "sweep two", "sweep three"];
+    for (const title of titles) await quickAdd(app, title);
+    const banner = app.getByRole("alert", { name: "3 pages moved to Trash" });
+    async function deleteAll() {
+      for (const title of titles) {
+        await listRow(app, title).click({ modifiers: ["ControlOrMeta"] });
+      }
+      await expect(app.locator("[data-page-list-item][data-selected=true]")).toHaveCount(3);
+      await app.keyboard.press(mod("Mod+Backspace"));
+      for (const title of titles) await expect(listRow(app, title)).toHaveCount(0);
+      await expect(banner).toHaveCount(1);
+      await expect(app.getByRole("alert")).toHaveCount(1);
+    }
+
+    await appTest.step("TRASH-11 one banner, and its Undo restores all three", async () => {
+      await deleteAll();
+      await banner.getByRole("button", { name: "Undo" }).click();
+      for (const title of titles) await expect(listRow(app, title)).toHaveCount(1);
+    });
+
+    await appTest.step("TRASH-11 Cmd+Z does the same", async () => {
+      await app.locator("body").click({ position: { x: 0, y: 0 } });
+      await deleteAll();
+      await app.keyboard.press(mod("Mod+z"));
+      await expect(banner).toHaveCount(0);
+      for (const title of titles) await expect(listRow(app, title)).toHaveCount(1);
+    });
+
+    await appTest.step("TRASH-11 none of them is left in the trash", async () => {
+      await openTrash(app);
+      await expect(app.getByText("The trash is empty.")).toBeVisible();
     });
   }
 );

@@ -131,13 +131,43 @@ describe("MonthGrid — event chips", () => {
     expect(chip.getAttribute("style")).toContain("#ff0000");
   });
 
-  it("draws a multi-day event as a chip in every covered cell", () => {
+  it("draws a multi-day event as one bar from its first day across the days it covers", () => {
     renderGrid([
       makePage({ id: "Offsite", scheduledEnd: "2026-03-12", scheduledStart: "2026-03-10" }),
     ]);
-    const chips = screen.getAllByRole("button", { name: "Offsite" });
-    expect(chips).toHaveLength(3);
-    expect(cell("Wednesday March 11, 2026")).toContainElement(chips[1]!);
+    const bar = screen.getByRole("button", { name: "Offsite" });
+
+    expect(cell("Tuesday March 10, 2026")).toContainElement(bar);
+    expect(bar.style.width).toContain("3 * 100%");
+  });
+
+  it("draws one bar per week row for an event that crosses a week", () => {
+    renderGrid([
+      makePage({ id: "Trip", scheduledEnd: "2026-03-17", scheduledStart: "2026-03-14" }),
+    ]);
+    const bars = screen.getAllByRole("button", { name: "Trip" });
+
+    expect(bars).toHaveLength(2);
+    expect(cell("Monday March 16, 2026")).toContainElement(bars[1]!);
+  });
+
+  it("ticks an event that crosses a week only on the row where it starts", () => {
+    renderGrid([
+      makePage({ id: "Trip", scheduledEnd: "2026-03-17", scheduledStart: "2026-03-14" }),
+    ]);
+    const [start, carried] = screen.getAllByRole("button", { name: "Trip" });
+
+    expect(start!.querySelector(".task-checkbox")).not.toBeNull();
+    expect(carried!.querySelector(".task-checkbox")).toBeNull();
+  });
+
+  it("keeps the tick on the first row for an event that started before the grid", () => {
+    renderGrid([
+      makePage({ id: "Retreat", scheduledEnd: "2026-02-25", scheduledStart: "2026-02-20" }),
+    ]);
+    const bar = screen.getByRole("button", { name: "Retreat" });
+
+    expect(bar.querySelector(".task-checkbox")).not.toBeNull();
   });
 
   it("shows events on padding cells too — they are real days of the grid", () => {

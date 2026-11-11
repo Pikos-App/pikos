@@ -21,6 +21,7 @@
     "qa:egress": "node scripts/check-egress.mjs",
     "qa:reset": "bash scripts/qa-staging.sh reset",
     "qa:seed": "bash scripts/qa-staging.sh seed",
+    "qa:accounts": "bash scripts/qa-staging.sh accounts",
     "qa:staging": "bash scripts/qa-staging.sh",
     "qa:gate": "node scripts/check-release-qa.mjs",
     "qa:marks": "node scripts/qa-marks.mjs",

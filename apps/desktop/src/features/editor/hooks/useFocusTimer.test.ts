@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { subscribeNotices } from "@/shared/events/noticeBus";
+import { flushPendingWrites } from "@/shared/pendingWrites";
 
 import { MIN_SESSION_S, useFocusTimer } from "./useFocusTimer";
 
@@ -127,6 +128,38 @@ describe("useFocusTimer", () => {
     expect(sessions[0]!.durationS).toBe(120);
   });
 
+  it("banks a running session once when the app quits", async () => {
+    const { result, unmount } = setup();
+    act(() => result.current.start());
+    await advance(120);
+
+    await act(async () => {
+      await flushPendingWrites();
+    });
+    const sessions = adapter.listFocusSessionsForTest();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.durationS).toBe(120);
+
+    await act(async () => {
+      unmount();
+      await Promise.resolve();
+    });
+    expect(adapter.listFocusSessionsForTest()).toHaveLength(1);
+  });
+
+  it("ticks on the second boundary after a late tick", async () => {
+    const { result } = setup();
+    act(() => result.current.start());
+    vi.setSystemTime(Date.now() + 400);
+
+    await advance(1);
+    expect(result.current.elapsedS).toBe(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(result.current.elapsedS).toBe(2);
+  });
+
   it("unmounting while idle writes nothing", async () => {
     const { unmount } = setup();
     await act(async () => {
@@ -188,7 +221,7 @@ describe("end-of-session notice", () => {
   // qa: EDIT-20:4
   it("says so when a session was too short to record", async () => {
     await runSession(MIN_SESSION_S - 1);
-    expect(notices).toEqual([`Under ${MIN_SESSION_S} seconds — not recorded`]);
+    expect(notices).toEqual([`Under ${MIN_SESSION_S} seconds, not recorded`]);
   });
 
   it("carries the hour once a session passes one", async () => {

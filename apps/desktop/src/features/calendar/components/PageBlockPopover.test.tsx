@@ -11,21 +11,25 @@ import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { PageBlockPopover } from "./PageBlockPopover";
 
-const mocks = vi.hoisted(() => ({ recurrenceRules: [] as PageRecurrenceRule[] }));
+const mocks = vi.hoisted(() => ({
+  createRecurrence: vi.fn(),
+  recurrenceRules: [] as PageRecurrenceRule[],
+  updatePage: vi.fn(),
+}));
 
 vi.mock("@/shared/context/PagesContext", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/shared/context/PagesContext")>()),
   usePages: () => ({
     clearSchedule: vi.fn(),
     createFolder: vi.fn(),
-    createRecurrence: vi.fn(),
+    createRecurrence: mocks.createRecurrence,
     deleteRecurrence: vi.fn(),
     folders: [],
     maybeToggleRecurringOccurrence: vi.fn(),
     recurrenceRules: mocks.recurrenceRules,
     scheduleOnce: vi.fn(),
     uncompleteRecurringOrFlip: vi.fn(),
-    updatePage: vi.fn(),
+    updatePage: mocks.updatePage,
     updateRecurrence: vi.fn(),
   }),
 }));
@@ -35,6 +39,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mocks.recurrenceRules = [];
+  mocks.createRecurrence.mockReset();
+  mocks.updatePage.mockReset();
 });
 
 function makePage(over: Partial<PageSummary>): PageSummary {
@@ -224,5 +230,30 @@ describe("PageBlockPopover — the delete names what it removes", () => {
   it("names a real page as the page", () => {
     renderWithDelete(makePage({}));
     expect(screen.getByRole("button", { name: "Delete page" })).toBeInTheDocument();
+  });
+});
+
+describe("PageBlockPopover — a typed title reads as Quick Add does", () => {
+  it("takes tags and a repeat out of the title, and the repeat keeps the block's slot", () => {
+    renderPopover(makePage({ title: "" }));
+    const title = screen.getByPlaceholderText("Untitled");
+    fireEvent.change(title, { target: { value: "standup every weekday #work" } });
+    fireEvent.keyDown(title, { key: "Enter" });
+    fireEvent.blur(title);
+
+    expect(mocks.updatePage).toHaveBeenLastCalledWith("p1", { tags: ["work"], title: "standup" });
+    expect(mocks.createRecurrence).toHaveBeenCalledOnce();
+    expect(mocks.createRecurrence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+        scheduledStart: "2099-01-05T09:00:00",
+      })
+    );
+  });
+
+  it("leaves an unchanged title alone", () => {
+    renderPopover(makePage({ title: "Standup #work" }));
+    fireEvent.keyDown(screen.getByDisplayValue("Standup #work"), { key: "Enter" });
+    expect(mocks.updatePage).not.toHaveBeenCalled();
   });
 });

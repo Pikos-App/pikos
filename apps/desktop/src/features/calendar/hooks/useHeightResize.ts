@@ -7,6 +7,12 @@ interface HeightResizeOptions {
   defaultHeight: number;
   min: number;
   max: number;
+  /**
+   * What the drawn height is multiplied by. The stored height, default, min and
+   * max are all at scale 1, so a value persisted before scaling existed keeps its
+   * meaning and a drag position shows the same contents at every zoom.
+   */
+  scale?: number;
 }
 
 interface HeightResize {
@@ -18,6 +24,7 @@ export function useHeightResize({
   defaultHeight,
   max,
   min,
+  scale = 1,
   storageKey,
 }: HeightResizeOptions): HeightResize {
   const [height, setHeight] = useLocalStorage(storageKey, defaultHeight);
@@ -45,7 +52,7 @@ export function useHeightResize({
 
     const onMove = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
-      const h = Math.max(min, Math.min(max, startHeight + ev.clientY - startY));
+      const h = Math.max(min, Math.min(max, startHeight + (ev.clientY - startY) / scale));
       setHeight(h);
     };
     // pointerup and pointercancel both end the gesture; the height already
@@ -62,5 +69,5 @@ export function useHeightResize({
     handle.addEventListener("pointercancel", onEnd);
   }
 
-  return { height, onResizeStart };
+  return { height: height * scale, onResizeStart };
 }

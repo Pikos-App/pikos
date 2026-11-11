@@ -88,6 +88,28 @@ describe("multi-select", () => {
     expect(result.current.selection.selectedPageIds).toEqual(new Set(["b", "c", "d"]));
   });
 
+  it("a range after a Cmd-click starts at the Cmd-clicked page, not the open one", () => {
+    const { result } = setup();
+    const ids = ["a", "b", "c", "d", "e"];
+    act(() => result.current.ui.setActivePage("a"));
+    act(() => result.current.selection.togglePageSelection("c"));
+
+    act(() => result.current.selection.setRangeSelection(ids, "e", "a"));
+
+    expect(result.current.selection.selectedPageIds).toEqual(new Set(["c", "d", "e"]));
+  });
+
+  it("opening a page moves the range anchor to it", () => {
+    const { result } = setup();
+    const ids = ["a", "b", "c", "d", "e"];
+    act(() => result.current.selection.setSelectionAnchorId("a"));
+    act(() => result.current.ui.setActivePage("c"));
+
+    act(() => result.current.selection.setRangeSelection(ids, "e", "c"));
+
+    expect(result.current.selection.selectedPageIds).toEqual(new Set(["c", "d", "e"]));
+  });
+
   it("setRangeSelection with no anchor selects just the target", () => {
     const { result } = setup();
     act(() => result.current.selection.setRangeSelection(["a", "b", "c"], "b"));

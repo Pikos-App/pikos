@@ -377,8 +377,11 @@ jobs:
           for f in **/*.dmg; do
             mv "$f" "$(dirname "$f")/Pikos-macos-universal.dmg"
           done
+          # The AppImage is also the Linux updater bundle. Tauri's own name is
+          # kept for the updater and the stable name is a copy for the site, so
+          # GitHub counts an update apart from a fresh download.
           for f in **/*.AppImage; do
-            mv "$f" "$(dirname "$f")/Pikos-linux-x86_64.AppImage"
+            cp "$f" "$(dirname "$f")/Pikos-linux-x86_64.AppImage"
           done
           for f in **/*.deb; do
             mv "$f" "$(dirname "$f")/Pikos-linux-x86_64.deb"
@@ -390,8 +393,23 @@ jobs:
       - name: Read release notes
         id: notes
         run: |
-          # Read RELEASE_NOTES.md from the tagged commit (before it was reset)
-          NOTES=$(git show ${{ github.ref_name }}:RELEASE_NOTES.md | grep -v '^<!--' || true)
+          set -euo pipefail
+          # The version's own notes file, the one the site renders, without its front matter. A beta
+          # reads the file of the release it leads up to.
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="apps/marketing/src/content/release-notes/${VERSION%%-*}.md"
+          NOTES=$(git show "${GITHUB_REF_NAME}:${FILE}" | awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm')
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::${FILE} is missing or empty at ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          # The update dialog and the GitHub release show the highlights above `<!-- more -->` and
+          # link to the full entry on the site, which renders the whole file.
+          if printf '%s\n' "$NOTES" | grep -qx '<!-- more -->'; then
+            NOTES="$(printf '%s\n' "$NOTES" | awk '/^<!-- more -->$/ {exit} {print}')
+
+          [See everything in ${VERSION%%-*}](https://pikos.app/release-notes#${VERSION%%-*})"
+          fi
           # Store as multiline output
           {
             echo "body<<NOTES_EOF"
@@ -454,10 +472,8 @@ jobs:
           done
 
           # Linux: Tauri v2 updater uses the bare .AppImage + .AppImage.sig
-          # (the .AppImage.tar.gz wrapper was the v1 format). The AppImage was
-          # renamed to its stable name above; the .sig keeps its original name
-          # but only its contents matter.
-          for f in artifacts/**/*.AppImage; do
+          # (the .AppImage.tar.gz wrapper was the v1 format).
+          for f in artifacts/**/Pikos_*.AppImage; do
             [ -f "$f" ] && LINUX_URL="${BASE}/$(basename "$f")"
           done
           for f in artifacts/**/*.AppImage.sig; do
@@ -499,8 +515,12 @@ jobs:
           }
           MANIFEST
 
+      # `draft: true` again, or the action publishes the draft it updates. It did for 0.4.0 and
+      # 0.4.1: the release went public as the build ended, before anyone smoke-tested it, and a
+      # publish by this job's token starts no other workflow, so the tap and the site never moved.
       - name: Upload latest.json to release
         if: ${{ !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: latest.json

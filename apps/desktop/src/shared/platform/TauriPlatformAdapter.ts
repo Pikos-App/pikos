@@ -65,6 +65,10 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     return invoke<boolean>("request_notification_permission");
   }
 
+  async openNotificationSettings(): Promise<void> {
+    await invoke("open_notification_settings");
+  }
+
   async applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void> {
     await invoke("update_notification_settings", { settings });
   }

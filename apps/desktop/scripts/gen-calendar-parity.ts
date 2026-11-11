@@ -48,13 +48,13 @@ import {
 } from "@pikos/core";
 import { computeCalendarMetrics, shortestBlockMinutes } from "@pikos/core";
 import { buildDayBlocks } from "@pikos/core";
-import type { CalendarDensity } from "@pikos/core";
+import { LEGACY_CALENDAR_DENSITIES } from "@pikos/core";
 import { computeScheduleTransition, normalizeEndInput } from "@pikos/core";
 
 import { parseDeepLink } from "@/shared/deep-link/parseDeepLink";
 
 const EXPECTED_TZ = "UTC";
-const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
+const DENSITIES = Object.entries(LEGACY_CALENDAR_DENSITIES);
 
 function packageRoot(): string {
   let dir = process.cwd();
@@ -473,8 +473,8 @@ function main(): void {
   // One entry per scenario per density — see the module docs.
   const timed = TIMED_SCENARIOS.flatMap((scenario) => {
     const day = new Date(`${scenario.day}T00:00:00`);
-    return DENSITIES.map((density) => {
-      const metrics = computeCalendarMetrics(density);
+    return DENSITIES.map(([density, hourHeight]) => {
+      const metrics = computeCalendarMetrics(hourHeight);
       const blocks = buildDayBlocks(scenario.pages, day, metrics);
       return {
         // Sorted by page id, not emit order — see the module docs on why emit

@@ -152,15 +152,15 @@ async fn apply(pool: &sqlx::SqlitePool, ids: &mut HashMap<String, String>, step:
                     folder_id: folder.as_ref().map(|f| ids[f].clone()),
                     title: title.clone(),
                     subtitle: subtitle.clone(),
-                    content: "{}".into(),
-                    content_text: content_text.clone(),
+                    content: content_text
+                        .as_deref()
+                        .map_or_else(|| "{}".into(), crate::build_tiptap_doc),
                     status: "not_started".into(),
                     priority: 0,
                     tags: tags.clone().unwrap_or_default(),
                     scheduled_start: None,
                     scheduled_end: None,
                     completed_at: None,
-                    links: vec![],
                     parent_id: None,
                     last_opened_at: None,
                     created_at: None,

@@ -1,8 +1,11 @@
 import { Fragment, type ReactNode } from "react";
 
+import { getPlatform } from "@/shared/platform";
+
 /**
  * Renders the narrow markdown subset used in release notes — headings (as
- * compact section labels), bullet lists, **bold**, and `inline code`. The notes
+ * compact section labels), bullet lists, **bold**, `inline code` and
+ * [links](https://…), which open in the browser. The notes
  * are authored by us to a convention (not arbitrary user input), so the subset
  * is deliberately small. Text is rendered as React children (never
  * dangerouslySetInnerHTML), so it can't inject markup.
@@ -15,7 +18,7 @@ type Block =
 
 const HEADING = /^#{1,6}\s+(.*)$/;
 const BULLET = /^[-*]\s+(.*)$/;
-const INLINE = /(\*\*([^*]+)\*\*|`([^`]+)`)/g;
+const INLINE = /(\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\))/g;
 
 function parseBlocks(body: string): Block[] {
   const blocks: Block[] = [];
@@ -82,6 +85,21 @@ function renderInline(text: string): ReactNode[] {
         <code className="rounded bg-muted px-1 py-0.5 text-xs" key={key++}>
           {match[3]}
         </code>
+      );
+    } else if (match[4] !== undefined && match[5] !== undefined) {
+      const href = match[5];
+      nodes.push(
+        <a
+          className="text-primary underline-offset-2 hover:underline"
+          href={href}
+          key={key++}
+          onClick={(event) => {
+            event.preventDefault();
+            void getPlatform().openExternal(href);
+          }}
+        >
+          {match[4]}
+        </a>
       );
     }
     last = index + match[0].length;

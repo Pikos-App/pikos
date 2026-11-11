@@ -17,7 +17,7 @@ export function highlightText(text: string, queryWords: string[], typed: string)
   const parts = text.split(new RegExp(`(${terms.map(escape).join("|")})`, "gi"));
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <mark className="bg-transparent font-medium text-primary" key={i}>
+      <mark className="bg-transparent font-medium text-action" key={i}>
         {part}
       </mark>
     ) : (

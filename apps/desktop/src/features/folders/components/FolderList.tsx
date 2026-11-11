@@ -183,7 +183,7 @@ export function FolderList() {
                   >
                     {opt.icon}
                     {opt.label}
-                    {sortOrder === opt.value && <span className="ml-auto text-primary">✓</span>}
+                    {sortOrder === opt.value && <span className="ml-auto text-action">✓</span>}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>

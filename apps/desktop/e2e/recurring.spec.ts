@@ -213,7 +213,7 @@ appTest(
     await expect(dialog).not.toBeVisible();
 
     // Today view: the head is scheduled today, so it shows here.
-    await app.getByRole("button", { name: /Today/ }).click();
+    await app.getByRole("button", { name: /^Today/ }).click();
     const items = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
     await expect(items).toHaveCount(1);
 
@@ -262,7 +262,7 @@ appTest(
     await app.keyboard.press("Enter");
     await expect(dialog).not.toBeVisible();
 
-    await app.getByRole("button", { name: /Today/ }).click();
+    await app.getByRole("button", { name: /^Today/ }).click();
     const items = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
     await expect(items).toHaveCount(1);
     await items

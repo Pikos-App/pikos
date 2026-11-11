@@ -11,7 +11,7 @@ import {
 } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -21,7 +21,8 @@ import { useUI } from "@/shared/context/UIContext";
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
-import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BLOCK_TIME_TEXT_CLASS, CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -272,10 +273,6 @@ export function PageBlock({
     />
   );
 
-  // Synced provenance: an active mirror dims-on-detach (never strikethrough —
-  // it's still a real page). The source/broken-sync glyph is SyncSourceIcon.
-  const isDetached = page.syncState === "detached";
-
   const resizeHandle = resizeEnabled ? (
     // touch-none: the strip's only gesture is the resize, so the browser must
     // not claim a touch drag here for a scroll. The block body deliberately
@@ -299,7 +296,6 @@ export function PageBlock({
               "absolute select-none",
               CHIP_BASE_CLASSES,
               "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
-              isDetached && !done && "opacity-70",
               done && "opacity-50",
               isHighlighted && "animate-highlight-flash",
               (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
@@ -335,7 +331,6 @@ export function PageBlock({
               done
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
-              isDetached && !done && "opacity-70",
               isHighlighted && "animate-highlight-flash",
               isResizing
                 ? "cursor-row-resize!"
@@ -377,7 +372,12 @@ export function PageBlock({
             )}
             {showTimeLabel && (
               // Indent matches the title's own left edge: checkbox 3.5 + gap 1
-              <p className="type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] truncate pl-[calc(1.125rem*var(--calendar-zoom,1))] text-subtle">
+              <p
+                className={cn(
+                  "type-ui-sm mt-[calc(0.125rem*var(--calendar-zoom,1))] w-full truncate pl-[calc(1.125rem*var(--calendar-zoom,1))]",
+                  BLOCK_TIME_TEXT_CLASS
+                )}
+              >
                 {timeLabel}
               </p>
             )}
@@ -385,7 +385,7 @@ export function PageBlock({
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent
+      <BlockPopoverContent
         align="start"
         className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         side="right"
@@ -413,7 +413,7 @@ export function PageBlock({
             page={page}
           />
         )}
-      </PopoverContent>
+      </BlockPopoverContent>
     </Popover>
   );
 }

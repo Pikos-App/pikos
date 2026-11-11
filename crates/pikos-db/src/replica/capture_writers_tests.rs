@@ -11,14 +11,12 @@ fn page(title: &str) -> NewPage {
         title: title.into(),
         subtitle: None,
         content: "{}".into(),
-        content_text: None,
         status: "not_started".into(),
         priority: 0,
         tags: vec![],
         scheduled_start: None,
         scheduled_end: None,
         completed_at: None,
-        links: vec![],
         parent_id: None,
         last_opened_at: None,
         created_at: None,
@@ -119,7 +117,6 @@ async fn every_page_and_folder_writer_captures_exactly_what_it_changed() {
                     r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"oat milk"}]}]}"#
                         .into(),
                 ),
-                content_text: Some("oat milk".into()),
                 ..Default::default()
             },
         )

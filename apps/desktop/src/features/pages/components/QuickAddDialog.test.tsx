@@ -100,7 +100,6 @@ describe("QuickAddDialog — body separator", () => {
 
     await waitFor(() => expect(createPage).toHaveBeenCalledOnce());
     const created = createPage.mock.calls[0]![0];
-    expect(created.contentText).toBe("she likes the blue one");
     expect(JSON.parse(created.content)).toEqual({
       content: [{ content: [{ text: "she likes the blue one", type: "text" }], type: "paragraph" }],
       type: "doc",
@@ -113,7 +112,7 @@ describe("QuickAddDialog — body separator", () => {
 
     await waitFor(() => expect(createPage).toHaveBeenCalledOnce());
     const created = createPage.mock.calls[0]![0];
-    expect(created.contentText).toBe("remember the #blue one");
+    expect(created.content).toContain("remember the #blue one");
     expect(created.tags).toEqual([]);
   });
 

@@ -123,71 +123,109 @@ pub async fn plan_markdown_export(
             .into_iter()
             .collect();
 
-    let rows = fetch_export_pages(
-        pool,
-        "id, folder_id, title, content, status, priority, tags, \
-         scheduled_start, scheduled_end, created_at, updated_at",
-        include_synced,
-    )
-    .await?;
+    let rows = fetch_export_pages(pool, MARKDOWN_COLUMNS, include_synced).await?;
 
-    let mut plan = Vec::with_capacity(rows.len());
-    for row in &rows {
-        let title: String = row.try_get("title").unwrap_or_default();
-        let content: String = row.try_get("content").unwrap_or_default();
-        let status: String = row.try_get("status").unwrap_or_default();
-        let priority: i64 = row.try_get("priority").unwrap_or(0);
-        let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
-        let scheduled_start = nullable(row, "scheduled_start");
-        let scheduled_end = nullable(row, "scheduled_end");
-        let created_at: String = row.try_get("created_at").unwrap_or_default();
-        let updated_at: String = row.try_get("updated_at").unwrap_or_default();
-        let folder_id = nullable(row, "folder_id");
+    let titles: HashMap<String, String> = rows
+        .iter()
+        .map(|row| {
+            let id: String = row.try_get("id").unwrap_or_default();
+            let title: String = row.try_get("title").unwrap_or_default();
+            (id, title)
+        })
+        .collect();
 
-        let mut assets = Vec::new();
-        if !content.is_empty() && content != "{}" {
-            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
-                collect_asset_paths(&doc, &mut assets);
-            }
+    Ok(rows
+        .iter()
+        .map(|row| {
+            // A folder id with no folder behind it is not an error worth failing an
+            // export over; the page still has to land somewhere a person can find.
+            let directory = nullable(row, "folder_id").map(|id| {
+                folder_names
+                    .get(&id)
+                    .map(|n| sanitize_filename(n))
+                    .unwrap_or_else(|| "Uncategorized".to_string())
+            });
+            markdown_page(row, directory, &titles)
+        })
+        .collect())
+}
+
+/// One page as a Markdown file of its own, at the root of wherever it is written.
+///
+/// A folder is the workspace export's directory, so a page shared alone carries
+/// none. Any page that is not in the trash exports, mirrors included: asking for
+/// one page by name is the explicit action the workspace export's filter stands
+/// in for.
+pub async fn plan_markdown_page(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> AppResult<Option<MarkdownPage>> {
+    let sql =
+        format!("SELECT {MARKDOWN_COLUMNS} FROM pages p WHERE p.id = ? AND p.deleted_at IS NULL");
+    let Some(row) = sqlx::query(&sql).bind(page_id).fetch_optional(pool).await? else {
+        return Ok(None);
+    };
+
+    let content: String = row.try_get("content").unwrap_or_default();
+    let titles = match serde_json::from_str::<serde_json::Value>(&content) {
+        Ok(doc) => crate::page_links::target_titles(pool, &doc).await?,
+        Err(_) => HashMap::new(),
+    };
+
+    Ok(Some(markdown_page(&row, None, &titles)))
+}
+
+const MARKDOWN_COLUMNS: &str = "id, folder_id, title, content, status, priority, tags, \
+     scheduled_start, scheduled_end, created_at, updated_at";
+
+fn markdown_page(
+    row: &sqlx::sqlite::SqliteRow,
+    directory: Option<String>,
+    titles: &HashMap<String, String>,
+) -> MarkdownPage {
+    let title: String = row.try_get("title").unwrap_or_default();
+    let content: String = row.try_get("content").unwrap_or_default();
+    let status: String = row.try_get("status").unwrap_or_default();
+    let priority: i64 = row.try_get("priority").unwrap_or(0);
+    let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
+    let scheduled_start = nullable(row, "scheduled_start");
+    let scheduled_end = nullable(row, "scheduled_end");
+    let created_at: String = row.try_get("created_at").unwrap_or_default();
+    let updated_at: String = row.try_get("updated_at").unwrap_or_default();
+
+    let mut assets = Vec::new();
+    if !content.is_empty() && content != "{}" {
+        if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
+            collect_asset_paths(&doc, &mut assets);
         }
-
-        let filename = if title.is_empty() {
-            "Untitled".to_string()
-        } else {
-            sanitize_filename(&title)
-        };
-        // A folder id with no folder behind it is not an error worth failing an
-        // export over; the page still has to land somewhere a person can find.
-        let directory = folder_id.as_deref().map(|id| {
-            folder_names
-                .get(id)
-                .map(|n| sanitize_filename(n))
-                .unwrap_or_else(|| "Uncategorized".to_string())
-        });
-
-        let frontmatter = build_frontmatter(
-            &title,
-            &status,
-            priority,
-            &tags,
-            scheduled_start.as_deref(),
-            scheduled_end.as_deref(),
-            &created_at,
-            &updated_at,
-        );
-
-        plan.push(MarkdownPage {
-            path: match &directory {
-                Some(dir) => format!("{dir}/{filename}.md"),
-                None => format!("{filename}.md"),
-            },
-            in_folder: directory.is_some(),
-            contents: format!("{frontmatter}{}", markdown_body(&content)),
-            assets,
-        });
     }
 
-    Ok(plan)
+    let filename = if title.is_empty() {
+        "Untitled".to_string()
+    } else {
+        sanitize_filename(&title)
+    };
+
+    let frontmatter = build_frontmatter(
+        &title,
+        &status,
+        priority,
+        &tags,
+        scheduled_start.as_deref(),
+        scheduled_end.as_deref(),
+        &created_at,
+        &updated_at,
+    );
+
+    MarkdownPage {
+        path: match &directory {
+            Some(dir) => format!("{dir}/{filename}.md"),
+            None => format!("{filename}.md"),
+        },
+        in_folder: directory.is_some(),
+        contents: format!("{frontmatter}{}", markdown_body(&content, titles)),
+        assets,
+    }
 }
 
 /// A page's final text, with every asset that was actually copied pointed at its
@@ -266,15 +304,19 @@ pub fn build_frontmatter(
     frontmatter
 }
 
-/// Convert a page's stored ProseMirror JSON `content` to a Markdown body.
+/// Convert a page's stored ProseMirror JSON `content` to a Markdown body, naming each linked
+/// page by its title in `titles` where it has one.
 /// Empty (`""`), empty-doc (`"{}"`), and unparseable content all yield an
 /// empty string so a page always produces a valid (frontmatter-only) file.
-pub fn markdown_body(content: &str) -> String {
+pub fn markdown_body(content: &str, titles: &HashMap<String, String>) -> String {
     if content.is_empty() || content == "{}" {
         return String::new();
     }
     match serde_json::from_str::<serde_json::Value>(content) {
-        Ok(doc) => pikos_core::prosemirror_to_markdown(&doc),
+        Ok(mut doc) => {
+            pikos_core::page_links::refresh_link_titles(&mut doc, &|id| titles.get(id).cloned());
+            pikos_core::prosemirror_to_markdown(&doc)
+        }
         Err(_) => String::new(),
     }
 }

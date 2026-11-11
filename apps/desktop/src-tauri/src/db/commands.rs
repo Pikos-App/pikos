@@ -267,14 +267,17 @@ db_commands! {
         crate::notifications::scheduler::update_notification_settings,
         crate::notifications::scheduler::request_notification_permission,
         crate::notifications::scheduler::check_notification_permission,
+        crate::notifications::scheduler::open_notification_settings,
         crate::notifications::click::replay_pending_notification_clicks,
         crate::db::dev::backup_db,
         crate::db::dev::backup_db_before_import,
         crate::db::dev::list_backups,
         crate::db::dev::restore_backup,
+        crate::db::dev::close_damaged_workspace,
         crate::db::dev::export_csv,
         crate::db::dev::export_ics,
         crate::db::dev::export_markdown,
+        crate::db::dev::export_page_markdown,
         crate::db::dev::get_usage_stats,
         crate::db::dev::wipe_app_data,
     ];
@@ -290,6 +293,8 @@ db_commands! {
         get_page(id: String) -> Option<Page> = pikos_db::get_page(&id);
         create_page(data: NewPage) -> Page = create_page_impl(data);
         update_page(id: String, updates: PageUpdate) -> Page = update_page_impl(id, updates);
+        pending_description_document(id: String) -> Option<String>
+            = pending_description_document_impl(&id);
         clear_pending_description(id: String) -> () = clear_pending_description_impl(&id);
         delete_page(id: String) -> () = delete_page_impl(&id);
         soft_delete_page(id: String) -> () = soft_delete_page_impl(&id);
@@ -351,6 +356,7 @@ db_commands! {
         list_recent_pages(exclude: Option<String>, limit: u32) -> Vec<PageSummary>
             = reads::list_recent_pages(exclude.as_deref(), limit as usize);
         list_tags() -> Vec<TagCount> = reads::list_tags();
+        list_backlinks(id: String) -> Vec<PageSummary> = reads::list_backlinks(&id);
         move_pages(ids: Vec<String>, place: Placement) -> MoveOutcome
             = moves::move_pages(&ids, &place);
         change_state() -> ChangeState = changes::change_state();

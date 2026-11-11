@@ -6,7 +6,6 @@ import type { PagePriority, PageStatus } from "@pikos/core";
 export interface ImportBatchItem {
   title: string;
   content: string;
-  contentText: string;
   folderKey: string | null;
   status: PageStatus;
   priority: PagePriority;

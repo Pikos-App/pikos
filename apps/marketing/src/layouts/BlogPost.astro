@@ -2,6 +2,7 @@
 import Base from "./Base.astro";
 import Footer from "../components/Footer.astro";
 import { formatDate, postBySlug } from "../content/posts";
+import { isOut, publishedVersion } from "../content/published";
 
 interface Props {
   /** Looked up in src/content/posts.ts, which owns every post's title, description and date. */
@@ -11,8 +12,9 @@ interface Props {
 }
 
 const { slug, ogImage } = Astro.props;
-const { title, description, date } = postBySlug(slug);
+const { title, description, date, version } = postBySlug(slug);
 const formattedDate = formatDate(date);
+const isHeldBack = version !== undefined && !isOut(version, await publishedVersion());
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -25,6 +27,16 @@ const jsonLd = {
 };
 ---
 
+{isHeldBack ? (
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="robots" content="noindex" />
+      <meta http-equiv="refresh" content="0; url=/blog" />
+      <title>Pikos</title>
+    </head>
+  </html>
+) : (
 <Base title={`${title} - Pikos`} description={description} ogType="article" publishedTime={date} jsonLd={jsonLd} ogImagePath={ogImage}>
 
   <main class="mx-auto max-w-2xl px-8 py-20">
@@ -47,6 +59,7 @@ const jsonLd = {
 
   <Footer />
 </Base>
+)}
 
 <style>
 

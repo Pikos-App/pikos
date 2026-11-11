@@ -132,7 +132,7 @@ async fn an_editor_write_survives_a_concurrent_writer() {
             &pool,
             "a".to_string(),
             PageUpdate {
-                content_text: Some(format!("edit {i}")),
+                content: Some(crate::build_tiptap_doc(&format!("edit {i}"))),
                 ..Default::default()
             },
         )

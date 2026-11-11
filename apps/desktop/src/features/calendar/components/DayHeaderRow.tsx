@@ -45,13 +45,13 @@ export function DayHeaderRow({ days, onCreateDragStart, today }: DayHeaderRowPro
             <span
               className={cn(
                 "type-ui-sm tracking-wide uppercase",
-                isToday ? "text-primary" : "text-subtle"
+                isToday ? "text-action" : "text-subtle"
               )}
             >
               {format(day, "EEE")}
             </span>
             <span
-              className={cn("type-ui-sm tabular-nums", isToday ? "text-primary" : "text-subtle")}
+              className={cn("type-ui-sm tabular-nums", isToday ? "text-action" : "text-subtle")}
             >
               {format(day, "d")}
             </span>

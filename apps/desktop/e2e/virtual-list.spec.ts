@@ -107,7 +107,7 @@ appTest(
 
 // ─── Cmd+A selects all in a virtualized list ───────────────────────────────
 
-appTest("Cmd+A selects every page, off-screen too, and deleting them leaves none", { tag: ["@LIST-09:10"] }, async ({ app, storage }) => {
+appTest("Cmd+A selects every page, off-screen too, and deleting them leaves none", { tag: ["@LIST-09:12"] }, async ({ app, storage }) => {
   await seedPages(app, PAGE_COUNT);
 
   // Focus the page list area (not an input)

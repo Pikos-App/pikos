@@ -27,14 +27,22 @@ function entry(over: Partial<NotificationHistoryEntry> = {}): NotificationHistor
 
 describe("NotificationHistory", () => {
   it("says so when nothing has fired yet", () => {
-    render(<NotificationHistory entries={[]} onOpenPage={vi.fn()} />);
+    render(
+      <NotificationHistory entries={[]} onOpenNotificationSettings={vi.fn()} onOpenPage={vi.fn()} />
+    );
     expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
   });
 
   // qa: NOTIF-08:4
   it("opens the page a delivered reminder was about", () => {
     const onOpenPage = vi.fn();
-    render(<NotificationHistory entries={[entry()]} onOpenPage={onOpenPage} />);
+    render(
+      <NotificationHistory
+        entries={[entry()]}
+        onOpenNotificationSettings={vi.fn()}
+        onOpenPage={onOpenPage}
+      />
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Standup" }));
     expect(onOpenPage).toHaveBeenCalledWith("p1");
@@ -42,14 +50,41 @@ describe("NotificationHistory", () => {
 
   // qa: NOTIF-06:4
   it("renders a quiet-hours silence as silenced, not as delivered", () => {
-    render(<NotificationHistory entries={[entry({ kind: "suppressed" })]} onOpenPage={vi.fn()} />);
+    render(
+      <NotificationHistory
+        entries={[entry({ kind: "suppressed" })]}
+        onOpenNotificationSettings={vi.fn()}
+        onOpenPage={vi.fn()}
+      />
+    );
     expect(screen.getByText("Silenced by quiet hours")).toBeInTheDocument();
     // Still clickable: the page is the point of knowing it was silenced.
     expect(screen.getByRole("button", { name: "Standup" })).toBeInTheDocument();
   });
 
+  it("says a reminder the system refused was not shown, and opens the setting that refused it", () => {
+    const onOpenNotificationSettings = vi.fn();
+    render(
+      <NotificationHistory
+        entries={[entry({ kind: "refused" })]}
+        onOpenNotificationSettings={onOpenNotificationSettings}
+        onOpenPage={vi.fn()}
+      />
+    );
+    expect(screen.getByText("Not shown: notifications are off for Pikos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
+    expect(onOpenNotificationSettings).toHaveBeenCalledOnce();
+  });
+
   it("marks a reminder the user clicked through", () => {
-    render(<NotificationHistory entries={[entry({ action: "opened" })]} onOpenPage={vi.fn()} />);
+    render(
+      <NotificationHistory
+        entries={[entry({ action: "opened" })]}
+        onOpenNotificationSettings={vi.fn()}
+        onOpenPage={vi.fn()}
+      />
+    );
     expect(screen.getByText("Reminder · opened")).toBeInTheDocument();
   });
 
@@ -57,6 +92,7 @@ describe("NotificationHistory", () => {
     render(
       <NotificationHistory
         entries={[entry({ kind: "overdue", pageId: null, pageTitle: null, scheduleId: null })]}
+        onOpenNotificationSettings={vi.fn()}
         onOpenPage={vi.fn()}
       />
     );
@@ -65,7 +101,13 @@ describe("NotificationHistory", () => {
   });
 
   it("names a page that has since been deleted rather than rendering a blank row", () => {
-    render(<NotificationHistory entries={[entry({ pageTitle: null })]} onOpenPage={vi.fn()} />);
+    render(
+      <NotificationHistory
+        entries={[entry({ pageTitle: null })]}
+        onOpenNotificationSettings={vi.fn()}
+        onOpenPage={vi.fn()}
+      />
+    );
     expect(screen.getByText("Deleted page")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

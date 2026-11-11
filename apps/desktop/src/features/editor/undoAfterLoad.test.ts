@@ -17,7 +17,8 @@
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 
-import { editorExtensions, loadPageContent } from "./components/EditorPane";
+import { editorExtensions } from "./components/EditorPane";
+import { loadPageContent } from "./utils/pageLoad";
 
 const PAGE = {
   content: [{ content: [{ text: "Existing page content", type: "text" }], type: "paragraph" }],

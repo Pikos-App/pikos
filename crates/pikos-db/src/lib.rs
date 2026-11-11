@@ -20,6 +20,7 @@ pub mod focus;
 pub mod folders;
 pub mod moves;
 pub mod notification_log;
+pub mod page_links;
 pub mod pages;
 mod pool;
 pub mod reads;
@@ -50,7 +51,7 @@ pub mod views;
 /// shape of `pages.content` alone, which is why it lives beside the data layer
 /// rather than in the editor package: the database is what outlives any one
 /// client, and with iOS in the picture there is more than one client.
-pub const CONTENT_SCHEMA_VERSION: i64 = 1;
+pub const CONTENT_SCHEMA_VERSION: i64 = 2;
 
 pub use backups::{
     backups_dir, list_backups, restore_backup, verify_restorable, BackupEntry, BackupKind,

@@ -7,10 +7,9 @@ import {
   localToday,
   parseLocalISO,
   snapAnchorToRule,
-  storageErrorUserMessage,
-  toStorageError,
   viewerStart,
 } from "@pikos/core";
+import type { JSONContent } from "@tiptap/core";
 import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -21,7 +20,9 @@ import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
+import { tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 import { useCaretAtEndOnFocus } from "../hooks/useCaretAtEndOnFocus";
 import { Byline } from "./Byline";
@@ -31,28 +32,18 @@ import { FocusTimer } from "./FocusTimer";
 interface MetadataHeaderProps {
   page: Page;
   onFocusEditor: () => void;
-  /** Appends text to the end of the body through the editor's own insert path,
-   *  so the write marks the page owned exactly as typing would. */
-  onAppendToBody: (text: string) => void;
-  contentSaveError?: Error | null;
-  onRetryContent?: () => void;
+  /** Appends a document to the end of the body through the editor's own insert path,
+   *  so the write marks the page owned exactly as typing would. False when nothing went in. */
+  onAppendToBody: (doc: JSONContent) => boolean;
 }
 
-export function MetadataHeader({
-  contentSaveError,
-  onAppendToBody,
-  onFocusEditor,
-  onRetryContent,
-  page,
-}: MetadataHeaderProps) {
+export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: MetadataHeaderProps) {
   const {
-    clearPageError,
     clearPendingDescription,
     createRecurrence,
     deleteRecurrence,
     flushPage,
     folders,
-    pageErrors,
     recurrenceRules,
     scheduleOnce,
     tags,
@@ -63,24 +54,22 @@ export function MetadataHeader({
   const { lineWidth } = useEditorSettings();
   const { flashPageBlock, requestCalendarScroll, setRightPanel } = useUI();
   const { setReferenceDate } = useCalendarDate();
+  const { storage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
-
-  const metadataError = pageErrors.get(page.id) ?? null;
-  const hasError = !!(metadataError ?? contentSaveError);
-  // Friendly per-kind copy from @pikos/core — never echoes raw sqlx/Tauri text.
-  const errorMessage = metadataError
-    ? storageErrorUserMessage(metadataError, "saving page metadata")
-    : contentSaveError
-      ? storageErrorUserMessage(toStorageError(contentSaveError), "saving page content")
-      : null;
-
-  function handleErrorClick() {
-    clearPageError(page.id);
-    onRetryContent?.();
-  }
 
   function handleStatusChange(status: PageStatus) {
     togglePageStatus(page, status);
+  }
+
+  // Read before the clear, which drops the text the document is built from; kept parked when it
+  // couldn't go in, such as a page switched away from while it was read.
+  async function handleAppendDescription() {
+    if (!storage) return;
+
+    const raw = await storage.pendingDescriptionDocument(page.id);
+    const doc = tryParseTiptapJson(raw, "appending a calendar description");
+    const isResolved = raw === null || (doc !== null && onAppendToBody(doc));
+    if (isResolved) await clearPendingDescription(page.id);
   }
 
   function handleFolderChange(folderId: string | null) {
@@ -266,74 +255,75 @@ export function MetadataHeader({
         )}
         {showDescriptionNotice && (
           <CalendarDescriptionNotice
-            onAppend={() => {
-              onAppendToBody(page.pendingDescription!);
-              void clearPendingDescription(page.id);
-            }}
+            onAppend={() => void handleAppendDescription()}
             onDismiss={() => void clearPendingDescription(page.id)}
             text={page.pendingDescription!}
           />
         )}
-        <div className={detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}>
-          {titleFocused && !titleLocked ? (
-            <textarea
-              aria-label="Page title"
-              autoCapitalize="off"
-              autoComplete="off"
-              autoCorrect="off"
-              className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
-              onBlur={() => {
-                setTitleFocused(false);
-                commitField();
-              }}
-              onChange={handleTitleChange}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
+        <div
+          className={`flex items-start gap-2 ${detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}`}
+        >
+          <div className="min-w-0 flex-1">
+            {titleFocused && !titleLocked ? (
+              <textarea
+                aria-label="Page title"
+                autoCapitalize="off"
+                autoComplete="off"
+                autoCorrect="off"
+                className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
+                onBlur={() => {
                   setTitleFocused(false);
                   commitField();
-                  handleSubtitleFocus();
-                }
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  onFocusEditor();
-                }
-              }}
-              placeholder="Untitled"
-              ref={titleRef}
-              rows={1}
-              value={titleValue}
-            />
-          ) : titleLocked ? (
-            <div className="flex items-center gap-2">
+                }}
+                onChange={handleTitleChange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    setTitleFocused(false);
+                    commitField();
+                    handleSubtitleFocus();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onFocusEditor();
+                  }
+                }}
+                placeholder="Untitled"
+                ref={titleRef}
+                rows={1}
+                value={titleValue}
+              />
+            ) : titleLocked ? (
+              <div className="flex items-center gap-2">
+                <div
+                  aria-label="Page title"
+                  className="type-display line-clamp-2 min-w-0 cursor-default bg-transparent outline-none"
+                  ref={titleDivRef}
+                >
+                  {titleValue || <span className="text-faint">Untitled</span>}
+                </div>
+                <SyncedLockHint size={14} />
+              </div>
+            ) : (
               <div
                 aria-label="Page title"
-                className="type-display line-clamp-2 min-w-0 cursor-default bg-transparent outline-none"
+                className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
+                onClick={handleTitleFocus}
+                onFocus={handleTitleFocus}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleTitleFocus();
+                  }
+                }}
                 ref={titleDivRef}
+                role="button"
+                tabIndex={0}
               >
                 {titleValue || <span className="text-faint">Untitled</span>}
               </div>
-              <SyncedLockHint size={14} />
-            </div>
-          ) : (
-            <div
-              aria-label="Page title"
-              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
-              onClick={handleTitleFocus}
-              onFocus={handleTitleFocus}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleTitleFocus();
-                }
-              }}
-              ref={titleDivRef}
-              role="button"
-              tabIndex={0}
-            >
-              {titleValue || <span className="text-faint">Untitled</span>}
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {subtitleFocused ? (
@@ -342,7 +332,7 @@ export function MetadataHeader({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[1.643em] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[1.643] text-muted-foreground outline-none [border:none] placeholder:text-faint"
+            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block min-h-[1.643em] w-full resize-none overflow-hidden bg-transparent [padding:0] leading-[1.643] text-muted-foreground outline-none [border:none] placeholder:text-subtle"
             onBlur={() => {
               setSubtitleFocused(false);
               commitField();
@@ -386,7 +376,7 @@ export function MetadataHeader({
             {subtitleValue ? (
               <span className="line-clamp-3">{subtitleValue}</span>
             ) : (
-              <span className="text-faint">Add a description…</span>
+              <span className="text-subtle">Add a description…</span>
             )}
           </div>
         )}
@@ -401,7 +391,6 @@ export function MetadataHeader({
             <Byline
               allTags={allTagNames}
               folders={folders}
-              onErrorClick={handleErrorClick}
               onFolderChange={handleFolderChange}
               {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
               onPriorityChange={handlePriorityChange}
@@ -409,7 +398,6 @@ export function MetadataHeader({
               onStatusChange={handleStatusChange}
               onTagToggle={handleTagToggle}
               page={page}
-              saveError={hasError ? (errorMessage ?? "Save failed") : null}
             />
           </div>
           <div className="pt-2 pb-4">

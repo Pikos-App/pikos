@@ -912,6 +912,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2026-03-15T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "sun_noon",
       "result": {
@@ -956,6 +971,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2026-03-16T09:00:00"
           },
           "type": "single"
         }
@@ -1222,6 +1266,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2026-04-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -2986,7 +3044,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -3001,11 +3059,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2026-03-16T07:00:00",
+            "scheduledEnd": "2026-03-16T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2026-03-15T21:00:00",
+            "scheduledEnd": "2026-03-16T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -7096,6 +7173,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2026-03-18T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "wed_noon",
       "result": {
@@ -7140,6 +7232,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2026-03-19T09:00:00"
           },
           "type": "single"
         }
@@ -7406,6 +7527,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2026-04-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -9164,7 +9299,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -9179,11 +9314,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2026-03-19T07:00:00",
+            "scheduledEnd": "2026-03-19T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2026-03-18T21:00:00",
+            "scheduledEnd": "2026-03-19T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -13269,6 +13423,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2026-03-16T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "mon_morning",
       "result": {
@@ -13313,6 +13482,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2026-03-17T09:00:00"
           },
           "type": "single"
         }
@@ -13579,6 +13777,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2026-04-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -15343,7 +15555,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -15358,11 +15570,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2026-03-17T07:00:00",
+            "scheduledEnd": "2026-03-17T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2026-03-16T21:00:00",
+            "scheduledEnd": "2026-03-17T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -19453,6 +19684,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2026-03-21T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "sat_late",
       "result": {
@@ -19497,6 +19743,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2026-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2026-03-22T09:00:00"
           },
           "type": "single"
         }
@@ -19763,6 +20038,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2026-04-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -21509,7 +21798,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -21524,11 +21813,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2026-03-22T07:00:00",
+            "scheduledEnd": "2026-03-22T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2026-03-21T21:00:00",
+            "scheduledEnd": "2026-03-22T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -25608,6 +25916,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2026-03-28T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "dst_eve",
       "result": {
@@ -25652,6 +25975,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2026-04-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2026-03-29T09:00:00"
           },
           "type": "single"
         }
@@ -25918,6 +26270,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2026-04-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -27646,7 +28012,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -27661,11 +28027,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2026-03-29T07:00:00",
+            "scheduledEnd": "2026-03-29T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2026-03-28T21:00:00",
+            "scheduledEnd": "2026-03-29T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -31745,6 +32130,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2024-02-29T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "leap_day",
       "result": {
@@ -31789,6 +32189,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2024-03-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2024-03-01T09:00:00"
           },
           "type": "single"
         }
@@ -32055,6 +32484,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2024-03-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -33855,7 +34298,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -33870,11 +34313,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2024-03-01T07:00:00",
+            "scheduledEnd": "2024-03-01T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2024-02-29T21:00:00",
+            "scheduledEnd": "2024-03-01T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -37992,6 +38454,21 @@
       }
     },
     {
+      "input": "Evening review today 8pm",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Evening review",
+            "scheduledStart": "2026-12-31T20:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
       "ref": "year_end",
       "result": {
@@ -38036,6 +38513,35 @@
             "tags": [],
             "title": "Meeting",
             "scheduledStart": "2027-01-24"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Morning pages tomorrow 9am",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Morning pages",
+            "scheduledStart": "2027-01-01T09:00:00"
           },
           "type": "single"
         }
@@ -38302,6 +38808,20 @@
             "tags": [],
             "title": "Standup",
             "scheduledStart": "2027-01-13T16:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "Stretch in the evening",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "Stretch in the evening"
           },
           "type": "single"
         }
@@ -40252,7 +40772,7 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run"
+            "title": "morning run"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
@@ -40267,11 +40787,30 @@
         "value": {
           "input": {
             "tags": [],
-            "title": "run at 7am",
-            "durationMinutes": 30
+            "title": "morning run",
+            "durationMinutes": 30,
+            "scheduledStart": "2027-01-01T07:00:00",
+            "scheduledEnd": "2027-01-01T07:30:00"
           },
           "rrule": "FREQ=DAILY",
           "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "night shift today 9pm to 5am",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "night shift",
+            "scheduledStart": "2026-12-31T21:00:00",
+            "scheduledEnd": "2027-01-01T05:00:00",
+            "durationMinutes": 480
+          },
+          "type": "single"
         }
       }
     },
@@ -43606,7 +44145,7 @@
       }
     }
   ],
-  "inputCount": 374,
+  "inputCount": 379,
   "meta": {
     "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
     "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",

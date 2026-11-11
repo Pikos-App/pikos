@@ -410,65 +410,6 @@ async fn the_summary_counts_what_waits_to_send_and_what_waits_to_apply() {
 }
 
 #[tokio::test]
-async fn a_body_saves_while_it_is_the_one_the_editor_loaded() {
-    let pool = test_pool().await;
-    start(&pool).await.unwrap();
-    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
-        .await
-        .unwrap();
-    let loaded = super::body_clock(&pool, "p1").await.unwrap();
-
-    let saved =
-        super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), loaded.as_deref())
-            .await
-            .unwrap();
-
-    let super::BodySave::Saved { clock } = saved else {
-        panic!("refused a save over the body it loaded");
-    };
-    assert_ne!(clock, loaded, "the save moved the body's clock");
-}
-
-#[tokio::test]
-async fn a_body_that_moved_since_it_was_loaded_is_handed_back_instead_of_overwritten() {
-    let pool = test_pool().await;
-    start(&pool).await.unwrap();
-    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
-        .await
-        .unwrap();
-    let loaded = super::body_clock(&pool, "p1").await.unwrap();
-    sqlx::query("UPDATE pages SET content = '{\"from\":\"the phone\"}' WHERE id = 'p1'")
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    let saved =
-        super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), loaded.as_deref())
-            .await
-            .unwrap();
-
-    let super::BodySave::Moved { content, clock } = saved else {
-        panic!("saved over a body that had moved on");
-    };
-    assert_eq!(content, "{\"from\":\"the phone\"}");
-    assert_ne!(clock, loaded);
-}
-
-#[tokio::test]
-async fn with_sync_off_every_body_save_goes_through() {
-    let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
-        .await
-        .unwrap();
-
-    let saved = super::save_body_if_unchanged(&pool, "p1", "{\"type\":\"doc\"}".into(), None)
-        .await
-        .unwrap();
-
-    assert_eq!(saved, super::BodySave::Saved { clock: None });
-}
-
-#[tokio::test]
 async fn starting_gives_a_page_timed_only_in_its_cache_a_schedule_row_to_sync() {
     let pool = test_pool().await;
     let page = crate::create_page_impl(

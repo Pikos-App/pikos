@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Fail when the app's own log carries warnings or errors nobody has accounted for.
 #
-#   scripts/check-log-clean.sh [--since YYYY-MM-DD] [path-to-log]
+#   scripts/check-log-clean.sh [--since YYYY-MM-DD] path-to-log
 #
 # Not part of `pnpm verify`: the log only exists where the app has actually run,
 # and CI never runs it. This is a release-time gate, run against a machine that
 # has been using the build.
+#
+# The path is required: the installed app's log is a real workspace's, personal
+# data no session may read, and it records the previous version, not the build under test.
 #
 # The premise is that a WARN the app emits about itself is either a defect or a
 # line that should not be there. Both are worth a decision. Left ungated, a log
@@ -17,7 +20,7 @@
 
 set -uo pipefail
 
-LOG="${HOME}/Library/Logs/app.pikos.desktop/pikos.log"
+LOG=""
 SINCE=""
 
 while [ $# -gt 0 ]; do
@@ -26,6 +29,11 @@ while [ $# -gt 0 ]; do
     *) LOG="$1"; shift ;;
   esac
 done
+
+if [ -z "$LOG" ]; then
+  echo "usage: scripts/check-log-clean.sh [--since YYYY-MM-DD] path-to-log" >&2
+  exit 2
+fi
 
 if [ ! -f "$LOG" ]; then
   echo "[log-check] no log at $LOG — run the app first" >&2

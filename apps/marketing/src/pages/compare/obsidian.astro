@@ -37,7 +37,7 @@ const description = "Obsidian is the better tool for linking and building a know
         <h2>Stay with Obsidian if</h2>
 
         <p>
-          You link notes heavily and use the graph. Pikos has search but no links between pages yet, and no graph view.
+          You link notes heavily and use the graph. Pikos links pages with <code>[[</code> and shows what links to each one, but there's no graph view, and a link goes to a page, not a heading or a block.
         </p>
 
         <p>
@@ -69,13 +69,13 @@ const description = "Obsidian is the better tool for linking and building a know
         <h2>What Pikos doesn't do</h2>
 
         <p>
-          No backlinks, no graph, no plugins, no phone app yet, no sync yet, and a much smaller community to ask when something breaks. Obsidian has been around since 2020, and Pikos went public in June 2026.
+          No graph, no plugins, no phone app yet, no sync yet, and a much smaller community to ask when something breaks. Obsidian has been around since 2020, and Pikos went public in June 2026.
         </p>
 
         <h2>Moving a vault across</h2>
 
         <p>
-          Pikos reads an Obsidian vault directly from disk, with no export step on the Obsidian side. Frontmatter, callouts, and image attachments come through. Wikilinks arrive as plain text, since Pikos doesn't link pages yet, and nested folders arrive as separate folders named after their path, like "Projects / Work". Point it at the folder you'd open in Obsidian and it walks the whole thing, skipping <code>.obsidian</code> and any other hidden directory.
+          Pikos reads an Obsidian vault directly from disk, with no export step on the Obsidian side. Frontmatter, callouts, and image attachments come through. Wikilinks arrive as plain text rather than as links, and nested folders arrive as separate folders named after their path, like "Projects / Work". Point it at the folder you'd open in Obsidian and it walks the whole thing, skipping <code>.obsidian</code> and any other hidden directory.
         </p>
 
         <p>

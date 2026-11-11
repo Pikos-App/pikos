@@ -3,7 +3,7 @@ import { DEFAULT_EVENT_COLOR, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 import type { CSSProperties } from "react";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -13,6 +13,7 @@ import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
 import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -152,7 +153,6 @@ export function AllDayBar({
           className={cn(
             "pointer-events-auto absolute flex cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
-            page.syncState === "detached" && !done && "opacity-70",
             done && "opacity-50",
             isBeingDragged && "opacity-40",
             continuesLeft && "rounded-tl-none rounded-bl-none",
@@ -201,7 +201,7 @@ export function AllDayBar({
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent
+      <BlockPopoverContent
         align="start"
         className="w-[calc(20rem*var(--ui-text-scale,1))] p-3"
         onClick={(e) => e.stopPropagation()}
@@ -228,7 +228,7 @@ export function AllDayBar({
             page={page}
           />
         )}
-      </PopoverContent>
+      </BlockPopoverContent>
     </Popover>
   );
 }

@@ -213,7 +213,7 @@ export function DataSettings({
       </SettingsSection>
 
       {/* ── Restore — renders nothing until there is a backup to put back ── */}
-      <RestoreSection />
+      <RestoreSection storage={storage} />
 
       {/* ── Export ─────────────────────────────────────────────────────── */}
       <SettingsSection description="Download your data in different formats." title="Export">
