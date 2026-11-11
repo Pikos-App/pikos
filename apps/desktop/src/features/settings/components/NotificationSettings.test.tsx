@@ -52,7 +52,7 @@ describe("NotificationSettings permission", () => {
     renderWithProviders(<NotificationSettings />);
 
     expect(await screen.findByText("Notifications blocked by your system")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Request permission" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
 

@@ -212,7 +212,7 @@ export function NotificationSettings() {
                 className="mt-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
                 onClick={() => void handleRequestPermission()}
               >
-                Request permission
+                Open System Settings
               </button>
             </div>
           </div>
