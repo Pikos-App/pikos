@@ -58,6 +58,11 @@ struct ShellBar: View {
                 route.calendarTopHour = nil
                 return
             }
+            // The first tap lands there too, wherever the calendar was left.
+            if value == .week {
+                route.calendarAnchor = Date()
+                route.calendarTopHour = nil
+            }
 
             // A segment always lands on its pane itself, never on a page left open over it.
             if !route.path.isEmpty {

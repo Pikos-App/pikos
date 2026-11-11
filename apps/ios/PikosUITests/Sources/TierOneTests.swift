@@ -723,24 +723,28 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-28
-    /// Leaving the calendar for the list and coming back finds the hours where they were left.
-    func testTheCalendarKeepsItsPlaceWhenTheListIsShownInBetween() throws {
-        try XCTSkipIf(Calendar.current.component(.hour, from: Date()) < 9, "early in the day the grid opens on this hour anyway")
-        quickAdd("Early swim today at 6:30am")
-        assertRowExists("Early swim")
+    func testTheCalendarButtonOpensOnTodayAtTheHourBeforeNow() throws {
+        try XCTSkipIf(Calendar.current.component(.hour, from: Date()) >= 15, "late in the day the grid opens near the evening anyway")
+        quickAdd("Late swim today at 9pm")
+        assertRowExists("Late swim")
         app.buttons["Calendar"].firstMatch.tap()
 
         let grid = app.scrollViews.firstMatch
         XCTAssertTrue(grid.waitForExistence(timeout: Self.timeout))
-        let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Early swim'")).firstMatch
-        for _ in 0..<6 where !block.isHittable { grid.swipeDown(velocity: .fast) }
-        XCTAssertTrue(block.isHittable, "scrolled up to the first open hour")
+        let block = app.scrollViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Late swim'")).firstMatch
+        for _ in 0..<6 where !block.isHittable { grid.swipeUp(velocity: .fast) }
+        XCTAssertTrue(block.isHittable, "scrolled down to the evening")
+        app.buttons["Next"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Today"].firstMatch.isEnabled, "and moved off today")
 
+        // Scrolling down folded the bar.
+        app.buttons["Show the bar"].firstMatch.tap()
         app.buttons["List"].firstMatch.tap()
-        assertRowExists("Early swim")
+        assertRowExists("Late swim")
         app.buttons["Calendar"].firstMatch.tap()
-        XCTAssertTrue(block.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(block.isHittable, "back on the calendar, still at dawn rather than the hour before now")
+        XCTAssertTrue(block.waitForExistence(timeout: Self.timeout), "back on today")
+        XCTAssertFalse(app.buttons["Today"].firstMatch.isEnabled, "with today on screen")
+        XCTAssertFalse(block.isHittable, "at the hour before now rather than in the evening")
     }
 
     // qa: IOS-76

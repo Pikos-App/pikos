@@ -140,9 +140,9 @@ final class Route {
     /// what it was showing.
     var calendarAnchor = Date()
     var calendarSpan: CalendarSpan?
-    /// The hour at the top of the calendar's grid when it was last scrolled, so coming back from
-    /// another view finds the hours where they were left. Nil until then, and after Today, both of
-    /// which open on the hour before now.
+    /// The hour at the top of the calendar's grid when it was last scrolled, so paging to another
+    /// day keeps the hours being read. Nil until then, and after Today or the bar's Calendar, all
+    /// of which open on the hour before now.
     var calendarTopHour: Int?
 
     /// The `YYYY-MM-DD` the calendar pane is on, so a page added from there lands on that day.

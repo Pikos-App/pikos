@@ -36,10 +36,12 @@ struct CalendarScreen: View {
 
     /// Moves the current-time line without a timer.
     ///
-    /// A calendar left open is usually a calendar in the background. Re-reading
-    /// the clock on the way back to the foreground covers the case that
-    /// matters — coming back to a line an hour out of date — where a ticking
-    /// timer would spend battery all day to fix a line nobody is looking at.
+    /// A calendar left open is usually a calendar in the background, or one
+    /// kept alive behind the list. Re-reading the clock on the way back to the
+    /// foreground, and as the bar brings the calendar back, covers the case
+    /// that matters — coming back to a line an hour out of date — where a
+    /// ticking timer would spend battery all day to fix a line nobody is
+    /// looking at.
     @Environment(\.scenePhase) private var scenePhase
 
     private var anchor: Date {
@@ -150,6 +152,9 @@ struct CalendarScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { now = WallClockDay.instant(from: Date()) }
+        }
+        .onChange(of: route.pane) { _, pane in
+            if pane == .week { now = WallClockDay.instant(from: Date()) }
         }
         #if DEBUG
             .onAppear {
