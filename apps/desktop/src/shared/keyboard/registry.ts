@@ -20,6 +20,9 @@ export type Binding = {
    *  only closes the palette it was chosen in. Static rather than a `when` gate,
    *  which the palette's snapshot reads a render stale. */
   inPalette?: boolean;
+  /** Lists after every command that matches the palette's filter as well, so the
+   *  palette never opens with it highlighted for a stray Enter. */
+  destructive?: boolean;
   // The originating KeyboardEvent is passed so handlers can branch on e.g.
   // `e.repeat`. Handlers that don't need it can ignore the argument.
   handler: (e: KeyboardEvent) => void;

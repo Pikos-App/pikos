@@ -58,6 +58,8 @@ if [ ! -f "$NOTES_FILE" ] || [ -z "$(notes_body | tr -d '[:space:]')" ]; then
   echo "with a date: line in its front matter, before releasing."
   exit 1
 fi
+# The notes are dated the day they ship, whatever the draft said.
+TODAY=$(date +%Y-%m-%d)
 
 # The competitor comparison is dated, and a release is the moment its claims go
 # out again. Past three months, re-check it rather than republish it unread.
@@ -132,7 +134,7 @@ fi
 # ── Release-notes sign-off ───────────────────────────────────────────────────
 # Tagging triggers the publish pipeline and is irreversible, so require an
 # explicit human review of the notes before proceeding.
-echo "Bumping $CURRENT → $NEW"
+echo "Bumping $CURRENT → $NEW, with the notes dated $TODAY"
 echo ""
 echo "Release notes. The site shows all of it; the update dialog and GitHub show what's above"
 echo "<!-- more -->, with a link to the rest (PKOS-0198):"
@@ -189,6 +191,9 @@ fi
 # updates the lockfile minimally instead. The diff it produces should be a single
 # version line; anything more means something else moved and wants looking at.
 (cd "$ROOT/apps/desktop/src-tauri" && cargo metadata --format-version 1 >/dev/null 2>&1 || true)
+
+awk -v today="$TODAY" 'NR==1 && /^---$/ {fm=1; print; next} fm && /^---$/ {fm=0} fm && /^date:/ {$0 = "date: " today} {print}' \
+  "$NOTES_FILE" > "$NOTES_FILE.tmp" && mv "$NOTES_FILE.tmp" "$NOTES_FILE"
 
 # Commit and tag, with the notes file, which the workflow reads from the tag.
 git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$NOTES_FILE"

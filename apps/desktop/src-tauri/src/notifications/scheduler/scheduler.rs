@@ -109,20 +109,40 @@ pub async fn update_notification_settings(
     Ok(())
 }
 
-/// Tauri command: request OS notification permission. Returns true if granted.
+/// Tauri command: request OS notification permission. Returns true if granted. macOS
+/// never asks again once notifications are turned off, so there it opens Pikos's page
+/// in System Settings, and the panel's check on returning to the window sees the change.
 #[tauri::command]
 pub async fn request_notification_permission(
     app: tauri::AppHandle,
 ) -> crate::error::AppResult<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let blocked = crate::notifications::macos::notifications_off().await;
+        if blocked {
+            open_settings_page(&app)?;
+        }
+
+        Ok(!blocked)
+    }
+    #[cfg(not(target_os = "macos"))]
     match app.notification().request_permission() {
         Ok(state) => Ok(state == tauri_plugin_notification::PermissionState::Granted),
         Err(e) => Err(crate::error::AppError::Internal(e.to_string())),
     }
 }
 
-/// Tauri command: check current notification permission status.
+/// Tauri command: check current notification permission status. On macOS it asks the
+/// system, as a tick does: the plugin's desktop answer is always granted, so a denial in
+/// System Settings never reached the panel's blocked banner.
 #[tauri::command]
 pub async fn check_notification_permission(app: tauri::AppHandle) -> crate::error::AppResult<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        Ok(!crate::notifications::macos::notifications_off().await)
+    }
+    #[cfg(not(target_os = "macos"))]
     match app.notification().permission_state() {
         Ok(state) => Ok(state == tauri_plugin_notification::PermissionState::Granted),
         Err(e) => Err(crate::error::AppError::Internal(e.to_string())),
@@ -134,19 +154,22 @@ pub async fn check_notification_permission(app: tauri::AppHandle) -> crate::erro
 #[tauri::command]
 pub async fn open_notification_settings(app: tauri::AppHandle) -> crate::error::AppResult<()> {
     #[cfg(target_os = "macos")]
-    {
-        use tauri_plugin_opener::OpenerExt;
-        let url = format!(
-            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id={}",
-            app.config().identifier
-        );
-        app.opener()
-            .open_url(url, None::<&str>)
-            .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
-    }
+    open_settings_page(&app)?;
     #[cfg(not(target_os = "macos"))]
     let _ = app;
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn open_settings_page(app: &tauri::AppHandle) -> crate::error::AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = format!(
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id={}",
+        app.config().identifier
+    );
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| crate::error::AppError::Internal(e.to_string()))
 }
 
 // ─── Scheduler loop ──────────────────────────────────────────────────────────

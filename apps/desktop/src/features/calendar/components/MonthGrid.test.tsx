@@ -151,6 +151,25 @@ describe("MonthGrid — event chips", () => {
     expect(cell("Monday March 16, 2026")).toContainElement(bars[1]!);
   });
 
+  it("ticks an event that crosses a week only on the row where it starts", () => {
+    renderGrid([
+      makePage({ id: "Trip", scheduledEnd: "2026-03-17", scheduledStart: "2026-03-14" }),
+    ]);
+    const [start, carried] = screen.getAllByRole("button", { name: "Trip" });
+
+    expect(start!.querySelector(".task-checkbox")).not.toBeNull();
+    expect(carried!.querySelector(".task-checkbox")).toBeNull();
+  });
+
+  it("keeps the tick on the first row for an event that started before the grid", () => {
+    renderGrid([
+      makePage({ id: "Retreat", scheduledEnd: "2026-02-25", scheduledStart: "2026-02-20" }),
+    ]);
+    const bar = screen.getByRole("button", { name: "Retreat" });
+
+    expect(bar.querySelector(".task-checkbox")).not.toBeNull();
+  });
+
   it("shows events on padding cells too — they are real days of the grid", () => {
     renderGrid([makePage({ id: "Kickoff", scheduledStart: "2026-02-24" })]);
     expect(cell("Tuesday February 24, 2026")).toContainElement(

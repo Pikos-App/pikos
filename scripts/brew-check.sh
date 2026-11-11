@@ -22,6 +22,9 @@ step() { printf '── %s\n' "$1"; }
 check() { if "$@"; then return 0; else fail=1; return 1; fi; }
 
 brew tap "$TAP" >/dev/null 2>&1 || true
+# Homebrew 7 refuses to audit or read a tap nobody has trusted. Installing by full name trusts
+# the cask on its own, so this is only the check's problem, not a user's.
+brew trust --tap "$TAP" >/dev/null 2>&1 || true
 
 step "audit"
 audit_log=$(mktemp)
@@ -67,8 +70,12 @@ prerelease=$(gh release list --repo "$REPO" --limit 20 --json tagName,isPrerelea
   --jq 'map(select(.isPrerelease))[0].tagName' 2>/dev/null | sed 's/^v//')
 formula_version=$(brew info --json=v2 "$FORMULA" 2>/dev/null \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["formulae"][0]["versions"]["stable"])' 2>/dev/null)
+# The beta cask is the newest build of either kind, so with no beta ahead of the stable release it
+# names the stable one. Betas are deleted once their release ships, and a cask left on one names
+# an asset that no longer exists.
+newest=$(python3 "$(dirname "$0")/lib/newest-version.py" "$stable" "$prerelease" 2>/dev/null)
 compare "the cask" "$(cask_version_of "$CASK")" "$stable"
-compare "the beta cask" "$(cask_version_of "$BETA")" "$prerelease"
+compare "the beta cask" "$(cask_version_of "$BETA")" "$newest"
 # The CLI ships with the betas too, so it tracks whichever of the two is newer.
 if [ -z "$formula_version" ] || { [ -z "$stable" ] && [ -z "$prerelease" ]; }; then
   echo "   the cli formula: could not read a version to compare"

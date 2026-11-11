@@ -20,6 +20,9 @@ interface MonthEventChipProps {
    * week grid's all-day section uses. */
   folderColor: string | undefined;
   onDoubleClick: (pageId: string) => void;
+  /** The event's first day is drawn in an earlier row of this grid, whose bar carries the
+   * checkbox, so this row's bar goes without one. */
+  startShownAbove: boolean;
   /** Set when the chip is a bar reaching past its own cell. */
   width?: string | undefined;
 }
@@ -32,7 +35,13 @@ interface MonthEventChipProps {
  * downstream of the click — the popover pair, the recurring/synced action
  * routing — is the same code path the week grid takes.
  */
-export function MonthEventChip({ event, folderColor, onDoubleClick, width }: MonthEventChipProps) {
+export function MonthEventChip({
+  event,
+  folderColor,
+  onDoubleClick,
+  startShownAbove,
+  width,
+}: MonthEventChipProps) {
   const { continuesAfter, continuesBefore, isAllDay, page, startDate } = event;
   const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
 
@@ -73,7 +82,9 @@ export function MonthEventChip({ event, folderColor, onDoubleClick, width }: Mon
           onMouseDown={(e) => e.stopPropagation()}
           style={{ ...chipFolderStyle(folderColor), width }}
         >
-          {showsCheckbox ? (
+          {!showsCheckbox ? (
+            <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : startShownAbove ? null : (
             <TaskCheckbox
               as="span"
               borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
@@ -82,8 +93,6 @@ export function MonthEventChip({ event, folderColor, onDoubleClick, width }: Mon
               onChange={handleCheckboxClick}
               size="xs"
             />
-          ) : (
-            <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
           <span className="min-w-0 truncate text-left">{page.title || "Untitled"}</span>
           <SyncSourceIcon className="ml-auto h-3 w-3 shrink-0" syncState={page.syncState} />

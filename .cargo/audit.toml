@@ -24,4 +24,8 @@ ignore = [
     # through a sqlx backend Pikos does not use; SQLite is the only one built.
     # Verified unreachable 2026-09-16.
     "RUSTSEC-2023-0071",
+
+    # libsqlite3-sys 0.30: reachable, and accepted rather than unreachable. The reason is on its
+    # entry in the desktop lock's apps/desktop/src-tauri/.cargo/audit.toml.
+    "RUSTSEC-2026-0459",
 ]

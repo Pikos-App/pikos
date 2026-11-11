@@ -105,8 +105,16 @@ appTest(
     await appTest.step(
       "SYNC-11 an event that crosses midnight sits on the day it happens here",
       async () => {
-        await app.getByRole("button", { name: "Tokyo sync, 9–9:30 PM" }).click();
-        await expect(app.getByRole("dialog")).toContainText("Today 9:00pm · 30m");
+        // Seeded at 10am Tokyo tomorrow, which keeps no daylight saving, so the evening hour it
+        // lands on here moves with this zone's.
+        const hour = await app.evaluate(() => {
+          const now = new Date();
+          const tokyoTenAm = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 1);
+
+          return new Date(tokyoTenAm).getHours() - 12;
+        });
+        await app.getByRole("button", { name: `Tokyo sync, ${hour}–${hour}:30 PM` }).click();
+        await expect(app.getByRole("dialog")).toContainText(`Today ${hour}:00pm · 30m`);
         await app.keyboard.press("Escape");
       }
     );

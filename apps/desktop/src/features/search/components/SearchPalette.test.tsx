@@ -413,6 +413,31 @@ describe("SearchPalette — command mode", () => {
     expect(screen.queryByRole("button", { name: /Gated away/ })).toBeNull();
   });
 
+  it("never opens on a destructive command, so Enter straight after > can't run one", async () => {
+    await setup();
+    let deleted = 0;
+    let ran = 0;
+    Keyboard.register({
+      combo: "Mod+7",
+      destructive: true,
+      handler: () => {
+        deleted += 1;
+      },
+      id: "test-gated",
+      label: "Delete the thing",
+    });
+    registerCommand(() => {
+      ran += 1;
+    });
+
+    type(">");
+    await screen.findByRole("button", { name: /Delete the thing/ });
+    fireEvent.keyDown(screen.getByPlaceholderText(/Search pages/), { key: "Enter" });
+
+    expect(deleted).toBe(0);
+    expect(ran).toBe(1);
+  });
+
   it("ranks a word that starts with the filter above scattered letters, and marks what matched", async () => {
     await setup();
     Keyboard.register({

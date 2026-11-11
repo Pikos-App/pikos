@@ -106,8 +106,15 @@ export function NotificationSettings() {
       });
   }
 
+  // Asked again on each return to the window, since the setting is changed in System Settings.
   useEffect(() => {
-    void checkPermission();
+    function recheck() {
+      void checkPermission();
+    }
+
+    recheck();
+    window.addEventListener("focus", recheck);
+    return () => window.removeEventListener("focus", recheck);
   }, []);
 
   useEffect(() => {
@@ -205,7 +212,7 @@ export function NotificationSettings() {
                 className="mt-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
                 onClick={() => void handleRequestPermission()}
               >
-                Request permission
+                Open System Settings
               </button>
             </div>
           </div>

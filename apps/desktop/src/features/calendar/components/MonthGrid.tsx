@@ -69,7 +69,7 @@ export function MonthGrid({ onOpenDay, onPageDoubleClick, pages, weeks }: MonthG
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {weeks.map((week) => (
+        {weeks.map((week, row) => (
           <div className="flex min-h-24 flex-1" key={week[0]?.key}>
             {placeMonthWeek(
               pages,
@@ -120,6 +120,7 @@ export function MonthGrid({ onOpenDay, onPageDoubleClick, pages, weeks }: MonthG
                         }
                         key={bar.event.key}
                         onDoubleClick={onPageDoubleClick}
+                        startShownAbove={bar.event.continuesBefore && row > 0}
                         width={barWidth(bar.spanCols)}
                       />
                     ) : (

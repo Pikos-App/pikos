@@ -228,7 +228,11 @@ export function SearchPalette() {
           const match = matchCommand(binding.label ?? "", commandFilter);
           return match ? [{ binding, match }] : [];
         })
-        .sort((a, b) => a.match.rank - b.match.rank)
+        .sort(
+          (a, b) =>
+            a.match.rank - b.match.rank ||
+            Number(a.binding.destructive ?? false) - Number(b.binding.destructive ?? false)
+        )
     : [];
 
   // Both open this palette, so both are inert once it is open. The guard is here

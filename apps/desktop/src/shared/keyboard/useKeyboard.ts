@@ -42,6 +42,7 @@ export function useKeyboardShortcut(
   const group = opts?.group;
   // Stryker disable next-line OptionalChaining: the label and group reads above already need the options
   const inPalette = opts?.inPalette;
+  const destructive = opts?.destructive;
 
   useEffect(() => {
     const id = `shortcut-${crypto.randomUUID()}`;
@@ -63,6 +64,7 @@ export function useKeyboardShortcut(
       ...(group !== undefined && { group }),
       // Stryker disable next-line ConditionalExpression: spreading an undefined inPalette equals leaving it out
       ...(inPalette !== undefined && { inPalette }),
+      ...(destructive !== undefined && { destructive }),
     };
 
     if (second !== undefined) {
@@ -126,6 +128,7 @@ export function useKeyboardShortcut(
     label,
     group,
     inPalette,
+    destructive,
   ]);
 }
 

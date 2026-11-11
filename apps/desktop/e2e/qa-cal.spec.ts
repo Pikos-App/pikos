@@ -995,11 +995,15 @@ appTest(
     await app.getByRole("switch", { name: "Sync Family" }).click();
     await expect(app.getByRole("switch", { name: "Sync Family" })).toBeChecked();
     await app.keyboard.press("Escape");
-    // A Saturday three weeks out, clear of the seeded calendar's crowded weekdays.
+    // Three weeks out, on a Saturday the seed's weekly series miss unless today is one, since they
+    // repeat on today's weekday; then a Thursday, which only the morning standup shares.
     const out = await app.evaluate(() => {
+      const isSaturday = new Date().getDay() === 6;
+      const weekday = isSaturday ? 4 : 6;
       const d = new Date();
       d.setDate(d.getDate() + 21);
-      return 21 + ((6 - d.getDay() + 7) % 7);
+
+      return 21 + ((weekday - d.getDay() + 7) % 7);
     });
     const day = (await stamp(app, out, "00:00")).slice(0, 10);
     const dayAfter = (await stamp(app, out + 1, "00:00")).slice(0, 10);
