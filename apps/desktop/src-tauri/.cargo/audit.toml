@@ -28,4 +28,13 @@ ignore = [
     "RUSTSEC-2026-0368",
     "RUSTSEC-2026-0369",
     "RUSTSEC-2026-0429",
+
+    # libsqlite3-sys 0.30: bundled SQLite before 3.54 can return stale page-cache memory when it
+    # opens a database beside a crafted -wal file of a different page size. Reachable, unlike the
+    # entries above: every target compiles it. Accepted for 0.5.0 by Alex on 2026-11-10, because
+    # Pikos opens only its own workspace and the backups it wrote into its own data directory, and
+    # a restore deletes the -wal beside the file it puts back, so a crafted pair needs write access
+    # to that directory already. The fix is sqlx 0.9, which is a breaking upgrade; drop this entry
+    # with it.
+    "RUSTSEC-2026-0459",
 ]
