@@ -22,6 +22,9 @@ step() { printf '── %s\n' "$1"; }
 check() { if "$@"; then return 0; else fail=1; return 1; fi; }
 
 brew tap "$TAP" >/dev/null 2>&1 || true
+# Homebrew 7 refuses to audit or read a tap nobody has trusted. Installing by full name trusts
+# the cask on its own, so this is only the check's problem, not a user's.
+brew trust --tap "$TAP" >/dev/null 2>&1 || true
 
 step "audit"
 audit_log=$(mktemp)
