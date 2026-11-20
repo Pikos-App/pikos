@@ -15,3 +15,9 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
+
+# SQLite is C that nobody steps through, and the tests spend much of their time inside it.
+# Optimizing it in debug builds took the workspace tests from 2.1 to 1.7 minutes on an M2, for
+# one rebuild of SQLite.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
