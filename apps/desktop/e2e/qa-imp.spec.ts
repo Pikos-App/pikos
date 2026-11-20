@@ -105,7 +105,7 @@ appTest(
     await importVault(app, [
       {
         content:
-          "---\ntags: [finance, home]\nstatus: done\npriority: high\ndue: 2026-11-20\ncreated: 2024-03-05\n---\nPaid in full.",
+          "---\ntags: [finance, home]\nstatus: done\npriority: high\ndue: 2024-11-20\ncreated: 2024-03-05\n---\nPaid in full.",
         path: "Finance/Mortgage.md",
       },
       {
