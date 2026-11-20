@@ -593,11 +593,7 @@ impl Filter for EnglishUnlikelyFormatFilter {
             }
         }
 
-        if text.to_lowercase().ends_with("the second") {
-            return false;
-        }
-
-        true
+        !text.to_lowercase().ends_with("the second")
     }
 }
 
