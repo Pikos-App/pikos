@@ -313,20 +313,14 @@ jobs:
       - name: Cargo fmt --check
         run: cargo fmt --all --check
 
-      - name: Cargo check (zero warnings)
-        env:
-          RUSTFLAGS: "-D warnings"
-        run: cargo check --workspace --all-targets
-
+      # No separate `cargo check -D warnings`: clippy compiles the same targets and denies the
+      # compiler's warnings along with its own.
       - name: Cargo clippy (zero warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Cargo test
-        run: cargo test --workspace --quiet
-
-      # The generator is TypeScript — it runs the reference implementation —
-      # so this job needs Node as well as Rust. Set up after the Rust checks so
-      # a formatting or clippy failure surfaces without waiting on an install.
+      # The parser bridge and the fuzz generators are TypeScript, so this job needs Node as
+      # well as Rust. Set up after fmt and clippy so a failure there surfaces without waiting
+      # on an install.
       - uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -337,6 +331,16 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # pikos-cli's `add` tests drive the real NLP parser through the @pikos/bridge bundle and
+      # silently skip themselves when it is absent, so without this build the CLI's whole
+      # parser surface would pass vacuously.
+      - name: Build the parser bridge
+        run: pnpm --filter @pikos/bridge build
+
+      # The workspace's only test run in CI. The `rust` job below runs the desktop crate's.
+      - name: Cargo test
+        run: cargo test --workspace --quiet
 
       # The committed fuzz corpus is a sample. This searches wider on every CI
       # run, with a seed derived from the run so successive runs explore
@@ -487,39 +491,9 @@ jobs:
 
       # Two Cargo trees, both gated. The root workspace is `crates/*` and it
       # *excludes* apps/desktop/src-tauri, so `--all` inside src-tauri resolves to
-      # that one standalone crate — running only there left pikos-db, -cli,
-      # -calendar-sync and -recurrence with no CI coverage at all. Mirrors the
-      # split .husky/pre-push already runs.
-      - name: Cargo fmt --check (workspace)
-        working-directory: .
-        run: cargo fmt --all --check
-
-      - name: Cargo clippy (workspace, zero warnings)
-        working-directory: .
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      # pikos-cli's `add` tests drive the real NLP parser through the
-      # @pikos/bridge bundle and silently skip themselves when it is absent —
-      # so without this build step the CLI's whole parser surface passes
-      # vacuously here.
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Build the parser bridge
-        working-directory: .
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @pikos/bridge build
-
-      - name: Cargo test (workspace)
-        working-directory: .
-        run: cargo test --workspace --quiet
+      # that one standalone crate. The workspace's fmt, clippy and tests run in
+      # `rust-workspace` above; this job runs the desktop crate's, plus the two
+      # Linux round-trips that need a real keychain.
 
       # The one test that asks the OS for its keychain. Every other keychain test injects a map,
       # so a build naming no backend for this platform passes all of them and then forgets every
@@ -542,11 +516,6 @@ jobs:
 
       - name: Cargo fmt --check (desktop crate)
         run: cargo fmt --check
-
-      - name: Cargo check (desktop crate, zero warnings)
-        env:
-          RUSTFLAGS: "-D warnings"
-        run: cargo check
 
       - name: Cargo clippy (desktop crate, zero warnings)
         run: cargo clippy --all-targets -- -D warnings
