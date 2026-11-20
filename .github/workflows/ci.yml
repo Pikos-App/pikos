@@ -22,6 +22,48 @@ env:
   PNPM_VERSION: 10.30.3
 
 jobs:
+  # ── What changed ───────────────────────────────────────────────────────────
+  # Only the iOS job is skipped by path. It is the one macOS runner and often the longest job,
+  # and most changes never reach the phone: a desktop screen, the site, a script.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    # A pull request's changed files come from the API.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ios: ${{ github.event_name == 'schedule' || steps.filter.outputs.ios == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: github.event_name != 'schedule'
+
+      # Everything the phone app is built from. A path missing here is a phone break CI never
+      # sees, so in doubt, add it.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name != 'schedule'
+        with:
+          filters: |
+            ios:
+              - 'apps/ios/**'
+              - 'apps/apple/**'
+              - 'crates/**'
+              - 'packages/core/**'
+              - 'packages/editor-mobile/**'
+              - 'packages/editor-schema/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'scripts/build-ios-framework.sh'
+              - 'scripts/build-editor-bundle.sh'
+              - 'scripts/gen-swift-bindings.sh'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/_ios.yml'
+
   # ── Validation ─────────────────────────────────────────────────────────────
   # verify + e2e + rust live in _validate.yml so release.yml can reuse them.
   validate:
@@ -34,6 +76,8 @@ jobs:
   # suites catch most of what breaks for a fraction of the wall clock. Turn them
   # on for a release, or when a screen is what changed.
   ios:
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     uses: ./.github/workflows/_ios.yml
 
   # ── Build ──────────────────────────────────────────────────────────────────
