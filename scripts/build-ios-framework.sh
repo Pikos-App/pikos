@@ -46,13 +46,33 @@ command -v xcodebuild >/dev/null 2>&1 || {
 # boundary tests would be runnable only in a simulator, which is minutes rather
 # than seconds. PikosCore/Package.swift already declares `.macOS(.v14)`; this is
 # what makes that declaration true.
-TARGETS=(
+ALL_TARGETS=(
   aarch64-apple-ios          # device
   aarch64-apple-ios-sim      # simulator, Apple silicon
   x86_64-apple-ios           # simulator, Intel
   aarch64-apple-darwin       # host tests, Apple silicon
   x86_64-apple-darwin        # host tests, Intel
 )
+
+# PIKOS_IOS_TARGETS builds a subset, space-separated, for a machine that knows what it needs.
+# Each slice is a full release build of the Rust core, so CI's Apple-silicon runners build
+# only theirs: the simulator and host slices for the tests, or the device slice to archive.
+# Unset, every slice is built, so the framework works on any Mac and any simulator.
+if [ -n "${PIKOS_IOS_TARGETS:-}" ]; then
+  read -r -a TARGETS <<<"$PIKOS_IOS_TARGETS"
+  for t in "${TARGETS[@]}"; do
+    case " ${ALL_TARGETS[*]} " in
+      *" $t "*) ;;
+      *) echo "error: PIKOS_IOS_TARGETS names $t, which is not one of: ${ALL_TARGETS[*]}" >&2; exit 1 ;;
+    esac
+  done
+else
+  TARGETS=("${ALL_TARGETS[@]}")
+fi
+
+built() {
+  case " ${TARGETS[*]} " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
 
 # The SDK each target links against, named rather than inherited.
 #
@@ -96,31 +116,31 @@ bash "$ROOT/scripts/gen-swift-bindings.sh"
 
 echo "▶ fusing the multi-architecture slices"
 rm -rf "$BUILD"
-mkdir -p "$BUILD/device/Headers" "$BUILD/sim/Headers" "$BUILD/macos/Headers"
-lipo -create \
-  "$ROOT/target/aarch64-apple-ios-sim/release/libpikos_ffi.a" \
-  "$ROOT/target/x86_64-apple-ios/release/libpikos_ffi.a" \
-  -output "$BUILD/sim/libpikos_ffi.a"
-lipo -create \
-  "$ROOT/target/aarch64-apple-darwin/release/libpikos_ffi.a" \
-  "$ROOT/target/x86_64-apple-darwin/release/libpikos_ffi.a" \
-  -output "$BUILD/macos/libpikos_ffi.a"
 
-for variant in device sim macos; do
+# One library per platform, fusing whichever of its architectures were built. A platform with
+# none built is left out of the framework.
+LIBRARIES=()
+fuse() {
+  local variant=$1
+  shift
+  local libs=()
+  for t in "$@"; do
+    built "$t" && libs+=("$ROOT/target/$t/release/libpikos_ffi.a")
+  done
+  [ ${#libs[@]} -gt 0 ] || return 0
+  mkdir -p "$BUILD/$variant/Headers"
+  lipo -create "${libs[@]}" -output "$BUILD/$variant/libpikos_ffi.a"
   cp "$PKG/generated/include/pikos_ffiFFI.h" "$BUILD/$variant/Headers/"
   cp "$PKG/generated/include/module.modulemap" "$BUILD/$variant/Headers/"
-done
+  LIBRARIES+=(-library "$BUILD/$variant/libpikos_ffi.a" -headers "$BUILD/$variant/Headers")
+}
+fuse device aarch64-apple-ios
+fuse sim aarch64-apple-ios-sim x86_64-apple-ios
+fuse macos aarch64-apple-darwin x86_64-apple-darwin
 
 echo "▶ assembling the XCFramework"
 rm -rf "$XCFRAMEWORK"
 mkdir -p "$PKG/Frameworks"
-xcodebuild -create-xcframework \
-  -library "$ROOT/target/aarch64-apple-ios/release/libpikos_ffi.a" \
-  -headers "$BUILD/device/Headers" \
-  -library "$BUILD/sim/libpikos_ffi.a" \
-  -headers "$BUILD/sim/Headers" \
-  -library "$BUILD/macos/libpikos_ffi.a" \
-  -headers "$BUILD/macos/Headers" \
-  -output "$XCFRAMEWORK"
+xcodebuild -create-xcframework "${LIBRARIES[@]}" -output "$XCFRAMEWORK"
 
 echo "✓ $XCFRAMEWORK"
