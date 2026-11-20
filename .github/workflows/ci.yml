@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [main]
     paths-ignore: ['**.md', 'LICENSE']
+  # GitHub drops a cache nobody has read for seven days, and a run with none takes about 30
+  # minutes instead of 12. main can go that long without a push, so this runs twice a week to
+  # keep main's caches warm for the next push and every branch that reads them. It also catches
+  # a new stable Rust's lints before a push does.
+  schedule:
+    - cron: '41 9 * * 1,4'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
