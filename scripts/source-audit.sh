@@ -64,11 +64,20 @@ SYNC_CRATE='crates/pikos-calendar-sync/'
 E2E_BRIDGE='apps/desktop/src-tauri/src/e2e_bridge.rs'
 
 # ── 1. Secrets (gitleaks) ──────────────────────────────────────────────────────
+# At commit time the hook sets SOURCE_AUDIT_STAGED, and only the staged changes are scanned:
+# they are what is about to enter history. Scanning the tree instead read about 5 GB of
+# ignored build output and took two and a half minutes per commit. Anywhere else, CI or by
+# hand, the whole tree is scanned.
+if [ -n "${SOURCE_AUDIT_STAGED:-}" ]; then
+  gitleaks_scan=(git --pre-commit --staged)
+else
+  gitleaks_scan=(dir .)
+fi
 if command -v gitleaks &>/dev/null; then
-  if gitleaks dir . --no-banner --exit-code 1 &>/dev/null; then
-    pass "No secrets" "gitleaks"
+  if gitleaks "${gitleaks_scan[@]}" --no-banner --exit-code 1 &>/dev/null; then
+    pass "No secrets" "gitleaks ${gitleaks_scan[*]}"
   else
-    fail "gitleaks detected secrets — run 'gitleaks dir . -v' for details"
+    fail "gitleaks detected secrets — run 'gitleaks ${gitleaks_scan[*]} -v' for details"
   fi
 else
   # Fallback: basic pattern grep if gitleaks not installed
