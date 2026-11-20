@@ -395,10 +395,12 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
+    # Six, because Playwright splits by test count rather than time, so the shard that draws
+    # the slow tests sets the job's length. At four, the shards ran from 3.5 to 9 minutes.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v5
 
@@ -422,14 +424,23 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Both trees: the bridge is the desktop crate, and the CLI that seeds the @large
+      # workspace is the root one.
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri -> target
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
 
       # Built here so the Playwright web-server timeout never covers a cold compile.
       - name: Build the e2e bridge
         working-directory: apps/desktop/src-tauri
         run: cargo build --features e2e-bridge --bin pikos-e2e-bridge
+
+      # The @large tests seed their 20,000-page workspace with this. Left to the first test that
+      # asks, a cold release build of it held that shard's workers idle for about three minutes.
+      - name: Build the CLI
+        run: cargo build --release -p pikos-cli
 
       # The writer reads its zone from /etc/localtime on Linux, not TZ; the bridge
       # refuses to start if the two disagree. Must match ZONE in the bridge config.
