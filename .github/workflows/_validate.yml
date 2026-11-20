@@ -81,6 +81,21 @@ jobs:
       - name: iOS call sites match the generated bindings
         run: pnpm check:ios-ffi
 
+      # Without it, the audit's secrets check falls back to a grep for a handful of key shapes.
+      # Pinned by version and checksum, like any binary run on the source.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$tarball"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP/gitleaks" gitleaks
+          echo "$RUNNER_TEMP/gitleaks" >> "$GITHUB_PATH"
+
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 
@@ -298,20 +313,14 @@ jobs:
       - name: Cargo fmt --check
         run: cargo fmt --all --check
 
-      - name: Cargo check (zero warnings)
-        env:
-          RUSTFLAGS: "-D warnings"
-        run: cargo check --workspace --all-targets
-
+      # No separate `cargo check -D warnings`: clippy compiles the same targets and denies the
+      # compiler's warnings along with its own.
       - name: Cargo clippy (zero warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Cargo test
-        run: cargo test --workspace --quiet
-
-      # The generator is TypeScript — it runs the reference implementation —
-      # so this job needs Node as well as Rust. Set up after the Rust checks so
-      # a formatting or clippy failure surfaces without waiting on an install.
+      # The parser bridge and the fuzz generators are TypeScript, so this job needs Node as
+      # well as Rust. Set up after fmt and clippy so a failure there surfaces without waiting
+      # on an install.
       - uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -322,6 +331,16 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # pikos-cli's `add` tests drive the real NLP parser through the @pikos/bridge bundle and
+      # silently skip themselves when it is absent, so without this build the CLI's whole
+      # parser surface would pass vacuously.
+      - name: Build the parser bridge
+        run: pnpm --filter @pikos/bridge build
+
+      # The workspace's only test run in CI. The `rust` job below runs the desktop crate's.
+      - name: Cargo test
+        run: cargo test --workspace --quiet
 
       # The committed fuzz corpus is a sample. This searches wider on every CI
       # run, with a seed derived from the run so successive runs explore
@@ -380,10 +399,12 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
+    # Six, because Playwright splits by test count rather than time, so the shard that draws
+    # the slow tests sets the job's length. At four, the shards ran from 3.5 to 9 minutes.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v5
 
@@ -407,14 +428,23 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Both trees: the bridge is the desktop crate, and the CLI that seeds the @large
+      # workspace is the root one.
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri -> target
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
 
       # Built here so the Playwright web-server timeout never covers a cold compile.
       - name: Build the e2e bridge
         working-directory: apps/desktop/src-tauri
         run: cargo build --features e2e-bridge --bin pikos-e2e-bridge
+
+      # The @large tests seed their 20,000-page workspace with this. Left to the first test that
+      # asks, a cold release build of it held that shard's workers idle for about three minutes.
+      - name: Build the CLI
+        run: cargo build --release -p pikos-cli
 
       # The writer reads its zone from /etc/localtime on Linux, not TZ; the bridge
       # refuses to start if the two disagree. Must match ZONE in the bridge config.
@@ -461,39 +491,9 @@ jobs:
 
       # Two Cargo trees, both gated. The root workspace is `crates/*` and it
       # *excludes* apps/desktop/src-tauri, so `--all` inside src-tauri resolves to
-      # that one standalone crate — running only there left pikos-db, -cli,
-      # -calendar-sync and -recurrence with no CI coverage at all. Mirrors the
-      # split .husky/pre-push already runs.
-      - name: Cargo fmt --check (workspace)
-        working-directory: .
-        run: cargo fmt --all --check
-
-      - name: Cargo clippy (workspace, zero warnings)
-        working-directory: .
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      # pikos-cli's `add` tests drive the real NLP parser through the
-      # @pikos/bridge bundle and silently skip themselves when it is absent —
-      # so without this build step the CLI's whole parser surface passes
-      # vacuously here.
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Build the parser bridge
-        working-directory: .
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @pikos/bridge build
-
-      - name: Cargo test (workspace)
-        working-directory: .
-        run: cargo test --workspace --quiet
+      # that one standalone crate. The workspace's fmt, clippy and tests run in
+      # `rust-workspace` above; this job runs the desktop crate's, plus the two
+      # Linux round-trips that need a real keychain.
 
       # The one test that asks the OS for its keychain. Every other keychain test injects a map,
       # so a build naming no backend for this platform passes all of them and then forgets every
@@ -516,11 +516,6 @@ jobs:
 
       - name: Cargo fmt --check (desktop crate)
         run: cargo fmt --check
-
-      - name: Cargo check (desktop crate, zero warnings)
-        env:
-          RUSTFLAGS: "-D warnings"
-        run: cargo check
 
       - name: Cargo clippy (desktop crate, zero warnings)
         run: cargo clippy --all-targets -- -D warnings

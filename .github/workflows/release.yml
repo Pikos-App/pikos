@@ -26,6 +26,11 @@ jobs:
   # Both gates are needed and neither subsumes the other: _validate.yml runs
   # against the dev server, _build.yml against a production bundle under the
   # packaged CSP.
+  #
+  # They gate publishing, not building. The builds below make artifacts and
+  # publish nothing, so they start alongside the gates instead of after them,
+  # and `release` waits on all four. That took a release from about 27 minutes
+  # to about 15.
   validate:
     uses: ./.github/workflows/_validate.yml
 
@@ -35,7 +40,6 @@ jobs:
 
   build:
     name: Build (${{ matrix.label }})
-    needs: [validate, bundle]
     strategy:
       fail-fast: false
       matrix:
@@ -250,7 +254,6 @@ jobs:
 
   cli:
     name: CLI (${{ matrix.label }})
-    needs: [validate, bundle]
     strategy:
       fail-fast: false
       matrix:
@@ -343,7 +346,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build, cli]
+    needs: [validate, bundle, build, cli]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
