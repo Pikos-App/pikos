@@ -36,9 +36,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Turbo replays the typecheck and lint for a package when neither its files nor
+      # any package it imports changed since a run this cache holds. Its hash leaves out
+      # Node's version, so the key carries it. Entries a week old are dropped first, or every
+      # run would save the cache back a little bigger. The scheduled run ignores the cache:
+      # a test that reads today's date can start failing with no file changed.
+      - name: Restore turbo's cache
+        uses: actions/cache@v5
+        with:
+          path: .turbo/cache
+          key: turbo-${{ github.job }}-node${{ env.NODE_VERSION }}-${{ github.sha }}
+          restore-keys: turbo-${{ github.job }}-node${{ env.NODE_VERSION }}-
+
+      - name: Drop week-old turbo entries
+        run: find .turbo/cache -type f -mtime +7 -delete 2>/dev/null || true
+
       - name: Verify (typecheck + lint + prettier + depcruise)
         env:
           SKIP_UNIT_TESTS: "1"
+          TURBO_FORCE: ${{ github.event_name == 'schedule' }}
         run: pnpm verify
 
       # The editor bridge's Swift half is generated from
@@ -121,8 +137,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Turbo replays the tests and their coverage report for a package when neither its
+      # files nor any package it imports changed since a run this cache holds. Its hash leaves out
+      # Node's version, so the key carries it. Entries a week old are dropped first, or every
+      # run would save the cache back a little bigger. The scheduled run ignores the cache:
+      # a test that reads today's date can start failing with no file changed.
+      - name: Restore turbo's cache
+        uses: actions/cache@v5
+        with:
+          path: .turbo/cache
+          key: turbo-${{ github.job }}-node${{ env.NODE_VERSION }}-${{ github.sha }}
+          restore-keys: turbo-${{ github.job }}-node${{ env.NODE_VERSION }}-
+
+      - name: Drop week-old turbo entries
+        run: find .turbo/cache -type f -mtime +7 -delete 2>/dev/null || true
+
       - name: Unit tests + coverage (desktop + core, per-directory thresholds)
-        run: pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
+        env:
+          TURBO_FORCE: ${{ github.event_name == 'schedule' }}
+        run: pnpm exec turbo test:coverage --filter=@pikos/desktop --filter=@pikos/core
 
       - name: Upload coverage reports
         if: ${{ !cancelled() }}

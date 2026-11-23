@@ -39,6 +39,12 @@
       "dependsOn": ["^transit"],
       "outputs": ["coverage/**"],
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
+    },
+    // CI's unit-test pass. A cache hit restores the report, so the job still uploads one.
+    "test:coverage": {
+      "dependsOn": ["^transit"],
+      "outputs": ["coverage/**"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     }
   }
 }
