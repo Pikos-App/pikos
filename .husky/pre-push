@@ -13,6 +13,22 @@ if git rev-parse --verify -q '@{u}' >/dev/null 2>&1; then
   fi
 fi
 
+# The same reasoning, one level finer: a gate runs only when the push touches something it reads.
+# These are dependencies, not guesses, so a skip never hides a failure the gate could have found.
+#
+# The Rust gates read the crates, the root `tests/` fixtures, and two TypeScript packages:
+# `packages/core`, which the date engine's corpora are generated from, and the parser bridge
+# that pikos-cli's tests run. The mock e2e lane runs the web app on the mock adapter, so it reads
+# nothing Rust builds. With no upstream, `pushing` is empty and everything runs.
+rust_needed=1
+smoke_needed=1
+if [ -n "$pushing" ]; then
+  rust_inputs='^(crates/|apps/desktop/src-tauri/|tests/|packages/core/|packages/pikos-bridge/|Cargo\.(toml|lock)$|\.cargo/|pnpm-lock\.yaml$|\.husky/pre-push$)'
+  rust_only='^(crates/|apps/desktop/src-tauri/|Cargo\.(toml|lock)$|\.cargo/)'
+  printf '%s\n' "$pushing" | grep -qE "$rust_inputs" || rust_needed=0
+  printf '%s\n' "$pushing" | grep -vE '(\.md|\.txt|LICENSE)$' | grep -qvE "$rust_only" || smoke_needed=0
+fi
+
 # Full unit suite. Pre-commit runs only the specs its diff reaches, so this is the
 # first gate seeing all of them — what keeps commits fast without letting an
 # unreached breakage leave the machine. Turbo-cached, so usually ~free.
@@ -26,7 +42,9 @@ printf '\033[0;32m✓\033[0m Unit tests — full suite\n'
 # (pikos-db, pikos-cli, pikos-calendar-sync) and it *excludes* the Tauri crate,
 # so a check that runs only in apps/desktop/src-tauri leaves the DB and sync
 # crates ungated entirely.
-if command -v cargo &>/dev/null; then
+if [ "$rust_needed" = 0 ]; then
+  printf '\033[0;32m✓\033[0m Rust gates skipped — nothing pushed that they read\n'
+elif command -v cargo &>/dev/null; then
   echo "Checking Rust formatting..."
   cargo fmt --all --check || exit 1
   if [ -f apps/desktop/src-tauri/Cargo.toml ]; then
@@ -59,6 +77,8 @@ fi
 
 # The @smoke e2e tests, on the mock so no Rust build stands in the way — skip when
 # SKIP_E2E is set. The full suite and perf run in CI.
-if [ -z "$SKIP_E2E" ]; then
+if [ "$smoke_needed" = 0 ]; then
+  printf '\033[0;32m✓\033[0m E2E smoke skipped — the push is Rust only, and the mock lane runs none\n'
+elif [ -z "$SKIP_E2E" ]; then
   pnpm --filter @pikos/desktop test:e2e --project e2e --grep @smoke -x
 fi
