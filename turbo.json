@@ -1,6 +1,9 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
+    // Pins the Node every script runs on. Turbo's hash leaves the runtime out, so without this
+    // a Node upgrade replays passes recorded on the old one.
+    "package.json",
     "tsconfig.base.json",
     "eslint.config.js",
     "crates/pikos-db/tests/fixtures/**",

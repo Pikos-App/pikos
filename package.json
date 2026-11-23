@@ -56,5 +56,12 @@
       "eslint --fix"
     ],
     "*.{js,json,css,md}": "prettier --write --log-level warn"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.x",
+      "onFail": "download"
+    }
   }
 }
