@@ -34,6 +34,9 @@ export default defineConfig<{ storage: StorageLane; tightCache: boolean }>({
   retries: process.env["CI"] ? 2 : 0,
   testDir: "./e2e",
   timeout: 30_000,
+  // Playwright's default on a CI runner is half its four cores, but a worker spends much of
+  // each test waiting on the browser and the writer, so a third keeps the cores busy.
+  ...(process.env["CI"] ? { workers: 3 } : {}),
   use: {
     baseURL: `http://localhost:${E2E_PORT}`,
     screenshot: "only-on-failure",
