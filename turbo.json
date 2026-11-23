@@ -28,28 +28,29 @@
     // A cached pass is replayed only when nothing the check reads has changed, so these take
     // every file in the package, as the scripts do: desktop's typecheck and lint also cover
     // e2e/, scripts/ and bridge/, and one of its unit tests reads src-tauri/capabilities. Docs
-    // and the Rust source are left out because no TypeScript check reads them.
+    // and the Rust crate's code, manifest and lockfile are left out because no TypeScript check
+    // reads them; its JSON config and icons stay in.
     "typecheck": {
       "dependsOn": ["^transit"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     },
     "lint": {
       // Type-aware rules read the imported packages' types.
       "dependsOn": ["^transit"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     },
     "test": {
       // `^test` as well keeps the suites from all starting at once. Together with typecheck and
       // lint, that much at once slowed core's tests six times over and timed one out.
       "dependsOn": ["^transit", "^test"],
       "outputs": ["coverage/**"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     },
     // CI's unit-test pass. A cache hit restores the report, so the job still uploads one.
     "test:coverage": {
       "dependsOn": ["^transit", "^test:coverage"],
       "outputs": ["coverage/**"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     }
   }
 }
