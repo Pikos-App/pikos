@@ -16,9 +16,9 @@
       "cache": false,
       "persistent": true
     },
-    // Holds no script. Each package's node hashes its own files, and chaining it through `^`
-    // makes a task's hash include every workspace package it imports, without making it wait
-    // for their tasks: `^test` did both, and so ran the test suites one package at a time.
+    // Holds no script. Each package's node hashes its own files, so chaining it through `^`
+    // makes a task's hash include every workspace package it imports, including the ones with
+    // no task of the same name to chain through, like the recurrence engine's wasm.
     "transit": {
       "dependsOn": ["^transit"]
     },
@@ -36,13 +36,15 @@
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     },
     "test": {
-      "dependsOn": ["^transit"],
+      // `^test` as well keeps the suites from all starting at once. Together with typecheck and
+      // lint, that much at once slowed core's tests six times over and timed one out.
+      "dependsOn": ["^transit", "^test"],
       "outputs": ["coverage/**"],
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     },
     // CI's unit-test pass. A cache hit restores the report, so the job still uploads one.
     "test:coverage": {
-      "dependsOn": ["^transit"],
+      "dependsOn": ["^transit", "^test:coverage"],
       "outputs": ["coverage/**"],
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     }
