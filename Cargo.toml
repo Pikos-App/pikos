@@ -21,3 +21,10 @@ strip = true
 # one rebuild of SQLite.
 [profile.dev.package.libsqlite3-sys]
 opt-level = 3
+
+# Every other dependency lightly optimized in debug builds; Pikos's own crates stay unoptimized,
+# so they still step through cleanly. Debug sqlx, tokio and serde made each test several times
+# slower: the workspace's tests went from 139 to 80 CPU-seconds on an M2, the same as at
+# opt-level 2, for one rebuild of the dependencies.
+[profile.dev.package."*"]
+opt-level = 1
