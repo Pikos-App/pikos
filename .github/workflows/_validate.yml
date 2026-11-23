@@ -468,6 +468,9 @@ jobs:
           workspaces: |
             . -> target
             apps/desktop/src-tauri -> target
+          # Every shard builds the same thing, so one saves it. All six saving cost each about
+          # two minutes whenever the lockfile changed.
+          save-if: ${{ matrix.shard == 1 }}
 
       # Built here so the Playwright web-server timeout never covers a cold compile.
       - name: Build the e2e bridge
