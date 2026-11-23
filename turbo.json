@@ -16,17 +16,29 @@
       "cache": false,
       "persistent": true
     },
+    // Holds no script. Each package's node hashes its own files, and chaining it through `^`
+    // makes a task's hash include every workspace package it imports, without making it wait
+    // for their tasks: `^test` did both, and so ran the test suites one package at a time.
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    // A cached pass is replayed only when nothing the check reads has changed, so these take
+    // every file in the package, as the scripts do: desktop's typecheck and lint also cover
+    // e2e/, scripts/ and bridge/, and one of its unit tests reads src-tauri/capabilities. Docs
+    // and the Rust source are left out because no TypeScript check reads them.
     "typecheck": {
-      "dependsOn": ["^typecheck"],
-      "inputs": ["src/**", "seeds/**", "tsconfig*.json", "vitest.config.ts", "package.json"]
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     },
     "lint": {
-      "inputs": ["src/**", "seeds/**", "package.json"]
+      // Type-aware rules read the imported packages' types.
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     },
     "test": {
-      "dependsOn": ["^test"],
+      "dependsOn": ["^transit"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "seeds/**", "vitest.config.ts", "tsconfig*.json", "package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/src/**"]
     }
   }
 }
