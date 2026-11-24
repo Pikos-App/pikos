@@ -465,10 +465,20 @@ async fn a_fetch_that_brings_changes_marks_when_this_device_last_received() {
         .collect();
 
     super::apply_fetched(&phone, &[]).await.unwrap();
-    assert_eq!(crate::replica::summary(&phone).await.unwrap().last_received_at, None);
+    assert_eq!(
+        crate::replica::summary(&phone)
+            .await
+            .unwrap()
+            .last_received_at,
+        None
+    );
 
     super::apply_fetched(&phone, &records).await.unwrap();
-    assert!(crate::replica::summary(&phone).await.unwrap().last_received_at.is_some());
+    assert!(crate::replica::summary(&phone)
+        .await
+        .unwrap()
+        .last_received_at
+        .is_some());
 }
 
 #[tokio::test]

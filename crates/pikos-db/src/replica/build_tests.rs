@@ -74,11 +74,18 @@ async fn a_send_marks_when_this_device_last_sent() {
         .await
         .unwrap();
     let built = build(&pool, &[page("p1")]).await.unwrap();
-    assert_eq!(crate::replica::summary(&pool).await.unwrap().last_sent_at, None);
+    assert_eq!(
+        crate::replica::summary(&pool).await.unwrap().last_sent_at,
+        None
+    );
 
     sent(&pool, &[(page("p1"), built[0].clock)]).await.unwrap();
 
-    assert!(crate::replica::summary(&pool).await.unwrap().last_sent_at.is_some());
+    assert!(crate::replica::summary(&pool)
+        .await
+        .unwrap()
+        .last_sent_at
+        .is_some());
 }
 
 #[tokio::test]
