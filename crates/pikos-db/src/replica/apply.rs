@@ -135,7 +135,16 @@ pub async fn apply_fetched(
         }
     }
 
-    apply_with_unnamed(pool, &named, &unnamed).await
+    let applied = apply_with_unnamed(pool, &named, &unnamed).await?;
+
+    if !records.is_empty() {
+        sqlx::query("UPDATE replica_meta SET last_received_at = ? WHERE id = 1")
+            .bind(crate::pool::now_iso())
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(applied)
 }
 
 async fn apply_with_unnamed(

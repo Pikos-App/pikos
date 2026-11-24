@@ -377,6 +377,8 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
                 "pending": summary.pending,
                 "needs_update": summary.needs_update,
                 "last_fetch_at": summary.last_fetch_at,
+                "last_sent_at": summary.last_sent_at,
+                "last_received_at": summary.last_received_at,
             }))
         }
     }

@@ -68,6 +68,20 @@ async fn a_sent_record_leaves_the_queue() {
 }
 
 #[tokio::test]
+async fn a_send_marks_when_this_device_last_sent() {
+    let pool = started().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    let built = build(&pool, &[page("p1")]).await.unwrap();
+    assert_eq!(crate::replica::summary(&pool).await.unwrap().last_sent_at, None);
+
+    sent(&pool, &[(page("p1"), built[0].clock)]).await.unwrap();
+
+    assert!(crate::replica::summary(&pool).await.unwrap().last_sent_at.is_some());
+}
+
+#[tokio::test]
 async fn a_calendar_page_is_dropped_from_the_queue_unbuilt() {
     let pool = started().await;
     insert_test_page(&pool, TestPage::new("event", "Dentist"))

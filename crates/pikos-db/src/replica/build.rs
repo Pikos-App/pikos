@@ -335,6 +335,14 @@ pub async fn sent(pool: &SqlitePool, records: &[(RecordName, Hlc)]) -> AppResult
             }
         }
     }
+
+    if !records.is_empty() {
+        sqlx::query("UPDATE replica_meta SET last_sent_at = ? WHERE id = 1")
+            .bind(crate::pool::now_iso())
+            .execute(pool)
+            .await?;
+    }
+
     Ok(still_pending)
 }
 

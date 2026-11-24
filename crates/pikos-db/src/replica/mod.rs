@@ -165,7 +165,8 @@ pub async fn forget(pool: &SqlitePool) -> AppResult<()> {
         sqlx::query(
             "UPDATE replica_meta
              SET started = 0, paused = 0, device_id = NULL, base_clock = NULL,
-                 engine_state = NULL, last_fetch_at = NULL, epoch_seen = NULL, held_for = NULL
+                 engine_state = NULL, last_fetch_at = NULL, epoch_seen = NULL, held_for = NULL,
+                 last_sent_at = NULL, last_received_at = NULL
              WHERE id = 1",
         )
         .execute(&mut *tx)
@@ -195,13 +196,20 @@ pub struct SyncSummary {
     pub needs_update: bool,
     /// When the transport last finished fetching, in `now_iso` form.
     pub last_fetch_at: Option<String>,
+    /// When the transport last stored a change from this device.
+    pub last_sent_at: Option<String>,
+    /// When a change from another device last arrived.
+    pub last_received_at: Option<String>,
 }
 
 pub async fn summary(pool: &SqlitePool) -> AppResult<SyncSummary> {
-    let (started, paused, last_fetch_at): (bool, bool, Option<String>) =
-        sqlx::query_as("SELECT started, paused, last_fetch_at FROM replica_meta WHERE id = 1")
-            .fetch_one(pool)
-            .await?;
+    type Meta = (bool, bool, Option<String>, Option<String>, Option<String>);
+    let (started, paused, last_fetch_at, last_sent_at, last_received_at): Meta = sqlx::query_as(
+        "SELECT started, paused, last_fetch_at, last_sent_at, last_received_at
+         FROM replica_meta WHERE id = 1",
+    )
+    .fetch_one(pool)
+    .await?;
     let (pending, held, newer): (i64, i64, i64) = sqlx::query_as(
         "SELECT (SELECT COUNT(*) FROM replica_ops),
                 (SELECT COUNT(*) FROM replica_pen),
@@ -216,6 +224,8 @@ pub async fn summary(pool: &SqlitePool) -> AppResult<SyncSummary> {
         held,
         needs_update: newer > 0,
         last_fetch_at,
+        last_sent_at,
+        last_received_at,
     })
 }
 
@@ -289,7 +299,8 @@ pub async fn claim_device(pool: &SqlitePool, outside: Option<&str>) -> AppResult
 
     let fresh = crate::fresh::id();
     sqlx::query(
-        "UPDATE replica_meta SET device_id = ?, engine_state = NULL, last_fetch_at = NULL
+        "UPDATE replica_meta SET device_id = ?, engine_state = NULL, last_fetch_at = NULL,
+             last_sent_at = NULL, last_received_at = NULL
          WHERE id = 1",
     )
     .bind(&fresh)

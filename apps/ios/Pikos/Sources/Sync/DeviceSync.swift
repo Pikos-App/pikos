@@ -29,6 +29,7 @@ final class DeviceSync {
 
     private static let nothingQueued = SyncStatusLine.Queue(toSend: 0, needsUpdate: false, lastFetch: nil)
     private var status: SyncStatus?
+    private var lastFailure: SyncStatusLine.Failure?
     private var batchesApplied = 0
     private let workspace: () -> Workspace?
     private let onApplied: @MainActor () async -> Void
@@ -153,7 +154,10 @@ final class DeviceSync {
 
     private func show(_ status: SyncStatus?) {
         self.status = status
-        if case .failed(let message) = status { lastError = message }
+        if case .failed(let message) = status {
+            lastError = message
+            lastFailure = .init(message: message, at: Date())
+        }
         Task { await refreshLine() }
     }
 
@@ -163,7 +167,10 @@ final class DeviceSync {
             SyncStatusLine.Queue(
                 toSend: Int($0.pending),
                 needsUpdate: $0.needsUpdate,
-                lastFetch: $0.lastFetchAt.flatMap(Self.parse))
+                lastFetch: $0.lastFetchAt.flatMap(Self.parse),
+                lastSent: $0.lastSentAt.flatMap(Self.parse),
+                lastReceived: $0.lastReceivedAt.flatMap(Self.parse),
+                lastFailure: lastFailure)
         }
         line = SyncStatusLine(status: status, queue: queue ?? Self.nothingQueued)
         if let summary {

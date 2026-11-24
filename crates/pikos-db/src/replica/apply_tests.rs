@@ -453,6 +453,25 @@ async fn a_record_from_a_newer_pikos_waits_rather_than_being_dropped() {
 }
 
 #[tokio::test]
+async fn a_fetch_that_brings_changes_marks_when_this_device_last_received() {
+    let (mac, phone) = (device().await, device().await);
+    create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    let names = pending(&mac, 100).await.unwrap();
+    let records: Vec<_> = build(&mac, &names)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|b| (b.name.to_string(), b.fields))
+        .collect();
+
+    super::apply_fetched(&phone, &[]).await.unwrap();
+    assert_eq!(crate::replica::summary(&phone).await.unwrap().last_received_at, None);
+
+    super::apply_fetched(&phone, &records).await.unwrap();
+    assert!(crate::replica::summary(&phone).await.unwrap().last_received_at.is_some());
+}
+
+#[tokio::test]
 async fn a_record_of_a_type_from_a_newer_pikos_waits_and_the_rest_of_its_batch_still_applies() {
     let (mac, phone) = (device().await, device().await);
     let kept = create_page_impl(&mac, new_page("Kept")).await.unwrap();

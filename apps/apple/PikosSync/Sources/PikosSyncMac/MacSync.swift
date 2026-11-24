@@ -19,6 +19,7 @@
         private var starter: SyncStarter<CloudKitSync>?
         private var timers: [Task<Void, Never>] = []
         private var focusObserver: NSObjectProtocol?
+        private var lastFailure: SyncStatusLine.Failure?
 
         /// Starts and stops run in the order Rust called them, so turning sync off and straight back
         /// on can't end with it off.
@@ -103,13 +104,19 @@
         private func report(_ status: SyncStatus) async {
             guard starter != nil else { return }
 
+            if case .failed(let message) = status {
+                lastFailure = .init(message: message, at: Date())
+            }
             let summary = try? await store.summary()
             let line = SyncStatusLine(
                 status: status,
                 queue: .init(
                     toSend: summary?.pending ?? 0,
                     needsUpdate: summary?.needsUpdate ?? false,
-                    lastFetch: summary?.lastFetch))
+                    lastFetch: summary?.lastFetch,
+                    lastSent: summary?.lastSent,
+                    lastReceived: summary?.lastReceived,
+                    lastFailure: lastFailure))
             try? await store.report(line)
         }
     }

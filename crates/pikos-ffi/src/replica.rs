@@ -91,6 +91,8 @@ pub struct SyncSummary {
     /// A newer Pikos wrote some of what arrived: the status line says to update.
     pub needs_update: bool,
     pub last_fetch_at: Option<String>,
+    pub last_sent_at: Option<String>,
+    pub last_received_at: Option<String>,
 }
 
 /// What turning sync on does when the account already holds a workspace.
@@ -323,6 +325,8 @@ impl Workspace {
             held: summary.held,
             needs_update: summary.needs_update,
             last_fetch_at: summary.last_fetch_at,
+            last_sent_at: summary.last_sent_at,
+            last_received_at: summary.last_received_at,
         })
     }
 

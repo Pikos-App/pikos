@@ -75,13 +75,17 @@
         }
 
         /// What waits on this device, for the status line.
-        func summary() async throws -> (pending: Int, needsUpdate: Bool, lastFetch: Date?) {
+        func summary() async throws -> (
+            pending: Int, needsUpdate: Bool, lastFetch: Date?, lastSent: Date?, lastReceived: Date?
+        ) {
             let summary: WireSummary = try call("summary", [String: Int]())
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             return (
                 summary.pending, summary.needsUpdate,
-                summary.lastFetchAt.flatMap(formatter.date(from:))
+                summary.lastFetchAt.flatMap(formatter.date(from:)),
+                summary.lastSentAt.flatMap(formatter.date(from:)),
+                summary.lastReceivedAt.flatMap(formatter.date(from:))
             )
         }
 
@@ -231,11 +235,15 @@
         let pending: Int
         let needsUpdate: Bool
         let lastFetchAt: String?
+        let lastSentAt: String?
+        let lastReceivedAt: String?
 
         enum CodingKeys: String, CodingKey {
             case pending
             case needsUpdate = "needs_update"
             case lastFetchAt = "last_fetch_at"
+            case lastSentAt = "last_sent_at"
+            case lastReceivedAt = "last_received_at"
         }
     }
 

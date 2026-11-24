@@ -14,16 +14,38 @@ public struct SyncStatusLine: Equatable, Sendable {
     public var text: String
     public var action: SyncAction
 
-    /// What waits on this device, read from the workspace when the status changes.
+    /// What waits on this device and when it last moved, read from the workspace when the status
+    /// changes. Last sent and last received are what show a stuck device from either side: one that
+    /// stopped sending reads as long since sent on itself and long since received on the other.
     public struct Queue: Equatable, Sendable {
         public var toSend: Int
         public var needsUpdate: Bool
         public var lastFetch: Date?
+        public var lastSent: Date?
+        public var lastReceived: Date?
+        /// Kept after sync recovers, so a failure that came and went still shows.
+        public var lastFailure: Failure?
 
-        public init(toSend: Int, needsUpdate: Bool, lastFetch: Date?) {
+        public init(
+            toSend: Int, needsUpdate: Bool, lastFetch: Date?, lastSent: Date? = nil,
+            lastReceived: Date? = nil, lastFailure: Failure? = nil
+        ) {
             self.toSend = toSend
             self.needsUpdate = needsUpdate
             self.lastFetch = lastFetch
+            self.lastSent = lastSent
+            self.lastReceived = lastReceived
+            self.lastFailure = lastFailure
+        }
+    }
+
+    public struct Failure: Equatable, Sendable {
+        public var message: String
+        public var at: Date
+
+        public init(message: String, at: Date) {
+            self.message = message
+            self.at = at
         }
     }
 
@@ -100,8 +122,19 @@ public struct SyncStatusLine: Equatable, Sendable {
         if queue.needsUpdate {
             parts.append("some changes need a newer Pikos")
         }
+        if let lastSent = queue.lastSent {
+            parts.append("sent \(Self.ago(lastSent, now: now))")
+        }
+        if let lastReceived = queue.lastReceived {
+            parts.append("received \(Self.ago(lastReceived, now: now))")
+        }
         if let lastFetch = queue.lastFetch {
             parts.append("checked \(Self.ago(lastFetch, now: now))")
+        }
+        if let failure = queue.lastFailure {
+            // Apple's messages end in a full stop, and the line is joined with its own.
+            let message = failure.message.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            parts.append("last failed \(Self.ago(failure.at, now: now)): \(message)")
         }
 
         return parts.joined(separator: " · ")

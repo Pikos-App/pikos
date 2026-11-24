@@ -35,6 +35,31 @@ final class SyncStatusLineTests: XCTestCase {
             SyncStatusLine(status: .upToDate, queue: recent, now: now).text, "Up to date · checked just now")
     }
 
+    func testASettledDeviceSaysWhenItLastSentAndReceived() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let queue = SyncStatusLine.Queue(
+            toSend: 0, needsUpdate: false, lastFetch: now, lastSent: now.addingTimeInterval(-10),
+            lastReceived: now.addingTimeInterval(-20))
+
+        let line = SyncStatusLine(status: .upToDate, queue: queue, now: now)
+
+        XCTAssertEqual(line.text, "Up to date · sent just now · received just now · checked just now")
+    }
+
+    func testAFailureThatPassedStaysOnTheLine() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let queue = SyncStatusLine.Queue(
+            toSend: 2, needsUpdate: false, lastFetch: nil,
+            lastFailure: .init(message: "The network connection was lost.", at: now))
+
+        let line = SyncStatusLine(status: .upToDate, queue: queue, now: now)
+
+        XCTAssertEqual(
+            line.text,
+            "2 changes waiting to send · last failed just now: The network connection was lost. \(SyncStatusLine.reassurance)"
+        )
+    }
+
     func testChangesWaitingToSendAreCountedInsteadOfUpToDate() {
         let one = SyncStatusLine(
             status: .upToDate, queue: .init(toSend: 1, needsUpdate: false, lastFetch: nil))

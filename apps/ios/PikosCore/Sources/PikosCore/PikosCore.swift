@@ -7741,6 +7741,8 @@ public struct SyncSummary: Equatable, Hashable {
      */
     public var needsUpdate: Bool
     public var lastFetchAt: String?
+    public var lastSentAt: String?
+    public var lastReceivedAt: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7753,13 +7755,15 @@ public struct SyncSummary: Equatable, Hashable {
          */held: Int64, 
         /**
          * A newer Pikos wrote some of what arrived: the status line says to update.
-         */needsUpdate: Bool, lastFetchAt: String?) {
+         */needsUpdate: Bool, lastFetchAt: String?, lastSentAt: String?, lastReceivedAt: String?) {
         self.started = started
         self.paused = paused
         self.pending = pending
         self.held = held
         self.needsUpdate = needsUpdate
         self.lastFetchAt = lastFetchAt
+        self.lastSentAt = lastSentAt
+        self.lastReceivedAt = lastReceivedAt
     }
 
     
@@ -7783,7 +7787,9 @@ public struct FfiConverterTypeSyncSummary: FfiConverterRustBuffer {
                 pending: FfiConverterInt64.read(from: &buf), 
                 held: FfiConverterInt64.read(from: &buf), 
                 needsUpdate: FfiConverterBool.read(from: &buf), 
-                lastFetchAt: FfiConverterOptionString.read(from: &buf)
+                lastFetchAt: FfiConverterOptionString.read(from: &buf), 
+                lastSentAt: FfiConverterOptionString.read(from: &buf), 
+                lastReceivedAt: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -7794,6 +7800,8 @@ public struct FfiConverterTypeSyncSummary: FfiConverterRustBuffer {
         FfiConverterInt64.write(value.held, into: &buf)
         FfiConverterBool.write(value.needsUpdate, into: &buf)
         FfiConverterOptionString.write(value.lastFetchAt, into: &buf)
+        FfiConverterOptionString.write(value.lastSentAt, into: &buf)
+        FfiConverterOptionString.write(value.lastReceivedAt, into: &buf)
     }
 }
 
