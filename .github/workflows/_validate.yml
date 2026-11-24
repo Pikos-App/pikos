@@ -428,16 +428,25 @@ jobs:
   # links the app crate, so the container also needs Rust and the Tauri build
   # libraries the `rust` job installs. Most of the suite is here, so the shards are.
   e2e-bridge:
-    name: E2E Tests, real writer (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    name: E2E Tests, real writer (${{ matrix.lane }})
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
-    # Six, because Playwright splits by test count rather than time, so the shard that draws
-    # the slow tests sets the job's length. At four, the shards ran from 3.5 to 9 minutes.
+    # Six shards, because Playwright splits by test count rather than time, so the shard that
+    # draws the slow tests sets the job's length. At four, the shards ran from 3.5 to 9 minutes.
+    # The four 20,000-page tests take over a minute each, so they get a runner of their own: in
+    # with the rest they all drew one shard, which then ran twice as long as the others.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        include:
+          - { lane: shard 1/6, args: --project bridge --shard=1/6 }
+          - { lane: shard 2/6, args: --project bridge --shard=2/6 }
+          - { lane: shard 3/6, args: --project bridge --shard=3/6 }
+          - { lane: shard 4/6, args: --project bridge --shard=4/6 }
+          - { lane: shard 5/6, args: --project bridge --shard=5/6 }
+          - { lane: shard 6/6, args: --project bridge --shard=6/6 }
+          - { lane: large workspace, args: --project bridge-large }
     steps:
       - uses: actions/checkout@v5
 
@@ -468,9 +477,9 @@ jobs:
           workspaces: |
             . -> target
             apps/desktop/src-tauri -> target
-          # Every shard builds the same thing, so one saves it. All six saving cost each about
+          # Every lane builds the same thing, so one saves it. All of them saving cost each about
           # two minutes whenever the lockfile changed.
-          save-if: ${{ matrix.shard == 1 }}
+          save-if: ${{ strategy.job-index == 0 }}
 
       # Built here so the Playwright web-server timeout never covers a cold compile.
       - name: Build the e2e bridge
@@ -488,14 +497,14 @@ jobs:
         run: ln -sf /usr/share/zoneinfo/America/New_York /etc/localtime
 
       - name: E2E tests against the real writer (Playwright)
-        run: pnpm --filter @pikos/desktop test:e2e:bridge --shard=${{ matrix.shard }}/${{ strategy.job-total }} --max-failures=1
+        run: pnpm --filter @pikos/desktop test:e2e:bridge ${{ matrix.args }} --max-failures=1
 
       # Merged with the mock lane's shards by `e2e-report`.
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: blob-report-bridge-${{ matrix.shard }}
+          name: blob-report-bridge-${{ strategy.job-index }}
           path: apps/desktop/blob-report/
           retention-days: 7
 

@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 import type { StorageLane } from "./e2e/fixtures";
 import { largeTemplatePath } from "./e2e/largeWorkspace";
-import { MOCK_ONLY, OWN_CONFIG_TAGS } from "./e2e/tags";
+import { MOCK_ONLY, OWN_CONFIG_TAGS, REAL_WRITER_ONLY } from "./e2e/tags";
 
 // The same spec bodies as the mock lane, against the real Rust writer and a real
 // SQLite file per test. Every test runs here unless it is tagged @mock-only.
@@ -21,10 +21,21 @@ export default defineConfig<{ storage: StorageLane; tightCache: boolean }>({
   },
   forbidOnly: !!process.env["CI"],
   fullyParallel: true,
+  // The 20,000-page tests are a project of their own so CI can give them a runner of their own:
+  // each takes over a minute, and sharded with the rest they all landed on one shard, which then
+  // ran twice as long as the others. Run without --project, both run.
   projects: [
     {
-      grepInvert: new RegExp(`${MOCK_ONLY.source}|${OWN_CONFIG_TAGS.source}`),
+      grepInvert: new RegExp(
+        `${MOCK_ONLY.source}|${OWN_CONFIG_TAGS.source}|${REAL_WRITER_ONLY.source}`
+      ),
       name: "bridge",
+      use: { ...devices["Desktop Safari"], storage: "bridge", tightCache: true, timezoneId: ZONE },
+    },
+    {
+      grep: REAL_WRITER_ONLY,
+      grepInvert: new RegExp(`${MOCK_ONLY.source}|${OWN_CONFIG_TAGS.source}`),
+      name: "bridge-large",
       use: { ...devices["Desktop Safari"], storage: "bridge", tightCache: true, timezoneId: ZONE },
     },
   ],
