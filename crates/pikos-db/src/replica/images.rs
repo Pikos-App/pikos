@@ -1,10 +1,14 @@
 //! Images: the files page bodies show, synced as records that carry the file beside their fields.
 //!
 //! An image is written once under a name Pikos made and never changed, so its record is create-only
-//! and has no field clocks. It's queued the first time a body that shows it is built, and a row in
-//! `replica_clocks` marks it as queued or already in the zone, so no device sends it twice. A
-//! device that receives an image has it in the zone by definition and never sends it back.
+//! and has no field clocks. A device that holds the file queues it the first time a body that shows
+//! it is built or arrives, and a row in `replica_clocks` marks it as queued or already in the zone,
+//! so no device sends it twice. Arrival counts because the body's sender may never have had the
+//! file, a copy of the page made on another device say, and after a zone move the device holding it
+//! may be the only one left that can send it. A device that receives an image has it in the zone by
+//! definition and never sends it back.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use pikos_replica::codec::{self, FieldMap, Record};
@@ -66,6 +70,27 @@ pub(crate) async fn queue_shown(
             .bind(clock.to_string())
             .execute(&mut *conn)
             .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Queues the images shown by the bodies of `pages`, as they are after an apply.
+pub(crate) async fn queue_arrived(
+    conn: &mut SqliteConnection,
+    pages: &BTreeSet<String>,
+    clock: Hlc,
+) -> AppResult<()> {
+    let body = crate::page_chunks::body_sql("pages.id");
+    // sql-ok: body_sql is built from a compile-time constant
+    let read_body = format!("SELECT {body} FROM pages WHERE id = ?");
+    for page in pages {
+        let content: Option<String> = sqlx::query_scalar(&read_body)
+            .bind(page)
+            .fetch_optional(&mut *conn)
+            .await?;
+        if let Some(content) = content {
+            queue_shown(conn, &content, clock).await?;
         }
     }
     Ok(())

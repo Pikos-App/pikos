@@ -254,6 +254,7 @@ async fn apply_in(
     // Rederiving captures edits, which must be stamped later than the records that caused them.
     observe(tx.conn(), newest).await?;
     touched.rederive(tx).await?;
+    super::images::queue_arrived(tx.conn(), &touched.bodies, newest).await?;
     for name in &applied.resent {
         let name: RecordName = name
             .parse()

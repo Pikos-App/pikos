@@ -1078,6 +1078,11 @@ async fn devices_that_start_alone_with_skewed_clocks_settle_in_one_zone_through_
 }
 
 #[tokio::test]
+async fn an_image_whose_page_was_copied_by_a_device_without_it_reaches_the_zone_it_moves_to() {
+    run_cloudkit(207640746, 3, 160).await;
+}
+
+#[tokio::test]
 async fn devices_editing_at_random_through_a_shared_folder_end_up_the_same() {
     for seed in seeds() {
         run(Store::Folder(Folder::default()), seed, 3, 120).await;
