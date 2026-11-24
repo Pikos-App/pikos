@@ -14,9 +14,7 @@ ignore = [
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
 
-    # quinn-proto, rkyv, rsa: in the lockfile, compiled into no shipped target. Verified
-    # 2026-10-01.
-    "RUSTSEC-2026-0185",
+    # rkyv, rsa: in the lockfile, compiled into no shipped target. Verified 2026-10-01.
     "RUSTSEC-2026-0235",
     "RUSTSEC-2023-0071",
 
