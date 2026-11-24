@@ -107,7 +107,7 @@ pub async fn get_folder_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Opt
 }
 
 pub async fn create_folder_impl(pool: &sqlx::SqlitePool, data: NewFolder) -> AppResult<Folder> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let now = now_iso();
     let sort_order: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM folders")

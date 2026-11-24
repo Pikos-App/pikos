@@ -751,7 +751,7 @@ pub async fn log_reminder_fired(
     schedule_id: &str,
     fired_at: &str,
 ) -> Result<String, sqlx::Error> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
          VALUES (?, ?, ?, 'reminder', ?)",
@@ -821,7 +821,7 @@ pub async fn log_reminder_not_shown(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
          VALUES (?, ?, ?, ?, ?)",
     )
-    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(crate::fresh::id())
     .bind(page_id)
     .bind(schedule_id)
     .bind(reason.log_type())
@@ -909,7 +909,7 @@ pub(crate) async fn clear_reminder_log_tx(
 /// for the same reason [`log_reminder_fired`] does — the summary names no page,
 /// so a click on it opens the calendar rather than a page.
 pub async fn log_daily_summary(pool: &SqlitePool, fired_at: &str) -> Result<String, sqlx::Error> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
          VALUES (?, NULL, NULL, 'overdue', ?)",

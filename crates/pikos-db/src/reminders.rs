@@ -76,7 +76,7 @@ pub async fn create_page_reminder(
             Some(row) => PageReminder::from(row),
             None => {
                 let reminder = PageReminder {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: crate::fresh::id(),
                     page_id: page_id.to_string(),
                     minutes_before,
                     created_at: now_iso(),

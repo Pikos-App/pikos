@@ -537,7 +537,7 @@ async fn upsert_page_tags_tx(
     .await?;
 
     for tag in &normalized {
-        let tag_id = uuid::Uuid::new_v4().to_string();
+        let tag_id = crate::fresh::id();
         sqlx::query("INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)")
             .bind(&tag_id)
             .bind(tag)
@@ -660,10 +660,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         }
     }
 
-    let id = data
-        .id
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let id = data.id.clone().unwrap_or_else(crate::fresh::id);
     let now = now_iso();
     let created_at = data.created_at.as_deref().unwrap_or(&now);
     let updated_at = data.updated_at.as_deref().unwrap_or(&now);
@@ -1929,7 +1926,7 @@ async fn insert_head_clone_tx(
              (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
              VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)",
         )
-        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(crate::fresh::id())
         .bind(spec.clone_id)
         .bind(start)
         .bind(spec.scheduled_end)
@@ -1952,7 +1949,7 @@ async fn complete_recurring_page_once(
     // date-compares `completed_at.slice(0,10)` against the local day, so a UTC
     // stamp would hide a just-completed clone whenever UTC's date ≠ the local date.
     let completed = now_local_iso();
-    let clone_id = uuid::Uuid::new_v4().to_string();
+    let clone_id = crate::fresh::id();
 
     let mut tx = pool.begin().await?;
 
@@ -2442,8 +2439,8 @@ async fn reschedule_virtual_occurrence_once(
     data: &RescheduleVirtualInput,
 ) -> AppResult<RescheduleVirtualResult> {
     let now = now_iso();
-    let clone_id = uuid::Uuid::new_v4().to_string();
-    let schedule_id = uuid::Uuid::new_v4().to_string();
+    let clone_id = crate::fresh::id();
+    let schedule_id = crate::fresh::id();
 
     let mut tx = pool.begin().await?;
 

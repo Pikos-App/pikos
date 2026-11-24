@@ -74,7 +74,7 @@ pub async fn insert_sync_account_impl(
     display_name: &str,
     auth_kind: &str,
 ) -> AppResult<SyncAccount> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let now = now_iso();
     sqlx::query(
         "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
@@ -198,7 +198,7 @@ pub async fn upsert_sync_calendar_impl(
     display_name: &str,
     color: Option<&str>,
 ) -> AppResult<SyncCalendar> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let now = now_iso();
     sqlx::query(
         "INSERT INTO sync_calendar
@@ -620,7 +620,7 @@ async fn create_external_folder(
     color: Option<&str>,
     now: &str,
 ) -> AppResult<String> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let sort_order: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM folders")
             .fetch_one(&mut **tx)

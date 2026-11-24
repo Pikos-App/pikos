@@ -32,7 +32,7 @@ const MAX_MIGRATION_BACKUPS: usize = 3;
 /// UTC, millisecond precision, trailing Z — the canonical timestamp format for
 /// created_at / updated_at across the workspace.
 pub fn now_iso() -> String {
-    chrono::Utc::now()
+    crate::fresh::now()
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
         .to_string()
 }
@@ -44,13 +44,13 @@ pub fn now_iso() -> String {
 /// `completed_at.slice(0,10) === localToday()` comparison fail whenever the UTC
 /// date differs from the local date (i.e. for much of every day off-UTC).
 pub fn now_local_iso() -> String {
-    WallClock::timed(chrono::Local::now().naive_local()).format()
+    WallClock::timed(local_now()).format()
 }
 
 /// Today's local date, `YYYY-MM-DD` — the day key occurrence dates are compared
 /// against. Local for the same reason as [`now_local_iso`].
 pub fn today_local() -> String {
-    WallClock::all_day(chrono::Local::now().date_naive()).format()
+    WallClock::all_day(local_now().date()).format()
 }
 
 /// Today's local date and the local moment, from a single reading of the clock.
@@ -65,8 +65,14 @@ pub fn today_local() -> String {
 /// The date half is formatted exactly as [`today_local`] formats it, so the
 /// list's membership query and its grouping cannot land on different days.
 pub fn now_local_parts() -> (String, chrono::NaiveDateTime) {
-    let now = chrono::Local::now().naive_local();
+    let now = local_now();
     (WallClock::all_day(now.date()).format(), now)
+}
+
+fn local_now() -> chrono::NaiveDateTime {
+    crate::fresh::now()
+        .with_timezone(&chrono::Local)
+        .naive_local()
 }
 
 /// The device's IANA zone, resolved once per process — the lookup reads OS config

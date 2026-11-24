@@ -662,6 +662,7 @@ async fn run(mut store: Store, seed: u64, devices: usize, steps: usize) {
     eprintln!("seed {seed}");
     let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
     let world: &'static AtomicU64 = Box::leak(Box::new(AtomicU64::new(1_800_000_000_000)));
+    let _replay = crate::fresh::replay(seed, world);
     let mut fleet = Vec::new();
     for _ in 0..devices {
         let pool = test_pool_on(Clock::Manual(world)).await;
@@ -936,10 +937,11 @@ impl Phone {
     }
 }
 
-async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
+async fn run_cloudkit(seed: u64, devices: usize, steps: usize) -> BTreeMap<String, Fields> {
     eprintln!("seed {seed}");
     let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
     let world: &'static AtomicU64 = Box::leak(Box::new(AtomicU64::new(1_800_000_000_000)));
+    let _replay = crate::fresh::replay(seed, world);
     let mut cloud = CloudKit::default();
     let mut fleet = Vec::new();
     for _ in 0..devices {
@@ -1044,6 +1046,8 @@ async fn run_cloudkit(seed: u64, devices: usize, steps: usize) {
             "seed {seed}: device {i}'s schedule caches: {stale:#?}"
         );
     }
+
+    first
 }
 
 fn seeds() -> Vec<u64> {
@@ -1080,6 +1084,14 @@ async fn devices_that_start_alone_with_skewed_clocks_settle_in_one_zone_through_
 #[tokio::test]
 async fn an_image_whose_page_was_copied_by_a_device_without_it_reaches_the_zone_it_moves_to() {
     run_cloudkit(207640746, 3, 160).await;
+}
+
+#[tokio::test]
+async fn a_seed_replays_the_same_run_however_many_ran_before_it() {
+    let once = run_cloudkit(207640746, 3, 60).await;
+    let again = run_cloudkit(207640746, 3, 60).await;
+
+    assert_eq!(once, again);
 }
 
 #[tokio::test]

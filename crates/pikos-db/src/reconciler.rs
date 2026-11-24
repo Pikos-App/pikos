@@ -418,7 +418,7 @@ async fn write_schedule(
     let base_end = InclusiveEnd::from_provider(&ev.schedule.end);
 
     if let (Some(rec), Some(rrule)) = (&ev.recurrence, &rrule) {
-        let rule_id = uuid::Uuid::new_v4().to_string();
+        let rule_id = crate::fresh::id();
         let mut exdates = carried.exdates;
         for d in &rec.exdates {
             if !exdates.contains(d) {
@@ -1198,7 +1198,7 @@ async fn insert_synced_page(
     title: &str,
     now: &str,
 ) -> AppResult<String> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let sort_order: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id = ?",
     )
@@ -1231,7 +1231,7 @@ async fn insert_page_sync(
     mirror_attendees: &Option<String>,
     now: &str,
 ) -> AppResult<()> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     sqlx::query(
         "INSERT INTO page_sync
          (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, etag,
@@ -1375,7 +1375,7 @@ async fn insert_schedule_row(
     original_date: Option<&str>,
     now: &str,
 ) -> AppResult<()> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     sqlx::query(
         "INSERT INTO page_schedules
          (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)

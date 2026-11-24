@@ -61,7 +61,7 @@ pub async fn create_focus_session(
         return Err(AppError::NotFound(format!("Page not found: {page_id}")));
     }
 
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     sqlx::query(
         "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
          VALUES (?, ?, ?, ?, ?)",

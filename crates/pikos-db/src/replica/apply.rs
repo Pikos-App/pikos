@@ -1427,14 +1427,11 @@ async fn write_row(
         Entity::Schedule | Entity::Reminder | Entity::FocusSession => {
             (vec!["id"], vec![key.to_owned()])
         }
-        Entity::Tag => (
-            vec!["id", "name"],
-            vec![uuid::Uuid::new_v4().to_string(), key.to_owned()],
-        ),
+        Entity::Tag => (vec!["id", "name"], vec![crate::fresh::id(), key.to_owned()]),
         Entity::Rule => {
             let id = local_rule(conn, key)
                 .await?
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                .unwrap_or_else(crate::fresh::id);
             (vec!["id", "page_id"], vec![id, key.to_owned()])
         }
         Entity::Override => {
@@ -1452,7 +1449,7 @@ async fn write_row(
             (
                 vec!["id", "page_id", "rule_id", "original_date"],
                 vec![
-                    id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                    id.unwrap_or_else(crate::fresh::id),
                     page.to_owned(),
                     rule,
                     date.to_owned(),
@@ -1469,7 +1466,7 @@ async fn write_row(
         Entity::PageTag => {
             let (page, tag) = split_key(key);
             sqlx::query("INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)")
-                .bind(uuid::Uuid::new_v4().to_string())
+                .bind(crate::fresh::id())
                 .bind(tag)
                 .execute(&mut *conn)
                 .await?;

@@ -64,7 +64,7 @@ pub async fn start(pool: &SqlitePool) -> AppResult<ReplicaMeta> {
              SET started = 1, paused = 0, device_id = ?, hlc = pikos_hlc_next(hlc, pikos_now_ms())
              WHERE id = 1 AND started = 0",
         )
-        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(crate::fresh::id())
         .execute(&mut *tx)
         .await?
         .rows_affected()
@@ -110,7 +110,7 @@ async fn schedule_rows_for_cached_times(tx: &mut Transaction<'_, Sqlite>) -> App
              (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
              VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
         )
-        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(crate::fresh::id())
         .bind(&page)
         .bind(&start)
         .bind(&end)
@@ -287,7 +287,7 @@ pub async fn claim_device(pool: &SqlitePool, outside: Option<&str>) -> AppResult
         return Ok(Some(inside));
     }
 
-    let fresh = uuid::Uuid::new_v4().to_string();
+    let fresh = crate::fresh::id();
     sqlx::query(
         "UPDATE replica_meta SET device_id = ?, engine_state = NULL, last_fetch_at = NULL
          WHERE id = 1",

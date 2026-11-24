@@ -316,7 +316,7 @@ pub async fn create_page_schedule_impl(
     data: NewPageSchedule,
 ) -> AppResult<PageSchedule> {
     crate::sync::ensure_page_schedule_unlocked(pool, &data.page_id).await?;
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let now = now_iso();
 
     // Insert + denorm refresh in one tx so a crash can't leave the row
@@ -502,7 +502,7 @@ pub async fn create_recurrence_rule_impl(
     data: NewRecurrenceRule,
 ) -> AppResult<PageRecurrenceRule> {
     crate::sync::ensure_page_schedule_unlocked(pool, &data.page_id).await?;
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = crate::fresh::id();
     let now = now_iso();
     let exdates_json =
         serde_json::to_string(&data.rrule_exdates).unwrap_or_else(|_| "[]".to_string());
