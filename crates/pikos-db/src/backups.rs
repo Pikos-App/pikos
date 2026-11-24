@@ -299,7 +299,7 @@ mod tests {
         crate::insert_test_folder(&pool, "f1", "Work")
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         (dir, path_str)
     }
 
@@ -320,7 +320,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         n
     }
 
@@ -415,7 +415,7 @@ mod tests {
         crate::insert_test_folder(&pool, "f2", "Later")
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
 
         let displaced = restore_backup(&path, backup_name).await.unwrap();
 
@@ -424,7 +424,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         assert_eq!(folders, 1, "the restored workspace is not the backup");
 
         // The displaced state is itself recoverable — a restore chosen by mistake
@@ -434,7 +434,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         assert_eq!(folders, 2, "the displaced workspace was not kept");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -450,7 +450,7 @@ mod tests {
         crate::insert_test_folder(&pool, "f2", "Later")
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         // Written after the close: under an open pool, whether a checkpoint gets to it first is a race.
         std::fs::write(format!("{path}-wal"), b"stale").unwrap();
 
@@ -471,7 +471,7 @@ mod tests {
         .fetch_all(&pool)
         .await
         .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         ops
     }
 
@@ -483,7 +483,7 @@ mod tests {
         crate::insert_test_page(&pool, crate::TestPage::new("kept", "Groceries"))
             .await
             .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         snapshot(&path, "pre-import-2026-10-17T00-00-00.sqlite").await;
 
         let pool = crate::pool::open_pool(&path).await.unwrap();
@@ -502,7 +502,7 @@ mod tests {
             .await
             .unwrap();
         let before = crate::replica::meta(&pool).await.unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
 
         restore_backup(&path, "pre-import-2026-10-17T00-00-00.sqlite")
             .await
@@ -523,7 +523,7 @@ mod tests {
         )
         .await
         .unwrap();
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         assert_eq!(title, "Groceries");
         assert!(after.started);
         assert_eq!(after.device_id, device, "this device carries on as itself");
@@ -559,7 +559,7 @@ mod tests {
         assert!(pending(&path).await.is_empty());
         let pool = crate::pool::open_pool(&path).await.unwrap();
         assert!(!crate::replica::meta(&pool).await.unwrap().started);
-        pool.close().await;
+        crate::pool::close_pool(&pool).await;
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

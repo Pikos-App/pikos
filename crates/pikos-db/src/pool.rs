@@ -147,6 +147,21 @@ pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
     Ok((embedded_migration_max(), applied))
 }
 
+/// Close `pool` and return only once no connection to its file is left open.
+///
+/// `SqlitePool::close` can return with one still open. A connection being handed back while it
+/// runs, as one of [`open_pool`]'s background tasks does, can join the idle queue after `close` last
+/// emptied it, and it then stays open for as long as anything holds the pool. Code that replaces or
+/// deletes the file next, a restore or a wipe, would race it, so it closes with this instead. Under
+/// load the backup tests caught it: the restore found the old file still locked.
+pub async fn close_pool(pool: &SqlitePool) {
+    pool.close().await;
+    while pool.size() > 0 {
+        tokio::task::yield_now().await;
+        pool.close().await;
+    }
+}
+
 /// Open (or create) the SQLite workspace at `path`, apply migrations, and run
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.

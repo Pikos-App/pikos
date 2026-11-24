@@ -64,8 +64,8 @@ pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
 pub use pool::{
-    build_tiptap_doc, checkpoint_once, device_zone, extract_text_from_tiptap, gather_statistics,
-    migration_versions, now_iso, now_local_iso, now_local_parts, open_pool,
+    build_tiptap_doc, checkpoint_once, close_pool, device_zone, extract_text_from_tiptap,
+    gather_statistics, migration_versions, now_iso, now_local_iso, now_local_parts, open_pool,
     open_pool_checkpointing, today_local, CheckpointHooks, Checkpoints,
 };
 #[cfg(any(test, feature = "test-support"))]
