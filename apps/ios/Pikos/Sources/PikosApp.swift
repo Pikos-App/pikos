@@ -167,6 +167,13 @@ struct PikosApp: App {
                     await DemoWorkspace.applyScreen(route: route, store: store)
                 #endif
                 await reminders.sync()
+                // The launch's own `.active` arrives while the workspace is still opening, so
+                // the foreground sync skips it; this is that sync for a cold launch.
+                let before = sync.lastAutomaticSyncAt
+                await sync.syncIfStale()
+                if sync.lastAutomaticSyncAt != before {
+                    await store.refresh()
+                }
             }
             .onOpenURL { url in route.handle(url, store: store) }
             // A page chosen from the home screen's search. Routed through

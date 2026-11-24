@@ -102,12 +102,13 @@ public final class CalendarSyncStore {
         defer { busyAccountID = nil }
         do {
             _ = try await workspace.reconnectCaldav(accountId: accountID, password: password)
-            await load()
-            return true
         } catch {
             record(error)
             return false
         }
+
+        await sync(accountID: accountID)
+        return true
     }
 
     public func disconnect(accountID: String) async {
@@ -122,6 +123,8 @@ public final class CalendarSyncStore {
         }
     }
 
+    /// Turning a calendar on syncs its account at once: nothing here polls, so
+    /// otherwise its events wait for the next return to the foreground.
     public func setEnabled(calendarID: String, accountID: String, enabled: Bool) async {
         guard let workspace = workspace() else { return }
         busyAccountID = accountID
@@ -129,9 +132,15 @@ public final class CalendarSyncStore {
         do {
             _ = try await workspace.setCalendarEnabled(
                 syncCalendarId: calendarID, enabled: enabled)
-            await load()
         } catch {
             record(error)
+            return
+        }
+
+        if enabled {
+            await sync(accountID: accountID)
+        } else {
+            await load()
         }
     }
 
