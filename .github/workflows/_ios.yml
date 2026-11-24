@@ -82,9 +82,14 @@ jobs:
       - name: Build the editor bundle
         run: bash scripts/build-editor-bundle.sh
 
-      # Also builds the macOS slices, which is what lets the package suites
-      # below run on the host instead of in a simulator.
+      # Also builds the macOS slice, which is what lets the package suites
+      # below run on the host instead of in a simulator. Only this runner's
+      # slices: the Apple-silicon simulator the app is built for and the macOS
+      # host, since each slice is a full release build of the Rust core. The
+      # device slice is TestFlight's to build.
       - name: Build PikosFFI.xcframework
+        env:
+          PIKOS_IOS_TARGETS: aarch64-apple-ios-sim aarch64-apple-darwin
         run: bash scripts/build-ios-framework.sh
 
       # ── The fast tests ────────────────────────────────────────────────────

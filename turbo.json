@@ -1,6 +1,9 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
+    // Pins the Node every script runs on. Turbo's hash leaves the runtime out, so without this
+    // a Node upgrade replays passes recorded on the old one.
+    "package.json",
     "tsconfig.base.json",
     "eslint.config.js",
     "crates/pikos-db/tests/fixtures/**",
@@ -16,17 +19,38 @@
       "cache": false,
       "persistent": true
     },
+    // Holds no script. Each package's node hashes its own files, so chaining it through `^`
+    // makes a task's hash include every workspace package it imports, including the ones with
+    // no task of the same name to chain through, like the recurrence engine's wasm.
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    // A cached pass is replayed only when nothing the check reads has changed, so these take
+    // every file in the package, as the scripts do: desktop's typecheck and lint also cover
+    // e2e/, scripts/ and bridge/, and one of its unit tests reads src-tauri/capabilities. Docs
+    // and the Rust crate's code, manifest and lockfile are left out because no TypeScript check
+    // reads them; its JSON config and icons stay in.
     "typecheck": {
-      "dependsOn": ["^typecheck"],
-      "inputs": ["src/**", "seeds/**", "tsconfig*.json", "vitest.config.ts", "package.json"]
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     },
     "lint": {
-      "inputs": ["src/**", "seeds/**", "package.json"]
+      // Type-aware rules read the imported packages' types.
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     },
     "test": {
-      "dependsOn": ["^test"],
+      // `^test` as well keeps the suites from all starting at once. Together with typecheck and
+      // lint, that much at once slowed core's tests six times over and timed one out.
+      "dependsOn": ["^transit", "^test"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "seeds/**", "vitest.config.ts", "tsconfig*.json", "package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
+    },
+    // CI's unit-test pass. A cache hit restores the report, so the job still uploads one.
+    "test:coverage": {
+      "dependsOn": ["^transit", "^test:coverage"],
+      "outputs": ["coverage/**"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!src-tauri/**/*.rs", "!src-tauri/Cargo.*", "!src-tauri/.cargo/**"]
     }
   }
 }

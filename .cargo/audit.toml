@@ -15,11 +15,6 @@
 
 [advisories]
 ignore = [
-    # quinn-proto: QUIC reassembly memory exhaustion. reqwest carries the HTTP/3
-    # feature in the lockfile without it being activated, so no target compiles
-    # quinn. Verified unreachable 2026-09-16.
-    "RUSTSEC-2026-0185",
-
     # rsa: Marvin timing sidechannel, and upstream has no fix. Reaches the lockfile
     # through a sqlx backend Pikos does not use; SQLite is the only one built.
     # Verified unreachable 2026-09-16.

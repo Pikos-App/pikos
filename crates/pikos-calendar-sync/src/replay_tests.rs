@@ -325,12 +325,12 @@ const SERIES_LAST_DAYS: [(&str, &str); 3] = [
 ];
 
 /// Whether a series last occurring on `last_day` still yields an occurrence the reconciler counts
-/// as in the window: any after midnight on the day before it starts.
+/// as in the window: one on or after the day the window starts. The reconciler asks for the next
+/// occurrence after the day before, which means after that day ends, not after it begins.
 fn still_in_window(last_day: &str) -> bool {
     let last_day = NaiveDate::parse_from_str(last_day, "%Y-%m-%d").expect("last day");
-    let window_start = pikos_db::reconciler::backfill_window_start();
 
-    last_day >= window_start - chrono::Days::new(1)
+    last_day >= pikos_db::reconciler::backfill_window_start()
 }
 
 /// The seed corpus, `S-01` to `S-22`, as Fastmail serves it, less any series [`SERIES_LAST_DAYS`]
