@@ -134,4 +134,17 @@
         guard #available(macOS 14.0, *) else { return }
         MacSync.shared.enqueue { await $0.stop() }
     }
+
+    /// `state` is newline-separated; the caller frees the reply with `pikos_sync_report_free`.
+    @_cdecl("pikos_sync_report")
+    public func pikosSyncReport(_ state: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+        let os = "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+        let state = String(cString: state).components(separatedBy: "\n") + [os]
+        return strdup(SyncReport.text(state: state, log: SyncReport.readLog()))
+    }
+
+    @_cdecl("pikos_sync_report_free")
+    public func pikosSyncReportFree(_ report: UnsafeMutablePointer<CChar>?) {
+        free(report)
+    }
 #endif

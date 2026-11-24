@@ -33,6 +33,8 @@ static LINE: Mutex<Option<(String, String)>> = Mutex::new(None);
 extern "C" {
     fn pikos_sync_start(container: *const c_char, zone: *const c_char);
     fn pikos_sync_stop();
+    fn pikos_sync_report(state: *const c_char) -> *mut c_char;
+    fn pikos_sync_report_free(report: *mut c_char);
 }
 
 /// Holds on to the workspace just opened, and syncs again if sync was on when the app last ran.
@@ -96,6 +98,37 @@ pub async fn state(pool: &SqlitePool) -> AppResult<ICloudSyncState> {
         (true, None) => ("Starting…".to_owned(), "none".to_owned()),
     };
     Ok(ICloudSyncState { on, text, action })
+}
+
+/// The sync report a tester pastes into a message; the transport adds its log and strips what pages hold.
+pub async fn report(pool: &SqlitePool) -> AppResult<String> {
+    let sync = state(pool).await?;
+    let meta = pikos_db::replica::meta(pool).await?;
+    let zone = pikos_replica::zone::zone_name(&meta.workspace_id);
+    let header = format!(
+        "Pikos {} on the Mac\nSync {} in {zone}\n{}",
+        env!("CARGO_PKG_VERSION"),
+        if sync.on { "on" } else { "off" },
+        sync.text
+    );
+    let header =
+        CString::new(header).map_err(|_| AppError::Internal("the sync state held a NUL".into()))?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let reply = unsafe { pikos_sync_report(header.as_ptr()) }; // SAFETY: NUL-terminated for the call, and Swift copies it
+        if reply.is_null() {
+            return Err(AppError::Internal(
+                "the sync report couldn't be made".into(),
+            ));
+        }
+        let text = unsafe { CStr::from_ptr(reply) }
+            .to_string_lossy()
+            .into_owned(); // SAFETY: Swift returns a NUL-terminated copy
+        unsafe { pikos_sync_report_free(reply) }; // SAFETY: freed once, by the side that allocated it
+        Ok(text)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?
 }
 
 /// Pausing keeps recording changes, so turning sync back on sends what was made meanwhile.

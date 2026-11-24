@@ -105,6 +105,19 @@ final class DeviceSync {
         await starter?.fetchNow()
     }
 
+    func report() async -> String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let state = [
+            "Pikos \(version ?? "unknown") on iOS \(UIDevice.current.systemVersion)",
+            "Sync \(isOn ? "on" : "off") in \(zone)",
+            line.text,
+            counts,
+        ]
+        let log = await Task.detached { SyncReport.readLog() }.value
+
+        return SyncReport.text(state: state, log: log)
+    }
+
     /// On from here even when this start can't reach iCloud, since the starter keeps trying.
     private func connect(_ workspace: Workspace) async {
         guard starter == nil, let container = Self.container else { return }

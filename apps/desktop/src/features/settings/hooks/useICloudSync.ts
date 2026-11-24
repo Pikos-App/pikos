@@ -17,6 +17,8 @@ export interface ICloudSync {
   error: string | null;
   setOn: (on: boolean) => Promise<void>;
   act: () => Promise<void>;
+  /** Resolves false when the report couldn't be made or copied, with `error` saying why. */
+  copyReport: () => Promise<boolean>;
 }
 
 function readState(): Promise<ICloudSyncState> {
@@ -58,8 +60,20 @@ export function useICloudSync(): ICloudSync {
     setState(await readState());
   }
 
+  async function copyReport(): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(await invoke<string>("icloud_sync_report"));
+      setError(null);
+      return true;
+    } catch (e) {
+      setError(String(e));
+      return false;
+    }
+  }
+
   return {
     act: () => run("icloud_sync_act"),
+    copyReport,
     error,
     setOn: (on) => run("icloud_sync_set", { on }),
     state,

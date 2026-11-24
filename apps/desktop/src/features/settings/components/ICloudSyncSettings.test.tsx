@@ -51,4 +51,23 @@ describe("ICloudSyncSettings", () => {
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("icloud_sync_act", undefined));
   });
+
+  // qa: CLOUD-141:3
+  it("copies the sync report the transport made", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    invoke.mockImplementation((command: string) =>
+      Promise.resolve(
+        command === "icloud_sync_report"
+          ? "Sync on in pikos-1\nUp to date"
+          : { action: "none", on: true, text: "Up to date" }
+      )
+    );
+    render(<ICloudSyncSettings />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy" }));
+
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith("Sync on in pikos-1\nUp to date");
+  });
 });

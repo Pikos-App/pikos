@@ -1,9 +1,11 @@
 import PikosSync
 import SwiftUI
+import UIKit
 
 /// The sync switch, its status line, and what the status line offers to do.
 struct SyncSection: View {
     @Environment(DeviceSync.self) private var deviceSync
+    @State private var copied = false
 
     var body: some View {
         Section {
@@ -14,6 +16,12 @@ struct SyncSection: View {
             if let label = actionLabel {
                 Button(label) {
                     Task { await deviceSync.perform(deviceSync.line.action) }
+                }
+            }
+            Button(copied ? "Copied" : "Copy sync report") {
+                Task {
+                    UIPasteboard.general.string = await deviceSync.report()
+                    copied = true
                 }
             }
             #if STAGING

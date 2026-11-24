@@ -264,6 +264,7 @@ db_commands! {
         crate::db::icloud_settings::icloud_sync_state,
         crate::db::icloud_settings::icloud_sync_set,
         crate::db::icloud_settings::icloud_sync_act,
+        crate::db::icloud_settings::icloud_sync_report,
         crate::notifications::scheduler::update_notification_settings,
         crate::notifications::scheduler::request_notification_permission,
         crate::notifications::scheduler::check_notification_permission,

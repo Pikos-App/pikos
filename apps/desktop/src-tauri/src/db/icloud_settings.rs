@@ -46,6 +46,17 @@ pub async fn icloud_sync_set(state: State<'_, DbState>, on: bool) -> AppResult<(
 }
 
 #[tauri::command]
+pub async fn icloud_sync_report(state: State<'_, DbState>) -> AppResult<String> {
+    #[cfg(all(target_os = "macos", feature = "icloud-sync"))]
+    return super::icloud::report(&state.get_pool().await?).await;
+    #[cfg(not(all(target_os = "macos", feature = "icloud-sync")))]
+    {
+        let _ = state;
+        Err(unavailable())
+    }
+}
+
+#[tauri::command]
 pub async fn icloud_sync_act(state: State<'_, DbState>) -> AppResult<()> {
     #[cfg(all(target_os = "macos", feature = "icloud-sync"))]
     return super::icloud::act(&state.get_pool().await?).await;
