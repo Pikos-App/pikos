@@ -785,7 +785,7 @@ appTest(
 
 appTest(
   "the current-time line sits at the time on the grid and moves with it",
-  { tag: ["@CAL-14"] },
+  { tag: ["@CAL-14:2"] },
   async ({ app }) => {
     appTest.setTimeout(100_000);
     const startsAt = await app.evaluate(() => {
@@ -824,6 +824,40 @@ appTest(
     await appTest.step("CAL-14 it moves down as the minutes pass", async () => {
       await expect.poll(lineY, { intervals: [2_000], timeout: 75_000 }).toBeGreaterThan(first);
     });
+  }
+);
+
+appTest(
+  "the current-time line passes under a block rather than through its title",
+  { tag: ["@CAL-14:2"] },
+  async ({ app }) => {
+    const hour = await app.evaluate(() => new Date().getHours());
+    const clock = `${hour % 12 || 12}${hour < 12 ? "am" : "pm"}`;
+    await quickAdd(app, `Deep work today at ${clock} for 1h`);
+    await openCalendarMode(app);
+    for (const band of [/^Expand 12 AM to/, /^Expand .* to 12 AM$/]) {
+      await app.getByRole("button", { name: band }).first().click();
+    }
+    const block = calendarOf(app).getByRole("button", { name: /^Deep work, / });
+    const line = calendarOf(app).getByRole("separator", { name: "Current time" });
+    await gutterLabel(app, hour).scrollIntoViewIfNeeded();
+    await expect(block).toBeVisible();
+    const blockBox = (await block.boundingBox())!;
+    const lineBox = (await line.boundingBox())!;
+
+    // The line ignores the pointer, so it is made hit-testable to ask what paints on top.
+    const blockIsOnTop = await line.evaluate(
+      (el, point) => {
+        const separator = el as HTMLElement;
+        separator.style.pointerEvents = "auto";
+        for (const child of separator.children) (child as HTMLElement).style.pointerEvents = "auto";
+        const hit = document.elementFromPoint(point.x, point.y);
+        return Boolean(hit?.closest("[data-cal-page-id]"));
+      },
+      { x: blockBox.x + blockBox.width / 2, y: lineBox.y + lineBox.height / 2 }
+    );
+
+    expect(blockIsOnTop).toBe(true);
   }
 );
 
