@@ -434,6 +434,7 @@ fn weekly_series() -> UpsertItem {
         ),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
             exdates: vec!["2026-06-15T09:00:00".into()],
             overrides: vec![OccurrenceOverride {
@@ -499,6 +500,7 @@ fn series_v(etag: &str, rrule: &str) -> UpsertItem {
         ),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -552,6 +554,7 @@ async fn occurrence_modify_against_stored_rule() {
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -617,6 +620,7 @@ fn recurring_1x1(etag: &str) -> UpsertItem {
         ),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
             exdates: vec![],
             overrides: vec![],
@@ -746,6 +750,7 @@ async fn occurrence_cancel_adds_exdate() {
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -779,6 +784,7 @@ fn series_with_rrule(rrule: &str, tz: &str) -> UpsertItem {
         schedule: timed("2026-06-01T09:00:00", Some("2026-06-01T09:30:00"), tz),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -857,6 +863,7 @@ async fn floating_and_date_only_until_pass_through() {
             schedule: all_day("2026-06-01", Some("2026-06-02")),
             recurrence: Some(Recurrence {
                 fidelity: OccurrenceFidelity::Complete,
+                continues: None,
                 rrule: "FREQ=WEEKLY;UNTIL=20260315".into(),
                 exdates: vec![],
                 overrides: vec![],
@@ -891,6 +898,7 @@ async fn every_recurrence_instant_is_wall_clock() {
         ),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260831T130000Z".into(),
             exdates: vec!["2026-06-15T09:00:00".into()],
             overrides: vec![OccurrenceOverride {
@@ -1354,6 +1362,7 @@ async fn occurrence_before_master_in_same_batch_resolves() {
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -1476,6 +1485,7 @@ fn series(etag: &str, exdates: Vec<String>, overrides: Vec<OccurrenceOverride>) 
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates,
             overrides,
@@ -1638,6 +1648,7 @@ fn master_only(etag: &str, exdates: Vec<String>, overrides: Vec<OccurrenceOverri
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::MasterOnly,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates,
             overrides,
@@ -1652,6 +1663,7 @@ fn master_only_at(etag: &str, rrule: &str, start: &str, tz: &str) -> UpsertItem 
         schedule: timed(start, None, tz),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::MasterOnly,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -1859,6 +1871,7 @@ fn all_day_master_only(etag: &str, overrides: Vec<OccurrenceOverride>) -> Upsert
         schedule: all_day("2026-06-01", Some("2026-06-02")),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::MasterOnly,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides,
@@ -2450,6 +2463,7 @@ fn series_recurring(href: &str, uid: &str, rrule: &str) -> UpsertItem {
         ),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -3319,6 +3333,7 @@ fn weekly(etag: &str, rrule: &str) -> UpsertItem {
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -3337,6 +3352,7 @@ fn weekly_anchored_weeks_ago(etag: &str, weeks_ago: i64) -> UpsertItem {
         schedule: timed(&base, None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -3374,6 +3390,7 @@ fn weekly_from_today(etag: &str, rrule: &str) -> UpsertItem {
         schedule: timed(&week_occ(0), None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -3739,6 +3756,7 @@ async fn detach_converts_a_recurring_series_within_the_day() {
             schedule: timed("2026-06-01T15:00:00", None, "Europe/Berlin"),
             recurrence: Some(Recurrence {
                 fidelity: OccurrenceFidelity::Complete,
+                continues: None,
                 rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260629T150000".into(),
                 exdates: vec!["2026-06-08T15:00:00".into()],
                 overrides: vec![],
@@ -3826,6 +3844,7 @@ async fn detach_leaves_a_cross_midnight_series_untouched() {
             ),
             recurrence: Some(Recurrence {
                 fidelity: OccurrenceFidelity::Complete,
+                continues: None,
                 rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
                 exdates: vec![],
                 overrides: vec![],
@@ -4485,6 +4504,7 @@ async fn a_synced_series_sorts_by_its_rules_zone() {
             schedule: timed("2026-06-15T09:00:00", None, "Europe/Paris"),
             recurrence: Some(Recurrence {
                 fidelity: OccurrenceFidelity::Complete,
+                continues: None,
                 rrule: "FREQ=WEEKLY".into(),
                 exdates: vec![],
                 overrides: vec![],
@@ -4517,6 +4537,7 @@ fn weekly_from_ten_weeks_ago(etag: &str, rrule: &str) -> UpsertItem {
         schedule: timed(&week_occ(-10), None, "UTC"),
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -4721,6 +4742,175 @@ async fn a_trashed_ended_series_is_not_mirrored_again_whatever_its_link_says() {
     assert!(
         page_exists(&pool, &page_id).await,
         "the trashed copy stays in the trash"
+    );
+}
+
+/// A weekly Google series at 09:00 from `weeks` out, at `offset_days` past that week's
+/// day, naming the series a "this and following" edit split it from.
+fn google_weekly(
+    id: &str,
+    etag: &str,
+    (weeks, offset_days): (i64, i64),
+    rrule: &str,
+    continues: Option<&str>,
+) -> UpsertItem {
+    let start = (chrono::Local::now()
+        + chrono::Duration::weeks(weeks)
+        + chrono::Duration::days(offset_days))
+    .format("%Y-%m-%dT09:00:00")
+    .to_string();
+    UpsertItem::Event(EventUpsert {
+        core: core(id, &format!("{id}@google.com"), etag, "Standup"),
+        schedule: timed(&start, None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::MasterOnly,
+            continues: continues.map(Into::into),
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+/// The id Google gives the rest of `evt1` after a "this and following" edit from the
+/// occurrence `weeks` out.
+fn split_id(weeks: i64) -> String {
+    format!(
+        "evt1_R{}",
+        (chrono::Local::now() + chrono::Duration::weeks(weeks)).format("%Y%m%dT090000")
+    )
+}
+
+async fn page_of(pool: &sqlx::SqlitePool, external_id: &str) -> String {
+    sqlx::query_scalar("SELECT page_id FROM page_sync WHERE external_id = ?")
+        .bind(external_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Ticks the occurrence `weeks` out through the completion command, as the list does.
+async fn tick(pool: &sqlx::SqlitePool, page_id: &str, weeks: i64) {
+    crate::pages::complete_recurring_page_impl(
+        pool,
+        crate::pages::CompleteRecurringInput {
+            page_id: page_id.into(),
+            occurrence_date: Some(week_day(weeks)),
+            scheduled_start: Some(week_occ(weeks)),
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+}
+
+async fn skip(pool: &sqlx::SqlitePool, page_id: &str, weeks: i64) {
+    crate::pages::skip_occurrence_impl(
+        pool,
+        crate::pages::SkipOccurrenceInput {
+            page_id: page_id.into(),
+            occurrence_date: week_day(weeks),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// The dates resolved on a page: (ticked, skipped).
+async fn resolved(pool: &sqlx::SqlitePool, page_id: &str) -> (Vec<String>, Vec<String>) {
+    let ticked = sqlx::query_scalar(
+        "SELECT occurrence_date FROM completed_set WHERE page_id = ? ORDER BY occurrence_date",
+    )
+    .bind(page_id)
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    let skipped = sqlx::query_scalar(
+        "SELECT occurrence_date FROM skip_set WHERE page_id = ? ORDER BY occurrence_date",
+    )
+    .bind(page_id)
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    (ticked, skipped)
+}
+
+async fn done_copies(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE status = 'done' AND id IN (SELECT clone_id FROM completed_set)")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Ticks this week and next and a skip the week after, then the series is edited "this
+/// and following" from next week, as Google sends it: the old event ends this week and
+/// the rest arrives as a new one.
+async fn split_after_resolving(pool: &sqlx::SqlitePool, rest_offset_days: i64) -> (String, String) {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![google_weekly(
+            "evt1",
+            "v1",
+            (0, 0),
+            "FREQ=WEEKLY",
+            None,
+        )]),
+    )
+    .await
+    .unwrap();
+    let old = page_of(pool, "evt1").await;
+    tick(pool, &old, 0).await;
+    tick(pool, &old, 1).await;
+    skip(pool, &old, 2).await;
+
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![
+            google_weekly(
+                &split_id(1),
+                "v1",
+                (1, rest_offset_days),
+                "FREQ=WEEKLY",
+                Some("evt1"),
+            ),
+            google_weekly("evt1", "v2", (0, 0), &weekly_until(0), None),
+        ]),
+    )
+    .await
+    .unwrap();
+    (old, page_of(pool, &split_id(1)).await)
+}
+
+#[tokio::test]
+async fn ticks_from_a_split_on_follow_the_series_that_carries_on() {
+    let pool = setup().await;
+    let (old, rest) = split_after_resolving(&pool, 0).await;
+
+    assert_eq!(
+        page_denorm(&pool, &rest).await.0,
+        Some(week_occ(3)),
+        "next due after the dates already resolved"
+    );
+    assert_eq!(
+        resolved(&pool, &rest).await,
+        (vec![week_day(1)], vec![week_day(2)])
+    );
+    assert_eq!(resolved(&pool, &old).await, (vec![week_day(0)], vec![]));
+    assert_eq!(done_copies(&pool).await, 2, "no second copy of either tick");
+}
+
+#[tokio::test]
+async fn a_split_onto_other_days_leaves_ticks_where_they_were_made() {
+    let pool = setup().await;
+    let (old, rest) = split_after_resolving(&pool, 1).await;
+
+    assert_eq!(resolved(&pool, &rest).await, (vec![], vec![]));
+    assert_eq!(
+        resolved(&pool, &old).await,
+        (vec![week_day(0), week_day(1)], vec![week_day(2)])
     );
 }
 

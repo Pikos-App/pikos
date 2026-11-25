@@ -18,6 +18,7 @@ const ORPHAN_MASTER: &str = include_str!("../../tests/fixtures/google/02_orphan_
 const CALENDAR_LIST: &str = include_str!("../../tests/fixtures/google/03_calendar_list.json");
 const PAGE_1: &str = include_str!("../../tests/fixtures/google/04_paged_page1.json");
 const PAGE_2: &str = include_str!("../../tests/fixtures/google/05_paged_page2.json");
+const SPLIT: &str = include_str!("../../tests/fixtures/google/06_split_series.json");
 
 const CAL: &str = "alex@example.com";
 
@@ -345,6 +346,38 @@ async fn moved_instance_without_its_master_becomes_an_occurrence_modify() {
         OccurrenceKind::Modify(s) => assert_eq!(s.start, "2026-06-24T16:00:00"),
         _ => unreachable!(),
     }
+}
+
+// ─── a "this and following" edit ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn the_rest_of_a_split_series_names_the_series_it_carries_on() {
+    let t = Replay::ok(SPLIT);
+    let delta = sync_calendar(&t, CAL, Some(&SyncToken("TOKEN-1".into())))
+        .await
+        .unwrap();
+
+    let continues = |id| event(&delta, id).recurrence.unwrap().continues;
+    assert_eq!(
+        continues("ev-standup_R20261105T140000").as_deref(),
+        Some("ev-standup")
+    );
+    assert_eq!(continues("ev-standup"), None);
+}
+
+#[test]
+fn only_a_split_marker_names_a_series_to_carry_on() {
+    use super::super::events::split_from;
+    assert_eq!(split_from("ev_R20261105T140000Z").as_deref(), Some("ev"));
+    assert_eq!(
+        split_from("ev_R20261105").as_deref(),
+        Some("ev"),
+        "an all-day series"
+    );
+    assert_eq!(split_from("ev_20261105T140000Z"), None, "one instance");
+    assert_eq!(split_from("ev_R2026"), None);
+    assert_eq!(split_from("_R20261105T140000"), None);
+    assert_eq!(split_from("ev"), None);
 }
 
 // ─── stale token + targeted fetch ─────────────────────────────────────────────

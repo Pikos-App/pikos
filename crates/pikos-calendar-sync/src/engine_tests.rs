@@ -167,6 +167,7 @@ fn master(external_id: &str, uid: &str) -> EventUpsert {
         },
         recurrence: Some(Recurrence {
             fidelity: OccurrenceFidelity::Complete,
+            continues: None,
             rrule: "FREQ=DAILY".into(),
             exdates: vec![],
             overrides: vec![],

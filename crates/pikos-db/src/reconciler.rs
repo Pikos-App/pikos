@@ -233,8 +233,98 @@ async fn apply_event(
         reclaim_calendar_folder(tx, &page_id, &ctx.folder_id).await?;
     }
     write_schedule(tx, &page_id, ev, &now).await?;
+    let continues = ev.recurrence.as_ref().and_then(|r| r.continues.as_deref());
+    if let (true, Some(from)) = (is_new, continues) {
+        carry_resolved_occurrences(tx, ctx, from, &page_id, &ev.schedule.start).await?;
+    }
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
     Ok(true)
+}
+
+/// Move the dates the person ticked or skipped on a series that was split onto the
+/// series that carries on from it. Each is keyed to the page it was made on, so without
+/// this every one from the split on reads as open on the new page, while its done copy
+/// still sits in Completed under the old one.
+///
+/// Only a date on or after `starts` that the new series has an occurrence on moves. One
+/// the edit moved to another day stays with the page it was made on, since the new series
+/// never asks about it.
+async fn carry_resolved_occurrences(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ctx: &ReconcileContext,
+    from_external_id: &str,
+    to_page: &str,
+    starts: &str,
+) -> AppResult<()> {
+    let from_day = &starts[..starts.len().min(10)];
+    let Some(from_page) = sqlx::query_scalar::<_, String>(
+        "SELECT page_id FROM page_sync
+         WHERE account_id = ? AND calendar_id = ? AND external_id = ? AND sync_state = 'active'",
+    )
+    .bind(&ctx.account_id)
+    .bind(&ctx.calendar_id)
+    .bind(from_external_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    else {
+        return Ok(());
+    };
+
+    let ticked = move_occurring_dates(
+        tx,
+        "SELECT occurrence_date FROM completed_set
+         WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
+        "UPDATE completed_set SET page_id = ? WHERE page_id = ? AND occurrence_date = ?",
+        &from_page,
+        from_day,
+        to_page,
+    )
+    .await?;
+    let skipped = move_occurring_dates(
+        tx,
+        "SELECT occurrence_date FROM skip_set
+         WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
+        "UPDATE skip_set SET page_id = ? WHERE page_id = ? AND occurrence_date = ?",
+        &from_page,
+        from_day,
+        to_page,
+    )
+    .await?;
+    if ticked || skipped {
+        crate::recurrence_derive::recompute_recurring_schedule(tx, &from_page).await?;
+        crate::recurrence_derive::recompute_recurring_schedule(tx, to_page).await?;
+    }
+    Ok(())
+}
+
+/// Moves each date `select` reads off `from_page` from `from_day` on that `to_page` has
+/// an occurrence on. Returns whether any moved.
+async fn move_occurring_dates(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    select: &str,
+    update: &str,
+    from_page: &str,
+    from_day: &str,
+    to_page: &str,
+) -> AppResult<bool> {
+    let dates: Vec<String> = sqlx::query_scalar(select)
+        .bind(from_page)
+        .bind(from_day)
+        .fetch_all(&mut **tx)
+        .await?;
+    let mut moved = false;
+    for date in dates {
+        if crate::pages::synced_occurrence_is_valid(tx, to_page, &date).await? {
+            sqlx::query(update)
+                .bind(to_page)
+                .bind(from_page)
+                .bind(&date)
+                .execute(&mut **tx)
+                .await?;
+            moved = true;
+        }
+    }
+    Ok(moved)
 }
 
 /// Whether a series ran out before `window`, the first day the sync reaches: no occurrence

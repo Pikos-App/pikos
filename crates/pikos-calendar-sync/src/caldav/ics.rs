@@ -290,6 +290,7 @@ fn build_recurrence(
         exdates,
         overrides,
         fidelity: OccurrenceFidelity::Complete,
+        continues: None,
     })
 }
 

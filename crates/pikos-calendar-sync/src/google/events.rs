@@ -178,6 +178,7 @@ fn build_bundle(
         }
     }
 
+    let continues = split_from(&core.external_id);
     Ok(EventUpsert {
         core,
         schedule,
@@ -186,8 +187,23 @@ fn build_bundle(
             exdates,
             overrides,
             fidelity,
+            continues,
         }),
     })
+}
+
+/// The series a "this and following" edit split this one from. Google ends the old
+/// series and starts the rest as a new event, named for the old one plus `_R` and the
+/// instant it starts from: `<id>_R20261105T091500`. An instance's own id has no `R`
+/// (`<id>_20261105T091500Z`), and a plain id is lowercase base32hex, so it can't
+/// carry the marker by chance.
+pub(crate) fn split_from(id: &str) -> Option<String> {
+    let (parent, stamp) = id.rsplit_once("_R")?;
+    let (date, time) = stamp.split_once('T').unwrap_or((stamp, ""));
+    let time = time.strip_suffix('Z').unwrap_or(time);
+    let digits = |s: &str, n: usize| s.len() == n && s.bytes().all(|b| b.is_ascii_digit());
+    (!parent.is_empty() && digits(date, 8) && (time.is_empty() || digits(time, 6)))
+        .then(|| parent.to_string())
 }
 
 /// An instance whose master isn't in this page — the shape only Google produces.

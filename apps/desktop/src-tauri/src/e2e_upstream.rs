@@ -38,6 +38,10 @@ pub struct UpstreamEvent {
     exdates: Vec<String>,
     #[serde(default)]
     overrides: Vec<UpstreamOverride>,
+    /// This is the rest of the series titled `title` after a "this and following"
+    /// edit: a new event upstream, named for that one the way Google names it.
+    #[serde(default)]
+    rest_of_split: bool,
 }
 
 #[derive(Deserialize)]
@@ -197,20 +201,29 @@ async fn to_upsert(
     calendar_id: &str,
     ev: UpstreamEvent,
 ) -> AppResult<EventUpsert> {
-    let existing = linked(pool, account_id, calendar_id, &ev.title).await?;
+    let mut existing = linked(pool, account_id, calendar_id, &ev.title).await?;
+    let mut continues = None;
+    if ev.rest_of_split {
+        let (split, _) = existing.take().ok_or_else(|| {
+            AppError::NotFound(format!("no synced series titled {} to split", ev.title))
+        })?;
+        continues = Some(split);
+    }
     let stored = match &existing {
         Some((_, page_id)) => Some(stored_event(pool, page_id).await?),
         None => None,
     };
-    let external_id = existing
-        .map(|(id, _)| id)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let carried = stored.unwrap_or_default();
 
     let start = ev
         .start
         .or(carried.start)
         .ok_or_else(|| AppError::Invalid(format!("{} needs a start", ev.title)))?;
+    let external_id = match (existing, &continues) {
+        (Some((id, _)), _) => id,
+        (None, Some(split)) => format!("{split}_R{}", start.replace(['-', ':'], "")),
+        (None, None) => uuid::Uuid::new_v4().to_string(),
+    };
     let end = ev.end.or(carried.end);
     let timezone = ev.timezone.or(carried.timezone);
     let recurrence = ev.rrule.map(|rrule| Recurrence {
@@ -229,6 +242,7 @@ async fn to_upsert(
             })
             .collect(),
         fidelity: OccurrenceFidelity::Complete,
+        continues,
     });
 
     Ok(EventUpsert {

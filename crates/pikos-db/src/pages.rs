@@ -2135,7 +2135,7 @@ async fn is_active_synced(
 /// `completed_set` entry that matches nothing and stays open forever. Enumerates the
 /// raw rule (no exclusions), so a moved override's `original_date` still counts; an
 /// unparseable rule skips the check.
-async fn synced_occurrence_is_valid(
+pub(crate) async fn synced_occurrence_is_valid(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
     occurrence_date: &str,
