@@ -1,4 +1,5 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
+import { Activity } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useNow } from "./useNow";
@@ -48,6 +49,40 @@ describe("useNow", () => {
 
     await act(() => vi.advanceTimersByTime(50_000));
     expect(result.current.getMinutes()).toBe(21);
+  });
+
+  it("is current as soon as a hidden Activity shows it again", () => {
+    // The calendar sits in a hidden Activity while the editor shows, which stops its
+    // timer and listeners, so the focus that brings the window back reaches nothing.
+    vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
+    const { container, rerender } = render(
+      <Activity mode="visible">
+        <Clock />
+      </Activity>
+    );
+    rerender(
+      <Activity mode="hidden">
+        <Clock />
+      </Activity>
+    );
+
+    vi.setSystemTime(new Date("2026-03-31T12:20:10.000"));
+    rerender(
+      <Activity mode="visible">
+        <Clock />
+      </Activity>
+    );
+    expect(container).toHaveTextContent("12:20");
+  });
+
+  it("doesn't render a fresh mount twice within the minute", () => {
+    vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useNow();
+    });
+    expect(renders).toBe(1);
   });
 
   it("stops its timers on unmount", () => {
