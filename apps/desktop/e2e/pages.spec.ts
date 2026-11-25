@@ -133,7 +133,7 @@ appTest("delete a page and undo @smoke", { tag: ["@TRASH-02:3"] }, async ({ app 
 
 // ─── Move page to folder via context menu ──────────────────────────────────
 
-appTest("move page to folder via context menu @smoke", { tag: ["@LIST-05"] }, async ({ app }) => {
+appTest("move page to folder via context menu @smoke", { tag: ["@LIST-05:2"] }, async ({ app }) => {
   await createFolder(app, "Work");
 
   // Create the page from Inbox — quickAdd lands pages in the active view's folder.

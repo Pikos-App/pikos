@@ -186,7 +186,7 @@ export function PageListItem({
                     isRenaming
                       ? "cursor-text overflow-hidden whitespace-nowrap caret-foreground"
                       : "truncate",
-                    isDone(page) && !isRenaming && "text-muted-foreground"
+                    isDone(page) && !isRenaming && "text-subtle"
                   )}
                   contentEditable={isRenaming}
                   key={isRenaming ? "editing" : "display"}

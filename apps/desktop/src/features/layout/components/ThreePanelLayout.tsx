@@ -17,6 +17,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 import { useWindowWidth } from "@/shared/hooks/useWindowWidth";
 
+import { besideCursor } from "../besideCursor";
 import { useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
 import { PANEL_SPRING, usePanelWidthMotion } from "../hooks/usePanelWidthMotion";
@@ -190,9 +191,12 @@ export function ThreePanelLayout() {
         </div>
       </div>
 
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={null} modifiers={activePageData ? [besideCursor] : []}>
         {activePageData && !isDraggingOverCalendar ? (
-          <div className="flex cursor-grabbing items-center gap-2 rounded bg-accent px-2 py-1.5 text-sm font-medium text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
+          <div
+            className="flex cursor-grabbing items-center gap-2 rounded bg-popover px-2 py-1.5 text-sm font-medium text-popover-foreground shadow-lg ring-1 ring-border"
+            data-testid="page-drag-ghost"
+          >
             {activePageData.title || "Untitled"}
             {draggedPageCount > 1 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">

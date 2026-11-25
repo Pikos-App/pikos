@@ -47,7 +47,10 @@ function viewName(activeViewId: string, folders: Folder[]): string {
   if (activeViewId === "today") return "Today";
   if (activeViewId === "upcoming") return "Upcoming";
   if (activeViewId === "inbox") return "Inbox";
-  return folders.find((f) => f.id === activeViewId)?.name ?? "Pages";
+  const folder = folders.find((f) => f.id === activeViewId);
+  if (!folder) return "Pages";
+
+  return folder.name || "Untitled";
 }
 
 export function PageListHeader({

@@ -376,7 +376,10 @@ appTest(
 // test covers the DnD path. A regression in the folder droppable wiring
 // would silently leave the page in its current folder.
 
-appTest("drag a page from list onto a sidebar folder moves it", async ({ app }) => {
+appTest(
+  "drag a page from list onto a sidebar folder moves it, its ghost clear of the folder's name",
+  { tag: ["@LIST-05:2"] },
+  async ({ app }) => {
   await createFolder(app, "Archive");
 
   await app.getByRole("button", { name: /^Inbox/ }).click();
@@ -403,6 +406,12 @@ appTest("drag a page from list onto a sidebar folder moves it", async ({ app }) 
   await app.mouse.down();
   await app.mouse.move(startX + 16, startY, { steps: 4 });
   await app.mouse.move(folderX, folderY, { steps: 10 });
+
+  const ghostBox = await app.getByTestId("page-drag-ghost").boundingBox();
+  const nameBox = await folder.getByText("Archive", { exact: true }).boundingBox();
+  if (!ghostBox || !nameBox) throw new Error("drag ghost or folder name missing");
+  expect(ghostBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height);
+
   await app.mouse.up();
 
   await expect(item).not.toBeVisible();
@@ -418,4 +427,5 @@ appTest("drag a page from list onto a sidebar folder moves it", async ({ app }) 
   await expect(
     app.locator("[data-page-list-item]").filter({ hasText: "movable doc" })
   ).toBeVisible();
-});
+  }
+);

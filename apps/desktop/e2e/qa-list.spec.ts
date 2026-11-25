@@ -263,8 +263,18 @@ appTest(
       return names;
     };
 
+    await appTest.step("LIST-06 a folder being named reads Untitled over its list", async () => {
+      await app
+        .getByRole("toolbar", { name: "Folder actions" })
+        .getByRole("button", { name: "New Folder" })
+        .click();
+      await expect(sidebar.getByRole("textbox")).toBeFocused();
+      await expect(app.getByRole("group", { name: "Untitled" })).toBeVisible();
+      await app.keyboard.type("Errands");
+      await app.keyboard.press("Enter");
+    });
+
     await appTest.step("LIST-06 a folder is created inline", async () => {
-      await createFolder(app, "Errands");
       await expect(folder("Errands")).toHaveAttribute("aria-current", "true");
     });
 
@@ -424,6 +434,20 @@ appTest(
       await completed.click();
       await expect(completed).toHaveAttribute("aria-expanded", "true");
       await expect(app.locator("[data-page-list-item]").first()).toContainText("done item");
+    });
+
+    await appTest.step("LIST-11 a completed page's title takes the faintest text ink", async () => {
+      const title = app.locator("[data-page-list-item]").first().getByText(/^done item/);
+      const tertiaryInk = await title.evaluate((el) => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--text-tertiary)";
+        el.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      });
+
+      await expect(title).toHaveCSS("color", tertiaryInk);
     });
 
     await appTest.step("LIST-11 Show more completed loads the rest", async () => {
