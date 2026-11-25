@@ -197,6 +197,17 @@ describe("PageBlockPopover — a locked mirror offers no schedule affordances", 
   });
 });
 
+describe("PageBlockPopover — the date picker", () => {
+  it("opens beside the popover rather than over its rows below", async () => {
+    renderPopover(makePage({}));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Scheduled:/ }));
+
+    const picker = await screen.findByRole("dialog", { name: "Schedule picker" });
+    expect(picker).toHaveAttribute("data-side", "right");
+  });
+});
+
 describe("PageBlockPopover — the delete names what it removes", () => {
   function renderWithDelete(page: PageSummary) {
     return renderWithProviders(

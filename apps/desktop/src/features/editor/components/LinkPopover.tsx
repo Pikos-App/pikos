@@ -62,18 +62,26 @@ function computePopoverPos(
   isLink: boolean,
   _selectionFrom: number,
   _posVersion: number
-): { top: number; left: number } | null {
+): { top: number; left: number; isAbove: boolean } | null {
   if (!isVisible) return null;
   const rect = getAnchorRect(editor, isLink);
   if (!rect) return null;
   const POPOVER_WIDTH = 320;
+  // The edit row's height, input and padding included; the view row is shorter.
+  const POPOVER_HEIGHT = 48;
   const EDGE_PADDING = 8;
+  const GAP = 6;
   let left = rect.left;
   if (left + POPOVER_WIDTH > window.innerWidth - EDGE_PADDING) {
     left = window.innerWidth - POPOVER_WIDTH - EDGE_PADDING;
   }
   if (left < EDGE_PADDING) left = EDGE_PADDING;
-  return { left, top: rect.bottom + 6 };
+
+  // Above the line, so the popover never covers the lines that follow the link.
+  const fitsAbove = rect.top - GAP - POPOVER_HEIGHT >= EDGE_PADDING;
+  if (fitsAbove) return { isAbove: true, left, top: rect.top - GAP };
+
+  return { isAbove: false, left, top: rect.bottom + GAP };
 }
 
 function ensureProtocol(url: string): string {
@@ -268,7 +276,11 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
         e.preventDefault();
       }}
       ref={popoverRef}
-      style={{ left: pos.left, top: pos.top }}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        transform: pos.isAbove ? "translateY(-100%)" : undefined,
+      }}
     >
       {showEditMode ? (
         <div className="flex items-center gap-1.5">

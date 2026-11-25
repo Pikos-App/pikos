@@ -21,6 +21,10 @@ import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 interface FormatToolbarProps {
   editor: Editor;
   onAddLink?: () => void;
+  /** The body's scroll container. The toolbar mounts on its parent, outside the
+   *  scroll clip, so it can sit above the body's first line over the page header
+   *  instead of flipping below the selection and covering the next lines. */
+  scroller: HTMLElement;
 }
 
 interface ToolbarButton {
@@ -35,7 +39,7 @@ interface ButtonGroup {
   buttons: ToolbarButton[];
 }
 
-export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
+export function FormatToolbar({ editor, onAddLink, scroller }: FormatToolbarProps) {
   const {
     isBold,
     isBullet,
@@ -172,8 +176,10 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
 
   return (
     <BubbleMenu
+      appendTo={scroller.parentElement ?? scroller}
+      className="z-50"
       editor={editor}
-      options={{ placement: "top" }}
+      options={{ hide: { boundary: scroller }, placement: "top", scrollTarget: scroller }}
       shouldShow={({ editor: ed, state }) =>
         ed.isFocused && !state.selection.empty && !ed.isActive("image") && !ed.isActive("table")
       }

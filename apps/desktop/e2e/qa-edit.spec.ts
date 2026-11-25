@@ -215,6 +215,28 @@ appTest(
       await expect(body.locator("ol")).toHaveText("styled");
     });
 
+    await appTest.step("EDIT-04 on the first line, the toolbar and link box open above it", async () => {
+      await clearBody(app);
+      await app.keyboard.type("styled");
+      await app.keyboard.press("Enter");
+      await app.keyboard.type("the line after");
+      await app.keyboard.press("ArrowUp");
+      await app.keyboard.press("End");
+      await app.keyboard.press("Shift+Home");
+      const firstLine = await body.getByRole("paragraph").first().boundingBox();
+
+      await expect(toolbar).toBeVisible();
+      const toolbarBox = await toolbar.boundingBox();
+      expect(toolbarBox!.y + toolbarBox!.height).toBeLessThanOrEqual(firstLine!.y);
+
+      await toolbar.getByRole("button", { exact: true, name: "Link" }).click();
+      const url = app.getByPlaceholder("Paste or type a URL…");
+      await expect(url).toBeVisible();
+      const urlBox = await url.boundingBox();
+      expect(urlBox!.y + urlBox!.height).toBeLessThanOrEqual(firstLine!.y);
+      await app.keyboard.press("Escape");
+    });
+
     await appTest.step("EDIT-04 link", async () => {
       await formatWith("Link");
       await app.getByPlaceholder("Paste or type a URL…").fill("https://pikos.app");

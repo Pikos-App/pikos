@@ -58,6 +58,7 @@ export interface DateTimePickerProps {
   isDone?: boolean;
   /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
+  side?: "bottom" | "right";
 }
 
 export function DateTimePicker({
@@ -66,6 +67,7 @@ export function DateTimePicker({
   onChange,
   onClose,
   onEndChange,
+  side = "bottom",
   value,
 }: DateTimePickerProps) {
   const { weekStart } = useAppSettings();
@@ -373,6 +375,7 @@ export function DateTimePicker({
         align="start"
         aria-label="Schedule picker"
         className="w-[380px] p-0"
+        side={side}
         {...(onClose && {
           onCloseAutoFocus: (e: Event) => {
             e.preventDefault();
@@ -448,7 +451,7 @@ export function DateTimePicker({
 
               <div
                 aria-label="Select start time"
-                className="min-h-0 flex-1 overflow-y-auto rounded-sm focus:outline-none [&::-webkit-scrollbar]:hidden"
+                className="min-h-0 flex-1 overflow-y-auto rounded-sm mask-b-from-80% pb-6 focus:outline-none [&::-webkit-scrollbar]:hidden"
                 onBlur={(event) => {
                   if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
                     setFocusedSlotIdx(null);

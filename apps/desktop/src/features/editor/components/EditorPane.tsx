@@ -128,6 +128,7 @@ export function EditorPane() {
 
   const currentPageIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
 
   // The editor instance, captured for use inside editorProps callbacks (which
   // are created before useEditor returns). Assigned in an effect below.
@@ -415,8 +416,12 @@ export function EditorPane() {
         />
       )}
       {editor && <FindContentPopover editor={editor} scroller={scrollContainerRef} />}
-      {editor && !isAddingLink && (
-        <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
+      {editor && scroller && !isAddingLink && (
+        <FormatToolbar
+          editor={editor}
+          onAddLink={() => setIsAddingLink(true)}
+          scroller={scroller}
+        />
       )}
       {editor && <TableToolbar editor={editor} />}
       {editor && (
@@ -426,7 +431,13 @@ export function EditorPane() {
           onAddingLinkChange={setIsAddingLink}
         />
       )}
-      <div className="relative flex-1 overflow-y-auto" ref={scrollContainerRef}>
+      <div
+        className="relative flex-1 overflow-y-auto"
+        ref={(node) => {
+          scrollContainerRef.current = node;
+          setScroller(node);
+        }}
+      >
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- padding around the editor; clicks delegate focus to the ProseMirror surface which is the real keyboard target */}
         <div

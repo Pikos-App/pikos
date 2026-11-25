@@ -96,7 +96,8 @@ function chipKey(chip: MetadataChip): string {
 function renderChip(chip: MetadataChip, layout: MetadataChipLayout): ReactNode {
   switch (chip.kind) {
     case "date":
-      return <DateTimePicker {...chip.props} />;
+      // In the calendar's labelled rows the picker opens beside them, not over the rows below.
+      return <DateTimePicker side={layout === "rows" ? "right" : "bottom"} {...chip.props} />;
     case "folder":
       return <FolderChip {...chip.props} />;
     case "node":
