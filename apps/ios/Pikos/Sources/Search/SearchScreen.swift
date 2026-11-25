@@ -211,12 +211,12 @@ struct SearchScreen: View {
                 .foregroundStyle(.textTertiary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-        } else if showCompleted || results.completedCount > 0 {
+        } else if results.completedCount > 0 {
             Button {
                 showCompleted.toggle()
             } label: {
                 Label(
-                    showCompleted ? "Hide completed" : "Show completed (\(results.completedCount))",
+                    "\(showCompleted ? "Hide" : "Show") completed (\(results.completedCount))",
                     systemImage: showCompleted ? "chevron.up" : "chevron.down")
                     .font(.pkUI)
                     .foregroundStyle(.textAction)

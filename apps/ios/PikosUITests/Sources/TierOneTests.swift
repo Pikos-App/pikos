@@ -265,7 +265,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.staticTexts["Loading…"].exists)
     }
 
-    // qa: IOS-05:2
+    // qa: IOS-05:3
     func testSearchFindsAPageByItsTitle() {
         quickAdd("Quarterly review today")
         assertRowExists("Quarterly review")
@@ -293,7 +293,35 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Switch view"].firstMatch.isHittable, "onto the list it was opened from")
     }
 
-    // qa: IOS-05:2
+    // qa: IOS-05:3
+    func testSearchCountsCompletedMatchesAndOffersTheToggleOnlyWhenOneMatches() {
+        quickAdd("Quarterly review today")
+        assertRowExists("Quarterly review")
+        app.buttons["Mark as done"].firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: app.staticTexts["Quarterly review"]))
+        quickAdd("Quarterly budget today")
+        assertRowExists("Quarterly budget")
+
+        app.buttons["Search"].firstMatch.tap()
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+        field.typeText("quarterly")
+        let show = app.buttons["Show completed (1)"]
+        XCTAssertTrue(show.waitForExistence(timeout: Self.timeout), "the finished match is counted")
+        show.tap()
+        XCTAssertTrue(
+            app.buttons["Hide completed (1)"].waitForExistence(timeout: Self.timeout),
+            "and still counted once shown")
+
+        field.typeText(" budget")
+        XCTAssertTrue(app.buttons["Quarterly budget"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(
+            waitForDisappearance(of: app.buttons["Hide completed (1)"]),
+            "no toggle once nothing finished matches")
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'completed ('")).firstMatch.exists)
+    }
+
+    // qa: IOS-05:3
     func testSearchSuggestsThePageLastOpenedBeforeAnythingIsTyped() {
         quickAdd("Trip notes today")
         assertRowExists("Trip notes")
