@@ -24,6 +24,23 @@ interface SlashCommand {
   command: (editor: Editor) => void;
 }
 
+/**
+ * A table typed into an empty list item takes that item's place, lifted out to the page body.
+ * Inserted in place, it would nest under a blank bullet, since a list item must open with a
+ * paragraph.
+ */
+function insertTableOnBody(editor: Editor) {
+  editor.commands.focus();
+  let isInEmptyListItem = editor.state.selection.$from.parent.content.size === 0;
+
+  while (isInEmptyListItem) {
+    isInEmptyListItem =
+      editor.commands.liftListItem("listItem") || editor.commands.liftListItem("taskItem");
+  }
+
+  editor.commands.insertTable({ cols: 3, rows: 3, withHeaderRow: true });
+}
+
 const COMMANDS: SlashCommand[] = [
   {
     aliases: ["h1", "heading1"],
@@ -90,8 +107,7 @@ const COMMANDS: SlashCommand[] = [
   },
   {
     aliases: ["grid", "spreadsheet"],
-    command: (editor) =>
-      editor.chain().focus().insertTable({ cols: 3, rows: 3, withHeaderRow: true }).run(),
+    command: insertTableOnBody,
     description: "Insert a data table",
     icon: "⊞",
     title: "Table",

@@ -152,6 +152,17 @@ appTest(
       await expect(body.getByRole("columnheader")).toHaveCount(3);
     });
 
+    await appTest.step("EDIT-03 a table typed into an empty bullet takes its place", async () => {
+      await insert("Bullet list");
+      await app.keyboard.type("A bullet");
+      await app.keyboard.press("Enter");
+      await app.keyboard.type("/");
+      await menu.getByRole("option", { name: /^\S+ Table / }).click();
+      await expect(body.getByRole("table")).toBeVisible();
+      await expect(body.getByRole("listitem")).toHaveCount(1);
+      await expect(body.getByRole("listitem").getByRole("table")).toHaveCount(0);
+    });
+
     await appTest.step("EDIT-03 Image is offered (its file picker is EDIT-15's)", async () => {
       await clearBody(app);
       await app.keyboard.type("/");

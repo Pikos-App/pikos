@@ -46,7 +46,7 @@ appTest(
 // ─── Zero matches ──────────────────────────────────────────────────────────
 
 appTest(
-  "find in page shows zero matches",
+  "find in page shows zero matches, in a bar clear of the window's edge",
   { tag: ["@EDIT-10:3"] },
   async ({ app }) => {
     await quickAdd(app, "empty search page");
@@ -62,6 +62,11 @@ appTest(
 
     await expect(app.getByText("0 of 0")).toBeVisible();
     await expect(editor.locator(".find-match")).toHaveCount(0);
+
+    const gapToEdge = await findInput.locator("..").evaluate(
+      (el) => window.innerWidth - el.getBoundingClientRect().right
+    );
+    expect(gapToEdge).toBeGreaterThanOrEqual(8);
   }
 );
 

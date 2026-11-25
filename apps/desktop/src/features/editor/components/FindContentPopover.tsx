@@ -116,7 +116,7 @@ export function FindContentPopover({ editor, scroller }: FindContentPopoverProps
 
   return (
     <div
-      className="absolute top-0 right-0 z-10 flex items-center gap-1 rounded-bl-lg border border-border/40 bg-surface-secondary px-3 py-1.5 shadow-sm"
+      className="absolute top-2 right-3 z-10 flex items-center gap-1 rounded-lg border border-border/40 bg-surface-secondary px-3 py-1.5 shadow-sm"
       onBlur={handleFocusOut}
       ref={popoverRef}
     >
