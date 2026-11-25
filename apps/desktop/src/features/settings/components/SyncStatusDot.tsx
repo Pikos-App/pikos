@@ -19,6 +19,7 @@ export function SyncStatusDot({ label, state }: SyncDotMeta) {
         state === "off" && "border border-muted-foreground/60 bg-transparent"
       )}
       role="img"
+      title={label}
     />
   );
 }

@@ -41,9 +41,8 @@ describe("CalendarSyncSettings", () => {
 
     expect(await screen.findByText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
-    // Discovered calendars start disabled → status dot reads "Off".
-    expect(screen.getByLabelText("Personal: Off")).toBeInTheDocument();
-    expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Sync Work" })).not.toBeChecked();
   });
 
   // Two providers on one account list is the 0.4.0 shape; each keeps its own
@@ -69,8 +68,8 @@ describe("CalendarSyncSettings", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Sync Team" }));
 
     await waitFor(() => expect(screen.getByLabelText("Team: Stale")).toBeInTheDocument());
-    expect(screen.getByLabelText("Personal: Off")).toBeInTheDocument();
-    expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Sync Work" })).not.toBeChecked();
   });
 
   it("toggles a calendar on, flipping its switch and status dot", async () => {
@@ -88,9 +87,9 @@ describe("CalendarSyncSettings", () => {
         "true"
       )
     );
-    // Enabled but never polled in the mock → "Stale"; only Work stays "Off".
+    // Enabled but never polled in the mock, so "Stale".
     expect(screen.getByLabelText("Personal: Stale")).toBeInTheDocument();
-    expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Sync Work" })).not.toBeChecked();
   });
 
   it("recolours a calendar from the palette", async () => {

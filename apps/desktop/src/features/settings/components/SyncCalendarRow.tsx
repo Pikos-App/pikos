@@ -103,7 +103,9 @@ export function SyncCalendarRow({
         </span>
       )}
 
-      <SyncStatusDot label={`${calendar.displayName}: ${dot.label}`} state={dot.state} />
+      {calendar.enabled && (
+        <SyncStatusDot label={`${calendar.displayName}: ${dot.label}`} state={dot.state} />
+      )}
 
       <ConfirmDialog
         confirmLabel="Turn on"

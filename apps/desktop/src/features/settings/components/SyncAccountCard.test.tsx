@@ -126,5 +126,27 @@ describe("SyncAccountCard", () => {
   it("handles an account with no discovered calendars", () => {
     render_({ account: account([]) });
     expect(screen.getByText("No calendars discovered.")).toBeInTheDocument();
+    expect(screen.queryByText(/Every calendar here is off/)).not.toBeInTheDocument();
+  });
+
+  // qa: SYNC-35:2
+  it("says every calendar is off and how to turn one on, with no dot beside an off switch", () => {
+    render_({
+      account: account([
+        cal({ enabled: false }),
+        cal({ displayName: "Work", enabled: false, id: "c2" }),
+      ]),
+    });
+    expect(
+      screen.getByText("Every calendar here is off. Turn one on to bring its events into Pikos.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Personal: Off" })).not.toBeInTheDocument();
+  });
+
+  // qa: SYNC-35:2
+  it("drops the off hint once a calendar is on, and names the on calendar's dot", () => {
+    render_({ account: account([cal(), cal({ displayName: "Work", enabled: false, id: "c2" })]) });
+    expect(screen.queryByText(/Every calendar here is off/)).not.toBeInTheDocument();
+    expect(screen.getByTitle("Personal: Stale")).toBeInTheDocument();
   });
 });

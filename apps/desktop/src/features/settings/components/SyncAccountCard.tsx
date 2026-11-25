@@ -5,7 +5,14 @@ import {
   accountProviderLabel,
   defaultColorForProvider,
 } from "@pikos/core";
-import { CalendarSync, KeyRound, MoreHorizontal, RefreshCw, Server } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarSync,
+  KeyRound,
+  MoreHorizontal,
+  RefreshCw,
+  Server,
+} from "lucide-react";
 import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -50,11 +57,14 @@ export function SyncAccountCard({
     account.calendars.map((c) => results[c.id]),
     account.reconnectNeeded
   );
+  const everyCalendarOff =
+    account.calendars.length > 0 && account.calendars.every((c) => !c.enabled);
+  const ProviderIcon = account.provider === "google" ? CalendarDays : Server;
 
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
-        <Server className="size-4 shrink-0 text-muted-foreground" />
+        <ProviderIcon className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{accountAddress(account)}</p>
           {busy ? (
@@ -114,6 +124,11 @@ export function SyncAccountCard({
       </div>
 
       <div className="px-4 py-1">
+        {everyCalendarOff && (
+          <p className="pt-2 text-xs text-muted-foreground">
+            Every calendar here is off. Turn one on to bring its events into Pikos.
+          </p>
+        )}
         {account.calendars.length === 0 ? (
           <p className="py-3 text-sm text-muted-foreground">No calendars discovered.</p>
         ) : (
