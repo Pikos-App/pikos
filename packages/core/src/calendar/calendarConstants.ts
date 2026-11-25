@@ -106,9 +106,11 @@ export const COMPACT_MODE_WIDTH_PX = 100;
 export const TITLE_MIN_WIDTH_PX = 54;
 
 /**
- * If any block would render below this rendered width (px), the layout
- * collapses the smallest blocks into a `+N more` pill at the cluster's
- * right edge instead of letting their titles truncate to a single letter.
+ * If any block would render below this rendered width (px at calendar zoom 1, scaled by the
+ * zoom), the layout collapses the smallest blocks into a `+N more` pill at the cluster's
+ * right edge instead of letting their titles truncate to a single letter. Unscaled, it fell
+ * under `TITLE_MIN_WIDTH_PX` once the text grew, and a block between the two showed its
+ * checkbox alone.
  */
 export const OVERFLOW_MIN_WIDTH_PX = 60;
 

@@ -113,6 +113,9 @@ const PILL_MAX_WIDTH_PCT = 50;
  * narrowing by a pixel or two, as it does when the calendar text grows and
  * widens the gutter, emptied whole mornings.
  *
+ * A first event left alone beside its pill takes the column back, unless the pill would sit on its
+ * title. Kept to its half of a split, at a large text size it had room for its checkbox only.
+ *
  * The pill's width floor scales with the text, because its label does.
  */
 export function collapseUnderWidth(
@@ -122,7 +125,9 @@ export function collapseUnderWidth(
   zoom = 1
 ): { visible: CalendarBlock[]; pills: OverflowPill[] } {
   if (columnWidth <= 0) return { pills: [], visible: blocks };
+  const minWidthPx = OVERFLOW_MIN_WIDTH_PX * zoom;
   const collapsedIds = new Set<string>();
+  const widened = new Map<CalendarBlock, CalendarBlock>();
   const pills: OverflowPill[] = [];
   for (const cluster of groupByPixelOverlap(blocks)) {
     const first = cluster.reduce((best, b) =>
@@ -132,7 +137,7 @@ export function collapseUnderWidth(
       (b) =>
         b !== first &&
         (b.cascadeDepth > MAX_VISIBLE_CASCADE_DEPTH ||
-          (b.widthPct / 100) * columnWidth < OVERFLOW_MIN_WIDTH_PX)
+          (b.widthPct / 100) * columnWidth < minWidthPx)
     );
     if (collapsed.length === 0) continue;
     let pill = pillFor(collapsed, columnWidth, chipHeight, zoom);
@@ -144,9 +149,18 @@ export function collapseUnderWidth(
     }
     for (const b of collapsed) collapsedIds.add(b.page.id);
     pills.push(pill);
+
+    const standsAlone = collapsed.length === cluster.length - 1;
+    const pillClearsTitle = Math.abs(first.top - pill.top) >= pill.height;
+    if (standsAlone && pillClearsTitle) {
+      widened.set(first, { ...first, widthPct: 100 - first.leftPct });
+    }
   }
   if (pills.length === 0) return { pills, visible: blocks };
-  return { pills, visible: blocks.filter((b) => !collapsedIds.has(b.page.id)) };
+  return {
+    pills,
+    visible: blocks.filter((b) => !collapsedIds.has(b.page.id)).map((b) => widened.get(b) ?? b),
+  };
 }
 
 /** Blocks whose pixel spans connect, the same relation the layout cascades by.

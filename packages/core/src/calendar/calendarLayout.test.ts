@@ -10,6 +10,7 @@ import {
   HOUR_HEIGHT,
   MAX_VISIBLE_CASCADE_DEPTH,
   OVERFLOW_MIN_WIDTH_PX,
+  TITLE_MIN_WIDTH_PX,
 } from "./calendarConstants";
 import {
   buildCollapseGeometry,
@@ -216,6 +217,45 @@ describe("collapseUnderWidth", () => {
     const { pills, visible } = collapseUnderWidth(blocks, 110);
     expect(visible.map((b) => b.page.id)).toEqual(["left"]);
     expect(pills.map((p) => p.pageIds)).toEqual([["right"]]);
+  });
+
+  // qa: CAL-30
+  it("keeps the title of a page overlapped half an hour in at a large text size", () => {
+    const pages = [
+      makePage({
+        id: "tax",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+      }),
+      makePage({
+        id: "standup",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:30:00",
+      }),
+    ];
+    const textSizeAndColumn = [
+      [20, 120],
+      [28, 140],
+    ] as const;
+
+    for (const [textSize, column] of textSizeAndColumn) {
+      const zoom = textSize / 14;
+      const metrics = computeCalendarMetrics(64, zoom);
+      const blocks = buildDayBlocks(pages, new Date(2026, 2, 15), metrics);
+
+      const { pills, visible } = collapseUnderWidth(
+        blocks,
+        column,
+        metrics.compactBlockHeight,
+        zoom
+      );
+
+      expect(visible.map((b) => b.page.id)).toEqual(["tax"]);
+      expect((visible[0]!.widthPct / 100) * column).toBeGreaterThanOrEqual(
+        TITLE_MIN_WIDTH_PX * zoom
+      );
+      expect(pills.map((p) => p.pageIds)).toEqual([["standup"]]);
+    }
   });
 
   it('widens the pill with the text, and drops the "more" past half the column', () => {
