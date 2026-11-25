@@ -14,6 +14,10 @@ const ZONE = "America/New_York";
 // And so must the runner: a spec that reads today in Node otherwise disagrees with the app for
 // the hours this machine's date differs from the lane's. Set here, before any worker starts.
 process.env["TZ"] = ZONE;
+// CI builds the bridge once per run and names it here, so a shard needs no Rust toolchain.
+const BRIDGE =
+  process.env["PIKOS_E2E_BRIDGE_BIN"] ??
+  "cargo run --manifest-path src-tauri/Cargo.toml --features e2e-bridge --bin pikos-e2e-bridge";
 
 export default defineConfig<{ storage: StorageLane; tightCache: boolean }>({
   expect: {
@@ -54,11 +58,11 @@ export default defineConfig<{ storage: StorageLane; tightCache: boolean }>({
     {
       // Reused only when E2E_REUSE_BRIDGE is set, by a caller that built and started the
       // bridge itself: a bridge left running from an older build would test old code.
-      command: `TZ=${ZONE} PIKOS_E2E_LARGE_TEMPLATE=${largeTemplatePath(ZONE)} cargo run --manifest-path src-tauri/Cargo.toml --features e2e-bridge --bin pikos-e2e-bridge`,
+      command: `TZ=${ZONE} PIKOS_E2E_LARGE_TEMPLATE=${largeTemplatePath(ZONE)} ${BRIDGE}`,
       port: BRIDGE_PORT,
       reuseExistingServer: process.env["E2E_REUSE_BRIDGE"] === "1",
       stderr: "pipe",
-      // A cold local build of the app crate takes minutes; CI builds it in a step first.
+      // A cold local build of the app crate takes minutes.
       timeout: 600_000,
     },
     {
