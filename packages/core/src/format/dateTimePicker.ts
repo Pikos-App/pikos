@@ -47,7 +47,10 @@ export function formatTriggerLabel(
   const durationSuffix =
     durationMinutes && durationMinutes > 0 ? ` · ${formatDurationLabel(durationMinutes)}` : "";
 
-  const isPast = isAllDay ? date < startOfDay(now) : date < now;
+  // Late is judged on the page's end, so a page still under way isn't marked overdue.
+  const hasEnd = !!endIso && isAllDayIso(endIso) === isAllDay && endIso > iso;
+  const endsAt = hasEnd ? parseLocalISO(endIso) : date;
+  const isPast = isAllDay ? endsAt < startOfDay(now) : endsAt < now;
   const dueSoon = !isPast && !isDone && date < addHours(now, 48);
 
   // Multi-day all-day: show the explicit range ("May 2 – 10"). Skipping the

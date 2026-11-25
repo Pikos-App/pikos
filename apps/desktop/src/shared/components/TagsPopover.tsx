@@ -1,6 +1,6 @@
 // Popover stays open across toggles for multi-select; Escape closes.
 
-import { Check, Hash } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,7 +29,7 @@ export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: 
   const hasSelected = selected.length > 0;
   const label =
     selected.length === 0
-      ? "Tags"
+      ? "No tags"
       : selected.length === 1
         ? `#${selected[0]}`
         : selected.length === 2
@@ -56,7 +56,6 @@ export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: 
             hasSelected ? "text-muted-foreground" : "text-subtle"
           )}
         >
-          {!hasSelected && <Hash aria-hidden="true" className="shrink-0" size={13} />}
           <span className="max-w-chip-label truncate">{label}</span>
         </button>
       }

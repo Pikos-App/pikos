@@ -691,3 +691,56 @@ appTest(
     });
   }
 );
+
+/** For each separator dot a person can see, whether a chip sits on its line to either side. */
+function visibleDotsBetweenChips(row: Locator) {
+  return row.evaluate((el) => {
+    const sharesLine = (a: Element, b: Element | null) => {
+      if (!b) return false;
+      const first = a.getBoundingClientRect();
+      const second = b.getBoundingClientRect();
+      return first.top < second.bottom && second.top < first.bottom;
+    };
+
+    return [...el.children]
+      .filter((child) => child.textContent === "·" && getComputedStyle(child).visibility === "visible")
+      .map((dot) => sharesLine(dot, dot.previousElementSibling) && sharesLine(dot, dot.nextElementSibling));
+  });
+}
+
+function lineCount(row: Locator) {
+  return row.evaluate(
+    (el) => new Set([...el.children].map((child) => Math.round(child.getBoundingClientRect().top))).size
+  );
+}
+
+appTest(
+  "at 200% text the properties row wraps without a stray dot, and empty fields say so",
+  { tag: ["@EDIT-30"] },
+  async ({ app }) => {
+    await app.evaluate(() => localStorage.setItem("pikos:interfaceTextScale", "2"));
+    await app.reload();
+    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    await quickAdd(app, "Order the desk frame today at 9am !high #home #desk");
+    await quickAdd(app, "Loose thought");
+    const row = app.getByRole("group", { name: "Page properties" });
+
+    await appTest.step("EDIT-30 a wrapped row has no dot ending or starting a line", async () => {
+      await openEditorForPage(app, "Order the desk frame");
+      await expect.poll(() => lineCount(row)).toBeGreaterThan(1);
+      const dots = await visibleDotsBetweenChips(row);
+      expect(dots.length).toBeGreaterThan(0);
+      expect(dots.every(Boolean)).toBe(true);
+    });
+
+    await appTest.step("EDIT-30 a priority shows as its name alone", async () => {
+      await expect(row.getByRole("button", { name: "Priority: High" })).toHaveText("High");
+    });
+
+    await appTest.step("EDIT-30 an empty priority and tags read as empty", async () => {
+      await openEditorForPage(app, "Loose thought");
+      await expect(row.getByRole("button", { name: "Priority: No priority" })).toHaveText("No priority");
+      await expect(row.getByRole("button", { name: "Tags: none" })).toHaveText("No tags");
+    });
+  }
+);

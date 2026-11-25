@@ -59,15 +59,16 @@ export function PriorityDropdown({
             {hasPriority ? cfg.icon : "—"}
           </button>
         ) : (
+          // Label only: beside the byline's separator dots a glyph read as a stray mark, and
+          // an unset priority's dash read as a value.
           <button
             aria-label={`Priority: ${cfg.label}`}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
+              "inline-flex shrink-0 items-center rounded text-sm whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
               colour
             )}
           >
-            <span className="text-sm font-medium">{hasPriority ? cfg.icon : "—"}</span>
-            <span className="text-sm">{hasPriority ? cfg.label : "Priority"}</span>
+            {cfg.label}
           </button>
         )}
       </DropdownMenuTrigger>

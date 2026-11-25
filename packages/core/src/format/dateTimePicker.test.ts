@@ -75,6 +75,27 @@ describe("formatTriggerLabel", () => {
     const r = formatTriggerLabel("2026-04-22", "2026-04-30", false);
     expect(r.isPast).toBe(false);
   });
+
+  it("all-day span that began yesterday and ends tomorrow: not past", () => {
+    const r = formatTriggerLabel("2026-04-20", "2026-04-22", false);
+    expect(r.isPast).toBe(false);
+  });
+
+  it("timed page under way: not past", () => {
+    const r = formatTriggerLabel("2026-04-21T11:30:00", "2026-04-21T12:15:00", false);
+    expect(r.isPast).toBe(false);
+    expect(r.label).toBe("Today 11:30am · 45m");
+  });
+
+  it("timed page whose end has gone by: past", () => {
+    const r = formatTriggerLabel("2026-04-21T11:00:00", "2026-04-21T11:30:00", false);
+    expect(r.isPast).toBe(true);
+  });
+
+  it("timed page with no end, once its start has gone by: past", () => {
+    const r = formatTriggerLabel("2026-04-21T11:00:00", null, false);
+    expect(r.isPast).toBe(true);
+  });
 });
 
 describe("parseCustomDurationStr", () => {
