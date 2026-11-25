@@ -66,6 +66,9 @@ export default defineConfig({
       VITE_TEST_MODE: "true",
     },
     environment: "jsdom",
+    // Node 26 has a `localStorage` of its own that is undefined without a backing file, and it
+    // shadows jsdom's, so every suite failed on `localStorage.clear()`. Node 24 accepts the flag.
+    execArgv: ["--no-experimental-webstorage"],
     // The conformance tables are read off disk with `node:fs`, so they are not in
     // vitest's module graph and `--changed` selects nothing when one is edited. The
     // Rust runners catch a break because `cargo test` runs everything; this side

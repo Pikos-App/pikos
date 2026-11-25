@@ -1,20 +1,46 @@
 use std::process::Command;
 
 fn main() {
-    let commit = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "unknown".into());
+    let commit = git(&["rev-parse", "--short", "HEAD"]).unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=PIKOS_GIT_COMMIT={commit}");
-    println!("cargo:rerun-if-changed=../../../.git/HEAD");
-    println!("cargo:rerun-if-changed=../../../.git/refs");
+    watch_commit();
 
     link_icloud_sync();
     tauri_build::build()
+}
+
+fn git(args: &[&str]) -> Option<String> {
+    Command::new("git")
+        .args(args)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Reruns this script when the commit changes, and at no other time. Git names the files, so this
+/// holds in a worktree, whose `.git` is a file: a hardcoded `.git/HEAD` there doesn't exist,
+/// and a missing file reads as changed, so every build recompiled the crate. Only the checked-out
+/// branch's ref is watched, rather than all of `refs/`, so a fetch doesn't recompile it either.
+fn watch_commit() {
+    let Some(head) = git(&["rev-parse", "--git-path", "HEAD"]) else {
+        return;
+    };
+    println!("cargo:rerun-if-changed={head}");
+    let Some(branch) = git(&["symbolic-ref", "-q", "HEAD"]) else {
+        return; // Detached: the commit is in HEAD itself.
+    };
+    // A ref git has packed has no file of its own, and watching a missing file would rerun
+    // every build, so watch the packed list instead.
+    let packed = || git(&["rev-parse", "--git-path", "packed-refs"]);
+    let watched = git(&["rev-parse", "--git-path", &branch])
+        .filter(|path| std::path::Path::new(path).exists())
+        .or_else(packed);
+    if let Some(path) = watched {
+        println!("cargo:rerun-if-changed={path}");
+    }
 }
 
 /// With the `icloud-sync` feature on a Mac, builds the Swift transport as a static library and

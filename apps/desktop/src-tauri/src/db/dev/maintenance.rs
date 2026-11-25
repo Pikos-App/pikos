@@ -79,14 +79,14 @@ pub async fn wipe_app_data(
 ) -> AppResult<()> {
     log::info!("wipe_app_data action=drop_pool_remove_disk");
 
-    // close().await, not just drop: SqlitePool's Drop hands cleanup to a
+    // close_pool, not just drop: SqlitePool's Drop hands cleanup to a
     // background task, so connections can outlive the wipe and the WAL can
     // stay uncheckpointed — the next launch would then race WAL recovery
     // across StrictMode's double-mount and hit SQLITE_BUSY. The test
     // `wipe_drops_pool_so_handles_release_before_file_removal` asserts this
     // close-before-unlink ordering.
     if let Some(pool) = state.take_pool().await {
-        pool.close().await;
+        pikos_db::close_pool(&pool).await;
     }
 
     let app_data = app
@@ -279,7 +279,7 @@ pub async fn restore_backup(
     pikos_db::backups::verify_restorable(&path, &file_name).await?;
 
     if let Some(pool) = state.take_pool().await {
-        pool.close().await;
+        pikos_db::close_pool(&pool).await;
     }
 
     let displaced = pikos_db::restore_backup(&path, &file_name).await?;

@@ -92,7 +92,10 @@ jobs:
       - name: Build the editor bundle
         run: bash scripts/build-editor-bundle.sh
 
+      # The archive is for phones, so the device slice is the only one it links.
       - name: Build PikosFFI.xcframework
+        env:
+          PIKOS_IOS_TARGETS: aarch64-apple-ios
         run: bash scripts/build-ios-framework.sh
 
       - name: Generate the Xcode project

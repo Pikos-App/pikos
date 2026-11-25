@@ -1,0 +1,11 @@
+# Read by every cargo run under this directory: both workspaces, the iOS framework build, and
+# release builds, which is deliberate. A flag set only for tests would rebuild SQLite each time
+# you switched between testing and running the app.
+
+[env]
+# Without this, every SQLite allocation takes one process-wide lock to keep a running total of
+# memory in use. Parallel tests each open their own database, so they spent most of their time
+# queued on that lock: the workspace's tests ran in 8.3 minutes with it and 2.1 without, on an
+# M2. Nothing in Pikos reads the total, and SQLite's own docs recommend turning it off. The app
+# gains the same, on a smaller scale.
+LIBSQLITE3_FLAGS = "-DSQLITE_DEFAULT_MEMSTATUS=0"
