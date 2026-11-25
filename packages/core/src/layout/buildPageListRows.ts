@@ -189,6 +189,13 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
     }
   }
 
+  // A view with no open pages offers Completed only once a completed page is known, so an empty
+  // folder doesn't offer a row that opens onto nothing.
+  const isEmptyView = rows[0]?.type === "empty-state";
+  const hasNoCompleted = completedPages.length === 0 && !completedHasMore;
+
+  if (isEmptyView && hasNoCompleted) return { pageToRowIndex, rows };
+
   rows.push({ key: "completed-toggle", type: "completed-toggle" });
   if (!completedCollapsed) {
     for (const p of completedPages) {

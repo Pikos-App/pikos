@@ -45,7 +45,18 @@ function rowTypes(input: BuildPageListRowsInput) {
 describe("empty state", () => {
   it("shows empty-state row when no visible pages", () => {
     const types = rowTypes(defaults());
-    expect(types).toEqual(["empty-state", "completed-toggle"]);
+    expect(types).toEqual(["empty-state"]);
+  });
+
+  it("offers Completed on an empty view only once a completed page is known", () => {
+    expect(rowTypes(defaults({ completedPages: [makePage()] }))).toEqual([
+      "empty-state",
+      "completed-toggle",
+    ]);
+    expect(rowTypes(defaults({ completedHasMore: true }))).toEqual([
+      "empty-state",
+      "completed-toggle",
+    ]);
   });
 });
 
@@ -216,7 +227,7 @@ describe("upcoming view", () => {
 
   it("falls back to the empty state when there is nothing in the window", () => {
     const types = rowTypes(defaults({ daySections: [], visiblePages: [] }));
-    expect(types).toEqual(["empty-state", "completed-toggle"]);
+    expect(types).toEqual(["empty-state"]);
   });
 });
 
@@ -284,6 +295,7 @@ describe("completed section", () => {
         completedCollapsed: false,
         completedHasMore: false,
         completedPages: [],
+        visiblePages: [makePage()],
       })
     );
     expect(types).toContain("empty-completed");
@@ -381,6 +393,6 @@ describe("lists loaded a window at a time", () => {
   it("waits for the first window before saying the list is empty", () => {
     const empty = [{ count: 0, header: null, key: "inbox", slots: [] }];
     expect(rowTypes(defaults({ loading: true, sections: empty }))).toEqual(["completed-toggle"]);
-    expect(rowTypes(defaults({ sections: empty }))).toEqual(["empty-state", "completed-toggle"]);
+    expect(rowTypes(defaults({ sections: empty }))).toEqual(["empty-state"]);
   });
 });

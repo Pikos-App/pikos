@@ -11,6 +11,7 @@ const log = createLogger("useCompletedPages");
 const PAGE_SIZE = 20;
 
 interface PaginationState {
+  viewId: string;
   total: number;
   offset: number;
   /** IDs explicitly loaded by this view's paginated fetches. The derived
@@ -30,9 +31,8 @@ export function useCompletedPages(activeViewId: string) {
   const { listCompletedPages, mergePages } = usePages();
   const held = useHeldPages();
 
-  // Per-view pagination metadata (no page data — that lives in WorkspaceContext)
-  const [paginationMap, setPaginationMap] = useState<Map<string, PaginationState>>(new Map());
-  const fetchedViewsRef = useRef<Set<string>>(new Set());
+  const [paginationState, setPaginationState] = useState<PaginationState | null>(null);
+  const fetchingViewRef = useRef<string | null>(null);
   // Timestamp captured on mount — pages whose `completedAt` is newer than
   // this were completed during this session and should be visible in the
   // Completed section even before pagination explicitly fetched them.
@@ -43,16 +43,13 @@ export function useCompletedPages(activeViewId: string) {
   // path that react-hooks/purity polices.
   const [sessionStartMs] = useState(() => Math.floor(Date.now() / 1000) * 1000);
 
-  const pagination = paginationMap.get(activeViewId);
+  const pagination = paginationState?.viewId === activeViewId ? paginationState : undefined;
 
   function mergeLoadedIds(viewId: string, incoming: string[], total: number, offset: number) {
-    setPaginationMap((prev) => {
-      const next = new Map(prev);
-      const existing = next.get(viewId);
-      const merged = new Set(existing?.loadedIds ?? []);
+    setPaginationState((prev) => {
+      const merged = new Set(prev?.viewId === viewId ? prev.loadedIds : []);
       for (const id of incoming) merged.add(id);
-      next.set(viewId, { loadedIds: merged, offset, total });
-      return next;
+      return { loadedIds: merged, offset, total, viewId };
     });
   }
 
@@ -73,24 +70,28 @@ export function useCompletedPages(activeViewId: string) {
     };
   }
 
+  /** Fetches the first batch afresh every time, never reusing an earlier one: showing another
+   *  view evicts every page no list holds, completed pages included, and a write since (an import,
+   *  a sync) can have added completed pages the earlier batch didn't see. */
   async function onExpand() {
-    if (fetchedViewsRef.current.has(activeViewId)) return;
-    fetchedViewsRef.current.add(activeViewId);
+    const isFetching = fetchingViewRef.current === activeViewId;
+    if (isFetching) return;
+
+    const viewId = activeViewId;
+    fetchingViewRef.current = viewId;
     try {
       const result = await listCompletedPages(buildFilter(0));
       mergePages(result.pages);
-      mergeLoadedIds(
-        activeViewId,
-        result.pages.map((p) => p.id),
-        result.total,
-        result.pages.length
-      );
+      setPaginationState({
+        loadedIds: new Set(result.pages.map((p) => p.id)),
+        offset: result.pages.length,
+        total: result.total,
+        viewId,
+      });
     } catch (err) {
-      // Drop the fetched-marker so the next mount can retry. Logging the
-      // swallowed error keeps a record in the log file if the fetch keeps
-      // failing for the same view.
       log.error(`fetchCompletedPages(${activeViewId}) failed`, err);
-      fetchedViewsRef.current.delete(activeViewId);
+    } finally {
+      fetchingViewRef.current = null;
     }
   }
 

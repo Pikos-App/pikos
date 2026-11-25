@@ -462,6 +462,15 @@ appTest(
       await expect(completed).toHaveAttribute("aria-expanded", "false");
       await expect(app.locator("[data-page-list-item]")).toHaveCount(0);
     });
+
+    await appTest.step("LIST-11 an empty folder has no Completed row", async () => {
+      await createFolder(app, "Nothing yet");
+      await expect(app.getByText("No pages in this folder")).toBeVisible();
+      await expect(completed).toHaveCount(0);
+
+      await app.getByRole("button", { name: /^Inbox/ }).click();
+      await expect(completed).toBeVisible();
+    });
   }
 );
 

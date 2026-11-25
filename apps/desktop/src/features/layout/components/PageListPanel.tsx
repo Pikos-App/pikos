@@ -171,6 +171,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       : {}),
   });
 
+  const isEmptyView = rows[0]?.type === "empty-state";
+  useEffect(() => {
+    if (isEmptyView) void onExpandCompleted();
+  }, [isEmptyView, activeViewId]);
+
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
   const virtualizer = useVirtualizer({
     count: rows.length,
