@@ -58,7 +58,25 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      - run: pnpm install --frozen-lockfile
+
+      - name: Read the Rust toolchain
+        id: rust
+        run: echo "version=$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+      # The framework is a release build of the Rust core, so a run that changed no Rust takes it
+      # from here. Skipping the build also skips its regeneration of the Swift bindings, so the
+      # committed ones stand in, and the workspace job proves those are current. This file is in
+      # the key because the slices and the Xcode it builds with are set here.
+      - name: Restore PikosFFI.xcframework
+        id: ffi
+        uses: actions/cache@v5
+        with:
+          path: apps/ios/PikosCore/Frameworks/PikosFFI.xcframework
+          key: ios-ffi-v1-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', '.cargo/**', 'crates/**', 'scripts/build-ios-framework.sh', 'scripts/gen-swift-bindings.sh', '.github/workflows/_ios.yml') }}
+
       - name: Cache cargo
+        if: steps.ffi.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -67,8 +85,6 @@ jobs:
             target
           key: ios-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ios-cargo-
-
-      - run: pnpm install --frozen-lockfile
 
       - name: Install the build tools
         run: brew install xcodegen xcbeautify
@@ -88,6 +104,7 @@ jobs:
       # host, since each slice is a full release build of the Rust core. The
       # device slice is TestFlight's to build.
       - name: Build PikosFFI.xcframework
+        if: steps.ffi.outputs.cache-hit != 'true'
         env:
           PIKOS_IOS_TARGETS: aarch64-apple-ios-sim aarch64-apple-darwin
         run: bash scripts/build-ios-framework.sh

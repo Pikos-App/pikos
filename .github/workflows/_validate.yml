@@ -423,29 +423,87 @@ jobs:
               echo "::error::Swift bindings are stale. Run scripts/gen-swift-bindings.sh and commit the result."
               exit 1
             }
-  # Every test not tagged @mock-only, against the real Rust writer. Same
-  # container as `e2e`, so the browser is the one the mock lane uses; the bridge
-  # links the app crate, so the container also needs Rust and the Tauri build
-  # libraries the `rust` job installs. Most of the suite is here, so the shards are.
-  e2e-bridge:
-    name: E2E Tests, real writer (${{ matrix.lane }})
+  # The two binaries the real-writer lane runs: the e2e bridge, which is the desktop crate, and
+  # the CLI that seeds the @large workspace, from the root one. Built once per run, in the lane's
+  # own container so they link against its libraries, rather than once per shard. A run that
+  # changed no Rust restores them from the cache in seconds.
+  e2e-binaries:
+    name: E2E binaries
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
-    # Six shards, because Playwright splits by test count rather than time, so the shard that
-    # draws the slow tests sets the job's length. At four, the shards ran from 3.5 to 9 minutes.
+    steps:
+      - uses: actions/checkout@v5
+
+      # Every path either binary is compiled from. The prefix is bumped by hand when how they
+      # are built changes.
+      - name: Restore the binaries
+        id: cached
+        uses: actions/cache@v5
+        with:
+          path: e2e-bin
+          key: e2e-bin-v1-${{ hashFiles('Cargo.toml', 'Cargo.lock', '.cargo/**', 'crates/**', 'apps/desktop/src-tauri/**', 'apps/apple/PikosSync/**') }}
+
+      - name: Install system dependencies
+        if: steps.cached.outputs.cache-hit != 'true'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y curl build-essential pkg-config tzdata libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.cached.outputs.cache-hit != 'true'
+
+      # Saved from main only: the shards wait for this job to finish, saving included, and that
+      # took about three minutes. A pull request restores main's.
+      - uses: Swatinem/rust-cache@v2
+        if: steps.cached.outputs.cache-hit != 'true'
+        with:
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build the binaries
+        if: steps.cached.outputs.cache-hit != 'true'
+        run: |
+          (cd apps/desktop/src-tauri && cargo build --features e2e-bridge --bin pikos-e2e-bridge)
+          cargo build --release -p pikos-cli
+          mkdir -p e2e-bin
+          cp apps/desktop/src-tauri/target/debug/pikos-e2e-bridge target/release/pikos e2e-bin/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-bin
+          path: e2e-bin/
+          retention-days: 1
+
+  # Every test not tagged @mock-only, against the real Rust writer. Same
+  # container as `e2e`, so the browser is the one the mock lane uses. Most of the
+  # suite is here, so the shards are.
+  e2e-bridge:
+    name: E2E Tests, real writer (${{ matrix.lane }})
+    needs: e2e-binaries
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    # Eight shards, because Playwright splits by test count rather than time, so the shard that
+    # draws the slow tests sets the job's length. At six, the shards ran from 2.8 to 5.7 minutes.
     # The four 20,000-page tests take over a minute each, so they get a runner of their own: in
     # with the rest they all drew one shard, which then ran twice as long as the others.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { lane: shard 1/6, args: --project bridge --shard=1/6 }
-          - { lane: shard 2/6, args: --project bridge --shard=2/6 }
-          - { lane: shard 3/6, args: --project bridge --shard=3/6 }
-          - { lane: shard 4/6, args: --project bridge --shard=4/6 }
-          - { lane: shard 5/6, args: --project bridge --shard=5/6 }
-          - { lane: shard 6/6, args: --project bridge --shard=6/6 }
+          - { lane: shard 1/8, args: --project bridge --shard=1/8 }
+          - { lane: shard 2/8, args: --project bridge --shard=2/8 }
+          - { lane: shard 3/8, args: --project bridge --shard=3/8 }
+          - { lane: shard 4/8, args: --project bridge --shard=4/8 }
+          - { lane: shard 5/8, args: --project bridge --shard=5/8 }
+          - { lane: shard 6/8, args: --project bridge --shard=6/8 }
+          - { lane: shard 7/8, args: --project bridge --shard=7/8 }
+          - { lane: shard 8/8, args: --project bridge --shard=8/8 }
           - { lane: large workspace, args: --project bridge-large }
     steps:
       - uses: actions/checkout@v5
@@ -461,35 +519,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # What the prebuilt bridge links against at runtime, without the compilers and headers a
+      # build needs.
       - name: Install system dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install -y curl build-essential pkg-config tzdata sqlite3 libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
+          apt-get install -y --no-install-recommends tzdata sqlite3 libwebkit2gtk-4.1-0 libsoup-3.0-0 librsvg2-2 libdbus-1-3
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      # Both trees: the bridge is the desktop crate, and the CLI that seeds the @large
-      # workspace is the root one.
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v8
         with:
-          workspaces: |
-            . -> target
-            apps/desktop/src-tauri -> target
-          # Every lane builds the same thing, so one saves it. All of them saving cost each about
-          # two minutes whenever the lockfile changed.
-          save-if: ${{ strategy.job-index == 0 }}
+          name: e2e-bin
+          path: e2e-bin
 
-      # Built here so the Playwright web-server timeout never covers a cold compile.
-      - name: Build the e2e bridge
-        working-directory: apps/desktop/src-tauri
-        run: cargo build --features e2e-bridge --bin pikos-e2e-bridge
-
-      # The @large tests seed their 20,000-page workspace with this. Left to the first test that
-      # asks, a cold release build of it held that shard's workers idle for about three minutes.
-      - name: Build the CLI
-        run: cargo build --release -p pikos-cli
+      # Artifacts drop the executable bit. The paths go through $GITHUB_WORKSPACE because in a
+      # container the github.workspace context names the host's path, not the container's.
+      - name: Point the tests at the binaries
+        run: |
+          chmod +x e2e-bin/*
+          echo "PIKOS_E2E_BRIDGE_BIN=$GITHUB_WORKSPACE/e2e-bin/pikos-e2e-bridge" >> "$GITHUB_ENV"
+          echo "PIKOS_CLI_BIN=$GITHUB_WORKSPACE/e2e-bin/pikos" >> "$GITHUB_ENV"
 
       # The writer reads its zone from /etc/localtime on Linux, not TZ; the bridge
       # refuses to start if the two disagree. Must match ZONE in the bridge config.
@@ -568,17 +618,20 @@ jobs:
       - name: Cargo test (desktop crate)
         run: cargo test --all --quiet
 
-      # Cached binary so we don't reinstall every run.
-      - name: Cache cargo-audit
-        id: cache-cargo-audit
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/cargo-audit
-          key: cargo-audit-${{ runner.os }}-v1
-
+      # The release binary, pinned by version and checksum like gitleaks. Compiling it took three
+      # minutes whenever its cache had been evicted.
       - name: Install cargo-audit
-        if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
-        run: cargo install cargo-audit --locked
+        working-directory: .
+        env:
+          CARGO_AUDIT_VERSION: 0.23.0
+          CARGO_AUDIT_SHA256: 4f01c74ed84b2dffd0b1d37012a62cdf2a92c96e25bdf8eec7fcc0d4d3eb7811
+        run: |
+          name="cargo-audit-x86_64-unknown-linux-musl-v${CARGO_AUDIT_VERSION}"
+          curl -fsSL -o "$RUNNER_TEMP/$name.tgz" \
+            "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv${CARGO_AUDIT_VERSION}/$name.tgz"
+          echo "$CARGO_AUDIT_SHA256  $RUNNER_TEMP/$name.tgz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP"
+          install -m 755 "$RUNNER_TEMP/$name/cargo-audit" ~/.cargo/bin/cargo-audit
 
       # Blocking. This tree is Pikos's own crates and the dependencies they chose,
       # so an advisory here is a decision someone made. What it may stay quiet
