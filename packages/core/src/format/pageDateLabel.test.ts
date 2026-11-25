@@ -95,21 +95,27 @@ describe("formatPageDate", () => {
 
 describe("formatPageRelativeTime", () => {
   it("counts whole days for an all-day date", () => {
-    expect(formatPageRelativeTime("2026-06-15").label).toBe("today");
-    expect(formatPageRelativeTime("2026-06-18")).toMatchObject({ isPast: false, label: "3d" });
-    expect(formatPageRelativeTime("2026-06-12")).toMatchObject({ isPast: true, label: "3d" });
+    expect(formatPageRelativeTime("2026-06-15").label).toBe("Today");
+    expect(formatPageRelativeTime("2026-06-18")).toMatchObject({ isPast: false, label: "in 3d" });
+    expect(formatPageRelativeTime("2026-06-12")).toMatchObject({ isPast: true, label: "3d ago" });
   });
 
   it("counts minutes, then hours, then days for a timed schedule", () => {
     expect(formatPageRelativeTime("2026-06-15T12:00:00")).toMatchObject({
       isPast: false,
-      label: "now",
+      label: "Now",
     });
-    expect(formatPageRelativeTime("2026-06-15T12:45:00").label).toBe("45m");
-    expect(formatPageRelativeTime("2026-06-15T18:00:00").label).toBe("6hr");
+    expect(formatPageRelativeTime("2026-06-15T12:45:00").label).toBe("in 45m");
+    expect(formatPageRelativeTime("2026-06-15T18:00:00").label).toBe("in 6h");
     expect(formatPageRelativeTime("2026-06-13T12:00:00")).toMatchObject({
       isPast: true,
-      label: "2d",
+      label: "2d ago",
     });
+  });
+
+  it("says in words whether a time is past or ahead, so the same distance reads two ways", () => {
+    expect(formatPageRelativeTime("2026-06-15T08:00:00").label).toBe("4h ago");
+    expect(formatPageRelativeTime("2026-06-15T16:00:00").label).toBe("in 4h");
+    expect(formatPageRelativeTime("2026-06-15T11:40:00").label).toBe("20m ago");
   });
 });

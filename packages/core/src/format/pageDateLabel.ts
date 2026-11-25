@@ -85,6 +85,11 @@ export function formatPageDate(iso: string, now: Date = new Date()): PageDateLab
   return { isPast, label, tooltip };
 }
 
+/** The direction is in words, since the row's red and amber also mean priority on its checkbox. */
+function relativeLabel(amount: string, isPast: boolean): string {
+  return isPast ? `${amount} ago` : `in ${amount}`;
+}
+
 export function formatPageRelativeTime(iso: string, now: Date = new Date()): PageDateLabel {
   const isAllDay = isAllDayIso(iso);
   const tooltip = tooltipFor(iso);
@@ -93,23 +98,28 @@ export function formatPageRelativeTime(iso: string, now: Date = new Date()): Pag
     const date = parseLocalISO(iso);
     const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
-    if (diffDays === 0) return { isPast: false, label: "today", tooltip };
-    if (diffDays < 0) return { isPast: true, label: `${Math.abs(diffDays)}d`, tooltip };
-    return { isPast: false, label: `${diffDays}d`, tooltip };
+    const isPast = diffDays < 0;
+
+    if (diffDays === 0) return { isPast, label: "Today", tooltip };
+
+    return { isPast, label: relativeLabel(`${Math.abs(diffDays)}d`, isPast), tooltip };
   }
 
   const date = parseLocalISO(iso);
   const diffMs = date.getTime() - now.getTime();
-  const isPast = diffMs < 0;
   const abs = Math.abs(diffMs);
   const absMins = Math.round(abs / 60000);
+  const isPast = diffMs < 0 && absMins > 0;
 
-  // Within the hour → relative only (already time-informative)
-  if (absMins < 60)
-    return { isPast: isPast && absMins > 0, label: absMins === 0 ? "now" : `${absMins}m`, tooltip };
+  if (absMins === 0) return { isPast, label: "Now", tooltip };
+
+  if (absMins < 60) return { isPast, label: relativeLabel(`${absMins}m`, isPast), tooltip };
+
   const absHours = Math.round(abs / 3600000);
-  // Within the day → relative only
-  if (absHours < 24) return { isPast, label: `${absHours}hr`, tooltip };
+
+  if (absHours < 24) return { isPast, label: relativeLabel(`${absHours}h`, isPast), tooltip };
+
   const days = Math.round(abs / 86400000);
-  return { isPast, label: `${days}d`, tooltip };
+
+  return { isPast, label: relativeLabel(`${days}d`, isPast), tooltip };
 }
