@@ -485,20 +485,22 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
-    # Six shards, because Playwright splits by test count rather than time, so the shard that
-    # draws the slow tests sets the job's length. At four, the shards ran from 3.5 to 9 minutes.
+    # Eight shards, because Playwright splits by test count rather than time, so the shard that
+    # draws the slow tests sets the job's length. At six, the shards ran from 2.8 to 5.7 minutes.
     # The four 20,000-page tests take over a minute each, so they get a runner of their own: in
     # with the rest they all drew one shard, which then ran twice as long as the others.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { lane: shard 1/6, args: --project bridge --shard=1/6 }
-          - { lane: shard 2/6, args: --project bridge --shard=2/6 }
-          - { lane: shard 3/6, args: --project bridge --shard=3/6 }
-          - { lane: shard 4/6, args: --project bridge --shard=4/6 }
-          - { lane: shard 5/6, args: --project bridge --shard=5/6 }
-          - { lane: shard 6/6, args: --project bridge --shard=6/6 }
+          - { lane: shard 1/8, args: --project bridge --shard=1/8 }
+          - { lane: shard 2/8, args: --project bridge --shard=2/8 }
+          - { lane: shard 3/8, args: --project bridge --shard=3/8 }
+          - { lane: shard 4/8, args: --project bridge --shard=4/8 }
+          - { lane: shard 5/8, args: --project bridge --shard=5/8 }
+          - { lane: shard 6/8, args: --project bridge --shard=6/8 }
+          - { lane: shard 7/8, args: --project bridge --shard=7/8 }
+          - { lane: shard 8/8, args: --project bridge --shard=8/8 }
           - { lane: large workspace, args: --project bridge-large }
     steps:
       - uses: actions/checkout@v5
