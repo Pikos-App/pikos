@@ -1087,6 +1087,12 @@ async fn an_image_whose_page_was_copied_by_a_device_without_it_reaches_the_zone_
 }
 
 #[tokio::test]
+async fn a_page_ticked_after_its_trashing_and_then_purged_leaves_no_schedules_behind_on_one_device()
+{
+    run(Store::Cloud(Cloud::default()), 207630869, 3, 120).await;
+}
+
+#[tokio::test]
 async fn a_seed_replays_the_same_run_however_many_ran_before_it() {
     let once = run_cloudkit(207640746, 3, 60).await;
     let again = run_cloudkit(207640746, 3, 60).await;

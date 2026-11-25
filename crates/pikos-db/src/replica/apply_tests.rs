@@ -899,6 +899,29 @@ async fn emptying_the_trash_with_no_restore_anywhere_removes_the_page_everywhere
 }
 
 #[tokio::test]
+async fn emptying_the_trash_of_a_page_ticked_after_it_was_trashed_reaches_the_other_device_when_the_tick_comes_back(
+) {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    create_page_reminder(&mac, &page.id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+    soft_delete_page_impl(&phone, &page.id).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+    set_pages_status_impl(&mac, std::slice::from_ref(&page.id), "done", None)
+        .await
+        .unwrap();
+    let tick = send_to_own_zone(&mac).await;
+    send(&phone, &mac).await;
+
+    purge_trashed_pages_older_than(&mac, 0).await.unwrap();
+    apply(&mac, &tick).await.unwrap();
+    apply(&phone, &tick).await.unwrap();
+    converge(&mac, &phone).await;
+
+    assert_converged(&mac, &phone).await;
+}
+
+#[tokio::test]
 async fn no_reminders_set_on_one_device_beats_a_reminder_added_on_the_other() {
     let (mac, phone) = (device().await, device().await);
     let page = create_page_impl(&mac, new_page("Dentist")).await.unwrap();

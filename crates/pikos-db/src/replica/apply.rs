@@ -894,6 +894,7 @@ async fn apply_record(
 
     let local_row = read_row(tx.conn(), entity, &record.name.key).await?;
     let clocks = read_clocks(tx.conn(), entity, &record.name.key).await?;
+    let own_tomb = clocks.as_ref().and_then(|(_, _, tomb)| *tomb);
     let local = match (&local_row, clocks) {
         (Some(values), clocks) => {
             let (born, slots, tomb) = match clocks {
@@ -934,13 +935,14 @@ async fn apply_record(
                 tomb: Some(tomb),
             })
         }
-        // Removed by its parent's purge, its clocks newer than any delete of its own. While the
-        // parent is gone its records are held above, so one that gets here came with the parent
-        // brought back, and is taken as new.
+        // Removed by its parent's purge, or by its own purge dated before its last write, as
+        // emptying the trash is dated to the trashing. Taken as new, but a purge of its own still
+        // stands: the other devices haven't heard of it, and its cascade has already run here.
         (None, _) => None,
     };
 
-    let merged = merge::merge(local.as_ref(), &remote);
+    let mut merged = merge::merge(local.as_ref(), &remote);
+    merged.row.tomb = merged.row.tomb.max(own_tomb);
     let was_live = local_row.is_some();
     let now_live = merged.row.is_live();
     let writes_row = now_live && (merged.taken != 0 || !was_live);
@@ -972,8 +974,7 @@ async fn apply_record(
         }
         delete_row(tx.conn(), entity, &record.name.key).await?;
     }
-    let local_tomb = local.as_ref().and_then(|l| l.tomb);
-    let purge_news = remote.tomb.filter(|t| Some(*t) > local_tomb);
+    let purge_news = remote.tomb.filter(|t| Some(*t) > own_tomb);
     if let (true, true, Some(tomb)) = (
         now_live,
         super::capture::is_purge_target(entity),
