@@ -455,12 +455,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         if: steps.cached.outputs.cache-hit != 'true'
 
+      # Saved from main only: the shards wait for this job to finish, saving included, and that
+      # took about three minutes. A pull request restores main's.
       - uses: Swatinem/rust-cache@v2
         if: steps.cached.outputs.cache-hit != 'true'
         with:
           workspaces: |
             . -> target
             apps/desktop/src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build the binaries
         if: steps.cached.outputs.cache-hit != 'true'
