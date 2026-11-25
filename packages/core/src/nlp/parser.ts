@@ -967,7 +967,23 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
         const dtstart = scheduledStart
           ? new Date(isAllDayIso(scheduledStart) ? scheduledStart + "T00:00:00" : scheduledStart)
           : ref;
-        boundary = addDays(dtstart, win.count - 1);
+        const windowEnd = addDays(dtstart, win.count - 1);
+        // Ends on the last occurrence inside the window, not the window's last day, so
+        // "every saturday for 8 weeks" reads as ending on a Saturday. A rule here fires at
+        // most daily, so the window's day count bounds the expansion.
+        const inWindow = listOccurrences(
+          serializeRrule({
+            byweekday: spec.byday,
+            freq: spec.freq,
+            interval: spec.interval,
+            until: untilFromLocalDate(windowEnd, true),
+          }),
+          formatLocalISO(dtstart),
+          win.count
+        );
+        const lastInWindow = inWindow[inWindow.length - 1];
+
+        boundary = lastInWindow ? parseLocalISO(lastInWindow) : windowEnd;
       }
       until = untilFromLocalDate(boundary, true);
     }

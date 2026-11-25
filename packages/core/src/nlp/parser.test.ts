@@ -62,7 +62,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { parseRrule } from "../utils/recurrence";
+import { parseRrule, rruleToShortLabel } from "../utils/recurrence";
 import { parseInput } from "./parser";
 import { assertCase, forAll, type ParserCase } from "./parser.testHelpers";
 
@@ -701,8 +701,8 @@ describe("NL Page Creation Parser", () => {
         },
         input: "water plant every day at 7am for 5 days",
       },
-      // dtstart = today (2026-03-15). UNTIL ≈ +89 days ≈ June 11.
-      // Monthly from 3/15: 3/15, 4/15, 5/15, 6/15 — but UNTIL < 6/15 → 3 occurrences.
+      // dtstart = today (2026-03-15). The 90-day window ends June 12, before 6/15:
+      // 3/15, 4/15, 5/15 → 3 occurrences.
       {
         expected: {
           expansion: { count: 3, dtstart: "20260315T000000Z" },
@@ -737,6 +737,18 @@ describe("NL Page Creation Parser", () => {
           type: "recurring",
         },
         input: "standup every weekday at 9am for 2 weeks",
+      },
+      // From Sat 3/21 the window runs to Fri 5/15; the rule ends on its last Saturday.
+      {
+        expected: {
+          custom: (r) => {
+            expect(rruleToShortLabel(r.rrule)).toBe("Weekly thru May 9");
+          },
+          expansion: { count: 8, dtstart: "20260321T000000Z" },
+          rrule: ["BYDAY=SA", "UNTIL=20260509"],
+          type: "recurring",
+        },
+        input: "every saturday for 8 weeks",
       },
       // Round-trip parseable: RRULE alone (no DTSTART) survives parseRrule.
       {
@@ -2261,11 +2273,11 @@ describe("NL Page Creation Parser", () => {
         input: "party tomorrow",
         now: DEC31,
       },
-      // Month rollover: Sun Mar 29 → next Monday Mar 30. 2 weeks = 14 days → Apr 12.
+      // Month rollover: Sun Mar 29 → next Monday Mar 30. 2 weeks ends on Monday Apr 6.
       {
         expected: {
           input: { scheduledStart: "2026-03-30" },
-          rrule: ["UNTIL=20260412"],
+          rrule: ["UNTIL=20260406"],
           type: "recurring",
         },
         input: "standup every monday for 2 weeks",
@@ -2304,7 +2316,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "team sync",
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260420T235959",
           "type": "recurring",
         }
       `);
@@ -2351,7 +2363,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "1:1",
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260511T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260428T235959",
           "type": "recurring",
         }
       `);
@@ -2394,7 +2406,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "team sync",
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260420T235959",
           "type": "recurring",
         }
       `);
@@ -2403,20 +2415,20 @@ describe("NL Page Creation Parser", () => {
     it("plural-day form + bounded + time + duration", () => {
       expect(parseInput("standup mondays at 9am for 30m for 4 weeks #work", NOW))
         .toMatchInlineSnapshot(`
-        {
-          "input": {
-            "durationMinutes": 30,
-            "scheduledEnd": "2026-03-16T09:30:00",
-            "scheduledStart": "2026-03-16T09:00:00",
-            "tags": [
-              "work",
-            ],
-            "title": "standup",
-          },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260412T235959",
-          "type": "recurring",
-        }
-      `);
+          {
+            "input": {
+              "durationMinutes": 30,
+              "scheduledEnd": "2026-03-16T09:30:00",
+              "scheduledStart": "2026-03-16T09:00:00",
+              "tags": [
+                "work",
+              ],
+              "title": "standup",
+            },
+            "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260406T235959",
+            "type": "recurring",
+          }
+        `);
     });
   });
 
