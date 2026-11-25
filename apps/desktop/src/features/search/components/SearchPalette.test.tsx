@@ -160,6 +160,21 @@ describe("SearchPalette — plain queries", () => {
     fireEvent.click(await screen.findByText("Show completed (1)"));
 
     expect(await findRow("alpha archive")).toBeInTheDocument();
+    expect(screen.getByText("Hide completed (1)")).toBeInTheDocument();
+  });
+
+  it("offers no completed toggle once a search with it on matches nothing completed", async () => {
+    await setup([{ title: "alpha report" }, { done: true, title: "alpha archive" }]);
+    type("alpha");
+    fireEvent.click(await screen.findByText("Show completed (1)"));
+    await findRow("alpha archive");
+
+    type("report");
+
+    await waitFor(() => {
+      expect(queryRow("alpha archive")).toBeNull();
+    });
+    expect(screen.queryByText(/completed/i)).toBeNull();
   });
 });
 

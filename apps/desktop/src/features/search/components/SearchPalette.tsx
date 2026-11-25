@@ -606,7 +606,7 @@ export function SearchPalette() {
               {/* Toggle to include/hide completed pages. `is:done` already asked for
                   them, so the toggle reports that state instead of offering to fight it. */}
               {trimmedQuery &&
-                (showCompleted || completedCount > 0) &&
+                completedCount > 0 &&
                 (parsed.status === "done" ? (
                   <p className="px-4 py-1.5 text-xs text-subtle">Showing completed: is:done</p>
                 ) : (
@@ -615,9 +615,7 @@ export function SearchPalette() {
                     onClick={() => setShowCompleted((v) => !v)}
                     type="button"
                   >
-                    {showCompleted
-                      ? "Hide completed"
-                      : `Show completed (${completedCount}${completedCountCapped ? "+" : ""})`}
+                    {`${showCompleted ? "Hide" : "Show"} completed (${completedCount}${completedCountCapped ? "+" : ""})`}
                   </button>
                 ))}
 

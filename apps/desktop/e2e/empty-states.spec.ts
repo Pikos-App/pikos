@@ -71,7 +71,7 @@ appTest(
 
     await showCompletedBtn.click();
     await expect(palette.getByText("archive item")).toBeVisible();
-    await expect(palette.getByRole("button", { name: "Hide completed" })).toBeVisible();
+    await expect(palette.getByRole("button", { name: "Hide completed (1)" })).toBeVisible();
   }
 );
 
