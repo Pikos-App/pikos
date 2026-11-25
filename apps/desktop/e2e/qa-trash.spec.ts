@@ -202,7 +202,7 @@ appTest(
       await cell.click();
       await app.keyboard.press("Escape");
       await app.getByRole("button", { name: "Mark done" }).click();
-      await expect(app.getByRole("dialog").filter({ hasText: /other days are still open/ })).toBeVisible();
+      await expect(app.getByRole("dialog").filter({ hasText: /days before today are still open/ })).toBeVisible();
       await app.keyboard.press(mod("Mod+Backspace"));
       await app.keyboard.press(mod("Mod+Shift+Backspace"));
       await app.keyboard.press("Escape");

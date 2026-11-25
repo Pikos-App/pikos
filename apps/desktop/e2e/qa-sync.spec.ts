@@ -611,9 +611,12 @@ appTest(
       "SYNC-26 the tick asks, listing only days since the connect day",
       async () => {
         await head.getByRole("checkbox", { name: "Mark done" }).click();
-        const dialog = app.getByRole("dialog", { name: "Mark “Release countdown” done?" });
+        const headDay = await dayLabel(app, -5, "gap");
+        const dialog = app.getByRole("dialog", {
+          name: `Mark “Release countdown” done for ${headDay}?`,
+        });
         await expect(dialog).toContainText(
-          `4 other days are still open: ${await dayLabel(app, -4, "gap")}, ${await dayLabel(app, -3, "gap")}, and 2 more.`
+          `5 days before today are still open: ${headDay}, ${await dayLabel(app, -4, "gap")}, and 3 more.`
         );
         await dialog.getByRole("button", { name: /This and everything before today/ }).click();
         await expect(dialog).not.toBeVisible();

@@ -566,7 +566,7 @@ async function overdueSeries(app: Page, text: string, title: string) {
 }
 
 const scopeDialog = (app: Page) =>
-  app.getByRole("dialog").filter({ hasText: /2 other days are still open/ });
+  app.getByRole("dialog").filter({ hasText: /3 days before today are still open/ });
 
 appTest(
   "ticking an overdue head asks scope: just this one, or one done page per missed day",

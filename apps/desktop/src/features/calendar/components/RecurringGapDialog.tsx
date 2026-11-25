@@ -63,18 +63,20 @@ export function RecurringGapDialog() {
   const { cancel, confirm, pending } = useRecurringGapDialog();
   const open = pending !== null;
   const others = pending?.missedDates.length ?? 0;
-  const total = others + 1;
   const isDelete = pending?.kind === "delete";
-  // Naming the page is the point: this dialog opens on a repeat with a backlog behind
-  // it, and "Delete occurrence" over "Deletes 3 days" asked you to remove several days
-  // of something it never identified. One word for the thing, too — the body counts
-  // days, so the title does not call them occurrences.
-  const name = pending ? `\u201C${pending.pageTitle}\u201D` : "";
+  // The title names the page and the day the gesture acts on, which for a native
+  // series is its head rather than the day clicked, and the body lists every day the
+  // bulk option acts on. Listing only the other days left the count uncheckable.
+  const name = pending ? `“${pending.pageTitle}”` : "";
+  const day = pending ? formatDateLabel(pending.occurrenceDate) : "";
+  const allDates = pending ? [pending.occurrenceDate, ...pending.missedDates].sort() : [];
   const title = isDelete
     ? pending?.syncedActive
-      ? `Remove a day of ${name} from Pikos?`
-      : `Delete a day of ${name}?`
-    : `Mark ${name} done?`;
+      ? `Remove ${name} on ${day} from Pikos?`
+      : `Delete ${name} on ${day}?`
+    : `Mark ${name} done for ${day}?`;
+  const othersStay =
+    others === 1 ? "The other day stays open." : `The other ${others} days stay open.`;
 
   return (
     <Dialog
@@ -87,23 +89,23 @@ export function RecurringGapDialog() {
         <DialogTitle>{title}</DialogTitle>
         {pending ? (
           <DialogDescription className="type-ui-sm text-muted-foreground">
-            {others} other {others === 1 ? "day is" : "days are"} still open:{" "}
-            <MissedDaysSummary dates={pending.missedDates} />.
+            {allDates.length} days before today are still open:{" "}
+            <MissedDaysSummary dates={allDates} />.
           </DialogDescription>
         ) : null}
 
         <div className="flex flex-col gap-1.5 pt-1">
           <ChoiceCard
-            helper={
-              others === 1
-                ? "The other one stays where it is."
-                : `The other ${others} stay where they are.`
-            }
+            helper={isDelete ? `Deletes ${day}. ${othersStay}` : `Marks ${day} done. ${othersStay}`}
             onClick={() => confirm("one")}
             title="Just this one"
           />
           <ChoiceCard
-            helper={isDelete ? `Deletes ${total} days.` : `Marks ${total} days done.`}
+            helper={
+              isDelete
+                ? `Deletes all ${allDates.length} days.`
+                : `Marks all ${allDates.length} days done.`
+            }
             onClick={() => confirm("all")}
             title="This and everything before today"
           />
