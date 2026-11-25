@@ -88,7 +88,7 @@ appTest("moving overdue pages to today clears the Overdue section @mock-only", a
 
   await page.getByRole("button", { name: "Move to today" }).click();
 
-  await expect(page.getByRole("alert", { name: "Moved 2 to today" })).toBeVisible();
+  await expect(page.getByRole("alert", { name: "Moved 2 pages to today" })).toBeVisible();
   // Both landed on today at their original times (3pm/4pm, still ahead of 07:00),
   // so the section they were in has nothing left to show.
   await expect(page.getByRole("button", { name: /^Overdue/ })).toHaveCount(0);

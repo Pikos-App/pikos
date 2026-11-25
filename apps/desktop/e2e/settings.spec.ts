@@ -18,12 +18,12 @@ appTest("settings opens and each tab renders @smoke", async ({ app }) => {
   await expect(app.getByRole("heading", { exact: true, name: "Notifications" })).toBeVisible();
 
   await app.getByRole("button", { exact: true, name: "Data" }).click();
-  await expect(app.getByRole("heading", { name: "Your Workspace" })).toBeVisible();
+  await expect(app.getByRole("heading", { name: "Your workspace" })).toBeVisible();
   await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
   await expect(app.getByRole("heading", { name: "Export" })).toBeVisible();
 
   await app.getByRole("button", { name: "Shortcuts" }).click();
-  await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
+  await expect(app.getByRole("heading", { name: "Keyboard shortcuts" })).toBeVisible();
 
   await app.getByRole("button", { exact: true, name: "General" }).click();
   await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
@@ -51,28 +51,28 @@ appTest("settings opens via Cmd+, shortcut @smoke", async ({ app }) => {
 
 // ─── Delete-all-data typed confirmation ─────────────────────────────────────
 //
-// The Danger Zone "Delete" button opens a typed-confirm dialog that requires
+// The Danger zone "Delete" button opens a typed-confirm dialog that requires
 // the user to type "delete" before the destructive action enables. Test
 // stops at the typed-match → confirm-enabled boundary; clicking the final
 // Confirm would actually wipe the e2e workspace, so we Cancel out instead.
 
 appTest(
-  "Delete All Data dialog requires typing 'delete' to enable confirm",
+  "Delete all data dialog requires typing 'delete' to enable confirm",
   { tag: ["@TRASH-08:3"] },
   async ({ app }) => {
     await app.getByRole("button", { name: "Open settings" }).click();
     await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
 
-    // Delete All Data lives on the Data settings page now — navigate there first.
+    // Delete all data lives on the Data settings page now — navigate there first.
     await app.getByRole("button", { exact: true, name: "Data" }).click();
 
-    // Danger Zone is at the bottom of Data; scroll the trigger into view.
+    // Danger zone is at the bottom of Data; scroll the trigger into view.
     const trigger = app.getByRole("button", { exact: true, name: "Delete" });
     await trigger.scrollIntoViewIfNeeded();
     await trigger.click();
 
     await expect(app.getByRole("alertdialog", { name: "Delete all Pikos data?" })).toBeVisible();
-    const confirm = app.getByRole("button", { name: "Delete Everything" });
+    const confirm = app.getByRole("button", { name: "Delete everything" });
     await expect(confirm).toBeDisabled();
 
     const input = app.getByRole("textbox");

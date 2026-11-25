@@ -1163,7 +1163,7 @@ appTest("no folder picker offers a synced calendar's folder", async ({ app }) =>
     });
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
     await app.getByRole("button", { name: /Import 1 page/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toHaveCount(0);
     await app.keyboard.press("Escape");

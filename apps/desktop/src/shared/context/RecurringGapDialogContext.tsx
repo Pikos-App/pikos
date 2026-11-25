@@ -22,6 +22,7 @@ import { createContext, type ReactNode, useContext, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { quoteTitle } from "@/shared/utils/quoteTitle";
 import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 /** Which gesture opened the dialog — it decides the copy and the write, never
@@ -198,8 +199,8 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
     const undo = await skipOccurrences(page.id, dates);
     const label =
       dates.length === 1
-        ? `Deleted one day of “${page.title || "Untitled"}”`
-        : `Deleted ${dates.length} days of “${page.title || "Untitled"}”`;
+        ? `Deleted one day of ${quoteTitle(page.title)}`
+        : `Deleted ${dates.length} days of ${quoteTitle(page.title)}`;
     requestUndoableAction(`skip:${page.id}:${gesturedDate}`, label, undo);
   }
 

@@ -237,7 +237,7 @@ appTest(
       async () => {
         await app.getByRole("button", { name: "Move to today" }).click();
         await expect(
-          app.getByRole("alert", { name: /^Moved 1 · 1 recurring, \d+ synced left$/ })
+          app.getByRole("alert", { name: /^Moved 1 page to today\. Left 1 repeating page to catch up and \d+ pages? set by a synced calendar$/ })
         ).toBeVisible();
         await overdue.click();
         await expect(overdue).toHaveAttribute("aria-expanded", "false");
@@ -890,7 +890,7 @@ appTest(
       items.filter({ hasText: title }).getByRole("button", { name: /^Toggle date format: / });
 
     await app.getByRole("button", { name: "Move to today" }).click();
-    await expect(app.getByRole("alert", { name: /^Moved 1 · / })).toBeVisible();
+    await expect(app.getByRole("alert", { name: /^Moved 1 page to today\. Left / })).toBeVisible();
 
     await appTest.step("LIST-20 the calendar page's date tooltip ends with why", async () => {
       await date("Budget sign-off").hover();

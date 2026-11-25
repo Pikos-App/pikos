@@ -118,7 +118,7 @@ function SingleToast({
       role={action ? "alert" : "status"}
       transition={{ duration: 0.18 }}
     >
-      <span className="flex-1 truncate text-sm text-foreground">{item.label}</span>
+      <span className="line-clamp-2 flex-1 text-sm text-foreground">{item.label}</span>
       {action && (
         <button
           aria-label={action.label}

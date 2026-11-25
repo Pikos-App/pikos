@@ -59,7 +59,7 @@ appTest("markdown import: folder pick → preview → commit", async ({ app }) =
 
   // Trigger the markdown import. Without the test-mode escape hatch this
   // would call openDialog(); with it, the parser receives VAULT_FILES.
-  await app.getByRole("button", { name: /Select Folder/ }).click();
+  await app.getByRole("button", { name: /Select folder/ }).click();
 
   // Preview modal renders with a summary line. The source label is
   // "Markdown / Obsidian" and the page/folder counts come straight from the
@@ -122,7 +122,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
 
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
@@ -161,7 +161,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
 
     await expect(app.getByText(/No \.md files found/)).toBeVisible();
     await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
@@ -191,7 +191,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
     // Plan has 1 completed page (Quarterly Report, status: done) of 4 total.
@@ -248,7 +248,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
     await expect(app.getByText(/2 pages in 2 folders/)).toBeVisible();
@@ -289,7 +289,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
     await app.getByRole("button", { name: /Import 1 page/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible({
@@ -329,7 +329,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select File/ }).click();
+    await app.getByRole("button", { name: /Select file/ }).click();
 
     await expect(app.getByRole("heading", { name: "Map CSV Columns" })).toBeVisible();
     await expect(app.getByText(/Auto-detected as TickTick/)).toBeVisible();
@@ -381,7 +381,7 @@ appTest(
 
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select File/ }).click();
+    await app.getByRole("button", { name: /Select file/ }).click();
     await expect(app.getByRole("heading", { name: "Map CSV Columns" })).toBeVisible();
 
     // Footer Cancel button (exact match avoids the back-arrow's "Cancel import" name).

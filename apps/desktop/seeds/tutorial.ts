@@ -7,6 +7,7 @@ import type { StorageAdapter } from "@pikos/core";
 import { addDays, addHours, format, getHours, isSameDay, set, startOfHour } from "date-fns";
 
 import { IS_MACOS } from "@/shared/constants/platform";
+import { formatCombo } from "@/shared/keyboard/formatCombo";
 
 const MARKER = "Welcome to Pikos";
 
@@ -18,9 +19,9 @@ async function alreadySeeded(adapter: StorageAdapter): Promise<boolean> {
   return results.some((r) => r.title.startsWith(MARKER));
 }
 
-/** "Cmd" on Mac, "Ctrl" elsewhere. Detected at seed time so the copy matches the user's platform. */
-function modKey(): string {
-  return IS_MACOS ? "Cmd" : "Ctrl";
+/** A combo as running text, written the way the app's own shortcut hints write it: "⌘N" on Mac, "Ctrl+N" elsewhere. */
+function shortcut(combo: string): string {
+  return formatCombo(combo).join(IS_MACOS ? "" : "+");
 }
 
 /**
@@ -43,7 +44,6 @@ export async function seedTutorial(
 
   const now = new Date();
   const tz = getLocalTimezone();
-  const MOD = modKey();
 
   // ── Single tutorial folder ──────────────────────────────────────────────
   // Named "Start here" (not "Tutorial") so it reads as something to work
@@ -70,10 +70,10 @@ export async function seedTutorial(
       ),
       h3("A few things to try"),
       bullets(
-        `Click + above the page list to add a new page (or press ${MOD}+N)`,
-        `Click the calendar icon in the right pane to flip between editor and calendar (or press ${MOD}+Shift+C)`,
+        `Click + above the page list to add a new page (or press ${shortcut("Mod+N")})`,
+        `Click the calendar icon in the right pane to flip between editor and calendar (or press ${shortcut("Mod+Shift+C")})`,
         "Drag a page from the list onto a time slot to schedule it",
-        `Click the search icon above the page list to search every page by content, not just titles (or press ${MOD}+K)`,
+        `Click the search icon above the page list to search every page by content, not just titles (or press ${shortcut("Mod+K")})`,
         "Tick the checkbox beside a page to mark it done"
       ),
       h3("When you’re done"),
@@ -104,7 +104,7 @@ export async function seedTutorial(
       p("Most of Pikos is three steps: add, schedule, complete."),
       h3("1. Add"),
       p(
-        `Click + above the page list (or press ${MOD}+N) and type what you want to do. ` +
+        `Click + above the page list (or press ${shortcut("Mod+N")}) and type what you want to do. ` +
           "Pikos picks out the date, time, and duration from plain English:"
       ),
       bullets(
@@ -156,13 +156,13 @@ export async function seedTutorial(
       ),
       h3("Moving around"),
       bullets(
-        `${MOD}+N: New page`,
-        `${MOD}+W: Close the current page`,
-        `${MOD}+K: Search`,
-        `${MOD}+Shift+C: Flip between page and calendar`,
-        `${MOD}+\\: Show or hide the sidebar`,
-        `${MOD}+1–9: Jump to a folder by position`,
-        `${MOD}+,: Open settings`
+        `${shortcut("Mod+N")}: New page`,
+        `${shortcut("Mod+W")}: Close the current page`,
+        `${shortcut("Mod+K")}: Search`,
+        `${shortcut("Mod+Shift+C")}: Flip between page and calendar`,
+        `${shortcut("Mod+\\")}: Show or hide the sidebar`,
+        `${shortcut("Mod+1–9")}: Jump to a folder by position`,
+        `${shortcut("Mod+,")}: Open settings`
       ),
       h3("Writing"),
       p(
@@ -170,9 +170,9 @@ export async function seedTutorial(
       ),
       bullets(
         "/: Open the block menu",
-        `${MOD}+B, ${MOD}+I, ${MOD}+U: Bold, italic, underline`,
-        `${MOD}+Shift+K: Add a link`,
-        `${MOD}+F: Find in the page`,
+        `${shortcut("Mod+B")}, ${shortcut("Mod+I")}, ${shortcut("Mod+U")}: Bold, italic, underline`,
+        `${shortcut("Mod+Shift+K")}: Add a link`,
+        `${shortcut("Mod+F")}: Find in the page`,
         "Tab, Shift+Tab: Indent or outdent a list"
       ),
       h3("Calendar"),

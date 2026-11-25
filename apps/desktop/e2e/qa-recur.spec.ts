@@ -761,7 +761,7 @@ appTest(
     }, csv);
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select File/ }).click();
+    await app.getByRole("button", { name: /Select file/ }).click();
     await app.getByRole("button", { name: "Continue" }).click();
     await app.getByRole("button", { name: /Import 1 page/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();

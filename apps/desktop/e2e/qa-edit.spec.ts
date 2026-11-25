@@ -127,19 +127,19 @@ appTest(
     });
 
     await appTest.step("EDIT-03 bullet, ordered and task lists", async () => {
-      await insert("Bullet List");
+      await insert("Bullet list");
       await app.keyboard.type("A bullet");
       await expect(body.locator("ul:not([data-type])")).toContainText("A bullet");
-      await insert("Ordered List");
+      await insert("Ordered list");
       await app.keyboard.type("A step");
       await expect(body.locator("ol")).toContainText("A step");
-      await insert("Task List");
+      await insert("Task list");
       await app.keyboard.type("A task");
       await expect(body.getByRole("checkbox")).toHaveCount(1);
     });
 
     await appTest.step("EDIT-03 code block, blockquote, rule and table", async () => {
-      await insert("Code Block");
+      await insert("Code block");
       await app.keyboard.type("run()");
       await expect(body.getByRole("code")).toHaveText("run()");
       await insert("Blockquote");

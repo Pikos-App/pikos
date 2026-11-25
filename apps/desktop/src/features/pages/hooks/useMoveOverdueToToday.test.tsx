@@ -106,7 +106,7 @@ describe("useMoveOverdueToToday", () => {
     });
     expect(pageById(hook, locked.id)?.scheduledStart).toBe("2026-06-10T11:00:00");
     expect(hook.result.current.undo.toastItems.map((t) => t.label)).toEqual([
-      "Moved 1 · 1 synced left",
+      "Moved 1 page to today. Left 1 page set by a synced calendar",
     ]);
   });
 
@@ -132,7 +132,7 @@ describe("useMoveOverdueToToday", () => {
 
     await waitFor(() => {
       expect(hook.result.current.undo.toastItems.map((t) => t.label)).toEqual([
-        "Nothing to move · 1 recurring left",
+        "Nothing to move. Left 1 repeating page to catch up",
       ]);
     });
     expect(pageById(hook, page.id)?.scheduledStart).toBe(before);
@@ -151,7 +151,7 @@ describe("useMoveOverdueToToday", () => {
     });
     const toasts = hook.result.current.undo.toastItems;
     expect(toasts).toHaveLength(1);
-    expect(toasts[0]?.label).toBe("Moved 2 to today");
+    expect(toasts[0]?.label).toBe("Moved 2 pages to today");
 
     act(() => toasts[0]?.action?.onClick());
 

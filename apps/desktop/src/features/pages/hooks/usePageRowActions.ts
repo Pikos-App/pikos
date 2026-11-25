@@ -5,6 +5,7 @@ import { addDays, nextMonday, startOfDay } from "date-fns";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { createLogger } from "@/shared/logger";
+import { quoteTitle } from "@/shared/utils/quoteTitle";
 
 const log = createLogger("pageRowActions");
 
@@ -76,7 +77,7 @@ export function usePageRowActions() {
     if (!rule) return;
 
     await deleteRecurrence(rule.id);
-    const name = page.title ? `“${page.title}”` : "Page";
+    const name = page.title ? quoteTitle(page.title) : "Page";
     requestUndoableAction(
       `stop-repeating:${crypto.randomUUID()}`,
       `${name} no longer repeats`,

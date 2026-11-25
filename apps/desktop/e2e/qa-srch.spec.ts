@@ -266,7 +266,7 @@ appTest(
       },
       "Keyboard shortcuts": async () => {
         await run("Keyboard shortcuts");
-        await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
+        await expect(app.getByRole("heading", { name: "Keyboard shortcuts" })).toBeVisible();
         await app.keyboard.press("Escape");
       },
       "New page": async () => {

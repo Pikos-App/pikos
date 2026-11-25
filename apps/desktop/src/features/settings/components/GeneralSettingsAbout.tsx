@@ -69,7 +69,7 @@ export function GeneralSettingsAbout() {
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
             onClick={() => void getPlatform().openExternal("https://pikos.app/release-notes")}
           >
-            Release Notes <ExternalLink className="h-3 w-3" />
+            Release notes <ExternalLink className="h-3 w-3" />
           </button>
         </div>
       </div>

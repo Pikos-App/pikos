@@ -33,7 +33,7 @@ function Harness({
       </button>
       <TypedConfirmDialog
         busy={busy}
-        confirmLabel="Delete Everything"
+        confirmLabel="Delete everything"
         confirmPhrase={confirmPhrase}
         description={description}
         onConfirm={onConfirm}
@@ -54,7 +54,7 @@ describe("TypedConfirmDialog", () => {
     const onConfirm = vi.fn();
     render(<Harness onConfirm={onConfirm} />);
 
-    const confirm = screen.getByRole("button", { name: "Delete Everything" });
+    const confirm = screen.getByRole("button", { name: "Delete everything" });
     expect(confirm).toBeDisabled();
 
     const input = screen.getByRole("textbox");
@@ -74,7 +74,7 @@ describe("TypedConfirmDialog", () => {
 
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "  DELETE  " } });
-    expect(screen.getByRole("button", { name: "Delete Everything" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Delete everything" })).toBeEnabled();
   });
 
   it("Enter on a matching input commits without an extra click", () => {
@@ -102,7 +102,7 @@ describe("TypedConfirmDialog", () => {
     render(<Harness busy initialOpen onConfirm={onConfirm} />);
 
     expect(screen.getByRole("textbox")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Delete Everything" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete everything" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
@@ -116,7 +116,7 @@ describe("TypedConfirmDialog", () => {
             reopen
           </button>
           <TypedConfirmDialog
-            confirmLabel="Delete Everything"
+            confirmLabel="Delete everything"
             confirmPhrase="delete"
             description="x"
             onConfirm={onConfirm}
@@ -131,7 +131,7 @@ describe("TypedConfirmDialog", () => {
 
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "delete" } });
-    expect(screen.getByRole("button", { name: "Delete Everything" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Delete everything" })).toBeEnabled();
 
     // Cancel via Escape — Radix closes; reopen.
     act(() => {
@@ -141,6 +141,6 @@ describe("TypedConfirmDialog", () => {
 
     // The input is fresh; confirm is disabled again.
     expect(screen.getByRole("textbox")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Delete Everything" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete everything" })).toBeDisabled();
   });
 });

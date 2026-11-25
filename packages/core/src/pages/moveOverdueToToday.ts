@@ -94,18 +94,26 @@ export function planMoveOverdueToToday(
   return { moves, recurringKept, syncedKept };
 }
 
+function countPages(count: number): string {
+  return `${count} ${count === 1 ? "page" : "pages"}`;
+}
+
 /**
- * Toast copy. The clean case names the destination ("Moved 4 to today"); once
- * something stayed behind, the destination is dropped so the sentence still
- * fits the toast's one line ("Moved 4 · 2 recurring left").
+ * Toast copy: what moved, then what stayed and why, in the module note's two
+ * reasons ("Moved 4 pages to today. Left 2 repeating pages to catch up").
  */
 export function moveOverdueToTodayLabel(plan: OverdueMovePlan): string {
+  const moved =
+    plan.moves.length === 0 ? "Nothing to move" : `Moved ${countPages(plan.moves.length)} to today`;
   const kept: string[] = [];
-  if (plan.recurringKept > 0) kept.push(`${plan.recurringKept} recurring`);
-  if (plan.syncedKept > 0) kept.push(`${plan.syncedKept} synced`);
-  if (plan.moves.length === 0) {
-    return kept.length === 0 ? "Nothing to move" : `Nothing to move · ${kept.join(", ")} left`;
+  if (plan.recurringKept > 0) {
+    kept.push(
+      `${plan.recurringKept} repeating ${plan.recurringKept === 1 ? "page" : "pages"} to catch up`
+    );
   }
-  if (kept.length === 0) return `Moved ${plan.moves.length} to today`;
-  return `Moved ${plan.moves.length} · ${kept.join(", ")} left`;
+  if (plan.syncedKept > 0) kept.push(`${countPages(plan.syncedKept)} set by a synced calendar`);
+
+  if (kept.length === 0) return moved;
+
+  return `${moved}. Left ${kept.join(" and ")}`;
 }

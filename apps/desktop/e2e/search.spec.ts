@@ -217,7 +217,7 @@ appTest(
     await app.keyboard.press("Enter");
 
     await expect(dialog).not.toBeVisible();
-    await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(app.getByRole("heading", { name: "Keyboard shortcuts" })).toBeVisible();
   }
 );
 
@@ -251,7 +251,7 @@ appTest(
   async ({ app }) => {
     await app.keyboard.press(mod("Mod+/"));
 
-    await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(app.getByRole("heading", { name: "Keyboard shortcuts" })).toBeVisible();
     await expect(app.getByText("New page", { exact: true })).toBeVisible();
     await expect(app.getByText("Toggle sidebar", { exact: true })).toBeVisible();
     await expect(app.getByText("Bold", { exact: true })).toBeVisible();

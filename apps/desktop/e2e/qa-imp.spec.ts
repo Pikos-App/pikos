@@ -20,7 +20,7 @@ appTest(
     }, VAULT);
     await app.getByRole("button", { name: "Open settings" }).click();
     await app.getByRole("button", { exact: true, name: "Data" }).click();
-    await app.getByRole("button", { name: /Select Folder/ }).click();
+    await app.getByRole("button", { name: /Select folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
     await appTest.step("IMP-06 it shows the page count", async () => {
@@ -53,7 +53,7 @@ async function importVault(app: Page, files: VaultFile[]) {
   }, { files, path: "/tmp/pikos-e2e-vault" });
   await app.getByRole("button", { name: "Open settings" }).click();
   await app.getByRole("button", { exact: true, name: "Data" }).click();
-  await app.getByRole("button", { name: /Select Folder/ }).click();
+  await app.getByRole("button", { name: /Select folder/ }).click();
   await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 }
 
@@ -63,7 +63,7 @@ async function importCsv(app: Page, csv: string) {
   }, csv);
   await app.getByRole("button", { name: "Open settings" }).click();
   await app.getByRole("button", { exact: true, name: "Data" }).click();
-  await app.getByRole("button", { name: /Select File/ }).click();
+  await app.getByRole("button", { name: /Select file/ }).click();
   await expect(app.getByRole("heading", { name: "Map CSV Columns" })).toBeVisible();
 }
 

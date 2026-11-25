@@ -165,25 +165,27 @@ describe("moveOverdueToTodayLabel", () => {
     }));
 
   it("names the destination when nothing stayed behind", () => {
-    expect(moveOverdueToTodayLabel(plan({ moves: moves(4) }))).toBe("Moved 4 to today");
-    expect(moveOverdueToTodayLabel(plan({ moves: moves(1) }))).toBe("Moved 1 to today");
+    expect(moveOverdueToTodayLabel(plan({ moves: moves(4) }))).toBe("Moved 4 pages to today");
+    expect(moveOverdueToTodayLabel(plan({ moves: moves(1) }))).toBe("Moved 1 page to today");
   });
 
-  it("reports what stayed behind", () => {
-    expect(moveOverdueToTodayLabel(plan({ moves: moves(4), recurringKept: 2 }))).toBe(
-      "Moved 4 · 2 recurring left"
+  it("reports what stayed behind and why", () => {
+    expect(moveOverdueToTodayLabel(plan({ moves: moves(4), recurringKept: 1 }))).toBe(
+      "Moved 4 pages to today. Left 1 repeating page to catch up"
     );
     expect(moveOverdueToTodayLabel(plan({ moves: moves(4), syncedKept: 1 }))).toBe(
-      "Moved 4 · 1 synced left"
+      "Moved 4 pages to today. Left 1 page set by a synced calendar"
     );
     expect(
-      moveOverdueToTodayLabel(plan({ moves: moves(4), recurringKept: 2, syncedKept: 1 }))
-    ).toBe("Moved 4 · 2 recurring, 1 synced left");
+      moveOverdueToTodayLabel(plan({ moves: moves(4), recurringKept: 2, syncedKept: 3 }))
+    ).toBe(
+      "Moved 4 pages to today. Left 2 repeating pages to catch up and 3 pages set by a synced calendar"
+    );
   });
 
   it("says so when everything stayed behind", () => {
     expect(moveOverdueToTodayLabel(plan({ recurringKept: 3 }))).toBe(
-      "Nothing to move · 3 recurring left"
+      "Nothing to move. Left 3 repeating pages to catch up"
     );
   });
 

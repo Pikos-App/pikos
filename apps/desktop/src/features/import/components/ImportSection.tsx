@@ -68,7 +68,7 @@ export function ImportSection({
             onClick={() => void handleMarkdownImport()}
           >
             <FolderOpen className="h-3.5 w-3.5" />
-            Select Folder
+            Select folder
           </button>
         </div>
 
@@ -85,7 +85,7 @@ export function ImportSection({
             onClick={() => void handleCSVImport()}
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
-            Select File
+            Select file
           </button>
         </div>
       </div>

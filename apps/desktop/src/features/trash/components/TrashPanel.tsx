@@ -10,7 +10,7 @@
 // Two things it refuses to pretend about:
 //   - A page whose calendar still owns it cannot be destroyed here. Its row
 //     carries the tombstone that stops the next sync pass re-creating the event,
-//     so "Delete Forever" is offered but disabled, and the row says why.
+//     so "Delete forever" is offered but disabled, and the row says why.
 //   - Restoring such a page hands it back to the calendar, which takes back its
 //     title, time and folder — the same bargain the Calendar Sync panel names
 //     when a calendar is turned back on. So that one asks first.
@@ -72,7 +72,7 @@ function TrashRow({
           variant="ghost"
         >
           <Trash2 />
-          Delete Forever
+          Delete forever
         </Button>
       </div>
     </li>

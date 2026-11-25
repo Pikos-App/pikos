@@ -22,8 +22,8 @@ appTest("every settings panel opens without an error", { tag: ["@SET-01"] }, asy
     ["General", "About"],
     ["Notifications", "Notifications"],
     ["Calendar sync", "Calendar sync"],
-    ["Data", "Your Workspace"],
-    ["Shortcuts", "Keyboard Shortcuts"],
+    ["Data", "Your workspace"],
+    ["Shortcuts", "Keyboard shortcuts"],
   ];
   for (const [tab, heading] of panels) {
     await appTest.step(`SET-01 ${tab} opens`, async () => {

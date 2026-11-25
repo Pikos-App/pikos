@@ -1,6 +1,6 @@
-import type { Page } from "@pikos/core";
+import { formatClockTime, type Page } from "@pikos/core";
 import type { Editor } from "@tiptap/react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, getHours, getMinutes } from "date-fns";
 import { Info } from "lucide-react";
 import { useState } from "react";
 
@@ -16,7 +16,9 @@ interface PageInfoPopoverProps {
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
-  return format(date, "MMM d, yyyy 'at' h:mm a");
+  const time = formatClockTime(getHours(date), getMinutes(date));
+
+  return `${format(date, "MMM d, yyyy")} at ${time}`;
 }
 
 function relativeDate(iso: string): string {

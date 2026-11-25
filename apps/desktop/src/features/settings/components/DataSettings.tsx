@@ -167,7 +167,7 @@ export function DataSettings({
       {/* ── Usage stats ────────────────────────────────────────────────── */}
       <SettingsSection
         description="Your data is stored locally and never leaves your device."
-        title="Your Workspace"
+        title="Your workspace"
       >
         <UsageStats notificationsEnabled={notificationsEnabled} stats={usageStats} />
       </SettingsSection>
@@ -272,16 +272,16 @@ export function DataSettings({
         </div>
       </SettingsSection>
 
-      {/* ── Danger Zone ────────────────────────────────────────────────── */}
+      {/* ── Danger zone ────────────────────────────────────────────────── */}
       {/* Lives here (not General) for data-lifecycle coherence and safety-
           adjacency to Export — back up before you wipe. Inline because it owns
           local dialog + in-flight state. */}
       <section className="mt-12 border-t border-destructive/30 pt-6">
-        <h2 className="mb-4 text-base font-semibold text-destructive">Danger Zone</h2>
+        <h2 className="mb-4 text-base font-semibold text-destructive">Danger zone</h2>
         <div className="rounded-lg border border-destructive/30 bg-card p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">Delete All Data</p>
+              <p className="text-sm font-medium">Delete all data</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Permanently deletes all pages, folders, tags, and settings on this device, and
                 disconnects any calendar account you've connected. This cannot be undone.
@@ -303,7 +303,7 @@ export function DataSettings({
       <TypedConfirmDialog
         busy={deleting}
         cancelLabel="Cancel"
-        confirmLabel="Delete Everything"
+        confirmLabel="Delete everything"
         confirmPhrase="delete"
         description="This will permanently delete all pages, folders, tags, and settings on this device, and disconnect any calendar account you've connected. Your data is stored locally and cannot be recovered after deletion."
         onConfirm={() => void handleDeleteAll()}

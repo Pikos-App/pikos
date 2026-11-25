@@ -123,7 +123,7 @@ appTest(
 );
 
 appTest(
-  "Empty trash and Delete Forever each ask once, and both are for good",
+  "Empty trash and Delete forever each ask once, and both are for good",
   { tag: ["@TRASH-06"] },
   async ({ app }) => {
     for (const title of ["first gone", "second gone", "third gone"]) {
@@ -132,7 +132,7 @@ appTest(
     }
     await openTrash(app);
 
-    await appTest.step("TRASH-06 Delete Forever on one page asks, then removes it", async () => {
+    await appTest.step("TRASH-06 Delete forever on one page asks, then removes it", async () => {
       await app.getByRole("button", { name: "Delete first gone forever" }).click();
       const confirm = app.getByRole("alertdialog", { name: "Delete this page forever?" });
       await expect(confirm).toBeVisible();

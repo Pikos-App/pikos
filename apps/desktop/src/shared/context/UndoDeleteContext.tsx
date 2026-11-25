@@ -15,6 +15,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { subscribeNotices } from "@/shared/events/noticeBus";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { quoteTitle } from "@/shared/utils/quoteTitle";
 import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 export interface UndoDeleteContextValue {
@@ -112,7 +113,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     if (activePageId && ids.includes(activePageId)) setActivePage(null);
     setHiddenPageIds((prev) => new Set([...prev, ...ids]));
     const label = isSingle
-      ? `Deleted “${first.title || "Untitled"}”`
+      ? `Deleted ${quoteTitle(first.title)}`
       : `${ids.length} pages moved to Trash`;
     setToastItems((prev) => [
       ...prev,
@@ -142,7 +143,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
         action: { label: "Undo", onClick: () => undoFolder(undoId) },
         duration: 16000,
         id: undoId,
-        label: `Deleted “${folder.name}”${suffix}`,
+        label: `Deleted ${quoteTitle(folder.name)}${suffix}`,
       },
     ]);
     void softDeleteFolder(folder.id);
