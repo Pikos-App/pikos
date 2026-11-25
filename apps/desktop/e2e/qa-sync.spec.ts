@@ -449,7 +449,7 @@ appTest(
 
 appTest(
   "ticks on a synced series stay done, once each, when it is edited from a date on",
-  { tag: ["@SYNC-35"] },
+  { tag: ["@SYNC-36"] },
   async ({ app, storage }) => {
     appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
     await seedSynced(app);
@@ -463,7 +463,7 @@ appTest(
         `Toggle date format: ${await dayLabel(app, days, "list")}`
       );
 
-    await appTest.step("SYNC-35 tick this week's and next week's", async () => {
+    await appTest.step("SYNC-36 tick this week's and next week's", async () => {
       await open.getByRole("checkbox", { name: "Mark done" }).click();
       await dueIn(7);
       await open.getByRole("checkbox", { name: "Mark done" }).click();
@@ -471,7 +471,7 @@ appTest(
     });
 
     await appTest.step(
-      "SYNC-35 moved half an hour from next week on, it is next due the week after",
+      "SYNC-36 moved half an hour from next week on, it is next due the week after",
       async () => {
         const t = (days: number, hm: string) => stamp(app, days, hm);
         // Google ends the series with this week's and sends the rest as a new event.
