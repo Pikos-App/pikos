@@ -615,17 +615,20 @@ jobs:
       - name: Cargo test (desktop crate)
         run: cargo test --all --quiet
 
-      # Cached binary so we don't reinstall every run.
-      - name: Cache cargo-audit
-        id: cache-cargo-audit
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/cargo-audit
-          key: cargo-audit-${{ runner.os }}-v1
-
+      # The release binary, pinned by version and checksum like gitleaks. Compiling it took three
+      # minutes whenever its cache had been evicted.
       - name: Install cargo-audit
-        if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
-        run: cargo install cargo-audit --locked
+        working-directory: .
+        env:
+          CARGO_AUDIT_VERSION: 0.23.0
+          CARGO_AUDIT_SHA256: 4f01c74ed84b2dffd0b1d37012a62cdf2a92c96e25bdf8eec7fcc0d4d3eb7811
+        run: |
+          name="cargo-audit-x86_64-unknown-linux-musl-v${CARGO_AUDIT_VERSION}"
+          curl -fsSL -o "$RUNNER_TEMP/$name.tgz" \
+            "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv${CARGO_AUDIT_VERSION}/$name.tgz"
+          echo "$CARGO_AUDIT_SHA256  $RUNNER_TEMP/$name.tgz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP"
+          install -m 755 "$RUNNER_TEMP/$name/cargo-audit" ~/.cargo/bin/cargo-audit
 
       # Blocking. This tree is Pikos's own crates and the dependencies they chose,
       # so an advisory here is a decision someone made. What it may stay quiet
