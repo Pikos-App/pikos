@@ -371,6 +371,36 @@ describe("useThreePanelDnD — handleDragEnd: page → Today view", () => {
   });
 });
 
+describe("useThreePanelDnD — handleDragEnd: page → all-day strip", () => {
+  it("a several-day all-day page keeps its length on the day it lands", async () => {
+    const hook = setup();
+    await init(hook);
+    const trip = await makeFolder(hook, "Trip");
+    const page = await makePage(hook, { folderId: trip.id, title: "Conference" });
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(page.id, "2026-08-03", "2026-08-05");
+    });
+    act(() => hook.result.current.ui.setActiveViewId(trip.id));
+    await waitForShown(hook, [page.id]);
+
+    act(() => hook.result.current.dnd.handleDragStart(startEvent(page.id, "page")));
+    act(() =>
+      hook.result.current.calendarDnD.registerExternalDragUpdater(() => ({ start: "2026-08-10" }))
+    );
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mousemove", { clientX: 500, clientY: 100 }));
+    });
+    act(() => hook.result.current.dnd.handleDragEnd(endEventOnCalendar(page.id)));
+
+    await waitFor(() => {
+      expect(hook.result.current.pages.pages.find((p) => p.id === page.id)).toMatchObject({
+        scheduledEnd: "2026-08-12",
+        scheduledStart: "2026-08-10",
+      });
+    });
+  });
+});
+
 describe("useThreePanelDnD — schedule-locked (synced) pages", () => {
   // Positive control for the locked case below: without it, a broken mousemove
   // harness would make "never writes a schedule" pass for the wrong reason.

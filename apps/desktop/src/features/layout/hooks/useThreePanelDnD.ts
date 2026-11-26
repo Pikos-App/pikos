@@ -14,6 +14,7 @@ import {
   isDone,
   isTimedIso,
   parseLocalISO,
+  shiftAllDayEnd,
 } from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
@@ -42,6 +43,13 @@ function getPageDurationMin(page: PageSummary): number | undefined {
     parseLocalISO(page.scheduledEnd)
   );
   return minutes > 0 ? minutes : undefined;
+}
+
+/** The end a page dropped on `day`'s all-day strip takes: an all-day page keeps how many
+ *  days it spans, as it does dragged within the strip; a timed or undated page becomes
+ *  that one day. */
+function allDayDropEnd(page: PageSummary, day: string): string | undefined {
+  return shiftAllDayEnd(page.scheduledStart, page.scheduledEnd, parseLocalISO(day));
 }
 
 /** Excludes synced mirrors: the reconciler owns their schedule and folder, so the
@@ -209,6 +217,8 @@ export function useThreePanelDnD() {
               "yyyy-MM-dd'T'HH:mm:ss"
             );
           }
+        } else {
+          calendarEnd = allDayDropEnd(target, calendarStart);
         }
         void scheduleOnce(target.id, calendarStart, calendarEnd);
       } else if (targets.length > 1) {
@@ -234,9 +244,9 @@ export function useThreePanelDnD() {
               (durationMin != null ? MULTI_DROP_GAP_MIN : MULTI_DROP_POINT_GAP_MIN);
           }
         } else {
-          // All-day drop: all pages become all-day for that date
           for (const id of targets) {
-            void scheduleOnce(id, calendarStart);
+            const page = lookup(id);
+            void scheduleOnce(id, calendarStart, page && allDayDropEnd(page, calendarStart));
           }
         }
       }
