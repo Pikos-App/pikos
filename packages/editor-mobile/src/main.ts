@@ -75,13 +75,17 @@ function mount(): Mounted {
         resolveAssetUrl,
       }),
     ],
-    // Reported on focus as well as on selection change. ProseMirror only fires
-    // a selection update when the selection actually moves, so tapping into the
-    // document where the caret already sits produces nothing — and a native
-    // toolbar that only listens for movement would sit there showing whatever
-    // the last page's caret was under.
+    // Reported on focus and on every transaction that could change what the
+    // toolbar shows. Tiptap's selection update fires only when the selection
+    // moves, so tapping into the document where the caret already sits
+    // produced nothing, and neither did a mark toggled from the toolbar: the
+    // button stayed unlit, and a second tap to make sure turned the mark off.
     onFocus: ({ editor: e }) => reportSelection(e),
-    onSelectionUpdate: ({ editor: e }) => reportSelection(e),
+    onTransaction: ({ editor: e, transaction }) => {
+      const mayChangeToolbar =
+        transaction.selectionSet || transaction.storedMarksSet || transaction.docChanged;
+      if (mayChangeToolbar) reportSelection(e);
+    },
     onUpdate: ({ editor: e }) => {
       // A host-initiated load fires onUpdate too. Sending that back would have
       // the host persist a document it just supplied — harmless in isolation,

@@ -522,6 +522,38 @@ test.describe("host commands", () => {
     expect(doc).toContain("emphasised");
   });
 
+  test("the toolbar hears a mark toggled at the caret before anything is typed", async ({
+    page,
+  }) => {
+    // Unheard, the bold button stays unlit, and the second tap meant to make sure turns it off.
+    await sendToEditor(page, "load", { doc: docWithText("plain"), pageId: "p1" });
+    await page.locator(".ProseMirror").click();
+    await page.keyboard.press("End");
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleMark", { mark: "bold" });
+    await expect
+      .poll(async () => (await messagesOfType(page, "selectionChanged")).at(-1)?.payload["marks"])
+      .toEqual(["bold"]);
+
+    await sendToEditor(page, "toggleMark", { mark: "bold" });
+    await expect
+      .poll(async () => (await messagesOfType(page, "selectionChanged")).at(-1)?.payload["marks"])
+      .toEqual([]);
+  });
+
+  test("the toolbar hears a mark toggled over a selected range", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: docWithText("make me bold"), pageId: "p1" });
+    await page.locator(".ProseMirror p").first().click({ clickCount: 3 });
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleMark", { mark: "bold" });
+
+    await expect
+      .poll(async () => (await messagesOfType(page, "selectionChanged")).at(-1)?.payload["marks"])
+      .toEqual(["bold"]);
+  });
+
   test("toggles a block type", async ({ page }) => {
     await sendToEditor(page, "load", { doc: docWithText("make me a heading"), pageId: "p1" });
     await page.locator(".ProseMirror").click();
