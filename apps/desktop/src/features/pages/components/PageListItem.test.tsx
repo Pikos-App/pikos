@@ -144,6 +144,22 @@ describe("PageListItem mirror-lock gating", () => {
   });
 });
 
+describe("PageListItem repeat mark", () => {
+  afterEach(cleanup);
+
+  it("marks a repeating page, so a tick that moves it to its next date reads as done", () => {
+    renderItem(makePage({ isRecurring: true, scheduledStart: "2026-08-10" }), vi.fn());
+
+    expect(screen.getByRole("img", { name: "Repeats" })).toBeInTheDocument();
+  });
+
+  it("leaves a one-off page unmarked", () => {
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
+
+    expect(screen.queryByRole("img", { name: "Repeats" })).not.toBeInTheDocument();
+  });
+});
+
 describe("PageListItem menu", () => {
   afterEach(cleanup);
 

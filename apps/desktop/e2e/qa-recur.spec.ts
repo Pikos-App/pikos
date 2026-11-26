@@ -117,7 +117,7 @@ appTest(
 
 appTest(
   "completing an on-time or future head clones it done and advances one step, with no dialog",
-  { tag: ["@RECUR-02"] },
+  { tag: ["@RECUR-02:2"] },
   async ({ app }) => {
     await quickAdd(app, "water plants every day");
     const head = listRows(app, "water plants").filter({
@@ -150,6 +150,36 @@ appTest(
           has: app.getByRole("checkbox", { name: "Mark not done" }),
         })
       ).toHaveCount(2);
+    });
+  }
+);
+
+appTest(
+  "a repeating row in a folder shows it repeats, and its checkbox moves it to its next date",
+  { tag: ["@RECUR-02:2"] },
+  async ({ app }) => {
+    await quickAdd(app, "stretch every day");
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    const head = listRows(app, "stretch").filter({
+      has: app.getByRole("checkbox", { name: "Mark done" }),
+    });
+
+    await appTest.step("RECUR-02 the head's row carries the repeat mark", async () => {
+      await expect(head.getByRole("img", { name: "Repeats" })).toBeVisible();
+    });
+
+    await appTest.step("RECUR-02 ticking the row advances it and leaves a done clone", async () => {
+      const dateLabel = head.getByRole("button", { name: /^Toggle date format/ });
+      const before = await dateLabel.getAttribute("aria-label");
+      await head.getByRole("checkbox", { name: "Mark done" }).click();
+      await expect(app.getByRole("alertdialog")).toHaveCount(0);
+      await expect(dateLabel).not.toHaveAccessibleName(before ?? "");
+      await app.getByRole("button", { exact: true, name: "Completed" }).click();
+      await expect(
+        listRows(app, "stretch").filter({
+          has: app.getByRole("checkbox", { name: "Mark not done" }),
+        })
+      ).toHaveCount(1);
     });
   }
 );

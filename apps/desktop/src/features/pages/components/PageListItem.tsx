@@ -15,6 +15,7 @@ import {
   viewerEnd,
   viewerStart,
 } from "@pikos/core";
+import { Repeat2 } from "lucide-react";
 import type React from "react";
 import { useRef } from "react";
 
@@ -230,6 +231,9 @@ export function PageListItem({
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                {page.isRecurring && (
+                  <Repeat2 aria-label="Repeats" className="h-3 w-3 text-subtle" role="img" />
+                )}
                 <SyncSourceIcon className="h-3 w-3" syncState={page.syncState} />
                 {page.scheduledStart &&
                   (() => {
