@@ -1,14 +1,12 @@
 //! Logging setup for the desktop app.
 //!
-//! See `apps/desktop/src/shared/logger.ts` for the philosophy that both
-//! sides follow. The short version, restated here so a Rust-only reader
-//! does not have to cross the language boundary:
+//! The TypeScript side follows the same rules (`apps/desktop/src/shared/logger.ts`).
 //!
 //! Logs exist to reconstruct a user's session from a bug report. Bias
 //! toward silence — anything that ships to disk on every install is a
 //! tax on every future bug report.
 //!
-//! ─── LOG these ─────────────────────────────────────────────────────────
+//! **Log these:**
 //!
 //! 1. Boundaries where errors disappear. Tauri command returns,
 //!    `tokio::spawn`'d tasks, scheduler ticks, IPC handlers. If it can
@@ -22,7 +20,7 @@
 //! 4. Silent branches. When code chooses based on env, OS, or stored
 //!    preference in a way the user can't see. DEBUG with the choice.
 //!
-//! ─── DO NOT log ────────────────────────────────────────────────────────
+//! **Do not log:**
 //!
 //! - Per-event noise. Per-query SQL, per-tick polls that did nothing,
 //!   per-keystroke saves, per-page renders. If it fires more than ~10×
@@ -33,7 +31,7 @@
 //!   (sqlite, OS, network) that may echo user input — pass the error
 //!   *class* or a stable code, not the formatted `Display` output.
 //!
-//! ─── Severity ladder ───────────────────────────────────────────────────
+//! **Severity:**
 //!
 //! - ERROR — user-visible failure or silent corruption risk.
 //! - WARN  — fallback taken, unexpected state, recoverable.
@@ -43,7 +41,7 @@
 //! - TRACE — per-query SQL, per-tick polls, hot-path reads. Off by
 //!   default, opt in via `RUST_LOG`.
 //!
-//! ─── Structured fields ─────────────────────────────────────────────────
+//! **Fields:**
 //!
 //! `log` doesn't have spans, so use `key=value` field syntax in the
 //! message itself. The message string stays app-controlled and short —
@@ -55,7 +53,7 @@
 //! `pikos_lib::notifications::scheduler`, …). Filter at the target
 //! level via `RUST_LOG`.
 //!
-//! ─── Levels at runtime ─────────────────────────────────────────────────
+//! **Levels at runtime:**
 //!
 //! Defaults — release: `pikos_lib=info, *=warn`; dev: `pikos_lib=debug,
 //! *=warn`. Override with `RUST_LOG`, e.g.:
@@ -63,7 +61,7 @@
 //! ```text
 //! RUST_LOG=pikos_lib=debug,sqlx=trace   # firehose for DB debugging
 //! RUST_LOG=pikos_lib::notifications=trace
-//! PIKOS_LOG_VERBOSE=1                   # legacy: pikos_lib=debug, deps=debug
+//! PIKOS_LOG_VERBOSE=1                   # pikos_lib=debug, deps=debug
 //! ```
 //!
 //! `RUST_LOG` wins over `PIKOS_LOG_VERBOSE` and over the defaults.
@@ -104,8 +102,8 @@ pub fn build_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         // Panic hook target — always surface panics.
         .level_for("panic", LevelFilter::Error)
         .max_file_size(2 * 1024 * 1024)
-        // `KeepOne` dropped the whole history each time the file filled, and a sync bug
-        // reported weeks later needs the weeks before it. `pikos.log` stays the current
+        // A sync bug reported weeks later needs the weeks before it, so rotate and keep
+        // old files rather than dropping the history. `pikos.log` stays the current
         // file, so everything that opens it by name still finds it.
         .rotation_strategy(RotationStrategy::KeepSome(LOG_FILES_KEPT))
         .timezone_strategy(TimezoneStrategy::UseUtc);

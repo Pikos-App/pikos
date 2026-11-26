@@ -1,6 +1,6 @@
-//! Shared `#[cfg(test)]` builders for the Layer-3 engine and scheduler tests:
+//! Shared `#[cfg(test)]` builders for the engine and scheduler tests:
 //! the `event`/`delta` value constructors, the account+calendar seed SQL, and the
-//! in-memory keychain that otherwise lived in a copy per test file.
+//! in-memory keychain.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

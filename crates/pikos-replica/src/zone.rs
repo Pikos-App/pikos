@@ -5,7 +5,6 @@ pub fn zone_name(workspace_id: &str) -> String {
     format!("ws-{workspace_id}")
 }
 
-/// The workspace id a zone holds, or None for a zone that isn't a workspace's.
 pub fn workspace_of(zone: &str) -> Option<&str> {
     zone.strip_prefix("ws-").filter(|id| !id.is_empty())
 }

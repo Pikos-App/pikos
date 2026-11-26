@@ -1,9 +1,8 @@
 //! The in-app benchmark, compiled only with `--features bench`.
 //!
-//! A bench build (frontend built with `VITE_BENCH=true`) opens the workspace named by
-//! `PIKOS_BENCH_DB` instead of the user's, lets the frontend time real interactions in the real
-//! window, writes them to `PIKOS_BENCH_OUT`, and quits. `pikos stress bench` times the database;
-//! this times what a person waits for, including the hop to the window and the drawing.
+//! Opens the workspace named by `PIKOS_BENCH_DB` instead of the user's, lets the frontend time
+//! real interactions in the real window, writes them to `PIKOS_BENCH_OUT`, and quits.
+//! `pikos stress bench` times the database; this times what a person waits for.
 
 use std::process::Command;
 use std::sync::OnceLock;
@@ -16,8 +15,6 @@ use crate::db::DbState;
 
 static STARTED: OnceLock<Instant> = OnceLock::new();
 
-/// Called first thing in `run`, so launch time counts from process start rather than from the
-/// window appearing.
 pub fn mark_start() {
     STARTED.get_or_init(Instant::now);
 }
@@ -27,9 +24,7 @@ pub fn mark_start() {
 pub struct BenchSession {
     db: String,
     uptime_ms: f64,
-    /// The areas to time, from `PIKOS_BENCH_ONLY`; every area when unset.
     only: Option<Vec<String>>,
-    /// Samples per action, from `PIKOS_BENCH_SAMPLES`; each action's own count when unset.
     samples: Option<usize>,
 }
 
@@ -68,12 +63,8 @@ pub struct BenchFolder {
 #[serde(rename_all = "camelCase")]
 pub struct BenchPlan {
     open_pages: i64,
-    /// Folders with at least one open page, by name.
     folders: Vec<BenchFolder>,
-    /// Open pages spread across the whole workspace, the same ones on every launch of a corpus.
     pages: Vec<String>,
-    /// The days between `from` and `to` with a timed page, so the calendar measure knows which
-    /// weeks have blocks to wait for.
     busy_days: Vec<String>,
 }
 

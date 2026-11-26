@@ -1,9 +1,8 @@
 //! End-to-end test of `pikos mcp`: spawn the real binary, speak newline-delimited
 //! JSON-RPC at it over stdio, and check the round trip.
 //!
-//! Deliberately not a unit test of the handler — the point is that a client that
-//! knows nothing about this crate can initialize, discover the tools, and drive a
-//! temp workspace through them.
+//! Deliberately not a unit test of the handler: a client that knows nothing about this
+//! crate must be able to initialize, discover the tools, and drive a workspace.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -44,7 +43,6 @@ fn base_page(title: &str) -> NewPage {
     }
 }
 
-/// Create + migrate the workspace file and seed it, returning the page ids.
 async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
     let pool = open_pool(db).await.unwrap();
     let mut ids = Vec::new();
@@ -62,7 +60,6 @@ fn bridge_js() -> Option<String> {
     p.exists().then(|| p.to_string_lossy().into_owned())
 }
 
-/// A live `pikos mcp` process, plus its pipes.
 struct Server {
     child: Child,
     stdin: ChildStdin,
@@ -96,7 +93,6 @@ impl Server {
         self.stdin.flush().unwrap();
     }
 
-    /// Send a request and read the one frame that answers it.
     fn request(&mut self, id: u64, method: &str, params: Value) -> Value {
         self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
         let mut line = String::new();
@@ -108,7 +104,6 @@ impl Server {
         frame
     }
 
-    /// Call a tool and parse the JSON payload back out of its text content.
     fn call(&mut self, id: u64, name: &str, arguments: Value) -> Value {
         let frame = self.request(
             id,
@@ -187,7 +182,6 @@ async fn initialize_lists_tools_and_round_trips_a_page() {
         assert!(names.contains(&expected), "missing {expected} in {names:?}");
     }
 
-    // Create through the tool, then read the same page back through another.
     let Some(_) = bridge_js() else {
         eprintln!("skipped the write half: @pikos/bridge not built");
         server.shutdown();
@@ -256,7 +250,6 @@ async fn tools_drive_the_page_through_its_whole_life() {
         "done"
     );
 
-    // Trash and untrash — the only removal the protocol offers.
     assert_eq!(
         server.call(10, "delete_page", json!({ "id": id }))["trashed"],
         true
@@ -279,8 +272,7 @@ async fn tools_drive_the_page_through_its_whole_life() {
     server.shutdown();
 }
 
-/// A failing tool must not end the session: the agent reads the error and keeps
-/// going, so the same connection has to answer the next call.
+/// A failing tool must not end the session: the agent reads the error and keeps going.
 // qa: CLI-04:2
 #[tokio::test]
 async fn a_tool_error_is_reported_in_the_result_and_the_session_survives() {
@@ -301,13 +293,11 @@ async fn a_tool_error_is_reported_in_the_result_and_the_session_survives() {
     let unknown = server.call_expecting_error(3, "explode", json!({}));
     assert_eq!(unknown["error"]["kind"], "Usage");
 
-    // Still serving.
     assert_eq!(server.call(4, "list_pages", json!({}))[0]["title"], "Alive");
 
     server.shutdown();
 }
 
-/// The one-way schema upgrade stays a decision a person makes at a prompt.
 #[tokio::test]
 async fn the_server_refuses_to_migrate() {
     let db = unique_db();
@@ -408,8 +398,7 @@ fn listening_tcp(pid: u32) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Pikos reaches the network only for a calendar the user connected; `mcp` is a
-/// stdio server and must hold no socket at all, which is otherwise a manual QA row.
+/// `mcp` is a stdio server and must hold no socket at all.
 // qa: CLI-05
 #[tokio::test]
 async fn the_server_opens_no_listening_socket() {
@@ -449,8 +438,7 @@ async fn the_server_opens_no_listening_socket() {
     server.shutdown();
 }
 
-/// `dryRun` is the agent-preview mode: the parse comes back for approval and the
-/// workspace is untouched, so a model can show its work before committing it.
+/// `dryRun` returns the parse for approval and leaves the workspace untouched.
 #[tokio::test]
 async fn create_page_dry_run_returns_the_parse_and_writes_nothing() {
     let db = unique_db();

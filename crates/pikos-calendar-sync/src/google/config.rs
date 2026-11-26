@@ -32,7 +32,6 @@ pub(crate) const SCOPES: [&str; 2] = [
     "https://www.googleapis.com/auth/calendar.events.readonly",
 ];
 
-/// Auth, token and revocation endpoints set; device-code and introspection unused.
 pub(crate) type GoogleOauthClient =
     BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointSet, EndpointSet>;
 

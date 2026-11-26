@@ -31,12 +31,10 @@ use super::model::{Event, EventDateTime};
 
 const CANCELLED: &str = "cancelled";
 
-/// A resolved instant in the shape every stored schedule value takes.
 fn wall(dt: NaiveDateTime) -> String {
     WallClock::timed(dt).format()
 }
 
-/// What one page of events reduces to.
 #[derive(Default)]
 pub(crate) struct Grouped {
     pub upserts: Vec<UpsertItem>,
@@ -235,8 +233,6 @@ fn core_of(e: &Event) -> EventCore {
     }
 }
 
-// ─── zone + instant normalization ───────────────────────────────────────────────
-
 /// The event's source zone: its own `timeZone`, else the calendar's. `None` for an
 /// all-day event, which has no meaningful zone.
 struct SourceZone {
@@ -278,7 +274,6 @@ fn resolve_zone(named: Option<&str>) -> Option<SourceZone> {
     }
 }
 
-/// `start`/`end` → a normalized schedule.
 fn schedule_of(e: &Event, zone: Option<&SourceZone>) -> Result<EventSchedule, GoogleError> {
     let start_field = e
         .start
@@ -320,9 +315,6 @@ fn wall_clock(field: &EventDateTime, zone: Option<&SourceZone>) -> Option<String
     })
 }
 
-// ─── recurrence lines ───────────────────────────────────────────────────────────
-
-/// The compact form ICS spells a date-time in.
 const COMPACT_FMT: &str = "%Y%m%dT%H%M%S";
 
 /// The `RRULE` line's value, carried raw. Google may also send `EXRULE`/`RDATE`

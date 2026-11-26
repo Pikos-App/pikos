@@ -1,4 +1,4 @@
-//! Google provider (Phase 2): OAuth 2.0 + PKCE over an ephemeral loopback
+//! Google provider: OAuth 2.0 + PKCE over an ephemeral loopback
 //! redirect, tokens in the OS keychain, and the Calendar API sync on top.
 //!
 //! Credentials are keyed by `sync_account` row id, so connecting a second Google

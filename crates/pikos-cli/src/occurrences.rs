@@ -80,11 +80,9 @@ fn is_skipped(page: &Page, day: &str) -> bool {
         .is_some_and(|skipped| skipped.iter().any(|d| d == day))
 }
 
-/// Tick off one occurrence of a series a calendar owns: `day`, or the oldest still open.
-///
 /// The writer can't find the occurrence itself, because the head of a synced series is
-/// kept on the calendar's clock; it takes the occurrence's start on the viewer's, which
-/// is what the app hands it from the block that was ticked.
+/// kept on the calendar's clock; it takes the occurrence's start on the viewer's, as the
+/// app hands it from the ticked block.
 pub async fn complete_synced(
     pool: &SqlitePool,
     page: &Page,
@@ -178,8 +176,6 @@ pub async fn unskip(pool: &SqlitePool, id: &str, day: &str) -> Result<Page, CliE
     require_page(pool, id).await
 }
 
-/// Move one occurrence, as dragging it on the calendar does. The flags read as `update`'s
-/// do against that occurrence's own time, so a move keeps its length.
 pub async fn move_occurrence(
     pool: &SqlitePool,
     id: &str,
@@ -229,7 +225,6 @@ pub async fn move_occurrence(
     .map_err(classify)
 }
 
-/// The series and date a done copy of an occurrence was ticked off as, if `page` is one.
 async fn completed_occurrence_of(
     pool: &SqlitePool,
     page: &Page,
@@ -258,8 +253,8 @@ async fn completed_occurrence_of(
     }))
 }
 
-/// Reopen a ticked-off occurrence as unchecking it in the app does, rather than flip its
-/// status, which leaves the series counting that date as done. `None`: not one.
+/// Unchecks as the app does; flipping the status would leave the series counting that
+/// date as done. `None`: not a done copy.
 pub async fn reopen_occurrence(pool: &SqlitePool, page: &Page) -> Result<Option<Page>, CliError> {
     let Some((series_id, day)) = completed_occurrence_of(pool, page).await? else {
         return Ok(None);

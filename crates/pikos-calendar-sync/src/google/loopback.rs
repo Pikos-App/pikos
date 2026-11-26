@@ -16,10 +16,8 @@ use super::error::GoogleError;
 /// rather than buffer whatever an unrelated local client decided to send.
 const MAX_REQUEST_LINE: u64 = 8 * 1024;
 
-/// The query Google appended to the redirect.
 pub(crate) struct Callback {
     pub code: String,
-    /// Echoed back for comparison against the CSRF token we issued.
     pub state: String,
 }
 

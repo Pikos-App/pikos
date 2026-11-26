@@ -1,14 +1,11 @@
 //! Seed a throwaway workspace and time the operations that decide whether Pikos feels instant.
 //!
-//! The point is a number anybody can reproduce on their own hardware, so this seeds through the
-//! same writer the app uses rather than inserting rows directly. Raw SQL would be far quicker and
-//! would measure a workspace the app could never have produced: FTS rows, tag denormalisation and
-//! schedule bookkeeping all come from the writer, and a benchmark over data that skipped them is
-//! measuring the wrong thing. Seeding is therefore slow on purpose.
+//! Seeding goes through the writer the app uses, not raw SQL: FTS rows, tag denormalisation
+//! and schedule bookkeeping come from it, and a benchmark over data that skipped them would
+//! measure a workspace the app could never have produced. Seeding is slow on purpose.
 //!
-//! Every entry point here refuses to touch the real workspace. Seeding a quarter of a million
-//! pages into somebody's actual notes is the worst thing this binary could do, so `--db` is
-//! required and a path matching the default workspace is rejected.
+//! Every entry point refuses to touch the real workspace: `--db` is required and a path
+//! matching the default workspace is rejected.
 
 use std::path::Path;
 use std::time::Instant;
@@ -32,9 +29,8 @@ use crate::ops::{list_pages, search, ListQuery};
 use crate::workspace::resolve_db_path;
 use crate::write::{base_page, local_tz, schedule_once};
 
-/// Words the generated bodies are drawn from. Deliberately ordinary English rather than lorem:
-/// FTS5 tokenises real words the way it will in use, and a corpus of one repeated token would
-/// make search look faster than it is.
+/// Ordinary English rather than lorem: FTS5 tokenises real words as it will in use, and one
+/// repeated token would make search look faster than it is.
 const WORDS: &[&str] = &[
     "meeting",
     "notes",
@@ -68,27 +64,22 @@ const WORDS: &[&str] = &[
     "incident",
 ];
 
-/// Body sizes the bench reads and writes against, in words. Roughly: a note, a long document, and
-/// something past anything a person would type by hand — the last exists to find where the editor
-/// and the FTS index stop being free rather than to represent a real page.
+/// Body sizes in words: a note, a long document, and one past anything typed by hand, which
+/// exists to find where the editor and the FTS index stop being free.
 const SIZE_BUCKETS: &[(&str, usize)] = &[("small", 40), ("large", 20_000), ("huge", 200_000)];
 const SIZE_MARKER: &str = "sizebench";
 
-/// A word outside [`WORDS`], put into the same number of pages whatever the corpus size. Every
-/// word in [`WORDS`] lands in most pages, so searching one ranks most of the workspace and grows
-/// with it; a real search term matches a handful, and this is the line that shows whether search
-/// stays flat when it does.
+/// A word outside [`WORDS`] in a fixed number of pages. Every word in [`WORDS`] lands in most
+/// pages, so searching one grows with the corpus; a real term matches a handful, and this shows
+/// whether search stays flat then.
 const RARE_WORD: &str = "zephyr";
 const RARE_PAGES: usize = 50;
 
-/// A small deterministic generator, so two runs on the same inputs produce the same workspace and
-/// two people comparing numbers are comparing the same shape of data. Not cryptographic and not
-/// trying to be.
+/// Deterministic, so two runs on the same inputs produce the same workspace and numbers compare.
 struct Rng(u64);
 
 impl Rng {
     fn next(&mut self) -> u64 {
-        // xorshift64*; enough spread for picking words and lengths.
         let mut x = self.0;
         x ^= x >> 12;
         x ^= x << 25;
@@ -102,7 +93,6 @@ impl Rng {
     }
 }
 
-/// A body as the editor saves one.
 fn set_body(page: &mut NewPage, text: String) {
     page.content = build_tiptap_doc(&text);
 }
@@ -118,7 +108,6 @@ fn sentence(rng: &mut Rng, words: usize) -> String {
     s
 }
 
-/// The real workspace is off limits, whatever the flags say.
 fn require_scratch_db(db: &Option<String>) -> Result<String, CliError> {
     let Some(path) = db.clone() else {
         return Err(CliError::workspace(
@@ -137,7 +126,6 @@ fn require_scratch_db(db: &Option<String>) -> Result<String, CliError> {
     Ok(path)
 }
 
-/// What the seeded pages look like.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Shape {
     /// Every page an undated inbox page: the database figures, and comparable across releases.
@@ -157,8 +145,7 @@ const TRICKY_TITLES: &[&str] = &[
     "Élan", "élan", "Elan", "ZEBRA", "zebra", "apple", "Äpfel", "item 2", "Item 10",
 ];
 
-/// One page's shape under [`Shape::Mixed`]: it edits `page` and returns the schedule to write
-/// (start, optional end) and whether the page repeats weekly.
+/// Edits `page` and returns the schedule to write (start, optional end) and whether it repeats weekly.
 fn shape_page(
     rng: &mut Rng,
     i: usize,
@@ -289,8 +276,7 @@ pub async fn seed(
             }
         }
 
-        // Seeding a quarter of a million pages is minutes of work, and a silent process that
-        // long reads as a hang.
+        // A silent process for minutes reads as a hang.
         if !json && i > 0 && i % 5_000 == 0 {
             eprintln!(
                 "  {i} / {pages} pages, {:.0}s elapsed",
@@ -299,9 +285,8 @@ pub async fn seed(
         }
     }
 
-    // Three marked pages the bench can find by title, so read and write can be timed against a
-    // known body size. Listing never touches these bodies — SUMMARY_COLUMNS carries no content —
-    // so page size only shows up on open, save, and the FTS index a write has to maintain.
+    // Marked pages the bench finds by title, to time read and write against a known body size.
+    // Listing never reads bodies (SUMMARY_COLUMNS carries no content).
     for (label, words) in SIZE_BUCKETS {
         let mut page = base_page(None, format!("{SIZE_MARKER} {label}"));
         let body = sentence(&mut rng, *words);
@@ -317,10 +302,8 @@ pub async fn seed(
         create_page_impl(&pool, page).await.map_err(classify)?;
     }
 
-    // A workspace has statistics from its first launch on, so the seed ends with them.
     pikos_db::gather_statistics(&pool).await.map_err(classify)?;
-    // Closing the last connection checkpoints the write-ahead log into the file and removes it, so
-    // the seeded file is complete on its own and can be copied as a template.
+    // Closing checkpoints the write-ahead log into the file, so it can be copied as a template.
     pool.close().await;
     let elapsed = started.elapsed();
     if json {
@@ -338,8 +321,7 @@ pub async fn seed(
     Ok(())
 }
 
-/// One timed operation, reported with the corpus size beside it because a duration without a size
-/// is the adjective this whole exercise exists to replace.
+/// Reported with the corpus size beside it, because a duration without a size means nothing.
 struct Timing {
     name: &'static str,
     /// Every measured run, in milliseconds, sorted.
@@ -353,13 +335,11 @@ impl Timing {
     }
 }
 
-/// How long one operation may spend on its measured runs before it stops early. Hundreds of runs of
-/// a sub-millisecond read cost nothing, while the same count of a seconds-long whole-table load
-/// would take most of an hour; the runs each operation actually got are in the output.
+/// Bounds an operation's measured runs: hundreds of a sub-millisecond read are free, but the same
+/// count of a seconds-long whole-table load would take most of an hour. The output reports the runs taken.
 const RUN_BUDGET: std::time::Duration = std::time::Duration::from_secs(10);
 const MIN_RUNS: usize = 5;
 
-/// The operations `bench --only` asked for; every one when empty.
 static ONLY: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
 
 async fn time_it<F, Fut, T>(runs: u32, name: &'static str, f: F) -> Result<Timing, CliError>
@@ -374,8 +354,7 @@ where
             samples: vec![],
         });
     }
-    // Once to warm the page cache, then the measured runs, so the number is steady-state rather
-    // than whatever the filesystem happened to be doing.
+    // One warm-up run, so the number is steady-state.
     let _ = f().await?;
     let mut samples = Vec::with_capacity(runs as usize);
     let began = Instant::now();
@@ -391,9 +370,8 @@ where
     Ok(Timing { name, samples })
 }
 
-/// A fresh install joining a workspace that already syncs, at the scale of the scratch workspace:
-/// start sync there, which queues every row, then build every record in batches and apply each
-/// batch into an empty workspace beside it, as a transport would carry them.
+/// A fresh install joining a synced workspace: sync starts on the scratch workspace, which
+/// queues every row, and each batch of records is built and applied into an empty one beside it.
 pub async fn sync_bootstrap(db: &Option<String>, batch: u32, json: bool) -> Result<(), CliError> {
     let path = require_scratch_db(db)?;
     let joining = format!("{path}.joining");
@@ -474,7 +452,7 @@ pub async fn bench(
     let _ = ONLY.set(only.to_vec());
 
     let open_start = Instant::now();
-    // Checkpointing the way the app does, so the bench times the database the app actually runs.
+    // Checkpointing as the app does, so the bench times the database the app runs.
     let pool = open_pool_checkpointing(&path, Checkpoints::Background(CheckpointHooks::NONE))
         .await
         .map_err(classify)?;
@@ -489,8 +467,7 @@ pub async fn bench(
         .await
         .map_err(|e| classify(e.into()))?;
 
-    // Every read and update goes to a different page, picked across the whole table with a fixed
-    // seed. Reading one page over and over times a cache hit, not a workspace of this size.
+    // Fixed-seed pages across the whole table: rereading one page times a cache hit.
     let max_rowid: i64 = sqlx::query_scalar("SELECT MAX(rowid) FROM pages")
         .fetch_one(&pool)
         .await
@@ -759,7 +736,6 @@ pub async fn bench(
         })
         .await?,
     );
-    // What the app reads at launch besides the list on screen.
     timings.push(
         time_it(runs, "launch: recompute recurring schedules", || async {
             pikos_db::recompute_recurring_schedules_impl(&pool)

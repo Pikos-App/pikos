@@ -13,9 +13,8 @@ use thiserror::Error;
 pub enum RecurrenceError {
     #[error("unparseable RRULE: {0}")]
     Parse(String),
-    /// A well-formed RRULE using a feature outside this engine's envelope (see
-    /// [`ParsedRule::validate_envelope`]). Distinct from `Parse` so callers can
-    /// fall back loudly (e.g. to rrule.js) rather than silently mis-enumerate.
+    /// A well-formed RRULE outside this engine's envelope. Distinct from `Parse` so
+    /// callers can fall back loudly rather than silently mis-enumerate.
     #[error("unsupported RRULE feature: {0}")]
     Unsupported(String),
 }
@@ -52,7 +51,6 @@ impl Freq {
     }
 }
 
-/// Weekday index, rrule.js convention: 0 = Monday … 6 = Sunday.
 const WEEKDAY_CODES: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
 fn weekday_from_code(code: &str) -> Option<u8> {
@@ -62,9 +60,8 @@ fn weekday_from_code(code: &str) -> Option<u8> {
         .map(|i| i as u8)
 }
 
-/// Typed round-trip options, mirroring `RecurrenceOptions` in `recurrence.ts`.
-/// Field presence matches the TS `parseRrule` output so the conformance corpus
-/// compares equal; the serde shape is the wasm boundary's JSON contract.
+/// Field presence matches the TS `parseRrule` output; the serde shape is the wasm
+/// boundary's JSON contract.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecurrenceOptions {
@@ -90,18 +87,15 @@ pub struct RecurrenceOptions {
     pub wkst: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<u32>,
-    /// End date as `YYYY-MM-DD`, matching the TS reduction of UNTIL to a date.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub until: Option<String>,
 }
 
-/// Splits an `RRULE` body (no `RRULE:` prefix) into its `KEY=VALUE` pairs.
 fn parts(rrule: &str) -> impl Iterator<Item = (&str, &str)> {
     rrule.split(';').filter_map(|p| p.split_once('='))
 }
 
-/// Parses an RRULE into the editor round-trip options. Returns `None` (not an
-/// error) on unparseable input or unsupported FREQ, matching `parseRrule`.
+/// `None` (not an error) on unparseable input or unsupported FREQ, matching `parseRrule`.
 pub fn parse_rrule(rrule: &str) -> Option<RecurrenceOptions> {
     let mut opts = RecurrenceOptions {
         interval: 1,
@@ -194,8 +188,6 @@ fn strip_ordinal(byday: &str) -> &str {
     &byday[ordinal_prefix.len()..]
 }
 
-/// Splits a BYDAY value into weekday indices and their positionally-aligned
-/// ordinals, dropping terms whose weekday code isn't recognised.
 fn parse_byday(value: &str) -> (Vec<u8>, Vec<Option<i32>>) {
     let mut days = Vec::new();
     let mut ordinals = Vec::new();
@@ -251,11 +243,6 @@ fn parse_until(value: &str) -> Option<NaiveDateTime> {
     }
 }
 
-/// The `UNTIL` instant of an RRULE, FREQ-agnostic — finds and parses the token
-/// without validating the envelope. Use this, not [`parse_rrule`], to ask "is
-/// this series bounded?": `parse_rrule` returns `None` on an out-of-envelope FREQ
-/// (e.g. `FREQ=HOURLY`), misreading a bounded rule as unbounded. Format handling
-/// is shared with the enumerator via [`parse_until`].
 /// A `UNTIL` token reduced to the one form the editor rebuilds: floating
 /// end-of-day.
 ///
@@ -274,15 +261,10 @@ fn normalized_until(value: &str) -> String {
     }
 }
 
-/// A comma-separated term reduced to a canonical form: upper-cased, `+`
-/// dropped, sorted. `BYDAY=TU,MO` and `BYDAY=mo,+tu` are the same rule.
-///
-/// The sort is defensive rather than load-bearing, and measurably so: today
-/// `parse_rrule` preserves the order it read and `build_rrule` emits it back
-/// unchanged, so the two sides of the comparison are always in the same order
-/// and no corpus case can exercise it. Carried anyway, because it is in the
-/// reference and because a builder that later canonicalises order would
-/// otherwise start reporting every list rule as un-editable.
+/// Canonical form of a comma-separated term, so `BYDAY=TU,MO` and `BYDAY=mo,+tu`
+/// compare equal. The sort is defensive: `parse_rrule` and `build_rrule` preserve order, so both
+/// sides of the comparison already agree. It stays so a builder that canonicalises
+/// order doesn't start reporting every list rule as un-editable.
 fn normalized_list(value: &str) -> String {
     let mut tokens: Vec<String> = value
         .split(',')
@@ -295,15 +277,13 @@ fn normalized_list(value: &str) -> String {
     tokens.join(",")
 }
 
-/// Every term an RRULE states, with the two the builder always emits defaulted
-/// in so a rule that omits them compares equal to one that spells them out.
+/// Every term an RRULE states, with the two the builder always emits defaulted in.
 fn rule_terms(rrule: &str) -> std::collections::BTreeMap<String, String> {
     let mut terms = std::collections::BTreeMap::from([
         ("INTERVAL".to_string(), "1".to_string()),
         ("WKST".to_string(), "MO".to_string()),
     ]);
-    // Case-insensitive, because the prefix is optional and providers spell it
-    // both ways.
+    // Providers spell the optional prefix both ways.
     let body = match rrule.get(..6) {
         Some(prefix) if prefix.eq_ignore_ascii_case("RRULE:") => &rrule[6..],
         _ => rrule,
@@ -323,21 +303,13 @@ fn rule_terms(rrule: &str) -> std::collections::BTreeMap<String, String> {
     terms
 }
 
-/// True when saving the rule back through a structured editor would change
-/// which occurrences it yields.
+/// True when saving the rule back through a structured editor would change which
+/// occurrences it yields: a term outside the envelope (`BYWEEKNO`, `BYYEARDAY`,
+/// `BYHOUR`) or a rule that does not parse.
 ///
-/// Port of `rruleEditWouldDegrade`. [`RecurrenceOptions`] carries every term the
-/// engine enumerates, so what is left over is the tail outside that envelope —
-/// `BYWEEKNO`, `BYYEARDAY`, `BYHOUR` — plus rules that do not parse at all.
-///
-/// Derived from the round-trip rather than from a list of lossy terms, and
-/// deliberately so: such a list is only ever as complete as the last person to
-/// notice a gap, and the TypeScript's missed `BYMONTH` — "15 March, annually" —
-/// for exactly that reason.
-///
-/// This is what an editor should ask before offering to change a rule. Offering
-/// it anyway is not a cosmetic bug: the user edits the interval and silently
-/// loses the terms that made the rule theirs.
+/// Derived from the round-trip rather than a list of lossy terms, because such a
+/// list is only as complete as the last person to notice a gap ("15 March,
+/// annually" slipped through the TypeScript's).
 pub fn rrule_edit_would_degrade(rrule: &str) -> bool {
     let Some(options) = parse_rrule(rrule) else {
         return true;
@@ -345,6 +317,10 @@ pub fn rrule_edit_would_degrade(rrule: &str) -> bool {
     rule_terms(rrule) != rule_terms(&build_rrule(&options))
 }
 
+/// The `UNTIL` instant of an RRULE, FREQ-agnostic: the token is parsed without
+/// validating the envelope. Use this, not [`parse_rrule`], to ask "is this series
+/// bounded?": `parse_rrule` returns `None` on an out-of-envelope FREQ (e.g.
+/// `FREQ=HOURLY`), misreading a bounded rule as unbounded.
 pub fn extract_until(rrule: &str) -> Option<NaiveDateTime> {
     rrule
         .split(';')
@@ -356,18 +332,11 @@ pub fn extract_until(rrule: &str) -> Option<NaiveDateTime> {
 }
 
 /// Rewrite an RRULE's `UNTIL` value in place, leaving every other field byte-for
-/// byte intact.
-///
-/// The one home for the surgical edit each zone-shifting caller needs: a parse
-/// round-trip through [`parse_rrule`]/[`build_rrule`] drops the fields those
-/// options don't carry (BYSETPOS, BYMONTHDAY, …), so a rule that only needed its
-/// bound moved would come back mutilated. `f` receives the raw `UNTIL` value and
-/// returns its replacement, or `None` to leave the token as it stands — the
-/// shapes a given caller can't convert (date-only, floating, unparseable) are
-/// already in the frame it wants.
-///
-/// Token matching follows [`extract_until`]: `;`-separated parts, key compared
-/// case-insensitively, original key spelling preserved.
+/// byte intact: a round-trip through [`parse_rrule`]/[`build_rrule`] drops the
+/// fields those options don't carry (BYSETPOS, BYMONTHDAY, ...). `f` receives the
+/// raw `UNTIL` value and returns its replacement, or `None` to leave it as it
+/// stands (date-only, floating and unparseable shapes are already in the frame the
+/// caller wants).
 pub fn rewrite_until_with<F>(rrule: &str, mut f: F) -> String
 where
     F: FnMut(&str) -> Option<String>,
@@ -385,23 +354,18 @@ where
         .join(";")
 }
 
-/// A single BYDAY term: an optional ordinal (`1` in `1MO`, `-1` in `-1FR`) and
-/// the weekday index (0 = Monday … 6 = Sunday).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ByDay {
     pub ordinal: Option<i32>,
     pub weekday: u8,
 }
 
-/// The internal parse the enumerator consumes — keeps BYDAY ordinals and the raw
-/// UNTIL instant that [`RecurrenceOptions`] discards.
 #[derive(Debug, Clone)]
 pub(crate) struct ParsedRule {
     pub freq: Freq,
     pub interval: u32,
     pub byday: Vec<ByDay>,
     pub bymonthday: Vec<i32>,
-    /// 1..=12; empty = every month.
     pub bymonth: Vec<u32>,
     pub bysetpos: Vec<i32>,
     pub wkst: u8,
@@ -410,14 +374,11 @@ pub(crate) struct ParsedRule {
 }
 
 impl ParsedRule {
-    /// Parses the full enumeration envelope. Rejection is reserved for parts the
-    /// enumerator genuinely does not implement (sub-daily FREQ, BYWEEKNO,
-    /// BYYEARDAY, BYHOUR/BYMINUTE/BYSECOND) — with rrule.js gone there is no
-    /// fallback engine, so a rejected rule renders nowhere; anything with
-    /// well-defined rrule.js semantics is enumerated instead. Two shapes rrule.js
-    /// tolerates are normalized the same way it does: a WEEKLY BYDAY ordinal is
-    /// read as the bare weekday, and COUNT+UNTIL together run to the tighter
-    /// bound.
+    /// Rejection is reserved for parts the enumerator does not implement (sub-daily
+    /// FREQ, BYWEEKNO, BYYEARDAY, BYHOUR/BYMINUTE/BYSECOND); there is no fallback
+    /// engine, so a rejected rule renders nowhere. Two shapes rrule.js tolerates are
+    /// normalized as it does: a WEEKLY BYDAY ordinal reads as the bare weekday, and
+    /// COUNT+UNTIL together run to the tighter bound.
     pub fn parse(rrule: &str) -> Result<Self, RecurrenceError> {
         let mut freq = None;
         let mut interval = 1u32;

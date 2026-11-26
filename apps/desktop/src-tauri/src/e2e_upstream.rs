@@ -1,6 +1,5 @@
-//! A calendar server for the bridge lane: a test says what upstream now holds, and
-//! the real sync engine and reconciler run against it. The lane has no network, so
-//! without this every row about a change arriving from the calendar stays manual.
+//! A calendar server for the bridge lane: a test says what upstream holds, and the real sync
+//! engine and reconciler run against it.
 //!
 //! Events are named by title, the way a test sees them. A title that matches a page
 //! in the calendar re-delivers that event under its stored identity; any other
@@ -30,7 +29,6 @@ pub struct UpstreamEvent {
     location: Option<String>,
     attendees: Option<Vec<String>>,
     start: Option<String>,
-    /// As the provider sends it: exclusive for an all-day event.
     end: Option<String>,
     timezone: Option<String>,
     rrule: Option<String>,
@@ -189,7 +187,6 @@ async fn calendar_by_name(pool: &SqlitePool, name: &str) -> AppResult<(String, S
     .ok_or_else(|| AppError::NotFound(format!("no calendar named {name}")))
 }
 
-/// The upstream identity of the calendar's page with this title, and the page.
 async fn linked(
     pool: &SqlitePool,
     account_id: &str,

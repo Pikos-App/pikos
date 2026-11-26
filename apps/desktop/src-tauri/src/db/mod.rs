@@ -19,19 +19,13 @@ pub mod sync_loop;
 #[path = "watch.rs"]
 mod watch;
 
-// The command modules `db_commands!` generates. They are declared in
-// `commands.rs` rather than written out per file, and surfaced here under the
-// names the rest of the app (and the IPC tests) know them by. `schedules` and
-// `sync` are not in this list because they also hold hand-written commands —
-// those modules pull their generated half in themselves.
+// The command modules `db_commands!` generates, surfaced here by name. `schedules` and
+// `sync` also hold hand-written commands, so they pull their generated half in themselves.
 pub use commands::{focus, folders, notifications, pages, replica, search, tags, windows};
 
-/// Shared database state. None until connect_db is called.
-///
-/// Tracks the canonical path of the currently-connected file so a repeated
-/// connect_db with the *same* path is a cheap no-op (frontend mount effect
-/// fires twice under React.StrictMode) while a *different* path is treated
-/// as a programming error — the app connects one workspace per launch.
+/// None until connect_db is called. The canonical path makes a repeated connect_db with
+/// the *same* path a no-op (the mount effect fires twice under StrictMode), while a
+/// *different* path is a programming error: the app connects one workspace per launch.
 pub struct DbState {
     inner: Mutex<DbStateInner>,
 }
@@ -39,10 +33,8 @@ pub struct DbState {
 #[derive(Default)]
 struct DbStateInner {
     pool: Option<SqlitePool>,
-    /// Canonicalised absolute path of the currently-connected DB file.
-    /// `None` matches the empty `pool`. Two paths that canonicalise to the
-    /// same on-disk file (e.g. one with `..`) are treated as the same
-    /// workspace — avoids opening a second pool to the same SQLite file.
+    /// Canonicalised, so two paths to one file (e.g. one with `..`) are one workspace and
+    /// never open a second pool. `None` matches the empty `pool`.
     path: Option<PathBuf>,
 }
 
@@ -64,16 +56,10 @@ impl DbState {
             .cloned()
     }
 
-    /// The workspace file this state is connected to. `None` matches an empty
-    /// pool. Read by maintenance commands that act on the file rather than on
-    /// the data inside it.
     pub(crate) async fn current_path(&self) -> Option<PathBuf> {
         self.inner.lock().await.path.clone()
     }
 
-    /// Take ownership of the current pool, clearing state. Used by
-    /// `wipe_app_data` so SQLite file handles release before the on-disk
-    /// file is removed.
     pub(crate) async fn take_pool(&self) -> Option<SqlitePool> {
         let mut guard = self.inner.lock().await;
         guard.path = None;
@@ -90,9 +76,6 @@ impl DbState {
         }
     }
 
-    /// Test-only: build a state already holding `pool`, bypassing `connect_db`
-    /// (which needs a `tauri::State`). Lets unit tests exercise the
-    /// take_pool/get_pool lifecycle that `wipe_app_data` depends on.
     #[cfg(test)]
     pub(crate) fn with_pool(pool: SqlitePool) -> Self {
         DbState {
@@ -104,15 +87,13 @@ impl DbState {
     }
 }
 
-/// Best-effort canonical path. Falls back to the raw path if the file
-/// doesn't exist yet (first-run create_if_missing) — in that case we
-/// canonicalise the parent dir and append the filename.
+/// Best-effort canonical path; a file that doesn't exist yet (first run) is canonicalised
+/// via its parent directory.
 fn canonicalize_path(path: &str) -> PathBuf {
     let raw = std::path::Path::new(path);
     if let Ok(c) = raw.canonicalize() {
         return c;
     }
-    // File doesn't exist yet — canonicalise parent and re-attach name.
     if let (Some(parent), Some(name)) = (raw.parent(), raw.file_name()) {
         if let Ok(parent_c) = parent.canonicalize() {
             return parent_c.join(name);
@@ -143,21 +124,13 @@ fn ensure_inside_data_dir(canonical: &Path, data_dir: &Path) -> AppResult<()> {
     )))
 }
 
-/// Open (or create) the SQLite workspace at `path`, run migrations, and
-/// store the pool in shared state.
+/// Idempotent for the **same** canonical path (the StrictMode double-mount warns so
+/// regressions stay visible). A **different** path is refused: the frontend assumes
+/// connect_db is the one-time bootstrap, and a different workspace means relaunching.
 ///
-/// Idempotent: a second call with the **same** canonical path is a fast
-/// no-op (the React.StrictMode double-mount path emits a WARN so future
-/// regressions stay visible). A call with a **different** path is refused —
-/// silently re-mapping the connection would surprise the frontend, which
-/// assumes connect_db is the one-time bootstrap, and there is no runtime
-/// swap to fall back on: `WorkspaceContext` connects once on mount and a
-/// different workspace means relaunching the app.
-///
-/// The mutex is held across `open_pool` so a concurrent second call (the
-/// dev StrictMode double-mount) waits and then hits the idempotency
-/// branch — racing into a second `open_pool` against the same file can
-/// return SQLITE_BUSY when migrations / WAL recovery contend.
+/// The mutex is held across `open_pool` so a concurrent second call waits and hits the
+/// idempotent branch; two `open_pool`s on one file can return SQLITE_BUSY while
+/// migrations / WAL recovery contend.
 #[tauri::command]
 pub async fn connect_db(
     path: String,
@@ -209,18 +182,13 @@ pub(crate) use pikos_db::Checkpoints;
 /// In the background, telling the outside-change watcher each one is the app's own.
 pub(crate) const APP_CHECKPOINTS: Checkpoints = Checkpoints::Background(watch::OWN_CHECKPOINTS);
 
-/// The one place a pool is opened: pikos-db handles schema, migrations,
-/// pragmas, content_text backfill and the FTS rebuild, then this runs the
-/// app-only housekeeping on top.
+/// The one place a pool is opened; pikos-db does schema and migrations, this adds the
+/// app-only housekeeping.
 pub(crate) async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     let pool = pikos_db::open_pool_checkpointing(path, APP_CHECKPOINTS).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
-    // The trash's other half. Soft-delete keeps a page forever on its own, so
-    // without a sweep the file only ever grows with work the user deleted — and
-    // "kept for 30 days", which the trash tells them, would be a promise nothing
-    // enforces. Once per launch beside the log prune, for the same reason it is
-    // there: retention is housekeeping, not something to make the user ask for,
-    // and a pool that has just opened is the one moment nothing else is writing.
+    // Soft-delete keeps a page forever on its own, and the trash promises "kept for 30 days",
+    // so retention is swept once per launch, when nothing else is writing.
     let purged =
         pikos_db::purge_trashed_pages_older_than(&pool, pikos_db::TRASH_RETENTION_DAYS).await?;
     if purged > 0 {
@@ -232,21 +200,11 @@ pub(crate) async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     Ok(pool)
 }
 
-// Tests import test_pool / insert_test_* / TestPage directly from `pikos_db`
-// (its `test-support` feature is enabled in this crate's dev-dependencies).
-// Sharing the upstream fixtures keeps tests on the same migration tree as
-// production — no separate apps/desktop/src-tauri/migrations/ to drift against.
+// Tests take their fixtures (`test_pool`, `insert_test_*`, `TestPage`) from `pikos_db`'s
+// `test-support` feature, so they share production's migration tree.
 
-// Cross-module workflow + real-pool integration tests. They drive pikos-db's
-// public API the way the app does (pages + folders + schedules + search through
-// one pool). They live in this crate, not pikos-db, because what they assert is
-// how the *desktop app* composes those modules — that belongs beside the code
-// doing the composing, and this crate's dev-dependencies enable pikos-db's
-// `test-support` feature so the fixtures still come off the same migration tree.
-// Reaching CI is no longer part of the reason: `_validate.yml` gates both Cargo
-// trees, `cargo test --workspace` over the root (`crates/*`, which excludes this
-// package) and then this crate on its own, so pikos-db's `#[cfg(test)]` modules
-// run either way. See the file header for detail.
+// Cross-module workflow tests drive pikos-db's public API the way the app does. They live
+// here, not in pikos-db, because they assert how the desktop app composes those modules.
 #[cfg(test)]
 #[path = "workflows_tests.rs"]
 mod workflows_tests;

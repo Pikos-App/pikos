@@ -1,18 +1,13 @@
 //! Background notification scheduler.
 //!
-//! Runs as a Tokio task on the Tauri async runtime (not JS setInterval),
-//! so it stays alive even when the webview is backgrounded or throttled.
-//! Ticks once per minute, aligned to the clock minute boundary, and queries
-//! SQLite for due reminders, firing OS desktop notifications.
+//! Runs as a Tokio task, not JS setInterval, so it survives a backgrounded or throttled
+//! webview. Ticks once per minute on the clock minute boundary.
 //!
 //! Two delivery paths:
-//! 1. Per-reminder: fires at `scheduled_start - minutes_before` for timed events.
-//!    All-day events are excluded — they'd fire at midnight-minus-N which is
-//!    never what the user wants.
-//! 2. Daily summary: fires once per local day with today's schedule + overdue
-//!    counts. Triggered at quiet-hours-end, or at 07:00+ if quiet hours are
-//!    disabled. This is also the catch-up mechanism for reminders that would
-//!    have fired during quiet hours.
+//! 1. Per-reminder, at `scheduled_start - minutes_before` for timed events. All-day events are
+//!    excluded: they'd fire at midnight-minus-N.
+//! 2. Daily summary, once per local day, at quiet-hours-end or 07:00+ without quiet hours.
+//!    It is also the catch-up for reminders that would have fired during quiet hours.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -25,22 +20,16 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::db::DbState;
 
-/// Notification settings passed from the frontend via a Tauri command.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationSettings {
     pub enabled: bool,
-    /// Default lead time in minutes (0 = at start, 5, 10, 15, 30).
     pub default_minutes_before: i64,
-    /// Daily summary — one notification per day with today's schedule + overdue.
-    /// Fires at the first non-quiet tick at or after `summary_time`.
+    /// Daily summary: one notification per day with today's schedule + overdue.
     pub overdue_alerts: bool,
-    /// When the daily summary should fire (HH:MM, 24h format). If this time
-    /// falls inside quiet hours, the summary is deferred to the first
-    /// non-quiet tick after it (quiet hours can be daytime — e.g. a focus
-    /// block — so don't assume they're overnight).
+    /// HH:MM, 24h. Inside quiet hours the summary defers to the first non-quiet tick after it
+    /// (quiet hours can be daytime, e.g. a focus block).
     pub summary_time: String, // e.g. "07:00"
-    /// Quiet hours — suppress notifications between these times (HH:MM, 24h format).
     pub quiet_hours_enabled: bool,
     pub quiet_hours_start: String, // e.g. "22:00"
     pub quiet_hours_end: String,   // e.g. "08:00"
@@ -60,7 +49,6 @@ impl Default for NotificationSettings {
     }
 }
 
-/// Shared state so the frontend can update notification settings at runtime.
 pub struct NotificationSettingsState(pub tokio::sync::Mutex<NotificationSettings>);
 
 impl NotificationSettingsState {
@@ -69,18 +57,13 @@ impl NotificationSettingsState {
     }
 }
 
-/// In-memory scheduler state carried across ticks.
 #[derive(Clone, Default)]
 struct SchedulerRuntime {
-    /// Local date of the last fired daily summary. Fast-path dedup; the DB
-    /// marker row is the source of truth across restarts.
+    /// Fast-path dedup; the DB marker row is the source of truth across restarts.
     last_summary_date: Option<NaiveDate>,
-    /// Where the last successful tick's window ended, so the next one starts
-    /// there instead of overlapping it. Ticks are meant to land a minute apart,
-    /// but tokio's timer does not advance while the machine sleeps, so after a
-    /// wake two can fall seconds apart with most of a minute in common — and a
-    /// reminder inside that overlap is collected by both. Only a tick that
-    /// finished sets it: a failed one leaves the window open so its reminders
+    /// Where the last successful tick's window ended. Tokio's timer doesn't advance while
+    /// the machine sleeps, so after a wake two ticks can fall seconds apart and both collect
+    /// a reminder in the overlap. Only a finished tick sets it, so a failed one's reminders
     /// are retried rather than skipped.
     last_window_end: Option<chrono::DateTime<chrono::Local>>,
 }
@@ -97,9 +80,6 @@ impl SchedulerRuntimeState {
     }
 }
 
-// ─── Commands ────────────────────────────────────────────────────────────────
-
-/// Tauri command: frontend calls this whenever notification settings change.
 #[tauri::command]
 pub async fn update_notification_settings(
     state: tauri::State<'_, NotificationSettingsState>,
@@ -172,9 +152,6 @@ fn open_settings_page(app: &tauri::AppHandle) -> crate::error::AppResult<()> {
         .map_err(|e| crate::error::AppError::Internal(e.to_string()))
 }
 
-// ─── Scheduler loop ──────────────────────────────────────────────────────────
-
-/// Main scheduler loop — spawned from `lib.rs` setup.
 pub async fn run(app: AppHandle) {
     // The frontend calls connect_db after mount, so we poll until it's ready.
     loop {
@@ -210,7 +187,6 @@ pub async fn run(app: AppHandle) {
     }
 }
 
-/// How long from `now` to the start of the next minute, where the next tick lands.
 fn until_next_minute(now: chrono::DateTime<chrono::Local>) -> Duration {
     let secs = 60 - now.second() as u64;
     let nanos = now.nanosecond() as u64;
@@ -244,7 +220,6 @@ fn classify_sqlx(e: &sqlx::Error) -> &'static str {
     }
 }
 
-/// Check if the current local time falls within quiet hours.
 fn is_quiet_hours(settings: &NotificationSettings, now: &chrono::DateTime<chrono::Local>) -> bool {
     if !settings.quiet_hours_enabled {
         return false;
@@ -263,16 +238,9 @@ fn is_quiet_hours(settings: &NotificationSettings, now: &chrono::DateTime<chrono
 
 /// Decide whether the daily summary should fire on this tick.
 ///
-/// Fires once per local day, gated on all of:
-/// - overdue_alerts enabled
-/// - not currently in quiet hours
-/// - local time is at or after `summary_time`
-/// - not already fired today
-///
-/// If `summary_time` falls inside quiet hours, this returns false until the
-/// first non-quiet tick after it. Works for both overnight and daytime quiet
-/// hours: a 07:00 summary with 22:00–10:00 quiet hours defers to 10:00; a
-/// 14:00 summary with 13:00–15:00 quiet hours defers to 15:00.
+/// Once per local day, when overdue_alerts is on, it is not quiet, and `summary_time` has
+/// passed. A summary time inside quiet hours defers to the first non-quiet tick after it,
+/// overnight or daytime: 07:00 with 22:00–10:00 quiet defers to 10:00.
 fn should_fire_daily_summary(
     runtime: &SchedulerRuntime,
     settings: &NotificationSettings,
@@ -290,41 +258,32 @@ fn should_fire_daily_summary(
     now_hm >= settings.summary_time
 }
 
-/// Everything one tick found due, resolved before any of it is delivered.
 struct DueBatch {
     reminders: Vec<DueReminder>,
-    /// Quiet hours were in force when this batch was resolved, so none of
-    /// `reminders` may be delivered — they are carried anyway so the tick can
-    /// record each as a suppression the history panel can show.
+    /// None of `reminders` may be delivered; they are carried so each can be recorded as a suppression.
     quiet: bool,
     summary: DueSummary,
 }
 
-/// The daily summary's fate on one tick.
 #[derive(Debug, PartialEq)]
 enum DueSummary {
     NotDue,
-    /// Due, but the log already carries today's marker: deliver nothing, and
-    /// consume the day in memory so the rest of it stays query-free.
+    /// Deliver nothing, and consume the day in memory so the rest of it stays query-free.
     AlreadyLogged,
-    /// Due and counted. Zero counts suppress the notification, not the marker —
-    /// otherwise every remaining tick today re-runs the counts.
+    /// Zero counts suppress the notification, not the marker, or every later tick re-runs the counts.
     Due {
         today_count: i64,
         overdue_count: i64,
     },
 }
 
-/// Resolve everything due at `now` without delivering any of it.
-///
-/// Quiet hours mark the batch `quiet` rather than emptying it: nothing in a
-/// quiet batch is ever delivered — that rule stays exactly where it was, in the
-/// one place the caller reads `quiet` — but the reminders are still resolved so
-/// each can be written to the log as a suppression. Before, a reminder silenced
-/// by quiet hours left no trace anywhere, and the user's only evidence was the
-/// notification that never came. They still resurface in the next summary as
-/// overdue, unchanged. The summary is evaluated above the gate because it defers
-/// rather than skips — `should_fire_daily_summary` owns that rule.
+/// Quiet hours mark the batch `quiet` rather than emptying it: nothing in a quiet
+/// batch is ever delivered (the caller reads `quiet` in one place), but the
+/// reminders are still resolved so each can be logged as a suppression; without
+/// that, the user's only evidence is the notification that never came. They
+/// resurface in the next summary as overdue. The summary is evaluated above the
+/// gate because it defers rather than skips; `should_fire_daily_summary` owns
+/// that rule.
 async fn collect_due(
     pool: &SqlitePool,
     settings: &NotificationSettings,
@@ -349,8 +308,8 @@ async fn collect_due(
     reminders.extend(pikos_db::due_synced_reminders(pool, &window, minutes).await?);
     reminders.extend(pikos_db::due_synced_override_reminders(pool, &window, minutes).await?);
 
-    // Backstop: the six partition the schedules by construction, but nothing
-    // logs between them any more, so an overlap would now deliver twice.
+    // Backstop: the six partition the schedules by construction, and nothing
+    // logs between them, so an overlap would deliver twice.
     let mut seen = HashSet::new();
     reminders.retain(|r| seen.insert(r.schedule_id.clone()));
 
@@ -361,8 +320,6 @@ async fn collect_due(
     })
 }
 
-/// Counts behind the daily summary — see `pikos_db::today_scheduled_count` and
-/// `pikos_db::overdue_count` for what each measures.
 async fn collect_daily_summary(
     pool: &SqlitePool,
     now: &chrono::DateTime<chrono::Local>,
@@ -405,11 +362,8 @@ pub(crate) async fn daily_summary_counts(
     })
 }
 
-/// One tick against the app: its settings, workspace, runtime state and the real clock.
-///
-/// Internal scheduler fns return `sqlx::Error` directly (not `String`) so the
-/// run-loop log site can use `classify_sqlx` to log a stable error class
-/// without echoing parameter values back through the sqlx Display impl.
+/// Internal fns return `sqlx::Error` directly so the log site can use `classify_sqlx`
+/// without echoing parameter values through Display.
 async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
     let settings = {
         let state = app.state::<NotificationSettingsState>();
@@ -452,10 +406,8 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
     result
 }
 
-/// Resolve everything due at `now`, show it through `show` (title, body, log row id), and log
-/// it. `runtime` records the day's summary as it goes and the window's end once every
-/// reminder is through. With `notifications_off`, a due reminder is logged as not shown
-/// rather than handed to a system that would drop it.
+/// With `notifications_off`, a due reminder is logged as not shown rather than handed to a
+/// system that would drop it.
 async fn tick(
     pool: &SqlitePool,
     settings: &NotificationSettings,
@@ -506,24 +458,14 @@ async fn tick(
     Ok(())
 }
 
-// ─── Delivery ────────────────────────────────────────────────────────────────
-
-/// Send an OS desktop notification.
+/// macOS delivers via UserNotifications (`notifications::macos`) so the banner shows while
+/// Pikos is frontmost, falling back to the plugin for an unbundled dev binary; other
+/// platforms use the plugin.
 ///
-/// On macOS we deliver via the modern UserNotifications framework
-/// (`notifications::macos`) so the banner shows even when Pikos is the
-/// frontmost app — the tauri-plugin-notification path uses the legacy
-/// NSUserNotification API, which macOS suppresses in the foreground. If the UN
-/// path is unavailable (unbundled `tauri dev` binary), we fall through to the
-/// plugin. All other platforms use the plugin directly.
+/// `log_id` becomes the notification's OS identifier on the UserNotifications path, so a
+/// click can find its row (see `notifications::click`); the plugin takes no identifier.
 ///
-/// `log_id` is the `notification_log` row this banner came from; the UN path
-/// carries it as the notification's OS identifier so a click can find its way
-/// back (see `notifications::click`). The plugin's desktop builder takes no
-/// identifier and reports no clicks, so on every other platform it goes nowhere.
-///
-/// Requires a properly signed app bundle — unsigned dev builds will
-/// silently drop notifications. Use osascript fallback for dev testing.
+/// Needs a signed app bundle: unsigned dev builds silently drop notifications.
 fn deliver(app: &AppHandle, title: &str, body: &str, log_id: &str) {
     #[cfg(target_os = "macos")]
     {
@@ -545,8 +487,6 @@ fn deliver(app: &AppHandle, title: &str, body: &str, log_id: &str) {
     {}
 }
 
-/// Note a reminder that came due and was not shown. Deliberately not a delivery
-/// path: no OS notification, and no dedup row (see `pikos_db::log_reminder_not_shown`).
 async fn record_not_shown(
     pool: &SqlitePool,
     row: &DueReminder,
@@ -575,8 +515,8 @@ fn format_lead_time(minutes: i64) -> String {
     } else if minutes < 60 {
         format!("in {} min", minutes)
     } else if minutes % 1440 == 0 {
-        // A whole number of days reads as days: the picker now offers a 1-day
-        // lead, and "in 24 hours" is the same span said less plainly.
+        // A whole number of days reads as days: "in 24 hours" is the same span said
+        // less plainly.
         let days = minutes / 1440;
         if days == 1 {
             "in 1 day".to_string()
@@ -602,7 +542,6 @@ fn format_time_from_iso(scheduled_start: &str) -> String {
     }
 }
 
-/// Pretty title for the daily summary: "Today — Sat, Apr 18"
 fn format_summary_title(now: &chrono::DateTime<chrono::Local>) -> String {
     let weekday = match now.weekday() {
         chrono::Weekday::Mon => "Mon",
@@ -630,8 +569,6 @@ fn format_summary_title(now: &chrono::DateTime<chrono::Local>) -> String {
     format!("Today — {}, {} {}", weekday, month, now.day())
 }
 
-/// Body for the daily summary. Omits zero counts.
-/// "3 scheduled · 2 overdue\nOpen Pikos to review."
 fn format_summary_body(today_count: i64, overdue_count: i64) -> String {
     let mut parts: Vec<String> = Vec::new();
     if today_count > 0 {
@@ -646,8 +583,6 @@ fn format_summary_body(today_count: i64, overdue_count: i64) -> String {
     format!("{}\nOpen Pikos to review.", parts.join(" · "))
 }
 
-/// Under a reminder's time when its calendar may be out of date
-/// ([`pikos_db::page_calendar_out_of_date`]).
 const NOT_SYNCING_NOTE: &str = "\nCalendar not syncing, so this may have changed";
 
 async fn fire_reminder(
@@ -677,15 +612,9 @@ async fn fire_reminder(
 
     show(&row.title, &body, &log_id);
 
-    // Reminder actually fired — meaningful audit anchor at INFO. Empty
-    // ticks are silent (most ticks find nothing).
-    //
-    // Diagnostic fields help explain "fired for a completed page" reports
-    // without logging any user content (no titles). The tell:
-    // - has_rule=true with schedule_start != page_start → recurring drift: the
-    //   head advanced but the reminder keyed off a stale page_schedules row.
-    // - status=done would mean a TOCTOU between the due query and now.
-    // Best-effort: a failed diagnostic read must not stop delivery.
+    // Diagnostic fields explain "fired for a completed page" reports without logging content:
+    // has_rule=true with schedule_start != page_start is recurring drift (the head advanced but
+    // the reminder keyed off a stale row); status=done is a TOCTOU. A failed read must not stop delivery.
     match pikos_db::reminder_fire_diagnostics(pool, &row.page_id).await {
         Ok(Some(diag)) => {
             let drift = diag.has_rule != 0
@@ -724,16 +653,12 @@ async fn fire_reminder(
     Ok(())
 }
 
-/// Prune notification_log entries older than 30 days so the table can't grow
-/// unboundedly. Run once per pool open (see `db::open_pool`).
 pub async fn prune_notification_log(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let cutoff = (chrono::Local::now() - chrono::Duration::days(30))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     pikos_db::prune_notification_log(pool, &cutoff).await
 }
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[path = "tests.rs"]

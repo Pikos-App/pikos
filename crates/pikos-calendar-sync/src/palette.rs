@@ -12,8 +12,6 @@
 
 use std::sync::LazyLock;
 
-/// The pastel half of `PALETTE_COLORS`, the only entries a synced calendar maps
-/// into.
 const SYNCED_PALETTE: [(&str, &str); 8] = [
     ("Rose", "#E8A6A1"),
     ("Peach", "#E8C3A0"),
@@ -32,16 +30,13 @@ static PALETTE_HUES: LazyLock<Vec<(&'static str, f32)>> = LazyLock::new(|| {
         .collect()
 });
 
-/// The palette entry nearest `hex` by hue, or `None` when there is no hue to
-/// match — an unparseable value, or a grey like Google's Graphite. The caller
-/// falls back to its per-provider default there.
+/// `None` when there is no hue to match (an unparseable value, or a grey like
+/// Google's Graphite); the caller falls back to its per-provider default.
 ///
-/// Hue alone is the metric: every candidate already shares one pastel lightness
-/// and chroma, so the provider's saturation and brightness carry no signal worth
-/// matching — only *which* colour the user picked in their calendar app. RGB
-/// distance collapses instead of separating, because a saturated input is far
-/// from every pastel and lands on whichever is nearest in brightness: it maps
-/// Google's Tomato and Tangerine both onto Rose, where hue splits them.
+/// Hue alone is the metric, since every candidate shares one pastel lightness and
+/// chroma. RGB distance collapses instead of separating: a saturated input is far
+/// from every pastel and lands on whichever is nearest in brightness, mapping
+/// Google's Tomato and Tangerine both onto Rose.
 pub fn nearest_palette_color(hex: &str) -> Option<&'static str> {
     let h = hue(parse_hex(hex)?)?;
     PALETTE_HUES
@@ -50,7 +45,6 @@ pub fn nearest_palette_color(hex: &str) -> Option<&'static str> {
         .map(|(entry, _)| *entry)
 }
 
-/// Shortest angular distance between two hues, degrees.
 fn arc(a: f32, b: f32) -> f32 {
     let d = (a - b).abs();
     d.min(360.0 - d)
@@ -70,8 +64,6 @@ fn parse_hex(hex: &str) -> Option<(f32, f32, f32)> {
     ))
 }
 
-/// HSL hue in degrees. `None` when the colour is achromatic (grey/black/white)
-/// and hue is undefined.
 fn hue((r, g, b): (f32, f32, f32)) -> Option<f32> {
     let max = r.max(g).max(b);
     let min = r.min(g).min(b);

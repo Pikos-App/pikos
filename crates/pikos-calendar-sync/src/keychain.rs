@@ -39,8 +39,7 @@ impl KeychainError {
     }
 }
 
-/// Secret backend. Production = OS keychain; tests inject an in-memory map
-/// (keyring's mock backend can't round-trip — state isn't shared across `Entry`s).
+/// Tests inject an in-memory map: keyring's mock backend shares no state across `Entry`s.
 pub(crate) trait CredentialStore: Send + Sync {
     fn set(&self, key: &str, secret: &str) -> Result<(), KeychainError>;
     fn get(&self, key: &str) -> Result<String, KeychainError>;
@@ -78,13 +77,11 @@ fn map_err(e: keyring::Error) -> KeychainError {
     }
 }
 
-/// Per-account credential store over the OS keychain.
 pub struct Keychain {
     store: Box<dyn CredentialStore>,
 }
 
 impl Keychain {
-    /// The real OS keychain. Use everywhere outside tests.
     pub fn system() -> Self {
         Self {
             store: Box::new(KeyringStore),

@@ -37,10 +37,8 @@ use pikos_db::tx::retry_on_busy;
 #[path = "engine_tests.rs"]
 mod engine_tests;
 
-/// What one calendar poll resolved to, for the status dot and the scheduler.
-/// Transport and credential failures are *not* errors here — they're expected
-/// operating states the UI surfaces calmly, so they map to variants rather than
-/// `Err`. Only a genuine bug (DB/serde/internal) propagates as `Err`.
+/// Transport and credential failures are expected operating states, so they map to
+/// variants rather than `Err`. Only a genuine bug (DB/serde/internal) is an `Err`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncOutcome {
     /// Synced cleanly. `full_resync` is true when a rejected cursor forced a
@@ -50,19 +48,15 @@ pub enum SyncOutcome {
     /// size — so a no-op full re-enumerate reports `false` and a sweep-only
     /// deletion reports `true`.
     Synced { full_resync: bool, changed: bool },
-    /// Transport/offline failure — show a "synced <time> ago" stale indicator and
-    /// keep the stored cursor; the next poll retries. No error storm.
+    /// Transport failure: the stored cursor is kept and the next poll retries.
     Offline,
-    /// Credentials missing or rejected (keychain miss / revoked / rotated app
-    /// password). Stop polling this account and surface a reconnect badge; every
-    /// already-synced page stays viewable offline.
+    /// Credentials missing or rejected. Polling stops until the user reconnects;
+    /// already-synced pages stay viewable.
     ReconnectNeeded,
 }
 
-/// Run one poll for a single enabled calendar: sync from the stored cursor (or
-/// backfill when there is none), reconcile, resolve any orphan masters, then
-/// advance the cursor. `folder_id` is the calendar's system folder, resolved by
-/// the caller — the engine never decides folder policy (mirrors the reconciler).
+/// `folder_id` is the calendar's system folder, resolved by the caller: the engine
+/// never decides folder policy.
 pub async fn sync_calendar<P: CalendarProvider>(
     pool: &sqlx::SqlitePool,
     provider: &P,
@@ -192,9 +186,9 @@ async fn run<P: CalendarProvider>(
     })
 }
 
-/// Drive `reconciler::sweep_absent` on a full authoritative enumerate; no-op
-/// otherwise. Runs after the upserts commit, so every returned event is `active`
-/// and won't be swept. Returns how many pages it removed (for the `changed` signal).
+/// Runs `reconciler::sweep_absent` on a full authoritative enumerate; no-op otherwise.
+/// Runs after the upserts commit, so every returned event is `active` and survives.
+/// Returns how many pages it removed.
 async fn sweep_absent_events(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
@@ -231,12 +225,9 @@ const RECONCILE_BATCH: usize = 200;
 /// skip is an optimisation over this backstop, not the sole guarantee.
 const FORCE_FULL_INTERVAL_HOURS: i64 = 6;
 
-/// Reconcile a delta, splitting a large one into batched transactions (see
-/// [`RECONCILE_BATCH`]). Whole-event/series upserts have no cross-item dependency
-/// and batch freely; occurrence deltas (which may reference a master in the same
-/// delta) and removals run last, after every event batch commits — so a master is
-/// stored before its override, and only that final pass can surface a missing
-/// master.
+/// Whole-event/series upserts batch freely; occurrence deltas (which may reference a
+/// master in the same delta) and removals run last, so a master is stored before its
+/// override and only that final pass can surface a missing master.
 async fn reconcile_batched(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
@@ -314,16 +305,13 @@ async fn reconcile_safe(
     retry_on_busy(|| reconcile(pool, ctx, delta)).await
 }
 
-/// Resolve occurrence deltas the reconciler couldn't apply because their series
-/// rule isn't stored and no master arrived in this delta. Fetches the one master
-/// per orphan (`fetch_event`, not a full-series re-fetch) and re-reconciles it
-/// with its occurrence deltas — the reconciler's two-pass applies the master
-/// first, so the override lands cleanly.
+/// Fetches the one master per orphan occurrence delta (`fetch_event`, not a
+/// full-series re-fetch) and re-reconciles it with its occurrences.
 ///
-/// A `404` means the master is gone upstream: drop the occurrence delta
-/// (terminal, cursor may advance). Any other error propagates and blocks the
-/// advance, so the run retries next poll. Returns the fetched masters' external
-/// ids so the sweep can spare them and the `changed` signal can see them.
+/// A `404` means the master is gone upstream: the occurrence delta is dropped
+/// (terminal, cursor may advance). Any other error blocks the advance, so the run
+/// retries next poll. Returns the fetched masters' external ids so the sweep can
+/// spare them and the `changed` signal can see them.
 async fn resolve_missing_masters<P: CalendarProvider>(
     pool: &sqlx::SqlitePool,
     provider: &P,
@@ -366,8 +354,7 @@ async fn resolve_missing_masters<P: CalendarProvider>(
     if resolved.upserts.is_empty() {
         return Ok(vec![]);
     }
-    // The masters just fetched are present, so this resolves cleanly — a
-    // lingering signal here would mean a provider bug, not a retryable orphan.
+    // The fetched masters are present, so a lingering signal here is a provider bug.
     reconcile_safe(pool, ctx, &resolved).await?;
     Ok(master_ids)
 }

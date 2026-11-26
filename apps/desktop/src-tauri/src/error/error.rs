@@ -3,7 +3,6 @@
 //! Tauri command boundary serializes it as `{ kind, message }` (the hand-rolled
 //! Serialize impl lives in pikos-db); frontends discriminate on `kind`.
 //!
-//! Re-exported here so existing `crate::error::{AppError, AppResult}` paths
-//! across the app keep working unchanged.
+//! Re-exported here as `crate::error::{AppError, AppResult}`.
 
 pub use pikos_db::{AppError, AppResult};

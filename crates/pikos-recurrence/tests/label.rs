@@ -1,8 +1,6 @@
-//! Long-label phrasing, pinned against rrule.js `.toText()` output harvested
-//! before the dependency was removed — plus the BYSETPOS position rrule.js
-//! drops (restored deliberately: "every month on Friday" misstates a
-//! BYSETPOS=3 cadence). Regenerating this table requires reinstalling
-//! rrule@2.8.1 and calling `.toText()`; treat the strings as the contract.
+//! Long-label phrasing, pinned against rrule.js `.toText()` output, plus the BYSETPOS
+//! position rrule.js drops ("every month on Friday" misstates a BYSETPOS=3 cadence).
+//! Regenerating the table needs rrule@2.8.1 `.toText()`; treat the strings as the contract.
 
 use pikos_recurrence::rrule_to_label;
 

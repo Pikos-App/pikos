@@ -1,4 +1,4 @@
-//! Layer-3 scheduler tests: the trigger loop driven by a scripted
+//! Scheduler tests: the trigger loop driven by a scripted
 //! [`TriggerSource`] and a scripted provider against a temp SQLite DB.
 
 use std::cell::{Cell, RefCell};
@@ -18,8 +18,6 @@ use pikos_db::test_pool;
 use super::{run_sync_loop, SchedulerConfig, SyncTrigger, TriggerSource};
 use crate::test_support::{self, page_count, seed_calendar, set_account_provider, CalSeed};
 
-// ─── scripted trigger source ────────────────────────────────────────────────────
-
 struct ScriptedTriggers(VecDeque<SyncTrigger>);
 
 impl TriggerSource for ScriptedTriggers {
@@ -32,12 +30,8 @@ fn triggers(list: &[SyncTrigger]) -> ScriptedTriggers {
     ScriptedTriggers(list.iter().copied().collect())
 }
 
-// ─── scripted provider ──────────────────────────────────────────────────────────
-
-/// Scripted responses shared across the per-account instances the provider
-/// factory hands out: each `sync` call pops the next queued response, so a
-/// multi-pass sequence stays deterministic even though every pass builds a fresh
-/// provider.
+/// Shared across the per-account instances the factory hands out, so a multi-pass
+/// sequence stays deterministic although every pass builds a fresh provider.
 #[derive(Clone, Default)]
 struct Shared {
     sync: Rc<RefCell<VecDeque<AppResult<SyncDelta>>>>,
@@ -84,10 +78,6 @@ impl CalendarProvider for Shared {
     }
 }
 
-// ─── builders + seed ────────────────────────────────────────────────────────────
-
-/// Scheduler tests don't exercise reconciliation, so etag/title are fixed —
-/// the full-fidelity constructor lives in `test_support`.
 fn event(external_id: &str, uid: &str) -> UpsertItem {
     test_support::event(external_id, uid, "v1", "Lunch")
 }
@@ -96,8 +86,6 @@ fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
     test_support::delta(upserts, Some("t1"))
 }
 
-/// One account with one enabled, folder-linked calendar — the shape
-/// `resync_account` polls.
 async fn seed_account(pool: &SqlitePool, account_id: &str, folder_id: &str) {
     seed_calendar(
         pool,
@@ -115,8 +103,6 @@ async fn seed_account(pool: &SqlitePool, account_id: &str, folder_id: &str) {
     .await;
 }
 
-/// Drive the loop with a scripted trigger list and one shared provider; return
-/// `(pass_starts, per-pass changed flags, per-pass error counts)`.
 async fn drive(
     pool: &SqlitePool,
     list: &[SyncTrigger],
@@ -143,10 +129,6 @@ async fn drive(
 
 const GAP: Duration = Duration::from_secs(60);
 
-// ─── tests ──────────────────────────────────────────────────────────────────────
-
-/// An interval trigger runs a pass end-to-end: the delta lands as a page and the
-/// report carries `changed: true` (the driver's reload signal).
 #[tokio::test]
 async fn interval_pass_applies_delta_and_reports_changed() {
     let pool = test_pool().await;
@@ -161,8 +143,6 @@ async fn interval_pass_applies_delta_and_reports_changed() {
     assert_eq!(page_count(&pool).await, 1);
 }
 
-/// An empty poll — the common case on every interval tick — reports `changed: false`
-/// so the driver doesn't reload the frontend for nothing.
 #[tokio::test]
 async fn empty_poll_reports_unchanged() {
     let pool = test_pool().await;
@@ -174,12 +154,8 @@ async fn empty_poll_reports_unchanged() {
     assert_eq!(changed, vec![false]);
 }
 
-/// A second focus trigger inside `min_focus_gap` waits the gap out and then runs.
-///
-/// It used to be dropped, which is what a person felt as coming back to Pikos and
-/// seeing yesterday's calendar: a change made in the provider seconds after a pass
-/// waited for the *next* app switch, or for the five-minute poll. The gap still
-/// spaces the passes; it no longer loses one.
+/// Dropping a second focus trigger would leave a change made in the provider seconds
+/// after a pass invisible until the next app switch or the five-minute poll.
 #[tokio::test]
 async fn focus_inside_the_gap_waits_instead_of_being_dropped() {
     const SHORT_GAP: Duration = Duration::from_millis(40);
@@ -206,8 +182,6 @@ async fn focus_inside_the_gap_waits_instead_of_being_dropped() {
     );
 }
 
-/// A poke (calendar just enabled) bypasses the focus gap — the newly-enabled
-/// calendar needs its initial backfill immediately.
 #[tokio::test]
 async fn poke_bypasses_focus_gap() {
     let pool = test_pool().await;
@@ -228,7 +202,6 @@ async fn poke_bypasses_focus_gap() {
     assert_eq!(changed, vec![false, true]);
 }
 
-/// Interval triggers are never debounced (the timer already paces them).
 #[tokio::test]
 async fn interval_bypasses_focus_gap() {
     let pool = test_pool().await;
@@ -248,8 +221,6 @@ async fn interval_bypasses_focus_gap() {
     assert_eq!(starts, 2);
 }
 
-/// One account failing (a genuine `Err`, not an offline outcome) must not stop
-/// the other account's poll — the error is reported, the pass continues.
 #[tokio::test]
 async fn account_error_does_not_abort_pass() {
     let pool = test_pool().await;
@@ -298,8 +269,6 @@ async fn reconnect_needed(pool: &SqlitePool, account_id: &str) -> bool {
         .unwrap()
 }
 
-/// A rejected credential flags the account so the background scheduler stops
-/// polling it every pass; only a manual resync re-includes it.
 #[tokio::test]
 async fn reconnect_needed_account_is_skipped_until_manual_resync() {
     let pool = test_pool().await;
@@ -324,7 +293,6 @@ async fn reconnect_needed_account_is_skipped_until_manual_resync() {
     super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
     assert_eq!(provider.calls.get(), 1, "flagged account not polled again");
 
-    // Manual resync with working creds clears the flag — the re-inclusion path.
     let good = Shared::default().with_sync(Ok(delta(vec![event("/e1.ics", "u1")])));
     crate::commands::resync_account(&pool, &good, "acc1")
         .await
@@ -343,8 +311,6 @@ async fn reconnect_needed_account_is_skipped_until_manual_resync() {
     );
 }
 
-/// No pool (app not connected yet / mid workspace-switch) → the trigger is
-/// dropped without a pass; the loop stays alive for the next trigger.
 #[tokio::test]
 async fn missing_pool_skips_pass() {
     let pool = test_pool().await;
@@ -376,11 +342,7 @@ async fn missing_pool_skips_pass() {
     assert_eq!(page_count(&pool).await, 1);
 }
 
-// ─── multi-provider ─────────────────────────────────────────────────────────────
-
-/// One pass polls a CalDAV and a Google account, and the factory is handed each
-/// account so it can pick the matching impl. Before this the driver constructed a
-/// `CaldavProvider` unconditionally, which would have spoken CalDAV at Google.
+/// A fixed `CaldavProvider` would speak CalDAV at Google.
 #[tokio::test]
 async fn every_account_is_polled_through_its_own_provider() {
     let pool = test_pool().await;
@@ -419,7 +381,6 @@ async fn every_account_is_polled_through_its_own_provider() {
     assert_eq!(page_count(&pool).await, 2, "both accounts synced");
 }
 
-/// Every call a provider could make over the network, counted.
 #[derive(Clone, Default)]
 struct Counting(Rc<Cell<usize>>);
 

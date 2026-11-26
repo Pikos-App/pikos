@@ -8,8 +8,6 @@ use pikos_recurrence::WallClock;
 
 use crate::error::CliError;
 
-/// Parse `list --due`: a single day, or a `YYYY-MM-DD..YYYY-MM-DD` range, into
-/// the `(scheduled_after, scheduled_before)` bounds a `PageFilter` takes.
 pub fn parse_due(due: &str) -> Result<(String, String), CliError> {
     let (from, to) = parse_day_range("due", due)?;
     Ok((from, format!("{to}T23:59:59")))
@@ -35,20 +33,12 @@ pub fn parse_day_range(name: &str, value: &str) -> Result<(String, String), CliE
     Ok((from.to_string(), to.to_string()))
 }
 
-/// All-day or timed, the distinction the whole schedule model turns on — a
-/// date-only string is all-day, a full local timestamp is timed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     AllDay,
     Timed,
 }
 
-/// The shape of a stored or supplied schedule value, or None if it is neither.
-///
-/// The lengths pin zero-padding, which chrono's `%m`/`%d` do not: "2026-9-1"
-/// parses fine and then sorts before every padded date it should follow.
-/// `scheduled_start` carries no CHECK, so an unparsed "tomorrow" would sit in the
-/// column reading as garbage against every date compare and rendering nowhere.
 pub fn shape_of(value: &str) -> Option<Shape> {
     match WallClock::parse(value)? {
         w if w.is_all_day() && value.len() == 10 => Some(Shape::AllDay),
@@ -57,27 +47,20 @@ pub fn shape_of(value: &str) -> Option<Shape> {
     }
 }
 
-/// What `update` will write to the schedule.
 #[derive(Debug)]
 pub struct ScheduleChange {
     pub start: String,
     pub end: Option<String>,
 }
 
-/// Resolve `--due` / `--all-day` / `--end` against the page's current schedule.
+/// A flag never silently changes a page's *shape*. A bare date aimed at a timed page is
+/// refused rather than quietly converting it, because that also destroys the time and
+/// the end; `--all-day` is the one way to ask for it, and a timestamp the one way to ask
+/// for the reverse.
 ///
-/// The rule is that a flag never silently changes a page's *shape*. A bare date
-/// aimed at a timed page is refused rather than quietly converting it, because
-/// that conversion also destroys the time and the end, and nothing in the command
-/// said so; `--all-day` is the one way to ask for it, and a timestamp is the one
-/// way to ask for the reverse. `--end` alone extends a page without moving it.
-///
-/// Duration is the deliberate exception: a bare timed `--due` keeps the length
-/// the page already had, because dragging a block in the app keeps its length and
-/// dropping the end silently is the same defect this refusal exists to prevent.
-/// Explicit governs the shape, not the length — which is also why `--all-day`
-/// only clears an end it cannot represent (a timed one), and preserves a span it
-/// can.
+/// Duration is the exception: a bare timed `--due` keeps the page's length, as dragging a
+/// block in the app does. Explicit governs the shape, not the length, so `--all-day` only
+/// clears an end it cannot represent (a timed one) and preserves a span it can.
 pub fn resolve_schedule_change(
     current: Option<(&str, Option<&str>)>,
     due: Option<&str>,
@@ -160,7 +143,6 @@ fn validated_end(value: &str, start: &str, start_shape: Shape) -> Result<String,
     Ok(value.to_string())
 }
 
-/// The end a page keeps when `--end` wasn't given.
 fn carried_end(
     current: Option<(&str, Option<&str>)>,
     start: &str,

@@ -1,4 +1,4 @@
-//! CalDAV provider (Phase 1): basic auth over HTTPS with an app password,
+//! CalDAV provider: basic auth over HTTPS with an app password,
 //! `.well-known` autodiscovery, incremental `sync-collection`, and a targeted
 //! single-resource fetch. Everything CalDAV-specific lives here, behind the
 //! shared `CalendarProvider` trait.

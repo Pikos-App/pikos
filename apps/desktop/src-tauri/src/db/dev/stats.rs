@@ -1,5 +1,4 @@
-//! Rich usage stats for the Settings → Data panel. All queries are local — no
-//! telemetry ever leaves the machine.
+//! Usage stats for the Settings → Data panel. All queries are local.
 
 use serde::Serialize;
 use sqlx::Row;
@@ -15,7 +14,6 @@ pub struct StatusCount {
 
 #[derive(Serialize)]
 pub struct WeekActivity {
-    /// ISO week label, e.g. "Mar 24"
     pub week: String,
     pub created: i64,
     pub edited: i64,
@@ -26,7 +24,6 @@ pub struct WeekActivity {
 
 #[derive(Serialize)]
 pub struct UsageStats {
-    // Totals
     pub total_pages: i64,
     pub total_folders: i64,
     pub total_schedules: i64,
@@ -35,13 +32,10 @@ pub struct UsageStats {
     pub total_completed: i64,
     pub total_words: i64,
 
-    // Pages by status
     pub pages_by_status: Vec<StatusCount>,
 
-    // Weekly activity (last 12 weeks)
     pub weekly_activity: Vec<WeekActivity>,
 
-    // Feature adoption
     pub has_folders: bool,
     pub has_schedules: bool,
     pub has_recurring: bool,
@@ -52,16 +46,11 @@ pub struct UsageStats {
     pub has_reminders: bool,
     pub has_calendar_sync: bool,
 
-    // Milestones
     pub first_page_date: Option<String>,
 }
 
-/// Rich usage stats for the Settings > Data panel. All queries are local — no telemetry.
-///
-/// Perf note: this fans out into ~14 sequential queries on every Settings open.
-/// Acceptable for now (Settings is rarely open and the DB is local), but a
-/// single CTE-based query would be the obvious next step if this ever shows
-/// up in a profile.
+/// Fans out into ~14 sequential queries on every Settings open, which is fine while
+/// Settings is rarely open and the DB is local.
 #[tauri::command]
 pub async fn get_usage_stats(
     state: tauri::State<'_, DbState>,
@@ -84,7 +73,6 @@ pub(crate) async fn get_usage_stats_impl(
             "week_start must be 0-6, got {week_start}"
         )));
     }
-    // ── Totals ────────────────────────────────────────────────────────────────
     let total_pages: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
             .fetch_one(pool)
@@ -95,11 +83,8 @@ pub(crate) async fn get_usage_stats_impl(
             .fetch_one(pool)
             .await?;
 
-    // Scheduled *pages*, the way the rest of the app defines scheduled
-    // (`PageFilter::has_schedule`), because this figure sits beside Pages, Folders
-    // and Completed and reads as one of them. Counting `page_schedules` rows
-    // instead both over- and under-counted: a trashed page keeps its rows, and a
-    // recurring page has none — its occurrences are virtual.
+    // Scheduled *pages* (`PageFilter::has_schedule`), not `page_schedules` rows: a trashed page
+    // keeps its rows and a recurring page has none, since its occurrences are virtual.
     let total_schedules: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND scheduled_start IS NOT NULL",
     )
@@ -121,13 +106,11 @@ pub(crate) async fn get_usage_stats_impl(
     .fetch_one(pool)
     .await?;
 
-    // Word count: sum of words in content_text across all pages
     let total_words: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(LENGTH(content_text) - LENGTH(REPLACE(content_text, ' ', '')) + 1), 0) \
          FROM pages WHERE deleted_at IS NULL AND content_text != ''"
     ).fetch_one(pool).await?;
 
-    // ── Pages by status ───────────────────────────────────────────────────────
     let status_rows = sqlx::query(
         "SELECT status, COUNT(*) as count FROM pages WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC"
     ).fetch_all(pool).await?;
@@ -140,15 +123,10 @@ pub(crate) async fn get_usage_stats_impl(
         })
         .collect();
 
-    // ── Weekly activity (last 12 weeks) ───────────────────────────────────────
-    // Tracks pages created, pages edited (updated_at != created_at), and pages completed per week.
-    //
-    // Weeks key on their first day via `date(X, '-6 days', 'weekday N')`. The
-    // reverse — `'weekday N'` then back a week — is what you reach for first and
-    // it is wrong on the boundary day: SQLite's `weekday` modifier is a no-op when
-    // the date already is that weekday, so that day walks back to the week before
-    // and its activity lands in the previous bucket. Going back 6 first can never
-    // land on the target weekday, so the modifier always moves.
+    // Weeks key on their first day via `date(X, '-6 days', 'weekday N')`. The reverse, `'weekday N'`
+    // then back a week, is wrong on the boundary day: SQLite's `weekday` modifier is a no-op when
+    // the date already is that weekday, so its activity lands in the previous bucket. Going back 6
+    // first can never land on the target weekday.
     let week_rows = sqlx::query(
         "WITH RECURSIVE weeks(n) AS ( \
            SELECT 0 UNION ALL SELECT n+1 FROM weeks WHERE n < 11 \
@@ -195,7 +173,6 @@ pub(crate) async fn get_usage_stats_impl(
         .iter()
         .map(|row| {
             let week_start: String = row.try_get("week_start").unwrap_or_default();
-            // Format "2026-03-23" → "Mar 23"
             let label = if week_start.len() >= 10 {
                 let month = match &week_start[5..7] {
                     "01" => "Jan",
@@ -227,7 +204,6 @@ pub(crate) async fn get_usage_stats_impl(
         })
         .collect();
 
-    // ── Feature adoption ──────────────────────────────────────────────────────
     let has_folders = total_folders > 0;
     let has_schedules = total_schedules > 0;
 
@@ -260,9 +236,8 @@ pub(crate) async fn get_usage_stats_impl(
     .await?
         > 0;
 
-    // Explicit per-page leads only. Whether reminders actually *fire* also depends
-    // on the notifications toggle and the global default lead, both of which live
-    // in frontend settings — the panel combines the two.
+    // Explicit per-page leads only; the notifications toggle and global default lead live in
+    // frontend settings, and the panel combines them.
     let has_reminders: bool = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM page_reminders")
         .fetch_one(pool)
         .await?
@@ -275,7 +250,6 @@ pub(crate) async fn get_usage_stats_impl(
         .await?
         > 0;
 
-    // ── Milestones ────────────────────────────────────────────────────────────
     let first_page_date: Option<String> =
         sqlx::query_scalar("SELECT MIN(created_at) FROM pages WHERE deleted_at IS NULL")
             .fetch_one(pool)

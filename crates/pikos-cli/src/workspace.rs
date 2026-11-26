@@ -49,10 +49,8 @@ pub fn resolve_db_path(override_opt: &Option<String>) -> String {
         .into_owned()
 }
 
-/// Refuse to migrate the workspace forward unless the user asked for it — see
-/// `pikos_db::migration_versions` for why a caller that doesn't own the file must
-/// not. The upgrade is one-way; recovering the locked-out desktop app means
-/// hand-editing `_sqlx_migrations`.
+/// The upgrade is one-way, and recovering the locked-out desktop app means
+/// hand-editing `_sqlx_migrations`; see `pikos_db::migration_versions`.
 pub async fn require_migration_consent(path: &str, consented: bool) -> Result<(), CliError> {
     if consented {
         return Ok(());
@@ -68,11 +66,8 @@ pub async fn require_migration_consent(path: &str, consented: bool) -> Result<()
     )))
 }
 
-/// Resolve, gate and open the workspace — the prologue every entry point runs.
-///
-/// `open_pool` runs the migrator, which fails closed (`TooNew` → mapped
-/// to `SchemaTooNew` in [`classify`]) when the workspace schema is newer than
-/// this build, so a stale CLI can never write against an unknown schema.
+/// `open_pool` runs the migrator, which fails closed (`TooNew`, mapped to `SchemaTooNew`
+/// in [`classify`]) when the schema is newer than this build.
 pub async fn open_workspace(
     db_override: &Option<String>,
     migrate: bool,
