@@ -219,3 +219,8 @@ else
   echo ""
   echo "Release workflow: https://github.com/${REPO}/actions/workflows/release.yml"
 fi
+
+# The release shipped what was merged, so the worktrees and branches that work lived in are
+# spent, and left alone they pile up: 0.5.1's worktree held 14 GB of build output.
+node "$ROOT/scripts/clean-merged-work.mjs" \
+  || echo "Warning: merged work wasn't cleaned up; run node scripts/clean-merged-work.mjs"

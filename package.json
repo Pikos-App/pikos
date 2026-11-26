@@ -15,6 +15,7 @@
     "verify": "bash scripts/verify.sh",
     "preflight": "bash scripts/validate.sh",
     "cleanup": "bash scripts/cleanup-builds.sh",
+    "cleanup:merged": "node scripts/clean-merged-work.mjs",
     "qa:build": "bash scripts/qa-build.sh",
     "ios:device": "bash scripts/ios-device.sh",
     "ios:speed": "bash scripts/ios-speed.sh",
