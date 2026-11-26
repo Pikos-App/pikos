@@ -88,11 +88,17 @@ export function useDragGhost({
 
   function ghostRefCallback(el: HTMLDivElement | null) {
     ghostElRef.current = el;
+    if (!el) return;
+
     const pending = pendingPositionRef.current;
-    if (el && pending) {
+    if (pending) {
       positionGhost(pending.dayIndex, pending.top, pending.height);
       pendingPositionRef.current = null;
+      return;
     }
+
+    // Unpositioned, it would draw in the first column until the next positionGhost.
+    hideGhost();
   }
 
   function ghostTimeLabelRefCallback(el: HTMLParagraphElement | null) {
