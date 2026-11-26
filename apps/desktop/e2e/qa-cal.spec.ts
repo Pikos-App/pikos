@@ -11,6 +11,7 @@ import {
   hourLineY,
   mod,
   openCalendarMode,
+  openEditorForPage,
   quickAdd,
   seedSynced,
   stamp,
@@ -784,8 +785,8 @@ appTest(
 );
 
 appTest(
-  "the current-time line sits at the time on the grid and moves with it",
-  { tag: ["@CAL-14"] },
+  "the current-time line sits at the time on the grid, and is current back from the editor",
+  { tag: ["@CAL-14:2", "@CAL-31"] },
   async ({ app }) => {
     appTest.setTimeout(100_000);
     const startsAt = await app.evaluate(() => {
@@ -793,6 +794,7 @@ appTest(
       return { hour: now.getHours(), minute: now.getMinutes() };
     });
     appTest.skip(startsAt.hour === 23 && startsAt.minute >= 58, "the line would wrap to tomorrow");
+    await quickAdd(app, "Notes for later");
     await openCalendarMode(app);
     for (const band of [/^Expand 12 AM to/, /^Expand .* to 12 AM$/]) {
       await app.getByRole("button", { name: band }).first().click();
@@ -821,9 +823,19 @@ appTest(
       expect(Math.abs(first - (top + (now - hour) * pitch))).toBeLessThan(3);
     });
 
-    await appTest.step("CAL-14 it moves down as the minutes pass", async () => {
-      await expect.poll(lineY, { intervals: [2_000], timeout: 75_000 }).toBeGreaterThan(first);
-    });
+    await appTest.step(
+      "CAL-31 back from the editor after the minute turns, it is at the new time at once",
+      async () => {
+        const minute = () => app.evaluate(() => new Date().getMinutes());
+        const leftAt = await minute();
+        await openEditorForPage(app, "Notes for later");
+        await expect(calendarOf(app)).toBeHidden();
+        await expect.poll(minute, { intervals: [1_000], timeout: 75_000 }).not.toBe(leftAt);
+
+        await openCalendarMode(app);
+        expect(await lineY()).toBeGreaterThan(first);
+      }
+    );
   }
 );
 

@@ -19,6 +19,7 @@ function Clock() {
 }
 
 describe("useNow", () => {
+  // qa: CAL-14:2
   it("moves at the next whole minute and every minute after", async () => {
     vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
     const { result } = renderHook(() => useNow());
