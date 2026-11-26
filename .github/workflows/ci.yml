@@ -23,20 +23,49 @@ env:
 
 jobs:
   # ── What changed ───────────────────────────────────────────────────────────
-  # Only the iOS job is skipped by path. It is the one macOS runner and often the longest job,
+  # The iOS job is skipped by path. It is the one macOS runner and often the longest job,
   # and most changes never reach the phone: a desktop screen, the site, a script.
+  #
+  # The trigger's paths-ignore only sees a pull request's whole diff, so a docs-only push to a
+  # PR that touches code anywhere would rerun everything. `code` is false for a push that
+  # changed only docs on top of a head whose CI passed, since that head's result still holds.
   changes:
     name: What changed
     runs-on: ubuntu-latest
-    # A pull request's changed files come from the API.
+    # A pull request's changed files come from the API, and the last head's result from runs.
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     outputs:
+      code: ${{ steps.docs.outputs.code != 'false' }}
       ios: ${{ github.event_name == 'schedule' || steps.filter.outputs.ios == 'true' }}
     steps:
       - uses: actions/checkout@v5
         if: github.event_name != 'schedule'
+
+      # Anything that fails to resolve, like a force-push or a missing run, leaves `code` true.
+      - name: Docs-only push on a passing head?
+        id: docs
+        if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BEFORE" "$AFTER" || exit 0
+          changed=$(git diff --name-only "$BEFORE" "$AFTER") || exit 0
+          # The site builds its release notes and posts from markdown, so those count as code.
+          if [ -z "$changed" ] || grep -qvE '(\.md|^LICENSE)$' <<<"$changed" \
+            || grep -q '^apps/marketing/' <<<"$changed"; then
+            exit 0
+          fi
+          prev=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$BEFORE" \
+            --event pull_request --json conclusion --jq '.[0].conclusion // ""') || exit 0
+          if [ "$prev" = success ]; then
+            echo "Only docs changed since $BEFORE, whose CI passed. Skipping the code gates."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Everything the phone app is built from. A path missing here is a phone break CI never
       # sees, so in doubt, add it.
@@ -67,6 +96,8 @@ jobs:
   # ── Validation ─────────────────────────────────────────────────────────────
   # verify + e2e + rust live in _validate.yml so release.yml can reuse them.
   validate:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/_validate.yml
 
   # ── iOS ────────────────────────────────────────────────────────────────────
@@ -77,11 +108,13 @@ jobs:
   # on for a release, or when a screen is what changed.
   ios:
     needs: changes
-    if: needs.changes.outputs.ios == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.ios == 'true'
     uses: ./.github/workflows/_ios.yml
 
   # ── Build ──────────────────────────────────────────────────────────────────
   # Prod-bundle gate: bundle size, the packaged-CSP smoke test, and perf.
   # Extracted into _build.yml so release.yml runs the same gate on the tag.
   build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/_build.yml
