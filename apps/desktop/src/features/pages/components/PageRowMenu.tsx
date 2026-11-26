@@ -1,11 +1,5 @@
 import type { Folder, PageActionId, PagePriority, PageSummary } from "@pikos/core";
-import {
-  isDone,
-  pageActions,
-  PRIORITY_COLORS,
-  rruleEditWouldDegrade,
-  writableFolders,
-} from "@pikos/core";
+import { isDone, pageActions, PRIORITY_COLORS, rruleEditWouldDegrade } from "@pikos/core";
 import {
   Ban,
   CalendarDays,
@@ -13,7 +7,6 @@ import {
   CircleCheck,
   Download,
   Flag,
-  FolderOpen,
   Hash,
   Pencil,
   Repeat2,
@@ -32,11 +25,12 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { MoveToFolderSub } from "@/shared/components/MoveToFolderSub";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "@/shared/components/PriorityDropdown";
 import { usePages } from "@/shared/context/PagesContext";
+import type { SendDay } from "@/shared/hooks/usePageRowActions";
 
 import { useExportPage } from "../hooks/useExportPage";
-import type { SendDay } from "../hooks/usePageRowActions";
 import type { RowPickerKind } from "../hooks/useRowPicker";
 
 interface PageRowMenuProps {
@@ -164,35 +158,11 @@ export function PageRowMenu({
       )}
 
       {offers("move-to-folder") && (
-        <ContextMenuSub>
-          <ContextMenuSubTrigger className="gap-2">
-            <FolderOpen aria-hidden />
-            Move to folder
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuItem
-              className={cn(page.folderId === null && "font-medium")}
-              onSelect={() => onMoveToFolder(null)}
-            >
-              Inbox
-            </ContextMenuItem>
-            {writableFolders(folders).map((folder) => (
-              <ContextMenuItem
-                className={cn(page.folderId === folder.id && "font-medium")}
-                key={folder.id}
-                onSelect={() => onMoveToFolder(folder.id)}
-              >
-                <span
-                  className="color-dot mr-2 h-2 w-2 shrink-0 rounded-full"
-                  style={{
-                    backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
-                  }}
-                />
-                {folder.name}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+        <MoveToFolderSub
+          currentFolderId={page.folderId}
+          folders={folders}
+          onMoveToFolder={onMoveToFolder}
+        />
       )}
 
       {offers("tags") && (

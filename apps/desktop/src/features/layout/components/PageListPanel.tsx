@@ -18,7 +18,6 @@ import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useScrollAnchor } from "@/features/layout/hooks/useScrollAnchor";
 import { PageListItem, useMoveOverdueToToday, usePageListContext } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
-import { usePageRowActions } from "@/features/pages/hooks/usePageRowActions";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -30,6 +29,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import { useNow } from "@/shared/hooks/useNow";
+import { usePageRowActions } from "@/shared/hooks/usePageRowActions";
 import { isArrowKeyConsumer, isInteractiveTarget } from "@/shared/keyboard/isInteractiveTarget";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 

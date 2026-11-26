@@ -159,6 +159,34 @@ appTest(
 );
 
 appTest(
+  "a search result's right-click menu moves the page to a day or a folder",
+  { tag: ["@SRCH-08"] },
+  async ({ app }) => {
+    await createFolder(app, "Kilns");
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    await quickAdd(app, "glaze order");
+
+    await appTest.step("SRCH-08 Tomorrow moves the page to tomorrow", async () => {
+      await search(app, "glaze");
+      await result(app, "glaze order").click({ button: "right" });
+      await app.getByRole("menuitem", { name: "Tomorrow" }).click();
+      await expect(paletteOf(app)).not.toBeVisible();
+      await app.getByRole("button", { name: /^Upcoming/ }).click();
+      await expect(app.getByLabel("glaze order", { exact: true })).toBeVisible();
+    });
+
+    await appTest.step("SRCH-08 Move to folder files the page there", async () => {
+      await search(app, "glaze");
+      await result(app, "glaze order").click({ button: "right" });
+      await app.getByRole("menuitem", { name: "Move to folder" }).click();
+      await app.getByRole("menuitem", { name: "Kilns" }).click();
+      await app.getByRole("button", { name: /^Kilns/ }).click();
+      await expect(app.getByLabel("glaze order", { exact: true })).toBeVisible();
+    });
+  }
+);
+
+appTest(
   "every command the palette lists does what its label says",
   { tag: ["@SRCH-05"] },
   async ({ app }) => {

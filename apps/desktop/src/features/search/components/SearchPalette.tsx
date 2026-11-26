@@ -40,6 +40,7 @@ import { useHeldPages } from "@/shared/viewCache/useHeldPages";
 
 import { type CommandMatch, matchCommand } from "../commandMatch";
 import { highlightText } from "../highlightText";
+import { SearchResultMenu } from "./SearchResultMenu";
 
 const log = createLogger("SearchPalette");
 
@@ -450,42 +451,43 @@ export function SearchPalette() {
     }
 
     return (
-      <button
-        className={cn(
-          "flex w-full items-start gap-2.5 px-4 py-2 text-left text-sm transition-colors",
-          idx === clampedIdx ? "bg-accent text-foreground" : mouseActive && "hover:bg-accent/50"
-        )}
-        key={item.id}
-        onClick={() => handleSelect(item.id)}
-        onMouseEnter={() => {
-          if (mouseMoved) {
-            setMouseActive(true);
-            setSelectedIdx(idx);
-          }
-        }}
-        ref={(el) => {
-          if (el) itemRefs.current.set(idx, el);
-          else itemRefs.current.delete(idx);
-        }}
-      >
-        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-        <div className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5 truncate">
-            <span className="truncate">
-              {highlightTitle
-                ? // Stryker disable next-line StringLiteral: an untitled page never matches on its title
-                  highlightText(item.title || "Untitled", queryWords, searchedText)
-                : item.title || "Untitled"}
-            </span>
-            {isDone(item) && (
-              <span className="ml-auto shrink-0 text-3xs text-subtle">Completed</span>
-            )}
-          </span>
-          {secondLine != null && (
-            <span className="mt-0.5 block truncate text-xs text-subtle">{secondLine}</span>
+      <SearchResultMenu key={item.id} onMoved={resetAndClose} pageId={item.id}>
+        <button
+          className={cn(
+            "flex w-full items-start gap-2.5 px-4 py-2 text-left text-sm transition-colors",
+            idx === clampedIdx ? "bg-accent text-foreground" : mouseActive && "hover:bg-accent/50"
           )}
-        </div>
-      </button>
+          onClick={() => handleSelect(item.id)}
+          onMouseEnter={() => {
+            if (mouseMoved) {
+              setMouseActive(true);
+              setSelectedIdx(idx);
+            }
+          }}
+          ref={(el) => {
+            if (el) itemRefs.current.set(idx, el);
+            else itemRefs.current.delete(idx);
+          }}
+        >
+          <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+          <div className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5 truncate">
+              <span className="truncate">
+                {highlightTitle
+                  ? // Stryker disable next-line StringLiteral: an untitled page never matches on its title
+                    highlightText(item.title || "Untitled", queryWords, searchedText)
+                  : item.title || "Untitled"}
+              </span>
+              {isDone(item) && (
+                <span className="ml-auto shrink-0 text-3xs text-subtle">Completed</span>
+              )}
+            </span>
+            {secondLine != null && (
+              <span className="mt-0.5 block truncate text-xs text-subtle">{secondLine}</span>
+            )}
+          </div>
+        </button>
+      </SearchResultMenu>
     );
   }
 

@@ -3,6 +3,7 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 // is one FTS5 search, an operator query is a structured listPages filter. These
 // specs pin which path answers which query, and what the completed toggle says.
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { addDays, format } from "date-fns";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -540,5 +541,60 @@ describe("SearchPalette — when a search runs", () => {
       for (let i = 0; i < 4; i++) await Promise.resolve();
     });
     expect(search.mock.calls.map(([q]) => q)).toEqual(["ze", "zep"]);
+  });
+});
+
+describe("SearchPalette — moving a result", () => {
+  async function pageNamed(title: string) {
+    const pages = await api().workspace.storage!.listPages();
+    return pages.find((p) => p.title === title)!;
+  }
+
+  it("sends a found page to tomorrow from its right-click menu, keeping its time", async () => {
+    await setup([{ scheduledStart: "2026-01-05T09:30:00", title: "alpha report" }]);
+    type("alpha");
+
+    fireEvent.contextMenu(await findRow("alpha report"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Tomorrow" }));
+
+    const tomorrow = format(addDays(new Date(), 1), "yyyy-MM-dd");
+    await waitFor(async () =>
+      expect((await pageNamed("alpha report")).scheduledStart).toBe(`${tomorrow}T09:30:00`)
+    );
+    expect(screen.queryByPlaceholderText(/Search pages/)).toBeNull();
+  });
+
+  it("files a found page in a folder from its right-click menu", async () => {
+    const folders = await setup([{ title: "alpha report" }], ["Work"]);
+    type("alpha");
+
+    fireEvent.contextMenu(await findRow("alpha report"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to folder" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Work" }));
+
+    await waitFor(async () =>
+      expect((await pageNamed("alpha report")).folderId).toBe(folders["Work"])
+    );
+  });
+
+  it("offers a repeating page no day to move to, as a list does", async () => {
+    await setup([{ scheduledStart: "2026-01-05T09:30:00", title: "alpha standup" }]);
+    const page = await pageNamed("alpha standup");
+    await act(async () => {
+      await api().pages.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        rruleExdates: [],
+        scheduledStart: "2026-01-05T09:30:00",
+        timezone: "UTC",
+      });
+    });
+    type("alpha");
+
+    fireEvent.contextMenu(await findRow("alpha standup"));
+
+    expect(await screen.findByRole("menuitem", { name: "Move to folder" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Today" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Tomorrow" })).toBeNull();
   });
 });
