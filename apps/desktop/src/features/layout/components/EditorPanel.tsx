@@ -1,16 +1,16 @@
-import { clampDayCount, dayCountNavStep, getCalendarDayCount } from "@pikos/core";
+import { dayCountNavStep } from "@pikos/core";
 import { addDays, addMonths, startOfMonth, subDays, subMonths } from "date-fns";
 import { Activity, useRef } from "react";
 
 import { CalendarHeader, CalendarView, usePreloadCalendarRange } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
-import { useLayoutMode } from "@/features/layout/breakpoints";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
+import { useCalendarDayCount } from "@/shared/hooks/useCalendarDays";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
@@ -20,10 +20,8 @@ import { RightPanelHeader } from "./RightPanelHeader";
 export function EditorPanel() {
   const ui = useUI();
   const { referenceDate, setReferenceDate } = useCalendarDate();
-  // Must match CalendarView's effective day count — otherwise prev/next step by
-  // the breakpoint max (7) while the view renders fewer days, skipping dates.
-  const { dayCount: preferredDayCount, setViewMode, viewMode } = useCalendarSettings();
-  const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(useLayoutMode()));
+  const { setViewMode, viewMode } = useCalendarSettings();
+  const dayCount = useCalendarDayCount();
   const navStep = dayCountNavStep(dayCount);
   const isMonth = viewMode === "month";
   const leftNav = useLeftNavToggle();

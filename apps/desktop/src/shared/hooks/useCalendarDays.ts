@@ -1,6 +1,7 @@
 import {
   buildCalendarDays,
   buildMonthGrid,
+  type CalendarDayCount,
   clampDayCount,
   formatDateOnly,
   getCalendarDayCount,
@@ -12,20 +13,32 @@ import { isSameDay } from "date-fns";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useNow } from "@/shared/hooks/useNow";
 import { useWindowWidth } from "@/shared/hooks/useWindowWidth";
+
+/**
+ * The days the time grid shows: the preferred count, capped by what the window can hold.
+ * The grid and the header's arrows both read it, so a step never skips the days not shown.
+ *
+ * The window is judged at its width in 100% interface text, since the breakpoints were set for
+ * panels at 100% and the sidebar and page list grow with the text while the calendar takes what is
+ * left. Judged on the raw width, 200% text kept seven days in a calendar squeezed to its minimum.
+ */
+export function useCalendarDayCount(): CalendarDayCount {
+  const { dayCount: preferredDayCount } = useCalendarSettings();
+  const { textScale } = useInterfaceSettings();
+  const widthAtBaseText = useWindowWidth() / textScale;
+
+  return clampDayCount(preferredDayCount, getCalendarDayCount(getLayoutMode(widthAtBaseText)));
+}
 
 /** The days the calendar shows: the month's padded grid, or the run of days around its date. */
 export function useCalendarDays() {
   const { referenceDate } = useCalendarDate();
   const { weekStart } = useAppSettings();
-  const { dayCount: preferredDayCount, viewMode } = useCalendarSettings();
-  // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
-  // would truncate day columns to unusable widths.
-  const dayCount = clampDayCount(
-    preferredDayCount,
-    getCalendarDayCount(getLayoutMode(useWindowWidth()))
-  );
+  const { viewMode } = useCalendarSettings();
+  const dayCount = useCalendarDayCount();
   const isMonth = viewMode === "month";
   // The padded grid (up to 42 days), not the month, so the padding rows get their pages and
   // occurrences too.

@@ -550,7 +550,7 @@ appTest(
 );
 
 appTest(
-  "every calendar day count renders, and a narrow window demotes 5 and M–F",
+  "every calendar day count renders, and a narrow window or large text demotes 5, 7 and M–F",
   { tag: ["@CAL-17"] },
   async ({ app }) => {
     const cells = allDayCells(app);
@@ -588,6 +588,20 @@ appTest(
       await app.setViewportSize({ height: 720, width: 700 });
       await expect(cells).toHaveCount(3);
     });
+
+    await appTest.step(
+      "CAL-17 at 200% interface text a window wide enough for 7 days shows 5",
+      async () => {
+        await app.setViewportSize({ height: 720, width: 1600 });
+        await choose(app, "Calendar days shown", "7");
+        await openCalendarMode(app);
+        await expect(cells).toHaveCount(7);
+        await app.evaluate(() => localStorage.setItem("pikos:interfaceTextScale", "2"));
+        await app.reload();
+        await openCalendarMode(app);
+        await expect(cells).toHaveCount(5);
+      }
+    );
   }
 );
 
