@@ -854,6 +854,11 @@ RustBuffer uniffi_pikos_ffi_fn_func_parse_quick_add(RustBuffer input, RustBuffer
 RustBuffer uniffi_pikos_ffi_fn_func_plain_text_to_document(RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_DROP_ALL_DAY
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_DROP_ALL_DAY
+RustBuffer uniffi_pikos_ffi_fn_func_drop_all_day(RustBuffer day, RustBuffer previous_start, RustBuffer previous_end, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_DROP_SCHEDULE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_DROP_SCHEDULE
 RustBuffer uniffi_pikos_ffi_fn_func_drop_schedule(RustBuffer day, int32_t minute, RustBuffer previous_start, RustBuffer previous_end, RustCallStatus *_Nonnull out_status
@@ -1214,6 +1219,12 @@ uint16_t uniffi_pikos_ffi_checksum_func_parse_quick_add(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PLAIN_TEXT_TO_DOCUMENT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PLAIN_TEXT_TO_DOCUMENT
 uint16_t uniffi_pikos_ffi_checksum_func_plain_text_to_document(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_DROP_ALL_DAY
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_DROP_ALL_DAY
+uint16_t uniffi_pikos_ffi_checksum_func_drop_all_day(void
     
 );
 #endif

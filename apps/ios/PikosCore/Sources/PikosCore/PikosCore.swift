@@ -11609,6 +11609,19 @@ public func plainTextToDocument(text: String) -> String  {
 })
 }
 /**
+ * The schedule a page dropped on the all-day strip of `day` (a `YYYY-MM-DD`) takes.
+ */
+public func dropAllDay(day: String, previousStart: String?, previousEnd: String?) -> DroppedSchedule  {
+    return try!  FfiConverterTypeDroppedSchedule_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_drop_all_day(
+        FfiConverterString.lower(day),
+        FfiConverterOptionString.lower(previousStart),
+        FfiConverterOptionString.lower(previousEnd),uniffiCallStatus
+    )
+})
+}
+/**
  * The schedule a page dropped at `minute` of `day` (a `YYYY-MM-DD`) takes.
  */
 public func dropSchedule(day: String, minute: Int32, previousStart: String?, previousEnd: String?) -> DroppedSchedule  {
@@ -11728,6 +11741,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 16292) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_func_drop_all_day() != 58256) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_drop_schedule() != 19000) {

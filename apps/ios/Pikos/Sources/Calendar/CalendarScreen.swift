@@ -245,7 +245,8 @@ struct CalendarScreen: View {
                     onSkip: { entry in Task { await act(.skip, on: entry) } },
                     onMove: { entry in moving = Moving(entry: entry) },
                     onCreate: { day, minute, minutes in create(on: day, at: minute, minutes: minutes) },
-                    onDrop: { page, day, minute in drop(page, on: day, at: minute) }
+                    onDrop: { page, day, minute in drop(page, on: day, at: minute) },
+                    onDropAllDay: { page, day in dropAllDay(page, on: day) }
                 )
                 .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
                 // A new identity per range is what lets the grid slide rather
@@ -288,6 +289,17 @@ struct CalendarScreen: View {
             await store.schedule(
                 pageId: page.id, title: page.title, start: dropped.start, end: dropped.end,
                 previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
+        }
+    }
+
+    private func dropAllDay(_ page: PageFacts, on day: String) {
+        let dropped = CalendarGeometry.dropAllDay(
+            day: day, previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
+        Task {
+            await store.schedule(
+                pageId: page.id, title: page.title, start: dropped.start, end: dropped.end,
+                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd,
+                saying: DayLabel.relative(day, today: DayLabel.today()))
         }
     }
 

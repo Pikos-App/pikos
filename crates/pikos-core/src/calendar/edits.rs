@@ -4,6 +4,8 @@
 //! renderer's own business, since it hangs on that renderer's row heights. Every edit snaps to the
 //! quarter hour the desktop's grid snaps to, and stays inside the day it was aimed at.
 
+use chrono::NaiveDate;
+
 const QUARTER: i32 = 15;
 const DAY_MINUTES: i32 = 24 * 60;
 /// The last minute a wall-clock string in a day can name.
@@ -70,6 +72,35 @@ pub fn drop_schedule(
         start,
         end: length.map(|length| wall_clock(day, start_minute + length)),
     }
+}
+
+/// The schedule a page dropped on `day`'s all-day strip takes. An all-day page keeps how many days
+/// it spans; a timed or undated page becomes that one day.
+pub fn drop_all_day(
+    day: &str,
+    previous_start: Option<&str>,
+    previous_end: Option<&str>,
+) -> Schedule {
+    let span = match (previous_start, previous_end) {
+        (Some(from), Some(to)) => match (parse_day(from), parse_day(to)) {
+            (Some(from), Some(to)) if to > from => Some(to - from),
+            _ => None,
+        },
+        _ => None,
+    };
+    let end = span
+        .zip(parse_day(day))
+        .map(|(span, day)| (day + span).format("%Y-%m-%d").to_string());
+
+    Schedule {
+        start: day.to_owned(),
+        end,
+    }
+}
+
+/// An all-day `YYYY-MM-DD` as a date; None for a timed string or anything malformed.
+fn parse_day(iso: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(iso, "%Y-%m-%d").ok()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

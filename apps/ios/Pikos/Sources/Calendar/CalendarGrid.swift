@@ -28,12 +28,16 @@ struct CalendarGrid: View {
     let onCreate: (String, Int, Int?) -> Void
     /// A block held, moved and let go over an hour: the page, the day and the snapped minute.
     let onDrop: (PageFacts, String, Int) -> Void
+    /// A page carried onto a day's all-day strip and let go: the page and the day.
+    let onDropAllDay: (PageFacts, String) -> Void
 
     /// The press is the one gesture on the grid with no visible target, so it is felt.
     /// The block a press on empty grid is drawing out, until the finger lifts.
     @State private var stretch: Stretch?
     @State private var allDayExpanded = false
     @State private var hover: DropHover?
+    /// The day whose all-day strip a carried page is over.
+    @State private var allDayHover: String?
     @State private var drops = 0
 
     @Environment(\.displayScale) private var displayScale
@@ -151,10 +155,13 @@ struct CalendarGrid: View {
         return layoutAllDay(pages: pages, days: days)
     }
 
+    /// Shown while a page is carried even with no bars, so a timed page has somewhere to become
+    /// all-day. Not on the press itself, which may only be opening the block's menu.
     @ViewBuilder
     private var allDaySection: some View {
         let bars = allDayBars
-        if !bars.isEmpty {
+        let isCarrying = drag.page != nil && drag.hasMoved
+        if !bars.isEmpty || isCarrying {
             let rowCount = Int(bars.map(\.row).max() ?? 0) + 1
             let shown = allDayExpanded ? rowCount : min(rowCount, Self.collapsedAllDayRows)
             let hidden = rowCount - shown
@@ -180,9 +187,25 @@ struct CalendarGrid: View {
 
                 GeometryReader { geometry in
                     let columnWidth = geometry.size.width / CGFloat(max(days.count, 1))
-                    ForEach(bars.filter { Int($0.row) < shown }, id: \.self) { bar in
-                        allDayBar(bar, columnWidth: columnWidth)
+                    ZStack(alignment: .topLeading) {
+                        ForEach(bars.filter { Int($0.row) < shown }, id: \.self) { bar in
+                            allDayBar(bar, columnWidth: columnWidth)
+                        }
+                        if let allDayHover, let index = days.firstIndex(of: allDayHover) {
+                            allDayDropGhost(columnWidth: columnWidth, height: CGFloat(shown) * metrics.allDayRowHeight)
+                                .offset(x: columnWidth * CGFloat(index))
+                        }
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                    .onDrop(
+                        of: [.text],
+                        delegate: AllDayDropDelegate(
+                            drag: drag, days: days, columnWidth: columnWidth, hover: $allDayHover,
+                            onDrop: { page, day in
+                                drops += 1
+                                onDropAllDay(page, day)
+                            }))
                 }
                 .frame(height: CGFloat(shown) * metrics.allDayRowHeight)
             }
@@ -228,7 +251,21 @@ struct CalendarGrid: View {
         .onTapGesture { if let entry { onOpen(entry.pageId) } }
         .accessibilityAddTraits(.isButton)
         .contextMenu { if let entry { occurrenceMenu(entry) } }
+        .modifier(LiftableBlock(page: entry.flatMap { canLift($0) ? PageFacts($0) : nil }))
         .accessibilityActions { if let entry { occurrenceActions(entry) } }
+    }
+
+    /// The day a carried page would become an all-day page on.
+    private func allDayDropGhost(columnWidth: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .fill(.surfaceSelected)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(.interactivePrimary, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+            .frame(width: max(columnWidth - 3, 1), height: max(height - 3, 1))
+            .offset(x: 1.5)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     // MARK: - Timed
@@ -481,7 +518,7 @@ struct CalendarGrid: View {
                     .contentShape(.accessibility, Rectangle())
                     .onTapGesture { onOpen(entry.pageId) }
                     .contextMenu { occurrenceMenu(entry) }
-                    .modifier(LiftableBlock(page: PageFacts(entry), isEnabled: canLift(entry)))
+                    .modifier(LiftableBlock(page: canLift(entry) ? PageFacts(entry) : nil))
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(accessibleLabel(entry, block: block))
                     .accessibilityAddTraits(.isButton)
@@ -858,14 +895,14 @@ private struct DropHover: Equatable {
 }
 
 /// Holding a block opens its menu; moving the finger instead carries it, as a list row is carried.
+/// A nil page is a block that stays where it is.
 private struct LiftableBlock: ViewModifier {
-    let page: PageFacts
-    let isEnabled: Bool
+    let page: PageFacts?
 
     @Environment(PageDragSession.self) private var drag
 
     func body(content: Content) -> some View {
-        if isEnabled {
+        if let page {
             content.onDrag {
                 drag.itemProvider(for: page)
             } preview: {
@@ -905,5 +942,41 @@ private struct GridDropDelegate: DropDelegate {
         guard let minute = hover?.minute else { return false }
         hover = nil
         return drag.land(info) { page in onDrop(page, minute) }
+    }
+}
+
+/// The all-day strip as one drop target across every day, the day read from where the finger is.
+private struct AllDayDropDelegate: DropDelegate {
+    let drag: PageDragSession
+    let days: [String]
+    let columnWidth: CGFloat
+    @Binding var hover: String?
+    let onDrop: (PageFacts, String) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        drag.candidate != nil && info.hasItemsConforming(to: [.text])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        drag.beat()
+        let next = day(at: info.location.x)
+        if hover != next { hover = next }
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        hover = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let day = hover else { return false }
+        hover = nil
+        return drag.land(info) { page in onDrop(page, day) }
+    }
+
+    private func day(at x: CGFloat) -> String? {
+        guard columnWidth > 0, !days.isEmpty else { return nil }
+        let index = min(max(0, Int(x / columnWidth)), days.count - 1)
+        return days[index]
     }
 }

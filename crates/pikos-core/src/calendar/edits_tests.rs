@@ -32,6 +32,29 @@ fn a_dropped_undated_or_all_day_page_gets_a_start_and_no_end() {
 }
 
 #[test]
+fn an_all_day_page_dropped_on_a_day_keeps_its_span() {
+    let one_day = drop_all_day("2026-09-14", Some("2026-09-10"), None);
+    let three_days = drop_all_day("2026-09-29", Some("2026-09-10"), Some("2026-09-12"));
+
+    assert_eq!((one_day.start.as_str(), one_day.end), ("2026-09-14", None));
+    assert_eq!(three_days.start, "2026-09-29");
+    assert_eq!(three_days.end.as_deref(), Some("2026-10-01"));
+}
+
+#[test]
+fn a_timed_or_undated_page_dropped_on_a_day_becomes_that_day() {
+    let timed = drop_all_day(
+        "2026-09-14",
+        Some("2026-09-10T10:00"),
+        Some("2026-09-12T11:00"),
+    );
+    let undated = drop_all_day("2026-09-14", None, None);
+
+    assert_eq!((timed.start.as_str(), timed.end), ("2026-09-14", None));
+    assert_eq!((undated.start.as_str(), undated.end), ("2026-09-14", None));
+}
+
+#[test]
 fn a_late_drop_ends_at_midnight_rather_than_tomorrow() {
     let dropped = drop_schedule(
         "2026-09-14",

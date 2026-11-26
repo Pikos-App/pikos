@@ -31,6 +31,20 @@ pub fn drop_schedule(
     }
 }
 
+/// The schedule a page dropped on the all-day strip of `day` (a `YYYY-MM-DD`) takes.
+#[uniffi::export]
+pub fn drop_all_day(
+    day: String,
+    previous_start: Option<String>,
+    previous_end: Option<String>,
+) -> DroppedSchedule {
+    let schedule = edits::drop_all_day(&day, previous_start.as_deref(), previous_end.as_deref());
+    DroppedSchedule {
+        start: schedule.start,
+        end: schedule.end,
+    }
+}
+
 #[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockEdge {
     Top,

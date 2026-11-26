@@ -17,11 +17,13 @@ final class PageDragSession {
     private(set) var page: PageFacts?
     /// Minutes into today the finger is over, snapped; nil when it is not over the day.
     var hoverMinute: Int?
+    /// The finger has carried the page over a drop target, so this is a drag and not a press
+    /// opening a menu.
+    private(set) var hasMoved = false
 
     /// The last page pressed, kept after the day closes so a slow drag can reopen it.
     @ObservationIgnored private(set) var candidate: PageFacts?
     @ObservationIgnored private var lastBeat = Date.distantPast
-    @ObservationIgnored private var hasMoved = false
     @ObservationIgnored private var watch: Task<Void, Never>?
 
     static let prefix = "pikos-page:"
@@ -39,7 +41,7 @@ final class PageDragSession {
     /// Called from every drop target's update while a drag is over it.
     func beat() {
         lastBeat = Date()
-        hasMoved = true
+        if !hasMoved { hasMoved = true }
         if page == nil, let candidate {
             carry(candidate, moved: true)
         }

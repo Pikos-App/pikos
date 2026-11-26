@@ -379,6 +379,14 @@ public enum CalendarGeometry {
         return (dropped.start, dropped.end)
     }
 
+    /// The schedule a page dropped on `day`'s all-day strip takes; `dropAllDay` in Rust holds the rule.
+    public static func dropAllDay(
+        day: String, previousStart: String?, previousEnd: String?
+    ) -> (start: String, end: String?) {
+        let dropped = PikosCore.dropAllDay(day: day, previousStart: previousStart, previousEnd: previousEnd)
+        return (dropped.start, dropped.end)
+    }
+
     /// A position over a whole day's column into a minute, snapped down to the quarter hour.
     public static func dropMinute(atY y: CGFloat, metrics: Metrics) -> Int {
         let minute = Int(metrics.minute(atY: max(0, y)).rounded(.down))
