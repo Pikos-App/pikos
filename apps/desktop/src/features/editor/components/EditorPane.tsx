@@ -462,7 +462,7 @@ export function EditorPane() {
         >
           {isReadOnly && (
             <p
-              className="mb-3 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90"
+              className="mb-3 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-400/90"
               role="status"
             >
               <TriangleAlert aria-hidden="true" className="shrink-0" size={14} />

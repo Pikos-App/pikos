@@ -324,6 +324,11 @@
   text-align: left;
 }
 
+/* Dark's inset fill sits below the page, which read as a hole rather than a header. */
+.dark .editor-content th {
+  background: var(--surface-hover);
+}
+
 .editor-content td > p,
 .editor-content th > p {
   margin: 0;
@@ -684,7 +689,7 @@
 
 .slash-menu-item-icon {
   align-items: center;
-  background: var(--muted);
+  background: var(--surface-active);
   border-radius: 4px;
   color: var(--muted-foreground);
   display: flex;

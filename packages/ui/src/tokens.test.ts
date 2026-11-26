@@ -122,6 +122,37 @@ describe("priority colours", () => {
   );
 });
 
+describe("text contrast", () => {
+  it.each(["light", "dark"] as const)(
+    "keeps the faintest readable text at 4.5:1 on every row surface, hovered and inset too, in %s",
+    (scheme) => {
+      const tertiary = tokenHex("text-tertiary", scheme);
+      const surfaces = [
+        "surface-primary",
+        "surface-secondary",
+        "surface-tertiary",
+        "surface-elevated",
+        "surface-hover",
+        "surface-inset",
+      ];
+
+      for (const surface of surfaces) {
+        expect(contrast(tertiary, tokenHex(surface, scheme))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  );
+});
+
+describe("control edges", () => {
+  it("draws an unchecked control at 3:1 against the dark ground and popover", () => {
+    const control = tokenHex("border-control", "dark");
+
+    for (const surface of ["surface-primary", "surface-elevated"]) {
+      expect(contrast(control, tokenHex(surface, "dark"))).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
 describe("tier discipline", () => {
   it("reaches primitives only through modelled refs, never through raw CSS", () => {
     for (const value of semanticValues.flatMap(walk)) {

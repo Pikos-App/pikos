@@ -610,7 +610,7 @@ export function DateTimePicker({
               {endTimeLabel !== null && selectedTime !== null && (
                 <p className="ml-auto text-xs text-foreground/60">
                   {formatClockTime(selectedTime.hour24, selectedTime.minute)}
-                  <span className="mx-1 text-foreground/30">→</span>
+                  <span className="mx-1 text-subtle">→</span>
                   {endTimeLabel}
                 </p>
               )}
@@ -691,7 +691,7 @@ export function DateTimePicker({
               {selectedDate && spanDays > 1 && endDate && (
                 <p className="ml-auto text-xs text-foreground/60">
                   {format(selectedDate, "MMM d")}
-                  <span className="mx-1 text-foreground/30">→</span>
+                  <span className="mx-1 text-subtle">→</span>
                   {format(endDate, "MMM d")}
                 </p>
               )}

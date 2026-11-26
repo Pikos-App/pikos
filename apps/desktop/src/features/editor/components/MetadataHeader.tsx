@@ -187,7 +187,7 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
     <div className="shrink-0">
       <div className={`mx-auto ${LINE_WIDTH_CLASS[lineWidth] ?? "max-w-[720px]"} px-8`}>
         {detached && (
-          <div className="mt-10 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90">
+          <div className="mt-10 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-400/90">
             <CalendarOff aria-hidden="true" className="shrink-0" size={14} />
             <span className="type-ui-sm">
               {page.detachIsReversible

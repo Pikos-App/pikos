@@ -122,7 +122,7 @@ export function MiniCalendar({
               >
                 {dayNum}
                 {isTodayDate && !isSelected && (
-                  <span className="absolute bottom-0 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-foreground/40" />
+                  <span className="absolute bottom-0 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-subtle" />
                 )}
               </span>
             </button>

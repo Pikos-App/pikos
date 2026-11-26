@@ -75,7 +75,7 @@ export function CaldavCredentialForm({
             />
           </label>
           {caldavSendsPasswordInClear(server.url) && (
-            <p className="-mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <p className="-mt-1.5 text-xs text-amber-800 dark:text-amber-400">
               Without https://, your password crosses the network unencrypted.
             </p>
           )}

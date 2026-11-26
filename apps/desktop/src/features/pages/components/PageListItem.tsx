@@ -130,7 +130,7 @@ export function PageListItem({
             isActive
               ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
               : isSelected
-                ? "border-l-transparent bg-surface-selected/50 text-accent-foreground"
+                ? "border-l-interactive-primary/50 bg-surface-selected/50 text-accent-foreground"
                 : "border-l-transparent hover:bg-surface-hover",
             dropSettle.isSettling && "animate-row-settle"
           )}

@@ -231,9 +231,10 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
     tokens: [
       { dark: hex("#f0efed"), name: "text-primary", value: hex("#161613") },
       { dark: hex("#b0afaa"), name: "text-secondary", value: hex("#5a5955") },
-      // The faintest text a reader has to read: 5:1 on white and on the dark popover. An opacity
-      // step on any text token drops below 4.5:1 by /75, so faded text is for separators and icons.
-      { dark: hex("#999893"), name: "text-tertiary", value: hex("#6f6e6a") },
+      // The faintest text a reader has to read: 4.5:1 on every row surface, a hovered row and the
+      // inset fill included. An opacity step on any text token drops below 4.5:1 by /75, so faded
+      // text is for separators and icons.
+      { dark: hex("#999893"), name: "text-tertiary", value: hex("#686763") },
       // 3.3:1 on white: disabled controls and display-size type only, never body-size text.
       { dark: hex("#8e8d88"), name: "text-disabled", value: hex("#8e8d88") },
       { dark: hex("#161613"), name: "text-inverse", value: hex("#ffffff") },

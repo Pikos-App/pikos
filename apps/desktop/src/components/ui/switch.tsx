@@ -18,7 +18,7 @@ function Switch({
   return (
     <SwitchPrimitive.Root
       className={cn(
-        "peer group/switch inline-flex shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-[calc(1.15rem*var(--ui-text-scale,1))] data-[size=default]:w-[calc(2rem*var(--ui-text-scale,1))] data-[size=sm]:h-[calc(0.875rem*var(--ui-text-scale,1))] data-[size=sm]:w-[calc(1.5rem*var(--ui-text-scale,1))] data-[state=checked]:bg-primary data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80",
+        "peer group/switch inline-flex shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-[calc(1.15rem*var(--ui-text-scale,1))] data-[size=default]:w-[calc(2rem*var(--ui-text-scale,1))] data-[size=sm]:h-[calc(0.875rem*var(--ui-text-scale,1))] data-[size=sm]:w-[calc(1.5rem*var(--ui-text-scale,1))] data-[state=checked]:bg-primary data-[state=unchecked]:bg-border-control",
         className
       )}
       data-size={size}

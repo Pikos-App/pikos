@@ -13,7 +13,7 @@ public enum PikosToken {
     public static let surfaceNavSelected = TokenColor(light: 0xEBEAE7FF, dark: 0x2F2F2CFF)
     public static let textPrimary = TokenColor(light: 0x161613FF, dark: 0xF0EFEDFF)
     public static let textSecondary = TokenColor(light: 0x5A5955FF, dark: 0xB0AFAAFF)
-    public static let textTertiary = TokenColor(light: 0x6F6E6AFF, dark: 0x999893FF)
+    public static let textTertiary = TokenColor(light: 0x686763FF, dark: 0x999893FF)
     public static let textDisabled = TokenColor(light: 0x8E8D88FF, dark: 0x8E8D88FF)
     public static let textInverse = TokenColor(light: 0xFFFFFFFF, dark: 0x161613FF)
     public static let textBrand = TokenColor(light: 0x14896CFF, dark: 0x2DD4A8FF)
