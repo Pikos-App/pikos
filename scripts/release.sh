@@ -186,7 +186,11 @@ fi
 awk -v today="$TODAY" 'NR==1 && /^---$/ {fm=1; print; next} fm && /^---$/ {fm=0} fm && /^date:/ {$0 = "date: " today} {print}' \
   "$NOTES_FILE" > "$NOTES_FILE.tmp" && mv "$NOTES_FILE.tmp" "$NOTES_FILE"
 
-# Commit and tag, with the notes file, which the workflow reads from the tag.
+# Commit and tag, with the notes file, which the workflow reads from the tag. Main takes changes
+# only through a pull request, the version bump included, so the commit goes on a branch of its
+# own and reaches main through one below.
+RELEASE_BRANCH="release/${TAG}"
+git switch -c "$RELEASE_BRANCH"
 git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$NOTES_FILE"
 git commit $HOOK_FLAG -m "release: v${NEW}"
 git tag "$TAG"
@@ -206,7 +210,7 @@ echo "Created tag $TAG"
 echo ""
 
 # Push and get workflow URL
-git push --atomic $HOOK_FLAG origin HEAD "$TAG"
+git push --atomic $HOOK_FLAG origin "$RELEASE_BRANCH" "$TAG"
 
 # Wait briefly for the run to register, then grab the URL
 sleep 3
@@ -218,4 +222,25 @@ else
   REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)
   echo ""
   echo "Release workflow: https://github.com/${REPO}/actions/workflows/release.yml"
+fi
+
+# The tag is out and building whatever happens here. CI checks the bump like any other change
+# before it merges; a red run leaves the pull request open to fix.
+PR_URL=$(gh pr create --base main --head "$RELEASE_BRANCH" --title "release: ${TAG}" \
+  --body "The version bump and dated release notes for ${TAG}, which is already tagged and building.")
+echo ""
+echo "Version bump: $PR_URL"
+# A fresh pull request reports no checks for a few seconds, which --watch reads as done.
+for _ in $(seq 1 24); do
+  [ -n "$(gh pr checks "$PR_URL" 2>/dev/null)" ] && break
+  sleep 5
+done
+if gh pr checks "$PR_URL" --watch --fail-fast >/dev/null 2>&1; then
+  gh pr merge "$PR_URL" --merge
+  git switch main
+  # The pull's post-merge hook clears away merged work, this release's branch included.
+  git pull --ff-only
+else
+  echo "CI didn't pass on the version bump. Fix it on $RELEASE_BRANCH and merge $PR_URL."
+  exit 1
 fi
