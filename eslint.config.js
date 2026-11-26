@@ -6,6 +6,25 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+const memoSyntax = {
+  message:
+    "The React Compiler handles memoization — drop the React.useMemo/React.useCallback/React.memo and write the plain value, function or component.",
+  selector: "MemberExpression[object.name='React'][property.name=/^(useMemo|useCallback|memo)$/]",
+};
+
+// A mutated Date is shared by every reference to it, so a setter on a value
+// passed in changes the caller's date too. date-fns returns a new one.
+const dateMutationSyntax = {
+  message: "Don't mutate a Date. Use date-fns (addMinutes, setHours, startOfDay…), which returns a new one.",
+  selector:
+    "CallExpression[callee.type='MemberExpression'][callee.property.name=/^set(UTC)?(FullYear|Month|Date|Hours|Minutes|Seconds|Milliseconds|Time)$/]",
+};
+
+const svgSyntax = {
+  message: "Use a lucide-react icon instead of a hand-written <svg>.",
+  selector: "JSXOpeningElement[name.name='svg']",
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -85,30 +104,31 @@ export default tseslint.config(
           paths: [
             {
               name: "react",
-              importNames: ["useMemo", "useCallback"],
+              importNames: ["useMemo", "useCallback", "memo"],
               message:
-                "The React Compiler handles memoization — drop the useMemo/useCallback and write the plain value or function. If a specific hot path really needs manual memoization, suspend this rule inline with a comment saying which measurement justified it.",
+                "The React Compiler handles memoization — drop the useMemo/useCallback/memo and write the plain value, function or component. If a specific hot path really needs manual memoization, suspend this rule inline with a comment saying which measurement justified it.",
             },
           ],
         },
       ],
       // Same convention, the other spelling: no-restricted-imports only sees the
       // import statement, so a namespaced `React.useMemo(...)` would walk past it.
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "MemberExpression[object.name='React'][property.name=/^(useMemo|useCallback)$/]",
-          message:
-            "The React Compiler handles memoization — drop the React.useMemo/React.useCallback and write the plain value or function.",
-        },
-      ],
+      "no-restricted-syntax": ["error", memoSyntax],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "no-console": "error",
+    },
+  },
+  // Tests, e2e specs, seeds and scripts build fixture dates by hand, so the Date
+  // and icon rules cover shipped source only.
+  {
+    files: ["apps/*/src/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/test/**"],
+    rules: {
+      "no-restricted-syntax": ["error", memoSyntax, dateMutationSyntax, svgSyntax],
     },
   },
   // Tests legitimately spy on console.* (e.g. suppressing React's expected

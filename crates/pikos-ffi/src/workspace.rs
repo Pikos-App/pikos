@@ -369,8 +369,7 @@ pub enum CompletedScope {
 //     iOS suspends within seconds of backgrounding. Every sync here is one the
 //     user asked for, by hand, with the app open.
 //
-// So this surface is honest about being manual. `docs/ios/06-platform-audit.md`
-// has the detail.
+// So this surface is honest about being manual.
 
 /// One connected calendar account.
 #[derive(Debug, uniffi::Record)]

@@ -1,41 +1,29 @@
 # @pikos/desktop
 
-The Tauri 2 desktop application. Rust backend for storage and system integration, React + TypeScript frontend for the UI.
-
-## Development
-
-From the repository root:
+The Tauri 2 desktop app. A Rust backend for storage and system integration, and a React + TypeScript frontend.
 
 ```bash
-pnpm dev:desktop
+pnpm dev:desktop      # from the repository root
 ```
 
-Or directly:
+## Where code goes
 
-```bash
-cd apps/desktop
-pnpm tauri dev
-```
+- `src/features/`: one folder per feature. Features don't import each other; dependency-cruiser enforces it.
+- `src/shared/`: what features share, such as context, hooks, adapters, and the keyboard registry.
+- `src-tauri/`: Tauri commands and system integration.
 
-## Structure
+The database and its migrations live in `crates/pikos-db`, which the CLI shares, so they aren't part of this app.
 
-```
-src/                    — React frontend
-  features/             — Feature modules (editor, pages, calendar, layout, settings)
-  shared/               — Shared context, hooks, components, keyboard registry
-  components/ui/        — shadcn/ui components
-src-tauri/
-  src/                  — Rust backend (Tauri commands, SQLite queries)
-```
+## Rules
 
-The SQL schema migrations live one level up, in `crates/pikos-db/migrations/` — the
-data layer is shared with the CLI, so it is not part of this app.
+- **Storage goes through the `StorageAdapter` from the workspace context.** A component never invokes a DB command or reaches SQLite itself, or test mode can't swap in the in-memory adapter. Other Tauri APIs, like events, windows, and dialogs, may be used directly.
+- **Constants shared across features go in `src/shared/constants/`**, never duplicated.
 
 ## Testing
 
 ```bash
-pnpm test              # Unit tests (Vitest)
-pnpm test:e2e          # E2E tests (Playwright, browser mode)
+pnpm test              # unit tests (Vitest)
+pnpm test:e2e          # end-to-end tests (Playwright, browser mode)
 ```
 
-Tests use `MockStorageAdapter` (in-memory) instead of real SQLite, controlled by `VITE_TEST_MODE=true`.
+Tests run against `MockStorageAdapter`, which is in memory, when `VITE_TEST_MODE=true`.
