@@ -40,6 +40,13 @@ struct EditorScreen: View {
     /// recreated on every update and so cannot hold a live reference.
     @State private var controller = EditorController()
     @State private var openBody: OpenPageBody?
+    @State private var pageWidth: CGFloat = 0
+
+    /// The width kept clear on each side of the bar's title, enough for the widest right-hand side:
+    /// a running focus timer and the page menu. The bar lays its centre item out at full length
+    /// and never shrinks it, so without a cap a long title ran off both edges. The cap goes on the
+    /// button's label, since the bar ignores a frame set on the button itself.
+    private static let barSideRoom: CGFloat = 130
 
     var body: some View {
         Group {
@@ -159,6 +166,7 @@ struct EditorScreen: View {
             }
         }
         .background(.surfacePrimary)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = $0 }
         .animation(.snappy, value: isDocumentFocused)
         .animation(.snappy, value: isHeaderHidden)
         // The system picker runs out of process, so no photo-library
@@ -187,11 +195,14 @@ struct EditorScreen: View {
         .toolbar {
             if isHeaderHidden {
                 ToolbarItem(placement: .principal) {
-                    Button(page.title.isEmpty ? "Untitled" : page.title, action: editTitle)
-                        .font(.headline)
-                        .foregroundStyle(.textPrimary)
-                        .lineLimit(1)
-                        .accessibilityHint("Shows the header and edits the title")
+                    Button(action: editTitle) {
+                        Text(page.title.isEmpty ? "Untitled" : page.title)
+                            .lineLimit(1)
+                            .frame(maxWidth: max(0, pageWidth - 2 * Self.barSideRoom))
+                    }
+                    .font(.headline)
+                    .foregroundStyle(.textPrimary)
+                    .accessibilityHint("Shows the header and edits the title")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {

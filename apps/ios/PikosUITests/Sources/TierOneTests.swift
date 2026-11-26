@@ -620,6 +620,39 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(waitForDisappearance(of: title), "going back to the content hides it again")
     }
 
+    func testALongTitleInTheBarStaysOnScreenWhileTheContentIsEdited() {
+        let longTitle = "Plan the kitchen renovation budget with quotes from three builders and the bank"
+        quickAdd("\(longTitle) today")
+        assertRowExists(longTitle)
+        app.staticTexts[longTitle].firstMatch.tap()
+        let title = textInput("Title")
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+
+        app.webViews.firstMatch.tap()
+        XCTAssertTrue(waitForDisappearance(of: title))
+
+        let bar = app.navigationBars.firstMatch
+        let barTitle = bar.buttons[longTitle]
+        XCTAssertTrue(barTitle.waitForExistence(timeout: 5))
+        let back = bar.buttons["Back"]
+        let timer = bar.buttons["Start timing this page"]
+        XCTAssertTrue(barTitle.frame.minX >= back.frame.maxX, "the bar's title is cut short, clear of Back")
+        XCTAssertTrue(barTitle.frame.maxX <= timer.frame.minX, "and clear of the buttons on the right")
+
+        timer.tap()
+        let stop = bar.buttons["Stop timing"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        let elapsed = bar.staticTexts.allElementsBoundByIndex.filter { $0.label != longTitle }
+        let rightEdge = elapsed.map(\.frame.minX).reduce(stop.frame.minX, min)
+        XCTAssertTrue(barTitle.frame.maxX <= rightEdge, "a running focus timer stays clear of it too")
+
+        // A running session outlives the app and would reopen this page on the next test's launch.
+        stop.tap()
+        let notice = app.alerts["Focus"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        notice.buttons["OK"].tap()
+    }
+
     // qa: IOS-69
     func testAFocusSessionHidesTheHeaderUntilItStops() {
         quickAdd("Essay draft today")
