@@ -20,7 +20,6 @@ fail() {
   overall=1
 }
 
-# Only check tracked files in source directories (skip node_modules, dist, target, etc.)
 src_files() {
   git ls-files -- \
     'apps/desktop/src/**' \
@@ -63,11 +62,9 @@ SYNC_CRATE='crates/pikos-calendar-sync/'
 # the `e2e-bridge` feature, which CI's test job enables and no release build does.
 E2E_BRIDGE='apps/desktop/src-tauri/src/e2e_bridge.rs'
 
-# ── 1. Secrets (gitleaks) ──────────────────────────────────────────────────────
-# At commit time the hook sets SOURCE_AUDIT_STAGED, and only the staged changes are scanned:
-# they are what is about to enter history. Scanning the tree instead read about 5 GB of
-# ignored build output and took two and a half minutes per commit. Anywhere else, CI or by
-# hand, the whole tree is scanned.
+# At commit time the hook sets SOURCE_AUDIT_STAGED and only staged changes are scanned: they are
+# what is about to enter history, and scanning the tree read about 5 GB of ignored build output
+# (two and a half minutes per commit). Elsewhere the whole tree is scanned.
 if [ -n "${SOURCE_AUDIT_STAGED:-}" ]; then
   gitleaks_scan=(git --pre-commit --staged)
 else
@@ -80,9 +77,8 @@ if command -v gitleaks &>/dev/null; then
     fail "gitleaks detected secrets — run 'gitleaks ${gitleaks_scan[*]} -v' for details"
   fi
 else
-  # Fallback: basic pattern grep if gitleaks not installed
-  # packages/recurrence-wasm/pkg is generated (base64-embedded wasm binary);
-  # random token-shaped substrings in the blob trip the patterns.
+  # packages/recurrence-wasm/pkg is generated (base64 wasm), and random token-shaped substrings in
+  # it trip these patterns.
   hits=$(src_files '*.ts' '*.tsx' '*.js' '*.jsx' '*.rs' '*.json' '*.toml' '*.yaml' '*.yml' '*.env*' \
     | xargs grep -nE '(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AIza[a-zA-Z0-9_-]{35}|AKIA[A-Z0-9]{16}|xoxb-[0-9]|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY)' 2>/dev/null \
     | grep -v 'node_modules' \
@@ -95,7 +91,6 @@ else
   fi
 fi
 
-# ── 2. Hardcoded personal paths ─────────────────────────────────────────────
 hits=$(src_files \
   | xargs grep -nE '(/Users/[a-zA-Z]|/home/[a-zA-Z]|/Library/Application Support|\.ssh/|\.aws/|\.gnupg/)' 2>/dev/null \
   | grep -v '\.rs:.*//.*e\.g\.' \
@@ -107,11 +102,8 @@ else
   pass "No hardcoded personal paths"
 fi
 
-# ── 2b. References nobody outside this machine can follow ───────────────────
-# `.agent/` and `.claude/` are gitignored, so a decision-record id,
-# a backlog id or a path into them is a dead end for anyone reading the published
-# source. State the fact inline instead; the record is where the reasoning lives,
-# not where a reader of this file can go.
+# `.agent/` and `.claude/` are gitignored, so a decision-record id, a backlog id or a path into
+# them is a dead end for readers of the published source. State the fact inline.
 hits=$({ src_files; published_docs; } \
   | xargs grep -nE '(PKOS-[0-9]{4}|GAR-[0-9]{4}|SOLO-[0-9]{4}|\.agent/|\.claude/|`[A-Z][0-9]{1,3}`)' 2>/dev/null \
   | grep -v 'node_modules' || true)
@@ -122,7 +114,21 @@ else
   pass "No references nobody outside can follow"
 fi
 
-# ── 3. Debug leftovers (JS/TS) ──────────────────────────────────────────────
+# A comment states what is true now. A version tag or a word of history in one is a change log
+# that goes stale; the history belongs in git and the decision in its record. Narrow on purpose:
+# "no longer" and "now" also describe present behaviour, so they aren't matched.
+hits=$(src_files 'apps/ios/**' 'apps/apple/**' \
+  | grep -E '\.(ts|tsx|rs|swift)$' \
+  | grep -vE '(/generated/|/pkg/|PikosCore/Sources/PikosCore/)' \
+  | xargs grep -nE '^\s*(//|\*|/\*).*(\(v?[0-9]+\.[0-9]+(\.[0-9]+)?\)|\b(in|since) v?[0-9]+\.[0-9]+\.[0-9]+\b|\b(previously|used to be|until recently)\b)' 2>/dev/null \
+  || true)
+
+if [ -n "$hits" ]; then
+  fail "Comments carrying version tags or history (say what is true now)" $hits
+else
+  pass "No history in comments"
+fi
+
 hits=$(ts_src_files \
   | xargs grep -nE '(^\s*console\.log\(|^\s*debugger\b)' 2>/dev/null || true)
 
@@ -132,7 +138,6 @@ else
   pass "No JS/TS debug leftovers"
 fi
 
-# ── 4. Debug leftovers (Rust) ───────────────────────────────────────────────
 hits=$(app_rust_src_files \
   | xargs grep -nE '(^\s*dbg!\(|^\s*println!\()' 2>/dev/null \
   | grep -v '#\[cfg(test)\]' \
@@ -144,11 +149,9 @@ else
   pass "No Rust debug leftovers"
 fi
 
-# ── 5. Unauthorized network calls ───────────────────────────────────────────
-# The desktop app must not make network requests except via the Tauri updater
-# plugin. Calendar sync is the single exception, and it is fenced three ways:
-# only that crate may declare an HTTP client, only its chokepoint may construct
-# one, and no other Rust source may name one at all.
+# The desktop app makes no network requests except via the Tauri updater plugin. Calendar sync is
+# the one exception, fenced three ways: only that crate may declare an HTTP client, only its
+# chokepoint may construct one, and no other Rust source may name one.
 hits=$(ts_src_files \
   | xargs grep -nE '\b(fetch\s*\(|axios|XMLHttpRequest|navigator\.sendBeacon|new\s+WebSocket|\.get\s*\(\s*['\''"`]https?://|\.post\s*\(\s*['\''"`]https?://)' 2>/dev/null || true)
 
@@ -187,10 +190,8 @@ else
   pass "One crate depends on an HTTP client"
 fi
 
-# ── 5b. iCloud device sync ──────────────────────────────────────────────────
-# The workspace leaves the device for the person's iCloud private database only
-# through the sync package. The phone's sync wiring imports CloudKit to name the
-# container and hands it straight to that package.
+# The workspace leaves the device for the person's iCloud private database only through the sync
+# package. The phone's sync wiring imports CloudKit to name the container and hands it straight on.
 hits=$(git ls-files -- '*.swift' \
   | grep -v '^apps/apple/PikosSync/' \
   | grep -v '^apps/ios/Pikos/Sources/Sync/' \
@@ -202,7 +203,6 @@ else
   pass "CloudKit only in the sync package"
 fi
 
-# ── 6. Analytics / telemetry SDK imports ────────────────────────────────────
 hits=$(ts_src_files \
   | xargs grep -nEi '(from ['\''"](@sentry|sentry|mixpanel|posthog|amplitude|@segment|@google-analytics|@fullstory|logrocket|hotjar)|import.*(Sentry|Mixpanel|Posthog|Amplitude)|analytics\.(init|track|identify|page)\(|\bgtag\s*\(|umami\.track)' 2>/dev/null || true)
 
@@ -212,9 +212,7 @@ else
   pass "No analytics/telemetry SDKs"
 fi
 
-# ── 7. XSS vectors (eval, innerHTML, dangerouslySetInnerHTML) ───────────────
 # In a Tauri app, XSS can escalate to full system access via IPC.
-# Exclude comments (lines starting with optional whitespace then // or * or /*).
 hits=$(ts_src_files \
   | xargs grep -nE '(\beval\s*\(|new\s+Function\s*\(|\binnerHTML\s*=|dangerouslySetInnerHTML)' 2>/dev/null \
   | grep -vE '^\S+:\s*(//|\*|/\*)' || true)
@@ -225,7 +223,6 @@ else
   pass "No XSS vectors"
 fi
 
-# ── 8. Unsafe Rust ─────────────────────────────────────────────────────────
 hits=$(rust_src_files \
   | xargs grep -nE '^\s*unsafe\b' 2>/dev/null \
   | grep -v '#\[cfg(test)\]' \
@@ -237,13 +234,10 @@ else
   pass "No unsafe Rust"
 fi
 
-# ── 9. SQL injection (raw string queries in Rust) ──────────────────────────
-# All SQL must use sqlx parameterized queries (?-binds). Flag any sqlx entry
-# point invoked with a `format!`'d string — query/query_as/query_scalar/execute.
-# Dynamic WHERE clauses built via QueryBuilder.push_bind are safe.
-# To allow a call site where the interpolated value is a compile-time constant
-# (e.g. column whitelist, PRAGMA name), add `// sql-ok:` by the call: the line
-# above it, the line itself, or either of the two after, since `format!(` wraps.
+# All SQL must use sqlx parameterized binds. Flags a sqlx entry point called with a `format!`'d
+# string; QueryBuilder.push_bind is safe. For a compile-time-constant interpolation (column
+# whitelist, PRAGMA name), add `// sql-ok:` on the line above the call, on it, or in the two
+# after, since `format!(` wraps.
 hits=$(rust_src_files | python3 -c '
 import re, sys
 
@@ -259,8 +253,6 @@ for path in sys.stdin.read().split("\n"):
     for i, line in enumerate(lines):
         if not CALL.search(line):
             continue
-        # The annotation sits wherever it reads best: above the call, on it, or
-        # inside it, since format!( almost always wraps.
         if any("sql-ok:" in w for w in lines[max(0, i - 1) : i + 3]):
             continue
         print("{}:{}:{}".format(path, i + 1, line.strip()))
@@ -272,8 +264,6 @@ else
   pass "No raw SQL string interpolation"
 fi
 
-# ── 10. Tauri capability escalation ─────────────────────────────────────────
-# Flag high-risk permissions that should never appear without explicit review.
 cap_files=$(git ls-files -- 'apps/desktop/src-tauri/capabilities/*.json')
 if [ -n "$cap_files" ]; then
   hits=$(echo "$cap_files" \
@@ -288,7 +278,6 @@ else
   pass "No high-risk Tauri capabilities" "(no capability files)"
 fi
 
-# ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 if [ $overall -eq 0 ]; then
   printf "${GREEN}Source audit passed.${RESET}\n"

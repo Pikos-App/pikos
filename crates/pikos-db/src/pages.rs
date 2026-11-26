@@ -2402,10 +2402,8 @@ pub struct RescheduleVirtualResult {
 /// 2. Schedules the clone at the new time (page_schedules row + denorm)
 /// 3. Merges the original date into the rule's exdates so the virtual disappears
 ///
-/// One transaction — previously these were three separate client-issued writes,
-/// so a failure after the clone insert left BOTH the clone and the still-
-/// unexcluded virtual on the calendar (duplicate occurrence, duplicate
-/// reminders). The head and rule are otherwise untouched; an override row needs
+/// One transaction, so a failure after the clone insert can't leave both the clone and the
+/// unexcluded virtual on the calendar as a duplicate occurrence with duplicate reminders. The head and rule are otherwise untouched; an override row needs
 /// no exdate, since the head derivation already excludes every materialized
 /// `original_date`.
 pub async fn reschedule_virtual_occurrence_impl(
