@@ -238,12 +238,9 @@ done
 if gh pr checks "$PR_URL" --watch --fail-fast >/dev/null 2>&1; then
   gh pr merge "$PR_URL" --merge
   git switch main
+  # The pull's post-merge hook clears away merged work, this release's branch included.
   git pull --ff-only
 else
   echo "CI didn't pass on the version bump. Fix it on $RELEASE_BRANCH and merge $PR_URL."
   exit 1
 fi
-
-# The release shipped what was merged, so the worktrees and branches that work lived in are
-# spent, and left alone they pile up: 0.5.1's worktree held 14 GB of build output.
-node "$ROOT/scripts/clean-merged-work.mjs"

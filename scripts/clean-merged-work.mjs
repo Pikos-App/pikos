@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Remove the local leftovers of work whose pull request has merged: extra worktrees, with
 // their build output, and branches. It runs after every pull that merges (the `post-merge`
-// hook) and at the end of a release, and by hand as `pnpm cleanup:merged`.
+// hook), a release's own pull included, and by hand as `pnpm cleanup:merged`.
 //
 //   node scripts/clean-merged-work.mjs [--dry-run] [--quiet]
 //
