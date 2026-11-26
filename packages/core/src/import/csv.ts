@@ -1,3 +1,5 @@
+import { addMinutes } from "date-fns";
+
 import type { PagePriority, PageStatus } from "../types";
 import { isAllDayIso, isTimedIso } from "../utils/dates";
 import { isDone } from "../utils/page";
@@ -622,8 +624,7 @@ export function applyMappings(
             const startDate = new Date(timedStart);
             if (!isNaN(startDate.getTime())) {
               scheduledStart = timedStart;
-              startDate.setMinutes(startDate.getMinutes() + durationMinutes);
-              scheduledEnd = toLocalISO(startDate);
+              scheduledEnd = toLocalISO(addMinutes(startDate, durationMinutes));
             }
           }
         }
