@@ -2,7 +2,7 @@
 import type { SyncCalendar } from "./SyncCalendar";
 
 /**
- * One account plus its calendars — the panel's account-centric read.
+ * One account plus its calendars.
  */
 export type AccountWithCalendars = {
   calendars: Array<SyncCalendar>;
@@ -12,9 +12,8 @@ export type AccountWithCalendars = {
   authKind: string;
   createdAt: string;
   /**
-   * Set when a poll hits a rejected credential, and the scheduler then skips the
-   * account entirely — so the panel must surface it, or a background rejection is
-   * invisible until someone resyncs by hand.
+   * Set when a poll hits a rejected credential, after which the scheduler skips the
+   * account, so the panel must surface it.
    */
   reconnectNeeded: boolean;
 };

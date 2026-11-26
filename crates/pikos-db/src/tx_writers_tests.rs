@@ -14,19 +14,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Churn duty cycle: hold the write lock across a yield point, then idle. Tuned
-/// as a pair against a deliberately unwrapped writer — enough pressure to catch
-/// one (red 7 runs in 8 for a read-then-write writer, 4 in 8 for a write-first
-/// one), enough idle that a correctly retried writer still lands inside its
-/// deadline. Both halves are load-bearing: committing straight after the write
-/// leaves a window too narrow to catch anything, and looping with no gap makes a
-/// lock hog no real writer resembles — that starves even correct writers past the
-/// deadline, so the test fails on healthy code.
+/// Churn duty cycle: hold the write lock across a yield point, then idle. Tuned against an
+/// unwrapped writer: enough pressure to catch one (red 7 runs in 8 for read-then-write, 4 in 8
+/// for write-first), enough idle that a correctly retried writer lands inside its deadline.
+/// Committing straight after the write leaves a window too narrow to catch anything, and looping
+/// with no gap is a lock hog that starves even correct writers past the deadline.
 const HOLD: Duration = Duration::from_micros(100);
 const GAP: Duration = Duration::from_micros(400);
 
-/// A disabled calendar with its account — the state `toggle_sync_calendar_impl`
-/// enables from.
 async fn insert_disabled_calendar(pool: &sqlx::SqlitePool, account_id: &str, calendar_id: &str) {
     let now = now_iso();
     sqlx::query(

@@ -2,8 +2,6 @@ use super::*;
 use crate::now_iso;
 use crate::pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
 
-// ─── helpers — raw inserts (no writers exist yet) ─────────────────────────────
-
 async fn insert_account(pool: &sqlx::SqlitePool, id: &str, provider: &str, auth_kind: &str) {
     let now = now_iso();
     sqlx::query(
@@ -65,8 +63,6 @@ async fn insert_page_sync(
     .execute(pool)
     .await
 }
-
-// ─── tests ────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn row_structs_round_trip() {

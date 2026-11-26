@@ -277,7 +277,7 @@ async fn observe(pool: &SqlitePool) -> Value {
     let mut ranges = BTreeMap::new();
     for zone in ZONES {
         let mut c = serde_json::to_value(count_views(pool, zone, today()).await.unwrap()).unwrap();
-        // A folder emptied keeps a zero row in the database; the mock never lists one.
+        // The database keeps a zero row for an emptied folder; the mock never lists one.
         if let Some(folders) = c["folders"].as_object_mut() {
             folders.retain(|_, v| v.as_i64() != Some(0));
         }

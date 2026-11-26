@@ -3,10 +3,9 @@
 /**
  * One row of the notification history panel: what fired, when, for which page.
  *
- * `page_title` is joined in rather than stored, so a renamed page reads under
- * its current name and a deleted one reads as `None` (the log row outlives the
- * page — `notification_log.page_id` carries no foreign key, by design: the log
- * is a dedup ledger first).
+ * `page_title` is joined in, so a renamed page reads under its current name and a deleted
+ * one as `None`: the log row outlives the page, since `notification_log.page_id` carries
+ * no foreign key.
  */
 export type NotificationHistoryEntry = {
   id: string;
@@ -15,8 +14,8 @@ export type NotificationHistoryEntry = {
   scheduleId?: string | null;
   /**
    * `reminder` (delivered), `suppressed` (quiet hours ate it), `refused`
-   * (notifications are off for Pikos) or `overdue` (the daily summary marker). Named `kind` because `type` is a Rust keyword;
-   * the column is `type`.
+   * (notifications are off for Pikos) or `overdue` (the daily summary marker).
+   * Named `kind` because `type` is a Rust keyword; the column is `type`.
    */
   kind: string;
   firedAt: string;

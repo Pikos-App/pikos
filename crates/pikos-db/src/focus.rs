@@ -1,15 +1,8 @@
-//! `focus_sessions` — how long the user actually sat with a page open.
+//! `focus_sessions`: how long the user sat with a page open, one row per completed session.
 //!
-//! The table has existed since migration 001 and `get_usage_stats` has counted
-//! it into the Data panel's "Focus time" card all along, but nothing ever wrote
-//! a row: the card has been showing a hard zero that reads as a measurement.
-//! This is the writer that makes it honest.
-//!
-//! One row per completed session. The frontend times the session and writes on
-//! stop, so `started_at`/`ended_at` come in from the caller rather than being
-//! stamped here — a session that spans a suspend or a clock change is still the
-//! wall-clock span the user lived through, and `duration_s` is what the totals
-//! sum, so it is stored rather than recomputed from the two timestamps.
+//! The frontend times the session and writes on stop, so `started_at` and `ended_at` come from
+//! the caller: a session spanning a suspend or clock change is still the span the user lived
+//! through. `duration_s` is what the totals sum, so it is stored, not recomputed.
 
 use serde::Serialize;
 
@@ -27,19 +20,14 @@ pub struct FocusSession {
     pub duration_s: i64,
 }
 
-/// Record one finished focus session against a page.
+/// Records one finished focus session against a page. Two refusals, since a bad row lands
+/// in a sum on a settings card as a total nobody can explain:
 ///
-/// Two refusals, both because a bad row here is invisible rather than loud — it
-/// lands in a sum on a settings card, where a negative or orphaned session shows
-/// up as a total nobody can explain:
-///
-/// - `duration_s` must be positive. Zero or negative is a caller bug (a clock
-///   that went backwards, a stop that raced the start), not a zero-length
-///   session worth keeping.
-/// - the page must exist. The column is `ON DELETE SET NULL`, so a row written
-///   against a deleted page would still count toward the totals while belonging
-///   to nothing — indistinguishable from a session whose page was trashed later,
-///   which is a state the app deliberately keeps.
+/// - `duration_s` must be positive; zero or negative is a caller bug (a clock that went
+///   backwards, a stop that raced the start).
+/// - The page must exist. The column is `ON DELETE SET NULL`, so a row for a deleted page
+///   would count toward totals while belonging to nothing, indistinguishable from a session
+///   whose page was trashed later, a state the app keeps.
 pub async fn create_focus_session(
     pool: &sqlx::SqlitePool,
     page_id: &str,

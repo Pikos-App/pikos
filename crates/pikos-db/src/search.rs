@@ -17,10 +17,9 @@ pub struct SearchResponse {
 
 /// How many of a query's matches search scores before ranking them.
 ///
-/// Ranking has to score every match, and nothing in the full-text index keeps matches in score
-/// order, so an exact top twenty for a word in most pages costs time in proportion to the
-/// workspace. Scanning a fixed number of the newest matches keeps it flat. A query with no more
-/// matches than the scan ranks exactly as before; past it, see [`search_pages_scan`].
+/// An exact top twenty has to score every match, which costs time in proportion to the
+/// workspace; scanning a fixed number of the newest keeps it flat. A query with no more
+/// matches than the scan ranks exactly; past it, see [`search_pages_scan`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchScan {
     /// Score at most this many of the newest matches, and as many of the newest title matches.
@@ -43,9 +42,8 @@ const SEARCH_COLUMNS: &str = "pages.id, pages.title, pages.subtitle, pages.conte
          WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') AS schedule_locked";
 const RESULT_LIMIT: i64 = 20;
 /// The matches joined to their pages, with the index driving. `CROSS JOIN` fixes that order:
-/// without table statistics, as before a large workspace's first sampling, SQLite started the
-/// completed count from the status index and probed the index once per done page, 3 s at
-/// 500,000 pages for a word on fifty of them.
+/// without table statistics SQLite started the completed count from the status index and
+/// probed the index once per done page, 3 s at 500,000 pages.
 const MATCHED_PAGES: &str = "pages_fts CROSS JOIN pages ON pages.rowid = pages_fts.rowid";
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -97,9 +95,8 @@ fn char_to_byte(s: &str, char_idx: usize) -> usize {
         .unwrap_or(s.len())
 }
 
-/// Build an excerpt centered on the first occurrence of any search token.
-/// Strips the title and subtitle from the beginning of content_text so the
-/// excerpt only shows body content.
+/// An excerpt centered on the first search token, with the leading title and subtitle
+/// stripped so only body content shows.
 fn build_excerpt(
     content_text: Option<&str>,
     title: &str,
@@ -114,10 +111,9 @@ fn build_excerpt(
 
 /// One block per line, rejoined so two of them do not read as one sentence.
 ///
-/// `content_text` keeps the document's line breaks, and every reader renders the excerpt as HTML,
-/// where a newline folds into a space: a hit at the end of "Measure the alcove" came out as
-/// "the alcove Order the desktop top". Blank lines are dropped, or an empty paragraph leaves a
-/// separator with nothing on either side of it.
+/// `content_text` keeps line breaks, which HTML folds into a space, so a hit at the end of
+/// one block ran into the next ("the alcove Order the desktop"). Blank lines are dropped,
+/// or an empty paragraph leaves a separator with nothing beside it.
 fn join_blocks(body: &str) -> String {
     body.lines()
         .map(str::trim)
@@ -126,14 +122,11 @@ fn join_blocks(body: &str) -> String {
         .join(" \u{00B7} ")
 }
 
-/// A mirror's calendar-owned metadata as the excerpt, for a hit that lands only
-/// there — the room or an attendee. Fills the same `excerpt` rather than adding a
-/// metadata arm to `match_source`, so the row's existing quote-and-highlight path
-/// renders it unchanged; an empty excerpt leaves the row showing the page's date,
-/// which names nothing the query asked for.
-///
-/// The stored blob is newline-joined (`mirror_search_text`, reconciler.rs) and the
-/// row is one truncated line, so the parts are rejoined for display.
+/// A mirror's calendar-owned metadata as the excerpt, for a hit landing only there (the room
+/// or an attendee). It fills `excerpt` rather than adding a `match_source` arm, so the
+/// existing quote-and-highlight path renders it; an empty excerpt would show the page's
+/// date, which names nothing the query asked for. The stored blob is newline-joined, so the
+/// parts are rejoined for display.
 fn build_mirror_excerpt(mirror_search_text: Option<&str>, tokens: &[String]) -> String {
     let Some(text) = mirror_search_text else {
         return String::new();
@@ -157,18 +150,14 @@ fn whitespace_before(body: &str, target: usize) -> Option<usize> {
         .map(|b| body[..b].chars().count())
 }
 
-/// Window `body` around the first occurrence of any token, snapped to word
-/// boundaries and elided at both cut edges. Empty when no token is present.
-/// All indexing is char-based to avoid panics on multi-byte UTF-8.
+/// Windows `body` around the first occurrence of any token, snapped to word boundaries and
+/// elided at both cut edges. Empty when no token is present. Indexing is char-based, so
+/// multi-byte UTF-8 can't panic.
 ///
-/// Each edge snaps *outward*, to the edge of whatever word it lands in, so the
-/// window can only ever grow to a whole word. Snapping inward instead reads as an
-/// excerpt that starts mid-word — "r delivery" — which looks like corrupted data
-/// rather than like the sentence it came from, and on a body with a long unbroken
-/// run (a pasted URL) it has no boundary to move to at all. Growing outward also
-/// keeps the match inside the window by construction, where an inward snap on a
-/// body with one space could close the window past it and lose the match.
-/// `max_chars` is therefore a target, not a bound.
+/// Each edge snaps outward to the edge of its word. Snapping inward starts the excerpt
+/// mid-word, which looks like corrupted data, has no boundary to move to in a long unbroken
+/// run such as a pasted URL, and on a body with one space could close the window past the
+/// match. `max_chars` is therefore a target, not a bound.
 fn excerpt_around(body: &str, tokens: &[String]) -> String {
     if body.is_empty() {
         return String::new();
@@ -220,8 +209,7 @@ fn excerpt_around(body: &str, tokens: &[String]) -> String {
     }
 }
 
-/// Extract first ~80 chars of body content as a preview, breaking at word boundary.
-/// All indexing is char-based to avoid panics on multi-byte UTF-8.
+/// The first ~80 chars of body content as a preview, broken at a word boundary.
 fn build_content_preview(
     content_text: Option<&str>,
     title: &str,
@@ -246,8 +234,6 @@ fn build_content_preview(
     }
 }
 
-/// Strip title and subtitle from the beginning of content_text, returning
-/// just the body portion.
 fn strip_title_subtitle<'a>(
     content_text: Option<&'a str>,
     title: &str,
@@ -272,8 +258,7 @@ fn strip_title_subtitle<'a>(
     body
 }
 
-/// Case-insensitive prefix strip. Returns the remainder if `text` starts with `prefix`.
-/// Uses char-based comparison to handle multi-byte UTF-8 safely.
+/// The remainder if `text` starts with `prefix`, compared case-insensitively by char.
 fn strip_prefix_ci<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
     let prefix_chars: usize = prefix.chars().count();
     let text_prefix: String = text.chars().take(prefix_chars).collect();
@@ -292,12 +277,10 @@ fn strip_prefix_ci<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
 
 /// Split a query into runs of alphanumeric chars, every other character a separator.
 ///
-/// This is FTS5's default `unicode61` tokenizer, reproduced — the index is the
-/// authority, not this function, so a query for "multi-color" finds the same rows as
-/// "multi color". It also keeps FTS5 from reading `-` as a NOT operator or column
-/// qualifier (`multi-color` → "no such column: color") and `'` as a phrase delimiter
-/// (`don't` → syntax error). The highlighter mirrors it through `ftsTokens`; both
-/// answer to `tests/fixtures/search-tokenization.json`.
+/// FTS5's default `unicode61` tokenizer reproduced, as the index is the authority: "multi-color"
+/// finds the same rows as "multi color". It also keeps FTS5 from reading `-` as NOT or a column
+/// qualifier and `'` as a phrase delimiter. The highlighter mirrors it through `ftsTokens`;
+/// both answer to `tests/fixtures/search-tokenization.json`.
 pub fn fts_tokens(query: &str) -> Vec<String> {
     query
         .split_whitespace()
@@ -310,10 +293,9 @@ pub fn fts_tokens(query: &str) -> Vec<String> {
         .collect()
 }
 
-/// Unified search: queries all FTS5 columns with bm25() weighting so title
-/// matches rank above content matches. Supports prefix matching on the last
-/// token (e.g. "morn" → "morning"). Returns up to 20 results with plain text
-/// excerpts (no HTML markup — frontend handles highlighting).
+/// Searches all FTS5 columns with bm25 weighting so title matches rank above content matches.
+/// The last token matches as a prefix. Returns up to 20 results with plain text excerpts; the
+/// frontend highlights.
 pub async fn search_pages_impl(
     pool: &sqlx::SqlitePool,
     query: String,
@@ -324,14 +306,13 @@ pub async fn search_pages_impl(
 
 /// [`search_pages_impl`] with the scan chosen by the caller.
 ///
-/// Past the scan, two capped streams are scored: the newest matches, and the newest matches in
-/// the title or subtitle. Their bm25 scores aren't comparable, because each query weighs its terms
-/// by its own match count, so the title stream ranks first and the rest follow, each by its own
-/// score. That is close to exact ranking anyway, since a title hit weighs ten times a body hit.
-/// Rejected: scoring the capped candidates in one query by rowid, which makes FTS5 rebuild the
-/// whole match list per candidate (35 s at 200,000 pages). When completed pages are excluded and
-/// most scanned matches are done, fewer than twenty results come back though older open
-/// matches exist.
+/// Past the scan, two capped streams are scored: the newest matches, and the newest in the
+/// title or subtitle. Their bm25 scores aren't comparable, since each query weighs terms by its
+/// own match count, so the title stream ranks first and the rest follow. That is close to
+/// exact, as a title hit weighs ten times a body hit. Scoring the capped candidates in one
+/// query by rowid was rejected: FTS5 rebuilds the whole match list per candidate (35 s at
+/// 200,000 pages). With completed pages excluded and most scanned matches done, fewer than
+/// twenty come back though older open matches exist.
 pub async fn search_pages_scan(
     pool: &sqlx::SqlitePool,
     query: String,
@@ -358,10 +339,7 @@ pub async fn search_pages_scan(
         _ => None,
     };
 
-    // deleted_at IS NULL is unconditional — trashed pages never appear in search.
-    // When include_completed is false, completed pages are excluded entirely.
-    // When true, they sort last and secondary sort is updated_at DESC (works for
-    // both notes and tasks).
+    // Trashed pages never appear. Completed pages are excluded, or sort last when included.
     let status_filter = if include_completed {
         ""
     } else {
@@ -475,10 +453,10 @@ pub enum Terms {
     Any,
 }
 
-/// Search a page at a time, for a caller that wants more than the app's first twenty: each page
-/// ranks a window of the newest [`SEARCH_PAGE_WINDOW`] matches the way the app does, title hits
-/// first, and shows `limit` of them; the cursor walks through that window, then the next older
-/// one. Scoring every match instead took 141 s for a common word at 200,000 pages.
+/// Searches a page at a time, for a caller wanting more than the first twenty: each page ranks
+/// a window of the newest [`SEARCH_PAGE_WINDOW`] matches as the app does and shows `limit` of
+/// them; the cursor walks that window, then the next older one. Scoring every match took 141 s
+/// for a common word at 200,000 pages.
 pub async fn search_page(
     pool: &sqlx::SqlitePool,
     query: &str,
@@ -705,11 +683,10 @@ struct RankedRow {
     completed_count: i64,
 }
 
-/// The ranking [`search_pages_scan`] describes past the scan, as one statement so each capped
-/// stream is built once. A prefix term makes FTS5 assemble the term's whole match list before it
-/// can stream it newest-first, and that assembly is most of the cost at size. Completed pages
-/// are excluded by sorting them after every open one and dropping them here, so the count still
-/// arrives when no open page matched.
+/// The ranking [`search_pages_scan`] describes, as one statement so each capped stream is built
+/// once: a prefix term makes FTS5 assemble the whole match list before streaming it, most of the
+/// cost at size. Completed pages sort after every open one and are dropped here, so the count
+/// still arrives when no open page matched.
 async fn capped_search(
     pool: &sqlx::SqlitePool,
     fts_query: &str,

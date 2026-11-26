@@ -1,8 +1,6 @@
 use super::*;
 use crate::pool::test_pool;
 
-// Scheduler tick window used across tests: a reminder is "due" if its fire time
-// (scheduled_start − minutes_before) lands in the half-open span `window()` returns.
 const NOW_TS: &str = "2026-05-25 09:00:00";
 
 /// The tick window the arms take, ending at `NOW_TS` in both readings.
@@ -105,13 +103,10 @@ async fn log_count(pool: &sqlx::SqlitePool, kind: &str) -> i64 {
         .unwrap()
 }
 
-// ─── due_explicit_reminders ──────────────────────────────────────────────────
-
 #[tokio::test]
 async fn explicit_reminder_due_in_window_is_returned() {
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
-    // 09:10 start, fires 10 min before = 09:00 → inside the tick window.
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "p1", 10).await;
 
@@ -127,7 +122,6 @@ async fn explicit_reminder_due_in_window_is_returned() {
 async fn explicit_reminder_outside_window_is_skipped() {
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
-    // 10:00 start, fires 09:50 → after NOW_TS, not yet due.
     insert_schedule(&pool, "s1", "p1", "2026-05-25T10:00:00", "not_started").await;
     insert_reminder(&pool, "p1", 10).await;
 
@@ -141,7 +135,6 @@ async fn explicit_reminder_outside_window_is_skipped() {
 async fn all_day_event_has_no_explicit_reminder() {
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
-    // All-day = date-only scheduled_start (no 'T').
     insert_schedule(&pool, "s1", "p1", "2026-05-25", "not_started").await;
     insert_reminder(&pool, "p1", 0).await;
 
@@ -154,20 +147,16 @@ async fn all_day_event_has_no_explicit_reminder() {
 #[tokio::test]
 async fn explicit_reminder_excludes_done_and_deleted_and_already_fired() {
     let pool = test_pool().await;
-    // done page
     insert_page(&pool, "done", "done", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "sd", "done", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "done", 10).await;
-    // deleted page
     insert_page(&pool, "del", "not_started", "2026-05-01T00:00:00").await;
     soft_delete_page(&pool, "del").await;
     insert_schedule(&pool, "sx", "del", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "del", 10).await;
-    // done schedule occurrence
     insert_page(&pool, "skip", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "ss", "skip", "2026-05-25T09:10:00", "done").await;
     insert_reminder(&pool, "skip", 10).await;
-    // already fired
     insert_page(&pool, "fired", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "sf", "fired", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "fired", 10).await;
@@ -183,16 +172,13 @@ async fn explicit_reminder_excludes_done_and_deleted_and_already_fired() {
 
 #[tokio::test]
 async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
-    // Two leads on one page (70min + 10min before) fire in separate ticks; the
-    // second must still be due after the first fires — dedup is per-lead, not
-    // per-schedule-row. Repro for the bare-`ps.id` collision.
+    // Two leads on one page fire in separate ticks; dedup is per lead, not per schedule row.
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "p1", 70).await; // fires 08:00
     insert_reminder(&pool, "p1", 10).await; // fires 09:00
 
-    // Tick A around 08:00 → only the 70-min lead is due; the scheduler logs it.
     let tick_a = due_explicit_reminders(&pool, &window_at("2026-05-25T08:00:00"))
         .await
         .unwrap();
@@ -207,7 +193,6 @@ async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
     .await
     .unwrap();
 
-    // Tick B around 09:00 → the 10-min lead must still fire.
     let tick_b = due_explicit_reminders(&pool, &window_at("2026-05-25T09:00:00"))
         .await
         .unwrap();
@@ -224,7 +209,6 @@ async fn none_sentinel_reminder_never_fires() {
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:00:00", "not_started").await;
-    // -1 = "no reminders for this page" sentinel; filtered by minutes_before >= 0.
     insert_reminder(&pool, "p1", -1).await;
 
     assert!(due_explicit_reminders(&pool, &window())
@@ -235,9 +219,8 @@ async fn none_sentinel_reminder_never_fires() {
 
 #[tokio::test]
 async fn floating_synced_oneoff_explicit_reminder_fires_on_native_path() {
-    // A synced one-off with NO timezone (floating CalDAV DTSTART) is device-local,
-    // so the native explicit path must still fire it — the synced path only
-    // handles zoned events. Regression guard for the over-broad synced exclusion.
+    // A synced one-off with no timezone (a floating CalDAV DTSTART) is device-local, so the
+    // native explicit path must still fire it; the synced path handles only zoned events.
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await; // tz NULL
@@ -257,8 +240,7 @@ async fn floating_synced_oneoff_explicit_reminder_fires_on_native_path() {
 
 #[tokio::test]
 async fn zoned_synced_oneoff_is_excluded_from_native_path() {
-    // A synced one-off WITH a timezone is absolute — it belongs on the synced
-    // (zone-aware) path, so the native explicit query must exclude it.
+    // A zoned synced one-off is absolute, so the native explicit query must exclude it.
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule_tz(&pool, "s1", "p1", "2026-05-25T09:10:00", "America/New_York").await;
@@ -276,15 +258,11 @@ async fn zoned_synced_oneoff_is_excluded_from_native_path() {
     );
 }
 
-// ─── due_synced_reminders (zoned one-off, absolute-instant path) ──────────────
-//
-// The counterpart to the native paths for a *zoned* synced one-off: it resolves
-// source-zone wall-clock + lead → the absolute UTC instant and fires in the fixed
-// 60-second window. Lead selection matches every other origin — explicit reminder
-// if there is one, global default otherwise, silent on the `-1` sentinel.
+// The zoned synced one-off path resolves source-zone wall-clock plus lead to an absolute UTC
+// instant. Lead selection matches every other origin: explicit if present, else the global
+// default, silent on `-1`.
 
-// 09:00 America/New_York (EDT, UTC−4) − 10 min = 08:50 EDT = 12:50 UTC. Reuses the
-// override-section basis; defined locally so this section reads standalone.
+// 09:00 America/New_York (EDT, UTC-4) minus 10 min is 12:50 UTC.
 fn synced_oneoff_now() -> chrono::DateTime<chrono::Utc> {
     naive("2026-05-25T12:50:00").and_utc()
 }
@@ -310,7 +288,7 @@ async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
     seed_synced_oneoff(&pool, "p1", "s1").await;
     insert_reminder(&pool, "p1", 10).await;
 
-    // Global default deliberately differs — the explicit lead must win.
+    // The global default differs, so the explicit lead must win.
     let due = due_synced_reminders(&pool, &window_ending(synced_oneoff_now()), 5)
         .await
         .unwrap();
@@ -334,7 +312,7 @@ async fn synced_oneoff_without_explicit_reminder_uses_the_global_default() {
 
 #[tokio::test]
 async fn synced_oneoff_none_sentinel_beats_the_global_default() {
-    // -1 means "never remind me about this page" and must survive the fallback.
+    // `-1` means never remind, and must survive the fallback.
     let pool = test_pool().await;
     seed_synced_oneoff(&pool, "p1", "s1").await;
     insert_reminder(&pool, "p1", -1).await;
@@ -350,7 +328,6 @@ async fn synced_oneoff_none_sentinel_beats_the_global_default() {
 #[tokio::test]
 async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
     let pool = test_pool().await;
-    // All-day (date-only start, no 'T') → excluded by the LIKE '%T%' timed guard.
     insert_page(&pool, "allday", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule_tz(&pool, "sa", "allday", "2026-05-25", "America/New_York").await;
     crate::pool::insert_test_page_sync(&pool, "allday", "active")
@@ -379,8 +356,7 @@ async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
 
 #[tokio::test]
 async fn synced_oneoff_does_not_catch_up_a_past_instant() {
-    // Forward-only: an instant more than 60s in the past must not backfill, even
-    // though the coarse SQL ±15h prefilter still returns the row.
+    // An instant over 60s in the past must not backfill, though the coarse SQL prefilter returns it.
     let pool = test_pool().await;
     seed_synced_oneoff(&pool, "p1", "s1").await;
     insert_reminder(&pool, "p1", 10).await;
@@ -394,8 +370,7 @@ async fn synced_oneoff_does_not_catch_up_a_past_instant() {
 
 #[tokio::test]
 async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
-    // Two explicit leads on one zoned one-off fire in two ticks; the second must
-    // still be due after the first fired — per-lead dedup, mirroring the native pin.
+    // Per-lead dedup, as in the native case.
     let pool = test_pool().await;
     seed_synced_oneoff(&pool, "p1", "s1").await; // 09:00 EDT = 13:00 UTC
     insert_reminder(&pool, "p1", 70).await; // fires 11:50 UTC
@@ -422,14 +397,11 @@ async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
     assert_eq!(tick_b[0].minutes_before, 10);
 }
 
-// ─── due_default_reminders ───────────────────────────────────────────────────
-
 #[tokio::test]
 async fn default_reminder_uses_global_lead_time() {
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
-    // No page_reminders row → falls to the default path.
 
     let due = due_default_reminders(&pool, 10, &window()).await.unwrap();
     assert_eq!(due.len(), 1);
@@ -453,8 +425,7 @@ async fn default_reminder_skips_pages_with_explicit_reminders() {
 // qa: NOTIF-10
 #[tokio::test]
 async fn floating_synced_oneoff_default_reminder_fires_on_native_path() {
-    // Twin of the explicit-lead case: with no page_reminders row the global
-    // default is the only lead, and the synced path can't serve a zone-less row.
+    // With no page_reminders row the global default is the only lead, and the synced path can't serve a zone-less row.
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await; // tz NULL
@@ -477,8 +448,6 @@ async fn floating_synced_oneoff_default_reminder_fires_on_native_path() {
     );
 }
 
-// ─── daily summary dedup + logging ───────────────────────────────────────────
-
 #[tokio::test]
 async fn daily_summary_marker_dedups_per_day() {
     let pool = test_pool().await;
@@ -487,11 +456,8 @@ async fn daily_summary_marker_dedups_per_day() {
     log_daily_summary(&pool, NOW_TS).await.unwrap();
 
     assert!(daily_summary_fired_on(&pool, "2026-05-25").await.unwrap());
-    // Different day is unaffected.
     assert!(!daily_summary_fired_on(&pool, "2026-05-26").await.unwrap());
 }
-
-// ─── today_scheduled_count ───────────────────────────────────────────────────
 
 #[tokio::test]
 async fn today_count_dedups_pages_and_includes_all_day() {
@@ -501,13 +467,11 @@ async fn today_count_dedups_pages_and_includes_all_day() {
     insert_schedule(&pool, "t2", "timed", "2026-05-25T14:00:00", "not_started").await; // same page twice
     insert_page(&pool, "allday", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "a1", "allday", "2026-05-25", "not_started").await;
-    // Excluded: done page, deleted page, and a different day.
     insert_page(&pool, "done", "done", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "d1", "done", "2026-05-25T10:00:00", "not_started").await;
     insert_page(&pool, "other", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "o1", "other", "2026-05-26T10:00:00", "not_started").await;
 
-    // 2 distinct pages today (timed + allday).
     assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 2);
 }
 
@@ -634,14 +598,11 @@ async fn today_count_reads_every_schedule_of_a_non_recurring_page() {
     assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
 }
 
-// ─── overdue_count ───────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn overdue_count_window_and_recency() {
     let pool = test_pool().await;
     let stale_cutoff = "2026-05-24 09:00:00"; // now - 24h
 
-    // Overdue: timed, started 2h ago, page created long ago.
     insert_page(&pool, "od", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s_od", "od", "2026-05-25T07:00:00", "not_started").await;
     // Excluded — just imported (created inside the import-skip window).
@@ -654,10 +615,8 @@ async fn overdue_count_window_and_recency() {
         "not_started",
     )
     .await;
-    // Excluded — all-day.
     insert_page(&pool, "ad", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s_ad", "ad", "2026-05-25", "not_started").await;
-    // Excluded — older than the 24h stale window.
     insert_page(&pool, "ancient", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(
         &pool,
@@ -674,12 +633,10 @@ async fn overdue_count_window_and_recency() {
     assert_eq!(n, 1);
 }
 
-// The 24h overdue window used below: [2026-05-24 09:00, 2026-05-25 09:00).
 const STALE_CUTOFF: &str = "2026-05-24 09:00:00";
 
-// The tick instant the scheduler passes; the import-skip cutoff it yields is
-// 08:55Z, which is what the "fresh" pages below are dated against. Equals
-// `NOW_TS` read as UTC, except where a test names a different local clock.
+// The tick instant the scheduler passes; its import-skip cutoff is 08:55Z, which the fresh
+// pages below are dated against. Equals `NOW_TS` read as UTC unless a test names another clock.
 fn now_utc() -> chrono::DateTime<chrono::Utc> {
     naive("2026-05-25T09:00:00").and_utc()
 }
@@ -817,7 +774,6 @@ async fn overdue_count_skips_a_fresh_import_east_of_utc() {
 #[tokio::test]
 async fn overdue_count_ignores_an_all_day_series() {
     let pool = test_pool().await;
-    // Date-only base — an all-day occurrence has no instant to be late against.
     insert_page(&pool, "ad", "not_started", "2026-05-01T00:00:00").await;
     insert_rule(&pool, "ad", "2026-05-01").await;
 
@@ -893,8 +849,6 @@ async fn overdue_count_ignores_a_recurring_pages_stale_anchor() {
         .unwrap();
     assert_eq!(n, 0);
 }
-
-// ─── reminder_fire_diagnostics ───────────────────────────────────────────────
 
 async fn set_page_start(pool: &sqlx::SqlitePool, page_id: &str, start: &str) {
     sqlx::query("UPDATE pages SET scheduled_start = ? WHERE id = ?")
@@ -1010,8 +964,6 @@ async fn diagnostics_none_for_missing_page() {
         .is_none());
 }
 
-// ─── recurring occurrence reminders (native path guards) ─────────────────────
-//
 // Per-occurrence firing (native + synced, DST, dedup, completed-silent) lives in
 // `recurrence_derive_tests`. These pin the two things that stay in this module:
 // the `due_recurring_reminders` seam threads through to the enumeration, and the
@@ -1147,8 +1099,6 @@ async fn trashing_the_page_silences_a_detached_overrides_reminder() {
         .is_empty());
 }
 
-// ─── synced recurring per-instance override reminders ────────────────────────
-//
 // See `due_synced_override_reminders`'s doc for the override-materialization
 // contract. These tests pin it against completed/skipped, already-fired, floating,
 // and multi-instance edge cases.
@@ -1401,12 +1351,9 @@ async fn synced_override_fires_only_the_in_window_sibling() {
     assert_eq!(due[0].schedule_id, "ov_early#10");
 }
 
-// ─── prune ───────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn prune_removes_only_rows_before_cutoff() {
     let pool = test_pool().await;
-    // Old reminder row + recent summary row.
     log_reminder_fired(&pool, "p1", "s1", "2026-01-01 00:00:00")
         .await
         .unwrap();
@@ -1424,12 +1371,8 @@ async fn prune_removes_only_rows_before_cutoff() {
     assert_eq!(log_count(&pool, "overdue").await, 1); // kept
 }
 
-// Active synced recurring series now fire (no longer suppressed on the native
-// path) — the enumeration resolves each occurrence's source-zone → absolute
-// instant. Covered in `recurrence_derive_tests`
-// (`synced_series_fires_at_the_absolute_instant_*`, detached + default-suppression).
-
-// ─── synced_fire_instant DST edges (doc-comment contract, previously untested) ──
+// Active synced recurring series fire through the enumeration, which resolves each occurrence's
+// source zone to an absolute instant; covered in `recurrence_derive_tests`.
 
 #[test]
 fn synced_fire_instant_spring_forward_gap_never_fires() {
@@ -1542,13 +1485,8 @@ async fn overdue_count_counts_synced_recurring_and_detached() {
     assert_eq!(n, 2, "recurring synced head and detached page both count");
 }
 
-// ─── Long leads (> 60 minutes) ───────────────────────────────────────────────
-//
-// The schema always accepted any non-negative `minutes_before`; the pickers only
-// ever offered 0–30. Now that they offer 1h/2h/1 day, the arms have to be right
-// for leads that cross an hour and a date boundary — SQLite's `-N minutes`
-// modifier does the date arithmetic, and the per-lead dedup key has to stay
-// distinct from the short leads on the same row.
+// Long leads cross an hour and a date boundary: SQLite's `-N minutes` modifier does the date
+// arithmetic, and the per-lead dedup key must stay distinct from the short leads on the row.
 
 #[tokio::test]
 async fn a_one_day_lead_fires_a_day_before_the_event() {
@@ -1649,8 +1587,6 @@ async fn a_synced_one_day_lead_holds_its_instant_across_a_dst_shift() {
     assert_eq!(due[0].schedule_id, "s1#1440");
 }
 
-// ─── due_day_before_reminders (all-day anchor) ───────────────────────────────
-
 async fn insert_all_day(pool: &sqlx::SqlitePool, id: &str, page_id: &str, date: &str) {
     insert_schedule(pool, id, page_id, date, "not_started").await;
 }
@@ -1742,8 +1678,7 @@ async fn day_before_reminder_holds_its_anchor_across_a_dst_shift() {
         .unwrap();
     assert_eq!(due.len(), 1, "the anchor stays at 09:00 wall-clock on D-1");
 
-    // Sanity: the same tick a day later finds nothing, so the assertion above is
-    // about the anchor and not about a window wide enough to catch anything.
+    // The same tick a day later finds nothing, so the assertion above is about the anchor and not a wide window.
     assert!(
         due_day_before_reminders(&pool, &window_at("2026-03-09T09:00:00"))
             .await
@@ -1771,8 +1706,7 @@ async fn day_before_reminder_covers_a_synced_all_day_event() {
 
 #[tokio::test]
 async fn the_day_before_sentinel_never_reads_as_a_lead_time() {
-    // Every lead-time arm filters `minutes_before >= 0`; this pins that the new
-    // sentinel is covered by it the way -1 already was.
+    // Every lead-time arm filters `minutes_before >= 0`, which must cover this sentinel as it does -1.
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:02:00", "not_started").await;
@@ -1790,8 +1724,6 @@ async fn the_day_before_sentinel_never_reads_as_a_lead_time() {
         "a page with any reminder row is off the default path"
     );
 }
-
-// ─── Reminders nobody was shown ──────────────────────────────────────────────
 
 #[tokio::test]
 async fn a_reminder_not_shown_is_logged_without_pinning_the_dedup() {
@@ -1820,8 +1752,6 @@ async fn a_reminder_not_shown_is_logged_without_pinning_the_dedup() {
         );
     }
 }
-
-// ─── History ─────────────────────────────────────────────────────────────────
 
 // qa: NOTIF-08:4
 #[tokio::test]
@@ -1857,7 +1787,6 @@ async fn history_lists_every_kind_newest_first_with_the_page_title() {
     );
     assert_eq!(history[0].page_title.as_deref(), Some("Standup"));
     assert_eq!(history[0].schedule_id.as_deref(), Some("s2#10"));
-    // The summary marker carries no page at all.
     assert_eq!(history[2].page_id, None);
     assert_eq!(history[2].page_title, None);
 }
@@ -1955,8 +1884,6 @@ async fn a_raw_delete_removes_notifications_too() {
 
     assert_eq!(log_rows_naming(&pool, "mirror").await, 0);
 }
-
-// ─── Click-through ───────────────────────────────────────────────────────────
 
 async fn action_of(pool: &sqlx::SqlitePool, id: &str) -> Option<String> {
     sqlx::query_scalar::<_, Option<String>>("SELECT action FROM notification_log WHERE id = ?")

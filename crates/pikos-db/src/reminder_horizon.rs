@@ -1,27 +1,18 @@
-//! Every reminder that will fire in the next N days, placed on the device's
-//! own clock.
+//! Every reminder that will fire in the next N days, placed on the device's own clock.
 //!
-//! The desktop asks the six `due_*` arms "what is due *now*?" every clock
-//! minute. A phone cannot run that loop — iOS suspends the process within
-//! seconds of backgrounding — so its model is inverted: compute what will fire
-//! over a horizon, hand each one to the OS in advance, and recompute whenever
-//! the workspace changes. This module is the first half of that. It composes
-//! the same six arms the desktop composes, over a forward window instead of a
-//! trailing one, so a reminder rings on the phone for exactly the reasons it
-//! rings on the desktop — the shared rules about done pages, all-day anchors,
-//! floating-versus-zoned pages, skipped occurrences and the `-1` sentinel are
-//! all theirs, not a second copy.
+//! A phone can't run the desktop's per-minute "what is due now" loop, as iOS suspends the
+//! process, so it computes what fires over a horizon, hands each to the OS, and recomputes when
+//! the workspace changes. This composes the same six `due_*` arms over a forward window, so a
+//! reminder rings on the phone for the reasons it rings on the desktop, with the shared rules
+//! (done pages, all-day anchors, floating vs zoned, skipped occurrences, the `-1` sentinel) in
+//! those arms and not copied.
 //!
-//! What it adds is placement. Each arm knows when its reminder fires in its
-//! own frame — a native page's wall clock, a synced page's absolute instant —
-//! and the OS wants one thing: a wall-clock date in the device's zone. So the
-//! caller names its zone, and every fire comes out as `YYYY-MM-DDTHH:MM:SS` on
-//! that zone's clock.
+//! It adds placement: each arm knows its fire in its own frame (a native wall clock, a synced
+//! absolute instant) and the OS wants a wall-clock date in the device's zone, so the caller names
+//! its zone and every fire comes out as `YYYY-MM-DDTHH:MM:SS` on it.
 //!
-//! Quiet hours are deliberately not applied here. The desktop suppresses a
-//! reminder that comes due inside them; on iOS the platform's Focus modes are
-//! the same control, system-wide, and applying a second copy at schedule time
-//! would silence a reminder the user's Focus schedule would have let through.
+//! Quiet hours are not applied: on iOS the Focus modes are that control, system-wide, and a
+//! second copy at schedule time would silence a reminder Focus would have let through.
 
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use sqlx::SqlitePool;
@@ -37,40 +28,35 @@ use crate::recurrence_derive::occurrences_with_reminders_firing_in;
 /// A reminder that will fire inside the horizon, placed on the device's clock.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpcomingReminder {
-    /// The same key the desktop logs when it fires this reminder — a schedule
-    /// row id with the lead appended, or `page@start[#lead]` for a rule's
-    /// occurrence. Distinct per (occurrence × lead), so it is what the OS
-    /// notification is identified by.
+    /// The key the desktop logs when it fires this reminder: a schedule row id with the lead
+    /// appended, or `page@start[#lead]` for a rule's occurrence. Distinct per occurrence and
+    /// lead, so the OS notification is identified by it.
     pub key: String,
     pub page_id: String,
     pub title: String,
-    /// The occurrence's own start, as stored — device-local for a native
-    /// page, source-zone for a synced one. For wording, not for placement.
+    /// The occurrence's start as stored (device-local for native, source-zone for synced), for
+    /// wording, not placement.
     pub scheduled_start: String,
     pub minutes_before: i64,
     /// When it fires, on the device's clock: `YYYY-MM-DDTHH:MM:SS`.
     pub fire_at: String,
 }
 
-/// The local hour a day-before reminder fires on the preceding day — the
-/// same 09:00 [`due_day_before_reminders`] resolves the sentinel to.
+/// The local hour a day-before reminder fires on the preceding day, as in
+/// [`due_day_before_reminders`].
 const DAY_BEFORE_HOUR: u32 = 9;
 
 const WALL_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 
 /// Every reminder firing in `(now, now + horizon]`, soonest first.
 ///
-/// `device_zone` is the zone the phone is in, which is what the wall clocks
-/// of native pages are read in and what every fire is placed on. A page a
-/// calendar owns is pinned to its source zone and resolved through it, so a
-/// 15:00 Berlin meeting reminds a phone in New York at 09:00 minus the lead.
+/// `device_zone` is the phone's zone, in which native wall clocks are read and every fire is
+/// placed. A calendar-owned page resolves through its source zone, so a 15:00 Berlin meeting
+/// reminds a phone in New York at 09:00 minus the lead.
 ///
-/// Already-fired reminders are excluded the way the desktop excludes them, by
-/// the `notification_log` row it writes — which, on a phone that hands
-/// delivery to the OS and never sees the moment it fires, means nothing is
-/// excluded on that account. Correct, not an oversight: the phone re-plans
-/// the whole horizon on every change and the OS keeps one notification per
-/// key, so there is nothing to dedup against.
+/// Already-fired reminders are excluded by the `notification_log` row, which a phone never
+/// writes since the OS delivers, so nothing is excluded on that account. That is intended: the
+/// phone re-plans the whole horizon each change and the OS keeps one notification per key.
 pub async fn upcoming_reminders(
     pool: &SqlitePool,
     now_utc: DateTime<Utc>,
@@ -81,8 +67,7 @@ pub async fn upcoming_reminders(
     let window = ReminderWindow::ahead(now_utc, device_zone, horizon);
     let mut fires: Vec<ReminderFire> = Vec::new();
 
-    // The three wall-clock arms return rows without an instant; each fire is
-    // reconstructed here by the same arithmetic the SQL selected on.
+    // The three wall-clock arms return no instant, so it is rebuilt by the arithmetic the SQL selected on.
     for row in due_explicit_reminders(pool, &window).await? {
         fires.extend(lead_fire(row));
     }
@@ -100,8 +85,7 @@ pub async fn upcoming_reminders(
     fires.extend(synced_reminders_firing_in(pool, &window, default_minutes).await?);
     fires.extend(synced_override_reminders_firing_in(pool, &window, default_minutes).await?);
 
-    // The six partition the schedules by construction; the desktop keeps the
-    // same backstop against an overlap delivering twice.
+    // The six arms partition the schedules; this dedup is a backstop against an overlap delivering twice.
     let mut seen = std::collections::HashSet::new();
     fires.retain(|fire| seen.insert(fire.reminder.schedule_id.clone()));
 
@@ -136,8 +120,7 @@ fn lead_fire(row: DueReminder) -> Option<ReminderFire> {
     })
 }
 
-/// An all-day row's fire: 09:00 on the day before, which is the only anchor
-/// such a page can carry — the sentinel names it rather than a count.
+/// An all-day row's fire: 09:00 the day before, the only anchor such a page has.
 fn day_before_fire(row: DueReminder) -> Option<ReminderFire> {
     debug_assert_eq!(row.minutes_before, DAY_BEFORE_MINUTES);
     let date = chrono::NaiveDate::parse_from_str(&row.scheduled_start[..10], "%Y-%m-%d").ok()?;

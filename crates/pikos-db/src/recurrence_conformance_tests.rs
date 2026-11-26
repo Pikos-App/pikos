@@ -1,10 +1,7 @@
-//! Recurrence-lifecycle conformance — the Rust half of a second shared table.
-//!
-//! Same contract as [`crate::sync_conformance_tests`], aimed at the occurrence sets:
-//! completion, skip, exdates, and the two arms of a moved occurrence. Every scenario
-//! runs the one series declared at the top of the fixture, against one of three
-//! origins — native, an active mirror, a detached one — because origin is what picks
-//! the arm in almost all of this code, and the mock has to pick the same one.
+//! The recurrence-lifecycle counterpart of [`crate::sync_conformance_tests`], for the occurrence
+//! sets: completion, skip, exdates and the two arms of a moved occurrence. Every scenario runs the
+//! fixture's one series against native, active-mirror and detached origins, since origin picks the
+//! arm and the mock has to pick the same one.
 
 use serde::Deserialize;
 
@@ -153,9 +150,7 @@ async fn run(series: &Series, scenario: &Scenario) {
     )
     .await
     .unwrap();
-    // Rule first, sync link second. A synced series' rule is reconciler-written, and
-    // the command path refuses to author one on a locked mirror — same stored rule
-    // either way, so the fixture takes the order the command path allows.
+    // Rule first, sync link second: the command path refuses to author a rule on a locked mirror.
     let rule = create_recurrence_rule_impl(
         &pool,
         NewRecurrenceRule {

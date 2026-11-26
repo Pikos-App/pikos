@@ -1,23 +1,12 @@
-//! Typed errors for the Tauri backend.
+//! Typed errors for the backend. The frontend receives a structured `{ kind, message }`.
 //!
-//! Replaces the stringly-typed `Result<T, String>` pattern that used to be
-//! peppered with `.map_err(|e| e.to_string())`. With this enum, command
-//! bodies can use `?` directly for any error that has a `From` impl, and
-//! the frontend receives a structured `{ kind, message }` shape instead of
-//! an opaque string.
+//! `Serialize` is hand-rolled rather than derived so the wire format is stable whatever the
+//! variant payload: frontends discriminate on `kind`, not the enum tag.
 //!
-//! Tauri requires command error types to be `Serialize`. We hand-roll the
-//! impl rather than `#[derive(Serialize)]` so the wire format is stable
-//! regardless of variant payload type — frontends discriminate on `kind`,
-//! not on enum tag.
-//!
-//! NOTE: `Display` output from foreign systems (sqlx in particular) can
-//! echo SQL fragments and parameter values, which may include user input.
-//! When *logging*, use a stable classifier (see `notifications::scheduler::
-//! classify_sqlx`). When *returning* the error to the frontend it's
-//! acceptable to surface the message — it's the same information the user
-//! would see in a dev-tools console — but the kind tag is what code should
-//! branch on.
+//! `Display` output from foreign systems (sqlx in particular) can echo SQL fragments and
+//! parameter values, which may include user input. When logging, use a stable classifier
+//! (see `notifications::scheduler::classify_sqlx`). Returning the message to the frontend is
+//! acceptable; the kind tag is what code branches on.
 
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 
@@ -46,17 +35,14 @@ pub enum AppError {
     #[error("network: {0}")]
     Network(String),
 
-    /// The workspace file itself is damaged: SQLite refused it, or an integrity
-    /// check found it inconsistent. Separate from `Db` because the answer is
-    /// different — no retry helps, and the app has a backups directory to point
-    /// the user at. Nothing else can offer that if this arrives as a generic
-    /// storage failure. Any query can produce it, not only the open, which is why
-    /// the sorting happens in `From<sqlx::Error>`.
+    /// The workspace file itself is damaged: SQLite refused it, or an integrity check found it
+    /// inconsistent. Separate from `Db` because no retry helps and the app can point the user at
+    /// the backups directory. Any query can produce it, not only the open, which is why the
+    /// sorting happens in `From<sqlx::Error>`.
     #[error("corrupt: {0}")]
     Corrupt(String),
 
-    /// A newer Pikos migrated the workspace past what this build carries. The
-    /// file is fine and only updating this copy opens it.
+    /// A newer Pikos migrated the workspace past this build. The file is fine; updating opens it.
     #[error("too new: the workspace is at schema v{applied}, this build reads up to v{supported}")]
     TooNew { applied: i64, supported: i64 },
 
@@ -65,9 +51,8 @@ pub enum AppError {
 }
 
 impl AppError {
-    /// Stable, content-free kind tag for frontend branching. Lives next to
-    /// the variant list so adding a variant produces a compile error here
-    /// before reaching the wire format.
+    /// Stable, content-free kind tag for frontend branching. Next to the variant list, so a new
+    /// variant is a compile error here before it reaches the wire.
     pub fn kind(&self) -> &'static str {
         match self {
             AppError::Db(_) => "Db",
@@ -112,9 +97,8 @@ fn migrated_past(err: &sqlx::Error) -> Option<(i64, i64)> {
 }
 
 /// SQLITE_IOERR_SHORT_READ: the file is shorter than SQLite's own record of it, so it changed
-/// underneath SQLite. It arrived a second before the first CORRUPT on the one damaged workspace
-/// seen in use. The rest of IOERR, and FULL (13), stay `Db`: a full disk or a failed write is
-/// the machine rather than the file, and a restore offered over it would throw away good work.
+/// underneath SQLite. The rest of IOERR, and FULL (13), stay `Db`: a full disk or failed write is
+/// the machine, not the file, and offering a restore would throw away good work.
 const SQLITE_IOERR_SHORT_READ: i32 = 522;
 
 /// CORRUPT (11) or NOTADB (26), in any extended form, or a short read. sqlx carries the

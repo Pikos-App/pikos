@@ -10,10 +10,9 @@ export type SyncCalendar = {
   lastSyncedAt?: string | null;
   folderId: string | null;
   /**
-   * How many pages this calendar left behind when it was switched off — ones the
-   * user had worked in, so they were kept rather than deleted. Switching the
-   * calendar back on reclaims them and the calendar's own values win, which is
-   * worth confirming first; zero means there is nothing to ask about.
+   * How many pages this calendar left behind when switched off, kept because the user had
+   * worked in them. Switching it back on reclaims them and the calendar's values win, which
+   * is worth confirming; zero means nothing to ask.
    */
   detachedPages: number;
 };

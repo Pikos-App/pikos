@@ -1,12 +1,7 @@
-//! Tests for the `.ics` export.
-//!
-//! Two layers, deliberately. Most assertions read the emitted text directly,
-//! because the classic iCalendar bugs — a comma that was never escaped, a fold
-//! that landed mid-character, an all-day `DTEND` off by one day — are invisible
-//! to a tolerant parser and only show up as text. The last group then runs the
-//! whole file back through `calcard`, the same parser the CalDAV provider reads
-//! real servers with, so nothing here can pass by asserting on a shape no
-//! calendar client would accept.
+//! Most assertions read the emitted text, because the classic iCalendar bugs (an unescaped
+//! comma, a mid-character fold, an all-day `DTEND` off by one) are invisible to a tolerant
+//! parser. The last group runs the file back through `calcard`, the parser the CalDAV provider
+//! uses, so nothing passes on a shape no calendar client would accept.
 
 use crate::{insert_test_page, insert_test_page_sync, now_iso, test_pool, TestPage};
 use calcard::icalendar::{
@@ -18,8 +13,6 @@ use sqlx::SqlitePool;
 use super::*;
 
 const NY: &str = "America/New_York";
-
-// ── Fixtures ─────────────────────────────────────────────────────────────────
 
 async fn add_page(
     pool: &SqlitePool,
@@ -49,7 +42,7 @@ async fn set_body(pool: &SqlitePool, id: &str, body: &str) {
         .unwrap();
 }
 
-/// A plain (non-override) schedule block — the row a one-off page's zone lives on.
+/// A plain, non-override schedule block: where a one-off page's zone lives.
 async fn add_schedule(
     pool: &SqlitePool,
     id: &str,
@@ -138,10 +131,7 @@ async fn add_override(
     .unwrap();
 }
 
-// ── Reading the emitted text ─────────────────────────────────────────────────
-
-/// Undo the 75-octet folding: a CRLF followed by one space is a continuation,
-/// so the assertions below can name a whole property value.
+/// Undoes the 75-octet folding, so assertions can name a whole property value.
 fn unfold(ics: &str) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for raw in ics.split("\r\n") {
@@ -157,9 +147,8 @@ fn unfold(ics: &str) -> Vec<String> {
     lines
 }
 
-/// The single VEVENT line starting with `prefix`, panicking if there is not
-/// exactly one. Scoped to the events because a `VTIMEZONE`'s observances carry
-/// `DTSTART` too, and matching those would make every assertion below ambiguous.
+/// The single VEVENT line starting with `prefix`. Scoped to events, since a `VTIMEZONE`'s
+/// observances carry `DTSTART` too.
 fn line(ics: &str, prefix: &str) -> String {
     let mut found = lines_with(ics, prefix);
     assert_eq!(found.len(), 1, "expected one {prefix} line in:\n{ics}");
@@ -174,7 +163,6 @@ fn lines_with(ics: &str, prefix: &str) -> Vec<String> {
         .collect()
 }
 
-/// The properties of one VEVENT, split off at its BEGIN/END markers.
 fn vevents(ics: &str) -> Vec<Vec<String>> {
     let mut out: Vec<Vec<String>> = Vec::new();
     let mut current: Option<Vec<String>> = None;
@@ -198,8 +186,6 @@ fn prop(event: &[String], prefix: &str) -> String {
         .clone()
 }
 
-// ── Envelope ─────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn wraps_the_events_in_one_vcalendar() {
     let pool = test_pool().await;
@@ -219,8 +205,8 @@ async fn wraps_the_events_in_one_vcalendar() {
     assert!(line(&ics, "DTSTAMP:").ends_with('Z'));
 }
 
-/// RFC 5545 §3.1: every content line ends CRLF. A bare LF is the single most
-/// common way a hand-rolled writer produces a file some clients silently reject.
+/// RFC 5545 §3.1: every content line ends CRLF; a bare LF is the commonest way a hand-rolled
+/// writer produces a file some clients silently reject.
 #[tokio::test]
 async fn every_line_ends_with_crlf() {
     let pool = test_pool().await;
@@ -249,9 +235,8 @@ async fn leaves_unscheduled_pages_out() {
     assert!(!ics.contains("Someday"));
 }
 
-/// The same predicate the Markdown and CSV exports share: a mirror the user
-/// never actioned is the calendar's own copy, and shipping it back out would
-/// duplicate the event on re-import.
+/// The predicate the Markdown and CSV exports share: an un-actioned mirror is the calendar's
+/// own copy and would duplicate the event on re-import.
 #[tokio::test]
 async fn leaves_un_actioned_mirrors_out_unless_asked() {
     let pool = test_pool().await;
@@ -313,8 +298,6 @@ async fn leaves_soft_deleted_pages_out() {
     assert!(vevents(&ics).is_empty());
 }
 
-// ── All-day: the exclusive-end convention ────────────────────────────────────
-
 /// Pikos stores the **inclusive** last covered day (the reconciler decrements a
 /// provider's exclusive `DTEND` on the way in); RFC 5545 wants it back
 /// exclusive. A single-day event is the case that catches a missing conversion.
@@ -333,7 +316,6 @@ async fn all_day_end_goes_back_out_exclusive() {
     let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(line(&ics, "DTSTART"), "DTSTART;VALUE=DATE:20260615");
-    // Jun 15–17 inclusive → the day after the last covered one.
     assert_eq!(line(&ics, "DTEND"), "DTEND;VALUE=DATE:20260618");
 }
 
@@ -376,14 +358,9 @@ async fn an_all_day_export_names_no_timezone() {
     assert!(!ics.contains("TZID"));
 }
 
-// ── The whole document ───────────────────────────────────────────────────────
-
-/// The file, end to end, against a pinned copy.
-///
-/// Every test above reads one property. This one is what catches the change nobody meant to make:
-/// a dropped `VTIMEZONE`, a renamed `PRODID`, a property that stopped folding, an observance that
-/// moved. `DTSTAMP` is the clock and the version is the build, so both are masked; everything else
-/// is compared byte for byte, `CRLF` included.
+/// The file end to end against a pinned copy, catching the change nobody meant to make: a
+/// dropped `VTIMEZONE`, a renamed `PRODID`, a property that stopped folding. `DTSTAMP` and the
+/// version are masked; everything else is compared byte for byte, `CRLF` included.
 #[tokio::test]
 async fn the_whole_export_matches_its_golden_copy() {
     let pool = test_pool().await;
@@ -419,10 +396,9 @@ async fn the_whole_export_matches_its_golden_copy() {
     assert_eq!(mask(&ics), GOLDEN, "the export changed:\n{ics}");
 }
 
-/// The parts that move on their own: the moment of export, the app's version, and the generated
-/// zone, whose observances run to a horizon counted from the current year. The offsets inside it
-/// are pinned by `the_generated_vtimezone_states_real_offsets`; what this test keeps is that the
-/// block is there, once, around the right TZID.
+/// The parts that move on their own: the export moment, the app version, and the generated zone,
+/// whose observances run to a horizon counted from the current year. Its offsets are pinned by
+/// `the_generated_vtimezone_states_real_offsets`; this keeps the block present, once, around the TZID.
 fn mask(ics: &str) -> String {
     let mut out = String::new();
     let mut inside_zone = false;
@@ -477,8 +453,6 @@ const GOLDEN: &str = "\
      END:VCALENDAR\r\n\
 ";
 
-// ── Timed: TZID + VTIMEZONE ──────────────────────────────────────────────────
-
 #[tokio::test]
 async fn a_timed_page_carries_its_own_zone() {
     let pool = test_pool().await;
@@ -527,7 +501,6 @@ async fn the_generated_vtimezone_states_real_offsets() {
 
     assert!(ics.contains("BEGIN:VTIMEZONE"));
     assert!(ics.contains("END:VTIMEZONE"));
-    // 2026: forward on Mar 8, back on Nov 1.
     assert!(
         ics.contains("BEGIN:DAYLIGHT\r\nDTSTART:20260308T020000\r\nTZOFFSETFROM:-0500\r\nTZOFFSETTO:-0400\r\nEND:DAYLIGHT"),
         "{ics}"
@@ -596,8 +569,6 @@ async fn each_zone_is_declared_once() {
     assert_eq!(ics.matches(&format!("TZID:{NY}\r\n")).count(), 1);
     assert_eq!(ics.matches("TZID:Europe/London\r\n").count(), 1);
 }
-
-// ── Recurrence ───────────────────────────────────────────────────────────────
 
 /// The rule row's base occurrence, never the page's denormalized
 /// `scheduled_start` — that column holds the *next* occurrence, so anchoring
@@ -907,8 +878,6 @@ async fn a_skipped_override_row_excludes_instead_of_replacing() {
     assert_eq!(line(&ics, "EXDATE"), "EXDATE;VALUE=DATE:20260603");
 }
 
-// ── Escaping and folding ─────────────────────────────────────────────────────
-
 #[test]
 fn escapes_the_four_text_specials() {
     assert_eq!(escape_text("a,b"), "a\\,b");
@@ -953,12 +922,11 @@ fn folds_at_seventy_five_octets_with_a_leading_space() {
         assert!(cont.starts_with(' '), "continuation must open with a space");
         assert!(cont.len() <= 75, "continuation is {} octets", cont.len());
     }
-    // Unfolding is lossless.
     assert_eq!(unfold(&out), vec![long]);
 }
 
 /// Octets, not characters — but never mid-character, or the consumer gets two
-/// invalid byte fragments where one emoji used to be.
+/// invalid byte fragments in place of one emoji.
 #[test]
 fn never_folds_inside_a_multibyte_character() {
     let mut out = String::new();
@@ -1029,8 +997,6 @@ fn renders_utc_offsets_the_way_the_rfc_spells_them() {
     // Sub-minute offsets exist in tzdb's pre-standardization era.
     assert_eq!(utc_offset(-(4 * 3600 + 30 * 60 + 30)), "-043030");
 }
-
-// ── Round trip through the CalDAV provider's own parser ──────────────────────
 
 fn parse_ics(ics: &str) -> ICalendar {
     let mut parser = Parser::new(ics);

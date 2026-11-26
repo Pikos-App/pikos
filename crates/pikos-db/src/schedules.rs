@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::{AppError, AppResult};
 use crate::now_iso;
 
-// ─── PageSchedule ──────────────────────────────────────────────────────────────
-
 #[derive(sqlx::FromRow)]
 struct PageScheduleRow {
     id: String,
@@ -77,8 +75,6 @@ pub struct PageScheduleUpdate {
     #[ts(type = "'not_started' | 'done' | 'skipped'", optional)]
     pub status: Option<String>,
 }
-
-// ─── PageRecurrenceRule ────────────────────────────────────────────────────────
 
 #[derive(sqlx::FromRow)]
 struct RecurrenceRuleRow {
@@ -155,36 +151,26 @@ pub struct RecurrenceRuleUpdate {
     pub timezone: Option<String>,
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Refreshes pages.scheduled_start/end to the nearest schedule for this page
-/// (non-override rows only): prefers the earliest upcoming schedule; falls back
-/// to the most recent past schedule if no future one exists.
-/// Clears to NULL when no explicit schedules remain.
+/// Refreshes `pages.scheduled_start` and `scheduled_end` to the page's nearest non-override
+/// schedule: the earliest upcoming, else the most recent past. NULL when none remain.
 pub async fn refresh_schedule_denorm(pool: &sqlx::SqlitePool, page_id: &str) -> AppResult<()> {
     let mut conn = pool.acquire().await?;
     refresh_schedule_denorm_conn(&mut conn, page_id).await
 }
 
-/// Connection/transaction form of [`refresh_schedule_denorm`]. The schedule
-/// writers run their mutation and this denorm refresh inside one transaction,
-/// so a mid-flight crash can't commit the row change while leaving
-/// `pages.scheduled_start` stale.
+/// Transaction form of [`refresh_schedule_denorm`]: the schedule writers run it in the same
+/// transaction as their mutation, so a crash can't leave `pages.scheduled_start` stale.
 pub(crate) async fn refresh_schedule_denorm_conn(
     conn: &mut sqlx::SqliteConnection,
     page_id: &str,
 ) -> AppResult<()> {
-    // The comparator is computed in Rust as LOCAL wall-clock. scheduled_start is
-    // stored as local wall-clock (no TZ suffix), but SQLite's strftime('now') is
-    // UTC — comparing the two misclassifies "upcoming vs past" by up to a day for
-    // non-UTC users near midnight.
+    // Local wall-clock from Rust: `scheduled_start` is local, and SQLite's strftime('now') is
+    // UTC, which misclassifies upcoming vs past by up to a day near midnight off-UTC.
     let now = chrono::Local::now().naive_local();
     refresh_schedule_denorm_at(conn, page_id, &now.format("%Y-%m-%dT%H:%M:%S").to_string()).await
 }
 
-/// Inner form taking an explicit local-now comparator (`YYYY-MM-DDTHH:MM:SS`),
-/// so the upcoming-vs-past bucketing is deterministically testable without
-/// depending on the machine clock or timezone.
+/// Takes the local-now comparator explicitly so tests don't depend on the clock or timezone.
 async fn refresh_schedule_denorm_at(
     conn: &mut sqlx::SqliteConnection,
     page_id: &str,
@@ -196,13 +182,9 @@ async fn refresh_schedule_denorm_at(
         scheduled_end: Option<String>,
     }
 
-    // rrule-backed pages own their denorm scheduled_start directly: the head's
-    // "current occurrence" is advanced by complete_recurring_page_impl, and the
-    // other occurrences are virtual (expanded client-side) with no non-rule
-    // page_schedules row tracking them. The page's original non-rule anchor row
-    // (from the initial scheduleOnce, before the rule was added) lingers at a
-    // now-past date, so refreshing from page_schedules here would clobber the
-    // head back to that anchor. Leave the denorm to the recurring logic.
+    // rrule-backed pages own their denorm: the head advances through complete_recurring_page_impl
+    // and other occurrences are virtual. The original non-rule anchor row lingers at a past
+    // date, so refreshing from page_schedules would clobber the head back to it.
     let has_rule = sqlx::query_scalar::<_, i64>(
         "SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)",
     )
@@ -214,11 +196,8 @@ async fn refresh_schedule_denorm_at(
         return Ok(());
     }
 
-    // All-day rows store a bare date (10 chars); pad them to end-of-day before
-    // comparing so an all-day event dated today stays "upcoming" all day instead
-    // of flipping to "past" at 00:00 (a bare date sorts before any timed "now"
-    // lexicographically). Bucket 0 = upcoming, 1 = past; within a bucket the
-    // earliest scheduled_start wins.
+    // A bare all-day date is padded to end-of-day, or it would flip to past at 00:00 (a bare
+    // date sorts before any timed "now"). Bucket 0 is upcoming, 1 is past; earliest start wins.
     let row = sqlx::query_as::<_, Denorm>(
         "SELECT scheduled_start, scheduled_end
          FROM page_schedules
@@ -277,10 +256,8 @@ async fn fetch_rule(pool: &sqlx::SqlitePool, id: &str) -> AppResult<PageRecurren
         .map(PageRecurrenceRule::from)
 }
 
-// ─── Locked-mirror guards ──────────────────────────────────────────────────────
-// A synced page's schedule + recurrence are calendar-owned. Reject command-layer
-// edits; the reconciler writes via raw SQL and bypasses these. (See
-// crate::sync::ensure_page_schedule_unlocked.)
+// A synced page's schedule and recurrence are calendar-owned, so command-layer edits are
+// rejected (see crate::sync::ensure_page_schedule_unlocked); the reconciler uses raw SQL.
 
 async fn ensure_schedule_row_unlocked(pool: &sqlx::SqlitePool, schedule_id: &str) -> AppResult<()> {
     let page_id: Option<String> =
@@ -309,8 +286,6 @@ pub(crate) async fn ensure_rule_row_unlocked(
     Ok(())
 }
 
-// ─── Schedule commands ────────────────────────────────────────────────────────
-
 pub async fn create_page_schedule_impl(
     pool: &sqlx::SqlitePool,
     data: NewPageSchedule,
@@ -319,8 +294,6 @@ pub async fn create_page_schedule_impl(
     let id = crate::fresh::id();
     let now = now_iso();
 
-    // Insert + denorm refresh in one tx so a crash can't leave the row
-    // committed with a stale pages.scheduled_start.
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
 
@@ -396,9 +369,8 @@ async fn apply_schedule_update(
     builder.push(" WHERE id = ");
     builder.push_bind(id);
 
-    // Update + reminder-log clear + denorm refresh in one tx: a crash
-    // between them could otherwise leave a stale dedup row (reminder never
-    // re-fires at the new time) or a stale pages.scheduled_start.
+    // One tx: a crash between these could leave a stale dedup row (the reminder never re-fires
+    // at the new time) or a stale pages.scheduled_start.
     let mut tx = pool.begin().await?;
 
     builder.build().execute(&mut *tx).await?;
@@ -422,8 +394,6 @@ async fn apply_schedule_update(
 
 pub async fn delete_page_schedule_impl(pool: &sqlx::SqlitePool, id: String) -> AppResult<()> {
     ensure_schedule_row_unlocked(pool, &id).await?;
-    // Lookup + delete + denorm refresh in one tx so the denorm can't be
-    // left pointing at the now-deleted row after a mid-flight crash.
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
 
@@ -452,9 +422,7 @@ pub async fn list_page_schedules_impl(
     pool: &sqlx::SqlitePool,
     page_id: &str,
 ) -> AppResult<Vec<PageSchedule>> {
-    // Filter trashed pages (mirrors list_page_schedules_for_rules_impl). Desktop
-    // calls this from scheduleOnce / clearSchedule / rescheduleVirtualOccurrence —
-    // without the guard a trashed page's schedules leak back into the UI.
+    // Without the trashed filter a trashed page's schedules leak back into the UI.
     let rows = sqlx::query_as::<_, PageScheduleRow>(
         "SELECT page_schedules.* FROM page_schedules
          JOIN pages ON pages.id = page_schedules.page_id
@@ -467,12 +435,10 @@ pub async fn list_page_schedules_impl(
     Ok(rows.into_iter().map(PageSchedule::from).collect())
 }
 
-/// Returns the override rows (`rule_id` set) for the given recurrence rules,
-/// regardless of where each occurrence was moved. The calendar's exclusion set
-/// needs an override's `original_date` even when its moved `scheduled_start`
-/// lands in another week — a range query keyed on the moved position misses it,
-/// ghost-rendering the original slot. Trashed pages excluded (mirrors
-/// `list_page_schedules_impl`).
+/// The override rows (`rule_id` set) for the given rules, wherever each occurrence was moved.
+/// The calendar's exclusion set needs an override's `original_date` even when its moved start
+/// lands in another week; a range query on the moved position would miss it and ghost-render
+/// the original slot. Trashed pages are excluded.
 pub async fn list_page_schedules_for_rules_impl(
     pool: &sqlx::SqlitePool,
     rule_ids: &[String],
@@ -525,9 +491,8 @@ pub async fn create_recurrence_rule_impl(
         .execute(&mut *tx)
         .await?;
 
-        // Ownership handoff: the derivation now owns `pages.scheduled_start`. Materialise
-        // the oldest-open occurrence so the head reflects the rule immediately (before
-        // this, the page carried the pre-rule scheduleOnce anchor).
+        // Ownership handoff: the derivation now owns `pages.scheduled_start`; materialise the
+        // oldest-open occurrence so the head reflects the rule at once.
         crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
         tx.commit().await?;
         Ok(())
@@ -537,7 +502,6 @@ pub async fn create_recurrence_rule_impl(
     fetch_rule(pool, &id).await
 }
 
-/// The page a rule belongs to — needed to target the recompute after a rule edit.
 async fn rule_page_id(pool: &sqlx::SqlitePool, rule_id: &str) -> AppResult<String> {
     sqlx::query_scalar("SELECT page_id FROM page_recurrence_rules WHERE id = ?")
         .bind(rule_id)
@@ -566,8 +530,8 @@ pub async fn update_recurrence_rule_impl(
     fetch_rule(pool, &id).await
 }
 
-/// The write half of [`update_recurrence_rule_impl`]; the statement is rebuilt on
-/// each attempt because a `QueryBuilder` is spent once built.
+/// The write half of [`update_recurrence_rule_impl`]; rebuilt each attempt because a
+/// `QueryBuilder` is spent once built.
 async fn apply_rule_update(
     pool: &sqlx::SqlitePool,
     id: &str,
@@ -608,18 +572,15 @@ async fn apply_rule_update(
 
     let mut tx = pool.begin().await?;
     builder.build().execute(&mut *tx).await?;
-    // The rule (rrule/base/exdates) changed — re-derive the head from truth.
     crate::recurrence_derive::recompute_recurring_schedule(&mut tx, page_id).await?;
     tx.commit().await?;
     Ok(())
 }
 
-/// Merges `add` into the rule's `rrule_exdates` inside the caller's transaction
-/// and returns the post-merge array. This read-merge-write is the ONLY safe way
-/// to grow exdates: clients computing the full replacement array from their own
-/// snapshot erase any exdate persisted since that snapshot was taken — an
-/// interleaved skip/complete then resurrects a completed occurrence. Dedups;
-/// preserves stored order.
+/// Merges `add` into the rule's `rrule_exdates` in the caller's transaction and returns the
+/// merged array, deduped, in stored order. This read-merge-write is the only safe way to grow
+/// exdates: a client's full replacement array erases any exdate persisted since its snapshot,
+/// and an interleaved skip or complete then resurrects a completed occurrence.
 pub(crate) async fn merge_rule_exdates_tx(
     tx: &mut sqlx::SqliteConnection,
     rule_id: &str,
@@ -646,9 +607,9 @@ pub(crate) async fn merge_rule_exdates_tx(
     Ok(exdates)
 }
 
-/// Adds dates to a rule's EXDATEs and recomputes the head — merge happens DB-side,
-/// see `merge_rule_exdates_tx`. Native dismissals now live in the skip-set
-/// ([`crate::pages::skip_occurrence_impl`]); this remains for provider/manual writes.
+/// Adds dates to a rule's EXDATEs and recomputes the head, merging DB-side (see
+/// `merge_rule_exdates_tx`). Native dismissals use the skip-set
+/// ([`crate::pages::skip_occurrence_impl`]); this is for provider and manual writes.
 pub async fn add_rule_exdates_impl(
     pool: &sqlx::SqlitePool,
     id: String,
@@ -667,8 +628,8 @@ pub async fn add_rule_exdates_impl(
     fetch_rule(pool, &id).await
 }
 
-/// Removes a single date from a rule's EXDATEs and recomputes the head. Removes
-/// ONLY that date from the current row — exdates added since survive.
+/// Removes one date from a rule's current EXDATEs and recomputes the head; exdates added
+/// since survive.
 pub async fn remove_rule_exdate_impl(
     pool: &sqlx::SqlitePool,
     id: String,
@@ -703,25 +664,20 @@ pub async fn remove_rule_exdate_impl(
     fetch_rule(pool, &id).await
 }
 
-/// Deletes a recurrence rule and hands `pages.scheduled_start` back to the one-off
-/// denorm — in ONE transaction. Ownership handoff: the derivation owned the head
-/// while the rule existed; after the delete, `refresh_schedule_denorm` re-derives
-/// from `page_schedules`. Splitting the two lets a concurrent denorm refresh read
-/// the lingering rule row (`has_rule` still true) and skip the refresh, leaving the
-/// head pinned at the now-orphaned past rule anchor.
+/// Deletes a recurrence rule and hands `pages.scheduled_start` back to the one-off denorm in
+/// one transaction. Split in two, a concurrent denorm refresh could read the lingering rule
+/// row (`has_rule` still true) and skip, leaving the head pinned at the orphaned rule anchor.
 pub async fn delete_recurrence_rule_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     ensure_rule_row_unlocked(pool, id).await?;
     let page_id = rule_page_id(pool, id).await?;
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        // Snapshot the head before the rule row goes away — see the fn doc for why
-        // it must be carried onto the surviving anchor.
+        // The head is snapshotted before the rule goes, to carry onto the surviving anchor.
         let head: Option<(Option<String>, Option<String>)> =
             sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?")
                 .bind(&page_id)
                 .fetch_optional(&mut *tx)
                 .await?;
-        // Cascades to page_schedules rows with rule_id = id.
         sqlx::query("DELETE FROM page_recurrence_rules WHERE id = ?")
             .bind(id)
             .execute(&mut *tx)

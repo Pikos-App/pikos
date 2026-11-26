@@ -1,9 +1,8 @@
 use super::*;
 use crate::pool::{insert_test_page, test_pool, TestPage};
 
-/// Acquire a connection and run the (connection-form) denorm refresh, dropping
-/// the connection before returning so the single-connection test pool stays
-/// free for follow-up reads.
+/// Runs the denorm refresh on a connection, dropped before returning so the single-connection
+/// pool stays free.
 async fn refresh_denorm_at(pool: &sqlx::SqlitePool, page_id: &str, now: &str) {
     let mut conn = pool.acquire().await.unwrap();
     refresh_schedule_denorm_at(&mut conn, page_id, now)
@@ -135,14 +134,12 @@ async fn falls_back_to_past_when_no_upcoming() {
 
 #[tokio::test]
 async fn rule_id_rows_are_excluded_from_denorm() {
-    // Materialized-override rows (rule_id IS NOT NULL) must not feed the denorm —
-    // the head's pages.scheduled_start tracks explicit schedules only.
+    // Override rows must not feed the denorm, which tracks explicit schedules only.
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "Recurring head"))
         .await
         .unwrap();
 
-    // Need a parent rule for FK integrity.
     let now = now_iso();
     sqlx::query(
         "INSERT INTO page_recurrence_rules
@@ -176,13 +173,10 @@ async fn rule_id_rows_are_excluded_from_denorm() {
     );
 }
 
-// ── timezone-correct, all-day-aware denorm bucketing ──────────────────
-
 #[tokio::test]
 async fn all_day_today_outranks_future_timed_in_denorm() {
-    // The old comparator lex-compared a bare date against a timed "now", so an
-    // all-day event dated today classified as "past" and a future timed event
-    // wrongly won the denorm.
+    // A bare date lex-compared against a timed "now" would classify an all-day event today as
+    // past and let a future timed event win the denorm.
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "Task"))
         .await
@@ -203,7 +197,6 @@ async fn all_day_today_outranks_future_timed_in_denorm() {
         .unwrap();
     }
 
-    // Midday on the all-day's date.
     refresh_denorm_at(&pool, "p1", "2026-05-28T12:00:00").await;
     assert_eq!(
         page_denorm(&pool, "p1").await.0.as_deref(),
@@ -214,8 +207,7 @@ async fn all_day_today_outranks_future_timed_in_denorm() {
 
 #[tokio::test]
 async fn denorm_split_follows_the_passed_local_now() {
-    // Classification must track the (local) comparator we pass, not SQLite's UTC
-    // strftime('now'). Two timed rows on one day; moving "now" moves the winner.
+    // Classification tracks the local comparator passed in, not SQLite's UTC strftime('now').
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "Task"))
         .await
@@ -236,30 +228,25 @@ async fn denorm_split_follows_the_passed_local_now() {
         .unwrap();
     }
 
-    // Noon: 09:00 past, 17:00 upcoming → upcoming wins → 17:00.
     refresh_denorm_at(&pool, "p1", "2026-05-28T12:00:00").await;
     assert_eq!(
         page_denorm(&pool, "p1").await.0.as_deref(),
         Some("2026-05-28T17:00:00")
     );
 
-    // 08:00: both upcoming → earliest = 09:00.
     refresh_denorm_at(&pool, "p1", "2026-05-28T08:00:00").await;
     assert_eq!(
         page_denorm(&pool, "p1").await.0.as_deref(),
         Some("2026-05-28T09:00:00")
     );
 
-    // 20:00: both past → earliest scheduled_start within the past bucket = 09:00
-    // (denorm tiebreak is ASC; unchanged from prior behavior).
+    // 20:00: both past; the earliest in the past bucket, 09:00, wins.
     refresh_denorm_at(&pool, "p1", "2026-05-28T20:00:00").await;
     assert_eq!(
         page_denorm(&pool, "p1").await.0.as_deref(),
         Some("2026-05-28T09:00:00")
     );
 }
-
-// ── per-page schedule list filters trashed pages ──────────────────────
 
 #[tokio::test]
 async fn list_page_schedules_excludes_trashed_page() {
@@ -337,13 +324,11 @@ async fn delete_schedule_clears_or_falls_back() {
     .await
     .unwrap();
 
-    // Sanity: earliest is denormed.
     assert_eq!(
         page_denorm(&pool, "p1").await.0.as_deref(),
         Some(first.as_str())
     );
 
-    // Deleting the earliest should fall back to the remaining one.
     delete_page_schedule_impl(&pool, s1.id.clone())
         .await
         .unwrap();
@@ -352,7 +337,6 @@ async fn delete_schedule_clears_or_falls_back() {
         Some(later.as_str())
     );
 
-    // Find the remaining schedule id and delete it — denorm should clear.
     let remaining_id: String =
         sqlx::query_scalar("SELECT id FROM page_schedules WHERE page_id = 'p1'")
             .fetch_one(&pool)
@@ -462,7 +446,6 @@ async fn update_clears_reminder_log_when_start_changes() {
     .await
     .unwrap();
 
-    // Seed both dedup key shapes — default-lead (bare id) and per-lead composite.
     let now = now_iso();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
@@ -473,7 +456,7 @@ async fn update_clears_reminder_log_when_start_changes() {
     .execute(&pool)
     .await
     .unwrap();
-    // Also seed an unrelated overdue entry — must NOT be cleared.
+    // An unrelated overdue entry must not be cleared.
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
          VALUES ('n2', 'p1', ?, 'overdue', ?)",
@@ -517,9 +500,8 @@ async fn update_clears_reminder_log_when_start_changes() {
 
 #[tokio::test]
 async fn moving_a_schedule_re_arms_a_fired_explicit_reminder() {
-    // Drives the real dedup key rather than seeding one: the scheduler logs
-    // whatever `due_*` returns, so a self-seeded key can pass while the user's
-    // reminder never re-fires.
+    // Uses the real dedup key: the scheduler logs whatever `due_*` returns, so a self-seeded key
+    // can pass while the reminder never re-fires.
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "Task"))
         .await
@@ -595,8 +577,6 @@ async fn moving_a_schedule_re_arms_a_fired_explicit_reminder() {
     assert_eq!(due[0].schedule_id, fired[0].schedule_id);
 }
 
-// ── list_page_schedules / range / recurrence rules ─────────────────────
-
 fn new_rule(page_id: &str, scheduled_start: &str) -> NewRecurrenceRule {
     NewRecurrenceRule {
         page_id: page_id.into(),
@@ -615,7 +595,6 @@ async fn list_page_schedules_returns_in_chronological_order() {
         .await
         .unwrap();
 
-    // Insert in non-chronological order.
     create_page_schedule_impl(
         &pool,
         NewPageSchedule {
@@ -711,9 +690,8 @@ async fn list_page_schedules_for_rules_returns_moved_override_regardless_of_posi
         .unwrap();
     insert_test_rule(&pool, "rule-a", "p1").await;
 
-    // Two overrides of rule-a: one in-week, one moved months out. Both must
-    // return — the calendar excludes an original slot even when the instance
-    // moved to another week. The plain (non-override) block is filtered out.
+    // Both overrides must return, even one moved months out, since the calendar excludes the
+    // original slot. The plain block is filtered out.
     for (original, moved) in [
         ("2026-05-11T09:00:00", "2026-05-11T11:00:00"),
         ("2026-05-18T09:00:00", "2026-09-01T11:00:00"),
@@ -849,7 +827,6 @@ async fn delete_recurrence_rule_cascades_to_generated_schedules() {
     let rule = create_recurrence_rule_impl(&pool, new_rule("p1", "2026-05-21"))
         .await
         .unwrap();
-    // Two expanded occurrences pinned to this rule.
     for date in ["2026-05-21", "2026-05-28"] {
         create_page_schedule_impl(
             &pool,
@@ -911,10 +888,8 @@ async fn list_recurrence_rules_skips_soft_deleted_pages() {
 
 #[tokio::test]
 async fn exdate_merge_ops_preserve_interleaved_writes() {
-    // Mirrors the client skip/undo flow: skip A, another writer lands B inside
-    // the undo-toast window, undo A. The undo must remove ONLY A — restoring
-    // the array captured at skip time would erase B and resurrect its
-    // occurrence next to whatever produced it (e.g. a completion's done clone).
+    // Skip A, another writer lands B inside the undo-toast window, undo A. The undo must remove
+    // only A: restoring the array captured at skip time would erase B and resurrect its occurrence.
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("head", "Series"))
         .await
@@ -946,7 +921,6 @@ async fn exdate_merge_ops_preserve_interleaved_writes() {
         "duplicate adds dedup"
     );
 
-    // The interleaved writer.
     add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-06-11".into()])
         .await
         .unwrap();
@@ -973,8 +947,6 @@ async fn exdate_ops_error_on_missing_rule() {
         .unwrap_err();
     assert!(matches!(remove_err, AppError::NotFound(_)));
 }
-
-// ─── schedule/recurrence writers reject synced pages ──────────────────────────
 
 async fn synced_page(pool: &sqlx::SqlitePool, id: &str) {
     insert_test_page(pool, TestPage::new(id, "Synced event"))
@@ -1039,7 +1011,6 @@ async fn update_and_delete_schedule_reject_when_page_becomes_synced() {
     insert_test_page(&pool, TestPage::new("p", "Event"))
         .await
         .unwrap();
-    // Schedule created while native, then the page is linked to sync.
     let sched = create_page_schedule_impl(
         &pool,
         NewPageSchedule {
@@ -1082,7 +1053,6 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
     insert_test_page(&pool, TestPage::new("p", "Recurring event"))
         .await
         .unwrap();
-    // Rule created while native, then the page is linked to sync.
     let rule = create_recurrence_rule_impl(
         &pool,
         NewRecurrenceRule {
@@ -1100,7 +1070,6 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
         .await
         .unwrap();
 
-    // Edit recurrence → rejected.
     let edit = update_recurrence_rule_impl(
         &pool,
         rule.id.clone(),
@@ -1116,7 +1085,6 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
         "edit recurrence locked"
     );
 
-    // Skip an occurrence (add exdate) → rejected.
     let skip = add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-07-13".into()])
         .await
         .unwrap_err();
@@ -1125,13 +1093,11 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
         "skip occurrence locked"
     );
 
-    // Undo-skip (remove exdate) → rejected, symmetric with the add-exdate guard.
     let unskip = remove_rule_exdate_impl(&pool, rule.id.clone(), "2026-07-13".into())
         .await
         .unwrap_err();
     assert!(matches!(unskip, AppError::Conflict(_)), "undo-skip locked");
 
-    // Delete recurrence → rejected.
     let del = delete_recurrence_rule_impl(&pool, &rule.id)
         .await
         .unwrap_err();

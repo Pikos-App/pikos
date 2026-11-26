@@ -1,15 +1,9 @@
 //! Reading the backups directory, and putting one back.
 //!
-//! The write side already existed and was only ever half a feature: `open_pool`
-//! snapshots before a pending migration and an import snapshots before it runs,
-//! so by the time anything goes wrong there is usually a good copy sitting on
-//! disk — with no way to reach it except quitting the app, finding the
-//! application-support directory and renaming a file by hand. Pikos is built for
-//! people who would not do that.
-//!
-//! Restoring never writes over the live file in place. It snapshots what is
-//! there first, so a restore chosen by mistake is itself undoable, and the app
-//! relaunches rather than hot-swapping the file under an open pool.
+//! `open_pool` and an import snapshot before they run, so a good copy usually exists. Restoring
+//! never writes over the live file in place: it snapshots what is there first, so a mistaken
+//! restore is undoable, and the app relaunches rather than hot-swapping the file under an open
+//! pool.
 
 use std::path::{Path, PathBuf};
 
@@ -18,8 +12,7 @@ use serde::Serialize;
 use crate::error::{AppError, AppResult};
 use crate::pool::embedded_migration_max;
 
-/// Why a snapshot exists. The prefix is part of the filename the writers already
-/// use, so this is read back out rather than stored.
+/// Why a snapshot exists, read back from the filename prefix rather than stored.
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -41,8 +34,8 @@ pub struct BackupEntry {
     pub kind: BackupKind,
     #[ts(type = "number")]
     pub bytes: i64,
-    /// Filesystem modification time, ISO-8601. The filenames carry a timestamp
-    /// too, in two different formats, so this reads the one the OS agrees with.
+    /// Filesystem modification time, ISO-8601. Filenames carry a timestamp in two formats, so
+    /// this is the one the OS agrees with.
     pub created_at: String,
 }
 
@@ -65,8 +58,7 @@ fn kind_of(file_name: &str) -> Option<BackupKind> {
     }
 }
 
-/// Every snapshot beside the workspace, newest first. A missing directory is an
-/// empty list, not an error: it simply means nothing has needed one yet.
+/// Every snapshot beside the workspace, newest first. A missing directory is an empty list.
 pub fn list_backups(workspace_path: &str) -> AppResult<Vec<BackupEntry>> {
     let dir = backups_dir(workspace_path);
     if !dir.exists() {
@@ -100,10 +92,9 @@ pub fn list_backups(workspace_path: &str) -> AppResult<Vec<BackupEntry>> {
     Ok(out)
 }
 
-/// Refuse anything that is not a plain filename in the backups directory. The
-/// value reaches here from the frontend, and a path that escapes the directory
-/// would let a restore read an arbitrary file and then overwrite the workspace
-/// with it.
+/// Refuses anything that is not a plain filename in the backups directory. The value comes
+/// from the frontend, and an escaping path would let a restore overwrite the workspace with
+/// an arbitrary file.
 fn resolve(workspace_path: &str, file_name: &str) -> AppResult<PathBuf> {
     if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
         return Err(AppError::Invalid(format!(
@@ -122,12 +113,8 @@ fn resolve(workspace_path: &str, file_name: &str) -> AppResult<PathBuf> {
     Ok(path)
 }
 
-/// Read a candidate before trusting it: it has to open, pass `quick_check`, and
-/// carry a schema this build knows.
-///
-/// The schema test is the same refusal the CLI makes when a workspace is newer
-/// than the binary, and it matters more here: migrations only run forward, so a
-/// backup written by a newer build would be migrated by nothing, and the app
+/// A candidate must open, pass `quick_check` and carry a schema this build knows. Migrations
+/// only run forward, so a backup from a newer build would be migrated by nothing and the app
 /// would open a workspace whose columns it cannot see.
 async fn verify(path: &Path) -> AppResult<()> {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -167,25 +154,16 @@ async fn verify(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-/// Answer "would restoring this work?" without touching anything.
-///
-/// Exists so a caller that has to close its pool before restoring can find out
-/// first. Once the pool is gone every other command fails, so a restore that
-/// discovers a damaged backup at that point has already broken the running app
-/// to deliver the bad news.
+/// Whether restoring would work, touching nothing, so a caller can check before closing its
+/// pool: once it is gone every other command fails.
 pub async fn verify_restorable(workspace_path: &str, file_name: &str) -> AppResult<()> {
     let source = resolve(workspace_path, file_name)?;
     verify(&source).await
 }
 
-/// Copy the workspace to `dest` through SQLite rather than the filesystem.
-///
-/// A plain `fs::copy` of the main file is not a copy of the database: recent
-/// writes may still live in the write-ahead log beside it, and closing the pool
-/// only checkpoints when SQLite gets around to it. Copying the file alone loses
-/// exactly the most recent edits, which on this path are the ones the user is
-/// about to want back. `VACUUM INTO` reads through the WAL and emits one
-/// consistent file, which is why every other snapshot in the codebase uses it.
+/// Copies the workspace to `dest` through SQLite. A plain `fs::copy` loses the most recent
+/// writes, which may still be in the write-ahead log, as closing the pool checkpoints only
+/// when SQLite gets to it. `VACUUM INTO` reads through the WAL into one consistent file.
 pub(crate) async fn snapshot_workspace(workspace_path: &str, dest: &Path) -> AppResult<()> {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
@@ -244,14 +222,12 @@ async fn sync_before_restore(workspace_path: &str) -> AppResult<Option<crate::re
     carried
 }
 
-/// Put `file_name` back as the workspace, after snapshotting what is there now.
+/// Puts `file_name` back as the workspace, after snapshotting what is there. Returns that
+/// snapshot so the UI can name it.
 ///
-/// The caller must have closed its pool: SQLite's WAL and shared-memory files
-/// belong to the old database, and leaving either beside the new one is how a
-/// restore produces a workspace that is neither file. They are removed here for
-/// the same reason.
-///
-/// Returns the snapshot of the displaced workspace, so the UI can name it.
+/// The caller must have closed its pool: the WAL and shared-memory files belong to the old
+/// database, and left beside the new one they produce a workspace that is neither file, so
+/// they are removed here.
 pub async fn restore_backup(workspace_path: &str, file_name: &str) -> AppResult<String> {
     let source = resolve(workspace_path, file_name)?;
     verify(&source).await?;
@@ -303,9 +279,8 @@ mod tests {
         (dir, path_str)
     }
 
-    /// Write a snapshot the way the app does. A plain `fs::copy` here produced a
-    /// backup that was sometimes missing the most recent insert, because closing
-    /// a pool does not synchronously fold the write-ahead log back into the file.
+    /// Writes a snapshot as the app does: a plain `fs::copy` can miss the latest insert, as
+    /// closing a pool doesn't synchronously fold the write-ahead log back.
     async fn snapshot(workspace_path: &str, name: &str) -> PathBuf {
         let dir = backups_dir(workspace_path);
         std::fs::create_dir_all(&dir).unwrap();
@@ -337,7 +312,7 @@ mod tests {
         snapshot(&path, "pre-migration-20260101T000000000Z-v8-to-v9.sqlite").await;
         snapshot(&path, "pre-import-2026-01-02T00-00-00.sqlite").await;
         snapshot(&path, "pre-restore-20260103T000000000Z.sqlite").await;
-        // Neither of these is ours, and a restore must never offer them.
+        // Not ours, so a restore must never offer them.
         snapshot(&path, "holiday-photos.sqlite").await;
         std::fs::write(backups_dir(&path).join("notes.txt"), "hi").unwrap();
 
@@ -352,9 +327,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The file name crosses the IPC boundary, so it is the one input here an
-    /// attacker-shaped value could arrive in. Each of these would otherwise read
-    /// a file outside the backups directory and then overwrite the workspace.
+    /// The file name crosses the IPC boundary; each of these would otherwise read a file outside
+    /// the backups directory and overwrite the workspace.
     #[tokio::test]
     async fn a_name_that_is_a_path_is_refused() {
         let (dir, path) = workspace().await;
@@ -407,8 +381,6 @@ mod tests {
     async fn restoring_puts_the_backup_back_and_keeps_what_it_displaced() {
         let (dir, path) = workspace().await;
 
-        // Snapshot the one-folder state, then add a second folder so the live
-        // file and the backup differ in a way the assertions can see.
         let backup_name = "pre-migration-20260101T000000000Z-v8-to-v9.sqlite";
         snapshot(&path, backup_name).await;
         let pool = crate::pool::open_pool(&path).await.unwrap();
@@ -427,8 +399,6 @@ mod tests {
         crate::pool::close_pool(&pool).await;
         assert_eq!(folders, 1, "the restored workspace is not the backup");
 
-        // The displaced state is itself recoverable — a restore chosen by mistake
-        // is not the end of the story.
         let pool = crate::pool::open_pool(&displaced).await.unwrap();
         let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders")
             .fetch_one(&pool)

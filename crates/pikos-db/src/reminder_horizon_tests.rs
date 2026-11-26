@@ -1,9 +1,8 @@
 use super::*;
 use crate::pool::test_pool;
 
-/// The horizon runs from this instant. Chosen on a Monday so a weekly series
-/// has occurrences at predictable offsets, and mid-morning so a same-day
-/// reminder can sit on either side of it.
+/// The horizon's start: a Monday, so a weekly series has predictable offsets, and mid-morning, so
+/// a same-day reminder can sit on either side.
 fn now() -> DateTime<Utc> {
     "2026-05-25T09:00:00Z".parse().expect("valid instant")
 }
@@ -90,8 +89,7 @@ async fn the_horizon_is_a_hard_edge_on_both_sides() {
         .into_iter()
         .map(|r| r.key)
         .collect();
-    // No explicit rows, so the global default lead applies and the key is the
-    // bare schedule id, as the desktop's default arm logs it.
+    // With no explicit rows the global default lead applies and the key is the bare schedule id.
     assert_eq!(keys, vec!["s-in"]);
 }
 
@@ -125,8 +123,7 @@ async fn an_all_day_page_reminds_at_nine_the_day_before() {
     insert_page(&pool, "trip", "not_started").await;
     insert_schedule(&pool, "s-trip", "trip", "2026-05-30").await;
     insert_reminder(&pool, "trip", DAY_BEFORE_MINUTES).await;
-    // Without the sentinel an all-day page has no reminder at all: there is
-    // no start time for a lead to count back from.
+    // An all-day page has no start time for a lead, so without the sentinel it has no reminder.
     insert_page(&pool, "other", "not_started").await;
     insert_schedule(&pool, "s-other", "other", "2026-05-31").await;
 
