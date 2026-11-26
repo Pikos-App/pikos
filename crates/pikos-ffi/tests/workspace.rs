@@ -1,9 +1,6 @@
-//! Tests for the workspace binding.
-//!
-//! `pikos-db` already tests the storage behaviour underneath; these cover the
-//! translation layer, which is where this crate can be wrong: the tri-state
-//! folder fields that become enums, the not-found case that becomes a distinct
-//! error, and the read-only handle that must actually be read-only.
+//! Tests for the workspace binding: the translation layer, where this crate can be wrong. The
+//! tri-state folder fields become enums, not-found is a distinct error, and the read-only handle is
+//! read-only. Storage behaviour is tested in `pikos-db`.
 
 use pikos_ffi::workspace::FocusOutcome;
 use pikos_ffi::workspace::{
@@ -12,11 +9,7 @@ use pikos_ffi::workspace::{
 };
 use pikos_ffi::{CalendarEntry, Occurrence};
 
-/// A workspace in a fresh temporary file.
-///
-/// A file rather than `:memory:` because the read-only handle opens the same
-/// path a second time, which an in-memory database cannot express — and
-/// because that second open is the thing being tested.
+/// A workspace in a fresh temporary file, not `:memory:`, because the read-only handle opens the same path a second time.
 struct TempWorkspace {
     path: String,
 }
@@ -102,8 +95,7 @@ async fn opens_creates_and_reads_back_a_page() {
 
     let created = ws.create_page(new_page("First")).await.unwrap();
     assert_eq!(created.title, "First");
-    // A new page gets the current schema version rather than the column
-    // default, so the stamp reflects the writer.
+    // The stamp reflects the writer, not the column default.
     assert_eq!(created.content_schema_version, ws.content_schema_version());
 
     let fetched = ws.get_page(created.id.clone()).await.unwrap();
@@ -113,8 +105,7 @@ async fn opens_creates_and_reads_back_a_page() {
 
 #[tokio::test]
 async fn a_missing_page_is_not_found_rather_than_a_failure() {
-    // A widget or deep link can hold an id that has since been deleted. The
-    // caller needs to tell that apart from a database that is broken.
+    // A widget or deep link can hold a since-deleted id; the caller must tell that from a broken database.
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
 
@@ -151,15 +142,11 @@ async fn editing_content_restamps_the_schema_version() {
 
 #[tokio::test]
 async fn folder_scope_distinguishes_inbox_from_any() {
-    // The data layer models this as an optional JSON value where absent means
-    // "any" and null means "inbox". Collapsing those two is the obvious bug
-    // this enum exists to prevent, so it is asserted directly.
+    // Collapsing absent and null (any vs inbox) is the bug this enum prevents.
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
 
-    // Both an unfiled page and a filed one, so Any and Inbox give different
-    // answers. With only an unfiled page they agree, and an earlier version of
-    // this test passed even with Inbox collapsed into Any.
+    // Both an unfiled and a filed page, or Any and Inbox agree even when collapsed.
     ws.create_page(new_page("Inbox page")).await.unwrap();
     let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
     let mut filed = new_page("Filed page");
@@ -214,9 +201,7 @@ async fn assigning_a_folder_round_trips_and_clears() {
     let work = ws.create_folder("Work".to_string(), None).await.unwrap();
     let archive = ws.create_folder("Archive".to_string(), None).await.unwrap();
 
-    // Starts unfiled, so each step below changes something. A page that begins
-    // with no folder makes "clear it" indistinguishable from "leave it alone",
-    // and an earlier version of this test passed with the two collapsed.
+    // Starts unfiled, so "clear it" differs from "leave it alone" and each step changes something.
     let page = ws.create_page(new_page("Filed")).await.unwrap();
     assert_eq!(page.folder_id, None);
 
@@ -266,8 +251,7 @@ async fn assigning_a_folder_round_trips_and_clears() {
         .unwrap();
     assert_eq!(moved.folder_id, Some(archive.id));
 
-    // Clearing must be expressible distinctly from "leave alone" — the same
-    // tri-state as the listing filter, in the opposite direction.
+    // Clearing must differ from "leave alone", the listing filter's tri-state in reverse.
     let cleared = ws
         .update_page(
             page.id.clone(),
@@ -417,8 +401,7 @@ async fn a_read_only_handle_sees_the_same_data() {
 
 #[tokio::test]
 async fn a_read_only_workspace_refuses_to_create_a_database() {
-    // A widget that silently creates an empty workspace looks to the user like
-    // their notes have vanished. It must fail instead.
+    // A widget that silently creates an empty workspace looks like vanished notes; it must fail.
     let tmp = TempWorkspace::new();
     match ReadOnlyWorkspace::open_existing(tmp.path.clone()).await {
         Err(WorkspaceError::Open { message }) => assert!(message.contains("no workspace")),
@@ -432,9 +415,7 @@ async fn a_read_only_workspace_refuses_to_create_a_database() {
 
 #[tokio::test]
 async fn a_read_only_handle_lists_folders() {
-    // The Shortcuts folder picker runs as an `EntityQuery`, not an intent, and
-    // opening a writable handle to populate a picker would put a second writer
-    // on a database whose WAL mode permits one. It reads through this.
+    // The Shortcuts folder picker reads through this, since a writable handle would be a second writer.
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
     ws.create_folder("Work".to_string(), None).await.unwrap();
@@ -457,8 +438,7 @@ async fn a_read_only_handle_lists_folders() {
 
 #[tokio::test]
 async fn opening_a_workspace_twice_shares_its_contents() {
-    // The app and an extension open the same path independently. WAL mode
-    // permits that; this pins it rather than assuming it.
+    // The app and an extension open the same path; WAL permits it, and this pins that.
     let tmp = TempWorkspace::new();
     let writer = Workspace::open(tmp.path.clone()).await.unwrap();
     writer.create_page(new_page("From the app")).await.unwrap();
@@ -472,13 +452,9 @@ async fn opening_a_workspace_twice_shares_its_contents() {
 
 #[tokio::test]
 async fn a_created_date_survives_a_later_reschedule() {
-    // `pages.scheduled_start` is a denormalised copy of the page's earliest
-    // `page_schedules` row, recomputed from that table whenever a schedule
-    // changes. A date written straight onto the page has no row behind it, so
-    // it reads back correctly right up until something touches the schedule —
-    // and then it is gone. Adding a *later* date is the cheapest way to make
-    // that recomputation happen: the earlier one should win, and can only win
-    // if it was ever really there.
+    // `pages.scheduled_start` copies the earliest `page_schedules` row, recomputed on schedule changes.
+    // A date written straight onto the page reads back until a later date triggers that recomputation,
+    // so the earlier one must win.
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
 
@@ -509,9 +485,7 @@ async fn a_created_date_survives_a_later_reschedule() {
 
 #[tokio::test]
 async fn a_recurring_page_starts_on_a_day_its_rule_allows() {
-    // A M/W/F rule anchored to a Sunday must not leave the page's head on the
-    // Sunday — that day is not in the series, so it would render as a stray
-    // first run detached from every occurrence after it.
+    // A M/W/F rule anchored to a Sunday must not leave the head on the Sunday, a stray first run outside the series.
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
 
@@ -631,19 +605,11 @@ async fn a_quick_add_line_with_a_malformed_reference_is_refused() {
         "a malformed argument should not look like a broken database: {error:?}"
     );
 
-    // And nothing was created on the way to failing.
     let pages = ws.list_pages(PageQuery::default()).await.unwrap();
     assert!(pages.is_empty());
 }
 
-// ─── Calendar range ──────────────────────────────────────────────────────────
-
 /// The case the whole `calendar_range` design exists for.
-///
-/// A weekly series is stored once — a head row plus a rule — and its other
-/// occurrences are projected at display time. A calendar that simply drew the
-/// pages it queried would show a weekly standup anchored months ago exactly
-/// zero times this week, and an empty calendar looks like an empty calendar.
 #[tokio::test]
 async fn a_recurring_series_appears_in_a_week_its_head_is_not_in() {
     let tmp = TempWorkspace::new();
@@ -681,9 +647,7 @@ async fn a_recurring_series_appears_in_a_week_its_head_is_not_in() {
     );
 }
 
-/// The last visible day is inclusive. Off by one here and the final column of
-/// a week grid silently never shows a recurring occurrence — the kind of bug
-/// that survives a demo because nobody scrolls to Sunday.
+/// The last visible day is inclusive.
 #[tokio::test]
 async fn the_last_day_of_the_range_is_included() {
     let tmp = TempWorkspace::new();
@@ -713,9 +677,7 @@ async fn the_last_day_of_the_range_is_included() {
     assert_eq!(dates.last().map(String::as_str), Some("2026-03-29"));
 }
 
-/// A page that began before the range and is still running through it. Filtering
-/// on `scheduled_start` alone would drop it, which is why the query is an
-/// overlap rather than a bound.
+/// A page that began before the range and is still running through it.
 #[tokio::test]
 async fn a_multi_day_page_spanning_into_the_range_is_included() {
     let tmp = TempWorkspace::new();
@@ -770,8 +732,7 @@ async fn a_scheduled_page_is_drawn_once_and_is_not_virtual() {
 }
 
 /// Every drawn item needs a distinct identity, or a list rendering them
-/// collapses duplicates. Page ids will not do: a weekly series shares one
-/// across every occurrence, deliberately.
+/// collapses duplicates.
 #[tokio::test]
 async fn occurrences_of_one_series_have_distinct_keys() {
     let tmp = TempWorkspace::new();
@@ -853,23 +814,6 @@ async fn the_read_only_handle_serves_the_calendar() {
 }
 
 /// An override written by the *other* app must suppress the projection.
-///
-/// The desktop can materialise a real schedule row for one occurrence of a
-/// series, carrying the rule id and the date it replaces. Both apps share one
-/// database, so iOS meets these rows without having any way to create one, and
-/// a rule that still projected onto that date would draw the occurrence twice.
-///
-/// Pairs with `a_recurring_series_appears_in_a_week_its_head_is_not_in`, which
-/// is the same setup without the override and *does* get a block on the 23rd.
-/// Neither test means much alone: together they say the override is what
-/// removed it.
-///
-/// Written through `pikos-db` rather than the FFI because the FFI has no writer
-/// for it. That is the point — this stands in for the desktop.
-///
-/// Not asserted: that the row is drawn. On this native series it is not, as on the
-/// desktop; a calendar series' moved occurrences are, which
-/// `a_calendar_series_occurrence_that_was_moved_is_drawn_where_it_went` covers.
 #[tokio::test]
 async fn an_overridden_occurrence_is_not_also_projected() {
     let tmp = TempWorkspace::new();
@@ -920,17 +864,7 @@ async fn an_overridden_occurrence_is_not_also_projected() {
     );
 }
 
-// ─── Recurring completion ────────────────────────────────────────────────────
-
 /// Completing an occurrence must advance the series, not end it.
-///
-/// `pikos-db` states the hazard directly above `set_pages_status_impl`:
-/// "Recurring heads must NOT be passed here — completing a recurring page
-/// clones the head and advances it; a plain status flip would corrupt the
-/// series." A checkbox that routes every page through `update_page` does
-/// exactly that, and the damage is invisible at the moment it happens: the row
-/// reads `done`, which is what the user asked for. What is gone is every
-/// occurrence that had not happened yet.
 #[tokio::test]
 async fn completing_an_occurrence_advances_the_head_rather_than_ending_the_series() {
     let tmp = TempWorkspace::new();
@@ -1049,19 +983,9 @@ async fn uncompleting_an_occurrence_walks_the_head_back() {
     );
     assert_eq!(restored.status, "not_started");
 }
-/// What the wrong path does, pinned so nobody reintroduces it.
-///
-/// This is not a test of desired behaviour — it is a record of the damage, kept
-/// because the damage is invisible at the moment it happens. Setting `status` on
-/// a recurring head leaves the head exactly where it was and marks it done: no
-/// clone, no completion record, and the head never advances. A daily series
-/// stops dead at its first occurrence, and the row reads `done`, which is what
-/// the user asked for. Everything that had not happened yet is simply gone.
-///
-/// If this assertion ever starts failing because `update_page` learned to route
-/// recurring heads itself, that is good news — delete this test and simplify
-/// the callers. Until then it is the reason `complete_recurring_occurrence`
-/// exists as a separate call.
+/// The wrong path, pinned: setting `status` on a recurring head marks it done with no clone and no advance.
+/// If this starts failing because `update_page` learned to route recurring heads, delete the test and
+/// simplify the callers.
 #[tokio::test]
 async fn a_plain_status_flip_on_a_recurring_head_ends_the_series() {
     let tmp = TempWorkspace::new();
@@ -1197,8 +1121,6 @@ async fn undoing_the_latest_completion_reports_whether_it_had_one() {
     );
 }
 
-// ─── Folders ─────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn a_folder_can_be_renamed() {
     let tmp = TempWorkspace::new();
@@ -1273,9 +1195,7 @@ async fn trashing_a_folder_takes_its_pages_and_restoring_brings_them_back() {
     assert!(restored.contains(&"Filed".to_string()), "got {restored:?}");
 }
 
-/// A folder a calendar owns is not the user's to file into. The picker needs to
-/// know which those are so it can leave them out rather than offering a choice
-/// the workspace will refuse.
+/// A folder a calendar owns is not the user's to file into.
 #[tokio::test]
 async fn a_folder_says_whether_a_calendar_owns_it() {
     let tmp = TempWorkspace::new();
@@ -1286,12 +1206,7 @@ async fn a_folder_says_whether_a_calendar_owns_it() {
 }
 
 /// A refusal is not a failure, and the message the data layer wrote is already
-/// addressed to the user. Wrapping it in "could not read or write" reads as the
-/// app breaking rather than as a rule being enforced.
-///
-/// The flag is set through `pikos-db` because only the sync reconciler sets it
-/// in production — the same standing-in-for-the-desktop trick the override test
-/// uses.
+/// addressed to the user.
 #[tokio::test]
 async fn filing_into_a_calendars_folder_is_refused_not_failed() {
     let tmp = TempWorkspace::new();
@@ -1339,11 +1254,6 @@ async fn filing_into_a_calendars_folder_is_refused_not_failed() {
 }
 
 /// The safe checkbox, on every kind of page.
-///
-/// The point of testing this rather than only the two paths underneath is that
-/// the *routing* is the part a caller cannot see. A caller holding a page id and
-/// a boolean has no way to know which of two destructive-if-wrong operations it
-/// is asking for, which is why the decision does not belong at the call site.
 #[tokio::test]
 async fn the_status_toggle_routes_by_kind_without_being_told() {
     let tmp = TempWorkspace::new();
@@ -1398,12 +1308,6 @@ async fn the_status_toggle_routes_by_kind_without_being_told() {
 }
 
 /// Unticking a recurring head that is `done` with nothing completed recovers it.
-///
-/// That state should not arise from this app any more, but it is exactly what a
-/// plain status flip leaves behind — and such rows already exist in databases
-/// this app will open, because that is the bug being fixed. Without the
-/// fallback, `uncomplete_latest` finds no occurrence to reopen, returns false,
-/// and the tap does nothing at all: a checkbox stuck on with no way to clear it.
 #[tokio::test]
 async fn unticking_recovers_a_head_left_done_with_no_completions() {
     let tmp = TempWorkspace::new();
@@ -1419,7 +1323,6 @@ async fn unticking_recovers_a_head_left_done_with_no_completions() {
     .await
     .unwrap();
 
-    // The damaged state, produced the way it gets produced.
     ws.update_page(
         series.id.clone(),
         PageEdit {
@@ -1451,10 +1354,7 @@ async fn toggling_a_page_that_is_gone_is_not_found() {
     }
 }
 
-// ─── Trash ───────────────────────────────────────────────────────────────────
-
-/// The round trip a mis-swipe depends on. Without the listing there is no way
-/// back on a phone, which is the device most likely to produce one.
+/// The round trip a mis-swipe depends on.
 #[tokio::test]
 async fn a_trashed_page_can_be_found_and_brought_back() {
     let tmp = TempWorkspace::new();
@@ -1495,9 +1395,7 @@ async fn a_trashed_page_can_be_found_and_brought_back() {
         .any(|p| p.id == filed.id));
 }
 
-/// A folder trashed with its pages leaves them with no name to show. Naming the
-/// folder anyway would promise a restore that does not happen — the page comes
-/// back, the folder does not.
+/// A folder trashed with its pages leaves them with no name to show.
 #[tokio::test]
 async fn a_page_whose_folder_went_with_it_has_no_folder_name() {
     let tmp = TempWorkspace::new();
@@ -1524,12 +1422,6 @@ async fn the_retention_window_comes_from_the_data_layer() {
 }
 
 /// Clearing a date, and the rows it must not touch.
-///
-/// The interesting half is what survives. A page's schedule rows are not all
-/// the same kind: a row carrying a `rule_id` is a materialised occurrence of a
-/// series — one instance somebody moved — and a bulk delete of "this page's
-/// schedules" would silently undo those moves. The desktop path draws the line
-/// at `rule_id`, so this checks the line is in the same place here.
 #[tokio::test]
 async fn clearing_a_date_takes_the_one_offs_and_leaves_the_series() {
     let tmp = TempWorkspace::new();
@@ -1591,11 +1483,6 @@ async fn clearing_a_date_takes_the_one_offs_and_leaves_the_series() {
 }
 
 /// Clearing is not a bulk `DELETE`, and this is why: the denorm has to follow.
-///
-/// `pages.scheduled_start` is a copy of the earliest schedule row. Deleting the
-/// rows without recomputing it leaves the page showing a date that no longer
-/// exists anywhere — which reads as "the clear didn't work" and survives a
-/// restart.
 #[tokio::test]
 async fn clearing_a_date_takes_the_page_s_own_copy_of_it_too() {
     let tmp = TempWorkspace::new();
@@ -1621,9 +1508,7 @@ async fn clearing_a_date_takes_the_page_s_own_copy_of_it_too() {
     assert_eq!(after.scheduled_end, None);
 }
 
-/// Nothing to clear is not a failure. The menu entry is offered whenever a page
-/// shows a date, and a date can be gone by the time the tap lands — from
-/// another window, a sync poll, or a second tap.
+/// Nothing to clear is not a failure.
 #[tokio::test]
 async fn clearing_a_page_with_no_date_reports_nothing_rather_than_failing() {
     let tmp = TempWorkspace::new();
@@ -1634,10 +1519,6 @@ async fn clearing_a_page_with_no_date_reports_nothing_rather_than_failing() {
 
 /// A calendar's page cannot have its date taken away here, and the refusal has
 /// to arrive as a refusal.
-///
-/// This is the flag's whole purpose: `schedule_locked` on a summary is what
-/// lets the UI leave the entry out, and this is the guard behind it for every
-/// caller that does not — a widget, an intent, a stale list.
 #[tokio::test]
 async fn a_calendar_owned_date_cannot_be_cleared() {
     let tmp = TempWorkspace::new();
@@ -1670,10 +1551,6 @@ async fn a_calendar_owned_date_cannot_be_cleared() {
 
 /// The summary carries the lock, so a list can decide what to offer without
 /// fetching every page.
-///
-/// A page list draws dozens of rows and each one's context menu has to know
-/// whether rename, move and clear-date are available. Asking per row would be
-/// dozens of round trips for a flag the summary query already computes.
 #[tokio::test]
 async fn a_summary_says_whether_a_calendar_owns_its_schedule() {
     let tmp = TempWorkspace::new();
@@ -1695,12 +1572,8 @@ async fn a_summary_says_whether_a_calendar_owns_its_schedule() {
     assert!(locked(&mirrored.id), "a mirror is not");
 }
 
-/// Give a page an active calendar link, the way the reconciler seeds one.
-///
-/// Written against the tables rather than through a sync API because this crate
-/// does not expose one — `pikos-calendar-sync` is not a dependency of the FFI.
-/// What matters to the tests above is only the derived flag, and that reads
-/// `page_sync.sync_state = 'active'`.
+/// Give a page an active calendar link, the way the reconciler seeds one: `pikos-calendar-sync` is not a
+/// dependency, and the tests only need `page_sync.sync_state = 'active'`.
 async fn link_to_a_calendar(path: &str, page_id: &str) {
     let pool = pikos_db::open_pool(path).await.unwrap();
     let now = "2026-01-01T00:00:00.000Z";
@@ -1729,19 +1602,8 @@ async fn link_to_a_calendar(path: &str, page_id: &str) {
     .unwrap();
 }
 
-/// What clearing does on a repeating page, which is nothing visible.
-///
-/// A record of the behaviour rather than an endorsement of it. A page with a
-/// rule owns its `scheduled_start` directly — the denorm refresh returns early
-/// for exactly that case, because the head's date is advanced by the recurring
-/// logic and recomputing it from `page_schedules` would drag the head back to
-/// whatever anchor row predates the rule. So the one-off rows do go, and the
-/// date the user is looking at does not move.
-///
-/// That is why the iOS menu leaves "Clear Date" out on a repeating page: not a
-/// different rule from desktop's, but a refusal to offer an entry whose only
-/// outcome is nothing happening. Ending a series is a different action and
-/// needs its own affordance.
+/// What clearing does on a repeating page, which is nothing visible: the page owns its `scheduled_start`,
+/// so the one-off rows go and the date does not move. The iOS menu leaves "Clear Date" out for that reason.
 #[tokio::test]
 async fn clearing_a_repeating_page_s_date_leaves_the_head_where_it_is() {
     let tmp = TempWorkspace::new();
@@ -1777,11 +1639,6 @@ async fn clearing_a_repeating_page_s_date_leaves_the_head_where_it_is() {
 }
 
 /// A list of open work leaves out what is finished.
-///
-/// The filter is a negation rather than `status = "not_started"`: today those
-/// are the same set, and the point of the negation is that a status added later
-/// keeps showing up in the list of things still to do instead of disappearing
-/// from every view at once with nothing logged.
 #[tokio::test]
 async fn an_open_listing_leaves_out_finished_pages() {
     let tmp = TempWorkspace::new();
@@ -1866,10 +1723,6 @@ async fn completed_pages_are_scoped_to_their_folder_and_ordered_newest_first() {
 }
 
 /// Paging through a folder's completed pages.
-///
-/// `total` is the count for the whole scope rather than the length of the page
-/// returned, which is what lets a "Show more" control know there is more to
-/// show without fetching a page to find out.
 #[tokio::test]
 async fn completed_pages_page_through_with_a_total_for_the_whole_scope() {
     let tmp = TempWorkspace::new();
@@ -1913,11 +1766,6 @@ async fn completed_pages_page_through_with_a_total_for_the_whole_scope() {
 
 /// Today's Completed section is a different question from a folder's, and the
 /// scope enum is what keeps a caller from asking the wrong one.
-///
-/// It means "completed today, wherever it lives" — the things that left Today's
-/// list since this morning. A page finished long ago in some folder is not part
-/// of that, even though it is completed and even though Today has no folder of
-/// its own to exclude it.
 #[tokio::test]
 async fn todays_completed_section_is_scoped_by_day_rather_than_by_folder() {
     let tmp = TempWorkspace::new();
@@ -1964,14 +1812,6 @@ async fn todays_completed_section_is_scoped_by_day_rather_than_by_folder() {
 }
 
 /// Ticking a box records *when*, and unticking takes it back.
-///
-/// Found by writing the Completed section, not by reading the code: the page
-/// vanished from Today and then failed to appear anywhere else. `set_page_status`
-/// went through `update_page_impl`, which writes `completed_at` only when a
-/// caller supplies one — and nothing did. The page was finished with no record
-/// of when, which is not a cosmetic gap: the Completed section for a date view
-/// selects on `date(completed_at)`, so a page ticked on the phone was done and
-/// invisible everywhere, including on the desktop reading the same file.
 #[tokio::test]
 async fn ticking_a_box_records_when_and_unticking_clears_it() {
     let tmp = TempWorkspace::new();
@@ -1983,10 +1823,8 @@ async fn ticking_a_box_records_when_and_unticking_clears_it() {
     let done = ws.get_page(page.id.clone()).await.unwrap();
     let stamp = done.completed_at.expect("a completed page knows when");
 
-    // Local wall clock, not UTC — the same convention `scheduled_start` uses,
-    // and what the Completed view's date comparison depends on. A `Z` here
-    // would mean the page hides from "completed today" whenever UTC's date is
-    // not the reader's.
+    // Local wall clock, not UTC: the Completed view compares dates and would hide the page from
+    // "completed today" whenever UTC's date differs.
     assert!(
         !stamp.ends_with('Z') && stamp.contains('T'),
         "wall-clock ISO with no zone suffix, got {stamp}"
@@ -2007,12 +1845,6 @@ async fn ticking_a_box_records_when_and_unticking_clears_it() {
 }
 
 /// A limit of zero counts without reading.
-///
-/// The page list leans on this every refresh: it needs to know whether a view
-/// has any finished pages — a view whose work is all done is not empty, and
-/// showing "nothing here yet" over a full Completed section would put that work
-/// out of reach — but it must not pay to build summaries nobody is looking at.
-/// Zero has to mean "none of them", not "all of them".
 #[tokio::test]
 async fn a_limit_of_zero_returns_the_count_and_no_rows() {
     let tmp = TempWorkspace::new();
@@ -2033,19 +1865,13 @@ async fn a_limit_of_zero_returns_the_count_and_no_rows() {
 
 /// Today arrives already split, and the split is by the clock rather than by
 /// the day.
-///
-/// The pikos-core port is graded against the TypeScript on a corpus; what this
-/// covers is the wiring — that the rows reaching the sections are the right
-/// rows, and that the two halves are not silently the same list twice.
 #[tokio::test]
 async fn todays_sections_separate_what_slipped_from_what_is_still_due() {
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
 
-    // Relative to the machine clock, because the view is. Yesterday is overdue
-    // whatever the hour; a bare date for today never is; a time far enough
-    // ahead is not yet. The core's own tests stand on the boundary itself —
-    // here the cases are chosen so no reasonable run time can flip them.
+    // Relative to the machine clock, as the view is. Yesterday is overdue at any hour, a bare date for
+    // today never is, a time far enough ahead is not yet; the boundary itself is graded in core.
     let today = chrono::Local::now().date_naive();
     let yesterday = (today - chrono::Duration::days(1))
         .format("%Y-%m-%d")
@@ -2342,12 +2168,6 @@ async fn view_counts_match_the_lists_they_badge() {
 }
 
 /// Upcoming's window, at both ends.
-///
-/// The upper bound is the one worth a test with a database behind it: the
-/// column is compared lexicographically and holds two different shapes, so a
-/// bare date as the bound admits the last day's all-day rows and silently drops
-/// every timed row on it. That failure looks like a calendar that just forgets
-/// next Saturday's meetings.
 #[tokio::test]
 async fn upcoming_spans_seven_days_and_keeps_the_last_days_timed_pages() {
     let tmp = TempWorkspace::new();
@@ -2462,19 +2282,7 @@ async fn upcoming_lists_open_work_only() {
     );
 }
 
-// ─── External calendars ──────────────────────────────────────────────────────
-//
-// What is testable here is the half that does not need a server: the status
-// read, the calendar toggle, and the error a call makes when the network is the
-// problem. Connecting is a live CalDAV discovery and belongs to the sync
-// crate's own suite, which has the transport to fake.
-
 /// An account and its calendars arrive in one read, dormant accounts included.
-///
-/// Listing dormant accounts is deliberate rather than an oversight. A
-/// disconnect keeps the row so a later reconnect re-links the pages it
-/// mirrored; a screen that hid them would make reconnecting look like
-/// connecting, which is what duplicates a calendar.
 #[tokio::test]
 async fn sync_status_lists_accounts_with_their_calendars() {
     let tmp = TempWorkspace::new();
@@ -2502,10 +2310,6 @@ async fn sync_status_lists_accounts_with_their_calendars() {
 }
 
 /// A rejected credential has to reach the screen.
-///
-/// The scheduler skips a flagged account entirely, so an interface that does
-/// not carry this flag shows an account that looks connected and silently syncs
-/// nothing — the failure mode the flag exists to make visible.
 #[tokio::test]
 async fn an_account_needing_reconnection_says_so() {
     let tmp = TempWorkspace::new();
@@ -2543,18 +2347,12 @@ async fn a_calendar_can_be_switched_off_and_back_on() {
 }
 
 /// A server that cannot be reached is not a broken workspace.
-///
-/// The distinction is the whole reason `WorkspaceError::Network` exists: it is
-/// the one failure here worth retrying unchanged, and the only one where "try
-/// again" is honest advice. Folded into `Database` it would tell somebody on a
-/// train that their notes are damaged.
 #[tokio::test]
 async fn an_unreachable_server_reads_as_a_network_problem() {
     let tmp = TempWorkspace::new();
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
 
-    // A host that resolves nowhere. `.invalid` is reserved by RFC 2606
-    // precisely so a test can be sure it will never be registered.
+    // `.invalid` is reserved by RFC 2606, so it never resolves.
     match ws
         .connect_caldav(
             "https://nothing.invalid/dav/".to_string(),
@@ -2586,10 +2384,6 @@ async fn reconnecting_an_unknown_account_is_an_error_rather_than_a_panic() {
 }
 
 /// Seed an account and its calendars directly.
-///
-/// Written against the tables because the real path is a live CalDAV discovery,
-/// and the behaviour under test here is the read and the toggle rather than the
-/// transport. Enabled by default, matching what discovery produces.
 async fn seed_account(path: &str, account_id: &str, name: &str, calendars: &[(&str, &str)]) {
     let pool = pikos_db::open_pool(path).await.unwrap();
     let now = "2026-01-01T00:00:00.000Z";
@@ -2625,11 +2419,6 @@ async fn seed_account(path: &str, account_id: &str, name: &str, calendars: &[(&s
 }
 
 /// Moving a page replaces its date rather than adding a second one.
-///
-/// The distinction matters because `schedule_page` *adds*: a page can hold
-/// several schedule rows and shows the earliest still ahead. An "edit" built on
-/// that leaves the old date behind to resurface once the new one passes, which
-/// reads as the app forgetting the change days later.
 #[tokio::test]
 async fn setting_a_date_replaces_the_one_that_was_there() {
     let tmp = TempWorkspace::new();
@@ -2735,9 +2524,6 @@ async fn an_all_day_span_keeps_both_ends() {
 }
 
 /// Mixed shapes are refused rather than stored.
-///
-/// The storage format has no way to say "all day, ending at 3pm", so a mixed
-/// pair would be written and then read back as something nobody asked for.
 #[tokio::test]
 async fn a_start_and_end_of_different_shapes_are_refused() {
     let tmp = TempWorkspace::new();
@@ -2763,8 +2549,7 @@ async fn a_start_and_end_of_different_shapes_are_refused() {
     );
 }
 
-/// An end before its start is refused. Stored, it gives every occurrence
-/// derived from the page a negative span.
+/// An end before its start is refused.
 #[tokio::test]
 async fn an_end_before_the_start_is_refused() {
     let tmp = TempWorkspace::new();
@@ -2900,8 +2685,6 @@ async fn a_malformed_date_is_refused() {
     }
 }
 
-// ─── Repeats ─────────────────────────────────────────────────────────────────
-
 /// A page that does not repeat says so, rather than reporting a repeat of
 /// nothing.
 #[tokio::test]
@@ -2916,8 +2699,7 @@ async fn a_plain_page_has_no_repeat() {
 }
 
 /// Setting a repeat, reading it back, and changing it — the round-trip the
-/// picker depends on. A shape that does not survive it would show the user
-/// something other than what they saved.
+/// picker depends on.
 #[tokio::test]
 async fn a_repeat_survives_being_read_back_and_changed() {
     let tmp = TempWorkspace::new();
@@ -2954,8 +2736,7 @@ async fn a_repeat_survives_being_read_back_and_changed() {
         other => panic!("expected Editable, got {other:?}"),
     }
 
-    // Changing it rewrites the one rule rather than adding a second — two rules
-    // on a page is a series that expands twice.
+    // Changing a repeat rewrites the one rule; two rules would expand the series twice.
     ws.set_page_repeat(
         page.id.clone(),
         Repeat {
@@ -2977,10 +2758,6 @@ async fn a_repeat_survives_being_read_back_and_changed() {
 }
 
 /// The anchor moves with the rule.
-///
-/// A weekly repeat switched to a different weekday has to leave the head on a
-/// day the rule yields, or the next recompute drags it back and the edit looks
-/// like it did not take.
 #[tokio::test]
 async fn changing_the_weekday_moves_the_head_onto_it() {
     let tmp = TempWorkspace::new();
@@ -3017,7 +2794,6 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
         "precondition: the head sits on its Monday"
     );
 
-    // Wednesday.
     ws.set_page_repeat(
         page.id.clone(),
         Repeat {
@@ -3041,12 +2817,8 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
         "the head follows the rule onto the Wednesday"
     );
 
-    // And the rule's own anchor moves with it. The head is re-derived by
-    // `recompute_recurring_schedule` either way, so this is the half that
-    // testing the page alone would miss: an anchor left on a Monday under
-    // BYDAY=WE is a rule whose stated start is a day it never yields, which
-    // anything reading the rule row directly — the calendar's connect-day
-    // floor, a future exporter — would have to second-guess.
+    // The rule's own anchor moves too: one left on a Monday under BYDAY=WE is a start the rule never
+    // yields, which anything reading the rule row directly would have to second-guess.
     let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
     let rule = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
         .await
@@ -3059,10 +2831,6 @@ async fn changing_the_weekday_moves_the_head_onto_it() {
 }
 
 /// Weekdays are dropped when the frequency cannot carry them.
-///
-/// The engine rejects a monthly rule with a BYDAY set it did not ask for, so
-/// passing the picker's leftover weekdays through would build a rule that fails
-/// to enumerate — a series that silently stops.
 #[tokio::test]
 async fn switching_away_from_weekly_drops_the_weekdays() {
     let tmp = TempWorkspace::new();
@@ -3099,9 +2867,6 @@ async fn switching_away_from_weekly_drops_the_weekdays() {
 }
 
 /// Stopping a repeat leaves the page, on the date it was last sitting on.
-///
-/// "Never" means stop repeating, not delete — and a head that vanished with its
-/// rule would take the user's page with it.
 #[tokio::test]
 async fn removing_a_repeat_keeps_the_page_and_its_date() {
     let tmp = TempWorkspace::new();
@@ -3140,8 +2905,7 @@ async fn removing_a_repeat_keeps_the_page_and_its_date() {
     ));
 }
 
-/// Removing a repeat a page does not have is a no-op, not an error. The menu
-/// offers "Never" whatever the page is, and a list row can be stale.
+/// Removing a repeat a page does not have is a no-op, not an error.
 #[tokio::test]
 async fn removing_a_repeat_that_is_not_there_is_harmless() {
     let tmp = TempWorkspace::new();
@@ -3155,10 +2919,6 @@ async fn removing_a_repeat_that_is_not_there_is_harmless() {
 }
 
 /// A repeat needs somewhere to start.
-///
-/// Every occurrence is derived from the anchor, so inventing one would put the
-/// series on a day the user never chose — and they would have to work out why
-/// their weekly meeting is on a Thursday.
 #[tokio::test]
 async fn a_page_with_no_date_cannot_be_made_to_repeat() {
     let tmp = TempWorkspace::new();
@@ -3192,9 +2952,6 @@ async fn a_page_with_no_date_cannot_be_made_to_repeat() {
 
 /// The phone locks exactly what the desktop locks, and saves what it doesn't lock back
 /// unchanged.
-///
-/// Graded over the corpus the desktop's own guard is graded on, plus the shapes the phone's
-/// fields can't name, which come back with `keeps_pattern` rather than flattened.
 // qa: IOS-07:3
 #[tokio::test]
 async fn every_rule_the_desktop_edits_opens_and_saves_unchanged_on_the_phone() {
@@ -3371,10 +3128,6 @@ async fn a_richer_rule_keeps_its_pattern_until_its_frequency_changes() {
 
 /// The desktop's richer presets survive the round-trip: a week of the month,
 /// and both ways a repeat can stop.
-///
-/// Each was locked before the picker had a control for it, so the regression
-/// this catches is a phone that shows "Every month on the third Tuesday" and
-/// then saves it back as every month on the 17th.
 #[tokio::test]
 async fn a_week_of_the_month_and_an_end_survive_being_read_back() {
     let tmp = TempWorkspace::new();
@@ -3523,7 +3276,7 @@ async fn a_repeat_the_rule_layer_could_not_enumerate_is_refused() {
     }
 }
 
-/// A calendar's repeat is upstream's. Shown, not edited.
+/// A calendar's repeat is upstream's.
 #[tokio::test]
 async fn a_calendar_owned_repeat_is_locked() {
     let tmp = TempWorkspace::new();
@@ -3598,15 +3351,6 @@ async fn an_interval_of_zero_is_refused() {
     ));
 }
 
-// ─── One occurrence at a time ────────────────────────────────────────────────
-//
-// A repeating page is one row plus a rule, and everything the calendar draws
-// beyond the head is a projection. So the three things a person can do to a
-// single occurrence — finish it, drop it, put it back — all come down to
-// writing a date into a set and re-deriving the head from what is left. What
-// makes them worth testing at this layer is that the wrong call is quiet: the
-// destructive one and the correct one both leave a screen that looks right.
-
 /// Seeds a daily series and returns its id and the head's first occurrence.
 async fn daily_series(ws: &Workspace, title: &str, from: &str) -> (String, String) {
     let page = ws.create_page(new_page(title)).await.unwrap();
@@ -3627,10 +3371,6 @@ async fn daily_series(ws: &Workspace, title: &str, from: &str) -> (String, Strin
 }
 
 /// Skipping is the third verb, and the one with no home before this.
-///
-/// Without it the only way to make one occurrence go away is to trash the head,
-/// which takes the entire series — every occurrence behind it and every one
-/// ahead. The user reaching for "not this week" means neither.
 #[tokio::test]
 async fn skipping_an_occurrence_advances_the_head_past_it() {
     let tmp = TempWorkspace::new();
@@ -3654,11 +3394,6 @@ async fn skipping_an_occurrence_advances_the_head_past_it() {
 }
 
 /// The difference between skipping and completing, stated as an assertion.
-///
-/// They look identical from the head's point of view — both advance it — which
-/// is exactly why this is worth pinning. A skip must leave no record saying the
-/// work was done: no clone, nothing in Completed, nothing in the history a
-/// person would later read as "I did that".
 #[tokio::test]
 async fn a_skipped_occurrence_is_not_a_completed_one() {
     let tmp = TempWorkspace::new();
@@ -3706,11 +3441,6 @@ async fn unskipping_brings_the_occurrence_back() {
 }
 
 /// Both halves are safe to retry.
-///
-/// A tap that gets no response is a tap the user makes again. Skipping an
-/// already-skipped date must not advance the head a second time — that would
-/// silently eat tomorrow's occurrence as well — and un-skipping a date that was
-/// never skipped must do nothing at all.
 #[tokio::test]
 async fn skipping_and_unskipping_are_both_repeatable() {
     let tmp = TempWorkspace::new();
@@ -3740,11 +3470,6 @@ async fn skipping_and_unskipping_are_both_repeatable() {
 }
 
 /// A date the series never produced is not an error.
-///
-/// The set is keyed by date and expansion only ever asks about dates the rule
-/// yields, so a stray entry is inert. Worth pinning because the alternative —
-/// validating against the rule on the way in — would make a skip fail for a
-/// client whose calendar is one refresh behind, which is every client.
 #[tokio::test]
 async fn skipping_a_date_outside_the_series_changes_nothing() {
     let tmp = TempWorkspace::new();
@@ -3778,12 +3503,6 @@ async fn skipping_a_date_outside_the_series_changes_nothing() {
 }
 
 /// Completing the occurrence you tapped, not the one you owe.
-///
-/// The backlog case, and the reason `Occurrence` exists. A series left alone
-/// for a week has its head sitting on the oldest occurrence still open, while
-/// the block the user actually tapped in the calendar is days ahead of it.
-/// Completing "the next one due" there finishes the wrong day and leaves the
-/// tapped block still sitting on screen, undone.
 #[tokio::test]
 async fn completing_a_particular_occurrence_leaves_the_backlog_alone() {
     let tmp = TempWorkspace::new();
@@ -3816,14 +3535,8 @@ async fn completing_a_particular_occurrence_leaves_the_backlog_alone() {
     );
 }
 
-/// The regression this call could not survive before.
-///
-/// `pikos-db` refuses an occurrence date supplied without the occurrence's own
-/// start — it has to write that start onto the clone. The FFI used to hard-code
-/// both extra fields to `None`, so *any* caller naming an occurrence was
-/// rejected at runtime with a message about synced series, and the only reachable
-/// behaviour was "complete whatever is next". Passing the three fields as one
-/// record is what makes the broken call unrepresentable.
+/// `pikos-db` refuses an occurrence date without the occurrence's own start, so the three fields travel as
+/// one record, which makes the broken call unrepresentable.
 #[tokio::test]
 async fn naming_an_occurrence_does_not_need_a_second_argument() {
     let tmp = TempWorkspace::new();
@@ -3880,13 +3593,6 @@ async fn an_occurrence_can_be_skipped_from_behind_a_backlog() {
 }
 
 /// The block that looks like a one-off and is not.
-///
-/// A repeating page's own row is drawn as a real block — no `original_date`,
-/// `is_virtual` false — and it is the occurrence most often on screen, because
-/// the head sits on the next one due. A calendar that decides "is this an
-/// occurrence?" by asking whether the block is virtual therefore gets the
-/// common case exactly backwards, and offers the series-wide delete for the one
-/// thing the user meant to drop from this week.
 #[tokio::test]
 async fn a_series_head_draws_as_a_real_block_that_still_knows_it_repeats() {
     let tmp = TempWorkspace::new();
@@ -3933,13 +3639,6 @@ async fn a_series_head_draws_as_a_real_block_that_still_knows_it_repeats() {
 
 /// Where an occurrence came from, which decides whether it can be finished on
 /// its own.
-///
-/// The desktop draws a checkbox on an occurrence of an imported calendar and
-/// withholds it from one of a native series — a birthday is resolved on the day
-/// it names, while a task series funnels to whichever occurrence is next due.
-/// The phone can only apply that rule if the block says which kind it is, and
-/// the answer is sync *origin*: a detached series is unlocked and still an
-/// imported calendar.
 #[tokio::test]
 async fn a_drawn_occurrence_says_whether_its_series_came_from_a_calendar() {
     let tmp = TempWorkspace::new();
@@ -3990,9 +3689,6 @@ async fn a_drawn_occurrence_says_whether_its_series_came_from_a_calendar() {
 }
 
 /// Unlink a page from its calendar, leaving the link row behind.
-///
-/// Which is the whole point of a detached series: the page remembers where it
-/// came from, and nothing upstream governs it any more.
 async fn detach_from_its_calendar(path: &str, page_id: &str) {
     let pool = pikos_db::open_pool(path).await.unwrap();
     sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
@@ -4003,11 +3699,6 @@ async fn detach_from_its_calendar(path: &str, page_id: &str) {
 }
 
 /// Moving one occurrence out of a native series.
-///
-/// The third verb, and the only one that changes the series rather than a set
-/// membership. A native occurrence has no upstream to reclaim its date, so it
-/// leaves: it becomes an ordinary page at the new time, and the date it came
-/// from joins the rule's exclusions so nothing is drawn twice.
 #[tokio::test]
 async fn moving_one_occurrence_detaches_it_and_leaves_the_series_alone() {
     let tmp = TempWorkspace::new();
@@ -4078,11 +3769,6 @@ async fn moving_one_occurrence_detaches_it_and_leaves_the_series_alone() {
 }
 
 /// A calendar's times are the calendar's.
-///
-/// `reschedule_virtual_occurrence_impl` refuses an active mirror before it opens
-/// a transaction, and the iOS menu leaves the entry out rather than offering it
-/// and explaining the refusal — which is only possible because `CalendarEntry`
-/// carries the lock.
 #[tokio::test]
 async fn an_occurrence_of_a_live_mirror_cannot_be_moved() {
     let tmp = TempWorkspace::new();
@@ -4135,7 +3821,7 @@ async fn an_occurrence_of_a_live_mirror_cannot_be_moved() {
     );
 }
 
-/// Only a projection carries a rule. A real block has a row to move instead.
+/// Only a projection carries a rule.
 #[tokio::test]
 async fn a_real_block_names_no_rule_to_move_it_by() {
     let tmp = TempWorkspace::new();
@@ -4169,14 +3855,6 @@ async fn a_real_block_names_no_rule_to_move_it_by() {
         "a projection has to name the rule, or it cannot be moved out of it"
     );
 }
-
-// ─── Search operators ────────────────────────────────────────────────────────
-//
-// The grammar itself — which tokens are operators, and what each one means — is
-// `pikos-core`'s, graded there against the TypeScript it replaces. What these
-// cover is the half that only exists here: turning a parsed query into a
-// storage filter, intersecting it with full-text search, and the several ways
-// that can quietly answer a different question than the one asked.
 
 /// Seeds one page with everything an operator can narrow on.
 async fn tagged_page(
@@ -4287,10 +3965,6 @@ async fn the_inbox_is_the_pages_with_no_folder_at_all() {
 }
 
 /// A folder name nothing matches narrows to nothing.
-///
-/// The failure worth guarding: dropping an unresolvable filter returns the
-/// *unfiltered* set, which looks like a working search and answers a question
-/// nobody asked.
 #[tokio::test]
 async fn a_folder_that_does_not_exist_matches_nothing_rather_than_everything() {
     let tmp = TempWorkspace::new();
@@ -4503,11 +4177,6 @@ async fn a_due_window_excludes_both_the_far_future_and_the_undated() {
 }
 
 /// `is:scheduled` means "has a date", whatever the date is.
-///
-/// The only operator whose whole effect is the `has_schedule` flag — every
-/// other one that sets it also sets a date bound, and in SQLite a date bound
-/// drops undated rows on the NULL comparison by itself. So without a case here
-/// the flag can be removed entirely and nothing notices.
 #[tokio::test]
 async fn is_scheduled_keeps_only_the_pages_that_have_a_date() {
     let tmp = TempWorkspace::new();
@@ -4525,10 +4194,6 @@ async fn is_scheduled_keeps_only_the_pages_that_have_a_date() {
 }
 
 /// A query that is only operators still returns the pages they describe.
-///
-/// The path with no words left for full-text search to rank. Getting it wrong
-/// gives an empty result for a query that plainly describes something, which
-/// reads as "there is nothing tagged work".
 #[tokio::test]
 async fn a_query_of_nothing_but_operators_still_answers() {
     let tmp = TempWorkspace::new();
@@ -4546,11 +4211,6 @@ async fn a_query_of_nothing_but_operators_still_answers() {
 }
 
 /// One leftover letter is matched on the title rather than thrown away.
-///
-/// FTS5 needs at least two characters to prefix-match on, so a single one
-/// cannot go to the index. Dropping it instead would silently widen the query:
-/// "tag:work a" would return everything tagged work, which is a different
-/// question and looks like a working search.
 #[tokio::test]
 async fn a_single_leftover_character_still_narrows() {
     let tmp = TempWorkspace::new();
@@ -4568,13 +4228,6 @@ async fn a_single_leftover_character_still_narrows() {
 }
 
 /// A value the grammar rejects leaves the whole token as text.
-///
-/// `priority:9` is the sharp case: the keyword is real and the value is not.
-/// Accepting it — clamping 9 to something, or shrugging and applying no
-/// priority — sends the query down the structured path with an empty filter,
-/// which matches *everything*. Leaving it as text sends it to full-text search,
-/// which looks for the words "priority" and "9" and finds neither. The two
-/// answers could not be further apart, and only one of them is honest.
 #[tokio::test]
 async fn a_rejected_operator_value_leaves_the_token_as_text() {
     let tmp = TempWorkspace::new();
@@ -4593,9 +4246,7 @@ async fn a_rejected_operator_value_leaves_the_token_as_text() {
         hits.iter().map(|h| &h.title).collect::<Vec<_>>()
     );
 
-    // The same shape with a value the grammar *does* know narrows instead of
-    // matching nothing — which is what makes the assertion above about the
-    // value, and not about the path being broken.
+    // A value the grammar knows narrows instead of matching nothing, so the assertion above is about the value.
     let hits = ws
         .search("priority:urgent".to_string(), false, 10)
         .await
@@ -4627,10 +4278,8 @@ async fn an_unknown_operator_is_searched_for_rather_than_obeyed() {
     .await
     .unwrap();
 
-    // FTS5 splits on the punctuation, so this searches for "ratio", "1" and
-    // "5" — all of which that page has, and the other page has none of. A port
-    // that swallowed `ratio:` as an operator would take the structured path
-    // with an empty filter and hand back both.
+    // FTS5 splits on the punctuation and searches "ratio", "1" and "5", which only one page has.
+    // Taking `ratio:` as an operator would hand back both.
     let hits = ws
         .search("ratio:1.5".to_string(), false, 10)
         .await
@@ -4642,12 +4291,6 @@ async fn an_unknown_operator_is_searched_for_rather_than_obeyed() {
         "an unrecognised token stays in the query as text"
     );
 }
-
-// ─── Clearing the overdue backlog ────────────────────────────────────────────
-//
-// The date arithmetic is `pikos-core`'s and graded there. What these cover is
-// this layer's half: which pages the button is allowed to act on, that the
-// writes actually landed, and that the undo puts back exactly what moved.
 
 /// Dates a page in the past, which `create_page` will not do on its own.
 async fn overdue_page(ws: &Workspace, title: &str, start: &str, end: Option<&str>) -> String {
@@ -4771,13 +4414,6 @@ async fn a_clear_backlog_reports_that_there_was_nothing_to_do() {
 }
 
 /// A series that is not late is not "left behind".
-///
-/// The subtle one. Both reasons a page is kept are *counted* and shown, so the
-/// set handed to the planner has to be the overdue section and nothing else. A
-/// caller that passes every scheduled page instead still moves the right pages
-/// — the planner refuses a shift into the past — but reports "1 recurring left"
-/// about a standup happening next Tuesday, which reads as a refusal to do
-/// something nobody asked for.
 #[tokio::test]
 async fn a_series_dated_ahead_is_not_counted_as_left_behind() {
     let tmp = TempWorkspace::new();
@@ -4857,8 +4493,6 @@ async fn undoing_the_bulk_move_puts_every_page_back_where_it_was() {
     );
 }
 
-// ─── Folder colour and nesting ───────────────────────────────────────────────
-
 /// The palette is served, not declared on each platform.
 #[tokio::test]
 async fn the_palette_comes_from_the_workspace_in_the_order_it_is_drawn() {
@@ -4895,16 +4529,12 @@ async fn a_folder_can_be_coloured_and_uncoloured() {
         .unwrap();
     assert_eq!(painted.color.as_deref(), Some("#539BF5"));
 
-    // Clearing has to be reachable, which is the whole reason the argument is
-    // an option rather than a string.
+    // Clearing must be reachable, which is why the argument is an option.
     let cleared = ws.set_folder_color(folder.id, None).await.unwrap();
     assert_eq!(cleared.color, None);
 }
 
 /// The deliberate exception to a calendar's folder being untouchable.
-///
-/// Its name, its placement and its existence belong to the calendar. What
-/// colour it is in *this* app does not, and the desktop offers the same.
 #[tokio::test]
 async fn a_calendars_folder_can_still_be_recoloured() {
     let tmp = TempWorkspace::new();
@@ -4957,13 +4587,6 @@ async fn mark_as_calendar_folder(path: &str, folder_id: &str) {
         .await
         .unwrap();
 }
-
-// ─── Getting the workspace out, and wiping it ────────────────────────────────
-//
-// What each export *contains* is tested in `pikos-db`, beside the code that
-// builds it, against the columns the importer reads back. What is tested here
-// is that the phone reaches the same builders and that the two destructive
-// operations do what their names say.
 
 #[tokio::test]
 async fn the_csv_export_carries_the_pages_and_the_importers_header() {
@@ -5070,8 +4693,7 @@ async fn the_backup_is_a_database_that_opens_and_carries_the_pages() {
     let destination = format!("{}-backup.sqlite", tmp.path);
     ws.backup_database(destination.clone()).await.unwrap();
 
-    // Opening it is the assertion. A file that is not a usable database — the
-    // failure a plain byte copy of a WAL-mode SQLite produces — fails here.
+    // Opening it is the assertion: a byte copy of a WAL-mode SQLite fails here.
     let restored = Workspace::open(destination.clone()).await.unwrap();
     let pages = restored.list_pages(PageQuery::default()).await.unwrap();
     assert_eq!(
@@ -5120,13 +4742,6 @@ async fn deleting_all_data_leaves_nothing_behind_and_the_workspace_usable() {
     let fresh = ws.create_page(new_page("Starting over")).await.unwrap();
     assert_eq!(ws.get_page(fresh.id).await.unwrap().title, "Starting over");
 }
-
-// ─── The focus timer ─────────────────────────────────────────────────────────
-//
-// The floor and the wording are `pikos-core`'s and graded there against the
-// TypeScript. What is here is the half that writes: that a session long enough
-// to count lands a row, that one under the floor lands nothing, and that the
-// duration comes from the timestamps rather than from a caller's arithmetic.
 
 #[tokio::test]
 async fn a_session_past_the_floor_is_recorded_with_its_length() {
@@ -5272,14 +4887,6 @@ async fn the_elapsed_label_crosses_the_boundary_rather_than_being_reimplemented(
     assert_eq!(ws.focus_elapsed_label(3_600), "1:00:00");
 }
 
-// ─── The backlog behind an occurrence ────────────────────────────────────────
-//
-// What decides whether acting on one occurrence is ambiguous. Every rule here
-// removes something from the answer, and each removal is invisible in the UI —
-// a date wrongly left in makes the app offer to complete a day that is already
-// done, and one wrongly taken out silently narrows what "everything before
-// today" means.
-
 /// A daily series whose head sits `days` days in the past.
 async fn overdue_series(ws: &Workspace, title: &str, days: i64) -> String {
     let page = ws.create_page(new_page(title)).await.unwrap();
@@ -5322,10 +4929,6 @@ async fn the_backlog_is_every_open_day_before_today_except_the_one_being_acted_o
 }
 
 /// Today's occurrence, and tomorrow's, have nothing behind them to ask about.
-///
-/// Not quite true of today — there may be earlier open days — but the prompt is
-/// about a *backlog*, and the caller only asks when it has a date before today.
-/// What this pins is the other half: a series that is not behind at all.
 #[tokio::test]
 async fn a_series_that_is_not_behind_has_no_backlog() {
     let tmp = TempWorkspace::new();
@@ -5408,12 +5011,6 @@ async fn an_occurrence_that_was_moved_is_not_counted_as_missed() {
 }
 
 /// An all-day head is the case the window's extra millisecond exists for.
-///
-/// The search runs strictly *after* its lower bound. A timed head at 09:00
-/// clears a bound set at its own midnight either way, so nothing notices — but
-/// an all-day occurrence *is* midnight, and a bound set there would drop the
-/// head out of its own backlog. Which is exactly the day somebody is most
-/// likely to be looking at.
 #[tokio::test]
 async fn an_all_day_head_is_part_of_the_backlog_behind_a_later_day() {
     let tmp = TempWorkspace::new();
@@ -5439,12 +5036,6 @@ async fn an_all_day_head_is_part_of_the_backlog_behind_a_later_day() {
 
 /// A moved occurrence of a *detached* series, which is the only kind that
 /// leaves an override row without an exdate.
-///
-/// A native move clones the page and excludes the original date from the rule,
-/// so the rule itself already stops yielding it — the filter never runs. A
-/// detached series keeps the occurrence in-series as a `page_schedules` row, and
-/// nothing in the rule says it moved. Without the filter it reads as a day
-/// nobody did.
 #[tokio::test]
 async fn a_moved_occurrence_of_a_detached_series_is_not_missed() {
     let tmp = TempWorkspace::new();
@@ -5484,10 +5075,6 @@ async fn a_moved_occurrence_of_a_detached_series_is_not_missed() {
 
 /// Occurrences from before the calendar was connected are the provider's
 /// history, not work anybody missed.
-///
-/// A freshly connected calendar full of last year's meetings would otherwise
-/// open as an enormous backlog on the first tap, offering to mark a year of
-/// somebody else's events done.
 #[tokio::test]
 async fn occurrences_before_the_connect_day_are_history_rather_than_backlog() {
     let tmp = TempWorkspace::new();
@@ -5504,12 +5091,8 @@ async fn occurrences_before_the_connect_day_are_history_rather_than_backlog() {
     );
 }
 
-/// Backdates a calendar link, so a test can put the connect day inside the
-/// series rather than before all of it.
-///
-/// The instant is local midday on `day`, stored as UTC the way the reconciler
-/// writes it. UTC midnight of a local date falls on the day before anywhere west
-/// of UTC, and midday is never skipped by a DST change.
+/// Backdates a calendar link so the connect day falls inside the series. Local midday on `day`, stored as
+/// UTC: UTC midnight of a local date falls on the previous day west of UTC.
 async fn connected_on(path: &str, page_id: &str, day: &str) {
     use chrono::TimeZone;
     let midday = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d")
@@ -5547,8 +5130,6 @@ async fn a_page_with_no_repeat_has_nothing_behind_it() {
         .unwrap()
         .is_empty());
 }
-
-// ─── Acting on the whole backlog ─────────────────────────────────────────────
 
 #[tokio::test]
 async fn skipping_a_backlog_drops_every_day_it_was_given() {

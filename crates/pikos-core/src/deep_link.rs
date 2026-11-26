@@ -1,12 +1,8 @@
 //! `pikos://` URL parsing.
 //!
-//! Port of `apps/desktop/src/shared/deep-link/parseDeepLink.ts`. iOS needs the
-//! identical grammar for App Intents, widget taps and notification handling, so
-//! a link that works on desktop works on the phone and vice versa.
-//!
-//! Unknown or malformed input yields `None`; callers treat that as a no-op
-//! rather than an error, because a deep link is usually arriving from outside
-//! the app and being noisy about a bad one helps nobody.
+//! iOS needs the identical grammar for App Intents, widget taps and notifications, so a link
+//! works on both platforms. Unknown or malformed input yields `None`, which callers treat as
+//! a no-op: the link arrives from outside, and being noisy about a bad one helps nobody.
 
 use url::Url;
 
@@ -42,7 +38,6 @@ impl SmartView {
     }
 }
 
-/// Case-insensitive canonical UUID check, matching the TypeScript regex.
 fn is_uuid(s: &str) -> bool {
     let groups = [8usize, 4, 4, 4, 12];
     let mut parts = s.split('-');
@@ -57,17 +52,14 @@ fn is_uuid(s: &str) -> bool {
     parts.next().is_none()
 }
 
-/// Parse a `pikos://` URL into an action.
 pub fn parse_deep_link(raw: &str) -> Option<DeepLink> {
     let url = Url::parse(raw).ok()?;
     if url.scheme() != "pikos" {
         return None;
     }
 
-    // The TypeScript joins host and pathname before splitting, because host
-    // parsing for non-special schemes differs between URL implementations —
-    // `pikos://today` yields host "today" in some and an empty host with path
-    // "/today" in others. Joining makes the parse independent of which.
+    // Host and path are joined before splitting because non-special schemes parse differently
+    // across URL implementations (`pikos://today` is host "today" in some, path "/today" in others).
     let host = url.host_str().unwrap_or("");
     let path = format!("{host}{}", url.path());
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
@@ -77,11 +69,8 @@ pub fn parse_deep_link(raw: &str) -> Option<DeepLink> {
     match *head {
         "page" => {
             let id = rest.first()?;
-            // Note the asymmetry with the arms below, which reject trailing
-            // segments: `pikos://page/<uuid>/extra` resolves to the page. That
-            // is the desktop behaviour, reproduced deliberately rather than
-            // tidied — the corpus pins it, and changing it here would make the
-            // two platforms disagree.
+            // Unlike the arms below, trailing segments are accepted: `pikos://page/<uuid>/extra`
+            // resolves to the page, matching desktop.
             if !is_uuid(id) {
                 return None;
             }
@@ -90,12 +79,7 @@ pub fn parse_deep_link(raw: &str) -> Option<DeepLink> {
                 focus: query_param(&url, "focus") == "1",
             })
         }
-        // Matched by name rather than by an if/else on one of them. The first
-        // port of this arm handled exactly two views and read `if head ==
-        // "today" { Today } else { Inbox }`, so when Upcoming was added on the
-        // desktop there was no arm to add it to and no test to notice: the URL
-        // simply did nothing on the phone. Exhaustive here, so a fourth view is
-        // a compile error rather than a dead link.
+        // Matched by name and exhaustively, so a new view is a compile error rather than a dead link.
         "today" | "upcoming" | "inbox" => {
             if !rest.is_empty() {
                 return None;
@@ -133,8 +117,7 @@ pub fn parse_deep_link(raw: &str) -> Option<DeepLink> {
     }
 }
 
-/// Percent-decoded value of a query parameter, or empty when absent — matching
-/// `URLSearchParams.get(k) ?? ""`.
+/// Percent-decoded value of a query parameter, or empty when absent.
 fn query_param(url: &Url, key: &str) -> String {
     url.query_pairs()
         .find(|(k, _)| k == key)

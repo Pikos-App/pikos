@@ -26,10 +26,6 @@ fn matches(pattern: &str, text: &str) -> bool {
         .unwrap_or(false)
 }
 
-// ---------------------------------------------------------------------------
-// Overlap removal: when two results claim overlapping text, the longer wins.
-// ---------------------------------------------------------------------------
-
 pub struct OverlapRemovalRefiner;
 
 impl Refiner for OverlapRemovalRefiner {
@@ -55,10 +51,6 @@ impl Refiner for OverlapRemovalRefiner {
         filtered
     }
 }
-
-// ---------------------------------------------------------------------------
-// Weekday + date: "Tuesday, January 13" is one result, not two.
-// ---------------------------------------------------------------------------
 
 pub struct MergeWeekdayComponentRefiner;
 
@@ -102,10 +94,6 @@ impl Refiner for MergeWeekdayComponentRefiner {
         refine_by_merging(self, context, results)
     }
 }
-
-// ---------------------------------------------------------------------------
-// Date + time: "april 18 at 3pm".
-// ---------------------------------------------------------------------------
 
 pub struct MergeDateTimeRefiner;
 
@@ -262,10 +250,6 @@ fn merge_date_time_component(
     merged
 }
 
-// ---------------------------------------------------------------------------
-// A UTC offset written after a date: "2020-02-13 +09:00".
-// ---------------------------------------------------------------------------
-
 /// Pull a `+hh`/`-hh[:mm]` following a result into it.
 ///
 /// This engine has no timezone concept of its own, and the offset it records is
@@ -328,10 +312,6 @@ impl Refiner for ExtractTimezoneOffsetRefiner {
     }
 }
 
-// ---------------------------------------------------------------------------
-// A relative offset written beside a date: "2020-02-13 +2 weeks".
-// ---------------------------------------------------------------------------
-
 pub struct MergeRelativeAfterDateRefiner;
 
 impl MergingRefiner for MergeRelativeAfterDateRefiner {
@@ -379,10 +359,6 @@ impl Refiner for MergeRelativeAfterDateRefiner {
         refine_by_merging(self, context, results)
     }
 }
-
-// ---------------------------------------------------------------------------
-// A relative offset written before a date: "2 weeks before 2020-02-13".
-// ---------------------------------------------------------------------------
 
 pub struct MergeRelativeFollowByDateRefiner;
 
@@ -446,10 +422,6 @@ impl Refiner for MergeRelativeFollowByDateRefiner {
         refine_by_merging(self, context, results)
     }
 }
-
-// ---------------------------------------------------------------------------
-// Push implied dates into the future.
-// ---------------------------------------------------------------------------
 
 pub struct ForwardDateRefiner;
 
@@ -543,10 +515,6 @@ fn forward_one(context: &Context, result: &mut ParsingResult) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Drop results that cannot be dates.
-// ---------------------------------------------------------------------------
-
 pub struct UnlikelyFormatFilter;
 
 impl Filter for UnlikelyFormatFilter {
@@ -603,10 +571,6 @@ impl Refiner for EnglishUnlikelyFormatFilter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// A year written after the date: "14/4 2026".
-// ---------------------------------------------------------------------------
-
 pub struct ExtractYearSuffixRefiner;
 
 impl Refiner for ExtractYearSuffixRefiner {
@@ -641,10 +605,6 @@ impl Refiner for ExtractYearSuffixRefiner {
         results
     }
 }
-
-// ---------------------------------------------------------------------------
-// Two dates joined by "to": "april 18 to april 25".
-// ---------------------------------------------------------------------------
 
 pub struct MergeDateRangeRefiner;
 

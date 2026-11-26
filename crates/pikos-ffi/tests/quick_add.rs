@@ -1,11 +1,5 @@
-//! The quick-add FFI surface.
-//!
-//! Parsing itself is graded in `pikos-core` against the TypeScript corpus;
-//! what is checked here is the boundary — that a malformed reference is
-//! refused rather than guessed at, and that priority survives the crossing with
-//! all three of its states intact. Collapsing "not mentioned" into "cleared" is
-//! the mistake this surface is shaped to prevent, so it is the one the tests
-//! aim at.
+//! The quick-add boundary: a malformed reference is refused rather than guessed at, and priority
+//! keeps all three of its states (parsing itself is graded in `pikos-core`).
 
 use pikos_ffi::{parse_quick_add, Priority, PriorityEdit, QuickAddResult};
 
@@ -114,6 +108,5 @@ fn a_named_set_of_days_comes_back_as_concrete_pages() {
             "2026-03-20T15:00:00"
         ]
     );
-    // Every page in the series carries the same title and metadata.
     assert!(inputs.iter().all(|input| input.title == "run"));
 }

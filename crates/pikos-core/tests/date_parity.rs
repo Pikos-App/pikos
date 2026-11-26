@@ -1,21 +1,13 @@
 //! The Rust date engine, graded against chrono-node.
 //!
-//! Two corpora, both generated from the TypeScript reference (see
-//! `packages/core/scripts/parser-grammar/`):
+//! - **`date-expressions.json`**: each distinct date expression on its own, so a failure
+//!   names the pattern family that broke.
+//! - **`date-calls.json`**: what chrono-node was actually asked, as whole quick-add titles.
+//!   It grades match extents and competing candidates, and its titles with no date in them
+//!   catch over-matching.
 //!
-//! - **`date-expressions.json`** — each distinct date expression the parser
-//!   corpus exercises, on its own, at every pinned reference. Development-grade
-//!   granularity: when this fails it says which pattern family broke.
-//! - **`date-calls.json`** — what chrono-node was *actually* asked, recorded
-//!   through the real parser. The text is a whole quick-add title after
-//!   pre-processing, so this is the one that grades match extents and the
-//!   choice between competing candidates. It is also the one with teeth: 596 of
-//!   its cases are titles with no date in them, and a parser that over-matches
-//!   fails there rather than here.
-//!
-//! Indices need converting: the reference records JavaScript string indices,
-//! which count UTF-16 code units, and this engine returns byte offsets. A title
-//! starting with an emoji makes the two differ.
+//! The reference records JavaScript string indices (UTF-16 code units); this engine returns
+//! byte offsets, so indices are converted.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -103,7 +95,6 @@ fn references(meta: &Meta) -> BTreeMap<String, NaiveDateTime> {
 }
 
 /// The reference's indices count UTF-16 code units; this engine's count bytes.
-/// Convert so the two are comparable for text that is not pure ASCII.
 fn utf16_index_to_byte_index(text: &str, utf16_index: usize) -> usize {
     let mut utf16 = 0usize;
     for (byte_index, character) in text.char_indices() {
@@ -130,7 +121,6 @@ fn sorted(names: &[String]) -> Vec<String> {
     sorted
 }
 
-/// What the reference said, rendered the way a failure message wants to read.
 fn describe_expected(expected: &Option<ExpectedResult>) -> String {
     match expected {
         None => "no match".to_string(),
@@ -171,8 +161,7 @@ fn describe_actual(actual: &Option<DateMatch>, text: &str) -> String {
     }
 }
 
-/// Compare one parse against the reference, returning a description of the
-/// first thing that differs.
+/// Compare one parse against the reference, describing the first difference.
 fn mismatch(text: &str, expected: &Option<ExpectedResult>, actual: &Option<DateMatch>) -> bool {
     match (expected, actual) {
         (None, None) => false,
@@ -256,8 +245,7 @@ fn every_recorded_call_matches_the_reference() {
     let total = corpus.cases.len();
     assert!(total > 1500, "corpus looks truncated: {total} cases");
 
-    // A corpus made only of matches would not catch over-matching, which is
-    // the likelier failure for a hand-written parser.
+    // A corpus of only matches would not catch over-matching.
     let without_a_date = corpus.cases.iter().filter(|c| c.result.is_none()).count();
     assert!(
         without_a_date > 400,

@@ -1,12 +1,10 @@
-//! Convert ProseMirror/Tiptap JSON → Markdown.
+//! Convert ProseMirror/Tiptap JSON to Markdown.
 //!
-//! Lives here rather than in the desktop crate because the Markdown export is
-//! not a desktop feature — it is what a workspace's contents look like outside
-//! Pikos, and a phone that cannot produce it cannot get its owner's writing
-//! out. Moved from `apps/desktop/src-tauri/src/markdown/`; the conformance
-//! table came with it, since a second renderer is exactly what the export and
-//! the importer must not have.
-//! Handles the node types produced by our Tiptap editor configuration:
+//! Lives here rather than in the desktop crate because export is not a desktop feature: a
+//! phone that cannot produce it cannot get its owner's writing out. The conformance table is
+//! shared so export and import never have two renderers.
+//!
+//! Handles the node types the Tiptap editor configuration produces:
 //! doc, paragraph, heading(1-3), bulletList, orderedList, listItem,
 //! taskList, taskItem, codeBlock, blockquote, horizontalRule, hardBreak,
 //! pageLink, text with marks: bold, italic, strike, code, link, underline.
@@ -70,8 +68,6 @@ fn with_alternate_marker(list: &str, family: ListFamily) -> String {
 
 fn render_blocks(out: &mut String, nodes: &[Value], depth: usize) {
     let len = nodes.len();
-    // The previous top-level list, if only blank lines have come since, and whether
-    // it took the alternate marker.
     let mut previous: Option<(ListFamily, bool)> = None;
     for (i, node) in nodes.iter().enumerate() {
         match (depth, list_family(node)) {
@@ -92,14 +88,9 @@ fn render_blocks(out: &mut String, nodes: &[Value], depth: usize) {
                 }
             }
         }
-        // Blank line between top-level blocks (not after the last one).
-        //
-        // An empty paragraph is the importer's representation of a blank line
-        // (see insertBlankLineParagraphs) and already renders as its own '\n'.
-        // Adding the separator on top of it would emit two newlines per empty
-        // paragraph, so a markdown → import → export round trip amplifies blank
-        // runs (1 → 3 → 7 …). Suppress the separator on either side of an empty
-        // paragraph so the empty paragraph alone carries the blank line (n → n).
+        // An empty paragraph is the importer's blank line and already renders as its own '\n'.
+        // A separator on either side would amplify blank runs on a markdown → import → export round
+        // trip (1 → 3 → 7), so it is suppressed there.
         if depth == 0
             && i + 1 < len
             && !is_empty_paragraph(node)
@@ -110,9 +101,8 @@ fn render_blocks(out: &mut String, nodes: &[Value], depth: usize) {
     }
 }
 
-/// True for a paragraph node with no inline content — the shape the importer
-/// inserts for each blank line. These must not also receive the inter-block
-/// separator (see `render_blocks`).
+/// True for a paragraph with no inline content, the importer's shape for a blank line.
+/// It gets no inter-block separator (see `render_blocks`).
 fn is_empty_paragraph(node: &Value) -> bool {
     node.get("type").and_then(|t| t.as_str()) == Some("paragraph")
         && node
@@ -260,8 +250,6 @@ fn render_block(out: &mut String, node: &Value, depth: usize) {
                 .and_then(|a| a.get("alt"))
                 .and_then(|a| a.as_str())
                 .unwrap_or("");
-            // Prefer the stored asset path for export (relative path),
-            // fall back to src
             let export_src = attrs
                 .and_then(|a| a.get("data-asset-path"))
                 .and_then(|p| p.as_str())
@@ -272,7 +260,6 @@ fn render_block(out: &mut String, node: &Value, depth: usize) {
             out.push_str("---\n");
         }
         _ => {
-            // Unknown block type — degrade to its text content
             render_inline_content(out, node);
             if !out.ends_with('\n') {
                 out.push('\n');
@@ -392,7 +379,6 @@ fn render_inline(out: &mut String, node: &Value) {
             out.push_str("]]");
         }
         _ => {
-            // Unknown inline — try text
             if let Some(text) = node.get("text").and_then(|t| t.as_str()) {
                 out.push_str(text);
             }

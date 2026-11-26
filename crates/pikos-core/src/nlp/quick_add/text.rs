@@ -61,10 +61,6 @@ pub fn group<'t>(captures: &Captures<'t, str>, index: usize) -> Option<&'t str> 
     captures.get(index).map(|m| m.as_str())
 }
 
-// ---------------------------------------------------------------------------
-// date-fns arithmetic
-// ---------------------------------------------------------------------------
-
 pub fn add_days(date: NaiveDateTime, days: i64) -> Option<NaiveDateTime> {
     date.checked_add_signed(TimeDelta::try_days(days)?)
 }

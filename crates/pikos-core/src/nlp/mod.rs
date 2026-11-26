@@ -1,69 +1,22 @@
-//! Natural-language date parsing, ported from chrono-node.
+//! Natural-language date parsing, ported from chrono-node 2.9.0 (MIT, Copyright (c) 2014
+//! Wanasit Tanakitrungruang).
 //!
-//! # Why this exists
+//! Returns what quick-add needs and no Rust date crate gives: the resolved instant, per-field
+//! certainty (a given time versus a guessed midday), the exact match extent to cut from the title,
+//! and the range end.
 //!
-//! Quick-add lets you type "call the plumber tomorrow at 3pm" and get a page
-//! scheduled for tomorrow at 15:00, with "call the plumber" as its title. On
-//! desktop the date part of that is chrono-node's work. iOS has no JavaScript
-//! runtime in the path where quick-add runs, and shelling out to the editor
-//! webview for it would be absurd — so it is here, in Rust, shared by both.
+//! Deliberate differences from the reference:
 //!
-//! # What the caller needs back
+//! - **Written-out timezones are not read.** chrono-node shifts "3pm EST" by an offset; this
+//!   leaves "EST" in the title. Pikos stores wall-clock values, so an offset has nothing to
+//!   apply to.
+//! - **A numeric offset is reproduced.** The reference reads a sign and digits after whatever it
+//!   just matched, so "may 2 to 10 2026-04-01" takes the "-04" as UTC-4 and shifts the result
+//!   four hours. Dropping it would put this engine at odds with the desktop's on ordinary input;
+//!   see `refiners::ExtractTimezoneOffsetRefiner`.
+//! - **English and casual mode only.** Nothing else asks for more.
 //!
-//! Four things, and they are why no Rust date crate fit:
-//!
-//! - **the resolved instant** — every library does this;
-//! - **per-field certainty** — did the text give a time, or is midday a guess?
-//!   Quick-add branches on it to decide between an all-day page and a timed
-//!   one;
-//! - **the match extent** — the date has to be cut out of the title, so the
-//!   exact span matters, not just that a date was found;
-//! - **the range end** — "3pm to 5pm" and "april 18-25" both carry one.
-//!
-//! # How it is graded
-//!
-//! The TypeScript path is the reference until this reaches parity with it.
-//! `tests/date_parity.rs` runs both corpora generated from it:
-//! `date-expressions.json` (each pattern on its own) and `date-calls.json`
-//! (what chrono-node was actually asked, recorded through the real parser, so
-//! the text is a whole title and the extents are the ones quick-add cuts).
-//!
-//! Beyond the corpora, `tests/quick_add_fuzz.rs` grades it against lines
-//! composed of fragments in random order. That is where the ordering bugs live:
-//! the hand-written corpora exercise one feature per input, and the parser is a
-//! pipeline whose order is load-bearing. A clean fuzz run is evidence about the
-//! axes the generator varies and nothing else, so a new axis needs a mutation
-//! that proves the fuzzer can see it.
-//!
-//! # Deliberate differences from the reference
-//!
-//! - **Written-out timezones are not read.** chrono-node maps "3pm EST" to an
-//!   offset and shifts the result; this leaves the "EST" in the title. Pikos
-//!   parses wall-clock text against a wall-clock reference and stores
-//!   wall-clock values — a timed page at 09:00 stays at 09:00 across a DST
-//!   boundary — so an offset has nothing to apply to, and for a written-out
-//!   zone leaving it alone is the better answer.
-//!
-//!   A *numeric* offset is a different matter and is reproduced. The reference
-//!   reads a sign and one or two digits after whatever it just matched, which
-//!   fires far more often than "somebody typed a timezone": in "may 2 to 10
-//!   2026-04-01" it takes the "-04" of the following date as UTC-4 and shifts
-//!   the result four hours. Ignoring that would put this engine and the
-//!   desktop's at odds on ordinary input, so it is reproduced — see
-//!   `refiners::ExtractTimezoneOffsetRefiner`, which also records why it is
-//!   almost certainly a bug worth fixing on the TypeScript side.
-//! - **English only.** The reference ships German, French, Japanese, Dutch,
-//!   Portuguese, Russian, Ukrainian and Chinese. Quick-add is English-only and
-//!   never reaches them.
-//! - **Casual mode only.** The strict configuration is not built here, because
-//!   nothing asks for it.
-//!
-//! Indices are **byte offsets** into the UTF-8 input, not character or UTF-16
-//! offsets. Slice the input with them directly; do not hand them to a caller
-//! that counts differently.
-//!
-//! Ported from chrono-node 2.9.0 (MIT, Copyright (c) 2014 Wanasit
-//! Tanakitrungruang).
+//! Indices are **byte offsets** into the UTF-8 input, not character or UTF-16 offsets.
 
 mod components;
 mod dict;
@@ -79,9 +32,7 @@ use components::{Component, Reference};
 use engine::{execute_parser, Context};
 use jsdate::JsDate;
 
-/// A field a parse can be certain about. Deliberately narrower than the
-/// internal component set: milliseconds and meridiem are bookkeeping, never
-/// something the caller branches on.
+/// A field a parse can be certain about. Narrower than the internal component set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Granularity {
     Hour,
@@ -136,13 +87,8 @@ pub struct MatchedDate {
     pub at: NaiveDateTime,
     /// In `Granularity::ALL` order, so two of these compare directly.
     pub certain: Vec<Granularity>,
-    /// The weekday the *text named*, Sunday as 0 — `None` when it named none.
-    ///
-    /// Deliberately not "the weekday `at` falls on", and not derivable from it:
-    /// "on friday dec 28" states Friday over a date that is a Monday, and the
-    /// date wins for scheduling while the *weekday* is what a recurrence rule
-    /// should repeat on. Reading it off `at` instead turns "every 2 weeks on
-    /// friday dec 28" into a rule that repeats on Mondays.
+    /// The weekday the *text named*, Sunday as 0, or `None`. Not derivable from `at`: "on friday
+    /// dec 28" names Friday over a Monday date, and a recurrence rule must repeat on Friday.
     pub stated_weekday: Option<u8>,
 }
 
@@ -252,7 +198,6 @@ fn into_matched_date(components: &components::ParsingComponents) -> Option<Match
 mod tests {
     use super::*;
 
-    /// Sunday 2026-03-15 at midday — the parity corpus's first reference.
     fn sunday_noon() -> NaiveDateTime {
         "2026-03-15T12:00:00".parse().expect("valid")
     }
@@ -316,7 +261,6 @@ mod tests {
     fn a_month_name_inside_a_sentence_is_not_a_date_when_it_is_a_verb() {
         // "may" is a modal verb far more often than a month.
         assert!(parse_first("this may take a while", sunday_noon()).is_none());
-        // On its own, it is the month.
         assert_eq!(at("may").start.at.to_string(), "2026-05-01 12:00:00");
     }
 
@@ -342,16 +286,10 @@ mod tests {
         assert_eq!(&text[matched.index..matched.end_index()], "tomorrow at 7pm");
     }
 
-    // Found by differential fuzzing rather than by reading — both are classes
-    // the hand-written corpora never reached. See `tests/quick_add_fuzz.rs`.
-
     #[test]
     fn a_hyphen_after_a_date_is_read_as_a_utc_offset() {
-        // Not a hypothetical about someone typing "EST". The month-name parser
-        // claims "may 2 to 10 2026", the offset refiner then reads the "-04" of
-        // the *following* ISO date as UTC-4, and the whole thing comes back
-        // shifted four hours. Almost certainly unwanted in a wall-clock app,
-        // and faithfully what the reference does.
+        // The offset refiner reads the "-04" of the following ISO date as UTC-4, as the
+        // reference does.
         let matched = at("may 2 to 10 2026-04-01");
         assert_eq!(matched.text, "may 2 to 10 2026-04-01");
         assert_eq!(matched.start.at.to_string(), "2026-05-02 05:00:00");
@@ -363,14 +301,9 @@ mod tests {
 
     #[test]
     fn an_overlapping_neighbour_is_dropped_rather_than_spliced_in() {
-        // The offset refiner extends a result's text, which can push its end
-        // past the start of the next result. The text "between" them is then
-        // asked for with the bounds the wrong way round; JavaScript's
-        // `substring` swaps them and hands back the overlap, which fails the
-        // merge patterns and leaves the pair alone for overlap removal to
-        // resolve. A slice returning empty instead reads as "nothing between
-        // these" and splices them together — this used to come back as
-        // "april 18-25 2024-0202".
+        // The offset refiner can push a result's end past the next result's start. The text
+        // between them is then read with swapped bounds, as JavaScript's `substring` does, so the
+        // pair fails the merge patterns instead of splicing into "april 18-25 2024-0202".
         let leap_day: NaiveDateTime = "2024-02-29T09:00:00".parse().expect("valid");
         let matched = parse_first("april 18-25 2024-02-26", leap_day).expect("a date");
         assert_eq!(matched.text, "april 18-25 2024-02");
@@ -381,11 +314,6 @@ mod tests {
     fn an_impossible_date_is_not_a_date() {
         assert!(parse_first("deadline february 30", sunday_noon()).is_none());
     }
-
-    // The cases below cover behaviour the parity corpora do not reach — found
-    // by mutating the engine and watching the corpora stay green. Every
-    // expectation here was read off the TypeScript reference (see
-    // `pnpm --filter @pikos/core probe:chrono`), not reasoned out.
 
     #[test]
     fn a_weekday_written_before_a_date_joins_it() {

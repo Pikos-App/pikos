@@ -1,24 +1,16 @@
 //! The folder palette.
 //!
-//! Mirror of `packages/core/src/constants/colors.ts`, graded against it by
-//! `tests/colors_parity.rs`. The TypeScript is the design source of truth; this
-//! exists so the palette reaches Swift over the FFI instead of being typed out a
-//! third time in a file no test compares to anything.
+//! The TypeScript in `packages/core/src/constants/colors.ts` is the design source of truth;
+//! this exists so the palette reaches Swift over the FFI instead of being typed out a third
+//! time in a file no test compares.
 //!
-//! One palette for folders *and* for the folders a calendar mirrors into, so a
-//! synced calendar can never clash with a colour the user picked themselves.
-//! Provider hex is deliberately not inherited — Google's Banana `#fbe983` is
-//! near-white on a dark sidebar and reads as no dot at all.
+//! One palette for folders and for the folders a calendar mirrors into, so a synced calendar
+//! never clashes with a colour the user picked. Provider hex is not inherited: Google's Banana
+//! `#fbe983` is near-white on a dark sidebar. The saturated eight are what a person picks; the
+//! pastel eight are where a synced calendar maps, so it reads as ambient next to chosen colours.
 //!
-//! The two rows are not decoration. The saturated eight are what a person picks
-//! for their own folders; the pastel eight are where a synced calendar is
-//! mapped, so an imported calendar reads as ambient next to work somebody chose
-//! to colour.
-//!
-//! `pikos-calendar-sync::palette` carries its own copy of the pastel half for
-//! the provider-colour mapping. It is a third copy and known to be one: that
-//! crate does not depend on this one, and adding the dependency to share eight
-//! string pairs would be the larger change. If the palette moves, both move.
+//! `pikos-calendar-sync::palette` keeps its own copy of the pastel half, since that crate does
+//! not depend on this one. If the palette moves, both move.
 
 /// One entry. `label` is shown to a person; `value` is what is stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +23,7 @@ const fn color(label: &'static str, value: &'static str) -> PaletteColor {
     PaletteColor { label, value }
 }
 
-/// Saturated row first, pastel row second — the order the pickers draw.
+/// Saturated row first, pastel row second, the order the pickers draw.
 pub const PALETTE_COLORS: [PaletteColor; 16] = [
     color("Red", "#D9577A"),
     color("Orange", "#E09B4A"),
@@ -53,8 +45,7 @@ pub const PALETTE_COLORS: [PaletteColor; 16] = [
 
 /// What a calendar's folder is coloured on first enable, before anybody picks.
 ///
-/// Per provider so two accounts do not both arrive as the same colour, and a
-/// pastel either way — see the module note on which row means what.
+/// Per provider so two accounts do not both arrive as the same colour; always pastel.
 pub fn default_color_for_provider(provider: &str) -> &'static str {
     match provider {
         "caldav" => "#A6C8E8", // Sky

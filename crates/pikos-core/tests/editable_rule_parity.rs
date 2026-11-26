@@ -1,19 +1,9 @@
-//! Which rules a structured editor may touch, graded against the TypeScript.
+//! Which rules a structured editor may touch, graded against `rruleEditWouldDegrade`.
 //!
-//! `rrule_edit_would_degrade` is the guard an editor asks before offering to
-//! change a rule at all. Getting it wrong in the permissive direction is the
-//! expensive one and it is silent: the user nudges an interval, the rule is
-//! rebuilt through a shape that cannot hold `BYWEEKNO`, and the terms that made
-//! the rule theirs are gone with no error anywhere.
-//!
-//! Graded rather than unit-tested because the answer is not a judgement call —
-//! it is whatever `rruleEditWouldDegrade` says, and the desktop has been
-//! answering it in production. The corpus is
-//! `tests/corpus/recurrence.json`'s `degradeCases`; regenerate with
-//! `pnpm --filter @pikos/core gen:parity`.
-//!
-//! This lives in `pikos-core` rather than beside the engine only because the
-//! corpus does. The function under test is `pikos-recurrence`'s.
+//! Too permissive is the expensive direction and silent: an edit rebuilds the rule through a
+//! shape that cannot hold `BYWEEKNO`, and the terms that made it the user's are lost. The corpus
+//! is `degradeCases` in `tests/corpus/recurrence.json`. The function under test is
+//! `pikos-recurrence`'s; it is graded here because the corpus lives here.
 
 use std::fs;
 use std::path::PathBuf;
@@ -74,11 +64,8 @@ fn the_editable_set_matches_the_typescript() {
     }
 }
 
-/// A corpus that only ever answers one way would pass whatever the port did.
-///
-/// Both halves matter and for different reasons: the locked half is what stops
-/// a lossy edit, and the editable half is what stops the guard from locking
-/// every rule and quietly disabling the editor entirely.
+/// Both halves matter: the locked half stops a lossy edit, the editable half stops the guard
+/// from locking every rule.
 #[test]
 fn the_corpus_covers_both_answers() {
     let corpus = load();

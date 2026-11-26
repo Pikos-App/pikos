@@ -143,10 +143,6 @@ pub enum Window {
     Days(u32),
 }
 
-// ---------------------------------------------------------------------------
-// Detection
-// ---------------------------------------------------------------------------
-
 /// Day words the bare "every <day>" rule accepts. No single letters: those
 /// belong to the slash list, and letting them in here would make "every m"
 /// swallow the "m" of "every morning".
@@ -403,10 +399,6 @@ fn is_weekly_without_days(cadence: &Option<Cadence>) -> bool {
     )
 }
 
-// ---------------------------------------------------------------------------
-// RRULE strings
-// ---------------------------------------------------------------------------
-
 /// Serialise an infinite cadence as the RRULE body — no `RRULE:` prefix and no
 /// `DTSTART`, because the anchor lives on the page, not in the rule.
 ///
@@ -458,10 +450,6 @@ pub enum Bound {
 fn format_until(boundary: NaiveDateTime) -> String {
     format!("{}T235959", boundary.format("%Y%m%d"))
 }
-
-// ---------------------------------------------------------------------------
-// Expansion
-// ---------------------------------------------------------------------------
 
 /// Expand a weekly-by-weekday rule into concrete occurrences.
 ///

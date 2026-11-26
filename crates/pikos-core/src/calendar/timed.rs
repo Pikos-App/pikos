@@ -1,19 +1,13 @@
-//! Timed-event overlap clustering and sweep-line column assignment.
-//!
-//! Answers one question: given the timed events touching a day, which column
-//! (cascade depth) does each one occupy? Pixel placement is the renderer's job;
-//! this decides the structure the renderer places.
+//! Timed-event overlap clustering and sweep-line column assignment: which column (cascade
+//! depth) each timed event on a day occupies. Pixel placement is the renderer's job.
 
 use chrono::{Duration, NaiveDateTime, Timelike};
 
 use super::LayoutPage;
 use crate::dates::{is_all_day_iso, parse_local_iso};
 
-/// Minimum visual duration of a timed event, in minutes.
-///
-/// A zero-length or very short event still occupies a readable slot, and that
-/// slot is what overlap is computed against — two 5-minute events 10 minutes
-/// apart do overlap, because both are quantized up to 15.
+/// Minimum visual duration of a timed event, in minutes. Overlap is computed against the
+/// floored slot, so two 5-minute events 10 minutes apart do overlap.
 const MIN_TIMED_MINUTES: i64 = 15;
 
 /// One timed event's structural placement within a day.
@@ -66,9 +60,8 @@ fn build_raw(
         None => real_start,
     };
 
-    // Overlap with the day is half-open on both sides: an event ending exactly
-    // at midnight belongs to the previous day only. One with no length belongs
-    // where its start falls, or at exactly midnight it would land on no day.
+    // Half-open on both sides: an event ending exactly at midnight belongs to the previous day
+    // only, and a zero-length one belongs where its start falls.
     let touches_day = if real_end > real_start {
         real_start < day_end && real_end > day_start
     } else {
@@ -131,10 +124,8 @@ fn build_raw(
     })
 }
 
-/// Group into transitively-connected overlap clusters.
-///
-/// Requires input sorted by top. A overlapping B and B overlapping C
-/// puts all three in one cluster even when A and C do not touch.
+/// Group into transitively-connected overlap clusters (A-B and B-C overlap puts A, B, C in
+/// one cluster). Requires input sorted by top.
 fn group_into_clusters(raws: Vec<Raw>) -> Vec<Vec<Raw>> {
     let mut clusters: Vec<Vec<Raw>> = Vec::new();
     let mut current: Vec<Raw> = Vec::new();
@@ -162,10 +153,9 @@ fn group_into_clusters(raws: Vec<Raw>) -> Vec<Vec<Raw>> {
 
 /// Assign a sweep-line column to each event in one cluster.
 ///
-/// Columns are walked from the highest down, and a free column is reused only
-/// when every column above it is also free. Reusing a lower column while a
-/// higher one is still alive would place the new event underneath a cascade
-/// that is still painted over it, hiding it.
+/// Columns are walked from the highest down, and a free column is reused only when every
+/// column above it is also free; otherwise the new event would sit under a cascade still
+/// painted over it.
 fn assign_columns(cluster: &[Raw]) -> Vec<usize> {
     let mut column_overlap_ends: Vec<NaiveDateTime> = Vec::new();
     let mut assignments = Vec::with_capacity(cluster.len());
@@ -194,17 +184,14 @@ fn assign_columns(cluster: &[Raw]) -> Vec<usize> {
 
 /// Structural layout for every timed event touching `day` (a `YYYY-MM-DD`).
 ///
-/// `shortest_block_minutes` is the shortest a block is drawn, in minutes of
-/// the grid: the renderer's minimum block height over its hour height, times
-/// 60. Overlap is decided by what is drawn, so a floored block claims the
-/// minutes its height covers, or a 9:00 reminder drawn 24 minutes tall would
-/// sit on a 9:15 event. That makes columns depend on the renderer's metrics,
-/// which is why the caller passes them in as minutes rather than this crate
-/// carrying any pixels.
+/// `shortest_block_minutes` is the shortest a block is drawn, in minutes of the grid (the
+/// renderer's minimum block height over its hour height, times 60). Overlap is decided by what
+/// is drawn, so a floored block claims the minutes its height covers; otherwise a 9:00 reminder
+/// drawn 24 minutes tall would sit on a 9:15 event. The renderer's metrics enter as minutes so
+/// this crate carries no pixels.
 ///
-/// Returns blocks in cluster order. The TypeScript original additionally sorts
-/// its result by `leftPct` before returning, to control DOM paint order; that
-/// is a rendering concern and is deliberately not reproduced here.
+/// Returns blocks in cluster order; the TypeScript original's `leftPct` sort is DOM paint order
+/// and is not reproduced.
 pub fn assign_timed_columns(
     pages: &[LayoutPage],
     day: &str,
