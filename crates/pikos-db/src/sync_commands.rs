@@ -1,7 +1,5 @@
-//! Sync-settings writers + DTOs — the account/calendar CRUD behind the Calendar
-//! Sync panel. Pure SQLite: the networked orchestration (autodiscovery, keychain,
-//! the poll engine) lives in `pikos-calendar-sync` and calls these. Kept here so
-//! the schema, row structs, and reconciler teardown stay co-located.
+//! Account and calendar CRUD behind the Calendar Sync panel. Pure SQLite: the networked
+//! orchestration lives in `pikos-calendar-sync` and calls these.
 
 use serde::Serialize;
 
@@ -20,9 +18,8 @@ pub struct SyncAccount {
     pub display_name: String,
     pub auth_kind: String,
     pub created_at: String,
-    /// Set when a poll hits a rejected credential, and the scheduler then skips the
-    /// account entirely — so the panel must surface it, or a background rejection is
-    /// invisible until someone resyncs by hand.
+    /// Set when a poll hits a rejected credential, after which the scheduler skips the
+    /// account, so the panel must surface it.
     pub reconnect_needed: bool,
 }
 
@@ -39,15 +36,14 @@ pub struct SyncCalendar {
     pub last_synced_at: Option<String>,
     #[ts(optional = false)]
     pub folder_id: Option<String>,
-    /// How many pages this calendar left behind when it was switched off — ones the
-    /// user had worked in, so they were kept rather than deleted. Switching the
-    /// calendar back on reclaims them and the calendar's own values win, which is
-    /// worth confirming first; zero means there is nothing to ask about.
+    /// How many pages this calendar left behind when switched off, kept because the user had
+    /// worked in them. Switching it back on reclaims them and the calendar's values win, which
+    /// is worth confirming; zero means nothing to ask.
     #[ts(type = "number")]
     pub detached_pages: i64,
 }
 
-/// One account plus its calendars — the panel's account-centric read.
+/// One account plus its calendars.
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
@@ -65,8 +61,6 @@ const CAL_COLS: &str = "id, account_id, calendar_id, display_name, color, enable
         WHERE ps.account_id = sync_calendar.account_id \
           AND ps.calendar_id = sync_calendar.calendar_id \
           AND ps.sync_state = 'detached' AND ps.detached_by = 'turn_off') AS detached_pages";
-
-// ─── accounts ───────────────────────────────────────────────────────────────────
 
 pub async fn insert_sync_account_impl(
     pool: &sqlx::SqlitePool,
@@ -91,10 +85,9 @@ pub async fn insert_sync_account_impl(
     get_sync_account_impl(pool, &id).await
 }
 
-/// Mark an account dormant (disconnected) rather than deleting it, so its calendars
-/// and detached `page_sync` rows survive for a later reconnect to re-link. Clears
-/// `reconnect_needed` — a dormant account isn't polled (its calendars are disabled),
-/// so the stale-credential flag no longer applies.
+/// Marks an account dormant rather than deleting it, so its calendars and detached
+/// `page_sync` rows survive for a reconnect to re-link. Clears `reconnect_needed`, which no
+/// longer applies to an account that isn't polled.
 pub async fn mark_account_disconnected_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     sqlx::query(
         "UPDATE sync_account SET disconnected = 1, reconnect_needed = 0, updated_at = ? WHERE id = ?",
@@ -106,21 +99,16 @@ pub async fn mark_account_disconnected_impl(pool: &sqlx::SqlitePool, id: &str) -
     Ok(())
 }
 
-/// Find an existing account to reuse on (re)connect, matched by the stable
-/// provider+display_name identity (`display_name` embeds `username · base_url` for
-/// CalDAV, the signed-in email for Google). Matches whether the row is dormant *or*
-/// still active: reconnecting an already-connected account must refresh it in place,
-/// never insert a second row — a duplicate account re-syncs every event twice (dedup
-/// is per-account). An active row wins the tiebreak in the unlikely event both exist.
+/// Finds an existing account to reuse on (re)connect, by provider and `display_name`
+/// (`username · base_url` for CalDAV, the email for Google). Matches a dormant or an active
+/// row: reconnecting must refresh in place, since a duplicate account re-syncs every event
+/// twice (dedup is per-account). An active row wins a tie.
 ///
-/// **Matched without regard to case.** A hostname is case-insensitive by DNS, so
-/// `Caldav.fastmail.com` and `caldav.fastmail.com` are one server, and a person typing
-/// the second after the first has no reason to expect a second account — one that
-/// re-syncs every event again and leaves the first account's pages detached, because
-/// re-link is scoped by account. Emails are effectively case-insensitive too, so
-/// collapsing the whole identity rather than only its host half costs nothing real and
-/// needs no rewrite of rows already stored. Merging two spellings is the direction this
-/// is allowed to be wrong in; splitting them is not.
+/// Matched without regard to case. A hostname is case-insensitive, so two spellings are one
+/// server, and a second account would re-sync every event and leave the first's pages
+/// detached, as re-link is scoped by account. Emails are effectively case-insensitive too,
+/// and collapsing the whole identity needs no rewrite of stored rows. Merging two spellings
+/// is the direction allowed to be wrong; splitting them is not.
 pub async fn find_account_by_identity_impl(
     pool: &sqlx::SqlitePool,
     provider: &str,
@@ -138,7 +126,6 @@ pub async fn find_account_by_identity_impl(
         .await?)
 }
 
-/// Clear the dormant flag when a reconnect reuses the account.
 pub async fn reactivate_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     sqlx::query(
         "UPDATE sync_account SET disconnected = 0, reconnect_needed = 0, updated_at = ? WHERE id = ?",
@@ -151,12 +138,9 @@ pub async fn reactivate_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppRe
 }
 
 pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<AccountWithCalendars>> {
-    // Dormant (disconnected) accounts are hidden — disconnect reads as removal in
-    // the panel even though the row survives for reconnect re-link.
-    // Grouped by provider, then by name, so a workspace lists the same way on every
-    // launch and two accounts on one provider sit together. Connection order put a
-    // newly added account at the bottom and told the user nothing. `created_at` only
-    // breaks a tie between two same-provider accounts sharing a name.
+    // Dormant accounts are hidden: disconnect reads as removal though the row survives for
+    // re-link. Ordered by provider then name so the list is stable and same-provider accounts
+    // sit together; `created_at` only breaks a tie.
     let sql = format!(
         "SELECT {ACCOUNT_COLS} FROM sync_account WHERE disconnected = 0
          ORDER BY provider ASC, display_name COLLATE NOCASE ASC, created_at ASC"
@@ -182,15 +166,11 @@ pub async fn get_sync_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
         .ok_or_else(|| AppError::NotFound(format!("sync account not found: {id}")))
 }
 
-// ─── calendars ──────────────────────────────────────────────────────────────────
-
-/// Persist a discovered calendar (disabled, no folder). Idempotent on
-/// `(account_id, calendar_id)`: a re-discovery refreshes the display name and —
-/// unless the user has picked one — the colour, leaving enable state and cursor
-/// untouched. Growing this `ON CONFLICT` set is how a reconnect silently disables
-/// every calendar or resets its cursor, so add a column here only deliberately.
-/// Both refreshed fields then flow onto the calendar's folder, which holds a
-/// derived copy rather than a second truth.
+/// Persists a discovered calendar, disabled and with no folder. Idempotent on
+/// `(account_id, calendar_id)`: a re-discovery refreshes the display name and, unless the
+/// user picked one, the colour, leaving enable state and cursor alone. Growing this
+/// `ON CONFLICT` set is how a reconnect would silently disable calendars or reset a cursor.
+/// Both fields flow onto the calendar's folder, a derived copy rather than a second truth.
 pub async fn upsert_sync_calendar_impl(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -241,8 +221,7 @@ pub async fn list_sync_calendars_impl(
         .await?)
 }
 
-/// Enabling materializes/re-flags its folder + sets the colour; disabling tears it
-/// down.
+/// Enabling materializes or re-flags its folder and sets the colour; disabling tears it down.
 pub async fn toggle_sync_calendar_impl(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
@@ -256,13 +235,9 @@ pub async fn toggle_sync_calendar_impl(
     }
 }
 
-/// Discard every enabled calendar's cursor on an account, so the next poll
-/// re-enumerates the whole backfill window instead of polling from where it left
-/// off. Backs the panel's full-refresh action; a disabled calendar has no cursor
-/// to clear (disable already did).
-///
-/// `last_full_sync_at` is deliberately left alone: it clocks the engine's own
-/// periodic re-enumerate, and the poll this precedes restamps it anyway.
+/// Discards every enabled calendar's cursor on an account, so the next poll re-enumerates
+/// the whole backfill window. Leaves `last_full_sync_at`, which clocks the engine's own
+/// periodic re-enumerate and which that poll restamps.
 pub async fn clear_sync_cursors_impl(pool: &sqlx::SqlitePool, account_id: &str) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         sqlx::query(
@@ -278,8 +253,8 @@ pub async fn clear_sync_cursors_impl(pool: &sqlx::SqlitePool, account_id: &str) 
     .await
 }
 
-/// A withheld upstream description as the document a seed would have written, addresses linked,
-/// for Append to add to the body. `None` once nothing is parked.
+/// A withheld upstream description as the document a seed would have written, for Append to
+/// add to the body. `None` once nothing is parked.
 pub async fn pending_description_document_impl(
     pool: &sqlx::SqlitePool,
     page_id: &str,
@@ -294,14 +269,11 @@ pub async fn pending_description_document_impl(
     Ok(pending.map(|text| crate::pool::build_description_doc(&text)))
 }
 
-/// Drop a withheld upstream description once the user has dealt with it — they
-/// folded it into the body, or decided against it. Both resolutions clear the
-/// same column; nothing distinguishes them afterwards, and nothing needs to.
+/// Drops a withheld upstream description once the user folded it in or declined it.
 ///
-/// Deliberately does not touch `seeded_description_hash`. The hash says what sync
-/// last wrote, so leaving it stale is what keeps the body reading as the user's:
-/// re-seeding here would make the next upstream change overwrite their notes
-/// silently instead of parking. Resolving a notice is not a re-seed.
+/// Leaves `seeded_description_hash`: it records what sync last wrote, so leaving it stale
+/// keeps the body reading as the user's, while re-seeding would let the next upstream change
+/// overwrite their notes silently instead of parking.
 pub async fn clear_pending_description_impl(
     pool: &sqlx::SqlitePool,
     page_id: &str,
@@ -316,8 +288,8 @@ pub async fn clear_pending_description_impl(
     .await
 }
 
-/// Record a colour the **user** picked, from either surface — latching
-/// `color_user_set` (see the column) and repainting the folder to match.
+/// Records a colour the user picked from either surface, latching `color_user_set` and
+/// repainting the folder.
 pub async fn set_sync_calendar_color_impl(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
@@ -342,9 +314,8 @@ pub async fn set_sync_calendar_color_impl(
     fetch_calendar(pool, sync_calendar_id).await
 }
 
-/// Materialize the calendar's system folder (creating it, or re-flagging the one a
-/// prior disable de-flagged) and mark the calendar enabled. The actual backfill is
-/// the engine's job on the next resync/poll.
+/// Materializes the calendar's folder (creating it, or re-flagging the one a prior disable
+/// de-flagged) and marks the calendar enabled. The backfill is the engine's next poll.
 async fn enable_sync_calendar(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
@@ -356,8 +327,7 @@ async fn enable_sync_calendar(
         let mut tx = pool.begin().await?;
 
         let folder_id = match &cal.folder_id {
-            // Re-enable: the de-flagged folder still exists → re-flag it in place so its
-            // surviving owned pages rejoin a live sync folder.
+            // Re-enable: re-flag the de-flagged folder so its surviving owned pages rejoin it.
             Some(fid) if folder_exists(&mut tx, fid).await? => {
                 sqlx::query("UPDATE folders SET is_external_calendar = 1, name = ?, color = ?, updated_at = ? WHERE id = ?")
                     .bind(&cal.display_name)
@@ -388,13 +358,11 @@ async fn enable_sync_calendar(
     fetch_calendar(pool, sync_calendar_id).await
 }
 
-/// Tear the calendar down (detach owned pages / delete bare mirrors, remove or
-/// de-flag the folder) and clear the cursor so a later re-enable backfills fresh.
+/// Tears the calendar down ([`crate::reconciler::teardown_calendar`]) and clears the cursor so a later
+/// re-enable backfills fresh.
 ///
-/// Ordered so a failure anywhere after the first step leaves the calendar durably
-/// off rather than live over half-severed mirrors: the poll loop selects on
-/// `enabled`, so clearing it up front both excludes the scheduler and makes a
-/// rerun of disable finish the job.
+/// Clearing `enabled` first leaves a mid-way failure durably off rather than live over
+/// half-severed mirrors: the poll loop selects on it, and a rerun finishes the job.
 async fn disable_sync_calendar(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
@@ -419,8 +387,7 @@ async fn disable_sync_calendar(
         teardown_calendar(pool, &cal.account_id, &cal.calendar_id, folder_id).await?;
     }
 
-    // teardown may have deleted the folder (no survivors) or de-flagged it (owned
-    // survivors); keep the link only while the folder still exists.
+    // Teardown may have deleted the folder; keep the link only while it exists.
     let folder_id = match &cal.folder_id {
         Some(fid) if folder_exists_pool(pool, fid).await? => Some(fid.clone()),
         _ => None,
@@ -438,16 +405,10 @@ async fn disable_sync_calendar(
     fetch_calendar(pool, sync_calendar_id).await
 }
 
-// ─── poll engine ────────────────────────────────────────────────────────────────
-//
-// The rows and cursor writes `pikos-calendar-sync` works from. They live here for
-// the same reason the panel's writers do: this crate owns the schema, so every
-// statement against `sync_account`/`sync_calendar` is readable in one place and
-// the provider crate stays pure orchestration.
+// The rows and cursor writes `pikos-calendar-sync` works from; this crate owns the schema,
+// so every statement against `sync_account` and `sync_calendar` lives here.
 
-/// One account, as the providers and the poll engine need it (credentials keyed
-/// by its id). `NotFound` when the row is gone — a caller holding a stale id has
-/// nothing to poll.
+/// One account as the providers and poll engine need it. `NotFound` when the row is gone.
 pub async fn sync_account_row_impl(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -459,9 +420,8 @@ pub async fn sync_account_row_impl(
         .ok_or_else(|| AppError::NotFound(format!("sync account not found: {account_id}")))
 }
 
-/// The accounts a background pass may poll — everything except those flagged
-/// `reconnect_needed` (a rejected credential); a manual resync clears the flag
-/// and re-includes them.
+/// The accounts a background pass may poll: all but those flagged `reconnect_needed`, which
+/// a manual resync clears.
 pub async fn pollable_account_rows_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<SyncAccountRow>> {
     Ok(
         sqlx::query_as::<_, SyncAccountRow>(
@@ -472,10 +432,9 @@ pub async fn pollable_account_rows_impl(pool: &sqlx::SqlitePool) -> AppResult<Ve
     )
 }
 
-/// Every account as `(id, provider, dormant)`, dormant rows included — the wipe
-/// path's list, where it both disconnects what is still live and releases every
-/// credential. A dormant row's secret should already be gone, but a wipe is the
-/// last chance to be sure.
+/// Every account as `(id, provider, dormant)`, dormant included, for the wipe path to
+/// disconnect and release every credential: a dormant secret should be gone, but a wipe is
+/// the last chance to be sure.
 pub async fn all_account_identities_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<(String, String, bool)>> {
@@ -486,7 +445,6 @@ pub async fn all_account_identities_impl(
     .await?)
 }
 
-/// Which provider an account speaks, or `None` when the row is gone.
 pub async fn account_provider_impl(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -515,7 +473,7 @@ pub async fn set_reconnect_needed_impl(
     Ok(())
 }
 
-/// The calendars a poll covers — an account's opted-in ones, cursors included.
+/// An account's opted-in calendars, cursors included.
 pub async fn enabled_calendar_rows_impl(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -528,8 +486,8 @@ pub async fn enabled_calendar_rows_impl(
     .await?)
 }
 
-/// Stamp a no-op poll's freshness clock without touching the cursor, ctag, or
-/// full-sync mark — the change tag matched, so nothing was enumerated.
+/// Stamps a no-op poll's freshness clock, leaving the cursor, ctag and full-sync mark: the
+/// change tag matched, so nothing was enumerated.
 pub async fn mark_calendar_polled_impl(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
@@ -544,10 +502,9 @@ pub async fn mark_calendar_polled_impl(
     Ok(())
 }
 
-/// Advance a calendar's stored cursor and freshness clocks after a fully
-/// successful poll. `ctag` and `last_full_sync_at` are recorded only on a full
-/// enumerate, so the next token-less poll can diff against the tag; an
-/// incremental poll leaves both untouched.
+/// Advances a calendar's cursor and freshness clocks after a fully successful poll. `ctag`
+/// and `last_full_sync_at` are recorded only on a full enumerate, so the next token-less
+/// poll can diff against the tag.
 pub async fn advance_calendar_cursor_impl(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
@@ -587,11 +544,8 @@ pub async fn advance_calendar_cursor_impl(
     Ok(())
 }
 
-// ─── internal ───────────────────────────────────────────────────────────────────
-
-/// Repaint an external folder from its calendar. Guarded on an actual difference:
-/// every discovery pass calls this for every enabled calendar, and an
-/// unconditional write would restamp `updated_at` on each one.
+/// Repaints an external folder from its calendar. Writes only on a difference, since every
+/// discovery pass calls it for every enabled calendar and would restamp `updated_at`.
 async fn reconcile_folder_to_calendar(
     pool: &sqlx::SqlitePool,
     folder_id: &str,

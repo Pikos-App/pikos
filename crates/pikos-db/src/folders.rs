@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::{AppError, AppResult};
 use crate::now_iso;
 
-// ─── DB row ───────────────────────────────────────────────────────────────────
-
 #[derive(sqlx::FromRow)]
 struct FolderRow {
     id: String,
@@ -17,8 +15,6 @@ struct FolderRow {
     created_at: String,
     updated_at: String,
 }
-
-// ─── Output type ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -55,8 +51,6 @@ impl From<FolderRow> for Folder {
     }
 }
 
-// ─── Input types ──────────────────────────────────────────────────────────────
-
 #[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
@@ -82,8 +76,6 @@ pub struct FolderUpdate {
     pub sort_order: Option<i64>,
 }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
-
 async fn fetch_folder(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Folder> {
     sqlx::query_as::<_, FolderRow>("SELECT * FROM folders WHERE id = ?")
         .bind(id)
@@ -92,8 +84,6 @@ async fn fetch_folder(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Folder> {
         .ok_or_else(|| AppError::NotFound(format!("Folder not found: {id}")))
         .map(Folder::from)
 }
-
-// ─── Commands ─────────────────────────────────────────────────────────────────
 
 pub async fn get_folder_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Folder>> {
     let row = sqlx::query_as::<_, FolderRow>("SELECT * FROM folders WHERE id = ?")
@@ -147,9 +137,8 @@ pub async fn update_folder_impl(
     id: String,
     updates: FolderUpdate,
 ) -> AppResult<Folder> {
-    // Placement lock: an external-calendar folder can't be reparented, and nothing
-    // can be nested under one. Name/color stay editable. The reconciler sets the
-    // system flag directly via SQL, bypassing this command.
+    // Placement lock: an external-calendar folder can't be reparented or nested under.
+    // Name and colour stay editable.
     if let Some(serde_json::Value::String(new_parent)) = &updates.parent_id {
         if folder_is_external(pool, new_parent).await? {
             return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
@@ -159,8 +148,7 @@ pub async fn update_folder_impl(
         return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
     }
 
-    // A sidebar recolour is a user pick like the panel's, so it has to reach the
-    // column that owns it (see `sync_calendar.color_user_set`).
+    // A sidebar recolour is a user pick, so it must reach `sync_calendar.color_user_set`.
     let recolor = match &updates.color {
         Some(serde_json::Value::String(c)) => Some(c.clone()),
         _ => None,
@@ -235,9 +223,8 @@ pub async fn delete_folder_impl(pool: &sqlx::SqlitePool, id: String) -> AppResul
     if folder_is_external(pool, &id).await? {
         return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
     }
-    // Transaction wraps the soft-delete-pages + drop-folder pair. The ON
-    // DELETE SET NULL constraint would otherwise orphan pages into the
-    // inbox if the second statement runs without the first.
+    // One transaction: ON DELETE SET NULL would otherwise orphan pages into the Inbox if the
+    // second statement ran without the first.
     crate::tx::retry_on_busy(|| async {
         let now = now_iso();
         let mut tx = pool.begin().await?;
@@ -266,9 +253,6 @@ pub async fn soft_delete_folder_impl(pool: &sqlx::SqlitePool, id: String) -> App
     if folder_is_external(pool, &id).await? {
         return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
     }
-    // Atomic with the cascading page soft-delete so the folder can't
-    // disappear from the sidebar while its pages remain visible (or vice
-    // versa) if the second statement fails.
     crate::tx::retry_on_busy(|| async {
         let now = now_iso();
         let mut tx = pool.begin().await?;
@@ -302,12 +286,8 @@ pub async fn restore_folder_impl(pool: &sqlx::SqlitePool, id: String) -> AppResu
         let now = now_iso();
         let mut tx = pool.begin().await?;
 
-        // Read the folder's trash timestamp before clearing it: the cascade in
-        // soft_delete_folder_impl stamps the folder and its pages with the same
-        // `now`, so we can revive only the pages this folder deletion trashed.
-        // Restoring every `deleted_at IS NOT NULL` page in the folder would also
-        // revive a page the user had trashed individually *before* the folder
-        // (its earlier timestamp is preserved by the cascade).
+        // The folder and its pages share a `deleted_at`, so reading it first revives only the
+        // pages this deletion trashed, not one trashed individually earlier.
         let folder_deleted_at: Option<String> =
             sqlx::query_scalar("SELECT deleted_at FROM folders WHERE id = ?")
                 .bind(&id)
@@ -345,15 +325,11 @@ pub async fn list_folders_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Folder>
     Ok(rows.into_iter().map(Folder::from).collect())
 }
 
-/// Resolve a parsed `folderQuery` to one of `folders`, in three tiers of
-/// precedence: exact case-insensitive, then prefix, then substring. `None` when
-/// nothing matches — the caller decides what a miss means.
+/// Resolves a parsed `folderQuery` to one of `folders`: exact case-insensitive, then prefix,
+/// then substring. `None` when nothing matches.
 ///
-/// Twin of the TS core's `fuzzyMatchFolder`, which the desktop's Quick Add runs
-/// over the same queries out of the same parser. Both answer to
-/// `tests/fixtures/folder-matching.json`; a tier that exists on one side only
-/// files the same string into different folders depending on which binary the
-/// user typed it into.
+/// Twin of the TS core's `fuzzyMatchFolder`; both answer to `tests/fixtures/folder-matching.json`,
+/// since a tier on one side only would file the same string into different folders by binary.
 pub fn fuzzy_match_folder<'a>(query: &str, folders: &'a [Folder]) -> Option<&'a Folder> {
     if query.is_empty() {
         return None;

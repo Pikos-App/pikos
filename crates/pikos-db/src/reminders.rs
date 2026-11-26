@@ -1,6 +1,4 @@
-//! Pool-based mirror of the desktop app's per-page reminder commands. The
-//! desktop `db::notifications` commands delegate here so the write path is
-//! exercised by `cargo test` without a live Tauri runtime.
+//! The per-page reminder writers; the desktop `db::notifications` commands delegate here.
 
 use serde::Serialize;
 

@@ -9,8 +9,8 @@ export type BackupEntry = {
   kind: BackupKind;
   bytes: number;
   /**
-   * Filesystem modification time, ISO-8601. The filenames carry a timestamp
-   * too, in two different formats, so this reads the one the OS agrees with.
+   * Filesystem modification time, ISO-8601. Filenames carry a timestamp in two formats, so
+   * this is the one the OS agrees with.
    */
   createdAt: string;
 };

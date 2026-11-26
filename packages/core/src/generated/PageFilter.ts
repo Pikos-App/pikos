@@ -2,7 +2,7 @@
 
 export type PageFilter = {
   /**
-   * None = no folder filter; Value::Null = inbox (folder_id IS NULL); Value::String = specific folder
+   * `None` is no folder filter, `Null` is the Inbox, a string is that folder.
    */
   folderId?: string | null;
   status?: "not_started" | "done";
@@ -12,21 +12,14 @@ export type PageFilter = {
   scheduledAfter?: string | null;
   scheduledBefore?: string | null;
   /**
-   * When Some(true), restrict to rows where scheduled_start IS NOT NULL —
-   * used by the calendar to pull completed scheduled pages without also
-   * loading unscheduled completed pages.
+   * When `Some(true)`, only pages with a `scheduled_start`.
    */
   hasSchedule?: boolean | null;
   /**
-   * When Some(true), restrict to pages that are not finished — the SQL form
-   * of `isOpen`.
+   * When `Some(true)`, only pages that are not finished: the SQL form of `isOpen`.
    *
-   * Deliberately a negation rather than `status = 'not_started'`, which is
-   * what it happens to be equivalent to today. `pages.status` currently only
-   * ever holds `not_started` or `done` (the third value in the schema
-   * comment, `skipped`, belongs to `page_schedules`), but a list of open
-   * work should widen to a new status rather than silently drop every page
-   * carrying it, which an equality filter would do without any error.
+   * A negation rather than `status = 'not_started'`, so a status added later
+   * joins the open list instead of silently dropping every page carrying it.
    */
   openOnly?: boolean | null;
 };

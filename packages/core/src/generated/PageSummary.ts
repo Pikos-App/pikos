@@ -18,7 +18,7 @@ export type PageSummary = {
   createdAt: string;
   updatedAt: string;
   /**
-   * Derived (not a stored column) — see `Page::schedule_locked`.
+   * See `Page::schedule_locked`.
    */
   scheduleLocked: boolean;
   /**

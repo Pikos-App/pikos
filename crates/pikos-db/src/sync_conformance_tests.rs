@@ -1,15 +1,11 @@
-//! Sync-lifecycle conformance — the Rust half of a table both storage adapters run.
+//! The Rust half of the sync-lifecycle conformance table. `MockStorageAdapter` re-implements the
+//! lifecycle in TypeScript because test mode has no writer, and every Playwright run rests on it
+//! being faithful. `tests/fixtures/sync-lifecycle.json` is the contract: this runner asserts the
+//! writers satisfy it, and `syncLifecycle.conformance.test.ts` asserts the mock does.
 //!
-//! `MockStorageAdapter` re-implements the sync lifecycle in TypeScript because test
-//! mode has no writer behind it, and every Playwright run in the repo rests on that
-//! re-implementation being faithful. It has drifted three times, each drift silently
-//! voiding a test written against it. The table in `tests/fixtures/sync-lifecycle.json`
-//! is the contract: this runner asserts the writers satisfy it, and
-//! `syncLifecycle.conformance.test.ts` asserts the mock satisfies the same rows.
-//!
-//! Steps describe intent, not calls — each side realizes them against its own store,
-//! and only the end state has to agree. `syncEvent` diverges the most: a reconcile
-//! against a synthetic delta here, a seeded page and its provenance in the mock.
+//! Steps describe intent, not calls; each side realizes them against its own store and only the
+//! end state has to agree. `syncEvent` diverges most: a reconcile against a synthetic delta here,
+//! a seeded page and its provenance in the mock.
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -82,10 +78,8 @@ enum Step {
         target: MoveTarget,
         rejected_with: Option<String>,
     },
-    /// Create a page against the placement lock, asserting like `MovePage`. The
-    /// create arm is a separate guard from the move arm because a page created in
-    /// a calendar folder is trapped rather than merely misfiled — the move guard
-    /// then refuses to let it back out.
+    /// Creates a page against the placement lock, asserting like `MovePage`. A separate guard
+    /// from the move arm, since a page created in a calendar folder is trapped, not misfiled.
     #[serde(rename_all = "camelCase")]
     CreatePageIn {
         target: MoveTarget,
@@ -142,11 +136,9 @@ struct Expect {
 /// Matches are named by the uid that produced the page, since a scenario never
 /// sees the generated page id.
 ///
-/// `excerpt_contains` is checked case-insensitively against every matched row, and
-/// with it that the row calls itself a content match — an excerpt the label does not
-/// let the palette render is not shown. Containment rather than equality because the
-/// two windowers are deliberately unequal: the mock's is a fixed-width approximation
-/// of the writer's word-snapped one.
+/// `excerpt_contains` is checked case-insensitively against every matched row, along with the
+/// row calling itself a content match. Containment, not equality, because the mock's windower is
+/// a fixed-width approximation of the writer's word-snapped one.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchExpect {
@@ -182,9 +174,8 @@ struct PageExpect {
     in_calendar_folder: Option<bool>,
 }
 
-/// What the runner has to remember across steps: the id a name maps to. `folders`
-/// outlives `sync_calendar.folder_id` on purpose — teardown clears the link, and a
-/// scenario still needs to ask whether that folder survived and how it is flagged.
+/// What the runner remembers across steps: the id a name maps to. `folders` outlives
+/// `sync_calendar.folder_id`, which teardown clears, so a scenario can ask whether it survived.
 #[derive(Default)]
 struct World {
     account_id: String,
@@ -286,8 +277,7 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
             world.pages.insert(uid.clone(), page_id);
         }
 
-        // The editor command path: any authored edit flips `user_modified`, which is
-        // what teardown reads to keep the page instead of destroying it.
+        // Any authored edit flips `user_modified`, which teardown reads to keep the page.
         Step::Own { uid } => {
             let page_id = &world.pages[uid];
             sqlx::query("UPDATE pages SET content_text = 'edited' WHERE id = ?")
@@ -428,7 +418,6 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
             assert_verdict("folder edit", result, rejected_with);
         }
 
-        // The local half of a disconnect: unsync each calendar, then hide the account.
         Step::Disconnect => {
             for cal in list_sync_calendars_impl(pool, &world.account_id)
                 .await
@@ -542,9 +531,7 @@ async fn check(pool: &sqlx::SqlitePool, world: &World, scenario: &Scenario) {
         assert_eq!(visible, want, "{at}: account visible in the panel");
     }
 
-    // Panel-visible rather than total rows: a dormant row is invisible to the mock
-    // by construction, so counting every row would be a question only one side can
-    // answer. A twin still shows up here, which is what the count is guarding.
+    // Panel-visible rows, since a dormant row is invisible to the mock; a twin still shows here.
     if let Some(want) = expect.account_count {
         let n = get_sync_status_impl(pool).await.unwrap().len();
         assert_eq!(n, want, "{at}: accounts in the panel");

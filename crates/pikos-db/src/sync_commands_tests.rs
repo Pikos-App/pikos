@@ -65,9 +65,8 @@ async fn status_lists_accounts_with_their_calendars() {
     assert!(status[0].calendars.iter().all(|c| !c.enabled));
 }
 
-/// Connection order is not an order: with three providers the panel read as a pile.
-/// Case-insensitive so "work" and "Work" don't split a provider's group, and the
-/// last account connected has to land in its place rather than at the bottom.
+/// Case-insensitive so "work" and "Work" don't split a provider's group, and the last account
+/// connected lands in its place, not at the bottom.
 #[tokio::test]
 async fn accounts_list_by_provider_then_name_whatever_the_connect_order() {
     let pool = test_pool().await;
@@ -113,9 +112,7 @@ async fn account_is_reused_by_identity_whether_dormant_or_active() {
         .unwrap()
         .id;
 
-    // An *active* account is a reuse target too — reconnecting it refreshes in place
-    // instead of inserting a duplicate. Matched by exact provider+display_name;
-    // the other account and a wrong name miss.
+    // An active account is a reuse target too: reconnecting refreshes it in place.
     let matched = find_account_by_identity_impl(&pool, "caldav", "you · https://x")
         .await
         .unwrap()
@@ -128,7 +125,6 @@ async fn account_is_reused_by_identity_whether_dormant_or_active() {
 
     mark_account_disconnected_impl(&pool, &acc).await.unwrap();
 
-    // Dormant: hidden from the panel, but still matchable for reconnect.
     let visible = get_sync_status_impl(&pool).await.unwrap();
     assert_eq!(
         visible.len(),
@@ -150,10 +146,8 @@ async fn account_is_reused_by_identity_whether_dormant_or_active() {
     );
 }
 
-/// With a live row and a dormant one sharing an identity, reconnect has to land on
-/// the live one (`ORDER BY disconnected ASC`). Picking the dormant one would
-/// reactivate a second account beside the working one, and the user would end up
-/// with the calendar twice.
+/// With a live row and a dormant one sharing an identity, reconnect lands on the live one
+/// (`ORDER BY disconnected ASC`); the dormant one would add a second account and the calendar twice.
 #[tokio::test]
 async fn identity_match_prefers_the_live_row_over_a_dormant_twin() {
     let pool = test_pool().await;
@@ -177,10 +171,8 @@ async fn identity_match_prefers_the_live_row_over_a_dormant_twin() {
     assert_eq!(matched.id, live);
 }
 
-/// Re-discovery runs on every connect and every enable, so its `ON CONFLICT` decides
-/// what survives. Widening it to the whole row would turn a reconnect into a silent
-/// reset: calendars the user syncs would come back off, and a cleared cursor would
-/// re-enumerate the world.
+/// Re-discovery runs on every connect and enable, so its `ON CONFLICT` decides what survives;
+/// widening it to the whole row would silently switch calendars off and clear cursors.
 #[tokio::test]
 async fn re_discovery_leaves_enabled_and_the_cursor_alone() {
     let pool = test_pool().await;
@@ -209,9 +201,9 @@ async fn re_discovery_leaves_enabled_and_the_cursor_alone() {
     assert_eq!(cursor, (Some("tok-1".into()), Some("ct-1".into())));
 }
 
-/// The count behind C55's re-enable confirm ("N pages will be reclaimed"). It is a
-/// correlated subquery in `CAL_COLS` with no other pin: if it read 0, the confirm
-/// would never show and a provider overwrite of the user's edits would land unasked.
+/// The count behind the re-enable confirm ("N pages will be reclaimed"), a correlated subquery
+/// in `CAL_COLS` with no other pin: reading 0 would skip the confirm and overwrite the user's
+/// edits unasked.
 #[tokio::test]
 async fn detached_pages_counts_only_this_calendars_survivors() {
     let pool = test_pool().await;
@@ -373,7 +365,6 @@ async fn disable_tears_down_bare_folder_and_clears_cursor() {
         .await
         .unwrap();
     let folder_id = enabled.folder_id.clone().unwrap();
-    // Pretend a sync ran and stored a cursor.
     sqlx::query("UPDATE sync_calendar SET sync_token = 'tok' WHERE id = ?")
         .bind(&cal.id)
         .execute(&pool)
@@ -410,7 +401,6 @@ async fn disable_keeps_and_deflags_folder_with_a_survivor() {
         .await
         .unwrap();
     let folder_id = enabled.folder_id.clone().unwrap();
-    // A page living in the folder survives teardown → folder is kept, de-flagged.
     insert_test_page(
         &pool,
         TestPage {
@@ -433,9 +423,8 @@ async fn disable_keeps_and_deflags_folder_with_a_survivor() {
     );
 }
 
-/// The poll loop selects on `enabled`, so it is only excluded from the teardown
-/// window if disable clears the flag before severing anything. Witnessed through a
-/// trigger, since the ordering is invisible in the end state.
+/// The poll loop selects on `enabled`, so disable must clear it before severing anything. Witnessed
+/// through a trigger, since the ordering is invisible in the end state.
 #[tokio::test]
 async fn disable_clears_enabled_before_severing_any_page() {
     let pool = test_pool().await;
@@ -456,8 +445,7 @@ async fn disable_clears_enabled_before_severing_any_page() {
     )
     .await
     .unwrap();
-    // user_modified → owned → teardown detaches rather than deleting, so the
-    // severing is an UPDATE the trigger can hang off.
+    // Owned, so teardown detaches with an UPDATE the trigger can hang off.
     sqlx::query(
         "INSERT INTO page_sync
            (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
@@ -681,9 +669,8 @@ async fn an_unchanged_re_discovery_does_not_restamp_the_folder() {
     );
 }
 
-/// A hostname is case-insensitive by DNS, so reconnecting a server typed with a capital
-/// has to revive the account rather than open a second one beside it — which would
-/// re-sync every event and leave the first account's pages detached.
+/// A hostname is case-insensitive, so reconnecting one typed with a capital must revive the
+/// account, not open a second that re-syncs every event and detaches the first's pages.
 #[tokio::test]
 async fn an_account_is_matched_whatever_case_the_server_was_typed_in() {
     let pool = test_pool().await;

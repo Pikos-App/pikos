@@ -44,7 +44,6 @@ async fn soft_delete_cascades_to_folder_pages() {
     assert!(folder_deleted_at(&pool, "f1").await.is_some());
     assert!(page_deleted_at(&pool, "p1").await.is_some());
     assert!(page_deleted_at(&pool, "p2").await.is_some());
-    // Other folder's pages are untouched.
     assert!(page_deleted_at(&pool, "p3").await.is_none());
     assert!(folder_deleted_at(&pool, "f2").await.is_none());
 }
@@ -54,7 +53,6 @@ async fn soft_delete_is_noop_when_already_deleted() {
     let pool = test_pool().await;
     seed_folder_with_pages(&pool).await;
 
-    // Pre-soft-delete a single page with a recognizable timestamp.
     sqlx::query("UPDATE pages SET deleted_at = '2026-01-01T00:00:00Z' WHERE id = 'p1'")
         .execute(&pool)
         .await
@@ -62,13 +60,12 @@ async fn soft_delete_is_noop_when_already_deleted() {
 
     soft_delete_folder_impl(&pool, "f1".into()).await.unwrap();
 
-    // The pre-existing deleted_at on p1 should be preserved (WHERE deleted_at IS NULL guard).
+    // The `deleted_at IS NULL` guard preserves p1's existing timestamp.
     assert_eq!(
         page_deleted_at(&pool, "p1").await.as_deref(),
         Some("2026-01-01T00:00:00Z"),
         "soft-delete overwrote an earlier trash timestamp"
     );
-    // p2 gets a fresh deleted_at.
     assert!(page_deleted_at(&pool, "p2").await.is_some());
 }
 
@@ -78,7 +75,6 @@ async fn restore_folder_restores_its_pages() {
     seed_folder_with_pages(&pool).await;
 
     soft_delete_folder_impl(&pool, "f1".into()).await.unwrap();
-    // Sanity precondition
     assert!(page_deleted_at(&pool, "p1").await.is_some());
 
     restore_folder_impl(&pool, "f1".into()).await.unwrap();
@@ -90,21 +86,17 @@ async fn restore_folder_restores_its_pages() {
 
 #[tokio::test]
 async fn restore_folder_preserves_individually_trashed_pages() {
-    // A page the user trashed *before* the folder must stay trashed after the
-    // folder is restored — only the pages this folder deletion cascaded to
-    // should revive.
+    // A page trashed before the folder stays trashed after the folder is restored; only the
+    // cascaded pages revive.
     let pool = test_pool().await;
     seed_folder_with_pages(&pool).await;
 
-    // Trash p1 on its own first. The 2ms gap guarantees a distinct (ms-precision)
-    // deleted_at from the folder cascade below, so the restore can tell them apart.
+    // The 2ms gap gives a distinct millisecond `deleted_at` from the cascade below.
     soft_delete_page_impl(&pool, "p1").await.unwrap();
     std::thread::sleep(std::time::Duration::from_millis(2));
     let p1_trashed_at = page_deleted_at(&pool, "p1").await;
     assert!(p1_trashed_at.is_some());
 
-    // Now trash the whole folder; the cascade skips p1 (already trashed) and
-    // stamps p2 with the folder's timestamp.
     soft_delete_folder_impl(&pool, "f1".into()).await.unwrap();
     assert_ne!(
         page_deleted_at(&pool, "p1").await,
@@ -133,15 +125,13 @@ async fn hard_delete_drops_folder_and_soft_deletes_pages() {
 
     delete_folder_impl(&pool, "f1".into()).await.unwrap();
 
-    // Folder row is gone.
     let folder_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders WHERE id = 'f1'")
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(folder_count, 0);
 
-    // Pages still exist but are soft-deleted, and the FK SET NULL fired
-    // because the folder row was dropped.
+    // The pages are soft-deleted and the FK SET NULL fired.
     let p1_folder: Option<String> =
         sqlx::query_scalar("SELECT folder_id FROM pages WHERE id = 'p1'")
             .fetch_one(&pool)
@@ -150,11 +140,8 @@ async fn hard_delete_drops_folder_and_soft_deletes_pages() {
     assert!(p1_folder.is_none(), "FK ON DELETE SET NULL did not fire");
     assert!(page_deleted_at(&pool, "p1").await.is_some());
     assert!(page_deleted_at(&pool, "p2").await.is_some());
-    // Sibling folder's pages unaffected.
     assert!(page_deleted_at(&pool, "p3").await.is_none());
 }
-
-// ── CRUD round-trips ───────────────────────────────────────────────────────
 
 fn new_folder(name: &str) -> NewFolder {
     NewFolder {
@@ -233,7 +220,6 @@ async fn update_folder_applies_partial_changes_and_clears_nullable_fields() {
     .await
     .unwrap();
 
-    // Rename + clear color via Value::Null.
     let updated = update_folder_impl(
         &pool,
         folder.id.clone(),
@@ -262,7 +248,6 @@ async fn list_folders_excludes_soft_deleted_and_sorts_by_sort_order() {
     let b = create_folder_impl(&pool, new_folder("B")).await.unwrap();
     let c = create_folder_impl(&pool, new_folder("C")).await.unwrap();
 
-    // Soft-delete the middle one.
     soft_delete_folder_impl(&pool, b.id.clone()).await.unwrap();
 
     let visible = list_folders_impl(&pool).await.unwrap();
@@ -277,7 +262,6 @@ async fn reorder_folders_assigns_positional_indices() {
     let b = create_folder_impl(&pool, new_folder("B")).await.unwrap();
     let c = create_folder_impl(&pool, new_folder("C")).await.unwrap();
 
-    // Reverse the order.
     reorder_folders_impl(&pool, &[c.id.clone(), b.id.clone(), a.id.clone()])
         .await
         .unwrap();
@@ -286,8 +270,6 @@ async fn reorder_folders_assigns_positional_indices() {
     assert_eq!(fetch_sort_order(&pool, &b.id).await, 1);
     assert_eq!(fetch_sort_order(&pool, &a.id).await, 2);
 }
-
-// ─── external-calendar folder ops are locked ──────────────────────────────────
 
 async fn external_folder(pool: &sqlx::SqlitePool, id: &str) {
     insert_test_folder(pool, id, "Synced").await.unwrap();
@@ -320,7 +302,6 @@ async fn external_folder_cannot_be_reparented_and_cannot_be_a_parent() {
     external_folder(&pool, "ext").await;
     insert_test_folder(&pool, "user", "User").await.unwrap();
 
-    // Reparent the external folder → rejected.
     let reparent = update_folder_impl(
         &pool,
         "ext".into(),
@@ -333,7 +314,6 @@ async fn external_folder_cannot_be_reparented_and_cannot_be_a_parent() {
     .unwrap_err();
     assert!(matches!(reparent, AppError::Conflict(_)));
 
-    // Nest a user folder under the external folder → rejected.
     let nest = update_folder_impl(
         &pool,
         "user".into(),
@@ -366,9 +346,7 @@ async fn external_folder_recolor_is_allowed() {
 
 #[tokio::test]
 async fn external_folder_can_be_reordered() {
-    // Unlike delete/reparent, reordering only rewrites sort_order — it doesn't
-    // orphan pages or break sync, so the sidebar may reposition an external
-    // folder among siblings.
+    // Reordering only rewrites sort_order, so the sidebar may reposition an external folder.
     let pool = test_pool().await;
     insert_test_folder(&pool, "user", "User").await.unwrap();
     external_folder(&pool, "ext").await;

@@ -3,8 +3,8 @@ import type { PageSummary } from "./PageSummary";
 
 export type RescheduleVirtualResult = {
   /**
-   * The new standalone page this occurrence became. `null` when the occurrence
-   * was already pinned to its own time and simply moved.
+   * The new standalone page this occurrence became. `null` when it was already
+   * pinned to its own time and simply moved.
    */
   clone?: PageSummary | null;
   /**

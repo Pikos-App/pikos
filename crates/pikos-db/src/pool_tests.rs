@@ -1,7 +1,6 @@
-// Migration snapshot/replay tests. These are the only tests that run the
-// migration tree itself rather than assuming a migrated DB, so they catch schema
-// drift and data-loss migrations before they ship to users — who have no easy
-// rollback once a release lands via the auto-updater.
+// Migration snapshot and replay tests: the only ones that run the migration tree itself rather
+// than assuming a migrated DB, so they catch schema drift and data loss before users, who have
+// no easy rollback, get a release.
 
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -11,7 +10,6 @@ use sqlx::SqlitePool;
 
 use super::*;
 
-// Each migration's SQL, in order, for stepwise replay.
 const MIGRATIONS: &[(&str, &str)] = &[
     ("001", include_str!("../migrations/001_initial.sql")),
     (
@@ -99,10 +97,9 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ),
 ];
 
-/// `include_str!` needs a literal path, so the list above is written by hand while
-/// the migrator reads the directory — and a migration added to the directory alone
-/// is still applied to every user's database with no test replaying it. The
-/// stepwise tests would keep passing, one version short, which reads as coverage.
+/// `include_str!` needs a literal path, so the list above is hand-written while the migrator
+/// reads the directory: a migration added to the directory alone would be applied to every
+/// user's database with no test replaying it, and the stepwise tests would pass one version short.
 #[test]
 fn the_replay_list_holds_every_migration_on_disk() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
@@ -158,7 +155,6 @@ async fn column_names(pool: &SqlitePool, table: &str) -> Vec<String> {
 
 #[tokio::test]
 async fn empty_to_current_snapshot() {
-    // test_pool() applies the full migration tree via sqlx::migrate!.
     let pool = test_pool().await;
 
     let tables = table_names(&pool).await;
@@ -179,7 +175,6 @@ async fn empty_to_current_snapshot() {
         );
     }
 
-    // Columns that migrations added/removed must be in their final state.
     let page_cols = column_names(&pool, "pages").await;
     assert!(
         page_cols.iter().any(|c| c == "deleted_at"),
@@ -194,7 +189,6 @@ async fn empty_to_current_snapshot() {
         .iter()
         .any(|c| c == "deleted_at"));
 
-    // FTS5 internal consistency — fails loudly if the index is structurally broken.
     sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('integrity-check')")
         .execute(&pool)
         .await
@@ -205,9 +199,8 @@ async fn empty_to_current_snapshot() {
 async fn stepwise_preserves_seeded_data() {
     let pool = single_conn_memory_pool().await;
 
-    // Apply 001 only, then seed legacy-shaped rows: a duration_mins value (dropped
-    // in 002), case/whitespace tag variants (deduped in 008), a multi-byte title,
-    // and NULL columns.
+    // Apply 001 only, then seed legacy-shaped rows: a duration_mins value, case and whitespace
+    // tag variants, a multi-byte title and NULL columns.
     sqlx::raw_sql(MIGRATIONS[0].1).execute(&pool).await.unwrap();
     sqlx::query(
         "INSERT INTO pages
@@ -220,7 +213,6 @@ async fn stepwise_preserves_seeded_data() {
     .await
     .unwrap();
 
-    // Apply the rest one at a time; the row must survive every step.
     for (name, sql) in &MIGRATIONS[1..] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -237,7 +229,6 @@ async fn stepwise_preserves_seeded_data() {
         );
     }
 
-    // 002 dropped duration_mins.
     assert!(
         !column_names(&pool, "pages")
             .await
@@ -289,21 +280,16 @@ async fn stepwise_preserves_seeded_data() {
     assert_eq!(denorm_tag, "work", "denorm tag must be lowercased");
 }
 
-/// The upgrade every existing install performs when 0.4.0 lands. `open_pool` runs
-/// the same tree against whatever the user already has, and 010 is the first
-/// migration to arrive after a real launch — so this is the one step whose failure
-/// mode is other people's data, with no rollback behind an auto-update.
+/// The upgrade an existing install performs on reaching the sync migration (010), the first
+/// after a real launch, so its failure mode is other people's data.
 ///
-/// The stepwise test above proves rows *survive* each migration; this one proves
-/// the workspace still **works** afterwards: pre-existing pages keep their
-/// schedules, rules and reminders, the new tables are usable, and a page that
-/// predates sync reads as unsynced rather than as anything ambiguous.
+/// The stepwise test proves rows survive each migration; this proves the workspace still works:
+/// pre-existing pages keep their schedules, rules and reminders, the new tables are usable, and
+/// a page that predates sync reads as unsynced.
 ///
-/// Note 010 is **not** idempotent — `ALTER TABLE ADD COLUMN` takes no `IF NOT
-/// EXISTS` and re-running errors on the duplicate column. It doesn't need to be:
-/// sqlx records each applied version and runs each migration in a transaction, so
-/// a failure rolls back whole and a retry starts from a clean 009. Don't "fix" it
-/// by making the ALTER conditional; the guarantee lives in the migrator.
+/// 010 is not idempotent (`ALTER TABLE ADD COLUMN` has no `IF NOT EXISTS`), and needn't be: sqlx
+/// records each version and runs each migration in a transaction, so a failure rolls back whole.
+/// Don't make the ALTER conditional; the guarantee lives in the migrator.
 #[tokio::test]
 async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
     let pool = single_conn_memory_pool().await;
@@ -314,10 +300,9 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
             .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
     }
 
-    // A workspace with the shapes 010 has to carry across: a foldered page, a
-    // schedule, a recurrence rule, and a reminder (007 recreated that table, and
-    // the stepwise seed leaves it empty — so this is also the first time 007's
-    // recreate is asked to preserve a row).
+    // The shapes 010 must carry across: a foldered page, a schedule, a rule and a reminder
+    // (the stepwise seed leaves the reminders table empty, so this is also the first time
+    // 007's recreate has to preserve a row).
     sqlx::query("INSERT INTO folders (id, name, sort_order, created_at, updated_at) VALUES ('f1', 'Work', 0, '2026-01-01', '2026-01-01')")
         .execute(&pool).await.unwrap();
     sqlx::query(
@@ -339,7 +324,6 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
 
     sqlx::raw_sql(MIGRATIONS[9].1).execute(&pool).await.unwrap();
 
-    // Nothing the user had is gone.
     for (table, id) in [
         ("pages", "p1"),
         ("folders", "f1"),
@@ -356,8 +340,7 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
         assert_eq!(found, 1, "{table} lost its row across 010");
     }
 
-    // The folder gained the flag, defaulted off — an existing folder is nobody's
-    // calendar, and a default of 1 would lock every folder the user already had.
+    // The flag defaults off: a default of 1 would lock every existing folder.
     let external: i64 =
         sqlx::query_scalar("SELECT is_external_calendar FROM folders WHERE id = 'f1'")
             .fetch_one(&pool)
@@ -372,8 +355,7 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
         .unwrap();
     assert_eq!(linked, 0);
 
-    // The new tables accept writes against the pre-existing page — a broken FK or
-    // a missed table would only surface the first time sync or a completion ran.
+    // A broken FK or missed table would otherwise surface only on the first sync or completion.
     sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES ('p1', '2026-06-01', 'clone-1')")
         .execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-06-08')")
@@ -382,10 +364,9 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
         .unwrap();
 }
 
-/// The reconciler only rewrites an event whose etag moved, so a mirror synced
-/// before 011 would stay out of the index forever if the migration didn't
-/// backfill it. That backfill is a second, frozen copy of `mirror_search_text`'s
-/// projection written in SQL — this is what catches the two drifting apart.
+/// The reconciler rewrites an event only when its etag moves, so a mirror synced before 011
+/// would stay out of the index without the migration's backfill. That backfill is a frozen SQL
+/// copy of `mirror_search_text`'s projection; this catches the two drifting apart.
 #[tokio::test]
 async fn the_search_migration_backfills_mirrors_synced_before_it() {
     let pool = single_conn_memory_pool().await;
@@ -453,11 +434,9 @@ async fn the_search_migration_backfills_mirrors_synced_before_it() {
     }
 }
 
-/// 012 recreates both notification tables to widen their CHECK constraints, and
-/// a recreate is the migration shape that loses data when a column list drifts.
-/// The reminder row and the fired-notification row here are what a user upgrading
-/// mid-week actually has: dropping either would re-fire every reminder already
-/// delivered and forget every per-page lead.
+/// 012 recreates both notification tables to widen their CHECK constraints, a shape that loses
+/// data when a column list drifts. Dropping either row would re-fire every delivered reminder
+/// and forget every per-page lead.
 #[tokio::test]
 async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
     let pool = single_conn_memory_pool().await;
@@ -512,8 +491,7 @@ async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
         "the dedup anchor did not survive the recreate"
     );
 
-    // Both widenings are usable immediately after the migration, not just
-    // declared — a CHECK typo would only surface on the first real write.
+    // A CHECK typo would only surface on the first real write.
     sqlx::query(
         "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
          VALUES ('r2', 'p1', -2, '2026-01-01')",
@@ -589,8 +567,7 @@ async fn the_status_migration_brings_every_page_back_on_screen() {
 
 #[tokio::test]
 async fn fts_rebuilds_on_schema_version_mismatch() {
-    // open_pool's rebuild path needs a real file: reopening a :memory: DB would
-    // start empty. Use a unique temp path and clean it (plus WAL/SHM) up after.
+    // A real file: reopening a :memory: DB would start empty.
     let path = std::env::temp_dir().join(format!("pkos_fts_{}.db", uuid::Uuid::new_v4()));
     let path_str = path.to_str().unwrap().to_string();
 
@@ -606,8 +583,7 @@ async fn fts_rebuilds_on_schema_version_mismatch() {
         .await
         .unwrap();
 
-        // Simulate a stale index after a hypothetical FTS-touching migration:
-        // wipe the FTS rows and reset the stored schema version.
+        // A stale index, as after an FTS-touching migration.
         sqlx::query("DELETE FROM pages_fts")
             .execute(&pool)
             .await
@@ -619,7 +595,6 @@ async fn fts_rebuilds_on_schema_version_mismatch() {
         pool.close().await;
     }
 
-    // Reopen: the version mismatch must trigger a rebuild.
     let pool = open_pool(&path_str).await.unwrap();
     let hits: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH 'needle'")
@@ -775,18 +750,11 @@ async fn a_page_saved_before_line_breaks_counted_is_found_by_the_word_after_one(
     assert_eq!(after_second_open, "oneask", "the pass runs once");
 }
 
-// ── pre-migration backup ───────────────────────────────────────────────
-//
-// These tests drive `maybe_backup_before_migrations` directly rather than
-// through a real `open_pool` reopen. To make `open_pool` actually see a pending
-// migration we'd delete the top `_sqlx_migrations` row and reopen — but that
-// forces sqlx to re-run that migration, which only survives if the migration is
-// idempotent (a future `ADD COLUMN` would fail). So the open_pool→gate wiring
-// itself (the call site before `MIGRATOR.run`) is intentionally not asserted
-// here; it's a one-line call verified by reading the code.
+// These drive `maybe_backup_before_migrations` directly: making `open_pool` see a pending
+// migration means deleting the top `_sqlx_migrations` row, which forces a re-run that only
+// survives an idempotent migration. The call site before `MIGRATOR.run` is not asserted.
 
-/// Isolated temp dir so each test's backups/ subfolder can't collide with
-/// another's (tests run in parallel and share std::env::temp_dir()).
+/// An isolated temp dir, since tests run in parallel and share `std::env::temp_dir()`.
 fn unique_tmp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("pkos_db14_{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -807,8 +775,7 @@ fn migration_backup_count(backup_dir: &Path) -> usize {
         .unwrap_or(0)
 }
 
-/// Drop the highest-version row from `_sqlx_migrations` so the workspace looks
-/// one migration behind the binary — i.e. has a pending migration.
+/// Drops the top `_sqlx_migrations` row so the workspace looks one migration behind.
 async fn simulate_pending_migration(pool: &SqlitePool) {
     sqlx::query(
         "DELETE FROM _sqlx_migrations WHERE version = (SELECT MAX(version) FROM _sqlx_migrations)",
@@ -846,9 +813,7 @@ async fn snapshots_before_pending_migration_when_data_present() {
 
 #[tokio::test]
 async fn snapshot_is_a_valid_restorable_copy() {
-    // The point of the snapshot is recovery, so prove the produced file opens as
-    // a real DB and still holds the pre-migration data (incl. a working FTS
-    // index) — not just that a file appears on disk.
+    // Recovery is the point, so the file must open as a real DB holding the data and a working FTS index.
     let dir = unique_tmp_dir();
     let path = dir.join("workspace.sqlite");
     let path_str = path.to_str().unwrap().to_string();
@@ -879,8 +844,7 @@ async fn snapshot_is_a_valid_restorable_copy() {
         })
         .expect("a snapshot file");
 
-    // Open the copy directly (no migrations) so this exercises only the copy's
-    // validity and contents, not the migrator.
+    // No migrations, so only the copy's validity and contents are exercised.
     let restored = SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(SqliteConnectOptions::new().filename(&snapshot))
@@ -917,7 +881,6 @@ async fn no_snapshot_when_up_to_date() {
     insert_test_page(&pool, TestPage::new("p1", "Data"))
         .await
         .unwrap();
-    // No pending migration: open_pool already applied the full tree.
 
     maybe_backup_before_migrations(&pool, &path_str)
         .await
@@ -940,7 +903,6 @@ async fn no_snapshot_for_empty_workspace() {
     let path_str = path.to_str().unwrap().to_string();
 
     let pool = open_pool(&path_str).await.unwrap();
-    // Pending migration but no pages or folders => nothing to lose.
     simulate_pending_migration(&pool).await;
 
     maybe_backup_before_migrations(&pool, &path_str)
@@ -1023,7 +985,6 @@ async fn a_pool_open_before_a_newer_build_migrates_refuses_to_write_naming_both_
 fn prune_keeps_newest_n_and_ignores_other_files() {
     let dir = unique_tmp_dir();
 
-    // Timestamp-first names: lexical order == chronological order.
     for ts in [
         "20260101T000000000Z",
         "20260102T000000000Z",
@@ -1036,7 +997,6 @@ fn prune_keeps_newest_n_and_ignores_other_files() {
         )
         .unwrap();
     }
-    // Unrelated files must be left alone.
     std::fs::write(dir.join("pre-import-20260101T000000Z.sqlite"), b"x").unwrap();
     std::fs::write(dir.join("notes.txt"), b"x").unwrap();
 
@@ -1047,28 +1007,22 @@ fn prune_keeps_newest_n_and_ignores_other_files() {
         3,
         "prune should keep exactly the newest 3 migration snapshots"
     );
-    // Oldest removed, newest kept.
     assert!(!dir
         .join("pre-migration-20260101T000000000Z-v8-to-v9.sqlite")
         .exists());
     assert!(dir
         .join("pre-migration-20260104T000000000Z-v8-to-v9.sqlite")
         .exists());
-    // Non-migration files untouched.
     assert!(dir.join("pre-import-20260101T000000Z.sqlite").exists());
     assert!(dir.join("notes.txt").exists());
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// ─── Shipped-workspace upgrades ──────────────────────────────────────────────
-//
-// Everything above builds its schema from empty, in this process. That misses
-// the only migration run that can lose a user's data: the one where a database
-// written by a *released* build meets a newer migrator. `tests/fixtures/
-// workspaces/` holds one real file per shipped version, and the test below walks
-// all of them, so covering a new release is adding a file rather than editing a
-// test.
+// Everything above builds its schema from empty, missing the one run that can lose data: a
+// database written by a released build meeting a newer migrator. `tests/fixtures/workspaces/`
+// holds one real file per shipped version and the test below walks them all, so covering a new
+// release means adding a file.
 
 fn workspace_fixture_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1087,9 +1041,7 @@ fn shipped_workspace_fixtures() -> Vec<PathBuf> {
     found
 }
 
-/// The fixtures exist to be migrated, so an empty directory has to fail rather
-/// than pass vacuously — the loop below would otherwise report success having
-/// checked nothing at all.
+/// An empty fixtures directory must fail, or the loop below would pass having checked nothing.
 #[test]
 fn every_shipped_version_has_a_workspace_fixture() {
     let found = shipped_workspace_fixtures();
@@ -1110,7 +1062,6 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
         let path = dir.join("workspace.sqlite");
         std::fs::copy(&fixture, &path).expect("copy fixture");
 
-        // The real entry point the app and the CLI both use: it migrates on connect.
         let pool = open_pool(path.to_str().unwrap())
             .await
             .unwrap_or_else(|e| panic!("{name} failed to open and migrate: {e:?}"));
@@ -1126,9 +1077,7 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
             }
         };
 
-        // What the fixture was seeded with. A migration that rebuilds a table by
-        // recreating it is the shape that drops rows, and 011 recreates the FTS
-        // index outright.
+        // A migration that recreates a table is the shape that drops rows, and 011 recreates the FTS index.
         assert_eq!(count("folders").await, 2, "{name}: folders lost");
         assert_eq!(count("pages").await, 5, "{name}: pages lost");
         assert_eq!(count("page_schedules").await, 3, "{name}: schedules lost");
@@ -1151,8 +1100,7 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
             "{name}: notification log lost"
         );
 
-        // Field-level survival on a page that carries every column a migration
-        // touches, including the soft-delete flag 004 added.
+        // Field-level survival on a page carrying every column a migration touches.
         let (title, status, completed, deleted): (String, String, Option<String>, Option<String>) =
             sqlx::query_as("SELECT title, status, completed_at, deleted_at FROM pages WHERE id = ?")
                 .bind("page-done")
@@ -1164,7 +1112,6 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
         assert!(completed.is_some(), "{name}: completed_at cleared");
         assert!(deleted.is_none(), "{name}: a live page was soft-deleted");
 
-        // The soft-deleted page must still be in the trash, not swept.
         let trashed: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NOT NULL")
                 .fetch_one(&pool)
@@ -1172,7 +1119,6 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
                 .unwrap();
         assert_eq!(trashed, 1, "{name}: the trashed page did not survive");
 
-        // 010-012 are what this upgrade is for.
         let tables = table_names(&pool).await;
         for expected in [
             "sync_account",
@@ -1187,9 +1133,7 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
             );
         }
 
-        // 011 rebuilds the search index. A backfill that skips existing rows
-        // leaves every page written before the upgrade unfindable, with every
-        // other check here still green.
+        // A backfill skipping existing rows would leave every older page unfindable with every other check green.
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('integrity-check')")
             .execute(&pool)
             .await
@@ -1215,10 +1159,8 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
 ///
 ///   cargo test -p pikos-db regenerate_shipped_workspace_fixture -- --ignored
 ///
-/// It goes through sqlx rather than raw SQL so `_sqlx_migrations` carries the
-/// same bookkeeping and checksums a real install has. A hand-built table there
-/// makes the next migrator refuse the file, which is the failure this whole
-/// fixture exists to catch, arriving in the fixture instead of in the product.
+/// It goes through sqlx so `_sqlx_migrations` carries a real install's bookkeeping and
+/// checksums; a hand-built table there makes the next migrator refuse the file.
 #[tokio::test]
 #[ignore]
 async fn regenerate_shipped_workspace_fixture() {
@@ -1264,8 +1206,7 @@ async fn regenerate_shipped_workspace_fixture() {
         .expect("apply the 0.3.1 migrations");
 
     seed_shipped_workspace(&pool).await;
-    // Committed file, so it is worth the pages SQLite would otherwise leave
-    // allocated: ~205KB of mostly-empty pages down to a few tens of KB.
+    // Committed, so worth reclaiming the pages SQLite leaves allocated: ~205KB down to tens of KB.
     sqlx::query("VACUUM").execute(&pool).await.unwrap();
     pool.close().await;
 
@@ -1300,9 +1241,7 @@ async fn seed_shipped_workspace(pool: &SqlitePool) {
         .execute(pool).await.unwrap();
     }
 
-    /// One seeded page. Named because a seven-wide tuple of `&str` and
-    /// `Option<&str>` is unreadable at the call sites below, where the whole
-    /// point is being able to see which column is which.
+    /// One seeded page, named because a seven-wide tuple is unreadable at the call sites.
     struct SeedPage {
         id: &'static str,
         title: &'static str,
