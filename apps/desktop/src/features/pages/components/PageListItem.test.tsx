@@ -29,6 +29,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
 interface ItemHandlers {
   menuActsOn?: number;
   onDelete?: () => void;
+  onSelect?: () => void;
   onSendToDay?: (day: string) => void;
 }
 
@@ -49,7 +50,7 @@ function renderItem(page: PageSummary, onRenameStart: () => void, handlers: Item
           onRenameCancel={() => {}}
           onRenameCommit={() => {}}
           onRenameStart={onRenameStart}
-          onSelect={() => {}}
+          onSelect={handlers.onSelect ?? (() => {})}
           onSendToDay={handlers.onSendToDay ?? (() => {})}
           onStopRepeating={() => {}}
           onToggleStatus={() => {}}
@@ -291,6 +292,37 @@ describe("PageListItem menu", () => {
     expect(screen.queryByPlaceholderText("Search or create…")).not.toBeInTheDocument();
   });
 
+  it("opens the day picker from the row's date, without opening the page", async () => {
+    const onSelect = vi.fn();
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn(), { onSelect });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Date: / }));
+
+    expect(await screen.findByRole("dialog", { name: "Schedule picker" })).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("opens the day picker from a repeating page's date, as Pick a date… does", async () => {
+    renderItem(makePage({ isRecurring: true, scheduledStart: "2026-08-10" }), vi.fn());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Date: / }));
+
+    expect(await screen.findByRole("dialog", { name: "Schedule picker" })).toBeInTheDocument();
+  });
+
+  it("leaves a calendar's page date as it is, since its calendar sets it", () => {
+    renderItem(
+      makePage({ scheduledStart: "2026-08-10", scheduleLocked: true, syncState: "active" }),
+      vi.fn()
+    );
+
+    const date = screen.getByRole("button", { name: /^Date: / });
+    fireEvent.click(date);
+
+    expect(date).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("dialog", { name: "Schedule picker" })).not.toBeInTheDocument();
+  });
+
   it("hands Delete to the list, which decides whether to ask", () => {
     const onDelete = vi.fn();
     renderItem(makePage({ isRecurring: true, scheduledStart: "2026-08-10" }), vi.fn(), {
@@ -325,7 +357,7 @@ describe("PageListItem — a synced event shows the viewer's time", () => {
   }
 
   function dateLabel(): string {
-    return screen.getByRole("button", { name: /Toggle date format/ }).textContent ?? "";
+    return screen.getByRole("button", { name: /^Date: / }).textContent ?? "";
   }
 
   it("files a Tokyo morning under the day it happens here", () => {

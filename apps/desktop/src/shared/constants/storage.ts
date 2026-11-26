@@ -44,7 +44,6 @@ export const STORAGE_KEYS = {
   quietHoursEnd: "pikos:quietHoursEnd",
   quietHoursStart: "pikos:quietHoursStart",
   rightPanel: "pikos:rightPanel",
-  showRelativeDates: "pikos:showRelativeDates",
   sidebarCollapsed: "pikos:sidebarCollapsed",
   skippedVersion: "pikos:skippedVersion",
   sortModes: "pikos:sortModes",

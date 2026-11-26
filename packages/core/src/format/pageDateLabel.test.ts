@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  formatCompactTime,
-  formatLongDate,
-  formatPageDate,
-  formatPageRelativeTime,
-  isDueSoon,
-} from "./pageDateLabel";
+import { formatCompactTime, formatLongDate, formatPageDate, isDueSoon } from "./pageDateLabel";
 
 // Vitest pins TZ=UTC, so local wall-clock equals the instants below.
 const NOW = new Date("2026-06-15T12:00:00Z");
@@ -90,32 +84,5 @@ describe("formatPageDate", () => {
   it("tooltips an all-day date without a time and a timed one with it", () => {
     expect(formatPageDate("2026-06-15").tooltip).toBe("Monday, June 15, 2026");
     expect(formatPageDate("2026-06-15T14:00:00").tooltip).toBe("Monday, June 15, 2026 at 2:00 PM");
-  });
-});
-
-describe("formatPageRelativeTime", () => {
-  it("counts whole days for an all-day date", () => {
-    expect(formatPageRelativeTime("2026-06-15").label).toBe("Today");
-    expect(formatPageRelativeTime("2026-06-18")).toMatchObject({ isPast: false, label: "in 3d" });
-    expect(formatPageRelativeTime("2026-06-12")).toMatchObject({ isPast: true, label: "3d ago" });
-  });
-
-  it("counts minutes, then hours, then days for a timed schedule", () => {
-    expect(formatPageRelativeTime("2026-06-15T12:00:00")).toMatchObject({
-      isPast: false,
-      label: "Now",
-    });
-    expect(formatPageRelativeTime("2026-06-15T12:45:00").label).toBe("in 45m");
-    expect(formatPageRelativeTime("2026-06-15T18:00:00").label).toBe("in 6h");
-    expect(formatPageRelativeTime("2026-06-13T12:00:00")).toMatchObject({
-      isPast: true,
-      label: "2d ago",
-    });
-  });
-
-  it("says in words whether a time is past or ahead, so the same distance reads two ways", () => {
-    expect(formatPageRelativeTime("2026-06-15T08:00:00").label).toBe("4h ago");
-    expect(formatPageRelativeTime("2026-06-15T16:00:00").label).toBe("in 4h");
-    expect(formatPageRelativeTime("2026-06-15T11:40:00").label).toBe("20m ago");
   });
 });

@@ -153,7 +153,6 @@ export {
   formatCompactTime,
   formatLongDate,
   formatPageDate,
-  formatPageRelativeTime,
   isDueSoon,
 } from "./format/pageDateLabel";
 export type { PageDateLabel } from "./format/pageDateLabel";

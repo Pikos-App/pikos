@@ -433,7 +433,7 @@ appTest(
     await appTest.step("QADD-13 Morning pages alone gets no date", async () => {
       await quickAdd(app, "Morning pages");
       const undated = row(app, "Morning pages").filter({
-        hasNot: app.getByRole("button", { name: /^Toggle date format: / }),
+        hasNot: app.getByRole("button", { name: /^Date: / }),
       });
       await expect(undated).toHaveCount(1);
       await undated.click();

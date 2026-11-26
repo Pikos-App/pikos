@@ -5,11 +5,11 @@ import {
   formatDateRange,
   formatLongDate,
   formatPageDate,
-  formatPageRelativeTime,
   isAllDayIso,
   isDone,
   isDueSoon,
   isOpen,
+  pageActions,
   parseLocalISO,
   PRIORITY_CHECKBOX_COLORS,
   viewerEnd,
@@ -57,8 +57,6 @@ interface PageListItemProps {
   onPriorityChange: (priority: PagePriority) => void;
   onSendToDay: (day: SendDay) => void;
   onStopRepeating: () => void;
-  showRelative?: boolean;
-  onToggleDateFormat?: () => void;
 }
 
 export function PageListItem({
@@ -78,10 +76,8 @@ export function PageListItem({
   onSelect,
   onSendToDay,
   onStopRepeating,
-  onToggleDateFormat,
   onToggleStatus,
   page,
-  showRelative = false,
 }: PageListItemProps) {
   const prefetch = usePrefetchOnHover(page.id);
   const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
@@ -97,6 +93,7 @@ export function PageListItem({
   const { openPage } = useUI();
   const { density } = useInterfaceSettings();
   const showSubtitle = density !== "compact" && Boolean(page.subtitle);
+  const canPickDate = pageActions(page).some((a) => a.id === "pick-date" && a.offered);
 
   const now = useNow();
 
@@ -157,7 +154,7 @@ export function PageListItem({
             }
           }}
           // Strip dnd-kit's injected role="button". The row contains nested
-          // interactive children (checkbox, date-toggle, context menu); leaving
+          // interactive children (checkbox, date, context menu); leaving
           // role="button" trips axe's nested-interactive at runtime. The row
           // is still keyboard-reachable via tabIndex (also from {...attributes})
           // and labeled via aria-label; the parent's onKeyDown handles
@@ -260,9 +257,7 @@ export function PageListItem({
                             tooltip: `${d.tooltip} – ${formatLongDate(parseLocalISO(end))}`,
                           };
                         })()
-                      : !isCompleted && showRelative
-                        ? formatPageRelativeTime(start, now)
-                        : formatPageDate(start, now);
+                      : formatPageDate(start, now);
                     const dueSoon = !isCompleted && !isPast && isDueSoon(start, now);
                     // Where someone looks after Move to today leaves a page behind;
                     // the toast only has room for the count.
@@ -272,9 +267,12 @@ export function PageListItem({
 
                     return (
                       <button
-                        aria-label={`Toggle date format: ${label}`}
+                        aria-disabled={canPickDate ? undefined : true}
+                        aria-haspopup={canPickDate ? "dialog" : undefined}
+                        aria-label={`Date: ${label}`}
                         className={cn(
-                          "type-ui-sm shrink-0 cursor-pointer hover:opacity-80",
+                          "type-ui-sm shrink-0",
+                          canPickDate ? "cursor-pointer hover:opacity-80" : "cursor-default",
                           isPast && !isCompleted
                             ? "text-status-overdue"
                             : dueSoon
@@ -283,7 +281,7 @@ export function PageListItem({
                         )}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onToggleDateFormat?.();
+                          if (canPickDate) rowPicker.show("pick-date", e.currentTarget);
                         }}
                         tabIndex={-1}
                         title={title}

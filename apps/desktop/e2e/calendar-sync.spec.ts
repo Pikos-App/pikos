@@ -937,7 +937,7 @@ async function dragRowOntoTodayRow(app: Page, row: Locator, lands = false): Prom
 async function dragRowOntoCalendar(app: Page, rowText: string) {
   const row = app.locator("[data-page-list-item]").filter({ hasText: rowText });
   await expect(row).toHaveCount(1);
-  const dateButton = row.getByRole("button", { name: /^Toggle date format:/ });
+  const dateButton = row.getByRole("button", { name: /^Date:/ });
   const before = await dateButton.getAttribute("aria-label");
 
   const { x, y } = await weekGridDropPoint(app);
@@ -1015,7 +1015,7 @@ appTest("a synced page can't be dropped onto the Today nav row", async ({ app })
 
   const locked = app.locator("[data-page-list-item]").filter({ hasText: "Team standup" });
   await locked.click();
-  const lockedDate = locked.getByRole("button", { name: /^Toggle date format:/ });
+  const lockedDate = locked.getByRole("button", { name: /^Date:/ });
   const lockedBefore = await lockedDate.getAttribute("aria-label");
 
   await dragRowOntoTodayRow(app, locked);
@@ -1027,7 +1027,7 @@ appTest("a synced page can't be dropped onto the Today nav row", async ({ app })
   // label ("5 PM") becomes the all-day one (a date).
   await openCalendarFolder(app, "Work");
   const detached = app.locator("[data-page-list-item]").filter({ hasText: "Old planning" });
-  const detachedDate = detached.getByRole("button", { name: /^Toggle date format:/ });
+  const detachedDate = detached.getByRole("button", { name: /^Date:/ });
   const detachedBefore = await detachedDate.getAttribute("aria-label");
 
   await dragRowOntoTodayRow(app, detached, true);
@@ -1059,7 +1059,7 @@ appTest(
     const list = page.locator("[data-page-list-item]");
     const mirror = list.filter({ hasText: "Company offsite" });
     const ordinary = list.filter({ hasText: "desk tidy" });
-    const mirrorDate = mirror.getByRole("button", { name: /^Toggle date format:/ });
+    const mirrorDate = mirror.getByRole("button", { name: /^Date:/ });
     const mirrorBefore = await mirrorDate.getAttribute("aria-label");
 
     // Cmd+click seeds the selection with whatever is open, so opening the mirror
@@ -1075,7 +1075,7 @@ appTest(
     await expect(page.getByRole("region", { name: "Week calendar" })).toBeVisible();
 
     // All-day, so the row names a date and no clock time.
-    const ordinaryDate = ordinary.getByRole("button", { name: /^Toggle date format:/ });
+    const ordinaryDate = ordinary.getByRole("button", { name: /^Date:/ });
     await expect(ordinaryDate).not.toHaveAttribute("aria-label", /\d{1,2}:\d{2}[ap]/);
 
     const { x, y } = await todayColumnDropPoint(page);

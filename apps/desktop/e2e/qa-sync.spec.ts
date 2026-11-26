@@ -21,7 +21,7 @@ function rows(app: Page, title: string) {
 }
 
 function dateLabel(row: Locator) {
-  return row.getByRole("button", { name: /^Toggle date format:/ });
+  return row.getByRole("button", { name: /^Date:/ });
 }
 
 /** A calendar folder in the sidebar. The realistic seed has ordinary folders of the same names,
@@ -408,7 +408,7 @@ appTest(
         await open.getByRole("checkbox", { name: "Mark done" }).click();
         await expect(dateLabel(open)).toHaveAttribute(
           "aria-label",
-          `Toggle date format: ${await dayLabel(app, 7, "list")}`
+          `Date: ${await dayLabel(app, 7, "list")}`
         );
         await expect(app.getByText(/read-only/i)).toHaveCount(0);
         await app.getByRole("button", { exact: true, name: "Completed" }).click();
@@ -603,7 +603,7 @@ appTest(
     await appTest.step("SYNC-26 the head sits on the connect day, nothing earlier", async () => {
       await expect(dateLabel(head)).toHaveAttribute(
         "aria-label",
-        `Toggle date format: ${await dayLabel(app, -5, "list")}`
+        `Date: ${await dayLabel(app, -5, "list")}`
       );
     });
 
@@ -623,7 +623,7 @@ appTest(
         await expect(app.getByText(/read-only/i)).toHaveCount(0);
         await expect(dateLabel(head)).toHaveAttribute(
           "aria-label",
-          /Toggle date format: \d{1,2}:\d{2}[ap]m/
+          /Date: \d{1,2}:\d{2}[ap]m/
         );
       }
     );

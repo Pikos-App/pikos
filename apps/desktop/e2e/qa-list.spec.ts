@@ -515,7 +515,7 @@ appTest(
       await app.getByRole("menuitem", { exact: true, name: "Tomorrow" }).click();
       const { monthDay } = await dayFrom(app, 1);
       await expect(
-        other.getByRole("button", { name: `Toggle date format: ${monthDay}` })
+        other.getByRole("button", { name: `Date: ${monthDay}` })
       ).toBeVisible();
     });
 
@@ -549,7 +549,17 @@ appTest(
       await app.keyboard.press("Escape");
       await expect(picker).not.toBeVisible();
       const { monthDay } = await dayFrom(app, 1);
-      await expect(row.getByRole("button", { name: `Toggle date format: ${monthDay}` })).toBeVisible();
+      await expect(row.getByRole("button", { name: `Date: ${monthDay}` })).toBeVisible();
+    });
+
+    await appTest.step("LIST-12 clicking the row's date opens the same picker", async () => {
+      await row.getByRole("button", { name: /^Date: / }).click();
+      const picker = app.getByRole("dialog", { name: "Schedule picker" });
+      await picker.getByRole("button", { exact: true, name: "Today" }).click();
+      await app.keyboard.press("Escape");
+      await expect(picker).not.toBeVisible();
+      await expect(row.getByRole("button", { name: "Date: Today" })).toBeVisible();
+      await expect(row).not.toHaveAttribute("aria-current", "true");
     });
 
     await appTest.step("LIST-12 Tags… creates and adds a tag", async () => {
@@ -901,7 +911,7 @@ appTest(
       app
         .locator("[data-page-list-item]")
         .filter({ hasText: title })
-        .getByRole("button", { name: /^Toggle date format: / });
+        .getByRole("button", { name: /^Date: / });
     const colour = (title: string) => date(title).evaluate((el) => getComputedStyle(el).color);
 
     await appTest.step("LIST-19 its date reads Today", async () => {
@@ -926,7 +936,7 @@ appTest(
     await expandOverdue(app);
     const items = app.locator("[data-page-list-item]");
     const date = (title: string) =>
-      items.filter({ hasText: title }).getByRole("button", { name: /^Toggle date format: / });
+      items.filter({ hasText: title }).getByRole("button", { name: /^Date: / });
 
     await app.getByRole("button", { name: "Move to today" }).click();
     await expect(app.getByRole("alert", { name: /^Moved 1 page to today\. Left / })).toBeVisible();

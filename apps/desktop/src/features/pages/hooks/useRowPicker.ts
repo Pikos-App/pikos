@@ -8,8 +8,9 @@ export interface OpenRowPicker {
 }
 
 /**
- * Which picker a row's menu asked for. It opens only once the menu has closed and handed focus
- * back to the row: opened from the menu item itself, the closing menu took focus from it.
+ * Which picker a row has open, asked for by its menu or by a click on its date. One the menu asks
+ * for opens only once the menu has closed and handed focus back to the row: opened from the menu
+ * item itself, the closing menu took focus from it.
  */
 export function useRowPicker() {
   const requested = useRef<RowPickerKind | null>(null);
@@ -27,5 +28,9 @@ export function useRowPicker() {
     setOpen({ anchor, kind });
   }
 
-  return { close: () => setOpen(null), open, openRequested, request };
+  function show(kind: RowPickerKind, anchor: HTMLElement) {
+    setOpen({ anchor, kind });
+  }
+
+  return { close: () => setOpen(null), open, openRequested, request, show };
 }

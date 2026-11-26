@@ -253,11 +253,9 @@ test("1 Lists @tour", async ({ page }) => {
       rows: ["F96"],
     });
 
-    await t.capture(13, "Relative dates", async () => {
+    await t.capture(13, "A row's date picker", async () => {
       await t.launch(TODAY);
-      await row(page, "Call mom")
-        .getByRole("button", { name: /^Toggle date format/ })
-        .click();
+      await row(page, "Call mom").getByRole("button", { name: /^Date: / }).click();
     });
 
     await t.capture(

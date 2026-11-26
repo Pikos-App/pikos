@@ -103,7 +103,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
   const { density } = useInterfaceSettings();
-  const [showRelative, setShowRelative] = useLocalStorage(STORAGE_KEYS.showRelativeDates, false);
   const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage(
     STORAGE_KEYS.overdueCollapsed,
     true
@@ -123,9 +122,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     if (willExpand) void onExpandCompleted();
   }
 
-  function toggleDateFormat() {
-    setShowRelative((v) => !v);
-  }
   function toggleOverdue() {
     setOverdueCollapsed((v) => !v);
   }
@@ -522,7 +518,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         onSelect={(e) => handlePageClick(page, e)}
         onSendToDay={(day) => onMenuTargets(page, (pages) => sendToDay(pages, day))}
         onStopRepeating={() => void stopRepeating(page)}
-        onToggleDateFormat={toggleDateFormat}
         onToggleStatus={() => {
           // A multi-select status toggle (clicking one selected row's checkbox)
           // routes through toggleSelected, which serializes its writes. The old
@@ -532,7 +527,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           else handleToggleStatus(page.id, page.status);
         }}
         page={page}
-        showRelative={showRelative}
       />
     );
   }

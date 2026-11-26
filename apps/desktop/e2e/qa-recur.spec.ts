@@ -169,7 +169,7 @@ appTest(
     });
 
     await appTest.step("RECUR-02 ticking the row advances it and leaves a done clone", async () => {
-      const dateLabel = head.getByRole("button", { name: /^Toggle date format/ });
+      const dateLabel = head.getByRole("button", { name: /^Date/ });
       const before = await dateLabel.getAttribute("aria-label");
       await head.getByRole("checkbox", { name: "Mark done" }).click();
       await expect(app.getByRole("alertdialog")).toHaveCount(0);
