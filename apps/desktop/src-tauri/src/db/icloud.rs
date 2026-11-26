@@ -209,33 +209,16 @@ struct NamedData {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Request {
-    Pending {
-        limit: i64,
-    },
-    Build {
-        names: Vec<String>,
-    },
-    Sent {
-        sent: Vec<Sent>,
-    },
-    Apply {
-        records: Vec<WireRecord>,
-    },
+    Pending { limit: i64 },
+    Build { names: Vec<String> },
+    Sent { sent: Vec<Sent> },
+    Apply { records: Vec<WireRecord> },
     EngineState {},
-    SetEngineState {
-        state: Vec<u8>,
-    },
+    SetEngineState { state: Vec<u8> },
     Expire {},
-    SaveSystemFields {
-        records: Vec<NamedData>,
-    },
-    Join {
-        zones: Vec<String>,
-    },
-    Status {
-        text: String,
-        action: String,
-    },
+    SaveSystemFields { records: Vec<NamedData> },
+    Join { zones: Vec<String> },
+    Status { text: String, action: String },
     Summary {},
 }
 
