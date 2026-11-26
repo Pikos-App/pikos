@@ -23,10 +23,12 @@ struct DayPeek: View {
     @State private var entries: [CalendarEntry] = []
     @State private var dropCount = 0
     @State private var headerHeight: CGFloat = 32
+    @State private var isOverAllDay = false
 
     private static let restingHours = 3
     static let droppingHours = 6
     private static let hourHeight: CGFloat = 40
+    private static let allDayRowHeight: CGFloat = 36
     private static let metrics = CalendarGeometry.Metrics(hourHeight: hourHeight, minBlockHeight: 20)
     private static let gutter: CGFloat = 50
     private static let gridTopInset: CGFloat = 8
@@ -44,10 +46,11 @@ struct DayPeek: View {
         .onDrop(
             of: [.text],
             delegate: PeekDropDelegate(
-                drag: drag, hourHeight: Self.hourHeight,
-                gridTop: { headerHeight + Self.gridTopInset },
+                drag: drag, hourHeight: Self.hourHeight, allDayHeight: Self.allDayRowHeight,
+                allDayTop: { headerHeight },
                 firstHour: { Self.firstHour(now: Date(), hours: Self.droppingHours) },
-                onDrop: dropPage))
+                gridInset: Self.gridTopInset, isOverAllDay: $isOverAllDay,
+                onDrop: dropPage, onDropAllDay: dropPageAllDay))
         .onPreferenceChange(PeekHeaderHeight.self) { headerHeight = $0 }
         .task(id: "\(WallClockDay.string(from: Date()))#\(store.dataVersion)") {
             let today = Date()
@@ -56,6 +59,7 @@ struct DayPeek: View {
                 from: WallClockDay.string(from: today), to: WallClockDay.string(from: weekOut))
         }
         .sensoryFeedback(.selection, trigger: drag.hoverMinute) { _, new in new != nil }
+        .sensoryFeedback(.selection, trigger: isOverAllDay) { _, new in new }
         .sensoryFeedback(.success, trigger: dropCount)
     }
 
@@ -71,6 +75,9 @@ struct DayPeek: View {
             if isShown {
                 VStack(spacing: 0) {
                     header(day: day, isDropping: isDropping)
+                    if isDropping {
+                        allDayRow
+                    }
                     if day.remaining.isEmpty && !isDropping {
                         emptyStrip(day: day)
                     } else {
@@ -133,6 +140,29 @@ struct DayPeek: View {
         .accessibilityLabel(day.summary.isEmpty ? String(localized: "Up next today") : String(localized: "Up next today, \(day.summary)"))
         .accessibilityHint("Opens the calendar")
         .accessibilityIdentifier("Day peek")
+    }
+
+    /// Above the hours while a page is carried, as the calendar's all-day strip is, so a timed page
+    /// has somewhere to become all-day today.
+    private var allDayRow: some View {
+        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        return Text("All day today")
+            .font(.pkUISm)
+            .foregroundStyle(isOverAllDay ? .textAction : .textTertiary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .frame(height: Self.allDayRowHeight - 8)
+            .background(shape.fill(isOverAllDay ? .surfaceSelected : .clear))
+            .overlay(
+                shape.strokeBorder(
+                    isOverAllDay ? .interactivePrimary : .borderSecondary,
+                    style: StrokeStyle(lineWidth: isOverAllDay ? 1.5 : 1, dash: [4, 3])))
+            .padding(.leading, Self.gutter)
+            .padding(.trailing, 12)
+            .frame(height: Self.allDayRowHeight)
+            .accessibilityIdentifier("All day today")
     }
 
     private func emptyStrip(day: Timeline) -> some View {
@@ -306,6 +336,19 @@ struct DayPeek: View {
         }
     }
 
+    private func dropPageAllDay(_ page: PageFacts) {
+        let today = WallClockDay.string(from: Date())
+        let dropped = CalendarGeometry.dropAllDay(
+            day: today, previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
+        dropCount += 1
+        Task {
+            await store.schedule(
+                pageId: page.id, title: page.title, start: dropped.start, end: dropped.end,
+                previousStart: page.scheduledStart, previousEnd: page.scheduledEnd,
+                saying: DayLabel.relative(today, today: DayLabel.today()))
+        }
+    }
+
     // MARK: - Labels
 
     /// The window starts at the current hour, pulled back so it never runs past midnight.
@@ -416,10 +459,14 @@ private struct PeekHeaderHeight: PreferenceKey {
 private struct PeekDropDelegate: DropDelegate {
     let drag: PageDragSession
     let hourHeight: CGFloat
-    /// Where the hours start inside the peek, read at the moment of each update.
-    let gridTop: () -> CGFloat
+    let allDayHeight: CGFloat
+    /// Where the all-day row starts inside the peek, read at the moment of each update.
+    let allDayTop: () -> CGFloat
     let firstHour: () -> Int
+    let gridInset: CGFloat
+    @Binding var isOverAllDay: Bool
     let onDrop: (PageFacts, Int) -> Void
+    let onDropAllDay: (PageFacts) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
         return drag.candidate != nil && info.hasItemsConforming(to: [.text])
@@ -432,27 +479,38 @@ private struct PeekDropDelegate: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal? {
         drag.beat()
         update(info)
-        return DropProposal(operation: drag.hoverMinute == nil ? .forbidden : .move)
+        let isOverTarget = drag.hoverMinute != nil || isOverAllDay
+        return DropProposal(operation: isOverTarget ? .move : .forbidden)
     }
 
     func dropExited(info: DropInfo) {
         drag.hoverMinute = nil
+        isOverAllDay = false
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        if isOverAllDay {
+            isOverAllDay = false
+            return drag.land(info) { page in onDropAllDay(page) }
+        }
         guard let minute = drag.hoverMinute else { return false }
         return drag.land(info) { page in onDrop(page, minute) }
     }
 
-    /// Over the header or below the last hour is not a time, so it clears the hover.
+    /// Over the header or below the last hour is neither all day nor a time, so it clears both.
     private func update(_ info: DropInfo) {
-        let y = info.location.y - gridTop()
+        let rowY = info.location.y - allDayTop()
+        let gridY = rowY - allDayHeight - gridInset
         let hours = CGFloat(DayPeek.droppingHours)
-        guard y >= 0, y < hours * hourHeight else {
+
+        let overAllDay = rowY >= 0 && rowY < allDayHeight
+        if isOverAllDay != overAllDay { isOverAllDay = overAllDay }
+
+        guard gridY >= 0, gridY < hours * hourHeight else {
             if drag.hoverMinute != nil { drag.hoverMinute = nil }
             return
         }
-        let minute = CalendarGeometry.dropMinute(atY: y, firstHour: firstHour(), hourHeight: hourHeight)
+        let minute = CalendarGeometry.dropMinute(atY: gridY, firstHour: firstHour(), hourHeight: hourHeight)
         if drag.hoverMinute != minute { drag.hoverMinute = minute }
     }
 }

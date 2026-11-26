@@ -766,6 +766,34 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.staticTexts["Drop on an hour"].exists, "and the day settles back")
     }
 
+    // qa: IOS-85
+    func testDroppingATimedPageOnTheDaysAllDayRowMakesItAllDayToday() {
+        showView("Inbox")
+        quickAdd("Call the bank today at 11:59pm")
+        let title = app.collectionViews.staticTexts["Call the bank"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        let peek = app.buttons["Day peek"].firstMatch
+        XCTAssertTrue(peek.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.descendants(matching: .any)["All day today"].exists, "the row waits for a lift")
+
+        // The day is pinned to the bottom, so a lift moves its header up by the three added hours and the row.
+        let addedHours: CGFloat = 3 * 40
+        let allDayRow: CGFloat = 36
+        let rowY = peek.frame.maxY - addedHours - allDayRow / 2
+        // Straight up to the row would slide into the menu the hold opens; the hours are below it.
+        let hours = CGPoint(x: peek.frame.midX, y: peek.frame.maxY + 60)
+        TouchPath(stops: [
+            .init(point: CGPoint(x: title.frame.midX, y: title.frame.midY), hold: 1.2),
+            .init(point: hours, hold: 0.6),
+            .init(point: CGPoint(x: peek.frame.midX, y: rowY), hold: 0.8),
+        ]).perform()
+
+        XCTAssertTrue(
+            app.staticTexts["“Call the bank” moved to Today"].waitForExistence(timeout: 5),
+            "the drop makes the page all-day today, where an hour would have named its time")
+        XCTAssertFalse(app.descendants(matching: .any)["All day today"].exists, "and the day settles back")
+    }
+
     // qa: IOS-14
     /// Hold empty grid until a block appears, then draw it out: quick add opens holding the range.
     func testDraggingOutABlockOnTheCalendarOpensQuickAddWithThatRange() {
