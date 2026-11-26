@@ -1,41 +1,19 @@
-import {
-  buildCalendarDays,
-  buildMonthGrid,
-  clampDayCount,
-  getCalendarDayCount,
-  monthGridDays,
-  utcInstant,
-} from "@pikos/core";
+import { utcInstant } from "@pikos/core";
 import { addDays, startOfDay } from "date-fns";
 import { useEffect } from "react";
 
-import { useLayoutMode } from "@/features/layout/breakpoints";
-import { useAppSettings } from "@/shared/context/AppSettingsContext";
-import { useCalendarDate } from "@/shared/context/CalendarDateContext";
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import {
   useCalendarExpansionHold,
   useViewCacheController,
 } from "@/shared/context/WorkspaceContext";
+import { useCalendarDays } from "@/shared/hooks/useCalendarDays";
 import { usePreloadRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 import type { Range } from "@/shared/viewCache/controller";
 
 /** The days the calendar shows, and the range of instants it reads them from. */
 export function useCalendarRange() {
-  const { referenceDate } = useCalendarDate();
-  const { weekStart } = useAppSettings();
-  const { dayCount: preferredDayCount, viewMode } = useCalendarSettings();
-  // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
-  // would truncate day columns to unusable widths.
-  const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(useLayoutMode()));
-  const isMonth = viewMode === "month";
-  // The padded grid (up to 42 days), not the month, so the padding rows get their pages and
-  // occurrences too.
-  const monthWeeks = buildMonthGrid(referenceDate, weekStart);
-  const days = isMonth
-    ? monthGridDays(monthWeeks)
-    : buildCalendarDays(referenceDate, dayCount, weekStart);
+  const { days, isMonth, monthWeeks } = useCalendarDays();
 
   const rangeStart = days[0];
   const rangeEnd = days[days.length - 1];

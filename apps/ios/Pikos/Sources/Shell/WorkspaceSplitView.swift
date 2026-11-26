@@ -27,7 +27,8 @@ struct WorkspaceSplitView: View {
                             onSearch: { route.openSearch(replacing: true) },
                             onCapture: {
                                 route.isSwitcherPresented = false
-                                route.presentQuickAdd(from: store, under: .list)
+                                route.presentQuickAdd(
+                                    from: store, under: .list, besideCalendar: route.path.isEmpty)
                             }
                         )
                         .transition(.opacity)

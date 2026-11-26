@@ -75,10 +75,12 @@ final class Route {
             self.filing = filing
         }
 
-        /// Upcoming begins today, so a page added there is dated today to be in it.
-        init(scope: WorkspaceStore.Scope, day: String? = nil) {
+        /// Upcoming begins today, so a page added there is dated today to be in it. With the
+        /// calendar on screen beside the list, Today and Upcoming date it to the calendar's day
+        /// instead, the day being looked at; the Inbox and a folder leave it undated.
+        init(scope: WorkspaceStore.Scope, day: String? = nil, calendarDay: String? = nil) {
             switch scope {
-            case .today, .upcoming: self.init(day: day ?? DayLabel.today())
+            case .today, .upcoming: self.init(day: day ?? calendarDay ?? DayLabel.today())
             case .inbox: self.init(day: day, filing: .inbox)
             case .folder(let id, _): self.init(day: day, filing: .folder(id))
             }
@@ -92,11 +94,13 @@ final class Route {
 
     /// Quick add from the bar, landing where the reader is looking: `pane` is the one the bar sits
     /// under, which is the list whenever both are on screen.
-    func presentQuickAdd(from store: WorkspaceStore, under pane: Pane) {
+    func presentQuickAdd(from store: WorkspaceStore, under pane: Pane, besideCalendar: Bool = false) {
         quickAddPrefill = ""
         quickAddPrefillDate = nil
         quickAddPrefillMinutes = nil
-        quickAddContext = QuickAddContext(scope: store.scope, day: pane == .week ? calendarDay : nil)
+        quickAddContext = QuickAddContext(
+            scope: store.scope, day: pane == .week ? calendarDay : nil,
+            calendarDay: besideCalendar ? calendarDay : nil)
         isQuickAddPresented = true
     }
 

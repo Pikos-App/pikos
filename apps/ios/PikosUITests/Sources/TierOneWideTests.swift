@@ -32,6 +32,25 @@ extension TierOneTests {
         XCTAssertTrue(textInput("Title").waitForExistence(timeout: Self.timeout), "a page opens from the list beside the calendar")
     }
 
+    // qa: IOS-81
+    func testAPageAddedToTodayBesideTheCalendarLandsOnTheDayTheCalendarShows() throws {
+        try requirePhone()
+        rotate(to: .landscapeLeft)
+        XCTAssertTrue(visibleDays.waitForHittable())
+
+        app.buttons["Next"].firstMatch.tap()
+        quickAdd("Water the plants")
+
+        let tomorrow = Calendar.current.dateComponents(
+            [.year, .month, .day], from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        let expected = String(format: "%04d-%02d-%02d", tomorrow.year!, tomorrow.month!, tomorrow.day!)
+
+        let isScheduled = NSPredicate { _, _ in self.scheduledStart(titled: "Water the plants") != nil }
+        expectation(for: isScheduled, evaluatedWith: nil)
+        waitForExpectations(timeout: Self.timeout)
+        XCTAssertEqual(scheduledStart(titled: "Water the plants"), expected, "the day on the calendar, not today")
+    }
+
     func testTheUprightPhoneShowsOnePaneAtATime() throws {
         try requirePhone()
 

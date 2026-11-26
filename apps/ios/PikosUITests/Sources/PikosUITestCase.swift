@@ -136,13 +136,23 @@ class PikosUITestCase: XCTestCase {
 
     /// A page's id, read from the test's own workspace file, for tests that open a link to it.
     func pageId(titled title: String) -> String? {
+        pageColumn("id", titled: title)
+    }
+
+    /// The day or time a page is scheduled for, read from the test's own workspace file.
+    func scheduledStart(titled title: String) -> String? {
+        pageColumn("scheduled_start", titled: title)
+    }
+
+    private func pageColumn(_ column: String, titled title: String) -> String? {
         var db: OpaquePointer?
         let path = workspaceDirectory.appendingPathComponent("pikos.sqlite").path
         guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_close(db) }
+
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT id FROM pages WHERE title = ?1 LIMIT 1", -1, &statement, nil) == SQLITE_OK
-        else { return nil }
+        let sql = "SELECT \(column) FROM pages WHERE title = ?1 LIMIT 1"
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, title, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
         guard sqlite3_step(statement) == SQLITE_ROW, let text = sqlite3_column_text(statement, 0) else { return nil }

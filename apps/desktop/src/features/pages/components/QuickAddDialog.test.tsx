@@ -3,12 +3,16 @@
 // asserted against the adapter, because that is where they land — the dialog
 // closes immediately and has no state left to inspect.
 
+import { formatDateOnly, localToday } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { addDays } from "date-fns";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
+import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
@@ -18,6 +22,7 @@ import { QuickAddDialog } from "./QuickAddDialog";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 function Harness() {
@@ -34,9 +39,11 @@ function Harness() {
 async function quickAdd(text: string) {
   renderWithProviders(
     <AppSettingsProvider>
-      <TooltipProvider>
-        <Harness />
-      </TooltipProvider>
+      <CalendarSettingsProvider>
+        <TooltipProvider>
+          <Harness />
+        </TooltipProvider>
+      </CalendarSettingsProvider>
     </AppSettingsProvider>
   );
   // The workspace initialises asynchronously; until it has, `storage` is null
@@ -90,6 +97,38 @@ describe("QuickAddDialog — parsed reminders", () => {
     fireEvent.change(input, { target: { value: "Dentist tomorrow at 3pm remind 2h before" } });
 
     expect(await screen.findByText("2 hours before")).toBeTruthy();
+  });
+});
+
+describe("QuickAddDialog — the day a dateless line lands on", () => {
+  const inTwoWeeks = addDays(new Date(), 14);
+
+  function showToday(rightPanel: "calendar" | "editor") {
+    localStorage.setItem(STORAGE_KEYS.lastActiveViewId, JSON.stringify("today"));
+    localStorage.setItem(STORAGE_KEYS.rightPanel, JSON.stringify(rightPanel));
+    localStorage.setItem(
+      STORAGE_KEYS.calendarReferenceDate,
+      JSON.stringify(inTwoWeeks.toISOString())
+    );
+  }
+
+  // qa: QADD-14
+  it("is the calendar's day, from Today with the calendar on another week", async () => {
+    showToday("calendar");
+    const createSchedule = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
+    await quickAdd("Water the plants");
+
+    await waitFor(() => expect(createSchedule).toHaveBeenCalledOnce());
+    expect(createSchedule.mock.calls[0]![0].scheduledStart).toBe(formatDateOnly(inTwoWeeks));
+  });
+
+  it("is today, from Today with the calendar out of sight", async () => {
+    showToday("editor");
+    const createSchedule = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
+    await quickAdd("Water the plants");
+
+    await waitFor(() => expect(createSchedule).toHaveBeenCalledOnce());
+    expect(createSchedule.mock.calls[0]![0].scheduledStart).toBe(localToday());
   });
 });
 

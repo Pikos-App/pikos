@@ -36,6 +36,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import type { NewPageFields } from "@/shared/context/usePageWrites";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useCalendarDayInView } from "@/shared/hooks/useCalendarDays";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 
@@ -126,7 +127,8 @@ interface QuickAddDialogBodyProps {
 function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const { createPage, createRecurrence, folders, scheduleOnce, tags, updatePage } = usePages();
   const allTagNames = tags.map((t) => t.name);
-  const { activeViewId, dialogPrefill, openPage } = useUI();
+  const { activeViewId, dialogPrefill, openPage, rightPanel } = useUI();
+  const calendarDay = useCalendarDayInView();
   const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
   // Reminder rows are raw CRUD — PagesContext doesn't carry them, so the new
   // page's leads go straight to the adapter, the same call the reminder
@@ -136,6 +138,8 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const creatableFolders = writableFolders(folders);
   const initialFolderId = folderIdForNewPage(activeViewId, folders, settingsDefaultFolder);
   const dateActiveToday = datesNewPageToday(activeViewId);
+  // Beside the calendar, Today and Upcoming date a page to the day it shows, the one being looked at.
+  const viewDay = rightPanel === "calendar" ? calendarDay : localToday();
 
   const [inputValue, setInputValue] = useState(() => dialogPrefill ?? "");
   const [shake, setShake] = useState(false);
@@ -152,7 +156,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   // Tags are split further: nlpTags vs manualTags (union displayed).
 
   const [dateValue, setDateValue] = useState<string | null>(() =>
-    dateActiveToday ? localToday() : null
+    dateActiveToday ? viewDay : null
   );
   const [endDateValue, setEndDateValue] = useState<string | null>(null);
   const [priorityValue, setPriorityValue] = useState<PagePriority>(0);

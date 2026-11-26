@@ -45,7 +45,9 @@ struct WorkspaceScreen: View {
                         onSearch: { route.openSearch() },
                         onCapture: {
                             route.isSwitcherPresented = false
-                            route.presentQuickAdd(from: store, under: isSideBySide ? .list : route.pane)
+                            route.presentQuickAdd(
+                                from: store, under: isSideBySide ? .list : route.pane,
+                                besideCalendar: isSideBySide)
                         },
                         onExpand: {
                             withAnimation(reduceMotion ? nil : .pkQuick) { route.isBarMinimized = false }
