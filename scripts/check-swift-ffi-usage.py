@@ -52,10 +52,8 @@ def labels_of(signature: str) -> list[str]:
     for part in strip_comments(signature).split(","):
         if ":" not in part:
             continue
-        # Back-quotes come off: uniffi wraps a label that collides with a
-        # Swift keyword (`repeat`, `default`, `in`), and the call site may
-        # write it either way. Comparing the quoted form against an unquoted
-        # one reports a mismatch that is not there.
+        # Back-quotes come off: uniffi quotes a label that collides with a Swift keyword,
+        # and the call site may write it either way.
         label = part.split(":")[0].strip().strip("`")
         if re.fullmatch(r"\w+", label):
             out.append(label)
@@ -219,12 +217,8 @@ def main() -> int:
                         f" which is {expected}"
                     )
 
-    # A call to a method the bindings do not declare at all. The label check
-    # above only ever looks at methods it knows, so a `workspace.foo(...)`
-    # whose `foo` the Rust never exported — or exported after the bindings
-    # were last generated — sailed through it. That happened: stale bindings
-    # were committed with the Swift calling two methods they did not have, and
-    # this reported every call site matching.
+    # A call to a method the bindings don't declare at all, which the label check above
+    # never sees because it only looks at methods it knows.
     for path in sources:
         for match in re.finditer(r"\bworkspace\.(\w+)\(", path.read_text()):
             name = match.group(1)

@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the mobile editor and place it where the iOS package expects it.
+# Build the mobile editor and place it where the iOS package expects it. Runs anywhere Node
+# runs. Run after cloning and after changing packages/editor-mobile or packages/editor-schema.
+# The output is gitignored.
 #
-# Runs anywhere Node runs — no Xcode needed. The output is a single HTML file
-# with the JavaScript and CSS inlined, because the webview loads it through a
-# WKURLSchemeHandler whose callbacks run on the main thread: one request means
-# one hop through the thread that has to stay responsive for typing, which is
-# what M0's cold-load bar (< 300 ms on iPhone 12-class hardware) measures.
-#
-# The output is a build artifact and is gitignored. Run it after cloning, and
-# again after changing anything under packages/editor-mobile or
-# packages/editor-schema.
+# One HTML file with JS and CSS inlined: the webview loads it through a WKURLSchemeHandler whose
+# callbacks run on the main thread, so each extra request is a hop through the thread typing needs.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources"
@@ -22,10 +17,8 @@ echo "▶ building @pikos/editor-mobile"
 SRC="$ROOT/packages/editor-mobile/dist/index.html"
 [ -f "$SRC" ] || { echo "error: $SRC was not produced" >&2; exit 1; }
 
-# The inliner in vite.config.ts already fails the build on a surviving external
-# reference. Re-checked here because the consequence lands far from the cause:
-# a stray <script src> would 404 silently inside the webview and the editor
-# would come up blank with nothing in the logs to explain it.
+# The vite inliner already fails on an external reference. Re-checked here because a stray
+# <script src> would 404 silently in the webview and leave the editor blank with nothing logged.
 if grep -Eq '<script[^>]*src=|<link[^>]*rel="stylesheet"' "$SRC"; then
   echo "error: the built editor still references external files" >&2
   exit 1

@@ -48,9 +48,12 @@ appTest(
 type VaultFile = { content: string; path: string };
 
 async function importVault(app: Page, files: VaultFile[]) {
-  await app.evaluate((vault) => {
-    (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = vault;
-  }, { files, path: "/tmp/pikos-e2e-vault" });
+  await app.evaluate(
+    (vault) => {
+      (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = vault;
+    },
+    { files, path: "/tmp/pikos-e2e-vault" }
+  );
   await app.getByRole("button", { name: "Open settings" }).click();
   await app.getByRole("button", { exact: true, name: "Data" }).click();
   await app.getByRole("button", { name: /Select Folder/ }).click();
@@ -120,12 +123,16 @@ appTest(
       await expect(rowOf(app, "Insurance")).toBeVisible();
       await expect(rowOf(app, "Mortgage")).toHaveCount(0);
       await app.getByRole("button", { exact: true, name: "Completed" }).click();
-      await expect(rowOf(app, "Mortgage").getByRole("checkbox", { name: "Mark not done" })).toBeVisible();
+      await expect(
+        rowOf(app, "Mortgage").getByRole("checkbox", { name: "Mark not done" })
+      ).toBeVisible();
     });
 
     await appTest.step("IMP-01 tags, priority and the due date land on the page", async () => {
       await rowOf(app, "Mortgage").click();
-      await expect(app.getByRole("button", { name: /^Tags: (finance, home|home, finance)$/ })).toBeVisible();
+      await expect(
+        app.getByRole("button", { name: /^Tags: (finance, home|home, finance)$/ })
+      ).toBeVisible();
       await expect(app.getByRole("button", { name: "Priority: High" })).toBeVisible();
       await expect(app.getByRole("button", { name: /^Scheduled: Nov 20/ })).toBeVisible();
     });
@@ -158,33 +165,44 @@ appTest(
   "real vault and export shapes import with flat folder names, silent title-only pages, and nesting",
   { tag: ["@IMP-02"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "IMP-02 reads the stored parent, which only the writer holds");
+    appTest.skip(
+      storage !== "bridge",
+      "IMP-02 reads the stored parent, which only the writer holds"
+    );
 
-    await appTest.step("IMP-02 a vault's nested folders flatten, and a title-only file imports quietly", async () => {
-      await importVault(app, [
-        { content: "Quarterly goals.", path: "Projects/Work/Plan.md" },
-        { content: "", path: "Projects/Work/Just a title.md" },
-        { content: "Loose thought.", path: "Inbox note.md" },
-      ]);
-      await expect(app.getByText(/3 pages in/)).toBeVisible();
-      await expect(app.getByRole("button", { name: "Projects / Work (2)" })).toBeVisible();
-      // The only note is the folder flattening; the title-only file raises none.
-      await expect(app.getByRole("listitem").filter({ hasText: /Just a title|empty/i })).toHaveCount(0);
-      await commitImport(app, 3);
-      await openFolder(app, "Projects / Work");
-      await expect(app.locator("[data-page-list-item]")).toHaveCount(2);
-      await expect(rowOf(app, "Just a title")).toBeVisible();
-    });
+    await appTest.step(
+      "IMP-02 a vault's nested folders flatten, and a title-only file imports quietly",
+      async () => {
+        await importVault(app, [
+          { content: "Quarterly goals.", path: "Projects/Work/Plan.md" },
+          { content: "", path: "Projects/Work/Just a title.md" },
+          { content: "Loose thought.", path: "Inbox note.md" },
+        ]);
+        await expect(app.getByText(/3 pages in/)).toBeVisible();
+        await expect(app.getByRole("button", { name: "Projects / Work (2)" })).toBeVisible();
+        // The only note is the folder flattening; the title-only file raises none.
+        await expect(
+          app.getByRole("listitem").filter({ hasText: /Just a title|empty/i })
+        ).toHaveCount(0);
+        await commitImport(app, 3);
+        await openFolder(app, "Projects / Work");
+        await expect(app.locator("[data-page-list-item]")).toHaveCount(2);
+        await expect(rowOf(app, "Just a title")).toBeVisible();
+      }
+    );
 
-    await appTest.step("IMP-02 a TickTick export's preamble is stripped and it is detected", async () => {
-      await importCsv(app, TICKTICK_EXPORT);
-      await expect(app.getByText(/Auto-detected as TickTick/)).toBeVisible();
-      await app.getByRole("button", { name: "Continue" }).click();
-      await commitImport(app, 2);
-      await openFolder(app, "Garden");
-      await expect(rowOf(app, "Plant bulbs")).toBeVisible();
-      await expect(rowOf(app, "Water daily")).toBeVisible();
-    });
+    await appTest.step(
+      "IMP-02 a TickTick export's preamble is stripped and it is detected",
+      async () => {
+        await importCsv(app, TICKTICK_EXPORT);
+        await expect(app.getByText(/Auto-detected as TickTick/)).toBeVisible();
+        await app.getByRole("button", { name: "Continue" }).click();
+        await commitImport(app, 2);
+        await openFolder(app, "Garden");
+        await expect(rowOf(app, "Plant bulbs")).toBeVisible();
+        await expect(rowOf(app, "Water daily")).toBeVisible();
+      }
+    );
 
     await appTest.step("IMP-02 a Todoist export's subtasks nest under their task", async () => {
       await importCsv(app, TODOIST_EXPORT);
@@ -192,10 +210,13 @@ appTest(
       await app.getByRole("button", { name: "Continue" }).click();
       await commitImport(app, 4);
       await app.getByRole("button", { name: /^Inbox/ }).click();
-      const idOf = async (title: string) => (await rowOf(app, title).getAttribute("data-page-id")) ?? "";
+      const idOf = async (title: string) =>
+        (await rowOf(app, title).getAttribute("data-page-id")) ?? "";
       const parent = await idOf("Weekly chores");
       for (const child of ["Clean the house", "Take out the trash"]) {
-        const page = await bridgeCall<{ parentId: string | null }>(app, "get_page", { id: await idOf(child) });
+        const page = await bridgeCall<{ parentId: string | null }>(app, "get_page", {
+          id: await idOf(child),
+        });
         expect(page.parentId).toBe(parent);
       }
       const top = await bridgeCall<{ parentId: string | null }>(app, "get_page", {
@@ -224,7 +245,8 @@ appTest(
 
     await appTest.step("IMP-04 the import still completes, the callout as a quote", async () => {
       await commitImport(app, 3);
-      for (const title of ["Diagram", "Index", "Callout"]) await expect(rowOf(app, title)).toBeVisible();
+      for (const title of ["Diagram", "Index", "Callout"])
+        await expect(rowOf(app, title)).toBeVisible();
       await rowOf(app, "Callout").click();
       await expect(
         app.getByRole("textbox", { name: "Page content" }).getByRole("blockquote")
@@ -258,7 +280,9 @@ Paint the shed,,Waiting,Meh,2024-02-02`
 
     await appTest.step("IMP-05 status and priority values map by hand", async () => {
       await app.getByRole("combobox", { name: "Map status value Finished" }).selectOption("done");
-      await app.getByRole("combobox", { name: "Map status value Waiting" }).selectOption("not_started");
+      await app
+        .getByRole("combobox", { name: "Map status value Waiting" })
+        .selectOption("not_started");
       await app.getByRole("combobox", { name: "Map priority value Hot" }).selectOption("1");
       await app.getByRole("combobox", { name: "Map priority value Meh" }).selectOption("4");
       await app.getByRole("button", { name: "Continue" }).click();
@@ -284,15 +308,21 @@ appTest(
   "an import leaves a Before an import snapshot in Restore, and a cancel leaves none",
   { tag: ["@IMP-07"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "snapshots are the writer's files, which the mock has none of");
+    appTest.skip(
+      storage !== "bridge",
+      "snapshots are the writer's files, which the mock has none of"
+    );
     const snapshot = app.getByText("Before an import");
 
-    await appTest.step("IMP-07 a cancelled import writes nothing and takes no snapshot", async () => {
-      await importVault(app, [{ content: "Hello.", path: "Note.md" }]);
-      await app.getByRole("button", { exact: true, name: "Cancel" }).click();
-      await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
-      await expect(snapshot).toHaveCount(0);
-    });
+    await appTest.step(
+      "IMP-07 a cancelled import writes nothing and takes no snapshot",
+      async () => {
+        await importVault(app, [{ content: "Hello.", path: "Note.md" }]);
+        await app.getByRole("button", { exact: true, name: "Cancel" }).click();
+        await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
+        await expect(snapshot).toHaveCount(0);
+      }
+    );
 
     await appTest.step("IMP-07 a run import leaves one, listed as Before an import", async () => {
       await app.keyboard.press("Escape");
@@ -353,7 +383,9 @@ appTest(
     await appTest.step("IMP-10 a regular Work folder is made beside the calendar's", async () => {
       await expect(folderRow(app, "Work")).toHaveCount(1);
       await expect(
-        app.getByRole("group", { name: "Views and folders" }).getByRole("button", { exact: true, name: "Work" })
+        app
+          .getByRole("group", { name: "Views and folders" })
+          .getByRole("button", { exact: true, name: "Work" })
       ).toHaveCount(2);
       await openFolder(app, "Work");
       await expect(rowOf(app, "Meeting notes")).toBeVisible();

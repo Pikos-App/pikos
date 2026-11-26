@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # Regenerate the TypeScript mirrors of pikos-db's wire types.
 #
-# The Rust structs are the source: `#[derive(ts_rs::TS)]` exports each one here,
-# and `packages/core` consumes the result instead of re-declaring it. The output is
-# a committed build artifact, so CI reruns this and fails on a diff — the same gate
-# the recurrence wasm package carries, for the same reason.
+# The Rust structs are the source: `#[derive(ts_rs::TS)]` exports each one here and
+# `packages/core` consumes the result. The output is committed, and CI reruns this and fails on a diff.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

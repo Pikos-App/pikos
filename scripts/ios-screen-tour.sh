@@ -36,8 +36,8 @@ restore() {
 }
 trap restore EXIT
 
-# The tour records what it could not reach instead of failing, so a non-zero exit here is a build
-# or runner problem; the attachments are still exported if the bundle exists.
+# The tour records what it could not reach instead of failing, so a non-zero exit is a build or
+# runner problem; attachments are still exported if the bundle exists.
 xcodebuild test \
   -project "$ROOT/apps/ios/Pikos/Pikos.xcodeproj" \
   -scheme Pikos \

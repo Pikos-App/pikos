@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # Fail when the token block in apps/desktop/src/app.css drifts from @pikos/ui.
 #
-# app.css is a committed build artifact from packages/ui/src/tokens.ts, the same
-# arrangement packages/core/src/generated and packages/recurrence-wasm/pkg carry.
-# Without this gate a token edited in TypeScript and never regenerated leaves the
-# app rendering the old value with every other check green — nothing typechecks
-# a stylesheet against the data it came from.
+# app.css is a committed artifact of packages/ui/src/tokens.ts. Nothing else typechecks a
+# stylesheet against its source, so a token edited and never regenerated would ship the old value
+# with every other check green.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

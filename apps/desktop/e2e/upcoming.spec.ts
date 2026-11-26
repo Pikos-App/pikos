@@ -1,11 +1,8 @@
-// Round-trip coverage for the two Today/Upcoming product surfaces whose logic is
-// unit-pinned in core: the Upcoming view's day grouping, and the Overdue
-// section's bulk "Move to today".
+// Today/Upcoming surfaces whose logic is unit-pinned in core: the Upcoming view's day grouping and
+// the Overdue section's bulk "Move to today".
 //
-// Both use the raw `page` fixture rather than `app` so the clock can be installed
-// before the app boots — "overdue" and "the next seven days" only exist relative
-// to a known now, and a wall-clock test would drift into a different set of day
-// headers depending on the weekday CI happens to run on.
+// Both use the raw `page` fixture so the clock is installed before the app boots: "overdue" and
+// "the next seven days" exist only relative to a known now.
 
 import type { Page } from "@playwright/test";
 
@@ -28,8 +25,6 @@ async function add(page: Page, input: string) {
   await expect(page.getByRole("dialog")).not.toBeVisible();
 }
 
-// ─── Upcoming groups the window by day ──────────────────────────────────────
-
 appTest("upcoming groups the next seven days by day @mock-only", async ({ page }) => {
   await bootAt(page, "2026-06-15T09:00:00");
 
@@ -51,8 +46,6 @@ appTest("upcoming groups the next seven days by day @mock-only", async ({ page }
   await expect(items.filter({ hasText: "quarter retro" })).toBeVisible();
 });
 
-// ─── Upcoming is not a second Today ─────────────────────────────────────────
-
 appTest("upcoming leaves overdue pages to the Today view @mock-only", async ({ page }) => {
   await bootAt(page, "2026-06-15T09:00:00");
 
@@ -72,8 +65,6 @@ appTest("upcoming leaves overdue pages to the Today view @mock-only", async ({ p
     page.locator("[data-page-list-item]").filter({ hasText: "expense report" })
   ).toBeVisible();
 });
-
-// ─── Bulk "Move to today" on the Overdue header ─────────────────────────────
 
 appTest("moving overdue pages to today clears the Overdue section @mock-only", async ({ page }) => {
   await bootAt(page, "2026-06-15T09:00:00");
@@ -96,8 +87,6 @@ appTest("moving overdue pages to today clears the Overdue section @mock-only", a
   await expect(items.filter({ hasText: "expense report" })).toBeVisible();
   await expect(items.filter({ hasText: "vendor call" })).toBeVisible();
 });
-
-// ─── Lists loaded a window at a time turn over at midnight ─────────────────
 
 appTest.describe("with lists loaded a window at a time", () => {
   appTest.use({ tightCache: true });

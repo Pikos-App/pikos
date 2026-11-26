@@ -6,10 +6,10 @@ import { test as appTest, bridgeCall, mod, quickAdd } from "./fixtures";
 
 /**
  * What a large workspace may cost, the speed checks that run on every PR, with the app's own cache
- * settings. Counts, not timings, so a shared runner's noise can't fail them. Measured 2026-10-04 on
- * the 20,000-page template: a launch and then opening Folder 01 (750 pages) make 17 or 18 calls,
- * read 400 rows and mount 33 to 37; a write after selecting the folder whole reads 100 rows,
- * where refetching every row it had ids for read 595.
+ * settings. Counts, not timings, so a shared runner's noise can't fail them. On the 20,000-page
+ * template, a launch and then opening Folder 01 (750 pages) make 17 or 18 calls, read 400 rows and
+ * mount 33 to 37; a write after selecting the folder whole reads 100 rows, where refetching every
+ * row it had ids for read 595.
  * Each limit is about twice what was measured, far under a list read or drawn whole.
  */
 const LIMITS = { launchCalls: 36, launchRows: 800, mountedRows: 80, writeRows: 200 };
@@ -34,7 +34,6 @@ function countReads(app: Page) {
 
 test("app boots directly to workspace @smoke @mock-only", async ({ page }) => {
   await page.goto("/");
-  // Workspace auto-creates on first launch — no welcome screen
   await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
 });
 

@@ -69,11 +69,14 @@ appTest(
     await deleteRow(app, "old draft");
     await listRow(app, "open page").click();
 
-    await appTest.step("TRASH-03 it opens in the page-list column under Kept for 30 days", async () => {
-      await openTrash(app);
-      await expect(app.getByText("Kept for 30 days")).toBeVisible();
-      await expect(app.getByRole("group", { name: "Work" })).toHaveCount(0);
-    });
+    await appTest.step(
+      "TRASH-03 it opens in the page-list column under Kept for 30 days",
+      async () => {
+        await openTrash(app);
+        await expect(app.getByText("Kept for 30 days")).toBeVisible();
+        await expect(app.getByRole("group", { name: "Work" })).toHaveCount(0);
+      }
+    );
 
     await appTest.step("TRASH-03 each row names its folder and how long ago it went", async () => {
       const row = trashList(app).getByRole("listitem").filter({ hasText: "old draft" });
@@ -81,11 +84,14 @@ appTest(
       await expect(row).toContainText("Deleted today");
     });
 
-    await appTest.step("TRASH-03 the delete shortcut works here, and the page appears at once", async () => {
-      await app.getByRole("textbox", { name: "Page content" }).click();
-      await app.keyboard.press(mod("Mod+Shift+Backspace"));
-      await expect(trashList(app)).toContainText("open page");
-    });
+    await appTest.step(
+      "TRASH-03 the delete shortcut works here, and the page appears at once",
+      async () => {
+        await app.getByRole("textbox", { name: "Page content" }).click();
+        await app.keyboard.press(mod("Mod+Shift+Backspace"));
+        await expect(trashList(app)).toContainText("open page");
+      }
+    );
 
     await appTest.step("TRASH-03 leaving it brings the normal list back", async () => {
       await app
@@ -165,7 +171,9 @@ appTest(
     await listRow(app, "keep me").click();
     const untouched = async () => {
       await expect(listRow(app, "keep me")).toHaveCount(1);
-      await expect(listRow(app, "keep me").getByRole("checkbox", { name: "Mark done" })).toBeVisible();
+      await expect(
+        listRow(app, "keep me").getByRole("checkbox", { name: "Mark done" })
+      ).toBeVisible();
     };
     async function pressAll() {
       for (const key of [mod("Mod+Backspace"), mod("Mod+Shift+Backspace"), "Space"]) {
@@ -198,16 +206,21 @@ appTest(
         return d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
       });
       const cell = picker.getByRole("button", { exact: true, name: day });
-      if (!(await cell.isVisible())) await picker.getByRole("button", { name: "Previous month" }).click();
+      if (!(await cell.isVisible()))
+        await picker.getByRole("button", { name: "Previous month" }).click();
       await cell.click();
       await app.keyboard.press("Escape");
       await app.getByRole("button", { name: "Mark done" }).click();
-      await expect(app.getByRole("dialog").filter({ hasText: /other days are still open/ })).toBeVisible();
+      await expect(
+        app.getByRole("dialog").filter({ hasText: /other days are still open/ })
+      ).toBeVisible();
       await app.keyboard.press(mod("Mod+Backspace"));
       await app.keyboard.press(mod("Mod+Shift+Backspace"));
       await app.keyboard.press("Escape");
       await expect(listRow(app, "stretch")).toHaveCount(1);
-      await expect(listRow(app, "stretch").getByRole("checkbox", { name: "Mark done" })).toBeVisible();
+      await expect(
+        listRow(app, "stretch").getByRole("checkbox", { name: "Mark done" })
+      ).toBeVisible();
       await untouched();
     });
   }

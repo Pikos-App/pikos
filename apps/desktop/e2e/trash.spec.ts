@@ -1,10 +1,4 @@
-// The trash — the surface that made a soft delete recoverable after the undo
-// toast is gone. Before it, "Delete" put a row on disk that nothing in the app
-// could ever reach again.
-//
-// Sandbox note: this spec has not been run here — the container has no WebKit
-// build, so Playwright cannot launch. It is written against the same fixtures
-// and locator idioms as pages.spec.ts.
+// The trash: where a soft delete stays recoverable once the undo toast is gone.
 
 import { expect } from "@playwright/test";
 
@@ -30,8 +24,6 @@ function openTrash(app: Parameters<typeof quickAdd>[0]) {
   return app.getByRole("button", { exact: true, name: "Trash" }).click();
 }
 
-// ─── tier2: a delete survives the toast and comes back ───────────────────────
-
 appTest(
   "a deleted page waits in the trash and restores from it",
   { tag: ["@TRASH-04"] },
@@ -50,15 +42,12 @@ appTest(
     // re-read the undo toast uses.
     await expect(app.getByText("The trash is empty.")).toBeVisible();
 
-    // The panel is a view, so leaving it is a navigation rather than a dismissal.
     await app.getByRole("button", { name: /^Inbox/ }).click();
     await expect(
       app.locator("[data-page-list-item]").filter({ hasText: "notes from the offsite" })
     ).toBeVisible();
   }
 );
-
-// ─── tier2: emptying the trash ───────────────────────────────────────────────
 
 appTest("emptying the trash destroys what was in it", async ({ app }) => {
   await quickAdd(app, "draft to abandon");
@@ -78,35 +67,28 @@ appTest("emptying the trash destroys what was in it", async ({ app }) => {
   await expect(app.getByText("The trash is empty.")).toBeVisible();
 });
 
-// ─── tier2: the trash takes the column without taking its behaviour ──────────
+// The trash is its own panel, so opening it unmounts the page list; the delete shortcut,
+// registered inside the list, must still work there.
+appTest("the trash stays live and the delete shortcut survives it", async ({ app }) => {
+  await quickAdd(app, "already in the bin");
+  await deleteAndLetUndoLapse(app, "already in the bin");
+  await quickAdd(app, "deleted while looking at the bin");
 
-// Both halves of one cause: the trash is its own panel, so opening it unmounts the
-// page list. The list caught up only on the way back in, and the delete shortcut —
-// registered inside the list — stopped working exactly where a user reaches for it.
-appTest(
-  "the trash stays live and the delete shortcut survives it",
-  async ({ app }) => {
-    await quickAdd(app, "already in the bin");
-    await deleteAndLetUndoLapse(app, "already in the bin");
-    await quickAdd(app, "deleted while looking at the bin");
+  await openTrash(app);
+  const trash = app.getByRole("list", { name: "Deleted pages" });
+  await expect(trash).toContainText("already in the bin");
 
-    await openTrash(app);
-    const trash = app.getByRole("list", { name: "Deleted pages" });
-    await expect(trash).toContainText("already in the bin");
+  // Open the page the shortcut will act on, without leaving the trash view: the
+  // editor keeps an active page whichever panel holds the middle column.
+  await app.getByRole("button", { name: /^Inbox/ }).click();
+  await app
+    .locator("[data-page-list-item]")
+    .filter({ hasText: "deleted while looking at the bin" })
+    .click();
+  await openTrash(app);
 
-    // Open the page the shortcut will act on, without leaving the trash view: the
-    // editor keeps an active page whichever panel holds the middle column.
-    await app.getByRole("button", { name: /^Inbox/ }).click();
-    await app
-      .locator("[data-page-list-item]")
-      .filter({ hasText: "deleted while looking at the bin" })
-      .click();
-    await openTrash(app);
+  await app.keyboard.press(mod("Mod+Shift+Backspace"));
 
-    await app.keyboard.press(mod("Mod+Shift+Backspace"));
-
-    // No navigation between the delete and the assertion — the row arriving is the
-    // part that used to wait for a trip out of the view and back.
-    await expect(trash).toContainText("deleted while looking at the bin");
-  }
-);
+  // No navigation between the delete and the assertion: the row must arrive without leaving the view.
+  await expect(trash).toContainText("deleted while looking at the bin");
+});

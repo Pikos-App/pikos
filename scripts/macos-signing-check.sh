@@ -3,28 +3,24 @@
 #
 #   scripts/macos-signing-check.sh <dir-with-bundle> [--signature-only]
 #
-# `--signature-only` stops after the signature checks, for the local signed build
-# (`pnpm qa:build`), which is deliberately not notarized — notarization needs the
-# pipeline's credentials. The half it still answers is the one that bites locally:
-# a build whose identity did not resolve is ad-hoc signed, and an ad-hoc build
-# delivers no notifications at all, which reads as "notifications are broken".
+# `--signature-only` stops after the signature checks, for the local signed build (`pnpm
+# qa:build), which is not notarized because that needs the pipeline's credentials. It still
+# catches the local failure: a build whose identity did not resolve is ad-hoc signed and delivers
+# no notifications at all.
 #
-# The build log cannot answer this. `tauri build` signs when it finds an identity
-# and notarizes when it finds an API key, and with either one missing or expired
-# it prints nothing unusual and exits 0. What reaches the user is "Pikos is
-# damaged and can't be opened", for everyone, with no fix short of a new release.
+# The build log cannot answer this. `tauri build` signs when it finds an identity and notarizes
+# when it finds an API key, and with either missing or expired it prints nothing unusual and
+# exits 0. Users then get "Pikos is damaged and can't be opened", with no fix short of a new
+# release.
 #
-# Three separate questions, in the order they fail:
+# Three questions, in the order they fail:
 #
 #   codesign --verify   the signature exists and the bundle has not been altered
-#   stapler validate    a notarization ticket is attached to the artifact itself,
-#                       which is what makes first launch work offline
-#   spctl --assess      Gatekeeper would actually let it run — the only one of the
-#                       three that answers the user's question rather than ours
+#   stapler validate    a notarization ticket is attached, so first launch works offline
+#   spctl --assess      Gatekeeper would actually let it run
 #
-# A Developer ID build that is signed but not stapled passes the first check and
-# fails the third on any machine that is offline or behind a captive portal, so
-# the pass is not redundant with the QA rung that opens the DMG by hand.
+# A signed but unstapled Developer ID build passes the first check and fails the third on an
+# offline machine, so this pass is not redundant with the QA rung that opens the DMG by hand.
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -41,19 +37,17 @@ pass() { printf "${GREEN}✓${RESET} %s${DIM} %s${RESET}\n" "$1" "${2:-}"; }
 app=$(find "$BUNDLE/macos" -maxdepth 1 -name "*.app" | head -1)
 [ -n "$app" ] || fail "no .app under $BUNDLE/macos"
 
-# --deep walks the embedded frameworks and helpers, not just the outer bundle;
-# an unsigned nested binary is enough for Gatekeeper to reject the whole thing.
-# It logs a line per nested item, which is hundreds in a Tauri app — kept back
-# unless it fails, where it is the only thing that names which one.
+# --deep walks embedded frameworks and helpers: one unsigned nested binary makes Gatekeeper reject
+# the whole bundle. Its per-item log runs to hundreds of lines in a Tauri app, so it is shown only
+# on failure, where it names the culprit.
 if ! out=$(codesign --verify --deep --strict --verbose=2 "$app" 2>&1); then
   printf '%s\n' "$out"
   fail "codesign could not verify $(basename "$app")"
 fi
 pass "codesign" "$(basename "$app")"
 
-# `|| true` because an ad-hoc signature prints no Authority line at all, and under
-# `pipefail` the empty grep would abort the script before the case below could say
-# why — a check that exits non-zero without naming its reason is its own bug.
+# `|| true` because an ad-hoc signature prints no Authority line, and under `pipefail` the empty
+# grep would abort before the case below could say why.
 authority=$(codesign -dvv "$app" 2>&1 | grep '^Authority=' | head -1 | cut -d= -f2- || true)
 case "$authority" in
   "Developer ID Application:"*) pass "signed by" "$authority" ;;
@@ -71,8 +65,6 @@ xcrun stapler validate "$app" \
   || fail "no notarization ticket stapled to $(basename "$app") — it will be refused on a machine that cannot reach Apple"
 pass "stapled" "$(basename "$app")"
 
-# `-t exec` is not `-t install`: this asks whether the app may *run*, which is
-# the check first launch performs.
 if ! out=$(spctl --assess --type exec --verbose=4 "$app" 2>&1); then
   printf '%s\n' "$out"
   fail "Gatekeeper would refuse $(basename "$app")"

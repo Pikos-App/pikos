@@ -1,15 +1,10 @@
 import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 import { assertNoBlocking, assertPerf, observeLongTasks, readLongTasks } from "./perf-helpers";
 
-// ─── P1: App boot to interactive ────────────────────────────────────────────
-
 appTest("app boots to interactive under 2000ms @perf", async ({ app }) => {
-  // Measure to `pikos:ready` (set after AppShell mount) instead of domInteractive,
-  // which fires before React mounts and so understates real time-to-interactive.
-  // The mark is set inside a useEffect on first AppShell render, so wait for it.
-  await app.waitForFunction(
-    () => performance.getEntriesByName("pikos:ready", "mark").length > 0
-  );
+  // Measure to `pikos:ready`, set in a useEffect on the first AppShell render: domInteractive
+  // fires before React mounts and understates time-to-interactive.
+  await app.waitForFunction(() => performance.getEntriesByName("pikos:ready", "mark").length > 0);
 
   const timing = await app.evaluate(() => {
     const nav = performance.getEntriesByType(
@@ -23,16 +18,12 @@ appTest("app boots to interactive under 2000ms @perf", async ({ app }) => {
   assertPerf("p1.boot_to_ready", timing, 2000);
 });
 
-// ─── P2: Page list render time on folder switch ─────────────────────────────
-
 appTest("page list renders under 50ms on folder switch @perf", async ({ app }) => {
   for (let i = 0; i < 20; i++) {
     await quickAdd(app, `page ${i}`);
   }
 
-  // Create + activate a new (empty) folder. Folder creation activates the new
-  // folder, so after Enter the user is sitting on an empty page list — the
-  // in-eval Inbox click below is then a real transition from 0 → 20 items.
+  // Folder creation activates the new folder, so the Inbox click below is a real 0 -> 20 transition.
   await app
     .getByRole("toolbar", { name: "Folder actions" })
     .getByRole("button", { name: "New Folder" })
@@ -78,8 +69,6 @@ appTest("page list renders under 50ms on folder switch @perf", async ({ app }) =
   assertPerf("p2.folder_switch", switchTime, 50);
 });
 
-// ─── P3: Editor has no long tasks during typing ─────────────────────────────
-
 appTest("editor has no long tasks during typing @perf", async ({ app }) => {
   await quickAdd(app, "perf test page");
   await app.locator("[data-page-list-item]").getByText("perf test page").click();
@@ -93,8 +82,6 @@ appTest("editor has no long tasks during typing @perf", async ({ app }) => {
 
   assertNoBlocking("p3.editor_typing", await readLongTasks(app, "__perfEditor"));
 });
-
-// ─── P4: Search has no long tasks ───────────────────────────────────────────
 
 appTest("search has no long tasks during open and filter @perf", async ({ app }) => {
   for (let i = 0; i < 10; i++) {
@@ -115,8 +102,6 @@ appTest("search has no long tasks during open and filter @perf", async ({ app })
 
   await app.keyboard.press("Escape");
 });
-
-// ─── P5: Calendar view with many events ─────────────────────────────────────
 
 appTest("calendar has no long tasks with 20+ events @perf", async ({ app }) => {
   for (let i = 0; i < 25; i++) {
@@ -146,8 +131,6 @@ appTest("calendar has no long tasks with 20+ events @perf", async ({ app }) => {
 
   assertNoBlocking("p5.calendar_open", await readLongTasks(app, "__perfCal"));
 });
-
-// ─── P6: Quick Add NLP parsing ──────────────────────────────────────────────
 
 appTest("quick add has no long tasks during NLP input @perf", async ({ app }) => {
   await observeLongTasks(app, "__perfQA");

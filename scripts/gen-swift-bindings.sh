@@ -1,31 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generate the Swift bindings for crates/pikos-ffi.
+# Generate the Swift bindings for crates/pikos-ffi. Runs anywhere Rust runs: uniffi-bindgen reads
+# the cdylib's embedded metadata. The XCFramework the bindings call into needs a Mac, see
+# build-ios-framework.sh.
 #
-# Runs anywhere Rust runs — no Xcode, no Apple toolchain. uniffi-bindgen reads
-# the compiled cdylib's embedded metadata and writes Swift source, so bindings
-# can be generated, diffed and reviewed on a Linux CI runner. Producing the
-# XCFramework that the bindings call into is the part that needs a Mac; see
-# scripts/build-ios-framework.sh.
-#
-# Output is committed. CI regenerates and fails on a diff (see the
-# swift-bindings step in .github/workflows/_validate.yml), so a change to the
-# Rust FFI surface cannot silently leave Swift behind.
+# Output is committed, and CI regenerates it and fails on a diff, so a Rust FFI change cannot
+# leave Swift behind.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Always build. uniffi-bindgen reads the metadata embedded in the *cdylib*,
-# and `cargo test` never produces one — so a library left over from an earlier
-# `cargo build` describes an earlier FFI, and bindings generated from it are
-# stale while looking freshly written. That happened once: a method added to
-# the Rust, tests green, bindings "regenerated", and the Swift calling a method
-# the bindings did not declare. A no-op build costs a second; skipping it cost
-# a push.
+# Always build: `cargo test` never produces a cdylib, so a library left from an earlier build
+# describes an earlier FFI and yields stale bindings that look freshly written.
 echo "▶ building pikos-ffi"
 (cd "$ROOT" && cargo build -p pikos-ffi --lib)
 
-# Linux builds .so, macOS .dylib — pick whichever this host produced.
 LIB_DIR="$ROOT/target/debug"
 LIB=""
 for candidate in "$LIB_DIR/libpikos_ffi.so" "$LIB_DIR/libpikos_ffi.dylib"; do
@@ -46,14 +35,10 @@ trap 'rm -rf "$TMP"' EXIT
 PKG="$ROOT/apps/ios/PikosCore"
 mkdir -p "$PKG/Sources/PikosCore" "$PKG/generated/include"
 
-# The Swift half is a normal SwiftPM source file.
 mv "$TMP/pikos_ffi.swift" "$PKG/Sources/PikosCore/PikosCore.swift"
 
-# The C header and modulemap are *inputs to the XCFramework*, not a SwiftPM
-# target: an XCFramework carries its own headers and modulemap, and having a
-# second copy as a systemLibrary target would give the compiler two modules
-# declaring the same symbols. They live under generated/ so it is obvious they
-# are build inputs rather than something to import directly.
+# The header and modulemap are XCFramework inputs, not a SwiftPM target: the XCFramework carries
+# its own, and a second copy as a systemLibrary would give two modules declaring the same symbols.
 mv "$TMP/pikos_ffiFFI.h" "$PKG/generated/include/pikos_ffiFFI.h"
 mv "$TMP/pikos_ffiFFI.modulemap" "$PKG/generated/include/module.modulemap"
 

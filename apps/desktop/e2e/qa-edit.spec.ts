@@ -43,16 +43,19 @@ appTest(
       await expect(list.filter({ hasText: "First draft" })).toHaveCount(0);
     });
 
-    await appTest.step("EDIT-01 opening another page replaces the editor, with no tabs", async () => {
-      await list.filter({ hasText: "Second draft" }).click();
-      await expect(app.getByLabel("Page title")).toHaveText("Second draft");
-      await expect(body).not.toContainText("words from the first page");
-      await expect(body).toHaveCount(1);
-      await expect(app.getByRole("tab")).toHaveCount(0);
+    await appTest.step(
+      "EDIT-01 opening another page replaces the editor, with no tabs",
+      async () => {
+        await list.filter({ hasText: "Second draft" }).click();
+        await expect(app.getByLabel("Page title")).toHaveText("Second draft");
+        await expect(body).not.toContainText("words from the first page");
+        await expect(body).toHaveCount(1);
+        await expect(app.getByRole("tab")).toHaveCount(0);
 
-      await list.filter({ hasText: "Opening chapter" }).click();
-      await expect(body).toContainText("words from the first page");
-    });
+        await list.filter({ hasText: "Opening chapter" }).click();
+        await expect(body).toContainText("words from the first page");
+      }
+    );
   }
 );
 
@@ -301,12 +304,15 @@ appTest(
       await expect(popover).toBeVisible();
     });
 
-    await appTest.step("EDIT-11 it shows words, characters, paragraphs and reading time", async () => {
-      await expect(popover).toContainText(/Words\s*4/);
-      await expect(popover).toContainText(/Characters\s*22/);
-      await expect(popover).toContainText(/Paragraphs\s*2/);
-      await expect(popover).toContainText(/Reading time\s*< 1 min/);
-    });
+    await appTest.step(
+      "EDIT-11 it shows words, characters, paragraphs and reading time",
+      async () => {
+        await expect(popover).toContainText(/Words\s*4/);
+        await expect(popover).toContainText(/Characters\s*22/);
+        await expect(popover).toContainText(/Paragraphs\s*2/);
+        await expect(popover).toContainText(/Reading time\s*< 1 min/);
+      }
+    );
 
     await appTest.step("EDIT-11 it shows the created, updated and completed dates", async () => {
       for (const label of ["Created", "Updated", "Completed"]) {
@@ -320,7 +326,10 @@ appTest(
   "typed content persists across a page switch and a relaunch",
   { tag: ["@EDIT-12"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "EDIT-12 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "EDIT-12 reloads, and the mock keeps nothing across a reload"
+    );
     await quickAdd(app, "Journal");
     await quickAdd(app, "Elsewhere");
     const body = await openEditorForPage(app, "Journal");
@@ -457,17 +466,20 @@ appTest(
     const items = app.locator("[data-page-list-item]");
     const backlinks = app.getByRole("button", { name: "Linked from 1 page" });
 
-    await appTest.step("EDIT-26 the link shows the new title at once and still opens it", async () => {
-      await items.filter({ hasText: "Plans" }).click();
-      await app.getByLabel("Page title").click();
-      await app.keyboard.press(mod("Mod+a"));
-      await app.keyboard.type("Plans for spring");
-      await app.keyboard.press("Enter");
-      await items.filter({ hasText: "Garden journal" }).click();
-      await expect(link("Plans for spring")).toBeVisible();
-      await link("Plans for spring").click();
-      await expect(app.getByLabel("Page title")).toHaveText("Plans for spring");
-    });
+    await appTest.step(
+      "EDIT-26 the link shows the new title at once and still opens it",
+      async () => {
+        await items.filter({ hasText: "Plans" }).click();
+        await app.getByLabel("Page title").click();
+        await app.keyboard.press(mod("Mod+a"));
+        await app.keyboard.type("Plans for spring");
+        await app.keyboard.press("Enter");
+        await items.filter({ hasText: "Garden journal" }).click();
+        await expect(link("Plans for spring")).toBeVisible();
+        await link("Plans for spring").click();
+        await expect(app.getByLabel("Page title")).toHaveText("Plans for spring");
+      }
+    );
 
     await appTest.step("EDIT-26 the byline shows the count after the tags", async () => {
       await expect(backlinks).toHaveText("1");
@@ -531,33 +543,42 @@ appTest(
     const code = body.getByRole("code");
     const language = body.getByRole("combobox", { name: "Code language" });
 
-    await appTest.step("EDIT-27 a language picked colours the code; Plain text doesn't", async () => {
-      await app.keyboard.type("``` ");
-      await app.keyboard.type("def greet(name): return None");
-      await expect(language).toHaveValue("");
-      expect(await codeColours(code)).toBe(1);
-      await language.selectOption({ label: "Python" });
-      await expect.poll(() => codeColours(code)).toBeGreaterThan(1);
-      await language.selectOption({ label: "Plain text" });
-      await expect.poll(() => codeColours(code)).toBe(1);
-    });
+    await appTest.step(
+      "EDIT-27 a language picked colours the code; Plain text doesn't",
+      async () => {
+        await app.keyboard.type("``` ");
+        await app.keyboard.type("def greet(name): return None");
+        await expect(language).toHaveValue("");
+        expect(await codeColours(code)).toBe(1);
+        await language.selectOption({ label: "Python" });
+        await expect.poll(() => codeColours(code)).toBeGreaterThan(1);
+        await language.selectOption({ label: "Plain text" });
+        await expect.poll(() => codeColours(code)).toBe(1);
+      }
+    );
 
-    await appTest.step("EDIT-27 code pasted into an unlabeled block gets a guessed language", async () => {
-      await clearBody(app);
-      await app.keyboard.type("``` ");
-      await expect(language).toHaveValue("");
-      await paste(body, PYTHON);
-      await expect(language).toHaveValue("python");
-      await expect.poll(() => codeColours(code)).toBeGreaterThan(1);
-    });
+    await appTest.step(
+      "EDIT-27 code pasted into an unlabeled block gets a guessed language",
+      async () => {
+        await clearBody(app);
+        await app.keyboard.type("``` ");
+        await expect(language).toHaveValue("");
+        await paste(body, PYTHON);
+        await expect(language).toHaveValue("python");
+        await expect.poll(() => codeColours(code)).toBeGreaterThan(1);
+      }
+    );
 
-    await appTest.step("EDIT-27 an untagged fenced block pasted gets one too, and it can be changed", async () => {
-      await clearBody(app);
-      await paste(body, "```\n" + PYTHON + "\n```");
-      await expect(language).toHaveValue("python");
-      await language.selectOption({ label: "Ruby" });
-      await expect(language).toHaveValue("ruby");
-    });
+    await appTest.step(
+      "EDIT-27 an untagged fenced block pasted gets one too, and it can be changed",
+      async () => {
+        await clearBody(app);
+        await paste(body, "```\n" + PYTHON + "\n```");
+        await expect(language).toHaveValue("python");
+        await language.selectOption({ label: "Ruby" });
+        await expect(language).toHaveValue("ruby");
+      }
+    );
   }
 );
 
@@ -590,7 +611,9 @@ appTest(
       await expect(notSaved).toHaveText("Not saved");
       const info = await app.getByRole("button", { name: "Page info" }).boundingBox();
       const status = await notSaved.boundingBox();
-      expect(Math.abs(status!.y + status!.height / 2 - (info!.y + info!.height / 2))).toBeLessThan(4);
+      expect(Math.abs(status!.y + status!.height / 2 - (info!.y + info!.height / 2))).toBeLessThan(
+        4
+      );
       expect(status!.x + status!.width).toBeLessThanOrEqual(info!.x);
     });
 

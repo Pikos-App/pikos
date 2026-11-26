@@ -3,10 +3,9 @@
  *
  * Nothing else in the suite sees that policy. Every other spec runs against the
  * vite dev server, which serves `devCsp` — and `devCsp` carries 'unsafe-eval'
- * while the shipped `csp` does not. 0.4.0-beta.1 went out through that gap with
- * a window that never painted: the recurrence engine compiles WebAssembly at
- * import time, `script-src 'self'` denied it, and the throw took down the entry
- * module graph before a line of app code ran.
+ * while the shipped `csp` does not. A gap there is a window that never paints: the
+ * recurrence engine compiles WebAssembly at import time, `script-src 'self'` denies it, and the
+ * throw takes down the entry module graph before any app code runs.
  *
  * The policy is read from tauri.conf.json, never copied here. A copy would keep
  * passing while the shipped app broke, which is exactly the failure this guards.

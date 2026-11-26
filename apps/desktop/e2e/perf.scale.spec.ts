@@ -11,9 +11,8 @@ import { expect, test } from "@playwright/test";
  * Uses the raw `page` rather than the `app` fixture: that fixture navigates and waits for the
  * workspace itself, which would boot the app once without a seed and then again with one.
  *
- * Reports rather than asserts. There are no budgets yet because nobody has measured this, and a
- * threshold invented before the first run is a number the suite would defend rather than
- * discover. Read the table it prints, then set budgets from it.
+ * Reports rather than asserts: a threshold invented before measuring is a number the suite would
+ * defend rather than discover. Read the table it prints, then set budgets from it.
  */
 
 // Two million is included to find the ceiling, not because it is expected to pass. Each seeded

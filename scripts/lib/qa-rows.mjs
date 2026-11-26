@@ -4,7 +4,7 @@
 // its index for every importer, so a core module is followed only into files whose
 // import from it names one of the module's exports, and the index itself into nothing.
 //
-// A manual row reaches only through its own code (PKOS-0145): a row with a `paths:` line of
+// A manual row reaches only through its own code: a row with a `paths:` line of
 // its own ignores its section's, and its paths match only the files they name, never a file
 // one import away. Section paths stay for the rows a test takes.
 

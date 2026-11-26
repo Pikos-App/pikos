@@ -11,12 +11,8 @@ import { assertNoBlocking, assertPerf, observeLongTasks, readLongTasks } from ".
 
 const WARN_ONLY = process.env["PERF_WARN_ONLY"] === "true";
 
-// ─── P1: App boot to interactive (<500ms) ───────────────────────────────────
-
 appTest("app boots to interactive under 500ms @perf-prod", async ({ app }) => {
-  await app.waitForFunction(
-    () => performance.getEntriesByName("pikos:ready", "mark").length > 0
-  );
+  await app.waitForFunction(() => performance.getEntriesByName("pikos:ready", "mark").length > 0);
 
   const timing = await app.evaluate(() => {
     const nav = performance.getEntriesByType(
@@ -29,8 +25,6 @@ appTest("app boots to interactive under 500ms @perf-prod", async ({ app }) => {
 
   assertPerf("p1.boot_to_ready", timing, 500, { warnOnly: WARN_ONLY });
 });
-
-// ─── P2: Page list render time on folder switch (<16ms) ─────────────────────
 
 appTest("page list renders under 16ms on folder switch @perf-prod", async ({ app }) => {
   for (let i = 0; i < 20; i++) {
@@ -79,8 +73,6 @@ appTest("page list renders under 16ms on folder switch @perf-prod", async ({ app
   assertPerf("p2.folder_switch", switchTime, 16, { warnOnly: WARN_ONLY });
 });
 
-// ─── P3: Editor — no long tasks during typing ───────────────────────────────
-
 appTest("editor has no long tasks during typing @perf-prod", async ({ app }) => {
   await quickAdd(app, "perf test page");
   await app.locator("[data-page-list-item]").getByText("perf test page").click();
@@ -96,8 +88,6 @@ appTest("editor has no long tasks during typing @perf-prod", async ({ app }) => 
     warnOnly: WARN_ONLY,
   });
 });
-
-// ─── P4: Search — no long tasks during open and filter ──────────────────────
 
 appTest("search has no long tasks during open and filter @perf-prod", async ({ app }) => {
   for (let i = 0; i < 10; i++) {
@@ -120,8 +110,6 @@ appTest("search has no long tasks during open and filter @perf-prod", async ({ a
 
   await app.keyboard.press("Escape");
 });
-
-// ─── P5: Calendar — no long tasks with 20+ events ──────────────────────────
 
 appTest("calendar has no long tasks with 20+ events @perf-prod", async ({ app }) => {
   for (let i = 0; i < 25; i++) {
@@ -150,8 +138,6 @@ appTest("calendar has no long tasks with 20+ events @perf-prod", async ({ app })
     warnOnly: WARN_ONLY,
   });
 });
-
-// ─── P6: Quick Add — no long tasks during NLP input ─────────────────────────
 
 appTest("quick add has no long tasks during NLP input @perf-prod", async ({ app }) => {
   await observeLongTasks(app, "__perfQA");

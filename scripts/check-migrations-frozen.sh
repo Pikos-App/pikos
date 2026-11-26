@@ -7,8 +7,8 @@
 # back. Every other gate builds the schema from scratch and can't see it. The fix is a new
 # migration, never an edit.
 #
-# Compared against every release tag, betas included, since any of them can be installed.
-# Git blob ids are equal exactly when the bytes are, which is what sqlx's hash checks too.
+# Compared against every release tag, betas included, since any can be installed. Git blob ids
+# are equal exactly when the bytes are, which is what sqlx's hash checks too.
 
 set -euo pipefail
 

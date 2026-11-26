@@ -1,7 +1,3 @@
-// E2E tests for the Tiptap editor — formatting, slash commands, keyboard
-// shortcuts, and content structure. All run against MockStorageAdapter
-// (VITE_TEST_MODE=true) so no Tauri backend is needed.
-
 import {
   test as appTest,
   expect,
@@ -10,8 +6,6 @@ import {
   quickAdd,
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
-
-// ─── Formatting via keyboard shortcuts ──────────────────────────────────────
 
 appTest("bold formatting via Cmd+B", async ({ app }) => {
   await quickAdd(app, "bold test");
@@ -58,8 +52,6 @@ appTest("inline code via Cmd+E", async ({ app }) => {
 
   await expect(editor.locator("code")).toHaveText("const x = 1");
 });
-
-// ─── Slash commands ─────────────────────────────────────────────────────────
 
 appTest("slash command inserts heading", async ({ app }) => {
   await quickAdd(app, "slash heading test");
@@ -159,7 +151,6 @@ appTest("slash command inserts table", async ({ app }) => {
   await app.keyboard.type("table");
   await app.keyboard.press("Enter");
 
-  // Default 3x3 table with header row
   await expect(editor.locator("table")).toBeVisible();
   await expect(editor.locator("th")).toHaveCount(3);
   await expect(editor.locator("tr")).toHaveCount(3);
@@ -174,8 +165,6 @@ appTest("escape closes slash menu without inserting", async ({ app }) => {
   await app.keyboard.press("Escape");
   await expect(app.locator(".slash-menu")).not.toBeVisible();
 });
-
-// ─── Task list interaction ──────────────────────────────────────────────────
 
 appTest("task checkbox toggles checked state", async ({ app }) => {
   await quickAdd(app, "checkbox test");
@@ -197,9 +186,8 @@ appTest("task checkbox toggles checked state", async ({ app }) => {
   await expect(checkbox).not.toBeChecked();
 });
 
-// A checkbox in the body is one line of a note; the page's own status is whether
-// the page is done. Nothing else pins them apart, and the two read identically on
-// screen — a tick next to text.
+// A body checkbox is one line of a note; the page's own status is whether the page is done. They read
+// identically on screen, and nothing else pins them apart.
 
 appTest(
   "ticking an inline task leaves the page's own status open",
@@ -226,8 +214,6 @@ appTest(
     await expect(status).toHaveText("Open");
   }
 );
-
-// ─── Content persistence ────────────────────────────────────────────────────
 
 appTest("formatted content persists across page switches @smoke", async ({ app }) => {
   await quickAdd(app, "persist-fmt-1");
@@ -279,8 +265,6 @@ appTest("leaving the window writes what was typed", async ({ app, storage }) => 
   await expect(body).toHaveText("heron at dusk");
 });
 
-// ─── Table toolbar ──────────────────────────────────────────────────────────
-
 appTest("table toolbar appears when cursor is in table", async ({ app }) => {
   await quickAdd(app, "table toolbar test");
   await openEditorForPage(app, "table toolbar test");
@@ -290,7 +274,6 @@ appTest("table toolbar appears when cursor is in table", async ({ app }) => {
   await app.keyboard.type("table");
   await app.keyboard.press("Enter");
 
-  // Toolbar should be visible (cursor is in the table after insert)
   await expect(app.locator(".table-toolbar")).toBeVisible();
 
   // Arrow the cursor out of the table; toolbar dismissal is not asserted here.
@@ -305,7 +288,6 @@ appTest("table toolbar adds row below", { tag: ["@EDIT-09:3"] }, async ({ app })
   await quickAdd(app, "table addrow test");
   const editor = await openEditorForPage(app, "table addrow test");
 
-  // Insert a table (3x3 default)
   await app.keyboard.type("/");
   await expect(app.locator(".slash-menu")).toBeVisible();
   await app.keyboard.type("table");
@@ -322,7 +304,6 @@ appTest("table toolbar adds and removes column", { tag: ["@EDIT-09:3"] }, async 
   await quickAdd(app, "table col test");
   const editor = await openEditorForPage(app, "table col test");
 
-  // Insert a table (3 cols)
   await app.keyboard.type("/");
   await expect(app.locator(".slash-menu")).toBeVisible();
   await app.keyboard.type("table");
@@ -353,24 +334,15 @@ appTest("table toolbar deletes table", { tag: ["@EDIT-09:3"] }, async ({ app }) 
   await expect(editor.locator("table")).not.toBeVisible();
 });
 
-// ─── Link insertion via the bubble toolbar ─────────────────────────────────
-//
-// The format bubble toolbar appears once the user has selected text. Its
-// Link button (aria-label="Link") opens the LinkPopover, which exposes a
-// URL input that commits on Enter and wraps the selection in <a href>.
-
 appTest("bubble toolbar inserts a link around the selection", async ({ app }) => {
   await quickAdd(app, "link insert test");
   const editor = await openEditorForPage(app, "link insert test");
 
-  // Type some text and select the last word ("Pikos") so the bubble toolbar
-  // has something to wrap. Five Shift+ArrowLeft keys cover the 5-char word.
+  // Select the last word ("Pikos"): five Shift+ArrowLeft keys cover its 5 chars.
   await app.keyboard.type("Visit Pikos");
   for (let i = 0; i < 5; i++) await app.keyboard.press("Shift+ArrowLeft");
 
-  // Bubble toolbar mounts on selection. Click the Link button — it blurs
-  // the editor (so the selection is preserved in editor state) and surfaces
-  // the LinkPopover input.
+  // The Link button blurs the editor, preserving the selection in editor state, and surfaces the LinkPopover input.
   const bubble = app.locator(".bubble-toolbar");
   await expect(bubble).toBeVisible();
   await bubble.getByRole("button", { name: "Link" }).click();
@@ -384,12 +356,8 @@ appTest("bubble toolbar inserts a link around the selection", async ({ app }) =>
   await expect(link).toHaveText("Pikos");
 });
 
-// ─── Focus timer clears the room and reports on the way out ─────────────────
-
-// The session hides the left panels for the duration. It must not write the
-// user's standing sidebar preference to do it: a run that ended by quitting the
-// app would otherwise leave the panels gone on the next launch, with nothing on
-// screen to explain why.
+// The session hides the left panels without writing the user's standing sidebar preference: quitting
+// mid-run would otherwise leave them gone on the next launch.
 
 appTest(
   "a focus session hides the left panels and gives them back",
@@ -412,8 +380,7 @@ appTest(
   }
 );
 
-// Opening the sidebar mid-session is an explicit decision, so the session stops
-// driving it — ending must not yank the panels away again.
+// Opening the sidebar mid-session is explicit, so the session stops driving it.
 
 appTest(
   "reopening the sidebar mid-session survives the session ending",
@@ -475,13 +442,10 @@ appTest(
   }
 );
 
-// Ending a session is otherwise invisible — the row lands in a settings panel the
-// user isn't looking at — so both outcomes toast. The strings are unit-pinned in
-// useFocusTimer.test.ts; what nothing covered is that they reach the screen.
-//
-// A recorded session has to outrun the 30s discard floor, so the length arm runs
-// on the raw `page` fixture: clock.install must land before the first app script
-// reads Date.
+// Ending a session is otherwise invisible, so both outcomes toast. The strings are unit-pinned in
+// useFocusTimer.test.ts; this checks they reach the screen. A recorded session must outrun the 30s
+// discard floor, so the length arm uses the raw `page` fixture: clock.install must land before the first
+// app script reads Date.
 
 appTest("stopping a focus session toasts how long it ran @mock-only", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
@@ -509,9 +473,7 @@ appTest(
     await app.getByRole("button", { name: "Start focus timer" }).click();
     await app.getByRole("button", { name: "Stop focus timer" }).click();
 
-    await expect(
-      app.getByRole("status", { name: "Under 30 seconds, not recorded" })
-    ).toBeVisible();
+    await expect(app.getByRole("status", { name: "Under 30 seconds, not recorded" })).toBeVisible();
   }
 );
 
@@ -534,12 +496,8 @@ appTest(
   }
 );
 
-// ─── tier2: Cmd+Shift+K belongs to whichever meaning fits ────────────────────
-
-// The editor's insert-link and the command palette both claim it. The editor's is
-// scoped, so it used to win outright and the palette could not be opened from the
-// one place you most want it. It now only claims the combo with a selection —
-// which is what a link is made out of — and the registry falls through otherwise.
+// The editor's insert-link and the command palette both claim Cmd+Shift+K. The editor claims it only with a
+// selection (what a link is made of), and the registry falls through otherwise.
 appTest(
   "Cmd+Shift+K makes a link from a selection, opens the palette without one",
   async ({ app }) => {
@@ -564,8 +522,6 @@ appTest(
     await expect(palette).not.toBeVisible();
   }
 );
-
-// ─── Lists loaded a window at a time ────────────────────────────────────────
 
 appTest.describe("with lists loaded a window at a time", () => {
   appTest.use({ tightCache: true });

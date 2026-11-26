@@ -182,7 +182,7 @@ export async function openEditorForPage(page: Page, title: string) {
 }
 
 /** Send one command to the real writer behind this page, as its own database. For
- *  state the app can no longer create; everything else goes through the UI. */
+ *  state the app can't create; everything else goes through the UI. */
 export async function bridgeCall<T>(
   page: Page,
   command: string,

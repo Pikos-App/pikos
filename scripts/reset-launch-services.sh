@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # Recover macOS notification delivery when it silently stops working.
 #
-# Repeated DMG mounts and in-place app overrides accumulate many Launch Services
-# registrations under the one bundle id `app.pikos.desktop`. macOS then can't map
-# the running app to a single authorization, so `requestAuthorization` fails
-# (granted=false / authorization_status=not_determined) even though System
-# Settings shows Pikos "allowed" — the visible toggle becomes a ghost with no
-# backing record. See .agent/BACKLOG_DISTRIBUTION.md (Gotchas worth remembering).
+# Repeated DMG mounts and in-place app overrides accumulate Launch Services registrations under
+# the one bundle id `app.pikos.desktop`. macOS then can't map the running app to a single
+# authorization, so `requestAuthorization` fails (granted=false / not_determined) even though
+# System Settings shows Pikos "allowed".
 #
 # This unregisters every Pikos.app path EXCEPT the canonical /Applications
 # install, then restarts the notification daemon. A plain `lsregister -r` rescan
@@ -27,8 +25,7 @@ if [ ! -x "$LSREGISTER" ]; then
   exit 1
 fi
 
-# Match the literal "/Pikos.app" bundle (case-sensitive) so unrelated paths
-# like ~/Library/WebKit/com.pikos.app aren't swept in.
+# Match the literal "/Pikos.app" bundle so paths like ~/Library/WebKit/com.pikos.app aren't swept in.
 paths=$("$LSREGISTER" -dump 2>/dev/null \
   | grep -E "^[[:space:]]*path:.*/Pikos\.app" \
   | sed -E 's/.*path: *//; s/ \(0x.*//' \
