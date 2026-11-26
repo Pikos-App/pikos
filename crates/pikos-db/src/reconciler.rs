@@ -262,9 +262,18 @@ impl SeriesSpan {
 /// rule's wall clock (`rewrite_until_to_wall_clock`), so its date is the last day the
 /// series can land on. A `COUNT` or an open rule has none.
 fn until_day(rrule: &str) -> Option<String> {
-    let value = rrule.split(';').find_map(|part| part.strip_prefix("UNTIL="))?;
-    let digits = value.get(..8).filter(|d| d.bytes().all(|b| b.is_ascii_digit()))?;
-    Some(format!("{}-{}-{}", &digits[..4], &digits[4..6], &digits[6..]))
+    let value = rrule
+        .split(';')
+        .find_map(|part| part.strip_prefix("UNTIL="))?;
+    let digits = value
+        .get(..8)
+        .filter(|d| d.bytes().all(|b| b.is_ascii_digit()))?;
+    Some(format!(
+        "{}-{}-{}",
+        &digits[..4],
+        &digits[4..6],
+        &digits[6..]
+    ))
 }
 
 /// Editing a repeating event "this and following" ends the series the day before and starts

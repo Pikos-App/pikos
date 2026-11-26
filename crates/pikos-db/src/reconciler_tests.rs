@@ -4848,7 +4848,13 @@ async fn split_after_resolving(pool: &sqlx::SqlitePool, split: Split) -> (String
     reconcile(
         pool,
         &ctx(),
-        &delta(vec![google_weekly("evt1", "v1", (0, 0), "FREQ=WEEKLY", "Standup")]),
+        &delta(vec![google_weekly(
+            "evt1",
+            "v1",
+            (0, 0),
+            "FREQ=WEEKLY",
+            "Standup",
+        )]),
     )
     .await
     .unwrap();
@@ -4954,7 +4960,13 @@ async fn a_series_that_ended_with_nothing_past_its_end_hands_nothing_on() {
     reconcile(
         &pool,
         &ctx(),
-        &delta(vec![google_weekly("evt1", "v1", (0, 0), &weekly_until(0), "Standup")]),
+        &delta(vec![google_weekly(
+            "evt1",
+            "v1",
+            (0, 0),
+            &weekly_until(0),
+            "Standup",
+        )]),
     )
     .await
     .unwrap();
@@ -4964,7 +4976,13 @@ async fn a_series_that_ended_with_nothing_past_its_end_hands_nothing_on() {
     reconcile(
         &pool,
         &ctx(),
-        &delta(vec![google_weekly(REST_ID, "v1", (1, 0), "FREQ=WEEKLY", "Standup")]),
+        &delta(vec![google_weekly(
+            REST_ID,
+            "v1",
+            (1, 0),
+            "FREQ=WEEKLY",
+            "Standup",
+        )]),
     )
     .await
     .unwrap();
